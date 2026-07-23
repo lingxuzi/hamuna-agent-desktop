@@ -1,0 +1,86 @@
+/**
+ * CodeBlock - Syntax highlighted code block with copy button
+ * Supports all major programming languages via react-syntax-highlighter
+ */
+
+import { Check, Copy } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { useResolvedTheme } from '@/theme';
+
+interface CodeBlockProps {
+    children: string;
+    language?: string;
+    className?: string;
+}
+
+
+export default function CodeBlock({ children, language, className }: CodeBlockProps) {
+    const { t } = useTranslation('app');
+    const customTheme = useResolvedTheme().adapters.prism;
+    const [copied, setCopied] = useState(false);
+
+    // Extract language from className if not provided directly
+    const extractedLanguage = language || className?.replace(/language-/, '') || 'text';
+
+    const handleCopy = useCallback(async () => {
+        try {
+            await navigator.clipboard.writeText(children);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+        }
+    }, [children]);
+
+    return (
+        <div className="group relative my-3 w-full overflow-hidden rounded-lg">
+            {/* Header with language label and copy button */}
+            <div className="flex items-center justify-between bg-[var(--code-header-bg)] px-4 py-2 text-xs">
+                <span className="font-mono text-[var(--code-line-number)] uppercase tracking-wide">
+                    {extractedLanguage}
+                </span>
+                <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="flex items-center gap-1.5 rounded px-2 py-1 text-[var(--code-line-number)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
+                    title={copied ? t('markdown.copied') : t('markdown.copyCode')}
+                >
+                    {copied ? (
+                        <>
+                            <Check className="size-3.5" />
+                            <span>{t('markdown.copied')}</span>
+                        </>
+                    ) : (
+                        <>
+                            <Copy className="size-3.5" />
+                            <span>{t('markdown.copy')}</span>
+                        </>
+                    )}
+                </button>
+            </div>
+
+            {/* Code content with syntax highlighting */}
+            <SyntaxHighlighter
+                language={extractedLanguage}
+                style={customTheme}
+                customStyle={{
+                    margin: 0,
+                    borderTopLeftRadius: 0,
+                    borderTopRightRadius: 0,
+                }}
+                showLineNumbers={children.split('\n').length > 5}
+                lineNumberStyle={{
+                    minWidth: '2.5em',
+                    paddingRight: '1em',
+                    color: 'var(--code-line-number)',
+                    userSelect: 'none',
+                }}
+                wrapLongLines={false}
+            >
+                {children.trim()}
+            </SyntaxHighlighter>
+        </div>
+    );
+}

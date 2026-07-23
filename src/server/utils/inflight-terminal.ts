@@ -1,0 +1,75 @@
+/**
+ * Issue #289 — what to do with the in-flight mid-turn queued item when the SDK's
+ * `result` (turn-end) arrives during/after an interrupt.
+ *
+ * Background: a message sent mid-turn is yielded to the SDK ("in-flight to CLI") and
+ * waits in the SDK commandQueue until the SDK either replays/dequeues it or the host
+ * cancels it via cancel_async_message. A graceful interrupt still routes a `result`
+ * through handleMessageComplete, but natural completion alone is not a consumption
+ * acknowledgement. So whether the item should be SURFACED (shown as a user bubble),
+ * DROPPED, or kept waiting depends on the terminal reason and user intent:
+ *
+ *  - Plain STOP: the user wants to stop; treat the in-flight item as "AI may not have
+ *    seen it" and drop it from the UI (matches the long-standing stop behavior).
+ *  - FORCE ("立即发送"): the user explicitly asked for THIS item to run now. force
+ *    interrupts the current turn precisely so the SDK drains + processes the queued
+ *    command — so it MUST be surfaced as a user bubble (the AI's reply renders under it).
+ *    Dropping it is the #289 bug: "message vanishes from UI but the AI processed it".
+ *  - Natural completion (not interrupting): keep waiting for SDK replay or the next
+ *    assistant-turn signal. Do not surface merely because the previous turn ended.
+ *
+ * Pure decision core (Functional Core / Imperative Shell): the shell passes the live
+ * flags; the caller performs the broadcast. This is ONLY for the result/complete handler.
+ * The stop/error handlers fire when the item was lost with a force-closed subprocess
+ * (rescuePendingToQueue does NOT rescue the in-flight item), so those always drop and
+ * do not use this.
+ */
+export type InFlightTerminalAction = 'drop' | 'surface' | 'await-replay' | 'noop';
+
+export type InFlightAsyncCancelResult = 'cancelled' | 'not-cancelled' | 'unavailable' | 'error';
+
+export type InFlightCancelSettlement = {
+  cancelled: boolean;
+  removePendingRequest: boolean;
+  clearSlot: boolean;
+  broadcastCancelled: boolean;
+  promoteNext: boolean;
+};
+
+export function decideInFlightActionOnResult(opts: {
+  /** An interrupt (stop or force) is in progress for this terminal result. */
+  isInterrupting: boolean;
+  /** This interrupt was a force-execute targeting THIS in-flight item (#289). */
+  forced: boolean;
+  /** inFlightMetadata is available to build the user bubble. */
+  hasMeta: boolean;
+}): InFlightTerminalAction {
+  // Plain stop (interrupt, not a force): drop — AI may not have seen the item.
+  if (opts.isInterrupting && !opts.forced) return 'drop';
+  // Force-send: explicit user intent to interrupt and process this item now.
+  if (opts.forced) return opts.hasMeta ? 'surface' : 'noop';
+  // Natural completion is not an SDK consumption ack. Keep the pill queued until
+  // SDKUserMessageReplay or a later assistant-turn signal confirms consumption.
+  return 'await-replay';
+}
+
+export function decideInFlightCancelSettlement(result: InFlightAsyncCancelResult): InFlightCancelSettlement {
+  const cancelled = result === 'cancelled';
+  return {
+    cancelled,
+    removePendingRequest: cancelled,
+    clearSlot: cancelled,
+    broadcastCancelled: cancelled,
+    promoteNext: cancelled,
+  };
+}
+
+export function terminalEventMatchesInFlight(opts: {
+  currentQueueId: string | null;
+  isInterrupting: boolean;
+  interruptTargetQueueId: string | null;
+}): boolean {
+  if (!opts.currentQueueId) return false;
+  if (!opts.isInterrupting) return true;
+  return opts.interruptTargetQueueId === opts.currentQueueId;
+}
