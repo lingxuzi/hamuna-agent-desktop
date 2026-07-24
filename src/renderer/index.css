@@ -534,8 +534,9 @@ pre code {
 /* Launcher two-column layout */
 .launcher-layout {
   display: grid;
-  /* Left 60%, Right 40% (with min-width constraint) */
-  grid-template-columns: 60fr minmax(var(--sidebar-min-width), 40fr);
+  /* Left 55%, Right 45% — Marquee Hero gives the brand more breathing room
+     while the workspaces rail gets slightly more visual weight. */
+  grid-template-columns: 55fr minmax(var(--sidebar-min-width), 45fr);
   grid-template-areas: 'brand workspaces';
 }
 
@@ -578,19 +579,8 @@ pre code {
     var(--launcher-history-row-overlay-bg) 78%
   );
 }
-
-/* Floating divider between brand and workspaces */
-.launcher-workspaces::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 24px;
-  bottom: 24px;
-  z-index: 30;
-  width: 1px;
-  background: var(--line);
-  pointer-events: none;
-}
+/* Floating divider between brand and workspaces — removed in Hallmark redesign
+   (Marquee Hero layout, the card grid provides its own visual separation). */
 
 /* Responsive: stack vertically below 640px (use --breakpoint-mobile) */
 @media (max-width: 639px) {
@@ -605,10 +595,6 @@ pre code {
   .launcher-brand {
     min-height: 200px;
     border-bottom: 1px solid var(--line);
-  }
-
-  .launcher-workspaces::before {
-    display: none;
   }
 }
 

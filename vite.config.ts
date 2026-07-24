@@ -37,6 +37,11 @@ const buildVersions = getBuildVersions();
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   plugins: [react(), tailwindcss()],
+  optimizeDeps: {
+    // UMD files loaded via `?raw` (chart.js, d3, lucide) have no ESM exports
+    // and crash the dep optimizer. Exclude so Vite serves them as-is.
+    exclude: ['chartjs-umd-source', 'd3-umd-source', 'lucide-umd-source'],
+  },
   resolve: {
     alias: [
       { find: '@', replacement: resolve(__dirname, 'src/renderer') },
@@ -101,8 +106,8 @@ export default defineConfig({
         // updates (app code changes every release; React rarely does).
         manualChunks(id: string) {
           if (id.includes('node_modules/react-dom') ||
-              id.includes('node_modules/react/') ||
-              id.includes('node_modules/scheduler')) {
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/scheduler')) {
             return 'vendor-react';
           }
           return undefined;
