@@ -561,7 +561,7 @@ try {
         Remove-Item -Recurse -Force $MinoDir
     }
     Write-Host "  克隆 openmino 默认工作区 (最新版本)..." -ForegroundColor Cyan
-    & git clone git@github.com:hAcKlyc/openmino.git $MinoDir
+    & git clone https://github.com/hAcKlyc/openmino.git $MinoDir
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  mino 克隆失败" -ForegroundColor Red
         Write-Host "`n按回车键退出..." -ForegroundColor Yellow

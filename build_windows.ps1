@@ -234,7 +234,7 @@ try {
         Write-Host "  cuse OK" -ForegroundColor Green
     } catch {
         Write-Host "  cuse 下载失败: $_" -ForegroundColor Red
-        Write-Host "    检查网络连通性: curl https://download.hamuna.io/cuse/latest.json" -ForegroundColor Yellow
+        Write-Host "    检查网络连通性: curl https://download.myagents.io/cuse/latest.json" -ForegroundColor Yellow
         $depOk = $false
     }
 
@@ -408,8 +408,7 @@ try {
     # 验证关键 CSP 指令是否存在
     $requiredCspParts = @(
         "http://ipc.localhost",
-        "asset:",
-        "https://download.hamuna.io"
+        "asset:"
     )
 
     $missingParts = @()
@@ -665,7 +664,7 @@ try {
     Write-Host "[6/7] 构建 Tauri 应用 (Release)..." -ForegroundColor Blue
     Write-Host "  这可能需要几分钟，请耐心等待..." -ForegroundColor Yellow
 
-    & npm run tauri:build -- --target x86_64-pc-windows-msvc --config src-tauri/tauri.windows.conf.json
+    & npx tauri build --target x86_64-pc-windows-msvc --config src-tauri\tauri.windows.conf.json
     if ($LASTEXITCODE -ne 0) {
         throw "Tauri 构建失败"
     }
