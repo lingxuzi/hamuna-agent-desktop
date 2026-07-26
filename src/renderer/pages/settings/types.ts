@@ -1,3 +1,4 @@
+import type { CheckUpdateResult } from '@/hooks/useUpdater';
 import type { CapabilityInitialSelect } from '../../../shared/skillsTypes';
 import type { OfficialToolId } from '../../../shared/official-tools';
 import type { SubscriptionStatusWithVerify } from '@/types/subscription';
@@ -39,6 +40,6 @@ export interface SettingsProps {
   updateDownloading?: boolean;
   updateInstalling?: boolean;
   updatePreparing?: boolean;
-  onCheckForUpdate?: () => Promise<'up-to-date' | 'downloading' | 'error'>;
+  onCheckForUpdate?: () => Promise<CheckUpdateResult>;
   onRestartAndUpdate?: () => void;
 }

@@ -1275,15 +1275,23 @@ pub fn run() {
             });
             ulog_info!("[App] Agent channel health monitor spawned");
 
-            // Start background update check (60s delay, then stale updater temp cleanup)
-            ulog_info!("[App] Setup complete, spawning background update check task...");
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                ulog_info!("[App] Background update task started, waiting 60 seconds before stale Windows updater temp cleanup and update check...");
-                updater::check_update_on_startup(app_handle).await;
-                ulog_info!("[App] Background update task completed");
-            });
-            ulog_info!("[App] Background update task spawned successfully");
+            // Start background update check (60s delay, then stale updater temp cleanup).
+            // Skipped when the updater is disabled (UPDATER_DISABLED flag in updater.rs) —
+            // currently the case because download.hamuna.io is NXDOMAIN. Re-enable the
+            // Rust flag in updater.rs AND the matching TS flag in
+            // src/renderer/hooks/useUpdater.ts to bring this back.
+            if !updater::UPDATER_DISABLED {
+                ulog_info!("[App] Setup complete, spawning background update check task...");
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    ulog_info!("[App] Background update task started, waiting 60 seconds before stale Windows updater temp cleanup and update check...");
+                    updater::check_update_on_startup(app_handle).await;
+                    ulog_info!("[App] Background update task completed");
+                });
+                ulog_info!("[App] Background update task spawned successfully");
+            } else {
+                ulog_info!("[App] Background update check disabled (UPDATER_DISABLED=true)");
+            }
 
             // LiteLLM model-data cache: startup conditional check + 24h interval
             // (gated by config.liteLLMModelDataRefresh, default on). Single owner

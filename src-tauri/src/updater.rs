@@ -26,6 +26,20 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::sidecar::ManagedSidecar;
 
+/// Temporary kill-switch for the entire auto-update subsystem.
+///
+/// `download.hamuna.io` is currently NXDOMAIN (R2 custom domain / DNS not
+/// configured yet), so every background check, periodic poll, and manual
+/// `test_update_connectivity` would fail and surface as noise. Flip this
+/// to `false` (and the matching flag in `src/renderer/hooks/useUpdater.ts`)
+/// once DNS + R2 custom domain are restored.
+///
+/// Both sides MUST be flipped together — the Rust side gates the
+/// `check_update_on_startup` task; the TS side gates the 30-min interval
+/// and the manual "Check for Updates" button. The renderer's event
+/// listeners stay mounted but are no-ops without a source.
+pub const UPDATER_DISABLED: bool = true;
+
 /// Global flag to prevent concurrent update checks/downloads
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
@@ -447,6 +461,13 @@ fn build_updater_with_proxy(app: &AppHandle) -> Result<tauri_plugin_updater::Upd
 /// Check for updates on startup and silently download if available
 /// This is the main entry point called from setup hook
 pub async fn check_update_on_startup(app: AppHandle) {
+    if UPDATER_DISABLED {
+        logger::info(
+            &app,
+            "[Updater] Disabled (UPDATER_DISABLED=true); skipping background check",
+        );
+        return;
+    }
     // Wait 60 seconds before checking — startup is heavy enough without an
     // updater HTTPS round-trip racing the user's first action. Periodic
     // checks (every 30 min) catch up after this initial window.
