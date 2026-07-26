@@ -174,7 +174,7 @@ cd HamunaAgent
 .\build_windows.ps1
 ```
 
-`setup.sh` 会准备内置 Node.js runtime、安装依赖并拉取默认工作区 `mino`。如果你没有 GitHub SSH key，`openmino` 的 SSH clone 可能失败；可以先配置 GitHub SSH，或手动把默认工作区准备到仓库根目录的 `mino/` 后重新运行。
+`setup.sh` 会准备内置 Node.js runtime、安装依赖并拉取默认工作区 `mino`。首次运行会克隆 `openmino` 到 `~/.hamuna/setup-cache/mino/`，之后每次 setup 只做本地拷贝，不再联网。如果你没有 GitHub SSH key，脚本会自动回落到 HTTPS clone；若仍失败，可手动把默认工作区放到 `~/.hamuna/setup-cache/mino/`（或设置 `MINO_REPO_URL` 指向你的 fork），或直接放进仓库根目录的 `mino/` 后重新运行。强制刷新缓存：`MINO_REFRESH=1 ./setup.sh`。
 
 ### 常用命令
 
@@ -434,7 +434,7 @@ cd HamunaAgent
 .\build_windows.ps1
 ```
 
-`setup.sh` prepares the bundled Node.js runtime, installs dependencies, and pulls the default `mino` workspace. If you do not have a GitHub SSH key, the SSH clone for `openmino` may fail. Configure GitHub SSH first, or prepare the default workspace manually under `mino/` and rerun the script.
+`setup.sh` prepares the bundled Node.js runtime, installs dependencies, and pulls the default `mino` workspace. The first run clones `openmino` into `~/.hamuna/setup-cache/mino/`; subsequent runs only copy from that local cache — no network round-trip. If you don't have a GitHub SSH key, the script falls back to an HTTPS clone automatically. If the clone still fails, place the default workspace at `~/.hamuna/setup-cache/mino/` manually (or set `MINO_REPO_URL` to your fork), or drop it into `mino/` at the repo root and rerun. Force a refresh: `MINO_REFRESH=1 ./setup.sh`.
 
 ### Common Commands
 

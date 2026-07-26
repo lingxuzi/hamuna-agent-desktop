@@ -52,6 +52,8 @@
       "../bundled-skills": "bundled-skills",
       "../bundled-agents": "bundled-agents",
       "../src-tauri/resources/cli": "cli",
+      "../src-tauri/resources/cuse-latest.json": "cuse-latest.json",
+      "../src-tauri/resources/assets/feedback_qr_code.png": "assets/feedback_qr_code.png",
       "../mino": "mino",
       "infoplist/en.lproj/InfoPlist.strings": "en.lproj/InfoPlist.strings",
       "infoplist/zh-Hans.lproj/InfoPlist.strings": "zh-Hans.lproj/InfoPlist.strings"

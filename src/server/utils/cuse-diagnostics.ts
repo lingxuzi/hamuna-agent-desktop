@@ -6,11 +6,18 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 import { promisify } from 'node:util';
 import { cancellableFetch } from './cancellation';
 import { getHomeDirOrNull } from './platform';
-import { getBundledCusePath } from './runtime';
+import { getBundledCusePath, getBundledResourcePath } from './runtime';
+
+// Vendored at build time from the same R2 latest.json the build script reads
+// (see scripts/download_cuse.ps1). Kept bundled so runtime diagnostics don't
+// require a network round-trip — and so the app keeps working when the
+// `download.hamuna.io` host is unreachable (it's still NXDOMAIN at the time
+// of this writing; see specs/tech_docs/auto_update.md).
+const CUSE_LATEST_BUNDLED = 'cuse-latest.json';
+const CUSE_LATEST_REMOTE_URL = 'https://download.hamuna.io/cuse/latest.json';
 
 const CUSE_VERSION_TIMEOUT_MS = 5_000;
 const CUSE_LATEST_TIMEOUT_MS = 5_000;
-const CUSE_LATEST_URL = 'https://download.hamuna.io/cuse/latest.json';
 const MAX_SKILL_CACHE_HASH_BYTES = 50 * 1024 * 1024;
 
 const execFileAsync = promisify(execFile);
@@ -269,23 +276,45 @@ async function inspectSkillCaches(
   });
 }
 
-async function defaultFetchLatest(): Promise<CuseLatestDiagnostic> {
+function readBundledCuseLatest(): CuseLatestDiagnostic | null {
+  const bundledPath = getBundledResourcePath(CUSE_LATEST_BUNDLED);
+  if (!bundledPath) return null;
   try {
-    const resp = await cancellableFetch(CUSE_LATEST_URL, {
-      headers: { 'Cache-Control': 'no-cache' },
-    }, { timeoutMs: CUSE_LATEST_TIMEOUT_MS });
-    if (!resp.ok) {
-      return { url: CUSE_LATEST_URL, version: null, error: `HTTP ${resp.status}` };
-    }
-    const json = await resp.json() as { version?: unknown };
+    const raw = readFileSync(bundledPath, 'utf8');
+    const json = JSON.parse(raw) as { version?: unknown };
     return {
-      url: CUSE_LATEST_URL,
+      url: `bundled://${CUSE_LATEST_BUNDLED}`,
       version: typeof json.version === 'string' ? normalizeCuseVersion(json.version) : null,
       error: typeof json.version === 'string' ? undefined : 'missing version',
     };
   } catch (err) {
     return {
-      url: CUSE_LATEST_URL,
+      url: `bundled://${CUSE_LATEST_BUNDLED}`,
+      version: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function defaultFetchLatest(): Promise<CuseLatestDiagnostic> {
+  const bundled = readBundledCuseLatest();
+  if (bundled) return bundled;
+  try {
+    const resp = await cancellableFetch(CUSE_LATEST_REMOTE_URL, {
+      headers: { 'Cache-Control': 'no-cache' },
+    }, { timeoutMs: CUSE_LATEST_TIMEOUT_MS });
+    if (!resp.ok) {
+      return { url: CUSE_LATEST_REMOTE_URL, version: null, error: `HTTP ${resp.status}` };
+    }
+    const json = await resp.json() as { version?: unknown };
+    return {
+      url: CUSE_LATEST_REMOTE_URL,
+      version: typeof json.version === 'string' ? normalizeCuseVersion(json.version) : null,
+      error: typeof json.version === 'string' ? undefined : 'missing version',
+    };
+  } catch (err) {
+    return {
+      url: CUSE_LATEST_REMOTE_URL,
       version: null,
       error: err instanceof Error ? err.message : String(err),
     };

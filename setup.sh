@@ -107,14 +107,48 @@ cd ..
 echo -e "${GREEN}✓ Rust 依赖准备完成${NC}"
 echo ""
 
-# 准备默认工作区 (mino) — 每次拉取最新版本
-# .git 不保留：避免 Tauri 资源打包权限问题 + rerun-if-changed 性能问题
-echo -e "${BLUE}[6/6] 准备默认工作区 (mino)${NC}"
+# 准备默认工作区 (mino) — 优先从本地缓存复制，避免每次 setup.sh 都重新 clone。
+# 首次运行仍需联网一次（克隆到 ~/.hamuna/setup-cache/mino），之后只做本地拷贝。
+# 强制刷新缓存：MINO_REFRESH=1 ./setup.sh
+# 强制走 HTTPS（绕过 SSH 探测）：MINO_REPO_URL=https://.../openmino.git ./setup.sh
 MINO_DIR="${PROJECT_DIR}/mino"
+MINO_CACHE_DIR="${MINO_CACHE_DIR:-${HAMUNA_HOME:-$HOME/.hamuna}/setup-cache/mino}"
+MINO_REPO_URL_SSH="${MINO_REPO_URL_SSH:-git@github.com:hAcKlyc/openmino.git}"
+MINO_REPO_URL_HTTPS="${MINO_REPO_URL_HTTPS:-https://github.com/hAcKlyc/openmino.git}"
+
+ensure_mino_cache() {
+  if [ -z "${MINO_REFRESH}" ] && [ -f "${MINO_CACHE_DIR}/CLAUDE.md" ]; then
+    echo -e "  ${GREEN}✓ 命中本地缓存 ${MINO_CACHE_DIR}${NC}"
+    return 0
+  fi
+  echo -e "  ${CYAN}克隆 openmino 到本地缓存 (${MINO_CACHE_DIR})...${NC}"
+  mkdir -p "$(dirname "$MINO_CACHE_DIR")"
+  rm -rf "$MINO_CACHE_DIR"
+  # SSH 优先（已配 key 的开发者更快），失败回落到 HTTPS。
+  if [ -n "${MINO_REPO_URL}" ]; then
+    git clone --depth 1 "${MINO_REPO_URL}" "$MINO_CACHE_DIR" && return 0
+    echo -e "  ${YELLOW}指定 MINO_REPO_URL 克隆失败${NC}" >&2
+    return 1
+  fi
+  if git clone --depth 1 "$MINO_REPO_URL_SSH" "$MINO_CACHE_DIR" 2>/dev/null; then
+    return 0
+  fi
+  echo -e "  ${YELLOW}SSH 克隆失败，回落到 HTTPS...${NC}"
+  git clone --depth 1 "$MINO_REPO_URL_HTTPS" "$MINO_CACHE_DIR"
+}
+
+echo -e "${BLUE}[6/6] 准备默认工作区 (mino)${NC}"
+if ! ensure_mino_cache; then
+  echo -e "${RED}✗ mino 克隆失败${NC}" >&2
+  echo -e "${YELLOW}  提示：可手动把 openmino 放到 ${MINO_DIR} 后重新运行${NC}" >&2
+  exit 1
+fi
+
+# 从缓存拷贝到项目目录，剥离 .git（避免 Tauri 资源打包权限问题 + rerun-if-changed 性能开销）。
 rm -rf "$MINO_DIR"
-echo -e "  ${CYAN}克隆 openmino 默认工作区 (最新版本)...${NC}"
-git clone git@github.com:hAcKlyc/openmino.git "$MINO_DIR"
-rm -rf "$MINO_DIR/.git"
+mkdir -p "$MINO_DIR"
+cp -R "${MINO_CACHE_DIR}/." "$MINO_DIR/"
+rm -rf "${MINO_DIR}/.git"
 echo -e "${GREEN}✓ mino 默认工作区已就绪${NC}"
 echo ""
 

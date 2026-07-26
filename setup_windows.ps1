@@ -553,25 +553,49 @@ try {
     Pop-Location
     Write-Host "OK - Rust 依赖下载完成" -ForegroundColor Green
 
-    # 准备默认工作区 (mino) — 每次拉取最新版本
-    # .git 不保留：避免 Tauri 资源打包权限问题 + rerun-if-changed 性能问题
-    Write-Host "`nStep 8/9: 准备默认工作区 (mino)" -ForegroundColor Blue
+    # 准备默认工作区 (mino) — 优先从本地缓存复制，避免每次 setup_windows.ps1 都重新 clone。
+    # 首次运行仍需联网一次（克隆到 %USERPROFILE%\.hamuna\setup-cache\mino），之后只做本地拷贝。
+    # 强制刷新缓存：$env:MINO_REFRESH=1; .\setup_windows.ps1
+    # 强制指定仓库：$env:MINO_REPO_URL='git@github.com:you/openmino.git'; .\setup_windows.ps1
     $MinoDir = Join-Path $ProjectDir "mino"
-    if (Test-Path $MinoDir) {
-        Remove-Item -Recurse -Force $MinoDir
+    $MinoCacheDir = if ($env:MINO_CACHE_DIR) { $env:MINO_CACHE_DIR } else { Join-Path $env:USERPROFILE ".hamuna\setup-cache\mino" }
+    $MinoRepoUrl = if ($env:MINO_REPO_URL) { $env:MINO_REPO_URL } else { "https://github.com/hAcKlyc/openmino.git" }
+    $MinoRefresh = $env:MINO_REFRESH
+
+    function Test-MinoCacheHit {
+        $marker = Join-Path $MinoCacheDir "CLAUDE.md"
+        return (-not $MinoRefresh) -and (Test-Path $marker)
     }
-    Write-Host "  克隆 openmino 默认工作区 (最新版本)..." -ForegroundColor Cyan
-    & git clone https://github.com/hAcKlyc/openmino.git $MinoDir
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  mino 克隆失败" -ForegroundColor Red
-        Write-Host "`n按回车键退出..." -ForegroundColor Yellow
-        Read-Host
-        exit 1
+
+    if (-not (Test-MinoCacheHit)) {
+        Write-Host "  克隆 openmino 到本地缓存 ($MinoCacheDir)..." -ForegroundColor Cyan
+        $parent = Split-Path -Parent $MinoCacheDir
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent | Out-Null }
+        if (Test-Path $MinoCacheDir) { Remove-Item -Recurse -Force $MinoCacheDir }
+        & git clone --depth 1 $MinoRepoUrl $MinoCacheDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  mino 克隆失败" -ForegroundColor Red
+            Write-Host "`n按回车键退出..." -ForegroundColor Yellow
+            Read-Host
+            exit 1
+        }
+    } else {
+        Write-Host "  OK - 命中本地缓存 $MinoCacheDir" -ForegroundColor Green
+    }
+
+    if (Test-Path $MinoDir) { Remove-Item -Recurse -Force $MinoDir }
+    New-Item -ItemType Directory -Path $MinoDir | Out-Null
+    # Copy-Item -Recurse 拷贝目录内容；然后单独剥离 .git（避免 Tauri 资源打包权限问题 + rerun-if-changed 性能开销）。
+    Get-ChildItem -Path $MinoCacheDir -Force | Where-Object { $_.Name -ne ".git" } | ForEach-Object {
+        $dest = Join-Path $MinoDir $_.Name
+        if ($_.PSIsContainer) {
+            Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force
+        } else {
+            Copy-Item -Path $_.FullName -Destination $dest -Force
+        }
     }
     $MinoGit = Join-Path $MinoDir ".git"
-    if (Test-Path $MinoGit) {
-        Remove-Item -Recurse -Force $MinoGit
-    }
+    if (Test-Path $MinoGit) { Remove-Item -Recurse -Force $MinoGit }
     Write-Host "OK - mino 默认工作区已就绪" -ForegroundColor Green
 
     Write-Host "`nStep 9/9: 初始化完成!" -ForegroundColor Blue

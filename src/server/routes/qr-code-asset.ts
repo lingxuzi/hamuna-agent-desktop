@@ -18,7 +18,14 @@ import { join } from 'path';
 import { cancellableFetch } from '../utils/cancellation';
 import { FileBusyError, withFileLock } from '../utils/file-lock';
 import { ensureDirSync } from '../utils/fs-utils';
+import { getBundledResourcePath } from '../utils/runtime';
 
+// Vendored at build time from the same R2 object the build pipeline uploads
+// to (see Cloudflare R2 hamuna-releases bucket). Kept bundled so the Feedback
+// popover works without a network round-trip — and stays working when
+// `download.hamuna.io` is unreachable (it's still NXDOMAIN at the time of
+// this writing; see specs/tech_docs/auto_update.md).
+const QR_CODE_BUNDLED = 'assets/feedback_qr_code.png';
 const QR_CODE_URL = 'https://download.hamuna.io/assets/feedback_qr_code.png';
 const CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 const LOCK_MAX_AGE_MS = 30_000;
@@ -33,6 +40,10 @@ interface QrCodeAssetRouteOptions {
   fetchImpl?: FetchLike;
   now?: () => number;
   logger?: Pick<Console, 'log' | 'warn'>;
+  // Path to a bundled copy of the QR asset. Leave undefined to auto-detect
+  // from `getBundledResourcePath`; pass `null` to skip the bundled shortcut
+  // (tests + non-Tauri previews); pass a string to force a specific file.
+  bundledPath?: string | null;
 }
 
 interface QrCodeAssetBody {
@@ -143,6 +154,18 @@ export async function handleQrCodeAssetRoute(
   const logger = options.logger ?? console;
   const fetchImpl = options.fetchImpl ?? cancellableFetch;
   const startTime = now();
+
+  // Bundled copy is the source of truth. Skip the download path entirely
+  // when it's present — no cache write, no network round-trip. Any stale
+  // local cache from an older build gets ignored.
+  const bundledPath = options.bundledPath !== undefined
+    ? options.bundledPath
+    : getBundledResourcePath(QR_CODE_BUNDLED);
+  const bundledDataUrl = bundledPath ? readCacheDataUrl(bundledPath) : null;
+  if (bundledDataUrl) {
+    logger.log(`[api/assets/qr-code] Bundled asset served (${bundledPath})`);
+    return jsonResponse({ success: true, dataUrl: bundledDataUrl });
+  }
 
   try {
     let needsDownload = true;

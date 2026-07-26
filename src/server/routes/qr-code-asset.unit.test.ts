@@ -30,6 +30,9 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return await response.json() as Record<string, unknown>;
 }
 
+// Tests deliberately pass `bundledPath: null` so the bundled shortcut
+// (added when the asset moved into `src-tauri/resources/`) never short-
+// circuits the cache + remote-download flow these tests are exercising.
 describe('handleQrCodeAssetRoute', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -42,7 +45,7 @@ describe('handleQrCodeAssetRoute', () => {
     const response = await handleQrCodeAssetRoute(
       '/api/other',
       new Request('http://local/api/other'),
-      { cacheDir: createTempCacheDir(), logger },
+      { cacheDir: createTempCacheDir(), bundledPath: null, logger },
     );
 
     expect(response).toBeNull();
@@ -56,7 +59,7 @@ describe('handleQrCodeAssetRoute', () => {
     const response = await handleQrCodeAssetRoute(
       '/api/assets/qr-code',
       createQrRequest(),
-      { cacheDir: createTempCacheDir(), fetchImpl, logger },
+      { cacheDir: createTempCacheDir(), fetchImpl, bundledPath: null, logger },
     );
 
     expect(response?.status).toBe(200);
@@ -76,7 +79,7 @@ describe('handleQrCodeAssetRoute', () => {
     const response = await handleQrCodeAssetRoute(
       '/api/assets/qr-code',
       createQrRequest(),
-      { cacheDir, cacheMaxAgeMs: 0, fetchImpl, logger },
+      { cacheDir, cacheMaxAgeMs: 0, fetchImpl, bundledPath: null, logger },
     );
     const body = await readJson(response as Response);
 
@@ -97,7 +100,7 @@ describe('handleQrCodeAssetRoute', () => {
     const response = await handleQrCodeAssetRoute(
       '/api/assets/qr-code',
       createQrRequest(),
-      { cacheDir, fetchImpl, logger },
+      { cacheDir, fetchImpl, bundledPath: null, logger },
     );
     const body = await readJson(response as Response);
 
@@ -114,7 +117,7 @@ describe('handleQrCodeAssetRoute', () => {
     const response = await handleQrCodeAssetRoute(
       '/api/assets/qr-code',
       createQrRequest(),
-      { cacheDir: createTempCacheDir(), fetchImpl, logger },
+      { cacheDir: createTempCacheDir(), fetchImpl, bundledPath: null, logger },
     );
     const body = await readJson(response as Response);
 
@@ -131,8 +134,8 @@ describe('handleQrCodeAssetRoute', () => {
     });
 
     const [first, second] = await Promise.all([
-      handleQrCodeAssetRoute('/api/assets/qr-code', createQrRequest(), { cacheDir, fetchImpl, logger }),
-      handleQrCodeAssetRoute('/api/assets/qr-code', createQrRequest(), { cacheDir, fetchImpl, logger }),
+      handleQrCodeAssetRoute('/api/assets/qr-code', createQrRequest(), { cacheDir, fetchImpl, bundledPath: null, logger }),
+      handleQrCodeAssetRoute('/api/assets/qr-code', createQrRequest(), { cacheDir, fetchImpl, bundledPath: null, logger }),
     ]);
 
     const firstBody = await readJson(first as Response);

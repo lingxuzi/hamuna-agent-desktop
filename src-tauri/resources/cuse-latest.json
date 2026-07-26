@@ -1,0 +1,16 @@
+{
+  "version": "v0.2.2",
+  "pub_date": "2026-06-19T07:42:56Z",
+  "platforms": {
+    "macos-universal": {
+      "url": "https://download.myagents.io/cuse/releases/v0.2.2/cuse-v0.2.2-macos-universal.tar.gz",
+      "sha256": "b064723e05fa45b012eb2700fc682aef70ccde8be496c7f3c4bdcfb3c7948ec3",
+      "size": 2970660
+    },
+    "windows-x64": {
+      "url": "https://download.myagents.io/cuse/releases/v0.2.2/cuse-v0.2.2-windows-x64.zip",
+      "sha256": "70b36cd9ea769161eb1c969b7d09d7cf14641083f52ff92d5f8d37e83307c1b8",
+      "size": 1397130
+    }
+  }
+}

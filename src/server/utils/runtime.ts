@@ -258,6 +258,32 @@ export function getBundledCusePath(): string | null {
 }
 
 /**
+ * Resolve an arbitrary resource that's bundled under `src-tauri/resources/`
+ * (per `tauri.conf.json > bundle.resources`). The Tauri build copies each
+ * entry to a path relative to the sidecar's `scriptDir` in production; in
+ * dev we walk up from `scriptDir` looking for `src-tauri/resources/`.
+ *
+ * Returns the absolute path on disk if found, otherwise `null`. Callers
+ * fall back to a remote fetch when the bundled copy is missing (e.g.
+ * older builds that predate the bundling).
+ *
+ * Mirrors the production / dev split used by `getBundledNodeDir` and
+ * `getBundledCusePath` — keep this in sync if the layout changes.
+ */
+export function getBundledResourcePath(relativePath: string): string | null {
+  const scriptDir = getScriptDir();
+  const prodPath = resolve(scriptDir, relativePath);
+  if (existsSync(prodPath)) return prodPath;
+  let dir = scriptDir;
+  for (let i = 0; i < 6; i++) {
+    const devPath = resolve(dir, 'src-tauri', 'resources', relativePath);
+    if (existsSync(devPath)) return devPath;
+    dir = dirname(dir);
+  }
+  return null;
+}
+
+/**
  * Get the absolute path to the bundled sharp module's CommonJS entry (`lib/index.js`).
  *
  * sharp ships per-platform native addons (`@img/sharp-<triple>/sharp.node`) that
