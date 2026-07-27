@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HamunaAgent",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "identifier": "com.hamuna.app",
   "build": {
     "frontendDist": "../dist",
@@ -110,7 +110,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "RWRKLXQeqGMdN5NlHntr4JqfEz+7/pleYUHRL+izartPQoa8EMKCKdow",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM3MUQ2M0E4MUU3NDJENEEKUlVSS0xYUWVxR01kTjVObEhudHI0SnFmRXorNy9wbGVZVUhSTCtpemFydFBRb2E4RU1LQ0tkb3cK",
       "endpoints": [
         "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev/update/{{target}}.json"
       ]
