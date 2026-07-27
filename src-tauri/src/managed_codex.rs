@@ -21,12 +21,22 @@ use crate::{ulog_error, ulog_info, ulog_warn};
 const CODEX_PROVIDER_ID: &str = "codex-sub";
 pub(crate) const REQUIRED_VERSION: &str = env!("HAMUNA_MANAGED_CODEX_VERSION");
 pub(crate) const REQUIRED_RUNTIME_SET: &str = env!("HAMUNA_MANAGED_CODEX_RUNTIME_SET");
-const RUNTIME_SETS_BASE_URL: &str = "https://download.hamuna.io/runtimes/codex/sets";
+// Build-time configurable via .env (forwarded by build_macos.sh / build_windows.ps1
+// via set -a; source .env). Defaults to official R2 endpoint. For self-hosted
+// builds, override both this AND `DOWNLOAD_HOST` to your custom R2 host.
+const RUNTIME_SETS_BASE_URL: &str = match option_env!("RUNTIME_SETS_BASE_URL") {
+    Some(v) => v,
+    None => "https://download.hamuna.io/runtimes/codex/sets",
+};
 // Keep this in sync with `src-tauri/tauri.conf.json > plugins.updater.pubkey`.
 // Managed runtime manifests and artifacts use the same minisign trust root as app updates.
 const HAMUNA_MINISIGN_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY3RkQ5QjIzMTE4RTgyRTkKUldUcGdvNFJJNXY5OTB3T2pnUzVUbjFrV203Zk5ZTDg0NVJRdGI0UVRranJzTUsvM0hGcmFlc0IK";
 const MANIFEST_SCHEMA_VERSION: u32 = 1;
-const DOWNLOAD_HOST: &str = "download.hamuna.io";
+// Build-time configurable; see comment on RUNTIME_SETS_BASE_URL above.
+const DOWNLOAD_HOST: &str = match option_env!("DOWNLOAD_HOST") {
+    Some(v) => v,
+    None => "download.hamuna.io",
+};
 const DOWNLOAD_PATH_PREFIX: &str = "/runtimes/codex/";
 const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
 const MAX_MANIFEST_SIGNATURE_BYTES: u64 = 16 * 1024;

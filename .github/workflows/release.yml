@@ -175,6 +175,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           DOWNLOAD_BASE_URL: https://download.hamuna.io
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           # Create update directory
           mkdir -p update-manifests
@@ -207,12 +208,12 @@ jobs:
             SIGNATURE=$(cat "$SIG")
 
             # Upload tar.gz to R2 (for updater)
-            rclone copy "$TAR_GZ" "r2:hamuna-releases/releases/v${VERSION}/"
+            rclone copy "$TAR_GZ" "r2:${R2_BUCKET}/releases/v${VERSION}/"
 
             # Upload DMG to R2 (for website download)
             if [ -n "$DMG" ]; then
               DMG_FILENAME=$(basename "$DMG")
-              rclone copy "$DMG" "r2:hamuna-releases/releases/v${VERSION}/"
+              rclone copy "$DMG" "r2:${R2_BUCKET}/releases/v${VERSION}/"
 
               # Store DMG filename for latest.json
               if [ "$target" = "aarch64-apple-darwin" ]; then
@@ -269,7 +270,7 @@ jobs:
           echo "Generated latest.json"
 
           # Upload all manifests to R2
-          rclone copy update-manifests/ "r2:hamuna-releases/update/"
+          rclone copy update-manifests/ "r2:${R2_BUCKET}/update/"
 
           echo "Upload complete!"
           echo "Update endpoints:"

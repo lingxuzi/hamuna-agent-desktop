@@ -9,8 +9,8 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${PROJECT_DIR}/.env"
 RUNTIME_LOCK_FILE="${PROJECT_DIR}/src/shared/managed-codex-runtime.json"
-R2_BUCKET="hamuna-releases"
-DOWNLOAD_BASE_URL="https://download.hamuna.io"
+R2_BUCKET="${R2_BUCKET:-hamuna-releases}"
+DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL:-https://download.hamuna.io}"
 DEFAULT_OUT_DIR="${PROJECT_DIR}/dist/managed-codex"
 
 RED='\033[0;31m'

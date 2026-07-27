@@ -53,8 +53,8 @@ $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectDir
 
 # 配置
-$R2Bucket = "hamuna-releases"
-$DownloadBaseUrl = "https://download.hamuna.io"
+$R2Bucket = if ($env:R2_BUCKET) { $env:R2_BUCKET } else { "hamuna-releases" }
+$DownloadBaseUrl = if ($env:DOWNLOAD_BASE_URL) { $env:DOWNLOAD_BASE_URL } else { "https://download.hamuna.io" }
 $EnvFile = Join-Path $ProjectDir ".env"
 
 Write-Host ""

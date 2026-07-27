@@ -18,8 +18,8 @@ Set-Location $ProjectDir
 
 $EnvFile = Join-Path $ProjectDir ".env"
 $RuntimeLockFile = Join-Path $ProjectDir "src\shared\managed-codex-runtime.json"
-$R2Bucket = "hamuna-releases"
-$DownloadBaseUrl = "https://download.hamuna.io"
+$R2Bucket = if ($env:R2_BUCKET) { $env:R2_BUCKET } else { "hamuna-releases" }
+$DownloadBaseUrl = if ($env:DOWNLOAD_BASE_URL) { $env:DOWNLOAD_BASE_URL } else { "https://download.hamuna.io" }
 if (-not $OutDir) {
     $OutDir = Join-Path $ProjectDir "dist\managed-codex"
 }

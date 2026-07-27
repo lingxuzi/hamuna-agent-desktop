@@ -48,12 +48,27 @@ Set-Location $ProjectDir
 # 读取版本号
 $TauriConf = Get-Content "src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json
 $Version = $TauriConf.version
+
+# 版本一致性检查 (防手滑: 跑完 npm version 没跑 sync, 或直接 publish 旧版本就出大事)
+# 一致时不打印, 不一致直接 hard fail
+$PkgJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+$PkgVersion = $PkgJson.version
+if ($PkgVersion -ne $Version) {
+    Write-Host ""
+    Write-Host "[X] 版本号不一致:" -ForegroundColor Red
+    Write-Host "    package.json:    $PkgVersion" -ForegroundColor Cyan
+    Write-Host "    tauri.conf.json: $Version" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "    修法: npm run version    # 同步 tauri.conf.json + Cargo.toml 到 package.json" -ForegroundColor Yellow
+    Write-Host "          npm version patch  # 一条命令全自动" -ForegroundColor Yellow
+    exit 1
+}
 $BundleDir = Join-Path $ProjectDir "src-tauri\target"
 $EnvFile = Join-Path $ProjectDir ".env"
 
 # 配置
-$R2Bucket = "hamuna-releases"
-$DownloadBaseUrl = "https://download.hamuna.io"
+$R2Bucket = if ($env:R2_BUCKET) { $env:R2_BUCKET } else { "hamuna-releases" }
+$DownloadBaseUrl = if ($env:DOWNLOAD_BASE_URL) { $env:DOWNLOAD_BASE_URL } else { "https://download.hamuna.io" }
 
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan
@@ -243,16 +258,16 @@ if ($UpdateZip) {
         notes     = "HamunaAgent v$Version"
         pub_date  = $PubDate
         signature = $Signature
-        url       = "$DownloadBaseUrl/releases/v$Version/$UpdateUploadName"
+        url       = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$UpdateUploadName"
     }
 
     # 添加下载链接
     $downloads = @{}
     if ($NsisExe) {
-        $downloads["installer"] = "$DownloadBaseUrl/releases/v$Version/$($NsisExe.Name)"
+        $downloads["installer"] = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$($NsisExe.Name)"
     }
     if ($PortableZip) {
-        $downloads["portable"] = "$DownloadBaseUrl/releases/v$Version/$($PortableZip.Name)"
+        $downloads["portable"] = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$($PortableZip.Name)"
     }
     if ($downloads.Count -gt 0) {
         $manifest["downloads"] = $downloads
@@ -278,7 +293,7 @@ if ($NsisExe) {
     $latestWinDownloads = @{
         "win_x64" = @{
             name = "Windows x64"
-            url  = "$DownloadBaseUrl/releases/v$Version/$($NsisExe.Name)"
+            url  = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$($NsisExe.Name)"
         }
     }
 

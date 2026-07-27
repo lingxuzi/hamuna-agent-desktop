@@ -21,8 +21,8 @@ BUNDLE_DIR="${PROJECT_DIR}/src-tauri/target"
 ENV_FILE="${PROJECT_DIR}/.env"
 
 # 配置
-R2_BUCKET="hamuna-releases"
-DOWNLOAD_BASE_URL="https://download.hamuna.io"
+R2_BUCKET="${R2_BUCKET:-hamuna-releases}"
+DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL:-https://download.hamuna.io}"
 
 # 架构名称辅助函数（避免重复计算逻辑）
 get_arch_suffix() {
@@ -66,6 +66,19 @@ echo -e "${CYAN}║${NC}  ${GREEN}🚀 HamunaAgent 发布到 Cloudflare R2${NC} 
 echo -e "${CYAN}║${NC}  ${BLUE}Version: ${VERSION}${NC}                                      ${CYAN}║${NC}"
 echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
 echo ""
+# 版本一致性检查 (防手滑: 跑完 npm version 没跑 sync, 或直接 publish 旧版本就出大事)
+# 一致时不打印, 不一致直接 hard fail
+PKG_VERSION=$(grep '"version"' "${PROJECT_DIR}/package.json" | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/')
+if [ "$PKG_VERSION" != "$VERSION" ]; then
+    echo ""
+    echo -e "${RED}❌ 版本号不一致:${NC}"
+    echo -e "   package.json:      ${CYAN}${PKG_VERSION}${NC}"
+    echo -e "   tauri.conf.json:   ${CYAN}${VERSION}${NC}"
+    echo ""
+    echo -e "   修法: ${YELLOW}npm run version${NC}    # 同步 tauri.conf.json + Cargo.toml 到 package.json"
+    echo -e "         ${YELLOW}npm version patch${NC}  # 一条命令全自动"
+    exit 1
+fi
 
 # ========================================
 # 加载环境变量

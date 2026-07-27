@@ -16,6 +16,12 @@ const MANAGED_CODEX_RUNTIME_LOCK_PATH: &str = "../src/shared/managed-codex-runti
 fn main() {
     expose_managed_codex_runtime_lock();
     expose_space_build_env();
+    // Layer A+: managed_codex.rs uses option_env!() for these. Without the
+    // rerun-if-env-changed hints, changing them and re-running cargo build
+    // would NOT trigger a recompile, so the build would still bake in the
+    // previous env values.
+    println!("cargo:rerun-if-env-changed=RUNTIME_SETS_BASE_URL");
+    println!("cargo:rerun-if-env-changed=DOWNLOAD_HOST");
     tauri_build::build()
 }
 

@@ -21,7 +21,7 @@ import { ensureDirSync } from '../utils/fs-utils';
 import { getBundledResourcePath } from '../utils/runtime';
 
 // Vendored at build time from the same R2 object the build pipeline uploads
-// to (see Cloudflare R2 hamuna-releases bucket). Kept bundled so the Feedback
+// to (the R2 bucket is read from R2_BUCKET / .env at publish time). Kept bundled so the Feedback
 // popover works without a network round-trip — and stays working when
 // `download.hamuna.io` is unreachable (it's still NXDOMAIN at the time of
 // this writing; see specs/tech_docs/auto_update.md).
