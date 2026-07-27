@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -7,986 +7,999 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.5] - 2026-07-27
+
+> 在线更新
+
+### Added
+- 在线更新
+
+### Changed
+- 在线更新
+
+### Fixed
+- 在线更新
+
 ## [0.3.4] - 2026-07-27
 
-> HamunaAgent 0.3.4 进一步收紧 R2 发布链路：将 R2 桶名、CSP / 升级端点 / 运行时清单基址等 URL 全部改为可由环境变量配置 (`.env` / `R2_BUCKET` / `DOWNLOAD_BASE_URL` / `RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST`)，让自部署 R2 的用户无需改源码即可切走 `download.hamuna.io`。同时在两个发布脚本里加入版本号一致性 hard-fail，避免 `package.json` 与 `tauri.conf.json` 漂移时静默发出旧版。
+> HamunaAgent 0.3.4 杩涗竴姝ユ敹绱?R2 鍙戝竷閾捐矾锛氬皢 R2 妗跺悕銆丆SP / 鍗囩骇绔偣 / 杩愯鏃舵竻鍗曞熀鍧€绛?URL 鍏ㄩ儴鏀逛负鍙敱鐜鍙橀噺閰嶇疆 (`.env` / `R2_BUCKET` / `DOWNLOAD_BASE_URL` / `RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST`)锛岃鑷儴缃?R2 鐨勭敤鎴锋棤闇€鏀规簮鐮佸嵆鍙垏璧?`download.hamuna.io`銆傚悓鏃跺湪涓や釜鍙戝竷鑴氭湰閲屽姞鍏ョ増鏈彿涓€鑷存€?hard-fail锛岄伩鍏?`package.json` 涓?`tauri.conf.json` 婕傜Щ鏃堕潤榛樺彂鍑烘棫鐗堛€?
 
 ### Added
 
-- **可配置 R2 桶名**: `.env` 新增 `R2_BUCKET` (默认 `hamuna-releases`)，`publish_*` / `rollback_*` / `upload_qr_code` / `release.yml` 全部从环境变量读取，不再写死 `r2:hamuna-releases/...`。
-- **CSP 与 Updater 端点 env 化**: `tauri.conf.json` 的 CSP `connect-src` / `img-src` 与 `plugins.updater.endpoints` 改用 `${DOWNLOAD_BASE_URL:-https://download.hamuna.io}` 占位符，R2 自部署用户可通过 `DOWNLOAD_BASE_URL=https://<你的域名>` 一键切走。
-- **Managed Codex Runtime 编译期 env 化**: `src-tauri/src/managed_codex.rs` 的 `RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST` 改用 `option_env!()`，配合 `src-tauri/build.rs` 新增的 `cargo:rerun-if-env-changed` 提示，构建时改 env 会真正触发重编译。
-- **版本号一致性 hard-fail**: `publish_release.sh` / `publish_windows.ps1` 在读取 `tauri.conf.json` 的 `version` 后立即对比 `package.json`，不一致直接 `exit 1` 并打印修复命令 (`npm run version` / `npm version patch`)，杜绝"忘记跑 sync-version 就 publish"的回归。
+- **鍙厤缃?R2 妗跺悕**: `.env` 鏂板 `R2_BUCKET` (榛樿 `hamuna-releases`)锛宍publish_*` / `rollback_*` / `upload_qr_code` / `release.yml` 鍏ㄩ儴浠庣幆澧冨彉閲忚鍙栵紝涓嶅啀鍐欐 `r2:hamuna-releases/...`銆?
+- **CSP 涓?Updater 绔偣 env 鍖?*: `tauri.conf.json` 鐨?CSP `connect-src` / `img-src` 涓?`plugins.updater.endpoints` 鏀圭敤 `${DOWNLOAD_BASE_URL:-https://download.hamuna.io}` 鍗犱綅绗︼紝R2 鑷儴缃茬敤鎴峰彲閫氳繃 `DOWNLOAD_BASE_URL=https://<浣犵殑鍩熷悕>` 涓€閿垏璧般€?
+- **Managed Codex Runtime 缂栬瘧鏈?env 鍖?*: `src-tauri/src/managed_codex.rs` 鐨?`RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST` 鏀圭敤 `option_env!()`锛岄厤鍚?`src-tauri/build.rs` 鏂板鐨?`cargo:rerun-if-env-changed` 鎻愮ず锛屾瀯寤烘椂鏀?env 浼氱湡姝ｈЕ鍙戦噸缂栬瘧銆?
+- **鐗堟湰鍙蜂竴鑷存€?hard-fail**: `publish_release.sh` / `publish_windows.ps1` 鍦ㄨ鍙?`tauri.conf.json` 鐨?`version` 鍚庣珛鍗冲姣?`package.json`锛屼笉涓€鑷寸洿鎺?`exit 1` 骞舵墦鍗颁慨澶嶅懡浠?(`npm run version` / `npm version patch`)锛屾潨缁?蹇樿璺?sync-version 灏?publish"鐨勫洖褰掋€?
 
 ### Changed
 
-- **Bump**: 0.3.2 → 0.3.4 (`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml`)。
+- **Bump**: 0.3.2 鈫?0.3.4 (`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml`)銆?
 
 ### Fixed
 
-- **CSP `${DOWNLOAD_BASE_URL:-...}` 默认值缺 `https://` schema**: 当 `DOWNLOAD_BASE_URL` 被显式设为完整 URL 时，原 fallback 拼出 `https://https://...` (双 schema)。Fallback 统一为 `https://download.hamuna.io`。
+- **CSP `${DOWNLOAD_BASE_URL:-...}` 榛樿鍊肩己 `https://` schema**: 褰?`DOWNLOAD_BASE_URL` 琚樉寮忚涓哄畬鏁?URL 鏃讹紝鍘?fallback 鎷煎嚭 `https://https://...` (鍙?schema)銆侳allback 缁熶竴涓?`https://download.hamuna.io`銆?
 
 ## [0.3.2] - 2026-07-23
 
-> HamunaAgent 0.3.2 引入完整 Theme System，带来八套可切换主题并统一桌面、Space、终端、编辑器与浮窗视觉；Goal Mode 新增可验证的结束条件，Team Space Registered Agent 也升级为独立执行实例。版本同时收紧核心 System Skill、会话恢复、配置一致性与 IM 渠道边界。
+> HamunaAgent 0.3.2 寮曞叆瀹屾暣 Theme System锛屽甫鏉ュ叓濂楀彲鍒囨崲涓婚骞剁粺涓€妗岄潰銆丼pace銆佺粓绔€佺紪杈戝櫒涓庢诞绐楄瑙夛紱Goal Mode 鏂板鍙獙璇佺殑缁撴潫鏉′欢锛孴eam Space Registered Agent 涔熷崌绾т负鐙珛鎵ц瀹炰緥銆傜増鏈悓鏃舵敹绱ф牳蹇?System Skill銆佷細璇濇仮澶嶃€侀厤缃竴鑷存€т笌 IM 娓犻亾杈圭晫銆?
 
 ### Added
 
-- **完整 Theme System 与八套主题**：新增 HamunaAgent Default、Default Black、Sage、Claude、Linear、Proof、Codex、Raycast，可分别选择主题与跟随系统 / 浅色 / 深色外观；主题会一致覆盖 Launcher、Chat、Settings、Team Space、终端、Monaco、Mermaid、代码高亮、Widget 与浮窗。Default Black 成为新用户产品默认，明确选择过主题的用户仍保留自己的选择。
-- **Goal Mode 支持结束条件与进度**：创建目标时可设置最晚截止时间、最大执行次数和 AI 是否可以主动结束；状态栏与 CLI 会区分已结算轮次和当前执行轮次，并在触发条件时精确停止对应 Goal。
-- **Team Space Registered Agent 独立执行实例**：同一工作区可以登记多个 Agent，每个实例拥有自己的目标与指令、订阅和投递 Session；Cloud v2 投递会保持精确 Agent 身份，并支持新旧客户端兼容滚动发布。
+- **瀹屾暣 Theme System 涓庡叓濂椾富棰?*锛氭柊澧?HamunaAgent Default銆丏efault Black銆丼age銆丆laude銆丩inear銆丳roof銆丆odex銆丷aycast锛屽彲鍒嗗埆閫夋嫨涓婚涓庤窡闅忕郴缁?/ 娴呰壊 / 娣辫壊澶栬锛涗富棰樹細涓€鑷磋鐩?Launcher銆丆hat銆丼ettings銆乀eam Space銆佺粓绔€丮onaco銆丮ermaid銆佷唬鐮侀珮浜€乄idget 涓庢诞绐椼€侱efault Black 鎴愪负鏂扮敤鎴蜂骇鍝侀粯璁わ紝鏄庣‘閫夋嫨杩囦富棰樼殑鐢ㄦ埛浠嶄繚鐣欒嚜宸辩殑閫夋嫨銆?
+- **Goal Mode 鏀寔缁撴潫鏉′欢涓庤繘搴?*锛氬垱寤虹洰鏍囨椂鍙缃渶鏅氭埅姝㈡椂闂淬€佹渶澶ф墽琛屾鏁板拰 AI 鏄惁鍙互涓诲姩缁撴潫锛涚姸鎬佹爮涓?CLI 浼氬尯鍒嗗凡缁撶畻杞鍜屽綋鍓嶆墽琛岃疆娆★紝骞跺湪瑙﹀彂鏉′欢鏃剁簿纭仠姝㈠搴?Goal銆?
+- **Team Space Registered Agent 鐙珛鎵ц瀹炰緥**锛氬悓涓€宸ヤ綔鍖哄彲浠ョ櫥璁板涓?Agent锛屾瘡涓疄渚嬫嫢鏈夎嚜宸辩殑鐩爣涓庢寚浠ゃ€佽闃呭拰鎶曢€?Session锛汣loud v2 鎶曢€掍細淇濇寔绮剧‘ Agent 韬唤锛屽苟鏀寔鏂版棫瀹㈡埛绔吋瀹规粴鍔ㄥ彂甯冦€?
 
 ### Changed
 
-- **Space Agent 管理更直接**：Agent 详情改为统一编辑器，目标与指令前置，订阅默认使用新会话并简化单条订阅配置；弹窗适配较小视口，同一 workspace 的多个 Agent 不再互相混淆。
-- **Space Issue 筛选更完整**：状态筛选支持更清晰的全部 / 未完成 / 具体状态切换，并在 Space、页面和退出边界正确保留或重置选择。
-- **核心 System Skill 始终可用**：`hamuna-cli`、`hamuna-docs` 与三项受管 Memory Skill 被标记为 Required，旧配置中的误禁用状态会自动清理，产品运行契约不再因用户级开关缺失。
-- **Tab 上下文更易辨认**：会话标题会保留工作区身份，活跃与非活跃标题、工作区和 Session 名称形成更稳定的视觉层级。
+- **Space Agent 绠＄悊鏇寸洿鎺?*锛欰gent 璇︽儏鏀逛负缁熶竴缂栬緫鍣紝鐩爣涓庢寚浠ゅ墠缃紝璁㈤槄榛樿浣跨敤鏂颁細璇濆苟绠€鍖栧崟鏉¤闃呴厤缃紱寮圭獥閫傞厤杈冨皬瑙嗗彛锛屽悓涓€ workspace 鐨勫涓?Agent 涓嶅啀浜掔浉娣锋穯銆?
+- **Space Issue 绛涢€夋洿瀹屾暣**锛氱姸鎬佺瓫閫夋敮鎸佹洿娓呮櫚鐨勫叏閮?/ 鏈畬鎴?/ 鍏蜂綋鐘舵€佸垏鎹紝骞跺湪 Space銆侀〉闈㈠拰閫€鍑鸿竟鐣屾纭繚鐣欐垨閲嶇疆閫夋嫨銆?
+- **鏍稿績 System Skill 濮嬬粓鍙敤**锛歚hamuna-cli`銆乣hamuna-docs` 涓庝笁椤瑰彈绠?Memory Skill 琚爣璁颁负 Required锛屾棫閰嶇疆涓殑璇鐢ㄧ姸鎬佷細鑷姩娓呯悊锛屼骇鍝佽繍琛屽绾︿笉鍐嶅洜鐢ㄦ埛绾у紑鍏崇己澶便€?
+- **Tab 涓婁笅鏂囨洿鏄撹鲸璁?*锛氫細璇濇爣棰樹細淇濈暀宸ヤ綔鍖鸿韩浠斤紝娲昏穬涓庨潪娲昏穬鏍囬銆佸伐浣滃尯鍜?Session 鍚嶇О褰㈡垚鏇寸ǔ瀹氱殑瑙嗚灞傜骇銆?
 
 ### Fixed
 
-- **Theme 首帧与复杂内容保持一致**：修复原生窗口启动闪色、运行时 Token 与 Tailwind utility 脱节、主按钮对比度、代码前景、终端 / 编辑器 / 图表配色及 Space 局部样式不跟随主题等问题。
-- **Goal 停止与 Space 投递竞态修复**：Goal 截止、取消和最大轮次不会在 lifecycle 锁内自锁；Agent 禁用、运行模式切换、Instruction 更新与批量投递按实例串行收口，避免旧设置覆盖或消息进入错误 Session。
-- **Agent 配置与会话恢复更可靠**：Agent 默认配置与 Project 兼容镜像在同一事务中更新并可回滚；macOS 只在 WebKit 确认 renderer 进程终止后恢复页面，普通唤醒不再误 reload 丢失草稿。
-- **IM Bridge 不再发出无法回答的结构化提问**：Telegram、钉钉和 OpenClaw Bridge 会禁用不受支持的阻塞式 `AskUserQuestion`，原生飞书卡片通道继续保留交互能力。
-- **Debug 构建版本保持一致**：macOS / Windows 开发构建会校验 package、Tauri 与 Cargo 版本，真实构建失败不再被包装脚本吞掉。
+- **Theme 棣栧抚涓庡鏉傚唴瀹逛繚鎸佷竴鑷?*锛氫慨澶嶅師鐢熺獥鍙ｅ惎鍔ㄩ棯鑹层€佽繍琛屾椂 Token 涓?Tailwind utility 鑴辫妭銆佷富鎸夐挳瀵规瘮搴︺€佷唬鐮佸墠鏅€佺粓绔?/ 缂栬緫鍣?/ 鍥捐〃閰嶈壊鍙?Space 灞€閮ㄦ牱寮忎笉璺熼殢涓婚绛夐棶棰樸€?
+- **Goal 鍋滄涓?Space 鎶曢€掔珵鎬佷慨澶?*锛欸oal 鎴銆佸彇娑堝拰鏈€澶ц疆娆′笉浼氬湪 lifecycle 閿佸唴鑷攣锛汚gent 绂佺敤銆佽繍琛屾ā寮忓垏鎹€両nstruction 鏇存柊涓庢壒閲忔姇閫掓寜瀹炰緥涓茶鏀跺彛锛岄伩鍏嶆棫璁剧疆瑕嗙洊鎴栨秷鎭繘鍏ラ敊璇?Session銆?
+- **Agent 閰嶇疆涓庝細璇濇仮澶嶆洿鍙潬**锛欰gent 榛樿閰嶇疆涓?Project 鍏煎闀滃儚鍦ㄥ悓涓€浜嬪姟涓洿鏂板苟鍙洖婊氾紱macOS 鍙湪 WebKit 纭 renderer 杩涚▼缁堟鍚庢仮澶嶉〉闈紝鏅€氬敜閱掍笉鍐嶈 reload 涓㈠け鑽夌銆?
+- **IM Bridge 涓嶅啀鍙戝嚭鏃犳硶鍥炵瓟鐨勭粨鏋勫寲鎻愰棶**锛歍elegram銆侀拤閽夊拰 OpenClaw Bridge 浼氱鐢ㄤ笉鍙楁敮鎸佺殑闃诲寮?`AskUserQuestion`锛屽師鐢熼涔﹀崱鐗囬€氶亾缁х画淇濈暀浜や簰鑳藉姏銆?
+- **Debug 鏋勫缓鐗堟湰淇濇寔涓€鑷?*锛歮acOS / Windows 寮€鍙戞瀯寤轰細鏍￠獙 package銆乀auri 涓?Cargo 鐗堟湰锛岀湡瀹炴瀯寤哄け璐ヤ笉鍐嶈鍖呰鑴氭湰鍚炴帀銆?
 
 ---
 
 ## [0.3.1] - 2026-07-17
 
-> HamunaAgent 0.3.1 聚焦连续对话与工具体验：飞书 Bot 的长回复重新流畅更新，MCP 异常不再阻塞 AI 回答，桌面与外部 Runtime 的活跃会话恢复更可靠；同时升级文件编辑和命令执行预览，补充通用网络代理范围，并加快使用统计加载。
+> HamunaAgent 0.3.1 鑱氱劍杩炵画瀵硅瘽涓庡伐鍏蜂綋楠岋細椋炰功 Bot 鐨勯暱鍥炲閲嶆柊娴佺晠鏇存柊锛孧CP 寮傚父涓嶅啀闃诲 AI 鍥炵瓟锛屾闈笌澶栭儴 Runtime 鐨勬椿璺冧細璇濇仮澶嶆洿鍙潬锛涘悓鏃跺崌绾ф枃浠剁紪杈戝拰鍛戒护鎵ц棰勮锛岃ˉ鍏呴€氱敤缃戠粶浠ｇ悊鑼冨洿锛屽苟鍔犲揩浣跨敤缁熻鍔犺浇銆?
 
 ### Added
 
-- **Space CLI 支持 Goal 查询与 Issue 更新**：可通过 `hamuna space goal list` 发现当前 Agent 可用的 Cloud Goal，并更新 Issue 标题、正文、human-only 属性或所属 Goal；歧义 Goal 会被明确拒绝，避免误更新。
+- **Space CLI 鏀寔 Goal 鏌ヨ涓?Issue 鏇存柊**锛氬彲閫氳繃 `hamuna space goal list` 鍙戠幇褰撳墠 Agent 鍙敤鐨?Cloud Goal锛屽苟鏇存柊 Issue 鏍囬銆佹鏂囥€乭uman-only 灞炴€ф垨鎵€灞?Goal锛涙涔?Goal 浼氳鏄庣‘鎷掔粷锛岄伩鍏嶈鏇存柊銆?
 
 ### Changed
 
-- **文件编辑与命令执行结果更易读**：Edit / Write 使用统一的逐行差异视图，多文件修改拆成独立卡片；Bash 输出改为紧凑的只读终端记录，长内容和大文件继续按安全上限渐进展示。
-- **网络代理范围可以分别控制**：自定义代理可独立选择“通用应用请求”和具体模型 Provider，支持只代理 Provider、只代理更新/Space/IM 等通用请求，或全部关闭应用代理并继承系统网络。
-- **Space Issue 列表默认聚焦未完成事项**：默认展示 open / todo / doing，选择“全部”时会真正包含已完成 Issue；Goal 路径、详情正文、评论和附件的层级也更清晰。
-- **使用统计切换更快更稳定**：7 / 30 / 60 天选择会统一驱动汇总、趋势和模型用量表；切换期间保留当前结果并显示局部加载，减少重复扫描 Session 索引带来的等待。
+- **鏂囦欢缂栬緫涓庡懡浠ゆ墽琛岀粨鏋滄洿鏄撹**锛欵dit / Write 浣跨敤缁熶竴鐨勯€愯宸紓瑙嗗浘锛屽鏂囦欢淇敼鎷嗘垚鐙珛鍗＄墖锛汢ash 杈撳嚭鏀逛负绱у噾鐨勫彧璇荤粓绔褰曪紝闀垮唴瀹瑰拰澶ф枃浠剁户缁寜瀹夊叏涓婇檺娓愯繘灞曠ず銆?
+- **缃戠粶浠ｇ悊鑼冨洿鍙互鍒嗗埆鎺у埗**锛氳嚜瀹氫箟浠ｇ悊鍙嫭绔嬮€夋嫨鈥滈€氱敤搴旂敤璇锋眰鈥濆拰鍏蜂綋妯″瀷 Provider锛屾敮鎸佸彧浠ｇ悊 Provider銆佸彧浠ｇ悊鏇存柊/Space/IM 绛夐€氱敤璇锋眰锛屾垨鍏ㄩ儴鍏抽棴搴旂敤浠ｇ悊骞剁户鎵跨郴缁熺綉缁溿€?
+- **Space Issue 鍒楄〃榛樿鑱氱劍鏈畬鎴愪簨椤?*锛氶粯璁ゅ睍绀?open / todo / doing锛岄€夋嫨鈥滃叏閮ㄢ€濇椂浼氱湡姝ｅ寘鍚凡瀹屾垚 Issue锛汫oal 璺緞銆佽鎯呮鏂囥€佽瘎璁哄拰闄勪欢鐨勫眰绾т篃鏇存竻鏅般€?
+- **浣跨敤缁熻鍒囨崲鏇村揩鏇寸ǔ瀹?*锛? / 30 / 60 澶╅€夋嫨浼氱粺涓€椹卞姩姹囨€汇€佽秼鍔垮拰妯″瀷鐢ㄩ噺琛紱鍒囨崲鏈熼棿淇濈暀褰撳墠缁撴灉骞舵樉绀哄眬閮ㄥ姞杞斤紝鍑忓皯閲嶅鎵弿 Session 绱㈠紩甯︽潵鐨勭瓑寰呫€?
 
 ### Fixed
 
-- **飞书 Bot 长回复恢复流畅更新**：修复流式配置类型、回复生命周期和重复整段更新的职责错位，由 Channel 插件统一负责渲染与收尾，减少长回答逐渐变慢以及结束后仍等待数十秒的问题。
-- **MCP 故障不再阻塞 AI 任务**：新会话会给 MCP 一个统一、可配置的短预热窗口；工具未就绪、鉴权失败或超时后，基础 AI 仍会继续回答。同一连续 Session 不再为每条 IM 消息重复启动工具服务。
-- **活跃会话恢复不再丢失流式尾部**：桌面切换历史或返回正在生成的会话时，会以同一份 Session 快照衔接后续实时事件，减少内容倒退、重复、缺段和虚假 loading。
-- **后台任务与完成提醒不再串会话**：任务状态、未读角标、系统通知和深链接按真实 Session / turn 隔离，多个 Tab 或自动化并行时不会互相覆盖。
-- **长推理模型不再被静默期误判为断流**：OpenAI 兼容 Bridge 不会因为推理阶段暂时没有正文 token 而在 60 秒后中止，真正的取消、传输错误和上层超时仍然有效。
-- **MCP OAuth 刷新避免多会话竞争**：主动刷新由单一全局进程负责，并防止较早的刷新响应覆盖用户刚完成的重新授权或注销。
+- **椋炰功 Bot 闀垮洖澶嶆仮澶嶆祦鐣呮洿鏂?*锛氫慨澶嶆祦寮忛厤缃被鍨嬨€佸洖澶嶇敓鍛藉懆鏈熷拰閲嶅鏁存鏇存柊鐨勮亴璐ｉ敊浣嶏紝鐢?Channel 鎻掍欢缁熶竴璐熻矗娓叉煋涓庢敹灏撅紝鍑忓皯闀垮洖绛旈€愭笎鍙樻參浠ュ強缁撴潫鍚庝粛绛夊緟鏁板崄绉掔殑闂銆?
+- **MCP 鏁呴殰涓嶅啀闃诲 AI 浠诲姟**锛氭柊浼氳瘽浼氱粰 MCP 涓€涓粺涓€銆佸彲閰嶇疆鐨勭煭棰勭儹绐楀彛锛涘伐鍏锋湭灏辩华銆侀壌鏉冨け璐ユ垨瓒呮椂鍚庯紝鍩虹 AI 浠嶄細缁х画鍥炵瓟銆傚悓涓€杩炵画 Session 涓嶅啀涓烘瘡鏉?IM 娑堟伅閲嶅鍚姩宸ュ叿鏈嶅姟銆?
+- **娲昏穬浼氳瘽鎭㈠涓嶅啀涓㈠け娴佸紡灏鹃儴**锛氭闈㈠垏鎹㈠巻鍙叉垨杩斿洖姝ｅ湪鐢熸垚鐨勪細璇濇椂锛屼細浠ュ悓涓€浠?Session 蹇収琛旀帴鍚庣画瀹炴椂浜嬩欢锛屽噺灏戝唴瀹瑰€掗€€銆侀噸澶嶃€佺己娈靛拰铏氬亣 loading銆?
+- **鍚庡彴浠诲姟涓庡畬鎴愭彁閱掍笉鍐嶄覆浼氳瘽**锛氫换鍔＄姸鎬併€佹湭璇昏鏍囥€佺郴缁熼€氱煡鍜屾繁閾炬帴鎸夌湡瀹?Session / turn 闅旂锛屽涓?Tab 鎴栬嚜鍔ㄥ寲骞惰鏃朵笉浼氫簰鐩歌鐩栥€?
+- **闀挎帹鐞嗘ā鍨嬩笉鍐嶈闈欓粯鏈熻鍒や负鏂祦**锛歄penAI 鍏煎 Bridge 涓嶄細鍥犱负鎺ㄧ悊闃舵鏆傛椂娌℃湁姝ｆ枃 token 鑰屽湪 60 绉掑悗涓锛岀湡姝ｇ殑鍙栨秷銆佷紶杈撻敊璇拰涓婂眰瓒呮椂浠嶇劧鏈夋晥銆?
+- **MCP OAuth 鍒锋柊閬垮厤澶氫細璇濈珵浜?*锛氫富鍔ㄥ埛鏂扮敱鍗曚竴鍏ㄥ眬杩涚▼璐熻矗锛屽苟闃叉杈冩棭鐨勫埛鏂板搷搴旇鐩栫敤鎴峰垰瀹屾垚鐨勯噸鏂版巿鏉冩垨娉ㄩ攢銆?
 
 ---
 
 ## [0.3.0] - 2026-07-14
 
-> HamunaAgent 0.3.0 是一次重要版本升级：新增可持续推进长期目标的 Goal Mode，并把 Team Space 作为实验室功能正式开放；同时加入 Grok 订阅登录、统一任务与定时自动化、长期记忆维护升级，以及更顺滑的 Managed Codex Runtime 更新体验。
+> HamunaAgent 0.3.0 鏄竴娆￠噸瑕佺増鏈崌绾э細鏂板鍙寔缁帹杩涢暱鏈熺洰鏍囩殑 Goal Mode锛屽苟鎶?Team Space 浣滀负瀹為獙瀹ゅ姛鑳芥寮忓紑鏀撅紱鍚屾椂鍔犲叆 Grok 璁㈤槄鐧诲綍銆佺粺涓€浠诲姟涓庡畾鏃惰嚜鍔ㄥ寲銆侀暱鏈熻蹇嗙淮鎶ゅ崌绾э紝浠ュ強鏇撮『婊戠殑 Managed Codex Runtime 鏇存柊浣撻獙銆?
 
 ### Added
 
-- **Goal Mode 长期目标模式**：在 Chat 或 Launcher 使用 `/goal` 即可让当前会话围绕一个目标持续工作，支持暂停、恢复、取消、完成与阻塞状态，并在状态栏汇总执行轮次、耗时和 Token；同一目标也能延续到对应的 IM / Agent Channel 会话。
-- **Team Space 进入实验室功能**：可在「设置 → 关于&反馈 → 实验室」开启 Team Space，体验团队成员协作、分层 Goal、Issue 指派与认领、评论和附件、共享 Skill、Registered Agent 工作流，以及 Space 套餐与配额展示。
-- **Grok 订阅 Provider**：新增 Grok 订阅登录入口，可通过 xAI OAuth 使用订阅额度，并在设置中完成登录、验证和注销，无需把访问令牌写入普通 Provider 配置。
+- **Goal Mode 闀挎湡鐩爣妯″紡**锛氬湪 Chat 鎴?Launcher 浣跨敤 `/goal` 鍗冲彲璁╁綋鍓嶄細璇濆洿缁曚竴涓洰鏍囨寔缁伐浣滐紝鏀寔鏆傚仠銆佹仮澶嶃€佸彇娑堛€佸畬鎴愪笌闃诲鐘舵€侊紝骞跺湪鐘舵€佹爮姹囨€绘墽琛岃疆娆°€佽€楁椂鍜?Token锛涘悓涓€鐩爣涔熻兘寤剁画鍒板搴旂殑 IM / Agent Channel 浼氳瘽銆?
+- **Team Space 杩涘叆瀹為獙瀹ゅ姛鑳?*锛氬彲鍦ㄣ€岃缃?鈫?鍏充簬&鍙嶉 鈫?瀹為獙瀹ゃ€嶅紑鍚?Team Space锛屼綋楠屽洟闃熸垚鍛樺崗浣溿€佸垎灞?Goal銆両ssue 鎸囨淳涓庤棰嗐€佽瘎璁哄拰闄勪欢銆佸叡浜?Skill銆丷egistered Agent 宸ヤ綔娴侊紝浠ュ強 Space 濂楅涓庨厤棰濆睍绀恒€?
+- **Grok 璁㈤槄 Provider**锛氭柊澧?Grok 璁㈤槄鐧诲綍鍏ュ彛锛屽彲閫氳繃 xAI OAuth 浣跨敤璁㈤槄棰濆害锛屽苟鍦ㄨ缃腑瀹屾垚鐧诲綍銆侀獙璇佸拰娉ㄩ攢锛屾棤闇€鎶婅闂护鐗屽啓鍏ユ櫘閫?Provider 閰嶇疆銆?
 
 ### Changed
 
-- **任务与定时自动化统一**：Task Center 现在是任务身份、调度和执行状态的统一来源；原有 Cron 命令继续可用，立即执行不会改变周期任务的下一次计划时间。旧 At / Every / Cron 定时任务会在升级后自动迁移；旧 Loop 不会自动转换为 Goal，需在对应会话中使用 `/goal` 重新创建。
-- **长期记忆维护更自然**：记忆整理、进化和自动更新改为隐藏的系统维护任务，并通过官方 Memory Update Skill 执行；普通任务列表更清爽，已有工作区也不再强制依赖自定义更新规则文件。
-- **Managed Codex Runtime 无感升级**：新版本下载期间继续使用已验证的 Runtime，不会中断活跃会话；设置页会展示检查、下载和可用状态，并增强代理网络与 Windows 签名轮换下的安装恢复能力。
-- **Space 协作流程更完整**：增加头像预设、云端套餐权益、Issue 经办人和跟进投送、附件草稿归属、Skill 来源与文件树，并优化成员邀请、Agent 设置、工作区切换和云端连接轮询。
+- **浠诲姟涓庡畾鏃惰嚜鍔ㄥ寲缁熶竴**锛歍ask Center 鐜板湪鏄换鍔¤韩浠姐€佽皟搴﹀拰鎵ц鐘舵€佺殑缁熶竴鏉ユ簮锛涘師鏈?Cron 鍛戒护缁х画鍙敤锛岀珛鍗虫墽琛屼笉浼氭敼鍙樺懆鏈熶换鍔＄殑涓嬩竴娆¤鍒掓椂闂淬€傛棫 At / Every / Cron 瀹氭椂浠诲姟浼氬湪鍗囩骇鍚庤嚜鍔ㄨ縼绉伙紱鏃?Loop 涓嶄細鑷姩杞崲涓?Goal锛岄渶鍦ㄥ搴斾細璇濅腑浣跨敤 `/goal` 閲嶆柊鍒涘缓銆?
+- **闀挎湡璁板繂缁存姢鏇磋嚜鐒?*锛氳蹇嗘暣鐞嗐€佽繘鍖栧拰鑷姩鏇存柊鏀逛负闅愯棌鐨勭郴缁熺淮鎶や换鍔★紝骞堕€氳繃瀹樻柟 Memory Update Skill 鎵ц锛涙櫘閫氫换鍔″垪琛ㄦ洿娓呯埥锛屽凡鏈夊伐浣滃尯涔熶笉鍐嶅己鍒朵緷璧栬嚜瀹氫箟鏇存柊瑙勫垯鏂囦欢銆?
+- **Managed Codex Runtime 鏃犳劅鍗囩骇**锛氭柊鐗堟湰涓嬭浇鏈熼棿缁х画浣跨敤宸查獙璇佺殑 Runtime锛屼笉浼氫腑鏂椿璺冧細璇濓紱璁剧疆椤典細灞曠ず妫€鏌ャ€佷笅杞藉拰鍙敤鐘舵€侊紝骞跺寮轰唬鐞嗙綉缁滀笌 Windows 绛惧悕杞崲涓嬬殑瀹夎鎭㈠鑳藉姏銆?
+- **Space 鍗忎綔娴佺▼鏇村畬鏁?*锛氬鍔犲ご鍍忛璁俱€佷簯绔椁愭潈鐩娿€両ssue 缁忓姙浜哄拰璺熻繘鎶曢€併€侀檮浠惰崏绋垮綊灞炪€丼kill 鏉ユ簮涓庢枃浠舵爲锛屽苟浼樺寲鎴愬憳閭€璇枫€丄gent 璁剧疆銆佸伐浣滃尯鍒囨崲鍜屼簯绔繛鎺ヨ疆璇€?
 
 ### Fixed
 
-- **会话与外部 Runtime 更稳定**：修复 SDK resume anchor 过期、预热 Session 首轮发送、Codex 恢复回合、连续发送气泡、注入任务结果和自动标题等问题，减少历史会话串写、空转或错误显示已完成的情况。
-- **自动化停止与投送更可靠**：Goal、Task、Cron 和 IM heartbeat 会按精确会话与执行轮次完成停止、恢复和结果投送，降低旧执行结果覆盖新任务或消息投错 Channel 的风险。
-- **工作区文件与附件更安全**：文件访问和 Space 附件写入会锚定已验证的目录句柄，抵御符号链接、目录替换和 Windows reparse point 引发的越界访问。
-- **Chat 与工作区浏览细节修复**：多张粘贴图片会保持各自预览；工作区树在预览布局中保持可见，并新增折叠控制、完整文件名提示和更合适的响应式断点。
+- **浼氳瘽涓庡閮?Runtime 鏇寸ǔ瀹?*锛氫慨澶?SDK resume anchor 杩囨湡銆侀鐑?Session 棣栬疆鍙戦€併€丆odex 鎭㈠鍥炲悎銆佽繛缁彂閫佹皵娉°€佹敞鍏ヤ换鍔＄粨鏋滃拰鑷姩鏍囬绛夐棶棰橈紝鍑忓皯鍘嗗彶浼氳瘽涓插啓銆佺┖杞垨閿欒鏄剧ず宸插畬鎴愮殑鎯呭喌銆?
+- **鑷姩鍖栧仠姝笌鎶曢€佹洿鍙潬**锛欸oal銆乀ask銆丆ron 鍜?IM heartbeat 浼氭寜绮剧‘浼氳瘽涓庢墽琛岃疆娆″畬鎴愬仠姝€佹仮澶嶅拰缁撴灉鎶曢€侊紝闄嶄綆鏃ф墽琛岀粨鏋滆鐩栨柊浠诲姟鎴栨秷鎭姇閿?Channel 鐨勯闄┿€?
+- **宸ヤ綔鍖烘枃浠朵笌闄勪欢鏇村畨鍏?*锛氭枃浠惰闂拰 Space 闄勪欢鍐欏叆浼氶敋瀹氬凡楠岃瘉鐨勭洰褰曞彞鏌勶紝鎶靛尽绗﹀彿閾炬帴銆佺洰褰曟浛鎹㈠拰 Windows reparse point 寮曞彂鐨勮秺鐣岃闂€?
+- **Chat 涓庡伐浣滃尯娴忚缁嗚妭淇**锛氬寮犵矘璐村浘鐗囦細淇濇寔鍚勮嚜棰勮锛涘伐浣滃尯鏍戝湪棰勮甯冨眬涓繚鎸佸彲瑙侊紝骞舵柊澧炴姌鍙犳帶鍒躲€佸畬鏁存枃浠跺悕鎻愮ず鍜屾洿鍚堥€傜殑鍝嶅簲寮忔柇鐐广€?
 
 ---
 
 ## [0.2.49] - 2026-07-07
 
-> 本版扩展 Agent 长期记忆、Team Space 协作和 IM 渠道交互：Agent 可定期整理/进化长期记忆；Space 增加个人资料、成员设置、Skill 发布历史和 Issue 投送体验；飞书等渠道可以用原生卡片向用户追问。OpenAI 兼容桥、会话草稿可见性、后台子 Agent 状态和 Skill 安装安全性也做了稳定性修复。
+> 鏈増鎵╁睍 Agent 闀挎湡璁板繂銆乀eam Space 鍗忎綔鍜?IM 娓犻亾浜や簰锛欰gent 鍙畾鏈熸暣鐞?杩涘寲闀挎湡璁板繂锛汼pace 澧炲姞涓汉璧勬枡銆佹垚鍛樿缃€丼kill 鍙戝竷鍘嗗彶鍜?Issue 鎶曢€佷綋楠岋紱椋炰功绛夋笭閬撳彲浠ョ敤鍘熺敓鍗＄墖鍚戠敤鎴疯拷闂€侽penAI 鍏煎妗ャ€佷細璇濊崏绋垮彲瑙佹€с€佸悗鍙板瓙 Agent 鐘舵€佸拰 Skill 瀹夎瀹夊叏鎬т篃鍋氫簡绋冲畾鎬т慨澶嶃€?
 
 ### Added
 
-- **Agent 长期记忆进化**：Agent 设置中新增长期记忆进化能力，可定期整理用户记忆、规则和自我改进素材，让长期运行的 Agent 更容易保持连续性。
-- **Team Space 协作能力补齐**：Space 增加个人资料头像、成员与配额设置、Skill 发布历史、文件夹来源发布，以及更结构化的 Issue 投送提示。
-- **IM 渠道追问卡片**：飞书渠道支持 `AskUserQuestion` 原生交互卡片，AI 在需要用户确认或补充信息时可以在聊天里直接发起问题。
-- **Prompt Writer 作为系统 Skill 更新**：内置 prompt-writer 会随应用更新同步，已有安装也能获得新的提示词写作方法论内容。
+- **Agent 闀挎湡璁板繂杩涘寲**锛欰gent 璁剧疆涓柊澧為暱鏈熻蹇嗚繘鍖栬兘鍔涳紝鍙畾鏈熸暣鐞嗙敤鎴疯蹇嗐€佽鍒欏拰鑷垜鏀硅繘绱犳潗锛岃闀挎湡杩愯鐨?Agent 鏇村鏄撲繚鎸佽繛缁€с€?
+- **Team Space 鍗忎綔鑳藉姏琛ラ綈**锛歋pace 澧炲姞涓汉璧勬枡澶村儚銆佹垚鍛樹笌閰嶉璁剧疆銆丼kill 鍙戝竷鍘嗗彶銆佹枃浠跺す鏉ユ簮鍙戝竷锛屼互鍙婃洿缁撴瀯鍖栫殑 Issue 鎶曢€佹彁绀恒€?
+- **IM 娓犻亾杩介棶鍗＄墖**锛氶涔︽笭閬撴敮鎸?`AskUserQuestion` 鍘熺敓浜や簰鍗＄墖锛孉I 鍦ㄩ渶瑕佺敤鎴风‘璁ゆ垨琛ュ厖淇℃伅鏃跺彲浠ュ湪鑱婂ぉ閲岀洿鎺ュ彂璧烽棶棰樸€?
+- **Prompt Writer 浣滀负绯荤粺 Skill 鏇存柊**锛氬唴缃?prompt-writer 浼氶殢搴旂敤鏇存柊鍚屾锛屽凡鏈夊畨瑁呬篃鑳借幏寰楁柊鐨勬彁绀鸿瘝鍐欎綔鏂规硶璁哄唴瀹广€?
 
 ### Changed
 
-- **OpenAI 兼容桥 prompt cache 更稳定**：Responses 和 Chat Completions 路径都会保留 prompt cache 亲和信息，减少兼容 Provider 下长上下文重复请求的成本。
-- **自动化会话更少干扰历史**：预查询 runtime 草稿和纯隐藏 system reminder 不再污染普通会话历史、搜索和用户气泡展示。
-- **后台子 Agent 状态更可见**：默认后台执行的子 Agent / 任务状态会更稳定地出现在任务中心和消息流中，减少“后台在跑但界面没反馈”的情况。
+- **OpenAI 鍏煎妗?prompt cache 鏇寸ǔ瀹?*锛歊esponses 鍜?Chat Completions 璺緞閮戒細淇濈暀 prompt cache 浜插拰淇℃伅锛屽噺灏戝吋瀹?Provider 涓嬮暱涓婁笅鏂囬噸澶嶈姹傜殑鎴愭湰銆?
+- **鑷姩鍖栦細璇濇洿灏戝共鎵板巻鍙?*锛氶鏌ヨ runtime 鑽夌鍜岀函闅愯棌 system reminder 涓嶅啀姹℃煋鏅€氫細璇濆巻鍙层€佹悳绱㈠拰鐢ㄦ埛姘旀场灞曠ず銆?
+- **鍚庡彴瀛?Agent 鐘舵€佹洿鍙**锛氶粯璁ゅ悗鍙版墽琛岀殑瀛?Agent / 浠诲姟鐘舵€佷細鏇寸ǔ瀹氬湴鍑虹幇鍦ㄤ换鍔′腑蹇冨拰娑堟伅娴佷腑锛屽噺灏戔€滃悗鍙板湪璺戜絾鐣岄潰娌″弽棣堚€濈殑鎯呭喌銆?
 
 ### Fixed
 
-- **Agent Channel heartbeat / cron 投送不再串私聊**：heartbeat、手动唤醒和定时任务结果会绑定到当前有效私聊目标，不会误投到其它私聊或群聊。
-- **IM 追问能力按渠道正确降级**：不支持原生卡片的渠道会禁用桌面-only 追问能力，避免 AI 发出用户无法响应的交互。
-- **Space Skill 发布更安全可靠**：直连压缩包下载改为 HTTPS-only，并拦截私网/回环地址和 DNS rebinding；URL 发布产生的临时包也会及时清理。
-- **Space 与设置页细节修复**：修复 Space slug 冲突提示、头像渲染、成员表单、设置页布局和配额错误处理等问题。
-- **桌面输入体验修复**：关闭 macOS 系统文本纠错弹窗干扰，并修复嵌套横向滚动区域与 Tab 滑动手势的冲突。
+- **Agent Channel heartbeat / cron 鎶曢€佷笉鍐嶄覆绉佽亰**锛歨eartbeat銆佹墜鍔ㄥ敜閱掑拰瀹氭椂浠诲姟缁撴灉浼氱粦瀹氬埌褰撳墠鏈夋晥绉佽亰鐩爣锛屼笉浼氳鎶曞埌鍏跺畠绉佽亰鎴栫兢鑱娿€?
+- **IM 杩介棶鑳藉姏鎸夋笭閬撴纭檷绾?*锛氫笉鏀寔鍘熺敓鍗＄墖鐨勬笭閬撲細绂佺敤妗岄潰-only 杩介棶鑳藉姏锛岄伩鍏?AI 鍙戝嚭鐢ㄦ埛鏃犳硶鍝嶅簲鐨勪氦浜掋€?
+- **Space Skill 鍙戝竷鏇村畨鍏ㄥ彲闈?*锛氱洿杩炲帇缂╁寘涓嬭浇鏀逛负 HTTPS-only锛屽苟鎷︽埅绉佺綉/鍥炵幆鍦板潃鍜?DNS rebinding锛沀RL 鍙戝竷浜х敓鐨勪复鏃跺寘涔熶細鍙婃椂娓呯悊銆?
+- **Space 涓庤缃〉缁嗚妭淇**锛氫慨澶?Space slug 鍐茬獊鎻愮ず銆佸ご鍍忔覆鏌撱€佹垚鍛樿〃鍗曘€佽缃〉甯冨眬鍜岄厤棰濋敊璇鐞嗙瓑闂銆?
+- **妗岄潰杈撳叆浣撻獙淇**锛氬叧闂?macOS 绯荤粺鏂囨湰绾犻敊寮圭獥骞叉壈锛屽苟淇宓屽妯悜婊氬姩鍖哄煙涓?Tab 婊戝姩鎵嬪娍鐨勫啿绐併€?
 
 ---
 
 ## [0.2.48] - 2026-07-05
 
-> 本版修复 Anthropic 订阅登录在新版 Claude SDK 下无法真正复用本机 OAuth 的问题：HamunaAgent 会把订阅账号交回 Claude Code 原生凭据系统管理，同时避免第三方 API Provider 环境污染订阅校验。
+> 鏈増淇 Anthropic 璁㈤槄鐧诲綍鍦ㄦ柊鐗?Claude SDK 涓嬫棤娉曠湡姝ｅ鐢ㄦ湰鏈?OAuth 鐨勯棶棰橈細HamunaAgent 浼氭妸璁㈤槄璐﹀彿浜ゅ洖 Claude Code 鍘熺敓鍑嵁绯荤粺绠＄悊锛屽悓鏃堕伩鍏嶇涓夋柟 API Provider 鐜姹℃煋璁㈤槄鏍￠獙銆?
 
 ### Fixed
 
-- **Anthropic 订阅登录恢复可用**：完成官方登录后，HamunaAgent 会复用本机 Claude Code/桌面端的订阅凭据，不再因为额外接管 OAuth token 或错误注入 provider env 导致验证失败。
-- **订阅验证不再串到第三方 Provider**：在当前会话使用第三方 API Provider 时，设置页的 Anthropic 订阅验证会显式切到官方订阅身份，避免误带 `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY`。
-- **登录失败时可手动继续**：当浏览器回跳未能自动完成时，设置页支持粘贴官方登录输出的授权码继续验证，减少卡在登录流程中的情况。
+- **Anthropic 璁㈤槄鐧诲綍鎭㈠鍙敤**锛氬畬鎴愬畼鏂圭櫥褰曞悗锛孒amunaAgent 浼氬鐢ㄦ湰鏈?Claude Code/妗岄潰绔殑璁㈤槄鍑嵁锛屼笉鍐嶅洜涓洪澶栨帴绠?OAuth token 鎴栭敊璇敞鍏?provider env 瀵艰嚧楠岃瘉澶辫触銆?
+- **璁㈤槄楠岃瘉涓嶅啀涓插埌绗笁鏂?Provider**锛氬湪褰撳墠浼氳瘽浣跨敤绗笁鏂?API Provider 鏃讹紝璁剧疆椤电殑 Anthropic 璁㈤槄楠岃瘉浼氭樉寮忓垏鍒板畼鏂硅闃呰韩浠斤紝閬垮厤璇甫 `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY`銆?
+- **鐧诲綍澶辫触鏃跺彲鎵嬪姩缁х画**锛氬綋娴忚鍣ㄥ洖璺虫湭鑳借嚜鍔ㄥ畬鎴愭椂锛岃缃〉鏀寔绮樿创瀹樻柟鐧诲綍杈撳嚭鐨勬巿鏉冪爜缁х画楠岃瘉锛屽噺灏戝崱鍦ㄧ櫥褰曟祦绋嬩腑鐨勬儏鍐点€?
 
 ---
 
 ## [0.2.47] - 2026-07-04
 
-> 本版修复 Claude 订阅登录后的状态校验问题：登录窗口完成 OAuth 后，设置页会继续用真实 Claude SDK 请求确认订阅是否可用；如果仍然过期或不可用，会直接展示底层真实错误，避免误显示“登录成功”。
+> 鏈増淇 Claude 璁㈤槄鐧诲綍鍚庣殑鐘舵€佹牎楠岄棶棰橈細鐧诲綍绐楀彛瀹屾垚 OAuth 鍚庯紝璁剧疆椤典細缁х画鐢ㄧ湡瀹?Claude SDK 璇锋眰纭璁㈤槄鏄惁鍙敤锛涘鏋滀粛鐒惰繃鏈熸垨涓嶅彲鐢紝浼氱洿鎺ュ睍绀哄簳灞傜湡瀹為敊璇紝閬垮厤璇樉绀衡€滅櫥褰曟垚鍔熲€濄€?
 
 ### Fixed
 
-- **Claude 订阅登录状态更准确**：点击登录并完成浏览器 OAuth 后，HamunaAgent 不再只根据 OAuth 完成状态判断成功，而是以实际订阅验证结果为准；验证失败时不会缓存成阻塞后续重试的状态。
-- **Claude 订阅错误信息更清楚**：设置页红色错误提示会展示 SDK 返回的真实 detail，便于区分登录过期、权限不足、网络错误等原因。
-- **Space Issue 详情抽屉显示优化**：加宽 Issue 详情抽屉，长内容查看时更舒展。
+- **Claude 璁㈤槄鐧诲綍鐘舵€佹洿鍑嗙‘**锛氱偣鍑荤櫥褰曞苟瀹屾垚娴忚鍣?OAuth 鍚庯紝HamunaAgent 涓嶅啀鍙牴鎹?OAuth 瀹屾垚鐘舵€佸垽鏂垚鍔燂紝鑰屾槸浠ュ疄闄呰闃呴獙璇佺粨鏋滀负鍑嗭紱楠岃瘉澶辫触鏃朵笉浼氱紦瀛樻垚闃诲鍚庣画閲嶈瘯鐨勭姸鎬併€?
+- **Claude 璁㈤槄閿欒淇℃伅鏇存竻妤?*锛氳缃〉绾㈣壊閿欒鎻愮ず浼氬睍绀?SDK 杩斿洖鐨勭湡瀹?detail锛屼究浜庡尯鍒嗙櫥褰曡繃鏈熴€佹潈闄愪笉瓒炽€佺綉缁滈敊璇瓑鍘熷洜銆?
+- **Space Issue 璇︽儏鎶藉眽鏄剧ず浼樺寲**锛氬姞瀹?Issue 璇︽儏鎶藉眽锛岄暱鍐呭鏌ョ湅鏃舵洿鑸掑睍銆?
 
 ---
 
 ## [0.2.46] - 2026-07-04
 
-> 本版聚焦长对话体验、网络代理控制和启动页性能：Chat 长列表滚动与底部状态更稳定；网络代理可以按供应商选择适用范围；Launcher 历史对话首次加载更快。桌面宠物资源导入、Provider 重试和构建环境校验也做了稳定性修复。
+> 鏈増鑱氱劍闀垮璇濅綋楠屻€佺綉缁滀唬鐞嗘帶鍒跺拰鍚姩椤垫€ц兘锛欳hat 闀垮垪琛ㄦ粴鍔ㄤ笌搴曢儴鐘舵€佹洿绋冲畾锛涚綉缁滀唬鐞嗗彲浠ユ寜渚涘簲鍟嗛€夋嫨閫傜敤鑼冨洿锛汱auncher 鍘嗗彶瀵硅瘽棣栨鍔犺浇鏇村揩銆傛闈㈠疇鐗╄祫婧愬鍏ャ€丳rovider 閲嶈瘯鍜屾瀯寤虹幆澧冩牎楠屼篃鍋氫簡绋冲畾鎬т慨澶嶃€?
 
 ### Added
 
-- **网络代理支持按供应商选择**：Settings 的网络代理可以选择「全部供应商」或自定义供应商范围；未选中的供应商不会注入 HamunaAgent 代理，但仍保留系统代理、TUN 或启动环境中的默认网络行为。
-- **Agent 工作区归档能力**：不常用的 Agent 工作区可以归档，Launcher 和管理入口会更清楚地区分活跃工作区与已归档工作区。
-- **Runtime 诊断信息更完整**：错误横幅和诊断入口补充更多环境、代理和 Runtime 线索，便于排查本机 Provider / CLI 连接问题。
+- **缃戠粶浠ｇ悊鏀寔鎸変緵搴斿晢閫夋嫨**锛歋ettings 鐨勭綉缁滀唬鐞嗗彲浠ラ€夋嫨銆屽叏閮ㄤ緵搴斿晢銆嶆垨鑷畾涔変緵搴斿晢鑼冨洿锛涙湭閫変腑鐨勪緵搴斿晢涓嶄細娉ㄥ叆 HamunaAgent 浠ｇ悊锛屼絾浠嶄繚鐣欑郴缁熶唬鐞嗐€乀UN 鎴栧惎鍔ㄧ幆澧冧腑鐨勯粯璁ょ綉缁滆涓恒€?
+- **Agent 宸ヤ綔鍖哄綊妗ｈ兘鍔?*锛氫笉甯哥敤鐨?Agent 宸ヤ綔鍖哄彲浠ュ綊妗ｏ紝Launcher 鍜岀鐞嗗叆鍙ｄ細鏇存竻妤氬湴鍖哄垎娲昏穬宸ヤ綔鍖轰笌宸插綊妗ｅ伐浣滃尯銆?
+- **Runtime 璇婃柇淇℃伅鏇村畬鏁?*锛氶敊璇í骞呭拰璇婃柇鍏ュ彛琛ュ厖鏇村鐜銆佷唬鐞嗗拰 Runtime 绾跨储锛屼究浜庢帓鏌ユ湰鏈?Provider / CLI 杩炴帴闂銆?
 
 ### Changed
 
-- **Chat 长对话滚动更稳**：重整虚拟列表的行高估算、底部状态和 composer 高度变化处理，长对话、流式输出和工具卡片展开时更少跳动或卡在错误位置。
-- **Launcher 历史列表加载更快**：历史会话 metadata 改为优先走 Rust 本地读取，并把历史列表加载状态从任务中心其它数据源中拆开，首次打开时不再被全局 Sidecar 或慢任务数据拖住。
-- **Claude Agent SDK 升级到 0.3.199**：同步适配新版 SDK，并补齐构建时对 SDK native package 的校验。
+- **Chat 闀垮璇濇粴鍔ㄦ洿绋?*锛氶噸鏁磋櫄鎷熷垪琛ㄧ殑琛岄珮浼扮畻銆佸簳閮ㄧ姸鎬佸拰 composer 楂樺害鍙樺寲澶勭悊锛岄暱瀵硅瘽銆佹祦寮忚緭鍑哄拰宸ュ叿鍗＄墖灞曞紑鏃舵洿灏戣烦鍔ㄦ垨鍗″湪閿欒浣嶇疆銆?
+- **Launcher 鍘嗗彶鍒楄〃鍔犺浇鏇村揩**锛氬巻鍙蹭細璇?metadata 鏀逛负浼樺厛璧?Rust 鏈湴璇诲彇锛屽苟鎶婂巻鍙插垪琛ㄥ姞杞界姸鎬佷粠浠诲姟涓績鍏跺畠鏁版嵁婧愪腑鎷嗗紑锛岄娆℃墦寮€鏃朵笉鍐嶈鍏ㄥ眬 Sidecar 鎴栨參浠诲姟鏁版嵁鎷栦綇銆?
+- **Claude Agent SDK 鍗囩骇鍒?0.3.199**锛氬悓姝ラ€傞厤鏂扮増 SDK锛屽苟琛ラ綈鏋勫缓鏃跺 SDK native package 鐨勬牎楠屻€?
 
 ### Fixed
 
-- **Windows 桌面宠物资源导入修复**：通过链接或压缩包导入的桌面宠物资源能正确加载，不再回退成默认圆球图标。
-- **Provider 短文本错误重试更可靠**：上游并发限制、临时限流等以文本形式返回的瞬时错误会被识别并按边界重试，减少“看似成功但只返回错误文本”的情况。
-- **网络代理切换更可靠**：自定义供应商代理不会覆盖未选中供应商的系统代理行为；快速切换 SOCKS5 / HTTP / 关闭代理时也会清理过期 bridge，避免残留代理状态。
-- **历史对话显示偏好更稳定**：历史列表的可见性控制会记住用户选择，减少重新打开 Launcher 后过滤状态回退。
-- **Claude SDK 包校验更稳**：macOS / Windows 开发和安装脚本会提前校验 Claude SDK native package，减少构建后才发现 runtime 包缺失或平台包异常的问题。
+- **Windows 妗岄潰瀹犵墿璧勬簮瀵煎叆淇**锛氶€氳繃閾炬帴鎴栧帇缂╁寘瀵煎叆鐨勬闈㈠疇鐗╄祫婧愯兘姝ｇ‘鍔犺浇锛屼笉鍐嶅洖閫€鎴愰粯璁ゅ渾鐞冨浘鏍囥€?
+- **Provider 鐭枃鏈敊璇噸璇曟洿鍙潬**锛氫笂娓稿苟鍙戦檺鍒躲€佷复鏃堕檺娴佺瓑浠ユ枃鏈舰寮忚繑鍥炵殑鐬椂閿欒浼氳璇嗗埆骞舵寜杈圭晫閲嶈瘯锛屽噺灏戔€滅湅浼兼垚鍔熶絾鍙繑鍥為敊璇枃鏈€濈殑鎯呭喌銆?
+- **缃戠粶浠ｇ悊鍒囨崲鏇村彲闈?*锛氳嚜瀹氫箟渚涘簲鍟嗕唬鐞嗕笉浼氳鐩栨湭閫変腑渚涘簲鍟嗙殑绯荤粺浠ｇ悊琛屼负锛涘揩閫熷垏鎹?SOCKS5 / HTTP / 鍏抽棴浠ｇ悊鏃朵篃浼氭竻鐞嗚繃鏈?bridge锛岄伩鍏嶆畫鐣欎唬鐞嗙姸鎬併€?
+- **鍘嗗彶瀵硅瘽鏄剧ず鍋忓ソ鏇寸ǔ瀹?*锛氬巻鍙插垪琛ㄧ殑鍙鎬ф帶鍒朵細璁颁綇鐢ㄦ埛閫夋嫨锛屽噺灏戦噸鏂版墦寮€ Launcher 鍚庤繃婊ょ姸鎬佸洖閫€銆?
+- **Claude SDK 鍖呮牎楠屾洿绋?*锛歮acOS / Windows 寮€鍙戝拰瀹夎鑴氭湰浼氭彁鍓嶆牎楠?Claude SDK native package锛屽噺灏戞瀯寤哄悗鎵嶅彂鐜?runtime 鍖呯己澶辨垨骞冲彴鍖呭紓甯哥殑闂銆?
 
 ---
 
 ## [0.2.45] - 2026-07-02
 
-> 本版聚焦会话来源归因、后台通知和 IM / Agent Channel 稳定性：历史列表默认收起自动化会话，后台完成提醒会落到正确会话；微信等 Channel 的 `/new`、`/restart` 与恢复会话不再因 metadata 丢失失败。macOS 悬浮球的输入聚焦和外部点击关闭也更符合系统交互预期。
+> 鏈増鑱氱劍浼氳瘽鏉ユ簮褰掑洜銆佸悗鍙伴€氱煡鍜?IM / Agent Channel 绋冲畾鎬э細鍘嗗彶鍒楄〃榛樿鏀惰捣鑷姩鍖栦細璇濓紝鍚庡彴瀹屾垚鎻愰啋浼氳惤鍒版纭細璇濓紱寰俊绛?Channel 鐨?`/new`銆乣/restart` 涓庢仮澶嶄細璇濅笉鍐嶅洜 metadata 涓㈠け澶辫触銆俶acOS 鎮诞鐞冪殑杈撳叆鑱氱劍鍜屽閮ㄧ偣鍑诲叧闂篃鏇寸鍚堢郴缁熶氦浜掗鏈熴€?
 
 ### Added
 
-- **会话来源归因**：新会话、历史打开和 AI 回合完成事件会记录稳定的 `origin` 与 `runtime_source`，区分桌面、悬浮球、定时任务、Task run、IM / Agent Channel 和 managed Codex 等来源，便于后续历史过滤与使用量统计。
-- **会话级未读提醒**：后台任务或会话完成后，历史列表和 Launcher 右栏会在对应会话上显示弱未读标记，Dock / 菜单栏角标与横幅通知保持同一目标会话。
+- **浼氳瘽鏉ユ簮褰掑洜**锛氭柊浼氳瘽銆佸巻鍙叉墦寮€鍜?AI 鍥炲悎瀹屾垚浜嬩欢浼氳褰曠ǔ瀹氱殑 `origin` 涓?`runtime_source`锛屽尯鍒嗘闈€佹偓娴悆銆佸畾鏃朵换鍔°€乀ask run銆両M / Agent Channel 鍜?managed Codex 绛夋潵婧愶紝渚夸簬鍚庣画鍘嗗彶杩囨护涓庝娇鐢ㄩ噺缁熻銆?
+- **浼氳瘽绾ф湭璇绘彁閱?*锛氬悗鍙颁换鍔℃垨浼氳瘽瀹屾垚鍚庯紝鍘嗗彶鍒楄〃鍜?Launcher 鍙虫爮浼氬湪瀵瑰簲浼氳瘽涓婃樉绀哄急鏈鏍囪锛孌ock / 鑿滃崟鏍忚鏍囦笌妯箙閫氱煡淇濇寔鍚屼竴鐩爣浼氳瘽銆?
 
 ### Changed
 
-- **历史列表默认更清爽**：定时任务和 Task run 产生的自动化会话默认从普通历史列表中收起，并提供显示自动化会话的入口，减少周期任务刷屏。
-- **Runtime 统计按身份区分**：Codex 订阅 Provider 和用户自行安装的 Codex CLI 不再只按 `runtime=codex` 混在一起统计，managed Provider 会保留自己的 runtime source。
+- **鍘嗗彶鍒楄〃榛樿鏇存竻鐖?*锛氬畾鏃朵换鍔″拰 Task run 浜х敓鐨勮嚜鍔ㄥ寲浼氳瘽榛樿浠庢櫘閫氬巻鍙插垪琛ㄤ腑鏀惰捣锛屽苟鎻愪緵鏄剧ず鑷姩鍖栦細璇濈殑鍏ュ彛锛屽噺灏戝懆鏈熶换鍔″埛灞忋€?
+- **Runtime 缁熻鎸夎韩浠藉尯鍒?*锛欳odex 璁㈤槄 Provider 鍜岀敤鎴疯嚜琛屽畨瑁呯殑 Codex CLI 涓嶅啀鍙寜 `runtime=codex` 娣峰湪涓€璧风粺璁★紝managed Provider 浼氫繚鐣欒嚜宸辩殑 runtime source銆?
 
 ### Fixed
 
-- **微信 / Agent Channel 恢复会话更稳**：恢复已有渠道会话、执行 `/new` 或 `/restart` 时，会补齐并保留会话 metadata，不再出现 “session not found in sessions.json” 或 “session metadata disappeared before first user turn”。
-- **后台通知不再串会话**：后台 completion、定时任务和任务中心通知会清理和点击到正确 session，减少旧会话角标残留或点击通知打开错误会话的问题。
-- **macOS 悬浮球输入与关闭行为修复**：点击悬浮球展开实心窗口后会直接聚焦输入框；首次外部点击只关闭悬浮窗，不会同时激活或点击底层应用；点击输入框不再被误判为外部点击导致窗口关闭。
+- **寰俊 / Agent Channel 鎭㈠浼氳瘽鏇寸ǔ**锛氭仮澶嶅凡鏈夋笭閬撲細璇濄€佹墽琛?`/new` 鎴?`/restart` 鏃讹紝浼氳ˉ榻愬苟淇濈暀浼氳瘽 metadata锛屼笉鍐嶅嚭鐜?鈥渟ession not found in sessions.json鈥?鎴?鈥渟ession metadata disappeared before first user turn鈥濄€?
+- **鍚庡彴閫氱煡涓嶅啀涓蹭細璇?*锛氬悗鍙?completion銆佸畾鏃朵换鍔″拰浠诲姟涓績閫氱煡浼氭竻鐞嗗拰鐐瑰嚮鍒版纭?session锛屽噺灏戞棫浼氳瘽瑙掓爣娈嬬暀鎴栫偣鍑婚€氱煡鎵撳紑閿欒浼氳瘽鐨勯棶棰樸€?
+- **macOS 鎮诞鐞冭緭鍏ヤ笌鍏抽棴琛屼负淇**锛氱偣鍑绘偓娴悆灞曞紑瀹炲績绐楀彛鍚庝細鐩存帴鑱氱劍杈撳叆妗嗭紱棣栨澶栭儴鐐瑰嚮鍙叧闂偓娴獥锛屼笉浼氬悓鏃舵縺娲绘垨鐐瑰嚮搴曞眰搴旂敤锛涚偣鍑昏緭鍏ユ涓嶅啀琚鍒や负澶栭儴鐐瑰嚮瀵艰嚧绐楀彛鍏抽棴銆?
 
 ---
 
 ## [0.2.44] - 2026-07-01
 
-> 本版聚焦 Codex 订阅 Runtime 的会话稳定性、权限审批体验和后台通知一致性：历史会话与新对话不再串写，多个权限请求会按队列逐个处理；IM / Agent Channel 默认使用无人值守权限，并修复中文文件名在渠道发送时乱码的问题。Windows 更新安装也更稳。
+> 鏈増鑱氱劍 Codex 璁㈤槄 Runtime 鐨勪細璇濈ǔ瀹氭€с€佹潈闄愬鎵逛綋楠屽拰鍚庡彴閫氱煡涓€鑷存€э細鍘嗗彶浼氳瘽涓庢柊瀵硅瘽涓嶅啀涓插啓锛屽涓潈闄愯姹備細鎸夐槦鍒楅€愪釜澶勭悊锛汭M / Agent Channel 榛樿浣跨敤鏃犱汉鍊煎畧鏉冮檺锛屽苟淇涓枃鏂囦欢鍚嶅湪娓犻亾鍙戦€佹椂涔辩爜鐨勯棶棰樸€俉indows 鏇存柊瀹夎涔熸洿绋炽€?
 
 ### Added
 
-- **Codex 权限审批队列**：Codex 一次性发出多条 Shell / 文件 / 表单审批时，前端会逐个展示并标注进度，避免多个权限请求互相覆盖导致页面像卡住一样等待。
-- **后台完成角标提醒**：后台任务完成后会同步更新 Dock 与 macOS 菜单栏状态项的未读数量，并在用户回到任务中心后清理，和横幅通知保持一致。
+- **Codex 鏉冮檺瀹℃壒闃熷垪**锛欳odex 涓€娆℃€у彂鍑哄鏉?Shell / 鏂囦欢 / 琛ㄥ崟瀹℃壒鏃讹紝鍓嶇浼氶€愪釜灞曠ず骞舵爣娉ㄨ繘搴︼紝閬垮厤澶氫釜鏉冮檺璇锋眰浜掔浉瑕嗙洊瀵艰嚧椤甸潰鍍忓崱浣忎竴鏍风瓑寰呫€?
+- **鍚庡彴瀹屾垚瑙掓爣鎻愰啋**锛氬悗鍙颁换鍔″畬鎴愬悗浼氬悓姝ユ洿鏂?Dock 涓?macOS 鑿滃崟鏍忕姸鎬侀」鐨勬湭璇绘暟閲忥紝骞跺湪鐢ㄦ埛鍥炲埌浠诲姟涓績鍚庢竻鐞嗭紝鍜屾í骞呴€氱煡淇濇寔涓€鑷淬€?
 
 ### Changed
 
-- **IM / Agent Channel 默认自主执行**：飞书、微信等 Channel 在未显式配置权限覆盖时，会按当前 runtime 使用最大自主权限；桌面 Agent 的默认权限不会静默降低无人值守 Channel。
-- **Windows 更新安装更保守**：Windows 点击安装更新前，会先停 IM、Agent、Terminal、Browser 和 Sidecar，并确认关键进程与文件锁释放后再进入安装器，减少更新时被残留进程卡住的情况。
+- **IM / Agent Channel 榛樿鑷富鎵ц**锛氶涔︺€佸井淇＄瓑 Channel 鍦ㄦ湭鏄惧紡閰嶇疆鏉冮檺瑕嗙洊鏃讹紝浼氭寜褰撳墠 runtime 浣跨敤鏈€澶ц嚜涓绘潈闄愶紱妗岄潰 Agent 鐨勯粯璁ゆ潈闄愪笉浼氶潤榛橀檷浣庢棤浜哄€煎畧 Channel銆?
+- **Windows 鏇存柊瀹夎鏇翠繚瀹?*锛歐indows 鐐瑰嚮瀹夎鏇存柊鍓嶏紝浼氬厛鍋?IM銆丄gent銆乀erminal銆丅rowser 鍜?Sidecar锛屽苟纭鍏抽敭杩涚▼涓庢枃浠堕攣閲婃斁鍚庡啀杩涘叆瀹夎鍣紝鍑忓皯鏇存柊鏃惰娈嬬暀杩涚▼鍗′綇鐨勬儏鍐点€?
 
 ### Fixed
 
-- **Codex 新对话和历史切换不再串线**：Codex 订阅会话在新建、恢复、历史互切和不同 runtime identity 之间切换时，会正确隔离 sidecar 与 runtime session，避免消息写入旧会话、切换无响应或出现 append-only history 报错。
-- **Codex 权限弹窗不再丢失**：Codex Runtime 的 Shell、文件修改、用户输入和 MCP elicitation 等权限协议都接到统一前端审批通道，并按 session scope 过滤旧事件，减少历史切换后弹错会话或不弹的问题。
-- **Channel 发送中文文件名不再乱码**：OpenClaw / 微信 / 飞书等 Channel 发送文件时保留 UTF-8 展示名，同时清理跨平台非法字符，保证 macOS 与 Windows 都能稳定落盘和上传。
-- **自定义模型添加入口更稳**：从模型选择器添加自定义模型时会先打开正确设置面板，避免入口失效或表单状态错位。
+- **Codex 鏂板璇濆拰鍘嗗彶鍒囨崲涓嶅啀涓茬嚎**锛欳odex 璁㈤槄浼氳瘽鍦ㄦ柊寤恒€佹仮澶嶃€佸巻鍙蹭簰鍒囧拰涓嶅悓 runtime identity 涔嬮棿鍒囨崲鏃讹紝浼氭纭殧绂?sidecar 涓?runtime session锛岄伩鍏嶆秷鎭啓鍏ユ棫浼氳瘽銆佸垏鎹㈡棤鍝嶅簲鎴栧嚭鐜?append-only history 鎶ラ敊銆?
+- **Codex 鏉冮檺寮圭獥涓嶅啀涓㈠け**锛欳odex Runtime 鐨?Shell銆佹枃浠朵慨鏀广€佺敤鎴疯緭鍏ュ拰 MCP elicitation 绛夋潈闄愬崗璁兘鎺ュ埌缁熶竴鍓嶇瀹℃壒閫氶亾锛屽苟鎸?session scope 杩囨护鏃т簨浠讹紝鍑忓皯鍘嗗彶鍒囨崲鍚庡脊閿欎細璇濇垨涓嶅脊鐨勯棶棰樸€?
+- **Channel 鍙戦€佷腑鏂囨枃浠跺悕涓嶅啀涔辩爜**锛歄penClaw / 寰俊 / 椋炰功绛?Channel 鍙戦€佹枃浠舵椂淇濈暀 UTF-8 灞曠ず鍚嶏紝鍚屾椂娓呯悊璺ㄥ钩鍙伴潪娉曞瓧绗︼紝淇濊瘉 macOS 涓?Windows 閮借兘绋冲畾钀界洏鍜屼笂浼犮€?
+- **鑷畾涔夋ā鍨嬫坊鍔犲叆鍙ｆ洿绋?*锛氫粠妯″瀷閫夋嫨鍣ㄦ坊鍔犺嚜瀹氫箟妯″瀷鏃朵細鍏堟墦寮€姝ｇ‘璁剧疆闈㈡澘锛岄伩鍏嶅叆鍙ｅけ鏁堟垨琛ㄥ崟鐘舵€侀敊浣嶃€?
 
 ---
 
 ## [0.2.43] - 2026-06-30
 
-> 本版继续收紧 Codex 订阅 Provider 与外部 Runtime 的身份边界：Codex 会话可以读取 HamunaAgent 用户 Skills，订阅型 Codex 在 Chat、任务、定时任务和 IM / Agent Channel 中更稳定地保持受管身份；同时修复 Windows 上 managed Codex 安装、模型解析和本地插件路径相关问题，并补齐若干菜单与历史操作细节。
+> 鏈増缁х画鏀剁揣 Codex 璁㈤槄 Provider 涓庡閮?Runtime 鐨勮韩浠借竟鐣岋細Codex 浼氳瘽鍙互璇诲彇 HamunaAgent 鐢ㄦ埛 Skills锛岃闃呭瀷 Codex 鍦?Chat銆佷换鍔°€佸畾鏃朵换鍔″拰 IM / Agent Channel 涓洿绋冲畾鍦颁繚鎸佸彈绠¤韩浠斤紱鍚屾椂淇 Windows 涓?managed Codex 瀹夎銆佹ā鍨嬭В鏋愬拰鏈湴鎻掍欢璺緞鐩稿叧闂锛屽苟琛ラ綈鑻ュ共鑿滃崟涓庡巻鍙叉搷浣滅粏鑺傘€?
 
 ### Added
 
-- **Codex 会话可使用 HamunaAgent 用户 Skills**：启用的用户级 Skills 会同步到工作区并注入 Codex Runtime，Codex 订阅和系统 Codex CLI 都能发现同一套工作区 Skills。
+- **Codex 浼氳瘽鍙娇鐢?HamunaAgent 鐢ㄦ埛 Skills**锛氬惎鐢ㄧ殑鐢ㄦ埛绾?Skills 浼氬悓姝ュ埌宸ヤ綔鍖哄苟娉ㄥ叆 Codex Runtime锛孋odex 璁㈤槄鍜岀郴缁?Codex CLI 閮借兘鍙戠幇鍚屼竴濂楀伐浣滃尯 Skills銆?
 
 ### Fixed
 
-- **Codex 订阅 Provider 身份更稳定**：managed Codex 不再在历史会话、IM / Agent Channel、heartbeat 或 `/model` 唤醒路径中退回系统 Codex CLI；运行时切换和会话冻结会保留完整 runtime source 与 provider identity。
-- **Windows managed Codex 更可靠**：安装包校验、安装元数据、旧 metadata 下的模型解析和 spawn 包装在 Windows 上更稳，减少下载完成后状态不一致、模型列表不可用或启动失败。
-- **Windows 本地插件路径修复**：本地 `file://` 插件路径使用平台原生解析，避免 Windows drive-letter 路径被解析成错误目录。
-- **工作区 Skills / Commands 同步可自愈**：断链 symlink 不再阻塞 `.claude/skills` 和 `.claude/commands` 刷新，用户级 Skills / Commands 更新后能重新同步到工作区。
-- **菜单和历史操作更稳**：修复文件预览、会话历史、Launcher 右栏等位置的 tooltip / 菜单交互细节，减少 hover 菜单错位或历史操作误触。
+- **Codex 璁㈤槄 Provider 韬唤鏇寸ǔ瀹?*锛歮anaged Codex 涓嶅啀鍦ㄥ巻鍙蹭細璇濄€両M / Agent Channel銆乭eartbeat 鎴?`/model` 鍞ら啋璺緞涓€€鍥炵郴缁?Codex CLI锛涜繍琛屾椂鍒囨崲鍜屼細璇濆喕缁撲細淇濈暀瀹屾暣 runtime source 涓?provider identity銆?
+- **Windows managed Codex 鏇村彲闈?*锛氬畨瑁呭寘鏍￠獙銆佸畨瑁呭厓鏁版嵁銆佹棫 metadata 涓嬬殑妯″瀷瑙ｆ瀽鍜?spawn 鍖呰鍦?Windows 涓婃洿绋筹紝鍑忓皯涓嬭浇瀹屾垚鍚庣姸鎬佷笉涓€鑷淬€佹ā鍨嬪垪琛ㄤ笉鍙敤鎴栧惎鍔ㄥけ璐ャ€?
+- **Windows 鏈湴鎻掍欢璺緞淇**锛氭湰鍦?`file://` 鎻掍欢璺緞浣跨敤骞冲彴鍘熺敓瑙ｆ瀽锛岄伩鍏?Windows drive-letter 璺緞琚В鏋愭垚閿欒鐩綍銆?
+- **宸ヤ綔鍖?Skills / Commands 鍚屾鍙嚜鎰?*锛氭柇閾?symlink 涓嶅啀闃诲 `.claude/skills` 鍜?`.claude/commands` 鍒锋柊锛岀敤鎴风骇 Skills / Commands 鏇存柊鍚庤兘閲嶆柊鍚屾鍒板伐浣滃尯銆?
+- **鑿滃崟鍜屽巻鍙叉搷浣滄洿绋?*锛氫慨澶嶆枃浠堕瑙堛€佷細璇濆巻鍙层€丩auncher 鍙虫爮绛変綅缃殑 tooltip / 鑿滃崟浜や簰缁嗚妭锛屽噺灏?hover 鑿滃崟閿欎綅鎴栧巻鍙叉搷浣滆瑙︺€?
 
 ---
 
 ## [0.2.42] - 2026-06-28
 
-> 本版把产品界面国际化推进到可用状态，并补齐订阅型 Provider 与官方图片理解工具：界面可跟随系统或切换中英文，Codex 订阅可作为受管 Provider 使用，内置 CLI 也能读取工作区图片。另有任务创建、定时任务、IM 渠道和 Chat 稳定性修复。
+> 鏈増鎶婁骇鍝佺晫闈㈠浗闄呭寲鎺ㄨ繘鍒板彲鐢ㄧ姸鎬侊紝骞惰ˉ榻愯闃呭瀷 Provider 涓庡畼鏂瑰浘鐗囩悊瑙ｅ伐鍏凤細鐣岄潰鍙窡闅忕郴缁熸垨鍒囨崲涓嫳鏂囷紝Codex 璁㈤槄鍙綔涓哄彈绠?Provider 浣跨敤锛屽唴缃?CLI 涔熻兘璇诲彇宸ヤ綔鍖哄浘鐗囥€傚彟鏈変换鍔″垱寤恒€佸畾鏃朵换鍔°€両M 娓犻亾鍜?Chat 绋冲畾鎬т慨澶嶃€?
 
 ### Added
 
-- **界面语言支持更完整**：Settings 可选择跟随系统、中文或 English；Launcher、Chat、Settings、Task Center、Agent 设置、工具卡片、IM 渠道、悬浮球和托盘等界面文案会随语言切换。
-- **Codex 订阅 Provider**：新增 Codex（订阅）入口，HamunaAgent 可管理 Codex runtime 的安装、更新与 ChatGPT 订阅登录，并把它和普通 Provider 一样用于 Chat、任务、定时任务和 Agent 默认配置。
-- **订阅登录能力补齐**：Provider 设置中补充 Anthropic 订阅登录验证，并把 Codex 订阅入口放到 Anthropic 附近，减少订阅账户和 API Key 配置混用时的误选。
-- **官方图片理解 CLI 工具**：新增 `hamuna vision`，可在已启用工具箱和读图模型配置后分析工作区内图片，支持短 prompt 与 workspace 内 prompt 文件。
+- **鐣岄潰璇█鏀寔鏇村畬鏁?*锛歋ettings 鍙€夋嫨璺熼殢绯荤粺銆佷腑鏂囨垨 English锛汱auncher銆丆hat銆丼ettings銆乀ask Center銆丄gent 璁剧疆銆佸伐鍏峰崱鐗囥€両M 娓犻亾銆佹偓娴悆鍜屾墭鐩樼瓑鐣岄潰鏂囨浼氶殢璇█鍒囨崲銆?
+- **Codex 璁㈤槄 Provider**锛氭柊澧?Codex锛堣闃咃級鍏ュ彛锛孒amunaAgent 鍙鐞?Codex runtime 鐨勫畨瑁呫€佹洿鏂颁笌 ChatGPT 璁㈤槄鐧诲綍锛屽苟鎶婂畠鍜屾櫘閫?Provider 涓€鏍风敤浜?Chat銆佷换鍔°€佸畾鏃朵换鍔″拰 Agent 榛樿閰嶇疆銆?
+- **璁㈤槄鐧诲綍鑳藉姏琛ラ綈**锛歅rovider 璁剧疆涓ˉ鍏?Anthropic 璁㈤槄鐧诲綍楠岃瘉锛屽苟鎶?Codex 璁㈤槄鍏ュ彛鏀惧埌 Anthropic 闄勮繎锛屽噺灏戣闃呰处鎴峰拰 API Key 閰嶇疆娣风敤鏃剁殑璇€夈€?
+- **瀹樻柟鍥剧墖鐞嗚В CLI 宸ュ叿**锛氭柊澧?`hamuna vision`锛屽彲鍦ㄥ凡鍚敤宸ュ叿绠卞拰璇诲浘妯″瀷閰嶇疆鍚庡垎鏋愬伐浣滃尯鍐呭浘鐗囷紝鏀寔鐭?prompt 涓?workspace 鍐?prompt 鏂囦欢銆?
 
 ### Changed
 
-- **定时任务编辑不中断输入**：Chat 输入区里的定时任务 composer 保持可交互，任务创建、停止和恢复反馈更稳定。
-- **任务中心创建流程更清晰**：任务卡片、派发弹窗和提示文案重新整理，任务 prompt 引导移入输入占位，减少表单噪音。
-- **Chat 回合信息更容易检查**：assistant 消息可在 hover 时查看本轮用量 / 时长等指标；启动遮罩、文件预览渐隐和设置导航也做了细节调整。
+- **瀹氭椂浠诲姟缂栬緫涓嶄腑鏂緭鍏?*锛欳hat 杈撳叆鍖洪噷鐨勫畾鏃朵换鍔?composer 淇濇寔鍙氦浜掞紝浠诲姟鍒涘缓銆佸仠姝㈠拰鎭㈠鍙嶉鏇寸ǔ瀹氥€?
+- **浠诲姟涓績鍒涘缓娴佺▼鏇存竻鏅?*锛氫换鍔″崱鐗囥€佹淳鍙戝脊绐楀拰鎻愮ず鏂囨閲嶆柊鏁寸悊锛屼换鍔?prompt 寮曞绉诲叆杈撳叆鍗犱綅锛屽噺灏戣〃鍗曞櫔闊炽€?
+- **Chat 鍥炲悎淇℃伅鏇村鏄撴鏌?*锛歛ssistant 娑堟伅鍙湪 hover 鏃舵煡鐪嬫湰杞敤閲?/ 鏃堕暱绛夋寚鏍囷紱鍚姩閬僵銆佹枃浠堕瑙堟笎闅愬拰璁剧疆瀵艰埅涔熷仛浜嗙粏鑺傝皟鏁淬€?
 
 ### Fixed
 
-- **OpenClaw / 微信 IM 渠道更稳**：修复 OpenClaw 渠道配置 key 归一化、微信路由、handover 和健康检查问题，减少扫码登录后串线或收不到消息的情况。
-- **Provider / Runtime 身份更稳**：Codex 订阅、第三方 Provider 与可 portable 切换的协议边界更清楚，避免任务、定时任务或 Agent 默认配置把订阅 Provider 误写成普通外部 Runtime。
-- **Plugin Bridge 日志更安全**：插件桥接日志会脱敏嵌套账号字段，减少账号凭据进入日志的风险。
-- **恢复历史会话不再吞新气泡**：修复 restored chat replay 与 live echo 的边界，恢复会话后新发用户消息仍能正常显示。
-- **Markdown raw HTML 不再逃出内容区**：收紧 Markdown HTML 处理，避免 raw HTML 生成覆盖层逃逸到消息容器外。
-- **macOS 标题栏拖拽恢复稳定**：恢复原生标题栏拖拽路径，避免自定义拖拽实现引发崩溃或拖动失效。
+- **OpenClaw / 寰俊 IM 娓犻亾鏇寸ǔ**锛氫慨澶?OpenClaw 娓犻亾閰嶇疆 key 褰掍竴鍖栥€佸井淇¤矾鐢便€乭andover 鍜屽仴搴锋鏌ラ棶棰橈紝鍑忓皯鎵爜鐧诲綍鍚庝覆绾挎垨鏀朵笉鍒版秷鎭殑鎯呭喌銆?
+- **Provider / Runtime 韬唤鏇寸ǔ**锛欳odex 璁㈤槄銆佺涓夋柟 Provider 涓庡彲 portable 鍒囨崲鐨勫崗璁竟鐣屾洿娓呮锛岄伩鍏嶄换鍔°€佸畾鏃朵换鍔℃垨 Agent 榛樿閰嶇疆鎶婅闃?Provider 璇啓鎴愭櫘閫氬閮?Runtime銆?
+- **Plugin Bridge 鏃ュ織鏇村畨鍏?*锛氭彃浠舵ˉ鎺ユ棩蹇椾細鑴辨晱宓屽璐﹀彿瀛楁锛屽噺灏戣处鍙峰嚟鎹繘鍏ユ棩蹇楃殑椋庨櫓銆?
+- **鎭㈠鍘嗗彶浼氳瘽涓嶅啀鍚炴柊姘旀场**锛氫慨澶?restored chat replay 涓?live echo 鐨勮竟鐣岋紝鎭㈠浼氳瘽鍚庢柊鍙戠敤鎴锋秷鎭粛鑳芥甯告樉绀恒€?
+- **Markdown raw HTML 涓嶅啀閫冨嚭鍐呭鍖?*锛氭敹绱?Markdown HTML 澶勭悊锛岄伩鍏?raw HTML 鐢熸垚瑕嗙洊灞傞€冮€稿埌娑堟伅瀹瑰櫒澶栥€?
+- **macOS 鏍囬鏍忔嫋鎷芥仮澶嶇ǔ瀹?*锛氭仮澶嶅師鐢熸爣棰樻爮鎷栨嫿璺緞锛岄伩鍏嶈嚜瀹氫箟鎷栨嫿瀹炵幇寮曞彂宕╂簝鎴栨嫋鍔ㄥけ鏁堛€?
 
 ---
 
 ## [0.2.41] - 2026-06-26
 
-> 本版继续收敛会话的 Provider / 模型身份，并让 custom MCP 删除变成真正的身份删除：历史会话、任务、定时任务和 Agent 里的旧引用不会再把已删除的 Provider / MCP 悄悄带回来；同时用量统计和 Codex 输入处理更可靠。
+> 鏈増缁х画鏀舵暃浼氳瘽鐨?Provider / 妯″瀷韬唤锛屽苟璁?custom MCP 鍒犻櫎鍙樻垚鐪熸鐨勮韩浠藉垹闄わ細鍘嗗彶浼氳瘽銆佷换鍔°€佸畾鏃朵换鍔″拰 Agent 閲岀殑鏃у紩鐢ㄤ笉浼氬啀鎶婂凡鍒犻櫎鐨?Provider / MCP 鎮勬倓甯﹀洖鏉ワ紱鍚屾椂鐢ㄩ噺缁熻鍜?Codex 杈撳叆澶勭悊鏇村彲闈犮€?
 
 ### Changed
 
-- **会话 Provider / 模型身份更明确**：内置会话现在用 provider + model 作为成对身份保存，请求时再从当前配置解析 API Key / Base URL；历史会话缺少 provider 信息时，只在能唯一匹配到已配置凭据或订阅记录的供应商时自动修复，否则会要求用户重新选择模型，避免错路由。
-- **Task / Cron MCP override 支持显式“无 MCP”**：任务或定时任务可以区分“跟随 Agent”和“本任务不用任何 MCP”，删除 MCP 后也不会意外继承 Agent 的其它 MCP。
+- **浼氳瘽 Provider / 妯″瀷韬唤鏇存槑纭?*锛氬唴缃細璇濈幇鍦ㄧ敤 provider + model 浣滀负鎴愬韬唤淇濆瓨锛岃姹傛椂鍐嶄粠褰撳墠閰嶇疆瑙ｆ瀽 API Key / Base URL锛涘巻鍙蹭細璇濈己灏?provider 淇℃伅鏃讹紝鍙湪鑳藉敮涓€鍖归厤鍒板凡閰嶇疆鍑嵁鎴栬闃呰褰曠殑渚涘簲鍟嗘椂鑷姩淇锛屽惁鍒欎細瑕佹眰鐢ㄦ埛閲嶆柊閫夋嫨妯″瀷锛岄伩鍏嶉敊璺敱銆?
+- **Task / Cron MCP override 鏀寔鏄惧紡鈥滄棤 MCP鈥?*锛氫换鍔℃垨瀹氭椂浠诲姟鍙互鍖哄垎鈥滆窡闅?Agent鈥濆拰鈥滄湰浠诲姟涓嶇敤浠讳綍 MCP鈥濓紝鍒犻櫎 MCP 鍚庝篃涓嶄細鎰忓缁ф壙 Agent 鐨勫叾瀹?MCP銆?
 
 ### Fixed
 
-- **会话中切换 Provider / 模型不再过度受限**（[#406](https://github.com/hAcKlyc/HamunaAgent/issues/406)）：普通可兼容的 Provider / 模型切换可以留在当前会话；只有跨不兼容历史边界时才会新开会话。旧版 `model + configSnapshotAt` 但缺 provider 的会话也不会出现“看得到模型但发送/切换不正常”的状态。
-- **删除 custom MCP 后不再复活或自动重启用**（[#405](https://github.com/hAcKlyc/HamunaAgent/issues/405)）：Settings / CLI 删除 custom MCP 会级联清理全局配置、Agent/Bot legacy payload、Project、Session、Task 和 Cron 引用；旧 HTTP/SSE MCP 不会再从 Agent 残留配置提升回全局列表。
-- **重新添加同 ID MCP 不再继承旧任务/会话选择**：删除后再添加同名 MCP 时，历史 Session / Task / Cron / Project 不会因为旧引用自动启用这个新 identity。
-- **用量统计按 Provider 分开**：会话统计和用量面板会把不同 Provider 的 token / usage 分开记录，减少多供应商混用时的统计串线。
-- **Codex Runtime 接受引导后的输入更稳**：Codex 在接受用户 steering / 确认后会把后续输入拆到正确回合，减少指令混入上一轮或被错误消费的问题。
+- **浼氳瘽涓垏鎹?Provider / 妯″瀷涓嶅啀杩囧害鍙楅檺**锛圼#406](https://github.com/hAcKlyc/HamunaAgent/issues/406)锛夛細鏅€氬彲鍏煎鐨?Provider / 妯″瀷鍒囨崲鍙互鐣欏湪褰撳墠浼氳瘽锛涘彧鏈夎法涓嶅吋瀹瑰巻鍙茶竟鐣屾椂鎵嶄細鏂板紑浼氳瘽銆傛棫鐗?`model + configSnapshotAt` 浣嗙己 provider 鐨勪細璇濅篃涓嶄細鍑虹幇鈥滅湅寰楀埌妯″瀷浣嗗彂閫?鍒囨崲涓嶆甯糕€濈殑鐘舵€併€?
+- **鍒犻櫎 custom MCP 鍚庝笉鍐嶅娲绘垨鑷姩閲嶅惎鐢?*锛圼#405](https://github.com/hAcKlyc/HamunaAgent/issues/405)锛夛細Settings / CLI 鍒犻櫎 custom MCP 浼氱骇鑱旀竻鐞嗗叏灞€閰嶇疆銆丄gent/Bot legacy payload銆丳roject銆丼ession銆乀ask 鍜?Cron 寮曠敤锛涙棫 HTTP/SSE MCP 涓嶄細鍐嶄粠 Agent 娈嬬暀閰嶇疆鎻愬崌鍥炲叏灞€鍒楄〃銆?
+- **閲嶆柊娣诲姞鍚?ID MCP 涓嶅啀缁ф壙鏃т换鍔?浼氳瘽閫夋嫨**锛氬垹闄ゅ悗鍐嶆坊鍔犲悓鍚?MCP 鏃讹紝鍘嗗彶 Session / Task / Cron / Project 涓嶄細鍥犱负鏃у紩鐢ㄨ嚜鍔ㄥ惎鐢ㄨ繖涓柊 identity銆?
+- **鐢ㄩ噺缁熻鎸?Provider 鍒嗗紑**锛氫細璇濈粺璁″拰鐢ㄩ噺闈㈡澘浼氭妸涓嶅悓 Provider 鐨?token / usage 鍒嗗紑璁板綍锛屽噺灏戝渚涘簲鍟嗘贩鐢ㄦ椂鐨勭粺璁′覆绾裤€?
+- **Codex Runtime 鎺ュ彈寮曞鍚庣殑杈撳叆鏇寸ǔ**锛欳odex 鍦ㄦ帴鍙楃敤鎴?steering / 纭鍚庝細鎶婂悗缁緭鍏ユ媶鍒版纭洖鍚堬紝鍑忓皯鎸囦护娣峰叆涓婁竴杞垨琚敊璇秷璐圭殑闂銆?
 
 ---
 
 ## [0.2.40] - 2026-06-25
 
-> 本版聚焦会话配置身份和后台完成后的界面刷新：切换模型 / Provider、恢复历史会话、后台 completion 返回后，当前会话会更稳定地保留自己的模型、Provider、权限和标题状态；同时修复 Windows 路径格式差异带来的工作区配置查找问题。
+> 鏈増鑱氱劍浼氳瘽閰嶇疆韬唤鍜屽悗鍙板畬鎴愬悗鐨勭晫闈㈠埛鏂帮細鍒囨崲妯″瀷 / Provider銆佹仮澶嶅巻鍙蹭細璇濄€佸悗鍙?completion 杩斿洖鍚庯紝褰撳墠浼氳瘽浼氭洿绋冲畾鍦颁繚鐣欒嚜宸辩殑妯″瀷銆丳rovider銆佹潈闄愬拰鏍囬鐘舵€侊紱鍚屾椂淇 Windows 璺緞鏍煎紡宸紓甯︽潵鐨勫伐浣滃尯閰嶇疆鏌ユ壘闂銆?
 
 ### Fixed
 
-- **会话模型 / Provider 选择不再串线**：拥有配置快照的会话会保留自己的 Provider 与模型身份，同一 Provider 下切换模型不会丢掉该会话冻结的自定义连接配置；跨 Provider 切换时会正确重新解析新 Provider 配置。
-- **历史会话配置编辑更可靠**：从旧会话或懒加载会话进入后，首次修改模型、权限、MCP 或插件配置时会基于最新会话状态写入，避免并发编辑把已保存的配置覆盖回旧值。
-- **后台完成后标题和历史列表及时刷新**：AI 在后台完成回复后，标签标题和打开中的历史下拉会刷新到最新会话标题 / 状态，不再需要重新打开页面才能看到变化。
-- **Windows 工作区配置查找更稳**：工作区路径使用不同斜杠、大小写或尾部分隔符时，Agent 配置、插件和管理 API 能匹配到同一个工作区，减少“找不到工作区”或默认配置回退。
+- **浼氳瘽妯″瀷 / Provider 閫夋嫨涓嶅啀涓茬嚎**锛氭嫢鏈夐厤缃揩鐓х殑浼氳瘽浼氫繚鐣欒嚜宸辩殑 Provider 涓庢ā鍨嬭韩浠斤紝鍚屼竴 Provider 涓嬪垏鎹㈡ā鍨嬩笉浼氫涪鎺夎浼氳瘽鍐荤粨鐨勮嚜瀹氫箟杩炴帴閰嶇疆锛涜法 Provider 鍒囨崲鏃朵細姝ｇ‘閲嶆柊瑙ｆ瀽鏂?Provider 閰嶇疆銆?
+- **鍘嗗彶浼氳瘽閰嶇疆缂栬緫鏇村彲闈?*锛氫粠鏃т細璇濇垨鎳掑姞杞戒細璇濊繘鍏ュ悗锛岄娆′慨鏀规ā鍨嬨€佹潈闄愩€丮CP 鎴栨彃浠堕厤缃椂浼氬熀浜庢渶鏂颁細璇濈姸鎬佸啓鍏ワ紝閬垮厤骞跺彂缂栬緫鎶婂凡淇濆瓨鐨勯厤缃鐩栧洖鏃у€笺€?
+- **鍚庡彴瀹屾垚鍚庢爣棰樺拰鍘嗗彶鍒楄〃鍙婃椂鍒锋柊**锛欰I 鍦ㄥ悗鍙板畬鎴愬洖澶嶅悗锛屾爣绛炬爣棰樺拰鎵撳紑涓殑鍘嗗彶涓嬫媺浼氬埛鏂板埌鏈€鏂颁細璇濇爣棰?/ 鐘舵€侊紝涓嶅啀闇€瑕侀噸鏂版墦寮€椤甸潰鎵嶈兘鐪嬪埌鍙樺寲銆?
+- **Windows 宸ヤ綔鍖洪厤缃煡鎵炬洿绋?*锛氬伐浣滃尯璺緞浣跨敤涓嶅悓鏂滄潬銆佸ぇ灏忓啓鎴栧熬閮ㄥ垎闅旂鏃讹紝Agent 閰嶇疆銆佹彃浠跺拰绠＄悊 API 鑳藉尮閰嶅埌鍚屼竴涓伐浣滃尯锛屽噺灏戔€滄壘涓嶅埌宸ヤ綔鍖衡€濇垨榛樿閰嶇疆鍥為€€銆?
 
 ---
 
 ## [0.2.39] - 2026-06-24
 
-> 本版聚焦会话配置归属与惰性会话物化：新建空会话、恢复会话、IM / 定时任务 / 后台通道共用会话时，模型、Provider、MCP 与 Agent 配置会回到对应 owner 的权威来源；同时修复活跃 sidecar 清理、启动页 Provider CTA 等稳定性问题。
+> 鏈増鑱氱劍浼氳瘽閰嶇疆褰掑睘涓庢儼鎬т細璇濈墿鍖栵細鏂板缓绌轰細璇濄€佹仮澶嶄細璇濄€両M / 瀹氭椂浠诲姟 / 鍚庡彴閫氶亾鍏辩敤浼氳瘽鏃讹紝妯″瀷銆丳rovider銆丮CP 涓?Agent 閰嶇疆浼氬洖鍒板搴?owner 鐨勬潈濞佹潵婧愶紱鍚屾椂淇娲昏穬 sidecar 娓呯悊銆佸惎鍔ㄩ〉 Provider CTA 绛夌ǔ瀹氭€ч棶棰樸€?
 
 ### Changed
 
-- **会话配置快照更明确**：Session 记录补齐 runtime session id、启用插件、配置快照时间和物化状态等元数据，恢复或懒加载时能按创建 owner 的配置重新进入 Chat。
-- **桌面 / IM / 定时任务配置归属收敛**：不同入口不再共用一套隐式配置状态，Agent 配置、远程 MCP registry 与会话 runtime 配置各自保留权威来源。
+- **浼氳瘽閰嶇疆蹇収鏇存槑纭?*锛歋ession 璁板綍琛ラ綈 runtime session id銆佸惎鐢ㄦ彃浠躲€侀厤缃揩鐓ф椂闂村拰鐗╁寲鐘舵€佺瓑鍏冩暟鎹紝鎭㈠鎴栨噿鍔犺浇鏃惰兘鎸夊垱寤?owner 鐨勯厤缃噸鏂拌繘鍏?Chat銆?
+- **妗岄潰 / IM / 瀹氭椂浠诲姟閰嶇疆褰掑睘鏀舵暃**锛氫笉鍚屽叆鍙ｄ笉鍐嶅叡鐢ㄤ竴濂楅殣寮忛厤缃姸鎬侊紝Agent 閰嶇疆銆佽繙绋?MCP registry 涓庝細璇?runtime 閰嶇疆鍚勮嚜淇濈暀鏉冨▉鏉ユ簮銆?
 
 ### Fixed
 
-- **空会话改模型不再误报配置未保存**（[#399](https://github.com/hAcKlyc/HamunaAgent/issues/399)）：刚打开的空 session 在切换模型或配置时，会先完成必要的会话物化与配置落盘，不再提示“配置未能完全保存”。
-- **恢复 / 懒加载会话配置不再丢失**：从启动页、历史或冷恢复进入会话时，owned config snapshot 会被保留，避免 Provider、模型、MCP 或插件配置回退成旧值。
-- **通道会话不再覆盖桌面会话状态**：IM、定时任务和后台 completion 流程保留各自 owner 的 session state，减少跨入口切换后的配置串线。
-- **活跃 sidecar 不再被清理误删**：会话清理流程会跳过仍在运行或已被其他 owner 接管的 sidecar，避免误删后重启、失忆或空转。
-- **启动页 Provider CTA 可正常点击**：无可用 Provider 时的引导按钮恢复可点击状态，用户可以直接进入配置流程。
+- **绌轰細璇濇敼妯″瀷涓嶅啀璇姤閰嶇疆鏈繚瀛?*锛圼#399](https://github.com/hAcKlyc/HamunaAgent/issues/399)锛夛細鍒氭墦寮€鐨勭┖ session 鍦ㄥ垏鎹㈡ā鍨嬫垨閰嶇疆鏃讹紝浼氬厛瀹屾垚蹇呰鐨勪細璇濈墿鍖栦笌閰嶇疆钀界洏锛屼笉鍐嶆彁绀衡€滈厤缃湭鑳藉畬鍏ㄤ繚瀛樷€濄€?
+- **鎭㈠ / 鎳掑姞杞戒細璇濋厤缃笉鍐嶄涪澶?*锛氫粠鍚姩椤点€佸巻鍙叉垨鍐锋仮澶嶈繘鍏ヤ細璇濇椂锛宱wned config snapshot 浼氳淇濈暀锛岄伩鍏?Provider銆佹ā鍨嬨€丮CP 鎴栨彃浠堕厤缃洖閫€鎴愭棫鍊笺€?
+- **閫氶亾浼氳瘽涓嶅啀瑕嗙洊妗岄潰浼氳瘽鐘舵€?*锛欼M銆佸畾鏃朵换鍔″拰鍚庡彴 completion 娴佺▼淇濈暀鍚勮嚜 owner 鐨?session state锛屽噺灏戣法鍏ュ彛鍒囨崲鍚庣殑閰嶇疆涓茬嚎銆?
+- **娲昏穬 sidecar 涓嶅啀琚竻鐞嗚鍒?*锛氫細璇濇竻鐞嗘祦绋嬩細璺宠繃浠嶅湪杩愯鎴栧凡琚叾浠?owner 鎺ョ鐨?sidecar锛岄伩鍏嶈鍒犲悗閲嶅惎銆佸け蹇嗘垨绌鸿浆銆?
+- **鍚姩椤?Provider CTA 鍙甯哥偣鍑?*锛氭棤鍙敤 Provider 鏃剁殑寮曞鎸夐挳鎭㈠鍙偣鍑荤姸鎬侊紝鐢ㄦ埛鍙互鐩存帴杩涘叆閰嶇疆娴佺▼銆?
 
 ---
 
 ## [0.2.38] - 2026-06-23
 
-> 本版聚焦外部 Runtime 的连续对话控制、会话稳定性和较大规模技术债清理：Codex 现在能跟随“实时响应 / 轮次响应”的连续发送设置，IM / 定时任务 / 后台注入回合对成功与失败的判断更可靠；同时完成 Session Engine、Sidecar owner 和前端巨型模块拆分，收紧 Provider / 上下文身份、Runtime CLI 检测和 Chat 欢迎页启动体验。
+> 鏈増鑱氱劍澶栭儴 Runtime 鐨勮繛缁璇濇帶鍒躲€佷細璇濈ǔ瀹氭€у拰杈冨ぇ瑙勬ā鎶€鏈€烘竻鐞嗭細Codex 鐜板湪鑳借窡闅忊€滃疄鏃跺搷搴?/ 杞鍝嶅簲鈥濈殑杩炵画鍙戦€佽缃紝IM / 瀹氭椂浠诲姟 / 鍚庡彴娉ㄥ叆鍥炲悎瀵规垚鍔熶笌澶辫触鐨勫垽鏂洿鍙潬锛涘悓鏃跺畬鎴?Session Engine銆丼idecar owner 鍜屽墠绔法鍨嬫ā鍧楁媶鍒嗭紝鏀剁揣 Provider / 涓婁笅鏂囪韩浠姐€丷untime CLI 妫€娴嬪拰 Chat 娆㈣繋椤靛惎鍔ㄤ綋楠屻€?
 
 ### Added
 
-- **Codex 连续发送实时响应**：设置里的“连续发送消息”现在同时作用于内置 SDK 与 Codex Runtime；实时响应模式下，Codex 可在工具调用间隙处理排队消息，轮次响应模式仍等当前 turn 完成后再继续。暂不支持该能力的外部 Runtime 会保持原有 turn 级行为。
-- **更完整的 Runtime 诊断能力**：内置工具 / Runtime 相关诊断信息更完整，排查本机运行环境与 CLI 发现问题时更有依据。
+- **Codex 杩炵画鍙戦€佸疄鏃跺搷搴?*锛氳缃噷鐨勨€滆繛缁彂閫佹秷鎭€濈幇鍦ㄥ悓鏃朵綔鐢ㄤ簬鍐呯疆 SDK 涓?Codex Runtime锛涘疄鏃跺搷搴旀ā寮忎笅锛孋odex 鍙湪宸ュ叿璋冪敤闂撮殭澶勭悊鎺掗槦娑堟伅锛岃疆娆″搷搴旀ā寮忎粛绛夊綋鍓?turn 瀹屾垚鍚庡啀缁х画銆傛殏涓嶆敮鎸佽鑳藉姏鐨勫閮?Runtime 浼氫繚鎸佸師鏈?turn 绾ц涓恒€?
+- **鏇村畬鏁寸殑 Runtime 璇婃柇鑳藉姏**锛氬唴缃伐鍏?/ Runtime 鐩稿叧璇婃柇淇℃伅鏇村畬鏁达紝鎺掓煡鏈満杩愯鐜涓?CLI 鍙戠幇闂鏃舵洿鏈変緷鎹€?
 
 ### Changed
 
-- **会话运行时架构收敛**：内置 SDK 与外部 Runtime 的会话读取、配置同步、注入 turn、队列和会话操作统一到 Session Engine 路径，减少 IM、定时任务、后台任务和桌面会话之间的状态漂移。
-- **大规模技术债清理**：拆分 Sidecar / Cron / IM 的 Rust owner 模块、builtin / external runtime 的会话状态 owner，以及 Settings、DirectoryPanel、SimpleChatInput 等前端巨型入口；公共 facade 保留外部协议，内部职责边界更清晰，后续排查和迭代成本更低。
-- **外部 Runtime CLI 检测更可靠**：应用内置或 HamunaAgent 管理的 Claude Code / Codex / Gemini CLI 能被更稳定地识别，不再过度依赖用户 shell 环境。
-- **产品说明与截图更新**：README 和产品截图刷新，便于新用户理解工作区、任务、模型供应商和悬浮入口等核心能力。
+- **浼氳瘽杩愯鏃舵灦鏋勬敹鏁?*锛氬唴缃?SDK 涓庡閮?Runtime 鐨勪細璇濊鍙栥€侀厤缃悓姝ャ€佹敞鍏?turn銆侀槦鍒楀拰浼氳瘽鎿嶄綔缁熶竴鍒?Session Engine 璺緞锛屽噺灏?IM銆佸畾鏃朵换鍔°€佸悗鍙颁换鍔″拰妗岄潰浼氳瘽涔嬮棿鐨勭姸鎬佹紓绉汇€?
+- **澶ц妯℃妧鏈€烘竻鐞?*锛氭媶鍒?Sidecar / Cron / IM 鐨?Rust owner 妯″潡銆乥uiltin / external runtime 鐨勪細璇濈姸鎬?owner锛屼互鍙?Settings銆丏irectoryPanel銆丼impleChatInput 绛夊墠绔法鍨嬪叆鍙ｏ紱鍏叡 facade 淇濈暀澶栭儴鍗忚锛屽唴閮ㄨ亴璐ｈ竟鐣屾洿娓呮櫚锛屽悗缁帓鏌ュ拰杩唬鎴愭湰鏇翠綆銆?
+- **澶栭儴 Runtime CLI 妫€娴嬫洿鍙潬**锛氬簲鐢ㄥ唴缃垨 HamunaAgent 绠＄悊鐨?Claude Code / Codex / Gemini CLI 鑳借鏇寸ǔ瀹氬湴璇嗗埆锛屼笉鍐嶈繃搴︿緷璧栫敤鎴?shell 鐜銆?
+- **浜у搧璇存槑涓庢埅鍥炬洿鏂?*锛歊EADME 鍜屼骇鍝佹埅鍥惧埛鏂帮紝渚夸簬鏂扮敤鎴风悊瑙ｅ伐浣滃尯銆佷换鍔°€佹ā鍨嬩緵搴斿晢鍜屾偓娴叆鍙ｇ瓑鏍稿績鑳藉姏銆?
 
 ### Fixed
 
-- **IM / 定时任务注入回合不再假成功**：同步注入 turn 只有在对应 Runtime 真正成功完成后才会被标记完成，减少 0 turn、空回复、读到上一轮结果或孤儿气泡的问题。
-- **Provider 与上下文身份更稳定**：会话会保留正确的 Provider 身份和上下文权限，减少供应商串线、模型不可用或大上下文能力被错误降级的情况。
-- **Claude 4.6 默认上下文更稳**：默认回到标准上下文，避免未开通额外用量时误触 1M context 相关错误。
-- **Chat 欢迎页不再启动闪烁**：打开带 `INTRODUCTION.md` 的工作区时，欢迎页不再因 sidecar / Codex session 初始化、pending session 升级或临时读取失败而反复卸载重播动画。
-- **触控板标签切换更安静**：普通使用中不再输出大量 tab swipe perf 调试日志，控制台噪音减少。
-- **会话标题更新顺序更可靠**：会话标题事件的优先级收紧，降低标题被较晚事件覆盖或恢复不及时的概率。
-- **Windows 开发构建更稳**：Windows 开发构建提高 Node heap，减少大规模前端构建时内存不足的问题。
+- **IM / 瀹氭椂浠诲姟娉ㄥ叆鍥炲悎涓嶅啀鍋囨垚鍔?*锛氬悓姝ユ敞鍏?turn 鍙湁鍦ㄥ搴?Runtime 鐪熸鎴愬姛瀹屾垚鍚庢墠浼氳鏍囪瀹屾垚锛屽噺灏?0 turn銆佺┖鍥炲銆佽鍒颁笂涓€杞粨鏋滄垨瀛ゅ効姘旀场鐨勯棶棰樸€?
+- **Provider 涓庝笂涓嬫枃韬唤鏇寸ǔ瀹?*锛氫細璇濅細淇濈暀姝ｇ‘鐨?Provider 韬唤鍜屼笂涓嬫枃鏉冮檺锛屽噺灏戜緵搴斿晢涓茬嚎銆佹ā鍨嬩笉鍙敤鎴栧ぇ涓婁笅鏂囪兘鍔涜閿欒闄嶇骇鐨勬儏鍐点€?
+- **Claude 4.6 榛樿涓婁笅鏂囨洿绋?*锛氶粯璁ゅ洖鍒版爣鍑嗕笂涓嬫枃锛岄伩鍏嶆湭寮€閫氶澶栫敤閲忔椂璇Е 1M context 鐩稿叧閿欒銆?
+- **Chat 娆㈣繋椤典笉鍐嶅惎鍔ㄩ棯鐑?*锛氭墦寮€甯?`INTRODUCTION.md` 鐨勫伐浣滃尯鏃讹紝娆㈣繋椤典笉鍐嶅洜 sidecar / Codex session 鍒濆鍖栥€乸ending session 鍗囩骇鎴栦复鏃惰鍙栧け璐ヨ€屽弽澶嶅嵏杞介噸鎾姩鐢汇€?
+- **瑙︽帶鏉挎爣绛惧垏鎹㈡洿瀹夐潤**锛氭櫘閫氫娇鐢ㄤ腑涓嶅啀杈撳嚭澶ч噺 tab swipe perf 璋冭瘯鏃ュ織锛屾帶鍒跺彴鍣煶鍑忓皯銆?
+- **浼氳瘽鏍囬鏇存柊椤哄簭鏇村彲闈?*锛氫細璇濇爣棰樹簨浠剁殑浼樺厛绾ф敹绱э紝闄嶄綆鏍囬琚緝鏅氫簨浠惰鐩栨垨鎭㈠涓嶅強鏃剁殑姒傜巼銆?
+- **Windows 寮€鍙戞瀯寤烘洿绋?*锛歐indows 寮€鍙戞瀯寤烘彁楂?Node heap锛屽噺灏戝ぇ瑙勬ā鍓嶇鏋勫缓鏃跺唴瀛樹笉瓒崇殑闂銆?
 
 ---
 
 ## [0.2.37] - 2026-06-20
 
-> 本版聚焦 Chat 会话事件协作、高频对话体验和大图片发送链路：新增 session watch 事件协议与连续发送响应模式，图片拖入改走文件 ref 以避免大 payload，启动页历史与收藏操作更完整，同时修复 external runtime 新会话从 pending session 升级到真实 session 后的附件与 watch owner 归属问题。
+> 鏈増鑱氱劍 Chat 浼氳瘽浜嬩欢鍗忎綔銆侀珮棰戝璇濅綋楠屽拰澶у浘鐗囧彂閫侀摼璺細鏂板 session watch 浜嬩欢鍗忚涓庤繛缁彂閫佸搷搴旀ā寮忥紝鍥剧墖鎷栧叆鏀硅蛋鏂囦欢 ref 浠ラ伩鍏嶅ぇ payload锛屽惎鍔ㄩ〉鍘嗗彶涓庢敹钘忔搷浣滄洿瀹屾暣锛屽悓鏃朵慨澶?external runtime 鏂颁細璇濅粠 pending session 鍗囩骇鍒扮湡瀹?session 鍚庣殑闄勪欢涓?watch owner 褰掑睘闂銆?
 
 ### Added
 
-- **Session watch 事件协议**：`hamuna session watch` 可监听另一个 session 的当前运行结果，完成后通过 `<hamuna-session-event type="watch.completed">` 推回当前 session。
-- **连续发送响应模式**：设置中新增“连续发送消息”，可选择“实时响应”或“轮次响应”；轮次响应会等 AI 完成当前轮次后再自动发送下一条消息，适合希望严格一问一答的场景。
-- **大图片路径 ref 发送**：从 Finder / Explorer 拖入聊天的大图片会先落到 app 附件目录，再以 ref 进入 Sidecar，避免大 base64 直接穿过 IPC / SSE。
-- **启动页历史与收藏控制**：历史会话、对话收藏和右栏交互补齐更多 hover / 右键 / 分页细节，提升长列表使用效率。
-- **文件预览完整复制**：文件预览支持复制完整文本内容，代码块与 Markdown 复制路径更稳定。
+- **Session watch 浜嬩欢鍗忚**锛歚hamuna session watch` 鍙洃鍚彟涓€涓?session 鐨勫綋鍓嶈繍琛岀粨鏋滐紝瀹屾垚鍚庨€氳繃 `<hamuna-session-event type="watch.completed">` 鎺ㄥ洖褰撳墠 session銆?
+- **杩炵画鍙戦€佸搷搴旀ā寮?*锛氳缃腑鏂板鈥滆繛缁彂閫佹秷鎭€濓紝鍙€夋嫨鈥滃疄鏃跺搷搴斺€濇垨鈥滆疆娆″搷搴斺€濓紱杞鍝嶅簲浼氱瓑 AI 瀹屾垚褰撳墠杞鍚庡啀鑷姩鍙戦€佷笅涓€鏉℃秷鎭紝閫傚悎甯屾湜涓ユ牸涓€闂竴绛旂殑鍦烘櫙銆?
+- **澶у浘鐗囪矾寰?ref 鍙戦€?*锛氫粠 Finder / Explorer 鎷栧叆鑱婂ぉ鐨勫ぇ鍥剧墖浼氬厛钀藉埌 app 闄勪欢鐩綍锛屽啀浠?ref 杩涘叆 Sidecar锛岄伩鍏嶅ぇ base64 鐩存帴绌胯繃 IPC / SSE銆?
+- **鍚姩椤靛巻鍙蹭笌鏀惰棌鎺у埗**锛氬巻鍙蹭細璇濄€佸璇濇敹钘忓拰鍙虫爮浜や簰琛ラ綈鏇村 hover / 鍙抽敭 / 鍒嗛〉缁嗚妭锛屾彁鍗囬暱鍒楄〃浣跨敤鏁堢巼銆?
+- **鏂囦欢棰勮瀹屾暣澶嶅埗**锛氭枃浠堕瑙堟敮鎸佸鍒跺畬鏁存枃鏈唴瀹癸紝浠ｇ爜鍧椾笌 Markdown 澶嶅埗璺緞鏇寸ǔ瀹氥€?
 
 ### Changed
 
-- **图片附件格式边界收敛**：聊天图片附件统一限定为 PNG / JPEG / GIF / WebP；其他图片格式走普通文件引用路径。
-- **外部 Runtime 新会话 owner 统一**：新建 tab 的 `pending-*` 会话在进入 Sidecar 后统一归属到真实 session id，watch、图片 ref、历史持久化使用同一个 owner。
+- **鍥剧墖闄勪欢鏍煎紡杈圭晫鏀舵暃**锛氳亰澶╁浘鐗囬檮浠剁粺涓€闄愬畾涓?PNG / JPEG / GIF / WebP锛涘叾浠栧浘鐗囨牸寮忚蛋鏅€氭枃浠跺紩鐢ㄨ矾寰勩€?
+- **澶栭儴 Runtime 鏂颁細璇?owner 缁熶竴**锛氭柊寤?tab 鐨?`pending-*` 浼氳瘽鍦ㄨ繘鍏?Sidecar 鍚庣粺涓€褰掑睘鍒扮湡瀹?session id锛寃atch銆佸浘鐗?ref銆佸巻鍙叉寔涔呭寲浣跨敤鍚屼竴涓?owner銆?
 
 ### Fixed
 
-- **首条图片消息不再因 pending ref 失效**：修复 builtin / external runtime 新会话首条路径图片发送时，附件仍归属 `pending-*` 而 runtime 使用真实 session id 导致校验失败的问题。
-- **Session watch 不再丢完成事件**：watch 投递改为确认送达后再清理 pending 记录；管理 API 短暂不可用时保留待重试。
-- **启动中 sidecar 的 watch 注册更稳**：目标 sidecar 已绑定 HTTP 但 readiness 尚未完成时，503 注册响应会在启动 deadline 内重试。
-- **触控板切换标签更稳**：修复滑动释放、连续滑动和尾段事件导致的重复切换或卡住问题。
-- **历史日期按本地自然日显示**：会话历史和搜索结果不再因具体时刻跨天边界而落到错误的“今天 / 昨天”分组。
-- **Windows 静止滚动条更克制**：Windows 上滚动条拇指静止时默认隐藏，滚动时短暂显色，减少长列表常驻视觉噪音。
-- **CLI / 文档小修**：更新 session help 中过期的 IM 命令名称，并补齐 watch 注册失败的 CLI exit code 映射。
+- **棣栨潯鍥剧墖娑堟伅涓嶅啀鍥?pending ref 澶辨晥**锛氫慨澶?builtin / external runtime 鏂颁細璇濋鏉¤矾寰勫浘鐗囧彂閫佹椂锛岄檮浠朵粛褰掑睘 `pending-*` 鑰?runtime 浣跨敤鐪熷疄 session id 瀵艰嚧鏍￠獙澶辫触鐨勯棶棰樸€?
+- **Session watch 涓嶅啀涓㈠畬鎴愪簨浠?*锛歸atch 鎶曢€掓敼涓虹‘璁ら€佽揪鍚庡啀娓呯悊 pending 璁板綍锛涚鐞?API 鐭殏涓嶅彲鐢ㄦ椂淇濈暀寰呴噸璇曘€?
+- **鍚姩涓?sidecar 鐨?watch 娉ㄥ唽鏇寸ǔ**锛氱洰鏍?sidecar 宸茬粦瀹?HTTP 浣?readiness 灏氭湭瀹屾垚鏃讹紝503 娉ㄥ唽鍝嶅簲浼氬湪鍚姩 deadline 鍐呴噸璇曘€?
+- **瑙︽帶鏉垮垏鎹㈡爣绛炬洿绋?*锛氫慨澶嶆粦鍔ㄩ噴鏀俱€佽繛缁粦鍔ㄥ拰灏炬浜嬩欢瀵艰嚧鐨勯噸澶嶅垏鎹㈡垨鍗′綇闂銆?
+- **鍘嗗彶鏃ユ湡鎸夋湰鍦拌嚜鐒舵棩鏄剧ず**锛氫細璇濆巻鍙插拰鎼滅储缁撴灉涓嶅啀鍥犲叿浣撴椂鍒昏法澶╄竟鐣岃€岃惤鍒伴敊璇殑鈥滀粖澶?/ 鏄ㄥぉ鈥濆垎缁勩€?
+- **Windows 闈欐婊氬姩鏉℃洿鍏嬪埗**锛歐indows 涓婃粴鍔ㄦ潯鎷囨寚闈欐鏃堕粯璁ら殣钘忥紝婊氬姩鏃剁煭鏆傛樉鑹诧紝鍑忓皯闀垮垪琛ㄥ父椹昏瑙夊櫔闊炽€?
+- **CLI / 鏂囨。灏忎慨**锛氭洿鏂?session help 涓繃鏈熺殑 IM 鍛戒护鍚嶇О锛屽苟琛ラ綈 watch 娉ㄥ唽澶辫触鐨?CLI exit code 鏄犲皠銆?
 
 ---
 
 ## [0.2.36] - 2026-06-20
 
-> 本版重构启动页右栏，把「Agent 工作区」与「历史对话」整合成更适合长期使用的工作台：工作区支持置顶、展开、更多菜单和打开所在文件夹；历史对话支持工作区筛选、吸顶、分页加载与右键菜单。另有文件预览更多菜单、文件补丁展示协议、入口归因分析，以及外部 Runtime / IM / 上下文统计的一批稳定性修复。
+> 鏈増閲嶆瀯鍚姩椤靛彸鏍忥紝鎶娿€孉gent 宸ヤ綔鍖恒€嶄笌銆屽巻鍙插璇濄€嶆暣鍚堟垚鏇撮€傚悎闀挎湡浣跨敤鐨勫伐浣滃彴锛氬伐浣滃尯鏀寔缃《銆佸睍寮€銆佹洿澶氳彍鍗曞拰鎵撳紑鎵€鍦ㄦ枃浠跺す锛涘巻鍙插璇濇敮鎸佸伐浣滃尯绛涢€夈€佸惛椤躲€佸垎椤靛姞杞戒笌鍙抽敭鑿滃崟銆傚彟鏈夋枃浠堕瑙堟洿澶氳彍鍗曘€佹枃浠惰ˉ涓佸睍绀哄崗璁€佸叆鍙ｅ綊鍥犲垎鏋愶紝浠ュ強澶栭儴 Runtime / IM / 涓婁笅鏂囩粺璁＄殑涓€鎵圭ǔ瀹氭€т慨澶嶃€?
 
 ### Added
 
-- **启动页右栏升级**：Launcher 右栏改为上方 Agent 工作区、下方历史对话的整体滚动区域；工作区默认展示 3 行 2 列，超过后可丝滑展开 / 收起，收起时回到右栏顶部。
-- **工作区置顶与更多菜单**：工作区卡片支持右键置顶 / 取消置顶，置顶项按置顶时间倒序排列；卡片 hover 的「更多」按钮会打开同一组菜单，并新增「打开所在文件夹」。
-- **历史对话筛选与分页**：历史对话默认显示全部可见工作区，标题右侧提供弱化的工作区筛选器；列表支持大量历史的分页加载，滚动时标题栏吸顶，底部带渐隐遮罩。
-- **历史对话右键菜单**：每条历史对话支持 hover 更多菜单与右键菜单，菜单位置跟随右键点击点位，并提供「查看统计」「删除」等操作。
-- **文件预览更多菜单**：Chat 文件预览器顶部改为「更多」入口，支持引用、在文件目录中展示、复制文件路径、打开所在文件夹、重命名，与文件树右键菜单能力对齐。
-- **文件补丁展示协议**：新增统一的文件补丁展示协议与 `FilePatchTool`，让 Edit / Write / patch 类工具的路径、变更和附件展示更一致。
-- **入口归因分析**：补强启动页历史、AI 小助理等入口的事件归因，便于统计用户从哪里进入会话、任务或帮助流程。
+- **鍚姩椤靛彸鏍忓崌绾?*锛歀auncher 鍙虫爮鏀逛负涓婃柟 Agent 宸ヤ綔鍖恒€佷笅鏂瑰巻鍙插璇濈殑鏁翠綋婊氬姩鍖哄煙锛涘伐浣滃尯榛樿灞曠ず 3 琛?2 鍒楋紝瓒呰繃鍚庡彲涓濇粦灞曞紑 / 鏀惰捣锛屾敹璧锋椂鍥炲埌鍙虫爮椤堕儴銆?
+- **宸ヤ綔鍖虹疆椤朵笌鏇村鑿滃崟**锛氬伐浣滃尯鍗＄墖鏀寔鍙抽敭缃《 / 鍙栨秷缃《锛岀疆椤堕」鎸夌疆椤舵椂闂村€掑簭鎺掑垪锛涘崱鐗?hover 鐨勩€屾洿澶氥€嶆寜閽細鎵撳紑鍚屼竴缁勮彍鍗曪紝骞舵柊澧炪€屾墦寮€鎵€鍦ㄦ枃浠跺す銆嶃€?
+- **鍘嗗彶瀵硅瘽绛涢€変笌鍒嗛〉**锛氬巻鍙插璇濋粯璁ゆ樉绀哄叏閮ㄥ彲瑙佸伐浣滃尯锛屾爣棰樺彸渚ф彁渚涘急鍖栫殑宸ヤ綔鍖虹瓫閫夊櫒锛涘垪琛ㄦ敮鎸佸ぇ閲忓巻鍙茬殑鍒嗛〉鍔犺浇锛屾粴鍔ㄦ椂鏍囬鏍忓惛椤讹紝搴曢儴甯︽笎闅愰伄缃┿€?
+- **鍘嗗彶瀵硅瘽鍙抽敭鑿滃崟**锛氭瘡鏉″巻鍙插璇濇敮鎸?hover 鏇村鑿滃崟涓庡彸閿彍鍗曪紝鑿滃崟浣嶇疆璺熼殢鍙抽敭鐐瑰嚮鐐逛綅锛屽苟鎻愪緵銆屾煡鐪嬬粺璁°€嶃€屽垹闄ゃ€嶇瓑鎿嶄綔銆?
+- **鏂囦欢棰勮鏇村鑿滃崟**锛欳hat 鏂囦欢棰勮鍣ㄩ《閮ㄦ敼涓恒€屾洿澶氥€嶅叆鍙ｏ紝鏀寔寮曠敤銆佸湪鏂囦欢鐩綍涓睍绀恒€佸鍒舵枃浠惰矾寰勩€佹墦寮€鎵€鍦ㄦ枃浠跺す銆侀噸鍛藉悕锛屼笌鏂囦欢鏍戝彸閿彍鍗曡兘鍔涘榻愩€?
+- **鏂囦欢琛ヤ竵灞曠ず鍗忚**锛氭柊澧炵粺涓€鐨勬枃浠惰ˉ涓佸睍绀哄崗璁笌 `FilePatchTool`锛岃 Edit / Write / patch 绫诲伐鍏风殑璺緞銆佸彉鏇村拰闄勪欢灞曠ず鏇翠竴鑷淬€?
+- **鍏ュ彛褰掑洜鍒嗘瀽**锛氳ˉ寮哄惎鍔ㄩ〉鍘嗗彶銆丄I 灏忓姪鐞嗙瓑鍏ュ彛鐨勪簨浠跺綊鍥狅紝渚夸簬缁熻鐢ㄦ埛浠庡摢閲岃繘鍏ヤ細璇濄€佷换鍔℃垨甯姪娴佺▼銆?
 
 ### Changed
 
-- **启动页任务入口收敛**：Launcher 不再展示最近任务 / 新建任务入口，任务中心统一保留在顶部导航栏。
-- **工作区卡片信息更紧凑**：渠道标签与工作区名称同排展示，空间不足时用遮罩式截断；路径和名称截断策略改为更少浪费右侧空间。
-- **历史对话列表更清爽**：去掉日期分组分割线和时间前图标，保留纯列表排布；更多按钮改为 overlay，不挤压标题区域。
-- **Chat 文件树菜单层级修正**：文件树右键菜单会显示在文档预览上方，避免被预览器遮挡。
-- **Codex Agent 面板显示 Plan 状态**：外部 Runtime 的 Codex 子 Agent 活动能更清楚地展示规划状态。
+- **鍚姩椤典换鍔″叆鍙ｆ敹鏁?*锛歀auncher 涓嶅啀灞曠ず鏈€杩戜换鍔?/ 鏂板缓浠诲姟鍏ュ彛锛屼换鍔′腑蹇冪粺涓€淇濈暀鍦ㄩ《閮ㄥ鑸爮銆?
+- **宸ヤ綔鍖哄崱鐗囦俊鎭洿绱у噾**锛氭笭閬撴爣绛句笌宸ヤ綔鍖哄悕绉板悓鎺掑睍绀猴紝绌洪棿涓嶈冻鏃剁敤閬僵寮忔埅鏂紱璺緞鍜屽悕绉版埅鏂瓥鐣ユ敼涓烘洿灏戞氮璐瑰彸渚х┖闂淬€?
+- **鍘嗗彶瀵硅瘽鍒楄〃鏇存竻鐖?*锛氬幓鎺夋棩鏈熷垎缁勫垎鍓茬嚎鍜屾椂闂村墠鍥炬爣锛屼繚鐣欑函鍒楄〃鎺掑竷锛涙洿澶氭寜閽敼涓?overlay锛屼笉鎸ゅ帇鏍囬鍖哄煙銆?
+- **Chat 鏂囦欢鏍戣彍鍗曞眰绾т慨姝?*锛氭枃浠舵爲鍙抽敭鑿滃崟浼氭樉绀哄湪鏂囨。棰勮涓婃柟锛岄伩鍏嶈棰勮鍣ㄩ伄鎸°€?
+- **Codex Agent 闈㈡澘鏄剧ず Plan 鐘舵€?*锛氬閮?Runtime 鐨?Codex 瀛?Agent 娲诲姩鑳芥洿娓呮鍦板睍绀鸿鍒掔姸鎬併€?
 
 ### Fixed
 
-- **历史与工作区菜单交互修复**：连续点击更多菜单不会叠出多个菜单；点击菜单项不会误进入对应 session；右键历史行不再选中文字或延迟弹出菜单。
-- **外部 Runtime 会话配置更稳**：清理和归一化外部 Runtime session 配置，避免 Provider / Runtime 身份串线或遗留配置污染新会话。
-- **IM 与定时任务稳定性修复**：修复 IM session runtime 身份保留、重复终态请求、定时任务提醒元数据展示等问题。
-- **上下文与会话状态更准确**：实时上下文窗口快照保持更新；Provider 绑定的 SDK transcript 在必要时重置，减少切换供应商后的历史污染。
-- **标签拖拽与悬浮球细节修复**：触控板拖拽标签更稳定；macOS 悬浮球 pin 行为绑定到正确输入 owner。
-- **Codex nested subagent 修复**：Codex 子 Agent 在嵌套工具调用期间保持活跃状态，避免执行中被错误判定为空闲。
+- **鍘嗗彶涓庡伐浣滃尯鑿滃崟浜や簰淇**锛氳繛缁偣鍑绘洿澶氳彍鍗曚笉浼氬彔鍑哄涓彍鍗曪紱鐐瑰嚮鑿滃崟椤逛笉浼氳杩涘叆瀵瑰簲 session锛涘彸閿巻鍙茶涓嶅啀閫変腑鏂囧瓧鎴栧欢杩熷脊鍑鸿彍鍗曘€?
+- **澶栭儴 Runtime 浼氳瘽閰嶇疆鏇寸ǔ**锛氭竻鐞嗗拰褰掍竴鍖栧閮?Runtime session 閰嶇疆锛岄伩鍏?Provider / Runtime 韬唤涓茬嚎鎴栭仐鐣欓厤缃薄鏌撴柊浼氳瘽銆?
+- **IM 涓庡畾鏃朵换鍔＄ǔ瀹氭€т慨澶?*锛氫慨澶?IM session runtime 韬唤淇濈暀銆侀噸澶嶇粓鎬佽姹傘€佸畾鏃朵换鍔℃彁閱掑厓鏁版嵁灞曠ず绛夐棶棰樸€?
+- **涓婁笅鏂囦笌浼氳瘽鐘舵€佹洿鍑嗙‘**锛氬疄鏃朵笂涓嬫枃绐楀彛蹇収淇濇寔鏇存柊锛汸rovider 缁戝畾鐨?SDK transcript 鍦ㄥ繀瑕佹椂閲嶇疆锛屽噺灏戝垏鎹緵搴斿晢鍚庣殑鍘嗗彶姹℃煋銆?
+- **鏍囩鎷栨嫿涓庢偓娴悆缁嗚妭淇**锛氳Е鎺ф澘鎷栨嫿鏍囩鏇寸ǔ瀹氾紱macOS 鎮诞鐞?pin 琛屼负缁戝畾鍒版纭緭鍏?owner銆?
+- **Codex nested subagent 淇**锛欳odex 瀛?Agent 鍦ㄥ祵濂楀伐鍏疯皟鐢ㄦ湡闂翠繚鎸佹椿璺冪姸鎬侊紝閬垮厤鎵ц涓閿欒鍒ゅ畾涓虹┖闂层€?
 
 ---
 
 ## [0.2.35] - 2026-06-16
 
-> 本版聚焦桌面宠物与 Plan 模式的稳定性：悬浮球提问会更自然地携带当前桌面上下文，且不会污染消息显示、会话标题或搜索导航；Plan 模式确认方案时不再丢内容；标题栏标签过多时更易管理，分栏网页预览和桌面宠物生命周期也更稳。
+> 鏈増鑱氱劍妗岄潰瀹犵墿涓?Plan 妯″紡鐨勭ǔ瀹氭€э細鎮诞鐞冩彁闂細鏇磋嚜鐒跺湴鎼哄甫褰撳墠妗岄潰涓婁笅鏂囷紝涓斾笉浼氭薄鏌撴秷鎭樉绀恒€佷細璇濇爣棰樻垨鎼滅储瀵艰埅锛汸lan 妯″紡纭鏂规鏃朵笉鍐嶄涪鍐呭锛涙爣棰樻爮鏍囩杩囧鏃舵洿鏄撶鐞嗭紝鍒嗘爮缃戦〉棰勮鍜屾闈㈠疇鐗╃敓鍛藉懆鏈熶篃鏇寸ǔ銆?
 
 ### Changed
 
-- **悬浮球提问更贴合当前桌面**：通过悬浮球发送消息时，AI 会收到小窗交互提示以及前台应用、窗口标题、选中文本、截图等后台上下文；这些上下文不会直接混进聊天气泡、会话标题或查询导航。
-- **标题栏标签过多时更好用**：标签可更自然地收缩，并在空间不足时提供溢出入口；窗口标题栏两侧保留可拖拽区域，拥挤时仍能顺手移动窗口。
+- **鎮诞鐞冩彁闂洿璐村悎褰撳墠妗岄潰**锛氶€氳繃鎮诞鐞冨彂閫佹秷鎭椂锛孉I 浼氭敹鍒板皬绐椾氦浜掓彁绀轰互鍙婂墠鍙板簲鐢ㄣ€佺獥鍙ｆ爣棰樸€侀€変腑鏂囨湰銆佹埅鍥剧瓑鍚庡彴涓婁笅鏂囷紱杩欎簺涓婁笅鏂囦笉浼氱洿鎺ユ贩杩涜亰澶╂皵娉°€佷細璇濇爣棰樻垨鏌ヨ瀵艰埅銆?
+- **鏍囬鏍忔爣绛捐繃澶氭椂鏇村ソ鐢?*锛氭爣绛惧彲鏇磋嚜鐒跺湴鏀剁缉锛屽苟鍦ㄧ┖闂翠笉瓒虫椂鎻愪緵婧㈠嚭鍏ュ彛锛涚獥鍙ｆ爣棰樻爮涓や晶淇濈暀鍙嫋鎷藉尯鍩燂紝鎷ユ尋鏃朵粛鑳介『鎵嬬Щ鍔ㄧ獥鍙ｃ€?
 
 ### Fixed
 
-- **Plan 模式确认内容不再丢失**：多次提交或修改规划方案时，确认卡片能恢复当前完整方案，避免出现空白或内容缺失。
-- **分栏网页预览打开更稳定**：右侧网页预览在面板宽度过渡期间不再用中间位置创建，减少打开时的错位和闪烁。
-- **桌面宠物生命周期更可靠**：修复悬浮球 hover、置顶、关闭或禁用过程中的异步状态竞争，减少残留面板、误唤起和截图失败难排查的问题。
+- **Plan 妯″紡纭鍐呭涓嶅啀涓㈠け**锛氬娆℃彁浜ゆ垨淇敼瑙勫垝鏂规鏃讹紝纭鍗＄墖鑳芥仮澶嶅綋鍓嶅畬鏁存柟妗堬紝閬垮厤鍑虹幇绌虹櫧鎴栧唴瀹圭己澶便€?
+- **鍒嗘爮缃戦〉棰勮鎵撳紑鏇寸ǔ瀹?*锛氬彸渚х綉椤甸瑙堝湪闈㈡澘瀹藉害杩囨浮鏈熼棿涓嶅啀鐢ㄤ腑闂翠綅缃垱寤猴紝鍑忓皯鎵撳紑鏃剁殑閿欎綅鍜岄棯鐑併€?
+- **妗岄潰瀹犵墿鐢熷懡鍛ㄦ湡鏇村彲闈?*锛氫慨澶嶆偓娴悆 hover銆佺疆椤躲€佸叧闂垨绂佺敤杩囩▼涓殑寮傛鐘舵€佺珵浜夛紝鍑忓皯娈嬬暀闈㈡澘銆佽鍞よ捣鍜屾埅鍥惧け璐ラ毦鎺掓煡鐨勯棶棰樸€?
 
 ---
 
 ## [0.2.34] - 2026-06-15
 
-> 本版新增桌面宠物入口：Mino 可以常驻屏幕边缘，hover 预览、点击即问，并能携带前台窗口、截图和图片上下文；同时新增会话级推理强度、实验性的 CLI 工具箱注册表、全产品字号统一、默认工作区隐藏，以及始终阻止电脑睡眠开关。另有编辑器右键菜单、图片附件展示、外部 Runtime 与通知跳转等一批体验修复。
+> 鏈増鏂板妗岄潰瀹犵墿鍏ュ彛锛歁ino 鍙互甯搁┗灞忓箷杈圭紭锛宧over 棰勮銆佺偣鍑诲嵆闂紝骞惰兘鎼哄甫鍓嶅彴绐楀彛銆佹埅鍥惧拰鍥剧墖涓婁笅鏂囷紱鍚屾椂鏂板浼氳瘽绾ф帹鐞嗗己搴︺€佸疄楠屾€х殑 CLI 宸ュ叿绠辨敞鍐岃〃銆佸叏浜у搧瀛楀彿缁熶竴銆侀粯璁ゅ伐浣滃尯闅愯棌锛屼互鍙婂缁堥樆姝㈢數鑴戠潯鐪犲紑鍏炽€傚彟鏈夌紪杈戝櫒鍙抽敭鑿滃崟銆佸浘鐗囬檮浠跺睍绀恒€佸閮?Runtime 涓庨€氱煡璺宠浆绛変竴鎵逛綋楠屼慨澶嶃€?
 
 ### Added
 
-- **桌面宠物 / 悬浮球（实验室）**：Mino 可作为屏幕边缘常驻入口，hover 半透明预览、点击固定聊天；小窗内支持正常对话、停止、查看思考 / 工具进度，并可处理权限确认、向用户提问和退出规划确认。发送时可附带前台 App / 窗口标题、选中文本、截图与图片附件，适合快速基于当前桌面内容发起请求。
-- **桌宠素材管理**：设置页新增「桌面宠物」，可开关桌宠、绑定工作区、开关悬停预览、切换内置样式，并支持从 Codex Pets、本地 zip 或 Petdex 链接导入素材。
-- **CLI 工具箱注册表（实验室）**：用户可以让 AI 把常用命令或脚本注册成可复用工具；设置里的「工具箱」可查看、启停、配置环境变量 / API Key 和删除这些 CLI 工具，新会话可自动发现已启用工具。
-- **会话级推理强度**（[#324](https://github.com/hAcKlyc/HamunaAgent/issues/324)）：启动页、Chat 输入栏和 Agent 默认设置中新增「推理强度」，可在服务商 / Runtime 支持时选择更快或更深的推理档位。
-- **始终阻止电脑睡眠**：设置中新增全局开关，开启后即使 AI 当前未运行，电脑也不会自动进入空闲睡眠；界面会明确提示合盖仍会睡眠且会增加耗电。
-- **默认工作区可隐藏**：内置 Mino 默认工作区可以从启动页隐藏，不会删除本地文件，也不会被启动自修复反复加回来。
-- **新增智谱 GLM 5.2 预设**：智谱相关 Provider 增加 GLM 5.2，并按大上下文能力配置模型信息。
+- **妗岄潰瀹犵墿 / 鎮诞鐞冿紙瀹為獙瀹わ級**锛歁ino 鍙綔涓哄睆骞曡竟缂樺父椹诲叆鍙ｏ紝hover 鍗婇€忔槑棰勮銆佺偣鍑诲浐瀹氳亰澶╋紱灏忕獥鍐呮敮鎸佹甯稿璇濄€佸仠姝€佹煡鐪嬫€濊€?/ 宸ュ叿杩涘害锛屽苟鍙鐞嗘潈闄愮‘璁ゃ€佸悜鐢ㄦ埛鎻愰棶鍜岄€€鍑鸿鍒掔‘璁ゃ€傚彂閫佹椂鍙檮甯﹀墠鍙?App / 绐楀彛鏍囬銆侀€変腑鏂囨湰銆佹埅鍥句笌鍥剧墖闄勪欢锛岄€傚悎蹇€熷熀浜庡綋鍓嶆闈㈠唴瀹瑰彂璧疯姹傘€?
+- **妗屽疇绱犳潗绠＄悊**锛氳缃〉鏂板銆屾闈㈠疇鐗┿€嶏紝鍙紑鍏虫瀹犮€佺粦瀹氬伐浣滃尯銆佸紑鍏虫偓鍋滈瑙堛€佸垏鎹㈠唴缃牱寮忥紝骞舵敮鎸佷粠 Codex Pets銆佹湰鍦?zip 鎴?Petdex 閾炬帴瀵煎叆绱犳潗銆?
+- **CLI 宸ュ叿绠辨敞鍐岃〃锛堝疄楠屽锛?*锛氱敤鎴峰彲浠ヨ AI 鎶婂父鐢ㄥ懡浠ゆ垨鑴氭湰娉ㄥ唽鎴愬彲澶嶇敤宸ュ叿锛涜缃噷鐨勩€屽伐鍏风銆嶅彲鏌ョ湅銆佸惎鍋溿€侀厤缃幆澧冨彉閲?/ API Key 鍜屽垹闄よ繖浜?CLI 宸ュ叿锛屾柊浼氳瘽鍙嚜鍔ㄥ彂鐜板凡鍚敤宸ュ叿銆?
+- **浼氳瘽绾ф帹鐞嗗己搴?*锛圼#324](https://github.com/hAcKlyc/HamunaAgent/issues/324)锛夛細鍚姩椤点€丆hat 杈撳叆鏍忓拰 Agent 榛樿璁剧疆涓柊澧炪€屾帹鐞嗗己搴︺€嶏紝鍙湪鏈嶅姟鍟?/ Runtime 鏀寔鏃堕€夋嫨鏇村揩鎴栨洿娣辩殑鎺ㄧ悊妗ｄ綅銆?
+- **濮嬬粓闃绘鐢佃剳鐫＄湢**锛氳缃腑鏂板鍏ㄥ眬寮€鍏筹紝寮€鍚悗鍗充娇 AI 褰撳墠鏈繍琛岋紝鐢佃剳涔熶笉浼氳嚜鍔ㄨ繘鍏ョ┖闂茬潯鐪狅紱鐣岄潰浼氭槑纭彁绀哄悎鐩栦粛浼氱潯鐪犱笖浼氬鍔犺€楃數銆?
+- **榛樿宸ヤ綔鍖哄彲闅愯棌**锛氬唴缃?Mino 榛樿宸ヤ綔鍖哄彲浠ヤ粠鍚姩椤甸殣钘忥紝涓嶄細鍒犻櫎鏈湴鏂囦欢锛屼篃涓嶄細琚惎鍔ㄨ嚜淇鍙嶅鍔犲洖鏉ャ€?
+- **鏂板鏅鸿氨 GLM 5.2 棰勮**锛氭櫤璋辩浉鍏?Provider 澧炲姞 GLM 5.2锛屽苟鎸夊ぇ涓婁笅鏂囪兘鍔涢厤缃ā鍨嬩俊鎭€?
 
 ### Changed
 
-- **全产品字号统一**：聊天、设置、任务中心、菜单、工具卡片、桌面宠物等界面统一到 7 档字号体系，减少不同页面字号忽大忽小的问题。
-- **工具入口命名更清晰**：设置里的「工具 MCP」升级为「工具箱」，MCP 与 CLI 工具管理放在同一个工具能力入口下。
-- **桌面宠物相关会话更易识别**：会话历史、任务中心和 Chat 顶栏会给悬浮球绑定的会话显示「悬浮球」标签。
+- **鍏ㄤ骇鍝佸瓧鍙风粺涓€**锛氳亰澶┿€佽缃€佷换鍔′腑蹇冦€佽彍鍗曘€佸伐鍏峰崱鐗囥€佹闈㈠疇鐗╃瓑鐣岄潰缁熶竴鍒?7 妗ｅ瓧鍙蜂綋绯伙紝鍑忓皯涓嶅悓椤甸潰瀛楀彿蹇藉ぇ蹇藉皬鐨勯棶棰樸€?
+- **宸ュ叿鍏ュ彛鍛藉悕鏇存竻鏅?*锛氳缃噷鐨勩€屽伐鍏?MCP銆嶅崌绾т负銆屽伐鍏风銆嶏紝MCP 涓?CLI 宸ュ叿绠＄悊鏀惧湪鍚屼竴涓伐鍏疯兘鍔涘叆鍙ｄ笅銆?
+- **妗岄潰瀹犵墿鐩稿叧浼氳瘽鏇存槗璇嗗埆**锛氫細璇濆巻鍙层€佷换鍔′腑蹇冨拰 Chat 椤舵爮浼氱粰鎮诞鐞冪粦瀹氱殑浼氳瘽鏄剧ず銆屾偓娴悆銆嶆爣绛俱€?
 
 ### Fixed
 
-- **图片附件显示更自然**：已发送图片保持原比例，宽图可横向滚动，图片说明对齐媒体宽度；工具返回的图片附件也能稳定渲染。
-- **编辑器鼠标与快捷键体验修复**：Monaco 编辑器新增右键菜单（剪切 / 复制 / 粘贴 / 全选 / 查找），并修复 Monaco / 文件树中 `⌘A` 全选失效的问题。
-- **外部 Runtime 会话更稳定**：Codex / Claude Code / Gemini 的配置切换、预热会话、被中断回合和排队消息处理更可靠，减少空转、假成功或状态串线。
-- **通知与插件体验修复**：定时任务通知点击可正确跳回对应会话；Plugin SDK slash commands 能正确显示并保留快照。
-- **上下文与统计显示修复**：修复部分多工具回合 context 用量环不更新、会话统计持久化与消息完成事件互相影响的问题。
-- **Windows 与构建流程加固**：桌面宠物在 Windows 上可用性更完整，并加固 Windows Rust 工具链与开发构建流程。
+- **鍥剧墖闄勪欢鏄剧ず鏇磋嚜鐒?*锛氬凡鍙戦€佸浘鐗囦繚鎸佸師姣斾緥锛屽鍥惧彲妯悜婊氬姩锛屽浘鐗囪鏄庡榻愬獟浣撳搴︼紱宸ュ叿杩斿洖鐨勫浘鐗囬檮浠朵篃鑳界ǔ瀹氭覆鏌撱€?
+- **缂栬緫鍣ㄩ紶鏍囦笌蹇嵎閿綋楠屼慨澶?*锛歁onaco 缂栬緫鍣ㄦ柊澧炲彸閿彍鍗曪紙鍓垏 / 澶嶅埗 / 绮樿创 / 鍏ㄩ€?/ 鏌ユ壘锛夛紝骞朵慨澶?Monaco / 鏂囦欢鏍戜腑 `鈱楢` 鍏ㄩ€夊け鏁堢殑闂銆?
+- **澶栭儴 Runtime 浼氳瘽鏇寸ǔ瀹?*锛欳odex / Claude Code / Gemini 鐨勯厤缃垏鎹€侀鐑細璇濄€佽涓柇鍥炲悎鍜屾帓闃熸秷鎭鐞嗘洿鍙潬锛屽噺灏戠┖杞€佸亣鎴愬姛鎴栫姸鎬佷覆绾裤€?
+- **閫氱煡涓庢彃浠朵綋楠屼慨澶?*锛氬畾鏃朵换鍔￠€氱煡鐐瑰嚮鍙纭烦鍥炲搴斾細璇濓紱Plugin SDK slash commands 鑳芥纭樉绀哄苟淇濈暀蹇収銆?
+- **涓婁笅鏂囦笌缁熻鏄剧ず淇**锛氫慨澶嶉儴鍒嗗宸ュ叿鍥炲悎 context 鐢ㄩ噺鐜笉鏇存柊銆佷細璇濈粺璁℃寔涔呭寲涓庢秷鎭畬鎴愪簨浠朵簰鐩稿奖鍝嶇殑闂銆?
+- **Windows 涓庢瀯寤烘祦绋嬪姞鍥?*锛氭闈㈠疇鐗╁湪 Windows 涓婂彲鐢ㄦ€ф洿瀹屾暣锛屽苟鍔犲浐 Windows Rust 宸ュ叿閾句笌寮€鍙戞瀯寤烘祦绋嬨€?
 
 ---
 
 ## [0.2.33] - 2026-06-11
 
-> 本版把工作区文件树升级为一个完整的文件管理器 —— 键盘导航、行内重命名、复制 / 剪切 / 粘贴、删除进系统回收站可撤销、拖放有落点预览；AI 工具产出的图片直接显示在对话里并自动存入工作区。另有每个模型可单独设置上下文窗口与模态、中间档大上下文模型（262K–512K）不再被按 200K 截断；并修复了会话统计 0 tokens、压缩后占用显示异常、IM 配置覆盖桌面会话、删除会话「复活」等一批问题。
+> 鏈増鎶婂伐浣滃尯鏂囦欢鏍戝崌绾т负涓€涓畬鏁寸殑鏂囦欢绠＄悊鍣?鈥斺€?閿洏瀵艰埅銆佽鍐呴噸鍛藉悕銆佸鍒?/ 鍓垏 / 绮樿创銆佸垹闄よ繘绯荤粺鍥炴敹绔欏彲鎾ら攢銆佹嫋鏀炬湁钀界偣棰勮锛汚I 宸ュ叿浜у嚭鐨勫浘鐗囩洿鎺ユ樉绀哄湪瀵硅瘽閲屽苟鑷姩瀛樺叆宸ヤ綔鍖恒€傚彟鏈夋瘡涓ā鍨嬪彲鍗曠嫭璁剧疆涓婁笅鏂囩獥鍙ｄ笌妯℃€併€佷腑闂存。澶т笂涓嬫枃妯″瀷锛?62K鈥?12K锛変笉鍐嶈鎸?200K 鎴柇锛涘苟淇浜嗕細璇濈粺璁?0 tokens銆佸帇缂╁悗鍗犵敤鏄剧ず寮傚父銆両M 閰嶇疆瑕嗙洊妗岄潰浼氳瘽銆佸垹闄や細璇濄€屽娲汇€嶇瓑涓€鎵归棶棰樸€?
 
 ### Added
 
-- **工作区文件树升级为完整文件管理器**：对标 VS Code 的文件管理体验 —— 方向键 / 首字母定位等键盘导航；行内重命名与新建（不再弹对话框）；⌘C / ⌘X / ⌘V 复制、剪切、粘贴，复制的文件还能直接粘贴到终端或聊天输入框；删除默认进入系统回收站（Finder「放回原处」即可找回），⌘Z 或右键「撤销上一步操作」可撤销移动 / 重命名 / 新建 / 粘贴；拖放文件时有清晰的落点预览，不再误放到根目录；右键菜单新增「全选」。
-- **AI 工具产出的图片直接显示在对话里**（[#293](https://github.com/hAcKlyc/HamunaAgent/issues/293)）：任意工具（MCP / 内置）返回的图片即时呈现在工具卡片中，并自动保存到工作区 `hamuna_files/<工具名>/` 目录便于回找；会话文件不再内嵌图片数据，较早会话打开更快。
-- **每个模型可单独设置**（[#325](https://github.com/hAcKlyc/HamunaAgent/issues/325)）：模型管理中可为单个模型自定义上下文窗口大小、输入模态（图片 / 视频 / 音频）与显示名称，应对第三方供应商信息缺失或不准的情况。
-- **内置 prompt-writer 技能**：让 AI 按系统化方法论帮你撰写、优化提示词。
+- **宸ヤ綔鍖烘枃浠舵爲鍗囩骇涓哄畬鏁存枃浠剁鐞嗗櫒**锛氬鏍?VS Code 鐨勬枃浠剁鐞嗕綋楠?鈥斺€?鏂瑰悜閿?/ 棣栧瓧姣嶅畾浣嶇瓑閿洏瀵艰埅锛涜鍐呴噸鍛藉悕涓庢柊寤猴紙涓嶅啀寮瑰璇濇锛夛紱鈱楥 / 鈱榅 / 鈱榁 澶嶅埗銆佸壀鍒囥€佺矘璐达紝澶嶅埗鐨勬枃浠惰繕鑳界洿鎺ョ矘璐村埌缁堢鎴栬亰澶╄緭鍏ユ锛涘垹闄ら粯璁よ繘鍏ョ郴缁熷洖鏀剁珯锛團inder銆屾斁鍥炲師澶勩€嶅嵆鍙壘鍥烇級锛屸寴Z 鎴栧彸閿€屾挙閿€涓婁竴姝ユ搷浣溿€嶅彲鎾ら攢绉诲姩 / 閲嶅懡鍚?/ 鏂板缓 / 绮樿创锛涙嫋鏀炬枃浠舵椂鏈夋竻鏅扮殑钀界偣棰勮锛屼笉鍐嶈鏀惧埌鏍圭洰褰曪紱鍙抽敭鑿滃崟鏂板銆屽叏閫夈€嶃€?
+- **AI 宸ュ叿浜у嚭鐨勫浘鐗囩洿鎺ユ樉绀哄湪瀵硅瘽閲?*锛圼#293](https://github.com/hAcKlyc/HamunaAgent/issues/293)锛夛細浠绘剰宸ュ叿锛圡CP / 鍐呯疆锛夎繑鍥炵殑鍥剧墖鍗虫椂鍛堢幇鍦ㄥ伐鍏峰崱鐗囦腑锛屽苟鑷姩淇濆瓨鍒板伐浣滃尯 `hamuna_files/<宸ュ叿鍚?/` 鐩綍渚夸簬鍥炴壘锛涗細璇濇枃浠朵笉鍐嶅唴宓屽浘鐗囨暟鎹紝杈冩棭浼氳瘽鎵撳紑鏇村揩銆?
+- **姣忎釜妯″瀷鍙崟鐙缃?*锛圼#325](https://github.com/hAcKlyc/HamunaAgent/issues/325)锛夛細妯″瀷绠＄悊涓彲涓哄崟涓ā鍨嬭嚜瀹氫箟涓婁笅鏂囩獥鍙ｅぇ灏忋€佽緭鍏ユā鎬侊紙鍥剧墖 / 瑙嗛 / 闊抽锛変笌鏄剧ず鍚嶇О锛屽簲瀵圭涓夋柟渚涘簲鍟嗕俊鎭己澶辨垨涓嶅噯鐨勬儏鍐点€?
+- **鍐呯疆 prompt-writer 鎶€鑳?*锛氳 AI 鎸夌郴缁熷寲鏂规硶璁哄府浣犳挵鍐欍€佷紭鍖栨彁绀鸿瘝銆?
 
 ### Fixed
 
-- **大上下文模型不再被按 200K 截断**（[#335](https://github.com/hAcKlyc/HamunaAgent/issues/335)）：262K–512K 窗口的模型（MiniMax / 豆包 / Kimi 等）现在能用满真实上下文窗口，不再过早自动压缩、附件不再被按 200K 截断。
-- **会话统计与上下文占用显示**：修复会话统计显示 0 tokens（[#331](https://github.com/hAcKlyc/HamunaAgent/issues/331)）、`/compact` 压缩后上下文占用显示 100% 或不可能数字（[#323](https://github.com/hAcKlyc/HamunaAgent/issues/323)），以及重新添加已移除的预置模型时出现重复条目的问题。
-- **IM 渠道配置不再覆盖桌面会话**（[#327](https://github.com/hAcKlyc/HamunaAgent/issues/327)）：开启 IM 机器人后，桌面正在进行的会话的模型 / 权限配置不再被渠道配置同步意外覆盖。
-- **删除会话彻底删除**（[#336](https://github.com/hAcKlyc/HamunaAgent/issues/336)）：删除会话后不再出现看不见的「幽灵会话文件」继续占用磁盘。
-- **IM / 定时任务不再偶发拿到上一轮回复**：外部 Runtime（Codex / Claude Code / Gemini）下，IM 机器人与定时任务偶发收到上一轮内容或空回复的问题修复。
-- **界面渐变灰带修复**（[#333](https://github.com/hAcKlyc/HamunaAgent/issues/333)）：部分系统上深色渐变处显示灰色污带的问题修复。
-- **分栏网页预览更稳定**：窗口 / 布局调整时分栏网页预览偶发错位、闪烁的问题修复。
-- **Windows 启动失败提示更准确**：AI 引擎子进程启动失败时给出基于证据的诊断提示，不再笼统归因于 Git for Windows。
-- **安全与可靠性**：修复工作区文件导入可经符号链接读取受保护目录的安全隐患；拖入文件失败时现在会明确提示原因，不再静默忽略。
+- **澶т笂涓嬫枃妯″瀷涓嶅啀琚寜 200K 鎴柇**锛圼#335](https://github.com/hAcKlyc/HamunaAgent/issues/335)锛夛細262K鈥?12K 绐楀彛鐨勬ā鍨嬶紙MiniMax / 璞嗗寘 / Kimi 绛夛級鐜板湪鑳界敤婊＄湡瀹炰笂涓嬫枃绐楀彛锛屼笉鍐嶈繃鏃╄嚜鍔ㄥ帇缂┿€侀檮浠朵笉鍐嶈鎸?200K 鎴柇銆?
+- **浼氳瘽缁熻涓庝笂涓嬫枃鍗犵敤鏄剧ず**锛氫慨澶嶄細璇濈粺璁℃樉绀?0 tokens锛圼#331](https://github.com/hAcKlyc/HamunaAgent/issues/331)锛夈€乣/compact` 鍘嬬缉鍚庝笂涓嬫枃鍗犵敤鏄剧ず 100% 鎴栦笉鍙兘鏁板瓧锛圼#323](https://github.com/hAcKlyc/HamunaAgent/issues/323)锛夛紝浠ュ強閲嶆柊娣诲姞宸茬Щ闄ょ殑棰勭疆妯″瀷鏃跺嚭鐜伴噸澶嶆潯鐩殑闂銆?
+- **IM 娓犻亾閰嶇疆涓嶅啀瑕嗙洊妗岄潰浼氳瘽**锛圼#327](https://github.com/hAcKlyc/HamunaAgent/issues/327)锛夛細寮€鍚?IM 鏈哄櫒浜哄悗锛屾闈㈡鍦ㄨ繘琛岀殑浼氳瘽鐨勬ā鍨?/ 鏉冮檺閰嶇疆涓嶅啀琚笭閬撻厤缃悓姝ユ剰澶栬鐩栥€?
+- **鍒犻櫎浼氳瘽褰诲簳鍒犻櫎**锛圼#336](https://github.com/hAcKlyc/HamunaAgent/issues/336)锛夛細鍒犻櫎浼氳瘽鍚庝笉鍐嶅嚭鐜扮湅涓嶈鐨勩€屽菇鐏典細璇濇枃浠躲€嶇户缁崰鐢ㄧ鐩樸€?
+- **IM / 瀹氭椂浠诲姟涓嶅啀鍋跺彂鎷垮埌涓婁竴杞洖澶?*锛氬閮?Runtime锛圕odex / Claude Code / Gemini锛変笅锛孖M 鏈哄櫒浜轰笌瀹氭椂浠诲姟鍋跺彂鏀跺埌涓婁竴杞唴瀹规垨绌哄洖澶嶇殑闂淇銆?
+- **鐣岄潰娓愬彉鐏板甫淇**锛圼#333](https://github.com/hAcKlyc/HamunaAgent/issues/333)锛夛細閮ㄥ垎绯荤粺涓婃繁鑹叉笎鍙樺鏄剧ず鐏拌壊姹″甫鐨勯棶棰樹慨澶嶃€?
+- **鍒嗘爮缃戦〉棰勮鏇寸ǔ瀹?*锛氱獥鍙?/ 甯冨眬璋冩暣鏃跺垎鏍忕綉椤甸瑙堝伓鍙戦敊浣嶃€侀棯鐑佺殑闂淇銆?
+- **Windows 鍚姩澶辫触鎻愮ず鏇村噯纭?*锛欰I 寮曟搸瀛愯繘绋嬪惎鍔ㄥけ璐ユ椂缁欏嚭鍩轰簬璇佹嵁鐨勮瘖鏂彁绀猴紝涓嶅啀绗肩粺褰掑洜浜?Git for Windows銆?
+- **瀹夊叏涓庡彲闈犳€?*锛氫慨澶嶅伐浣滃尯鏂囦欢瀵煎叆鍙粡绗﹀彿閾炬帴璇诲彇鍙椾繚鎶ょ洰褰曠殑瀹夊叏闅愭偅锛涙嫋鍏ユ枃浠跺け璐ユ椂鐜板湪浼氭槑纭彁绀哄師鍥狅紝涓嶅啀闈欓粯蹇界暐銆?
 
 ---
 
 ## [0.2.32] - 2026-06-09
 
-> 本版新增实时 Context 用量指示器 —— 对话时随时看到当前占用了多少上下文窗口，内置模型可一键智能压缩，关闭会话重开即恢复显示。另有 `/loop` 一步开启循环任务、聊天里的文件路径（含反引号内的绝对路径）可点可复制、模型供应商新增小米 MiMo 并刷新各家预置模型；并修复了会话恢复偶尔丢失最新消息、个别旧会话打开报错，以及一批 Windows 兼容性问题。
+> 鏈増鏂板瀹炴椂 Context 鐢ㄩ噺鎸囩ず鍣?鈥斺€?瀵硅瘽鏃堕殢鏃剁湅鍒板綋鍓嶅崰鐢ㄤ簡澶氬皯涓婁笅鏂囩獥鍙ｏ紝鍐呯疆妯″瀷鍙竴閿櫤鑳藉帇缂╋紝鍏抽棴浼氳瘽閲嶅紑鍗虫仮澶嶆樉绀恒€傚彟鏈?`/loop` 涓€姝ュ紑鍚惊鐜换鍔°€佽亰澶╅噷鐨勬枃浠惰矾寰勶紙鍚弽寮曞彿鍐呯殑缁濆璺緞锛夊彲鐐瑰彲澶嶅埗銆佹ā鍨嬩緵搴斿晢鏂板灏忕背 MiMo 骞跺埛鏂板悇瀹堕缃ā鍨嬶紱骞朵慨澶嶄簡浼氳瘽鎭㈠鍋跺皵涓㈠け鏈€鏂版秷鎭€佷釜鍒棫浼氳瘽鎵撳紑鎶ラ敊锛屼互鍙婁竴鎵?Windows 鍏煎鎬ч棶棰樸€?
 
 ### Added
 
-- **实时 Context 用量指示器 + 智能压缩**：对话框模型选择器左侧新增一个环形指示器，随时显示当前对话占用了多少上下文窗口，悬停查看详情；内置模型可一键「智能压缩」精简上下文（第三方 Runtime 不显示压缩入口）。关闭会话后再打开，会立即恢复显示上一轮结束时的真实占用。
-- **`/loop` 一步开启循环任务**：在输入框输入 `/loop` 即可直接打开「无限循环」模式的定时任务面板（默认已勾选「允许 AI 自主结束任务」），不必再手动切换两个选项。同时应用内置命令在斜杠菜单中优先于自定义技能 / 命令展示。
-- **聊天中的文件路径可点、可复制**：AI 回复里写在反引号代码块中的绝对路径现在也能点击打开（此前仅相对路径可点）；文件路径的右键菜单新增「复制」。
-- **新增小米 MiMo 模型供应商**：预置供应商列表加入「小米 MiMo（按量付费）」与「小米 MiMo Token Plan（订阅）」两个入口。
-- **可设置 Claude 会话本地保留天数**：设置 →「关于」新增「Claude 会话保留天数」（默认 365 天），延长本地对话记录的保留时间，避免较早的会话因到期被自动清理而无法恢复历史。
-- **刷新各家预置模型列表**：按 2026 年 6 月官方文档校正了多家供应商的模型清单，修正了部分会调用失败的模型 ID，并新增了一批新旗舰模型。
+- **瀹炴椂 Context 鐢ㄩ噺鎸囩ず鍣?+ 鏅鸿兘鍘嬬缉**锛氬璇濇妯″瀷閫夋嫨鍣ㄥ乏渚ф柊澧炰竴涓幆褰㈡寚绀哄櫒锛岄殢鏃舵樉绀哄綋鍓嶅璇濆崰鐢ㄤ簡澶氬皯涓婁笅鏂囩獥鍙ｏ紝鎮仠鏌ョ湅璇︽儏锛涘唴缃ā鍨嬪彲涓€閿€屾櫤鑳藉帇缂┿€嶇簿绠€涓婁笅鏂囷紙绗笁鏂?Runtime 涓嶆樉绀哄帇缂╁叆鍙ｏ級銆傚叧闂細璇濆悗鍐嶆墦寮€锛屼細绔嬪嵆鎭㈠鏄剧ず涓婁竴杞粨鏉熸椂鐨勭湡瀹炲崰鐢ㄣ€?
+- **`/loop` 涓€姝ュ紑鍚惊鐜换鍔?*锛氬湪杈撳叆妗嗚緭鍏?`/loop` 鍗冲彲鐩存帴鎵撳紑銆屾棤闄愬惊鐜€嶆ā寮忕殑瀹氭椂浠诲姟闈㈡澘锛堥粯璁ゅ凡鍕鹃€夈€屽厑璁?AI 鑷富缁撴潫浠诲姟銆嶏級锛屼笉蹇呭啀鎵嬪姩鍒囨崲涓や釜閫夐」銆傚悓鏃跺簲鐢ㄥ唴缃懡浠ゅ湪鏂滄潬鑿滃崟涓紭鍏堜簬鑷畾涔夋妧鑳?/ 鍛戒护灞曠ず銆?
+- **鑱婂ぉ涓殑鏂囦欢璺緞鍙偣銆佸彲澶嶅埗**锛欰I 鍥炲閲屽啓鍦ㄥ弽寮曞彿浠ｇ爜鍧椾腑鐨勭粷瀵硅矾寰勭幇鍦ㄤ篃鑳界偣鍑绘墦寮€锛堟鍓嶄粎鐩稿璺緞鍙偣锛夛紱鏂囦欢璺緞鐨勫彸閿彍鍗曟柊澧炪€屽鍒躲€嶃€?
+- **鏂板灏忕背 MiMo 妯″瀷渚涘簲鍟?*锛氶缃緵搴斿晢鍒楄〃鍔犲叆銆屽皬绫?MiMo锛堟寜閲忎粯璐癸級銆嶄笌銆屽皬绫?MiMo Token Plan锛堣闃咃級銆嶄袱涓叆鍙ｃ€?
+- **鍙缃?Claude 浼氳瘽鏈湴淇濈暀澶╂暟**锛氳缃?鈫掋€屽叧浜庛€嶆柊澧炪€孋laude 浼氳瘽淇濈暀澶╂暟銆嶏紙榛樿 365 澶╋級锛屽欢闀挎湰鍦板璇濊褰曠殑淇濈暀鏃堕棿锛岄伩鍏嶈緝鏃╃殑浼氳瘽鍥犲埌鏈熻鑷姩娓呯悊鑰屾棤娉曟仮澶嶅巻鍙层€?
+- **鍒锋柊鍚勫棰勭疆妯″瀷鍒楄〃**锛氭寜 2026 骞?6 鏈堝畼鏂规枃妗ｆ牎姝ｄ簡澶氬渚涘簲鍟嗙殑妯″瀷娓呭崟锛屼慨姝ｄ簡閮ㄥ垎浼氳皟鐢ㄥけ璐ョ殑妯″瀷 ID锛屽苟鏂板浜嗕竴鎵规柊鏃楄埌妯″瀷銆?
 
 ### Fixed
 
-- **会话恢复更可靠**：修复了恢复会话时偶尔只显示到较早历史、最新几条消息「消失」的问题（你的数据始终安全），以及个别情况下打开较早或被中断过的会话会整窗口报「界面渲染出错」的问题；应用重启后恢复的标签页也更稳定。
-- **Windows 兼容性修复**：修复了 Windows 上旧版定时任务升级时「找不到工作区」、任务卡片缺工作区名 / 图标、最近会话列表空白、工作区筛选全部显示「已失效」等一系列因路径格式不一致导致的问题（[#320](https://github.com/hAcKlyc/HamunaAgent/issues/320)）；修复了升级后用户技能意外消失（[#321](https://github.com/hAcKlyc/HamunaAgent/issues/321)）；以及分栏打开网页预览时偶发的显示异常（[#322](https://github.com/hAcKlyc/HamunaAgent/issues/322)）。
-- **能力面板重复分隔线**：当前会话未启用任何能力时，面板顶部不再出现两条叠加的分隔线（[#314](https://github.com/hAcKlyc/HamunaAgent/issues/314)）。
+- **浼氳瘽鎭㈠鏇村彲闈?*锛氫慨澶嶄簡鎭㈠浼氳瘽鏃跺伓灏斿彧鏄剧ず鍒拌緝鏃╁巻鍙层€佹渶鏂板嚑鏉℃秷鎭€屾秷澶便€嶇殑闂锛堜綘鐨勬暟鎹缁堝畨鍏級锛屼互鍙婁釜鍒儏鍐典笅鎵撳紑杈冩棭鎴栬涓柇杩囩殑浼氳瘽浼氭暣绐楀彛鎶ャ€岀晫闈㈡覆鏌撳嚭閿欍€嶇殑闂锛涘簲鐢ㄩ噸鍚悗鎭㈠鐨勬爣绛鹃〉涔熸洿绋冲畾銆?
+- **Windows 鍏煎鎬т慨澶?*锛氫慨澶嶄簡 Windows 涓婃棫鐗堝畾鏃朵换鍔″崌绾ф椂銆屾壘涓嶅埌宸ヤ綔鍖恒€嶃€佷换鍔″崱鐗囩己宸ヤ綔鍖哄悕 / 鍥炬爣銆佹渶杩戜細璇濆垪琛ㄧ┖鐧姐€佸伐浣滃尯绛涢€夊叏閮ㄦ樉绀恒€屽凡澶辨晥銆嶇瓑涓€绯诲垪鍥犺矾寰勬牸寮忎笉涓€鑷村鑷寸殑闂锛圼#320](https://github.com/hAcKlyc/HamunaAgent/issues/320)锛夛紱淇浜嗗崌绾у悗鐢ㄦ埛鎶€鑳芥剰澶栨秷澶憋紙[#321](https://github.com/hAcKlyc/HamunaAgent/issues/321)锛夛紱浠ュ強鍒嗘爮鎵撳紑缃戦〉棰勮鏃跺伓鍙戠殑鏄剧ず寮傚父锛圼#322](https://github.com/hAcKlyc/HamunaAgent/issues/322)锛夈€?
+- **鑳藉姏闈㈡澘閲嶅鍒嗛殧绾?*锛氬綋鍓嶄細璇濇湭鍚敤浠讳綍鑳藉姏鏃讹紝闈㈡澘椤堕儴涓嶅啀鍑虹幇涓ゆ潯鍙犲姞鐨勫垎闅旂嚎锛圼#314](https://github.com/hAcKlyc/HamunaAgent/issues/314)锛夈€?
 
 ---
 
 ## [0.2.31] - 2026-06-07
 
-> 本版聚焦性能与流畅度：点开会话即时进入聊天界面，不再有约一秒的整窗口冻结；应用首次启动与新建标签页也明显更快。会话恢复变得更克制 —— 你主动退出后干净启动，只有崩溃或「重启更新」后才提示恢复上次对话。另有 Windows 兼容性修复、工作区文件树不再闪烁，以及默认工作区开箱即用的主动 Agent 能力。
+> 鏈増鑱氱劍鎬ц兘涓庢祦鐣呭害锛氱偣寮€浼氳瘽鍗虫椂杩涘叆鑱婂ぉ鐣岄潰锛屼笉鍐嶆湁绾︿竴绉掔殑鏁寸獥鍙ｅ喕缁擄紱搴旂敤棣栨鍚姩涓庢柊寤烘爣绛鹃〉涔熸槑鏄炬洿蹇€備細璇濇仮澶嶅彉寰楁洿鍏嬪埗 鈥斺€?浣犱富鍔ㄩ€€鍑哄悗骞插噣鍚姩锛屽彧鏈夊穿婧冩垨銆岄噸鍚洿鏂般€嶅悗鎵嶆彁绀烘仮澶嶄笂娆″璇濄€傚彟鏈?Windows 鍏煎鎬т慨澶嶃€佸伐浣滃尯鏂囦欢鏍戜笉鍐嶉棯鐑侊紝浠ュ強榛樿宸ヤ綔鍖哄紑绠卞嵆鐢ㄧ殑涓诲姩 Agent 鑳藉姏銆?
 
 ### Added
 
-- **退出原因感知的会话恢复**（[#309](https://github.com/hAcKlyc/HamunaAgent/issues/309)）：启动不再无差别强制恢复上次的所有标签页。你主动退出（⌘Q / Dock / 托盘）时，下次是干净启动，不再被上次的会话打扰；只有当上次是崩溃或「重启更新」时，才在标题栏显示一个可点可叉的「恢复上次对话」入口，由你决定是否恢复。
-- **默认工作区开箱即用的主动 Agent 能力**：默认的 Mino 工作区（以及从模板库新建的 Mino 工作区）现在默认开启「主动 Agent 模式」，内置心跳与记忆更新 —— 新用户第一次打开即是一个完整的 Agent 工作区，无需手动开启（不会自动创建任何 IM 渠道）。
-- **会话历史新增「更多」菜单与「在新标签页打开」**：工作区历史里的会话行不再堆叠一排悬停按钮 —— 高频的「在新标签页打开」直接可见，收藏 / 导出 / 统计 / 删除收进每行的「更多」(⋯) 菜单，列表更清爽。
-- **聊天中右键路径可「在文件目录中展示」**：在聊天里右键一个文件路径，可直接在系统文件管理器中定位到该文件。
-- **工作区搜索结果导航优化**：搜索工作区文件后，点击结果跳转与高亮定位更顺手。
+- **閫€鍑哄師鍥犳劅鐭ョ殑浼氳瘽鎭㈠**锛圼#309](https://github.com/hAcKlyc/HamunaAgent/issues/309)锛夛細鍚姩涓嶅啀鏃犲樊鍒己鍒舵仮澶嶄笂娆＄殑鎵€鏈夋爣绛鹃〉銆備綘涓诲姩閫€鍑猴紙鈱楺 / Dock / 鎵樼洏锛夋椂锛屼笅娆℃槸骞插噣鍚姩锛屼笉鍐嶈涓婃鐨勪細璇濇墦鎵帮紱鍙湁褰撲笂娆℃槸宕╂簝鎴栥€岄噸鍚洿鏂般€嶆椂锛屾墠鍦ㄦ爣棰樻爮鏄剧ず涓€涓彲鐐瑰彲鍙夌殑銆屾仮澶嶄笂娆″璇濄€嶅叆鍙ｏ紝鐢变綘鍐冲畾鏄惁鎭㈠銆?
+- **榛樿宸ヤ綔鍖哄紑绠卞嵆鐢ㄧ殑涓诲姩 Agent 鑳藉姏**锛氶粯璁ょ殑 Mino 宸ヤ綔鍖猴紙浠ュ強浠庢ā鏉垮簱鏂板缓鐨?Mino 宸ヤ綔鍖猴級鐜板湪榛樿寮€鍚€屼富鍔?Agent 妯″紡銆嶏紝鍐呯疆蹇冭烦涓庤蹇嗘洿鏂?鈥斺€?鏂扮敤鎴风涓€娆℃墦寮€鍗虫槸涓€涓畬鏁寸殑 Agent 宸ヤ綔鍖猴紝鏃犻渶鎵嬪姩寮€鍚紙涓嶄細鑷姩鍒涘缓浠讳綍 IM 娓犻亾锛夈€?
+- **浼氳瘽鍘嗗彶鏂板銆屾洿澶氥€嶈彍鍗曚笌銆屽湪鏂版爣绛鹃〉鎵撳紑銆?*锛氬伐浣滃尯鍘嗗彶閲岀殑浼氳瘽琛屼笉鍐嶅爢鍙犱竴鎺掓偓鍋滄寜閽?鈥斺€?楂橀鐨勩€屽湪鏂版爣绛鹃〉鎵撳紑銆嶇洿鎺ュ彲瑙侊紝鏀惰棌 / 瀵煎嚭 / 缁熻 / 鍒犻櫎鏀惰繘姣忚鐨勩€屾洿澶氥€?鈰? 鑿滃崟锛屽垪琛ㄦ洿娓呯埥銆?
+- **鑱婂ぉ涓彸閿矾寰勫彲銆屽湪鏂囦欢鐩綍涓睍绀恒€?*锛氬湪鑱婂ぉ閲屽彸閿竴涓枃浠惰矾寰勶紝鍙洿鎺ュ湪绯荤粺鏂囦欢绠＄悊鍣ㄤ腑瀹氫綅鍒拌鏂囦欢銆?
+- **宸ヤ綔鍖烘悳绱㈢粨鏋滃鑸紭鍖?*锛氭悳绱㈠伐浣滃尯鏂囦欢鍚庯紝鐐瑰嚮缁撴灉璺宠浆涓庨珮浜畾浣嶆洿椤烘墜銆?
 
 ### Fixed
 
-- **点开会话即时进入，不再卡顿**：从启动页点开会话、或新建会话时，聊天界面即时呈现，不再出现约一秒的整窗口冻结（打开较早的历史会话同样即时）。
-- **应用启动与新建标签页更快**：精简了首屏加载体积、改为按需加载各页面，首次启动和新建标签页明显更快。
-- **工作区文件树不再闪烁**：在有文件持续写入（AI / 开发服务 / git 等）时，文件树不再频繁闪烁；滚动到底部时顶部面包屑也不再抖动。
-- **Windows 兼容性修复**：修复了 Windows 上 AI 生成图片不显示、部分图表 widget 空白、滚动条占用布局导致错位、分栏预览过渡撕裂等问题。
-- **心跳间隔「自定义」输入修复**（[#310](https://github.com/hAcKlyc/HamunaAgent/issues/310)）：自定义心跳间隔时可以正常输入数字，不再被中途清空或误触成预设值。
-- **生成的音频卡片重新设计为播放器**：AI 生成的语音以更完整的播放器卡片在对话流中内联呈现，支持暂停 / 继续与进度查看。
+- **鐐瑰紑浼氳瘽鍗虫椂杩涘叆锛屼笉鍐嶅崱椤?*锛氫粠鍚姩椤电偣寮€浼氳瘽銆佹垨鏂板缓浼氳瘽鏃讹紝鑱婂ぉ鐣岄潰鍗虫椂鍛堢幇锛屼笉鍐嶅嚭鐜扮害涓€绉掔殑鏁寸獥鍙ｅ喕缁擄紙鎵撳紑杈冩棭鐨勫巻鍙蹭細璇濆悓鏍峰嵆鏃讹級銆?
+- **搴旂敤鍚姩涓庢柊寤烘爣绛鹃〉鏇村揩**锛氱簿绠€浜嗛灞忓姞杞戒綋绉€佹敼涓烘寜闇€鍔犺浇鍚勯〉闈紝棣栨鍚姩鍜屾柊寤烘爣绛鹃〉鏄庢樉鏇村揩銆?
+- **宸ヤ綔鍖烘枃浠舵爲涓嶅啀闂儊**锛氬湪鏈夋枃浠舵寔缁啓鍏ワ紙AI / 寮€鍙戞湇鍔?/ git 绛夛級鏃讹紝鏂囦欢鏍戜笉鍐嶉绻侀棯鐑侊紱婊氬姩鍒板簳閮ㄦ椂椤堕儴闈㈠寘灞戜篃涓嶅啀鎶栧姩銆?
+- **Windows 鍏煎鎬т慨澶?*锛氫慨澶嶄簡 Windows 涓?AI 鐢熸垚鍥剧墖涓嶆樉绀恒€侀儴鍒嗗浘琛?widget 绌虹櫧銆佹粴鍔ㄦ潯鍗犵敤甯冨眬瀵艰嚧閿欎綅銆佸垎鏍忛瑙堣繃娓℃挄瑁傜瓑闂銆?
+- **蹇冭烦闂撮殧銆岃嚜瀹氫箟銆嶈緭鍏ヤ慨澶?*锛圼#310](https://github.com/hAcKlyc/HamunaAgent/issues/310)锛夛細鑷畾涔夊績璺抽棿闅旀椂鍙互姝ｅ父杈撳叆鏁板瓧锛屼笉鍐嶈涓€旀竻绌烘垨璇Е鎴愰璁惧€笺€?
+- **鐢熸垚鐨勯煶棰戝崱鐗囬噸鏂拌璁′负鎾斁鍣?*锛欰I 鐢熸垚鐨勮闊充互鏇村畬鏁寸殑鎾斁鍣ㄥ崱鐗囧湪瀵硅瘽娴佷腑鍐呰仈鍛堢幇锛屾敮鎸佹殏鍋?/ 缁х画涓庤繘搴︽煡鐪嬨€?
 
 ---
 
 ## [0.2.30] - 2026-06-05
 
-> 本版聚焦会话的可读性与生成内容的呈现：对话会自动获得一个便于日后检索的标题；AI 生成的语音 / 图片直接作为聊天附件呈现，可播放、可查看；第三方供应商验证失败时也会告诉你真实原因，而不是笼统的「验证超时」。另修复了新建标签页短暂黄屏、点「停止」误弹错误、标签内模型 / 权限切换丢失等体验问题。
+> 鏈増鑱氱劍浼氳瘽鐨勫彲璇绘€т笌鐢熸垚鍐呭鐨勫憟鐜帮細瀵硅瘽浼氳嚜鍔ㄨ幏寰椾竴涓究浜庢棩鍚庢绱㈢殑鏍囬锛汚I 鐢熸垚鐨勮闊?/ 鍥剧墖鐩存帴浣滀负鑱婂ぉ闄勪欢鍛堢幇锛屽彲鎾斁銆佸彲鏌ョ湅锛涚涓夋柟渚涘簲鍟嗛獙璇佸け璐ユ椂涔熶細鍛婅瘔浣犵湡瀹炲師鍥狅紝鑰屼笉鏄缁熺殑銆岄獙璇佽秴鏃躲€嶃€傚彟淇浜嗘柊寤烘爣绛鹃〉鐭殏榛勫睆銆佺偣銆屽仠姝€嶈寮归敊璇€佹爣绛惧唴妯″瀷 / 鏉冮檺鍒囨崲涓㈠け绛変綋楠岄棶棰樸€?
 
 ### Added
 
-- **对话自动生成标题**（[#296](https://github.com/hAcKlyc/HamunaAgent/issues/296)）：对话进行到第 2 轮后，会自动生成一个便于日后在会话列表里一眼认出的标题（尽量保留项目名、编号、文件名等独特锚点）。改由后端统一生成，因此 Chat、IM 机器人、定时任务、后台任务的会话都能拿到标题；此前只有打开着的聊天标签会生成，关闭或刷新后就丢了。
-- **生成的语音 / 图片直接成为聊天附件**：用语音合成（edge-tts）生成的音频、用 Gemini 生成或编辑的图片，现在直接作为聊天附件呈现 —— 音频可内联播放、图片可查看，不再只是一行文件路径文字。Codex 等外部 Runtime 的官方产图工具也走同一套呈现管道。
+- **瀵硅瘽鑷姩鐢熸垚鏍囬**锛圼#296](https://github.com/hAcKlyc/HamunaAgent/issues/296)锛夛細瀵硅瘽杩涜鍒扮 2 杞悗锛屼細鑷姩鐢熸垚涓€涓究浜庢棩鍚庡湪浼氳瘽鍒楄〃閲屼竴鐪艰鍑虹殑鏍囬锛堝敖閲忎繚鐣欓」鐩悕銆佺紪鍙枫€佹枃浠跺悕绛夌嫭鐗归敋鐐癸級銆傛敼鐢卞悗绔粺涓€鐢熸垚锛屽洜姝?Chat銆両M 鏈哄櫒浜恒€佸畾鏃朵换鍔°€佸悗鍙颁换鍔＄殑浼氳瘽閮借兘鎷垮埌鏍囬锛涙鍓嶅彧鏈夋墦寮€鐫€鐨勮亰澶╂爣绛句細鐢熸垚锛屽叧闂垨鍒锋柊鍚庡氨涓簡銆?
+- **鐢熸垚鐨勮闊?/ 鍥剧墖鐩存帴鎴愪负鑱婂ぉ闄勪欢**锛氱敤璇煶鍚堟垚锛坋dge-tts锛夌敓鎴愮殑闊抽銆佺敤 Gemini 鐢熸垚鎴栫紪杈戠殑鍥剧墖锛岀幇鍦ㄧ洿鎺ヤ綔涓鸿亰澶╅檮浠跺憟鐜?鈥斺€?闊抽鍙唴鑱旀挱鏀俱€佸浘鐗囧彲鏌ョ湅锛屼笉鍐嶅彧鏄竴琛屾枃浠惰矾寰勬枃瀛椼€侰odex 绛夊閮?Runtime 鐨勫畼鏂逛骇鍥惧伐鍏蜂篃璧板悓涓€濂楀憟鐜扮閬撱€?
 
 ### Fixed
 
-- **供应商验证失败显示真实原因**：第三方供应商的 API Key 验证失败时，不再一律提示「验证超时，请检查网络连接」。现在会区分并显示真实原因 —— 模型不存在、余额不足 / 欠费、Key 受限、Base URL 错误、或供应商返回的真实 HTTP 状态，并附「详情」按钮便于排查。
-- **删除 API Key 时不再刷屏报错**（[#306](https://github.com/hAcKlyc/HamunaAgent/issues/306)）：退格或清空 API Key 输入框时，不再每删一个字符就触发一次验证、堆叠出一串「Key 无效」提示。只有粘贴、正向输入、或替换成另一个 Key 才会触发验证。
-- **新建标签页不再短暂黄屏**：新建标签页现在即时显示内容，不再出现 1–2 秒的全屏空白（俗称「黄屏」）。
-- **点「停止」不再弹出内部诊断错误**（[#307](https://github.com/hAcKlyc/HamunaAgent/issues/307)）：手动中止 AI 回合时，不再把内部诊断信息当成报错横幅弹出（桌面、IM 转发、外部 Runtime 三处一致）。
-- **标签内切换模型 / 权限模式后不再丢失**（[#305](https://github.com/hAcKlyc/HamunaAgent/issues/305)）：在某个标签内临时切换的模型或权限模式，关闭标签再重新打开后能正确保留。
-- **仅修改 MCP 环境变量也即时生效**（[#303](https://github.com/hAcKlyc/HamunaAgent/issues/303)）：只改某个 MCP 工具的环境变量（没有增删工具）时，改动现在会即时同步到当前正在对话的 Chat，无需重启会话。
-- **@ 提及文件搜索布局优化**：输入 `@` 提及文件时，搜索结果的排版更清晰易读。
-- **Windows 便携版可正常启动**：修正了 Windows 便携版（portable）可执行文件的命名，便携包不再因此无法启动。
+- **渚涘簲鍟嗛獙璇佸け璐ユ樉绀虹湡瀹炲師鍥?*锛氱涓夋柟渚涘簲鍟嗙殑 API Key 楠岃瘉澶辫触鏃讹紝涓嶅啀涓€寰嬫彁绀恒€岄獙璇佽秴鏃讹紝璇锋鏌ョ綉缁滆繛鎺ャ€嶃€傜幇鍦ㄤ細鍖哄垎骞舵樉绀虹湡瀹炲師鍥?鈥斺€?妯″瀷涓嶅瓨鍦ㄣ€佷綑棰濅笉瓒?/ 娆犺垂銆並ey 鍙楅檺銆丅ase URL 閿欒銆佹垨渚涘簲鍟嗚繑鍥炵殑鐪熷疄 HTTP 鐘舵€侊紝骞堕檮銆岃鎯呫€嶆寜閽究浜庢帓鏌ャ€?
+- **鍒犻櫎 API Key 鏃朵笉鍐嶅埛灞忔姤閿?*锛圼#306](https://github.com/hAcKlyc/HamunaAgent/issues/306)锛夛細閫€鏍兼垨娓呯┖ API Key 杈撳叆妗嗘椂锛屼笉鍐嶆瘡鍒犱竴涓瓧绗﹀氨瑙﹀彂涓€娆￠獙璇併€佸爢鍙犲嚭涓€涓层€孠ey 鏃犳晥銆嶆彁绀恒€傚彧鏈夌矘璐淬€佹鍚戣緭鍏ャ€佹垨鏇挎崲鎴愬彟涓€涓?Key 鎵嶄細瑙﹀彂楠岃瘉銆?
+- **鏂板缓鏍囩椤典笉鍐嶇煭鏆傞粍灞?*锛氭柊寤烘爣绛鹃〉鐜板湪鍗虫椂鏄剧ず鍐呭锛屼笉鍐嶅嚭鐜?1鈥? 绉掔殑鍏ㄥ睆绌虹櫧锛堜織绉般€岄粍灞忋€嶏級銆?
+- **鐐广€屽仠姝€嶄笉鍐嶅脊鍑哄唴閮ㄨ瘖鏂敊璇?*锛圼#307](https://github.com/hAcKlyc/HamunaAgent/issues/307)锛夛細鎵嬪姩涓 AI 鍥炲悎鏃讹紝涓嶅啀鎶婂唴閮ㄨ瘖鏂俊鎭綋鎴愭姤閿欐í骞呭脊鍑猴紙妗岄潰銆両M 杞彂銆佸閮?Runtime 涓夊涓€鑷达級銆?
+- **鏍囩鍐呭垏鎹㈡ā鍨?/ 鏉冮檺妯″紡鍚庝笉鍐嶄涪澶?*锛圼#305](https://github.com/hAcKlyc/HamunaAgent/issues/305)锛夛細鍦ㄦ煇涓爣绛惧唴涓存椂鍒囨崲鐨勬ā鍨嬫垨鏉冮檺妯″紡锛屽叧闂爣绛惧啀閲嶆柊鎵撳紑鍚庤兘姝ｇ‘淇濈暀銆?
+- **浠呬慨鏀?MCP 鐜鍙橀噺涔熷嵆鏃剁敓鏁?*锛圼#303](https://github.com/hAcKlyc/HamunaAgent/issues/303)锛夛細鍙敼鏌愪釜 MCP 宸ュ叿鐨勭幆澧冨彉閲忥紙娌℃湁澧炲垹宸ュ叿锛夋椂锛屾敼鍔ㄧ幇鍦ㄤ細鍗虫椂鍚屾鍒板綋鍓嶆鍦ㄥ璇濈殑 Chat锛屾棤闇€閲嶅惎浼氳瘽銆?
+- **@ 鎻愬強鏂囦欢鎼滅储甯冨眬浼樺寲**锛氳緭鍏?`@` 鎻愬強鏂囦欢鏃讹紝鎼滅储缁撴灉鐨勬帓鐗堟洿娓呮櫚鏄撹銆?
+- **Windows 渚挎惡鐗堝彲姝ｅ父鍚姩**锛氫慨姝ｄ簡 Windows 渚挎惡鐗堬紙portable锛夊彲鎵ц鏂囦欢鐨勫懡鍚嶏紝渚挎惡鍖呬笉鍐嶅洜姝ゆ棤娉曞惎鍔ㄣ€?
 
 ---
 
 ## [0.2.29] - 2026-06-04
 
-> 本版聚焦输入与配置体验：聊天发送键可自定义并在所有对话输入框统一；修复了切换会话时模型 / Provider 被静默重置、Agent 渠道配置异常导致自启失败等问题；外部 Runtime（Codex / Claude Code / Gemini）的记忆更新与子 agent 富媒体产物也更完善。
+> 鏈増鑱氱劍杈撳叆涓庨厤缃綋楠岋細鑱婂ぉ鍙戦€侀敭鍙嚜瀹氫箟骞跺湪鎵€鏈夊璇濊緭鍏ユ缁熶竴锛涗慨澶嶄簡鍒囨崲浼氳瘽鏃舵ā鍨?/ Provider 琚潤榛橀噸缃€丄gent 娓犻亾閰嶇疆寮傚父瀵艰嚧鑷惎澶辫触绛夐棶棰橈紱澶栭儴 Runtime锛圕odex / Claude Code / Gemini锛夌殑璁板繂鏇存柊涓庡瓙 agent 瀵屽獟浣撲骇鐗╀篃鏇村畬鍠勩€?
 
 ### Added
 
-- **聊天发送键可自定义**：新增「快捷键」设置区，消息发送键可在「Enter 发送」与「⌘/Ctrl + Enter 发送」之间切换，并在主对话框、AI 小助理、问题反馈三处统一生效。沿用旧习惯的用户默认仍是 Enter 发送，升级后无感知变化。
-- **文件工具卡片路径可点击**：Write / Edit / Read 等工具卡片中的文件路径，现在和 AI 正文里的路径一样可点击 —— 预览、引用、打开、打开所在文件夹（路径不存在或非聊天场景时退化为普通显示）。
+- **鑱婂ぉ鍙戦€侀敭鍙嚜瀹氫箟**锛氭柊澧炪€屽揩鎹烽敭銆嶈缃尯锛屾秷鎭彂閫侀敭鍙湪銆孍nter 鍙戦€併€嶄笌銆屸寴/Ctrl + Enter 鍙戦€併€嶄箣闂村垏鎹紝骞跺湪涓诲璇濇銆丄I 灏忓姪鐞嗐€侀棶棰樺弽棣堜笁澶勭粺涓€鐢熸晥銆傛部鐢ㄦ棫涔犳儻鐨勭敤鎴烽粯璁や粛鏄?Enter 鍙戦€侊紝鍗囩骇鍚庢棤鎰熺煡鍙樺寲銆?
+- **鏂囦欢宸ュ叿鍗＄墖璺緞鍙偣鍑?*锛歐rite / Edit / Read 绛夊伐鍏峰崱鐗囦腑鐨勬枃浠惰矾寰勶紝鐜板湪鍜?AI 姝ｆ枃閲岀殑璺緞涓€鏍峰彲鐐瑰嚮 鈥斺€?棰勮銆佸紩鐢ㄣ€佹墦寮€銆佹墦寮€鎵€鍦ㄦ枃浠跺す锛堣矾寰勪笉瀛樺湪鎴栭潪鑱婂ぉ鍦烘櫙鏃堕€€鍖栦负鏅€氭樉绀猴級銆?
 
 ### Fixed
 
-- **切换会话不再静默重置模型 / Provider**（[#300](https://github.com/hAcKlyc/HamunaAgent/issues/300)）：此前切回一个绑定了不可用 Provider（缺 API Key / 已禁用）的会话时，会静默回退到第一个可用 Provider 并把模型覆盖成它的默认模型，导致下一条消息被计费到错误的 Provider（402）。现在会保留你 pin 的合法模型；Provider 不可用时拦截发送并明确提示，而不是悄悄切走、错误计费。
-- **Agent 渠道配置更健壮**（[#301](https://github.com/hAcKlyc/HamunaAgent/issues/301)）：修复了 Agent 的 Provider / MCP 配置在某些情况下被存成对象（而非字符串化 JSON），导致渠道启动报 `invalid type: map`、甚至开机时全部 Agent 自启失败的问题。现在加载时自动归一化，且单个损坏的 Agent 不再拖垮其它 Agent 的自启。
-- **外部 Runtime 记忆更新修复**：使用 Codex / Claude Code / Gemini 外部 Runtime 的会话，定时记忆更新此前会静默空转（0 轮、假成功，留下孤儿气泡）。现在正确走对应 Runtime 执行，并以真实回合成功为准。
-- **中文输入法误发修复**（[#123](https://github.com/hAcKlyc/HamunaAgent/issues/123)）：AI 小助理与问题反馈输入框，在用中文 / 日文输入法选词时按回车不再误发送。
-- **嵌套子 agent 图片产物显示修复**：使用 Codex 外部 Runtime 时，子 agent 生成的图片等富媒体产物此前会被丢弃、只显示一行文字；现在能像主流程一样正确渲染图库。
-- **响应超时后自动恢复**：AI 回合因长时间无响应被中止后，现在会自动续上继续执行，不再卡住、需要手动重发。
+- **鍒囨崲浼氳瘽涓嶅啀闈欓粯閲嶇疆妯″瀷 / Provider**锛圼#300](https://github.com/hAcKlyc/HamunaAgent/issues/300)锛夛細姝ゅ墠鍒囧洖涓€涓粦瀹氫簡涓嶅彲鐢?Provider锛堢己 API Key / 宸茬鐢級鐨勪細璇濇椂锛屼細闈欓粯鍥為€€鍒扮涓€涓彲鐢?Provider 骞舵妸妯″瀷瑕嗙洊鎴愬畠鐨勯粯璁ゆā鍨嬶紝瀵艰嚧涓嬩竴鏉℃秷鎭璁¤垂鍒伴敊璇殑 Provider锛?02锛夈€傜幇鍦ㄤ細淇濈暀浣?pin 鐨勫悎娉曟ā鍨嬶紱Provider 涓嶅彲鐢ㄦ椂鎷︽埅鍙戦€佸苟鏄庣‘鎻愮ず锛岃€屼笉鏄倓鎮勫垏璧般€侀敊璇璐广€?
+- **Agent 娓犻亾閰嶇疆鏇村仴澹?*锛圼#301](https://github.com/hAcKlyc/HamunaAgent/issues/301)锛夛細淇浜?Agent 鐨?Provider / MCP 閰嶇疆鍦ㄦ煇浜涙儏鍐典笅琚瓨鎴愬璞★紙鑰岄潪瀛楃涓插寲 JSON锛夛紝瀵艰嚧娓犻亾鍚姩鎶?`invalid type: map`銆佺敋鑷冲紑鏈烘椂鍏ㄩ儴 Agent 鑷惎澶辫触鐨勯棶棰樸€傜幇鍦ㄥ姞杞芥椂鑷姩褰掍竴鍖栵紝涓斿崟涓崯鍧忕殑 Agent 涓嶅啀鎷栧灝鍏跺畠 Agent 鐨勮嚜鍚€?
+- **澶栭儴 Runtime 璁板繂鏇存柊淇**锛氫娇鐢?Codex / Claude Code / Gemini 澶栭儴 Runtime 鐨勪細璇濓紝瀹氭椂璁板繂鏇存柊姝ゅ墠浼氶潤榛樼┖杞紙0 杞€佸亣鎴愬姛锛岀暀涓嬪鍎挎皵娉★級銆傜幇鍦ㄦ纭蛋瀵瑰簲 Runtime 鎵ц锛屽苟浠ョ湡瀹炲洖鍚堟垚鍔熶负鍑嗐€?
+- **涓枃杈撳叆娉曡鍙戜慨澶?*锛圼#123](https://github.com/hAcKlyc/HamunaAgent/issues/123)锛夛細AI 灏忓姪鐞嗕笌闂鍙嶉杈撳叆妗嗭紝鍦ㄧ敤涓枃 / 鏃ユ枃杈撳叆娉曢€夎瘝鏃舵寜鍥炶溅涓嶅啀璇彂閫併€?
+- **宓屽瀛?agent 鍥剧墖浜х墿鏄剧ず淇**锛氫娇鐢?Codex 澶栭儴 Runtime 鏃讹紝瀛?agent 鐢熸垚鐨勫浘鐗囩瓑瀵屽獟浣撲骇鐗╂鍓嶄細琚涪寮冦€佸彧鏄剧ず涓€琛屾枃瀛楋紱鐜板湪鑳藉儚涓绘祦绋嬩竴鏍锋纭覆鏌撳浘搴撱€?
+- **鍝嶅簲瓒呮椂鍚庤嚜鍔ㄦ仮澶?*锛欰I 鍥炲悎鍥犻暱鏃堕棿鏃犲搷搴旇涓鍚庯紝鐜板湪浼氳嚜鍔ㄧ画涓婄户缁墽琛岋紝涓嶅啀鍗′綇銆侀渶瑕佹墜鍔ㄩ噸鍙戙€?
 
 ---
 
 ## [0.2.28] - 2026-06-03
 
-> 本版聚焦安全与稳定性：Plan（规划）模式现在真正强制只读，杜绝第三方模型在规划阶段误执行写操作或命令；「重启更新」后的标签页恢复也更可靠。
+> 鏈増鑱氱劍瀹夊叏涓庣ǔ瀹氭€э細Plan锛堣鍒掞級妯″紡鐜板湪鐪熸寮哄埗鍙锛屾潨缁濈涓夋柟妯″瀷鍦ㄨ鍒掗樁娈佃鎵ц鍐欐搷浣滄垨鍛戒护锛涖€岄噸鍚洿鏂般€嶅悗鐨勬爣绛鹃〉鎭㈠涔熸洿鍙潬銆?
 
 ### Fixed
 
-- **Plan（规划）模式现在真正强制只读**（[#295](https://github.com/hAcKlyc/HamunaAgent/issues/295)）：此前在 Plan 模式下，部分第三方模型仍可能不经审批就直接执行写文件、运行命令等有副作用的操作，存在误操作风险。现在这类操作会被硬性拦截 —— Plan 模式下 AI 只能做只读调研与规划，必须经你审批退出 Plan 模式后才能执行写操作（内置读取、搜索与「向用户提问 / 提交方案」不受影响）。
-- **「重启更新」后标签页恢复更可靠**（[#232](https://github.com/hAcKlyc/HamunaAgent/issues/232) 加固）：标签恢复此前只写 localStorage，而 WebView 把 localStorage 落盘是异步的——点「重启更新」时进程被立即强制退出（Windows 走 NSIS `exit(0)`、macOS 走 `relaunch()`），最后一次写入可能还没落盘就丢了，导致重启后标签没恢复。现在在退出前额外把标签快照 fsync 落盘到 `~/.hamuna/open-tabs.json`（复用 config.json 的原子写），重启时若 localStorage 读到空就从这个兜底快照恢复，用完即删。
+- **Plan锛堣鍒掞級妯″紡鐜板湪鐪熸寮哄埗鍙**锛圼#295](https://github.com/hAcKlyc/HamunaAgent/issues/295)锛夛細姝ゅ墠鍦?Plan 妯″紡涓嬶紝閮ㄥ垎绗笁鏂规ā鍨嬩粛鍙兘涓嶇粡瀹℃壒灏辩洿鎺ユ墽琛屽啓鏂囦欢銆佽繍琛屽懡浠ょ瓑鏈夊壇浣滅敤鐨勬搷浣滐紝瀛樺湪璇搷浣滈闄┿€傜幇鍦ㄨ繖绫绘搷浣滀細琚‖鎬ф嫤鎴?鈥斺€?Plan 妯″紡涓?AI 鍙兘鍋氬彧璇昏皟鐮斾笌瑙勫垝锛屽繀椤荤粡浣犲鎵归€€鍑?Plan 妯″紡鍚庢墠鑳芥墽琛屽啓鎿嶄綔锛堝唴缃鍙栥€佹悳绱笌銆屽悜鐢ㄦ埛鎻愰棶 / 鎻愪氦鏂规銆嶄笉鍙楀奖鍝嶏級銆?
+- **銆岄噸鍚洿鏂般€嶅悗鏍囩椤垫仮澶嶆洿鍙潬**锛圼#232](https://github.com/hAcKlyc/HamunaAgent/issues/232) 鍔犲浐锛夛細鏍囩鎭㈠姝ゅ墠鍙啓 localStorage锛岃€?WebView 鎶?localStorage 钀界洏鏄紓姝ョ殑鈥斺€旂偣銆岄噸鍚洿鏂般€嶆椂杩涚▼琚珛鍗冲己鍒堕€€鍑猴紙Windows 璧?NSIS `exit(0)`銆乵acOS 璧?`relaunch()`锛夛紝鏈€鍚庝竴娆″啓鍏ュ彲鑳借繕娌¤惤鐩樺氨涓簡锛屽鑷撮噸鍚悗鏍囩娌℃仮澶嶃€傜幇鍦ㄥ湪閫€鍑哄墠棰濆鎶婃爣绛惧揩鐓?fsync 钀界洏鍒?`~/.hamuna/open-tabs.json`锛堝鐢?config.json 鐨勫師瀛愬啓锛夛紝閲嶅惎鏃惰嫢 localStorage 璇诲埌绌哄氨浠庤繖涓厹搴曞揩鐓ф仮澶嶏紝鐢ㄥ畬鍗冲垹銆?
 
 ---
 
 ## [0.2.27] - 2026-06-02
 
-> 本版聚焦外部 Runtime（尤其 Codex）的多 agent 体验与超长会话稳定性：Codex 子 agent 的工具调用现在像内置 Task 一样折叠展示；外部 Runtime 支持回合中途排队消息；修复了包含大量工具输出的超长会话重开后内容截断的问题；生成式 UI 图表内置、更稳定。
+> 鏈増鑱氱劍澶栭儴 Runtime锛堝挨鍏?Codex锛夌殑澶?agent 浣撻獙涓庤秴闀夸細璇濈ǔ瀹氭€э細Codex 瀛?agent 鐨勫伐鍏疯皟鐢ㄧ幇鍦ㄥ儚鍐呯疆 Task 涓€鏍锋姌鍙犲睍绀猴紱澶栭儴 Runtime 鏀寔鍥炲悎涓€旀帓闃熸秷鎭紱淇浜嗗寘鍚ぇ閲忓伐鍏疯緭鍑虹殑瓒呴暱浼氳瘽閲嶅紑鍚庡唴瀹规埅鏂殑闂锛涚敓鎴愬紡 UI 鍥捐〃鍐呯疆銆佹洿绋冲畾銆?
 
 ### Added
 
-- **Codex 子 agent 工具调用折叠展示**：使用 Codex 外部 Runtime 且主 agent 派生子 agent 并行干活时，子 agent 的工具调用现在折叠在对应的子 agent 卡片内、可展开查看，不再平铺混在主对话流里 —— 与内置 Runtime 的 Task 卡片体验一致。
-- **生成式 UI 图表开箱即用**：图表类 Widget 现在内置 Chart.js 并在沙箱内联注入，不再依赖外部 CDN —— 解决了 Windows 上图表 Widget 偶发空白的问题（沙箱 CSP 在 Chromium/WebView2 下会继承父页限制，拦掉外部脚本）；同时放开 Google Fonts，Widget 可使用更丰富的字体。Widget 脚本执行失败时会显式提示，不再静默空白。
-- **外部 Runtime 支持回合中途排队消息**：使用 Claude Code / Codex / Gemini 外部 Runtime 时，AI 回合进行中输入的消息会排队，回合结束后自动按序发送，行为与内置 Runtime 对齐。
+- **Codex 瀛?agent 宸ュ叿璋冪敤鎶樺彔灞曠ず**锛氫娇鐢?Codex 澶栭儴 Runtime 涓斾富 agent 娲剧敓瀛?agent 骞惰骞叉椿鏃讹紝瀛?agent 鐨勫伐鍏疯皟鐢ㄧ幇鍦ㄦ姌鍙犲湪瀵瑰簲鐨勫瓙 agent 鍗＄墖鍐呫€佸彲灞曞紑鏌ョ湅锛屼笉鍐嶅钩閾烘贩鍦ㄤ富瀵硅瘽娴侀噷 鈥斺€?涓庡唴缃?Runtime 鐨?Task 鍗＄墖浣撻獙涓€鑷淬€?
+- **鐢熸垚寮?UI 鍥捐〃寮€绠卞嵆鐢?*锛氬浘琛ㄧ被 Widget 鐜板湪鍐呯疆 Chart.js 骞跺湪娌欑鍐呰仈娉ㄥ叆锛屼笉鍐嶄緷璧栧閮?CDN 鈥斺€?瑙ｅ喅浜?Windows 涓婂浘琛?Widget 鍋跺彂绌虹櫧鐨勯棶棰橈紙娌欑 CSP 鍦?Chromium/WebView2 涓嬩細缁ф壙鐖堕〉闄愬埗锛屾嫤鎺夊閮ㄨ剼鏈級锛涘悓鏃舵斁寮€ Google Fonts锛學idget 鍙娇鐢ㄦ洿涓板瘜鐨勫瓧浣撱€俉idget 鑴氭湰鎵ц澶辫触鏃朵細鏄惧紡鎻愮ず锛屼笉鍐嶉潤榛樼┖鐧姐€?
+- **澶栭儴 Runtime 鏀寔鍥炲悎涓€旀帓闃熸秷鎭?*锛氫娇鐢?Claude Code / Codex / Gemini 澶栭儴 Runtime 鏃讹紝AI 鍥炲悎杩涜涓緭鍏ョ殑娑堟伅浼氭帓闃燂紝鍥炲悎缁撴潫鍚庤嚜鍔ㄦ寜搴忓彂閫侊紝琛屼负涓庡唴缃?Runtime 瀵归綈銆?
 
 ### Fixed
 
-- **超长会话恢复后内容截断**：包含大量工具输出的超长会话（尤其 Codex 子 agent 批量产出的回合）重新打开时，历史不再卡在中间某条消息、后续内容不显示；现在会完整加载，个别超大的单条消息折叠为预览，完整内容仍保存在本地会话文件。
-- **HTML 预览窗口定位异常**（[#290](https://github.com/hAcKlyc/HamunaAgent/issues/290)）：点击文件名预览 HTML 时，内嵌浏览器有时以 0 宽度创建、悬浮覆盖在聊天区域上方而非显示在右侧浏览器面板。根因是右侧分栏容器在聊天区 300ms 宽度过渡动画期间宽度仍为 0，创建时读到的尺寸是 0。现已改为等容器完成布局后再创建 webview，并在前后端两侧都拦截退化尺寸。
-- **强制发送会浮现在途排队消息**（[#289](https://github.com/hAcKlyc/HamunaAgent/issues/289)）：对排队消息点「立即发送」时，正在处理中的那条消息会正确浮现为对话气泡（而非被丢弃），与「停止」语义区分开。
-- **多选问答回答丢失**：升级 SDK 0.3.158 后，内置「向用户提问」工具改为按问题文本回填答案，旧的按序号回填会让模型收到「用户未作答」。现已改为按问题文本作答案键。
-- **思考块在流式期间不再抖动**：AI 回复流式输出时，思考块不再自动展开 / 折叠；展开某个工具执行行后也会保持展开，不会因折叠卸载而丢失已加载内容。
-- **OpenClaw 渠道状态按渠道隔离**：多个 IM 渠道使用 OpenClaw 插件时，各自的本地登录状态相互隔离，不再串到同一个 `~/.openclaw` 实例。
-- **工作区文件树显示构建目录**：文件树现在会显示 `node_modules` / `dist` 等构建产物目录（懒加载、有上限，不影响性能）。
-- **清理 Windows 残留更新临时目录**：自动更新后会清理历史版本遗留的更新临时目录，避免磁盘占用累积。
+- **瓒呴暱浼氳瘽鎭㈠鍚庡唴瀹规埅鏂?*锛氬寘鍚ぇ閲忓伐鍏疯緭鍑虹殑瓒呴暱浼氳瘽锛堝挨鍏?Codex 瀛?agent 鎵归噺浜у嚭鐨勫洖鍚堬級閲嶆柊鎵撳紑鏃讹紝鍘嗗彶涓嶅啀鍗″湪涓棿鏌愭潯娑堟伅銆佸悗缁唴瀹逛笉鏄剧ず锛涚幇鍦ㄤ細瀹屾暣鍔犺浇锛屼釜鍒秴澶х殑鍗曟潯娑堟伅鎶樺彔涓洪瑙堬紝瀹屾暣鍐呭浠嶄繚瀛樺湪鏈湴浼氳瘽鏂囦欢銆?
+- **HTML 棰勮绐楀彛瀹氫綅寮傚父**锛圼#290](https://github.com/hAcKlyc/HamunaAgent/issues/290)锛夛細鐐瑰嚮鏂囦欢鍚嶉瑙?HTML 鏃讹紝鍐呭祵娴忚鍣ㄦ湁鏃朵互 0 瀹藉害鍒涘缓銆佹偓娴鐩栧湪鑱婂ぉ鍖哄煙涓婃柟鑰岄潪鏄剧ず鍦ㄥ彸渚ф祻瑙堝櫒闈㈡澘銆傛牴鍥犳槸鍙充晶鍒嗘爮瀹瑰櫒鍦ㄨ亰澶╁尯 300ms 瀹藉害杩囨浮鍔ㄧ敾鏈熼棿瀹藉害浠嶄负 0锛屽垱寤烘椂璇诲埌鐨勫昂瀵告槸 0銆傜幇宸叉敼涓虹瓑瀹瑰櫒瀹屾垚甯冨眬鍚庡啀鍒涘缓 webview锛屽苟鍦ㄥ墠鍚庣涓や晶閮芥嫤鎴€€鍖栧昂瀵搞€?
+- **寮哄埗鍙戦€佷細娴幇鍦ㄩ€旀帓闃熸秷鎭?*锛圼#289](https://github.com/hAcKlyc/HamunaAgent/issues/289)锛夛細瀵规帓闃熸秷鎭偣銆岀珛鍗冲彂閫併€嶆椂锛屾鍦ㄥ鐞嗕腑鐨勯偅鏉℃秷鎭細姝ｇ‘娴幇涓哄璇濇皵娉★紙鑰岄潪琚涪寮冿級锛屼笌銆屽仠姝€嶈涔夊尯鍒嗗紑銆?
+- **澶氶€夐棶绛斿洖绛斾涪澶?*锛氬崌绾?SDK 0.3.158 鍚庯紝鍐呯疆銆屽悜鐢ㄦ埛鎻愰棶銆嶅伐鍏锋敼涓烘寜闂鏂囨湰鍥炲～绛旀锛屾棫鐨勬寜搴忓彿鍥炲～浼氳妯″瀷鏀跺埌銆岀敤鎴锋湭浣滅瓟銆嶃€傜幇宸叉敼涓烘寜闂鏂囨湰浣滅瓟妗堥敭銆?
+- **鎬濊€冨潡鍦ㄦ祦寮忔湡闂翠笉鍐嶆姈鍔?*锛欰I 鍥炲娴佸紡杈撳嚭鏃讹紝鎬濊€冨潡涓嶅啀鑷姩灞曞紑 / 鎶樺彔锛涘睍寮€鏌愪釜宸ュ叿鎵ц琛屽悗涔熶細淇濇寔灞曞紑锛屼笉浼氬洜鎶樺彔鍗歌浇鑰屼涪澶卞凡鍔犺浇鍐呭銆?
+- **OpenClaw 娓犻亾鐘舵€佹寜娓犻亾闅旂**锛氬涓?IM 娓犻亾浣跨敤 OpenClaw 鎻掍欢鏃讹紝鍚勮嚜鐨勬湰鍦扮櫥褰曠姸鎬佺浉浜掗殧绂伙紝涓嶅啀涓插埌鍚屼竴涓?`~/.openclaw` 瀹炰緥銆?
+- **宸ヤ綔鍖烘枃浠舵爲鏄剧ず鏋勫缓鐩綍**锛氭枃浠舵爲鐜板湪浼氭樉绀?`node_modules` / `dist` 绛夋瀯寤轰骇鐗╃洰褰曪紙鎳掑姞杞姐€佹湁涓婇檺锛屼笉褰卞搷鎬ц兘锛夈€?
+- **娓呯悊 Windows 娈嬬暀鏇存柊涓存椂鐩綍**锛氳嚜鍔ㄦ洿鏂板悗浼氭竻鐞嗗巻鍙茬増鏈仐鐣欑殑鏇存柊涓存椂鐩綍锛岄伩鍏嶇鐩樺崰鐢ㄧ疮绉€?
 
 ### Developer
 
-- **Eager Fork（默认开启）**：会话分叉改为创建独立 SDK 会话（`forkSession()`），分叉后作为普通会话恢复，规避旧 `forkFrom` 状态机与 fork-at-tail 退化；可在 设置 → 关于 的开发者开关中关闭。Rewind 截断在冷重载后也能持久生效。
+- **Eager Fork锛堥粯璁ゅ紑鍚級**锛氫細璇濆垎鍙夋敼涓哄垱寤虹嫭绔?SDK 浼氳瘽锛坄forkSession()`锛夛紝鍒嗗弶鍚庝綔涓烘櫘閫氫細璇濇仮澶嶏紝瑙勯伩鏃?`forkFrom` 鐘舵€佹満涓?fork-at-tail 閫€鍖栵紱鍙湪 璁剧疆 鈫?鍏充簬 鐨勫紑鍙戣€呭紑鍏充腑鍏抽棴銆俁ewind 鎴柇鍦ㄥ喎閲嶈浇鍚庝篃鑳芥寔涔呯敓鏁堛€?
 
 ---
 
 ## [0.2.26] - 2026-05-31
 
-> 本版聚焦第三方模型体验：修复了 OpenAI 兼容协议供应商「使用统计一直为 0」的问题，新增 Claude Opus 4.8，并让第三方模型的上下文长度识别更准确（不再被一刀切按 200K 处理）。
+> 鏈増鑱氱劍绗笁鏂规ā鍨嬩綋楠岋細淇浜?OpenAI 鍏煎鍗忚渚涘簲鍟嗐€屼娇鐢ㄧ粺璁′竴鐩翠负 0銆嶇殑闂锛屾柊澧?Claude Opus 4.8锛屽苟璁╃涓夋柟妯″瀷鐨勪笂涓嬫枃闀垮害璇嗗埆鏇村噯纭紙涓嶅啀琚竴鍒€鍒囨寜 200K 澶勭悊锛夈€?
 
 ### Added
 
-- **新增 Claude Opus 4.8**：模型列表新增 Opus 4.8，默认 Opus 同步升级到 4.8（订阅 / API 共用）。
-- **第三方模型上下文长度自动识别更准**：接入社区模型库数据后，那些接口本身不返回上下文窗口大小的第三方模型也能被正确识别，长上下文不再被错误地按 200K 截断。（可在 设置 → 开发者 中关闭自动更新）
+- **鏂板 Claude Opus 4.8**锛氭ā鍨嬪垪琛ㄦ柊澧?Opus 4.8锛岄粯璁?Opus 鍚屾鍗囩骇鍒?4.8锛堣闃?/ API 鍏辩敤锛夈€?
+- **绗笁鏂规ā鍨嬩笂涓嬫枃闀垮害鑷姩璇嗗埆鏇村噯**锛氭帴鍏ョぞ鍖烘ā鍨嬪簱鏁版嵁鍚庯紝閭ｄ簺鎺ュ彛鏈韩涓嶈繑鍥炰笂涓嬫枃绐楀彛澶у皬鐨勭涓夋柟妯″瀷涔熻兘琚纭瘑鍒紝闀夸笂涓嬫枃涓嶅啀琚敊璇湴鎸?200K 鎴柇銆傦紙鍙湪 璁剧疆 鈫?寮€鍙戣€?涓叧闂嚜鍔ㄦ洿鏂帮級
 
 ### Fixed
 
-- **OpenAI 协议供应商的 token 使用统计**（[#277](https://github.com/hAcKlyc/HamunaAgent/issues/277)）：使用 OpenAI 兼容协议的第三方供应商（如 APIFree）时，使用统计不再一直显示 0，输入 / 输出 token 能正确统计。
+- **OpenAI 鍗忚渚涘簲鍟嗙殑 token 浣跨敤缁熻**锛圼#277](https://github.com/hAcKlyc/HamunaAgent/issues/277)锛夛細浣跨敤 OpenAI 鍏煎鍗忚鐨勭涓夋柟渚涘簲鍟嗭紙濡?APIFree锛夋椂锛屼娇鐢ㄧ粺璁′笉鍐嶄竴鐩存樉绀?0锛岃緭鍏?/ 杈撳嚭 token 鑳芥纭粺璁°€?
 
 ---
 
 ## [0.2.25] - 2026-05-30
 
-> 本版聚焦「关掉再回来不丢上下文」：重启 / 更新后自动恢复之前打开的会话标签，思考过程与回复可单独导出，历史对话支持按 ID 直达；同时新增后台子任务的权限策略，并加固了定时任务与 IM 渠道的自动恢复。
+> 鏈増鑱氱劍銆屽叧鎺夊啀鍥炴潵涓嶄涪涓婁笅鏂囥€嶏細閲嶅惎 / 鏇存柊鍚庤嚜鍔ㄦ仮澶嶄箣鍓嶆墦寮€鐨勪細璇濇爣绛撅紝鎬濊€冭繃绋嬩笌鍥炲鍙崟鐙鍑猴紝鍘嗗彶瀵硅瘽鏀寔鎸?ID 鐩磋揪锛涘悓鏃舵柊澧炲悗鍙板瓙浠诲姟鐨勬潈闄愮瓥鐣ワ紝骞跺姞鍥轰簡瀹氭椂浠诲姟涓?IM 娓犻亾鐨勮嚜鍔ㄦ仮澶嶃€?
 
 ### Added
 
-- **重启后自动恢复会话标签**（[#232](https://github.com/hAcKlyc/HamunaAgent/issues/232)）：重启或更新应用后，之前打开的聊天标签会自动恢复，不用再一个个重新打开。
-- **思考过程与回复支持导出**：聊天中的 AI 思考块和单条回复现在可以单独复制或导出为 Markdown 文件。
-- **历史对话支持按 ID 跳转**（[#260](https://github.com/hAcKlyc/HamunaAgent/issues/260)）：在历史对话搜索框粘贴会话 ID，即可直接定位到对应会话。
-- **后台智能体权限策略**（[#264](https://github.com/hAcKlyc/HamunaAgent/issues/264)）：新增后台运行子任务的工具权限策略，可选择继承当前会话的授权或完全自主执行，后台任务不再因无人放行而被静默拒绝。
+- **閲嶅惎鍚庤嚜鍔ㄦ仮澶嶄細璇濇爣绛?*锛圼#232](https://github.com/hAcKlyc/HamunaAgent/issues/232)锛夛細閲嶅惎鎴栨洿鏂板簲鐢ㄥ悗锛屼箣鍓嶆墦寮€鐨勮亰澶╂爣绛句細鑷姩鎭㈠锛屼笉鐢ㄥ啀涓€涓釜閲嶆柊鎵撳紑銆?
+- **鎬濊€冭繃绋嬩笌鍥炲鏀寔瀵煎嚭**锛氳亰澶╀腑鐨?AI 鎬濊€冨潡鍜屽崟鏉″洖澶嶇幇鍦ㄥ彲浠ュ崟鐙鍒舵垨瀵煎嚭涓?Markdown 鏂囦欢銆?
+- **鍘嗗彶瀵硅瘽鏀寔鎸?ID 璺宠浆**锛圼#260](https://github.com/hAcKlyc/HamunaAgent/issues/260)锛夛細鍦ㄥ巻鍙插璇濇悳绱㈡绮樿创浼氳瘽 ID锛屽嵆鍙洿鎺ュ畾浣嶅埌瀵瑰簲浼氳瘽銆?
+- **鍚庡彴鏅鸿兘浣撴潈闄愮瓥鐣?*锛圼#264](https://github.com/hAcKlyc/HamunaAgent/issues/264)锛夛細鏂板鍚庡彴杩愯瀛愪换鍔＄殑宸ュ叿鏉冮檺绛栫暐锛屽彲閫夋嫨缁ф壙褰撳墠浼氳瘽鐨勬巿鏉冩垨瀹屽叏鑷富鎵ц锛屽悗鍙颁换鍔′笉鍐嶅洜鏃犱汉鏀捐鑰岃闈欓粯鎷掔粷銆?
 
 ### Fixed
 
-- **设置页显示真实仓库地址**（[#256](https://github.com/hAcKlyc/HamunaAgent/issues/256)）：关于页脚的 GitHub 链接现在指向真实的项目仓库。
-- **会话标题显示更干净**：标题截断前会先剥离系统包装文本，显示更贴近真实内容。
-- **修复输入法重复输入**：在带文件引用的输入框中使用中文输入法，不再产生重复字符。
-- **定时任务与渠道恢复更稳定**：加固了定时任务和 IM Agent 渠道的自动恢复逻辑，异常后能更可靠地自行拉起。
+- **璁剧疆椤垫樉绀虹湡瀹炰粨搴撳湴鍧€**锛圼#256](https://github.com/hAcKlyc/HamunaAgent/issues/256)锛夛細鍏充簬椤佃剼鐨?GitHub 閾炬帴鐜板湪鎸囧悜鐪熷疄鐨勯」鐩粨搴撱€?
+- **浼氳瘽鏍囬鏄剧ず鏇村共鍑€**锛氭爣棰樻埅鏂墠浼氬厛鍓ョ绯荤粺鍖呰鏂囨湰锛屾樉绀烘洿璐磋繎鐪熷疄鍐呭銆?
+- **淇杈撳叆娉曢噸澶嶈緭鍏?*锛氬湪甯︽枃浠跺紩鐢ㄧ殑杈撳叆妗嗕腑浣跨敤涓枃杈撳叆娉曪紝涓嶅啀浜х敓閲嶅瀛楃銆?
+- **瀹氭椂浠诲姟涓庢笭閬撴仮澶嶆洿绋冲畾**锛氬姞鍥轰簡瀹氭椂浠诲姟鍜?IM Agent 娓犻亾鐨勮嚜鍔ㄦ仮澶嶉€昏緫锛屽紓甯稿悗鑳芥洿鍙潬鍦拌嚜琛屾媺璧枫€?
 
 ---
 
 ## [0.2.24] - 2026-05-28
 
-> 本版聚焦「配置可诊断、交接不串线、长上下文不误杀」：设置页能直接检查 Provider 与代理连通性，Agent Channel / IM 会话交接更稳定，Codex Runtime 在超长上下文下不再容易被过早中止；同时补齐生成式 UI 回复、任务预览和更新记录入口等体验细节。
+> 鏈増鑱氱劍銆岄厤缃彲璇婃柇銆佷氦鎺ヤ笉涓茬嚎銆侀暱涓婁笅鏂囦笉璇潃銆嶏細璁剧疆椤佃兘鐩存帴妫€鏌?Provider 涓庝唬鐞嗚繛閫氭€э紝Agent Channel / IM 浼氳瘽浜ゆ帴鏇寸ǔ瀹氾紝Codex Runtime 鍦ㄨ秴闀夸笂涓嬫枃涓嬩笉鍐嶅鏄撹杩囨棭涓锛涘悓鏃惰ˉ榻愮敓鎴愬紡 UI 鍥炲銆佷换鍔￠瑙堝拰鏇存柊璁板綍鍏ュ彛绛変綋楠岀粏鑺傘€?
 
 ### Added
 
-- **Provider / 代理连通性诊断**：在设置里验证模型供应商前，会先检查目标地址是否可达；代理开启后也会自动显示连通性结果。网络不可达时，错误提示可直接跳到代理配置区域，本地 Ollama / LM Studio 等地址不会再被系统代理干扰。
-- **设置页更新记录入口**：关于区域新增 GitHub / Release 入口，检查更新旁也能直接查看历史版本说明。
+- **Provider / 浠ｇ悊杩為€氭€ц瘖鏂?*锛氬湪璁剧疆閲岄獙璇佹ā鍨嬩緵搴斿晢鍓嶏紝浼氬厛妫€鏌ョ洰鏍囧湴鍧€鏄惁鍙揪锛涗唬鐞嗗紑鍚悗涔熶細鑷姩鏄剧ず杩為€氭€х粨鏋溿€傜綉缁滀笉鍙揪鏃讹紝閿欒鎻愮ず鍙洿鎺ヨ烦鍒颁唬鐞嗛厤缃尯鍩燂紝鏈湴 Ollama / LM Studio 绛夊湴鍧€涓嶄細鍐嶈绯荤粺浠ｇ悊骞叉壈銆?
+- **璁剧疆椤垫洿鏂拌褰曞叆鍙?*锛氬叧浜庡尯鍩熸柊澧?GitHub / Release 鍏ュ彛锛屾鏌ユ洿鏂版梺涔熻兘鐩存帴鏌ョ湅鍘嗗彶鐗堟湰璇存槑銆?
 
 ### Fixed
 
-- **Agent Channel / IM 会话交接不再串到旧会话**：把桌面对话交接到 IM 频道、频道间切换或复用已有频道时，会正确更新目标会话绑定并清理旧监听，避免回复继续流向之前的 session。
-- **Codex Runtime 超长上下文不再容易被误判超时**：长对话或大上下文首轮发送时，会按上下文规模放宽响应 watchdog，减少大模型仍在处理却被 10 分钟计时器中止的情况。
-- **已完成的生成式 UI 回复会正常渲染**：AI 回复结束后，生成式 UI / widget 不再因为流式状态判断错误而保持空白。
-- **任务消息不再污染搜索与历史预览**：Chat 顶部用户提问导航和会话预览会过滤任务通知、本地命令输出等系统注入内容，显示更贴近真实用户输入。
-- **Agent 状态刷新更稳**：设置 / Chat 中的 Agent 状态刷新不会再被较慢的旧请求覆盖成过期结果。
+- **Agent Channel / IM 浼氳瘽浜ゆ帴涓嶅啀涓插埌鏃т細璇?*锛氭妸妗岄潰瀵硅瘽浜ゆ帴鍒?IM 棰戦亾銆侀閬撻棿鍒囨崲鎴栧鐢ㄥ凡鏈夐閬撴椂锛屼細姝ｇ‘鏇存柊鐩爣浼氳瘽缁戝畾骞舵竻鐞嗘棫鐩戝惉锛岄伩鍏嶅洖澶嶇户缁祦鍚戜箣鍓嶇殑 session銆?
+- **Codex Runtime 瓒呴暱涓婁笅鏂囦笉鍐嶅鏄撹璇垽瓒呮椂**锛氶暱瀵硅瘽鎴栧ぇ涓婁笅鏂囬杞彂閫佹椂锛屼細鎸変笂涓嬫枃瑙勬ā鏀惧鍝嶅簲 watchdog锛屽噺灏戝ぇ妯″瀷浠嶅湪澶勭悊鍗磋 10 鍒嗛挓璁℃椂鍣ㄤ腑姝㈢殑鎯呭喌銆?
+- **宸插畬鎴愮殑鐢熸垚寮?UI 鍥炲浼氭甯告覆鏌?*锛欰I 鍥炲缁撴潫鍚庯紝鐢熸垚寮?UI / widget 涓嶅啀鍥犱负娴佸紡鐘舵€佸垽鏂敊璇€屼繚鎸佺┖鐧姐€?
+- **浠诲姟娑堟伅涓嶅啀姹℃煋鎼滅储涓庡巻鍙查瑙?*锛欳hat 椤堕儴鐢ㄦ埛鎻愰棶瀵艰埅鍜屼細璇濋瑙堜細杩囨护浠诲姟閫氱煡銆佹湰鍦板懡浠よ緭鍑虹瓑绯荤粺娉ㄥ叆鍐呭锛屾樉绀烘洿璐磋繎鐪熷疄鐢ㄦ埛杈撳叆銆?
+- **Agent 鐘舵€佸埛鏂版洿绋?*锛氳缃?/ Chat 涓殑 Agent 鐘舵€佸埛鏂颁笉浼氬啀琚緝鎱㈢殑鏃ц姹傝鐩栨垚杩囨湡缁撴灉銆?
 
 ---
 
 ## [0.2.23] - 2026-05-27
 
-> 本版是历史对话热修：修复 0.2.22 引入的「点击历史对话却打开到另一个会话」问题，并统一历史列表、全部面板和 Chat 顶部的会话标题显示策略。
+> 鏈増鏄巻鍙插璇濈儹淇細淇 0.2.22 寮曞叆鐨勩€岀偣鍑诲巻鍙插璇濆嵈鎵撳紑鍒板彟涓€涓細璇濄€嶉棶棰橈紝骞剁粺涓€鍘嗗彶鍒楄〃銆佸叏閮ㄩ潰鏉垮拰 Chat 椤堕儴鐨勪細璇濇爣棰樻樉绀虹瓥鐣ャ€?
 
 ### Fixed
 
-- **点击历史对话现在会稳定打开被点击的那一条**（[#255](https://github.com/hAcKlyc/HamunaAgent/issues/255)）：历史切换时不再被上一条会话遗留的运行状态拦住，界面、Sidecar 和消息历史会一起切到目标会话。
-- **历史对话标题显示口径统一**：右上历史下拉、启动页 / 全部历史面板、打开后的 Chat 顶部现在使用同一套规则：优先显示会话标题，标题为空时 fallback 到最后一条真实用户消息；Codex / Claude Code 等外部 Runtime 不再把 AI 回复片段当作历史列表标题。
+- **鐐瑰嚮鍘嗗彶瀵硅瘽鐜板湪浼氱ǔ瀹氭墦寮€琚偣鍑荤殑閭ｄ竴鏉?*锛圼#255](https://github.com/hAcKlyc/HamunaAgent/issues/255)锛夛細鍘嗗彶鍒囨崲鏃朵笉鍐嶈涓婁竴鏉′細璇濋仐鐣欑殑杩愯鐘舵€佹嫤浣忥紝鐣岄潰銆丼idecar 鍜屾秷鎭巻鍙蹭細涓€璧峰垏鍒扮洰鏍囦細璇濄€?
+- **鍘嗗彶瀵硅瘽鏍囬鏄剧ず鍙ｅ緞缁熶竴**锛氬彸涓婂巻鍙蹭笅鎷夈€佸惎鍔ㄩ〉 / 鍏ㄩ儴鍘嗗彶闈㈡澘銆佹墦寮€鍚庣殑 Chat 椤堕儴鐜板湪浣跨敤鍚屼竴濂楄鍒欙細浼樺厛鏄剧ず浼氳瘽鏍囬锛屾爣棰樹负绌烘椂 fallback 鍒版渶鍚庝竴鏉＄湡瀹炵敤鎴锋秷鎭紱Codex / Claude Code 绛夊閮?Runtime 涓嶅啀鎶?AI 鍥炲鐗囨褰撲綔鍘嗗彶鍒楄〃鏍囬銆?
 
 ---
 
 ## [0.2.22] - 2026-05-26
 
-> 本版继续收紧外部 Runtime 和长对话体验：Codex Runtime 的工具/权限/协议适配更稳，聊天列表在隐藏窗口后不再容易错位，AI 回复尾部淡出、用户消息气泡、Markdown 文件链接和 SessionID 复制这些高频细节也做了补齐。另外修复了 HamunaAgent 自己的 npm 安装隔离变量泄漏到用户 shell、触发 nvm 警告的问题。
+> 鏈増缁х画鏀剁揣澶栭儴 Runtime 鍜岄暱瀵硅瘽浣撻獙锛欳odex Runtime 鐨勫伐鍏?鏉冮檺/鍗忚閫傞厤鏇寸ǔ锛岃亰澶╁垪琛ㄥ湪闅愯棌绐楀彛鍚庝笉鍐嶅鏄撻敊浣嶏紝AI 鍥炲灏鹃儴娣″嚭銆佺敤鎴锋秷鎭皵娉°€丮arkdown 鏂囦欢閾炬帴鍜?SessionID 澶嶅埗杩欎簺楂橀缁嗚妭涔熷仛浜嗚ˉ榻愩€傚彟澶栦慨澶嶄簡 HamunaAgent 鑷繁鐨?npm 瀹夎闅旂鍙橀噺娉勬紡鍒扮敤鎴?shell銆佽Е鍙?nvm 璀﹀憡鐨勯棶棰樸€?
 
 ### Added
 
-- **Markdown 里的工作区文件链接可直接预览**：AI 回复中出现当前工作区内的文件路径链接时，点击会在 HamunaAgent 的文件预览 / 分屏预览中打开，支持 `:42` / `#L42` 这类行号定位；不可预览的文件会交给系统默认应用打开，网页链接仍按原来的浏览器逻辑处理。
-- **对话菜单可复制 SessionID**：会话右上角菜单顶部现在显示当前 SessionID，并提供一键复制，方便在 issue、排查日志或跨会话协作时准确引用。
+- **Markdown 閲岀殑宸ヤ綔鍖烘枃浠堕摼鎺ュ彲鐩存帴棰勮**锛欰I 鍥炲涓嚭鐜板綋鍓嶅伐浣滃尯鍐呯殑鏂囦欢璺緞閾炬帴鏃讹紝鐐瑰嚮浼氬湪 HamunaAgent 鐨勬枃浠堕瑙?/ 鍒嗗睆棰勮涓墦寮€锛屾敮鎸?`:42` / `#L42` 杩欑被琛屽彿瀹氫綅锛涗笉鍙瑙堢殑鏂囦欢浼氫氦缁欑郴缁熼粯璁ゅ簲鐢ㄦ墦寮€锛岀綉椤甸摼鎺ヤ粛鎸夊師鏉ョ殑娴忚鍣ㄩ€昏緫澶勭悊銆?
+- **瀵硅瘽鑿滃崟鍙鍒?SessionID**锛氫細璇濆彸涓婅鑿滃崟椤堕儴鐜板湪鏄剧ず褰撳墠 SessionID锛屽苟鎻愪緵涓€閿鍒讹紝鏂逛究鍦?issue銆佹帓鏌ユ棩蹇楁垨璺ㄤ細璇濆崗浣滄椂鍑嗙‘寮曠敤銆?
 
 ### Fixed
 
-- **Codex Runtime 协议适配更完整**：修复 Codex app-server 协议下权限响应、工具结果、会话恢复、运行时配置同步等多条路径的兼容问题，减少切到 Codex 后出现工具结果丢失、权限模式回退或会话恢复异常的情况。
-- **Chat 长会话切到后台再回来不再容易错位**：Tab / 窗口不可见时暂停把流式增长持续喂给虚拟列表，回到前台后再恢复，避免长对话在后台期间出现空白、错位或滚动位置异常。
-- **AI 回复尾部淡出不再残留**：文本块结束但后续工具 / 思考还在跑时，最后几个字不再一直保持流式淡出效果。
-- **用户消息气泡 padding 更一致**：短消息、长消息和多行消息的内边距统一，减少文本贴边或气泡视觉不平衡。
-- **IM / OpenClaw Bridge 派发更稳**：修复部分 IM fallback、history 渲染和 Bridge pending dispatch 失败路径，避免非 @ 群消息或插件回调失败时把渠道卡到长时间等待。
-- **Agent Channel 会话交接更可靠**：桌面会话交接到 IM 频道、频道间切换或新建频道会话后，不再容易把回复路由到旧会话或旧频道。
-- **TodoWrite 待办状态显示跟随实际结果**：TodoWrite 完成后，工具卡片、紧凑标签和 Agent 状态面板会显示最新待办状态，不再停留在调用输入里的旧进度。
-- **nvm 用户不再看到 HamunaAgent 注入的 npm prefix 警告**（[#247](https://github.com/hAcKlyc/HamunaAgent/issues/247)）：HamunaAgent 不再把 `npm_config_prefix=~/.hamuna/npm-global` 泄漏到整个 AI shell 环境；需要安装 CLI 时改为命令级隔离安装，既不污染用户 nvm 环境，也保留 AI 自装工具的可用性。
-- **Task / AskUserQuestion 输入展示细节修复**：选择题和相关输入区域的布局、滚动同步在 resize 后更稳定，减少内容错位。
+- **Codex Runtime 鍗忚閫傞厤鏇村畬鏁?*锛氫慨澶?Codex app-server 鍗忚涓嬫潈闄愬搷搴斻€佸伐鍏风粨鏋溿€佷細璇濇仮澶嶃€佽繍琛屾椂閰嶇疆鍚屾绛夊鏉¤矾寰勭殑鍏煎闂锛屽噺灏戝垏鍒?Codex 鍚庡嚭鐜板伐鍏风粨鏋滀涪澶便€佹潈闄愭ā寮忓洖閫€鎴栦細璇濇仮澶嶅紓甯哥殑鎯呭喌銆?
+- **Chat 闀夸細璇濆垏鍒板悗鍙板啀鍥炴潵涓嶅啀瀹规槗閿欎綅**锛歍ab / 绐楀彛涓嶅彲瑙佹椂鏆傚仠鎶婃祦寮忓闀挎寔缁杺缁欒櫄鎷熷垪琛紝鍥炲埌鍓嶅彴鍚庡啀鎭㈠锛岄伩鍏嶉暱瀵硅瘽鍦ㄥ悗鍙版湡闂村嚭鐜扮┖鐧姐€侀敊浣嶆垨婊氬姩浣嶇疆寮傚父銆?
+- **AI 鍥炲灏鹃儴娣″嚭涓嶅啀娈嬬暀**锛氭枃鏈潡缁撴潫浣嗗悗缁伐鍏?/ 鎬濊€冭繕鍦ㄨ窇鏃讹紝鏈€鍚庡嚑涓瓧涓嶅啀涓€鐩翠繚鎸佹祦寮忔贰鍑烘晥鏋溿€?
+- **鐢ㄦ埛娑堟伅姘旀场 padding 鏇翠竴鑷?*锛氱煭娑堟伅銆侀暱娑堟伅鍜屽琛屾秷鎭殑鍐呰竟璺濈粺涓€锛屽噺灏戞枃鏈创杈规垨姘旀场瑙嗚涓嶅钩琛°€?
+- **IM / OpenClaw Bridge 娲惧彂鏇寸ǔ**锛氫慨澶嶉儴鍒?IM fallback銆乭istory 娓叉煋鍜?Bridge pending dispatch 澶辫触璺緞锛岄伩鍏嶉潪 @ 缇ゆ秷鎭垨鎻掍欢鍥炶皟澶辫触鏃舵妸娓犻亾鍗″埌闀挎椂闂寸瓑寰呫€?
+- **Agent Channel 浼氳瘽浜ゆ帴鏇村彲闈?*锛氭闈細璇濅氦鎺ュ埌 IM 棰戦亾銆侀閬撻棿鍒囨崲鎴栨柊寤洪閬撲細璇濆悗锛屼笉鍐嶅鏄撴妸鍥炲璺敱鍒版棫浼氳瘽鎴栨棫棰戦亾銆?
+- **TodoWrite 寰呭姙鐘舵€佹樉绀鸿窡闅忓疄闄呯粨鏋?*锛歍odoWrite 瀹屾垚鍚庯紝宸ュ叿鍗＄墖銆佺揣鍑戞爣绛惧拰 Agent 鐘舵€侀潰鏉夸細鏄剧ず鏈€鏂板緟鍔炵姸鎬侊紝涓嶅啀鍋滅暀鍦ㄨ皟鐢ㄨ緭鍏ラ噷鐨勬棫杩涘害銆?
+- **nvm 鐢ㄦ埛涓嶅啀鐪嬪埌 HamunaAgent 娉ㄥ叆鐨?npm prefix 璀﹀憡**锛圼#247](https://github.com/hAcKlyc/HamunaAgent/issues/247)锛夛細HamunaAgent 涓嶅啀鎶?`npm_config_prefix=~/.hamuna/npm-global` 娉勬紡鍒版暣涓?AI shell 鐜锛涢渶瑕佸畨瑁?CLI 鏃舵敼涓哄懡浠ょ骇闅旂瀹夎锛屾棦涓嶆薄鏌撶敤鎴?nvm 鐜锛屼篃淇濈暀 AI 鑷宸ュ叿鐨勫彲鐢ㄦ€с€?
+- **Task / AskUserQuestion 杈撳叆灞曠ず缁嗚妭淇**锛氶€夋嫨棰樺拰鐩稿叧杈撳叆鍖哄煙鐨勫竷灞€銆佹粴鍔ㄥ悓姝ュ湪 resize 鍚庢洿绋冲畾锛屽噺灏戝唴瀹归敊浣嶃€?
 
 ---
 
 ## [0.2.21] - 2026-05-24
 
-> 本版是一轮稳定性与社区 bug 修复：重点修了 Windows 上对话进行中频繁掉线、历史记录切换后界面卡死空白、新建 Tab 首条消息权限模式不对、改了 Agent 默认 Provider 后快捷启动栏仍走旧 Provider、本地插件装不上等社区报告的问题，并关闭了一个 macOS 路径安全黑名单缺口。
+> 鏈増鏄竴杞ǔ瀹氭€т笌绀惧尯 bug 淇锛氶噸鐐逛慨浜?Windows 涓婂璇濊繘琛屼腑棰戠箒鎺夌嚎銆佸巻鍙茶褰曞垏鎹㈠悗鐣岄潰鍗℃绌虹櫧銆佹柊寤?Tab 棣栨潯娑堟伅鏉冮檺妯″紡涓嶅銆佹敼浜?Agent 榛樿 Provider 鍚庡揩鎹峰惎鍔ㄦ爮浠嶈蛋鏃?Provider銆佹湰鍦版彃浠惰涓嶄笂绛夌ぞ鍖烘姤鍛婄殑闂锛屽苟鍏抽棴浜嗕竴涓?macOS 璺緞瀹夊叏榛戝悕鍗曠己鍙ｃ€?
 
 ### Fixed
 
-- **Windows 对话进行中频繁掉线、全局 Sidecar 反复重启**（[#236](https://github.com/hAcKlyc/HamunaAgent/issues/236)）：全局 Sidecar 的健康检查原本单次探测失败（进程其实还活着，只是被 Defender 扫描 / 瞬时高负载卡了一下）就重启，连带所有 Tab 一起掉线。现在要求连续两次探测失败才重启，进程真死仍立即重启，并在日志里标注存活状态便于排查。（注：日志里的 `SSE stream error / 10054` 是进程被回收的结果，不是原因。）
-- **历史记录切换后界面卡死 / 空白**（[#235](https://github.com/hAcKlyc/HamunaAgent/issues/235)）：网络抖动导致 SSE 连接一直连不上时，会话加载会无限等待、界面永久空白。现在加了超时兜底——超时后直接用 HTTP 加载会话内容让你先看到对话，SSE 恢复后继续流式。
-- **新建 Tab 首条消息没按工作区权限模式发送**（[#244](https://github.com/hAcKlyc/HamunaAgent/issues/244)）：新建 Tab 后立刻发的第一条消息会用默认的 `auto` 而不是工作区配置的权限（如 fullAgency），表现为「明明配了权限却说工具不可用」。现在首条消息也正确采用配置值。
-- **改 Agent 默认 Provider 后快捷启动栏仍用旧 Provider**（[#234](https://github.com/hAcKlyc/HamunaAgent/issues/234)）：在设置里把 Agent 默认 Provider 换掉后，快捷启动栏仍记着旧的，从启动栏开的新会话会走错 Provider 导致超时。现在启动栏会跟随 Agent 当前默认 Provider。
-- **本地插件 `cc-plugin install file://` 报「目录已存在」却装不上**（[#239](https://github.com/hAcKlyc/HamunaAgent/issues/239)）：当插件目录已经放在 `~/.hamuna/plugins/<名字>` 下、再用 `file://` 指向它安装时会 409 失败、且 `cc-plugin list` 看不到。现在能原地正确注册。
-- **对话自动命名被 API 错误信息污染**（[#245](https://github.com/hAcKlyc/HamunaAgent/issues/245)）：上游返回 4xx/5xx 时错误文本会被当成正常回复，导致会话被自动命名成「API Error: 400 …」。现在带错误的轮次不再参与自动起标题。
-- **生成式 UI widget 在桌面端空白**：仅桌面端打开的生成式 UI widget 因导航守卫误拦内部 iframe 而显示空白，已修。
-- **安全加固**：关闭 macOS 路径安全黑名单缺口——`/etc`、`/var` 在 macOS 上是指向 `/private/*` 的符号链接，其规范化形式 `/private/etc`、`/private/var` 此前能绕过黑名单，现已一并拦截；同时加固了工具下载图片时对内网 / loopback 地址（含 IPv6 映射形式）的 SSRF 防护。
+- **Windows 瀵硅瘽杩涜涓绻佹帀绾裤€佸叏灞€ Sidecar 鍙嶅閲嶅惎**锛圼#236](https://github.com/hAcKlyc/HamunaAgent/issues/236)锛夛細鍏ㄥ眬 Sidecar 鐨勫仴搴锋鏌ュ師鏈崟娆℃帰娴嬪け璐ワ紙杩涚▼鍏跺疄杩樻椿鐫€锛屽彧鏄 Defender 鎵弿 / 鐬椂楂樿礋杞藉崱浜嗕竴涓嬶級灏遍噸鍚紝杩炲甫鎵€鏈?Tab 涓€璧锋帀绾裤€傜幇鍦ㄨ姹傝繛缁袱娆℃帰娴嬪け璐ユ墠閲嶅惎锛岃繘绋嬬湡姝讳粛绔嬪嵆閲嶅惎锛屽苟鍦ㄦ棩蹇楅噷鏍囨敞瀛樻椿鐘舵€佷究浜庢帓鏌ャ€傦紙娉細鏃ュ織閲岀殑 `SSE stream error / 10054` 鏄繘绋嬭鍥炴敹鐨勭粨鏋滐紝涓嶆槸鍘熷洜銆傦級
+- **鍘嗗彶璁板綍鍒囨崲鍚庣晫闈㈠崱姝?/ 绌虹櫧**锛圼#235](https://github.com/hAcKlyc/HamunaAgent/issues/235)锛夛細缃戠粶鎶栧姩瀵艰嚧 SSE 杩炴帴涓€鐩磋繛涓嶄笂鏃讹紝浼氳瘽鍔犺浇浼氭棤闄愮瓑寰呫€佺晫闈㈡案涔呯┖鐧姐€傜幇鍦ㄥ姞浜嗚秴鏃跺厹搴曗€斺€旇秴鏃跺悗鐩存帴鐢?HTTP 鍔犺浇浼氳瘽鍐呭璁╀綘鍏堢湅鍒板璇濓紝SSE 鎭㈠鍚庣户缁祦寮忋€?
+- **鏂板缓 Tab 棣栨潯娑堟伅娌℃寜宸ヤ綔鍖烘潈闄愭ā寮忓彂閫?*锛圼#244](https://github.com/hAcKlyc/HamunaAgent/issues/244)锛夛細鏂板缓 Tab 鍚庣珛鍒诲彂鐨勭涓€鏉℃秷鎭細鐢ㄩ粯璁ょ殑 `auto` 鑰屼笉鏄伐浣滃尯閰嶇疆鐨勬潈闄愶紙濡?fullAgency锛夛紝琛ㄧ幇涓恒€屾槑鏄庨厤浜嗘潈闄愬嵈璇村伐鍏蜂笉鍙敤銆嶃€傜幇鍦ㄩ鏉℃秷鎭篃姝ｇ‘閲囩敤閰嶇疆鍊笺€?
+- **鏀?Agent 榛樿 Provider 鍚庡揩鎹峰惎鍔ㄦ爮浠嶇敤鏃?Provider**锛圼#234](https://github.com/hAcKlyc/HamunaAgent/issues/234)锛夛細鍦ㄨ缃噷鎶?Agent 榛樿 Provider 鎹㈡帀鍚庯紝蹇嵎鍚姩鏍忎粛璁扮潃鏃х殑锛屼粠鍚姩鏍忓紑鐨勬柊浼氳瘽浼氳蛋閿?Provider 瀵艰嚧瓒呮椂銆傜幇鍦ㄥ惎鍔ㄦ爮浼氳窡闅?Agent 褰撳墠榛樿 Provider銆?
+- **鏈湴鎻掍欢 `cc-plugin install file://` 鎶ャ€岀洰褰曞凡瀛樺湪銆嶅嵈瑁呬笉涓?*锛圼#239](https://github.com/hAcKlyc/HamunaAgent/issues/239)锛夛細褰撴彃浠剁洰褰曞凡缁忔斁鍦?`~/.hamuna/plugins/<鍚嶅瓧>` 涓嬨€佸啀鐢?`file://` 鎸囧悜瀹冨畨瑁呮椂浼?409 澶辫触銆佷笖 `cc-plugin list` 鐪嬩笉鍒般€傜幇鍦ㄨ兘鍘熷湴姝ｇ‘娉ㄥ唽銆?
+- **瀵硅瘽鑷姩鍛藉悕琚?API 閿欒淇℃伅姹℃煋**锛圼#245](https://github.com/hAcKlyc/HamunaAgent/issues/245)锛夛細涓婃父杩斿洖 4xx/5xx 鏃堕敊璇枃鏈細琚綋鎴愭甯稿洖澶嶏紝瀵艰嚧浼氳瘽琚嚜鍔ㄥ懡鍚嶆垚銆孉PI Error: 400 鈥︺€嶃€傜幇鍦ㄥ甫閿欒鐨勮疆娆′笉鍐嶅弬涓庤嚜鍔ㄨ捣鏍囬銆?
+- **鐢熸垚寮?UI widget 鍦ㄦ闈㈢绌虹櫧**锛氫粎妗岄潰绔墦寮€鐨勭敓鎴愬紡 UI widget 鍥犲鑸畧鍗鎷﹀唴閮?iframe 鑰屾樉绀虹┖鐧斤紝宸蹭慨銆?
+- **瀹夊叏鍔犲浐**锛氬叧闂?macOS 璺緞瀹夊叏榛戝悕鍗曠己鍙ｂ€斺€擿/etc`銆乣/var` 鍦?macOS 涓婃槸鎸囧悜 `/private/*` 鐨勭鍙烽摼鎺ワ紝鍏惰鑼冨寲褰㈠紡 `/private/etc`銆乣/private/var` 姝ゅ墠鑳界粫杩囬粦鍚嶅崟锛岀幇宸蹭竴骞舵嫤鎴紱鍚屾椂鍔犲浐浜嗗伐鍏蜂笅杞藉浘鐗囨椂瀵瑰唴缃?/ loopback 鍦板潃锛堝惈 IPv6 鏄犲皠褰㈠紡锛夌殑 SSRF 闃叉姢銆?
 
 ---
 
 ## [0.2.20] - 2026-05-23
 
-> 本版主打「富文档预览」——PDF、Word、Excel、PowerPoint 现在都能直接在应用内打开，不用切到外部软件；PDF 还能选中复制文字、触控板捏合缩放。另外修了一批任务可靠性问题：Mac 休眠 / App Nap 唤醒后长任务被误判超时而「突然自动中止」、关闭 Tab 会中断正在后台跑的任务、非 Claude 模型（Codex / Gemini）下生成的图表卡片空白等社区报告的问题。
+> 鏈増涓绘墦銆屽瘜鏂囨。棰勮銆嶁€斺€擯DF銆乄ord銆丒xcel銆丳owerPoint 鐜板湪閮借兘鐩存帴鍦ㄥ簲鐢ㄥ唴鎵撳紑锛屼笉鐢ㄥ垏鍒板閮ㄨ蒋浠讹紱PDF 杩樿兘閫変腑澶嶅埗鏂囧瓧銆佽Е鎺ф澘鎹忓悎缂╂斁銆傚彟澶栦慨浜嗕竴鎵逛换鍔″彲闈犳€ч棶棰橈細Mac 浼戠湢 / App Nap 鍞ら啋鍚庨暱浠诲姟琚鍒よ秴鏃惰€屻€岀獊鐒惰嚜鍔ㄤ腑姝€嶃€佸叧闂?Tab 浼氫腑鏂鍦ㄥ悗鍙拌窇鐨勪换鍔°€侀潪 Claude 妯″瀷锛圕odex / Gemini锛変笅鐢熸垚鐨勫浘琛ㄥ崱鐗囩┖鐧界瓑绀惧尯鎶ュ憡鐨勯棶棰樸€?
 
 ### Added
 
-- **富文档只读预览（PDF / Word / Excel / PowerPoint）**：在文件树或对话里点开 `.pdf` `.docx` `.xlsx` `.xls` `.pptx`，直接在右侧面板内预览，无需外部软件。PDF 支持选中复制文字、滚动翻页、缩放（`Ctrl/⌘+滚轮`、触控板捏合、右下角浮动按钮三种方式）；Excel 多工作表切换；超大文件（最大 50MB）与空文档都有对应提示。纯本地渲染、只读，文档内的外链资源不会向外发起网络请求。
-- **文件树展开状态记忆**：展开的文件夹在关闭目录面板再打开后保持原样，按 Tab 各自独立。
-- **流式输出更顺滑**：AI 回复改为逐字平滑吐出，长回复滚动跟随更自然。
+- **瀵屾枃妗ｅ彧璇婚瑙堬紙PDF / Word / Excel / PowerPoint锛?*锛氬湪鏂囦欢鏍戞垨瀵硅瘽閲岀偣寮€ `.pdf` `.docx` `.xlsx` `.xls` `.pptx`锛岀洿鎺ュ湪鍙充晶闈㈡澘鍐呴瑙堬紝鏃犻渶澶栭儴杞欢銆侾DF 鏀寔閫変腑澶嶅埗鏂囧瓧銆佹粴鍔ㄧ炕椤点€佺缉鏀撅紙`Ctrl/鈱?婊氳疆`銆佽Е鎺ф澘鎹忓悎銆佸彸涓嬭娴姩鎸夐挳涓夌鏂瑰紡锛夛紱Excel 澶氬伐浣滆〃鍒囨崲锛涜秴澶ф枃浠讹紙鏈€澶?50MB锛変笌绌烘枃妗ｉ兘鏈夊搴旀彁绀恒€傜函鏈湴娓叉煋銆佸彧璇伙紝鏂囨。鍐呯殑澶栭摼璧勬簮涓嶄細鍚戝鍙戣捣缃戠粶璇锋眰銆?
+- **鏂囦欢鏍戝睍寮€鐘舵€佽蹇?*锛氬睍寮€鐨勬枃浠跺す鍦ㄥ叧闂洰褰曢潰鏉垮啀鎵撳紑鍚庝繚鎸佸師鏍凤紝鎸?Tab 鍚勮嚜鐙珛銆?
+- **娴佸紡杈撳嚭鏇撮『婊?*锛欰I 鍥炲鏀逛负閫愬瓧骞虫粦鍚愬嚭锛岄暱鍥炲婊氬姩璺熼殢鏇磋嚜鐒躲€?
 
 ### Fixed
 
-- **长任务在系统休眠 / App Nap 后被「突然自动中止」**：响应超时计时器原本用墙钟计时，进程被系统挂起期间墙钟照走、醒来即被误判为「10 分钟无响应」而 kill。现在只统计进程实际活跃时间，挂起期间不计入；交互式 turn 等待你输入期间也不再误触发超时，并对其持有系统 wake-lock。
-- **关闭 Tab 会中断正在后台跑的任务**：之前关掉聊天 Tab 会被当成「取消任务」，导致后台完成 / 定时任务 / IM 派发的 turn 被中断，飞书等渠道收到 `turn_failed`。现在任务生命周期与前端连接解耦，关 Tab 不再影响后台执行。
-- **后台子任务通知丢失**（[#227](https://github.com/hAcKlyc/HamunaAgent/issues/227)）：后台子 Agent 完成通知约 23% 静默丢失，且富文本摘要会被丢弃只剩一行。现已确保通知必达、摘要完整保留。
-- **非 Claude 模型下图表卡片空白**（[#221](https://github.com/hAcKlyc/HamunaAgent/issues/221)）：Codex / Gemini 等模型生成的图表卡片因脚本竞态与解析问题渲染空白；正文中含字面量 `<` 开标签的卡片也会被截断。均已修正。
-- **切到 Codex runtime 模型名错配**（[#224](https://github.com/hAcKlyc/HamunaAgent/issues/224)）：Codex 会话的快照会错存成 Claude 模型名，导致读取时模型不符。改为按 runtime 存取并在读侧纠正。
-- **定时任务推送到 IM 缺少来源会话标识**（[#225](https://github.com/hAcKlyc/HamunaAgent/issues/225)）：cron 结果投递到飞书等渠道时缺 Source session id 行，可能落错会话，已补全。
-- **渠道停用未跨重启保持**（[#219](https://github.com/hAcKlyc/HamunaAgent/issues/219)）：手动停用的 IM 渠道在应用重启后会自己复活。现在停用状态会持久化，重启后保持停用。
-- **粘贴超长文本卡死输入框**（[#231](https://github.com/hAcKlyc/HamunaAgent/issues/231)）：往聊天输入框粘贴超长文本会导致界面冻结，已修。
-- **代理设置每敲一键就重连**（[#230](https://github.com/hAcKlyc/HamunaAgent/issues/230)）：设置页编辑代理端口 / 主机时每个字符都触发重载，现改为编辑完成后再生效。
-- **Windows 下 CLI 调用内置 Node 失败**（[#229](https://github.com/hAcKlyc/HamunaAgent/issues/229)）：`hamuna.cmd` 拿到的内置 Node 路径带 `\\?\` 长路径前缀导致调用失败，已剥除。
-- **Fork 过期会话无限重试**：源会话的 SDK session UUID 过期后 Fork 会无限重试，已修为优雅处理。
-- **零碎体验**：右键「复制文件 / 文件夹路径」现在复制完整绝对路径而非工作区相对路径；工具卡片图标在 Windows 11 上错位已对齐；点击菜单 / 能力 / 输入区按钮时焦点不再被抢走（macOS 触控板 tap）；切换 Tab 更跟手。
+- **闀夸换鍔″湪绯荤粺浼戠湢 / App Nap 鍚庤銆岀獊鐒惰嚜鍔ㄤ腑姝€?*锛氬搷搴旇秴鏃惰鏃跺櫒鍘熸湰鐢ㄥ閽熻鏃讹紝杩涚▼琚郴缁熸寕璧锋湡闂村閽熺収璧般€侀啋鏉ュ嵆琚鍒や负銆?0 鍒嗛挓鏃犲搷搴斻€嶈€?kill銆傜幇鍦ㄥ彧缁熻杩涚▼瀹為檯娲昏穬鏃堕棿锛屾寕璧锋湡闂翠笉璁″叆锛涗氦浜掑紡 turn 绛夊緟浣犺緭鍏ユ湡闂翠篃涓嶅啀璇Е鍙戣秴鏃讹紝骞跺鍏舵寔鏈夌郴缁?wake-lock銆?
+- **鍏抽棴 Tab 浼氫腑鏂鍦ㄥ悗鍙拌窇鐨勪换鍔?*锛氫箣鍓嶅叧鎺夎亰澶?Tab 浼氳褰撴垚銆屽彇娑堜换鍔°€嶏紝瀵艰嚧鍚庡彴瀹屾垚 / 瀹氭椂浠诲姟 / IM 娲惧彂鐨?turn 琚腑鏂紝椋炰功绛夋笭閬撴敹鍒?`turn_failed`銆傜幇鍦ㄤ换鍔＄敓鍛藉懆鏈熶笌鍓嶇杩炴帴瑙ｈ€︼紝鍏?Tab 涓嶅啀褰卞搷鍚庡彴鎵ц銆?
+- **鍚庡彴瀛愪换鍔￠€氱煡涓㈠け**锛圼#227](https://github.com/hAcKlyc/HamunaAgent/issues/227)锛夛細鍚庡彴瀛?Agent 瀹屾垚閫氱煡绾?23% 闈欓粯涓㈠け锛屼笖瀵屾枃鏈憳瑕佷細琚涪寮冨彧鍓╀竴琛屻€傜幇宸茬‘淇濋€氱煡蹇呰揪銆佹憳瑕佸畬鏁翠繚鐣欍€?
+- **闈?Claude 妯″瀷涓嬪浘琛ㄥ崱鐗囩┖鐧?*锛圼#221](https://github.com/hAcKlyc/HamunaAgent/issues/221)锛夛細Codex / Gemini 绛夋ā鍨嬬敓鎴愮殑鍥捐〃鍗＄墖鍥犺剼鏈珵鎬佷笌瑙ｆ瀽闂娓叉煋绌虹櫧锛涙鏂囦腑鍚瓧闈㈤噺 `<` 寮€鏍囩鐨勫崱鐗囦篃浼氳鎴柇銆傚潎宸蹭慨姝ｃ€?
+- **鍒囧埌 Codex runtime 妯″瀷鍚嶉敊閰?*锛圼#224](https://github.com/hAcKlyc/HamunaAgent/issues/224)锛夛細Codex 浼氳瘽鐨勫揩鐓т細閿欏瓨鎴?Claude 妯″瀷鍚嶏紝瀵艰嚧璇诲彇鏃舵ā鍨嬩笉绗︺€傛敼涓烘寜 runtime 瀛樺彇骞跺湪璇讳晶绾犳銆?
+- **瀹氭椂浠诲姟鎺ㄩ€佸埌 IM 缂哄皯鏉ユ簮浼氳瘽鏍囪瘑**锛圼#225](https://github.com/hAcKlyc/HamunaAgent/issues/225)锛夛細cron 缁撴灉鎶曢€掑埌椋炰功绛夋笭閬撴椂缂?Source session id 琛岋紝鍙兘钀介敊浼氳瘽锛屽凡琛ュ叏銆?
+- **娓犻亾鍋滅敤鏈法閲嶅惎淇濇寔**锛圼#219](https://github.com/hAcKlyc/HamunaAgent/issues/219)锛夛細鎵嬪姩鍋滅敤鐨?IM 娓犻亾鍦ㄥ簲鐢ㄩ噸鍚悗浼氳嚜宸卞娲汇€傜幇鍦ㄥ仠鐢ㄧ姸鎬佷細鎸佷箙鍖栵紝閲嶅惎鍚庝繚鎸佸仠鐢ㄣ€?
+- **绮樿创瓒呴暱鏂囨湰鍗℃杈撳叆妗?*锛圼#231](https://github.com/hAcKlyc/HamunaAgent/issues/231)锛夛細寰€鑱婂ぉ杈撳叆妗嗙矘璐磋秴闀挎枃鏈細瀵艰嚧鐣岄潰鍐荤粨锛屽凡淇€?
+- **浠ｇ悊璁剧疆姣忔暡涓€閿氨閲嶈繛**锛圼#230](https://github.com/hAcKlyc/HamunaAgent/issues/230)锛夛細璁剧疆椤电紪杈戜唬鐞嗙鍙?/ 涓绘満鏃舵瘡涓瓧绗﹂兘瑙﹀彂閲嶈浇锛岀幇鏀逛负缂栬緫瀹屾垚鍚庡啀鐢熸晥銆?
+- **Windows 涓?CLI 璋冪敤鍐呯疆 Node 澶辫触**锛圼#229](https://github.com/hAcKlyc/HamunaAgent/issues/229)锛夛細`hamuna.cmd` 鎷垮埌鐨勫唴缃?Node 璺緞甯?`\\?\` 闀胯矾寰勫墠缂€瀵艰嚧璋冪敤澶辫触锛屽凡鍓ラ櫎銆?
+- **Fork 杩囨湡浼氳瘽鏃犻檺閲嶈瘯**锛氭簮浼氳瘽鐨?SDK session UUID 杩囨湡鍚?Fork 浼氭棤闄愰噸璇曪紝宸蹭慨涓轰紭闆呭鐞嗐€?
+- **闆剁浣撻獙**锛氬彸閿€屽鍒舵枃浠?/ 鏂囦欢澶硅矾寰勩€嶇幇鍦ㄥ鍒跺畬鏁寸粷瀵硅矾寰勮€岄潪宸ヤ綔鍖虹浉瀵硅矾寰勶紱宸ュ叿鍗＄墖鍥炬爣鍦?Windows 11 涓婇敊浣嶅凡瀵归綈锛涚偣鍑昏彍鍗?/ 鑳藉姏 / 杈撳叆鍖烘寜閽椂鐒︾偣涓嶅啀琚姠璧帮紙macOS 瑙︽帶鏉?tap锛夛紱鍒囨崲 Tab 鏇磋窡鎵嬨€?
 
 ---
 
 ## [0.2.19] - 2026-05-20
 
-> 主修「长跑 cron 任务被系统休眠杀掉」这一类问题：cron 执行期间主动向系统申请「防 idle sleep」锁，三平台（macOS / Windows / Linux）全部支持；万一锁不住（用户合上盖子、Linux 无 systemd），AI 下次回到这个 session 时会自动续跑上次未完成的任务，不用手动 "继续"。另外修了 Chat Cmd+F 翻页被流式更新打断、SiliconFlow 上的 Kimi K2.5 模型一日挂死 43 次（[#216](https://github.com/hAcKlyc/HamunaAgent/issues/216)）等社区报告的问题。
+> 涓讳慨銆岄暱璺?cron 浠诲姟琚郴缁熶紤鐪犳潃鎺夈€嶈繖涓€绫婚棶棰橈細cron 鎵ц鏈熼棿涓诲姩鍚戠郴缁熺敵璇枫€岄槻 idle sleep銆嶉攣锛屼笁骞冲彴锛坢acOS / Windows / Linux锛夊叏閮ㄦ敮鎸侊紱涓囦竴閿佷笉浣忥紙鐢ㄦ埛鍚堜笂鐩栧瓙銆丩inux 鏃?systemd锛夛紝AI 涓嬫鍥炲埌杩欎釜 session 鏃朵細鑷姩缁窇涓婃鏈畬鎴愮殑浠诲姟锛屼笉鐢ㄦ墜鍔?"缁х画"銆傚彟澶栦慨浜?Chat Cmd+F 缈婚〉琚祦寮忔洿鏂版墦鏂€丼iliconFlow 涓婄殑 Kimi K2.5 妯″瀷涓€鏃ユ寕姝?43 娆★紙[#216](https://github.com/hAcKlyc/HamunaAgent/issues/216)锛夌瓑绀惧尯鎶ュ憡鐨勯棶棰樸€?
 
 ### Added
 
-- **Cron 期间防止系统进入 idle sleep**：长跑 cron 任务（比如 `/issue-triage` 这种 6 小时一次的）以前会卡死在系统休眠后——TCP 流被中间设备 RST，SDK 没察觉，watchdog 10 分钟后才 kill 出空 output。现在 cron 执行期间自动持有一个系统级 wake-lock 断言（macOS `IOPMAssertion` / Windows `PowerCreateRequest` / Linux `systemd-inhibit`），整个任务期间机器不会自己睡过去。合盖、按电源键、用户主动 sleep 仍然挡不住——这是 OS 设计，没有应用能绕。
-- **响应超时自动续跑**：watchdog 超时中止一个有实际产出的 turn 后，session 会被标记「待续跑」并落盘。你下次在这个 session 里发任何一条消息（Chat / IM / 任务派发都行），系统会先自动发一条英文 `<system-reminder>` 让 AI 基于已有上下文续跑上次未完成的工作，然后再处理你的新消息。同一个 session 一次中止只续一次，避免循环重试浪费 token；空 turn（一字未吐就超时）不触发续跑。
+- **Cron 鏈熼棿闃叉绯荤粺杩涘叆 idle sleep**锛氶暱璺?cron 浠诲姟锛堟瘮濡?`/issue-triage` 杩欑 6 灏忔椂涓€娆＄殑锛変互鍓嶄細鍗℃鍦ㄧ郴缁熶紤鐪犲悗鈥斺€擳CP 娴佽涓棿璁惧 RST锛孲DK 娌″療瑙夛紝watchdog 10 鍒嗛挓鍚庢墠 kill 鍑虹┖ output銆傜幇鍦?cron 鎵ц鏈熼棿鑷姩鎸佹湁涓€涓郴缁熺骇 wake-lock 鏂█锛坢acOS `IOPMAssertion` / Windows `PowerCreateRequest` / Linux `systemd-inhibit`锛夛紝鏁翠釜浠诲姟鏈熼棿鏈哄櫒涓嶄細鑷繁鐫¤繃鍘汇€傚悎鐩栥€佹寜鐢垫簮閿€佺敤鎴蜂富鍔?sleep 浠嶇劧鎸′笉浣忊€斺€旇繖鏄?OS 璁捐锛屾病鏈夊簲鐢ㄨ兘缁曘€?
+- **鍝嶅簲瓒呮椂鑷姩缁窇**锛歸atchdog 瓒呮椂涓涓€涓湁瀹為檯浜у嚭鐨?turn 鍚庯紝session 浼氳鏍囪銆屽緟缁窇銆嶅苟钀界洏銆備綘涓嬫鍦ㄨ繖涓?session 閲屽彂浠讳綍涓€鏉℃秷鎭紙Chat / IM / 浠诲姟娲惧彂閮借锛夛紝绯荤粺浼氬厛鑷姩鍙戜竴鏉¤嫳鏂?`<system-reminder>` 璁?AI 鍩轰簬宸叉湁涓婁笅鏂囩画璺戜笂娆℃湭瀹屾垚鐨勫伐浣滐紝鐒跺悗鍐嶅鐞嗕綘鐨勬柊娑堟伅銆傚悓涓€涓?session 涓€娆′腑姝㈠彧缁竴娆★紝閬垮厤寰幆閲嶈瘯娴垂 token锛涚┖ turn锛堜竴瀛楁湭鍚愬氨瓒呮椂锛変笉瑙﹀彂缁窇銆?
 
 ### Fixed
 
-- **Chat Cmd+F 搜索翻页被流式更新打断**（[#214](https://github.com/hAcKlyc/HamunaAgent/issues/214)）：消息流式刷新或父组件 re-render 时会触发一个 150ms 防抖的 reconcile，原本会无条件覆盖用户刚点的 next/prev 跳转位置，看起来像「卡在最后一个匹配」。现在 reconcile 检测到用户刚翻过页就保留用户的位置。
-- **SiliconFlow 上的 Kimi K2.5 等模型挂死**（[#216](https://github.com/hAcKlyc/HamunaAgent/issues/216)）：SiliconFlow 的 Anthropic 兼容层对这类模型返回非规范的 thinking block，SDK 抛 `Content block is not a text block` 直接挂死会话（报告者一天遇到 43 次）。预设改走它的 OpenAI 兼容层（`/v1`），reasoning_content / tool_calls 都标准，已有的 OpenAI Bridge 也显式适配 Kimi K2.5 的 reasoning_content。
-- **Chat 输入框 Todo 卡片被发送队列遮住**：AgentStatusPanel 与 QueuedMessagesPanel 都在输入框正上方右对齐 z-20 渲染，发消息后排队卡会盖住 Todo。两者合并到同一行 flex 排布，不再抢 Z 层。
-- **WeCom 群聊「全部消息」开关说明**：企微 AI Bot 平台 webhook 仅在 @ 机器人时下发事件，原生没有「未 @ 也响应所有群消息」的能力。设置页里禁用该渠道的「全部消息」开关并给出 tooltip 说明，避免用户误以为关掉就能跑。
+- **Chat Cmd+F 鎼滅储缈婚〉琚祦寮忔洿鏂版墦鏂?*锛圼#214](https://github.com/hAcKlyc/HamunaAgent/issues/214)锛夛細娑堟伅娴佸紡鍒锋柊鎴栫埗缁勪欢 re-render 鏃朵細瑙﹀彂涓€涓?150ms 闃叉姈鐨?reconcile锛屽師鏈細鏃犳潯浠惰鐩栫敤鎴峰垰鐐圭殑 next/prev 璺宠浆浣嶇疆锛岀湅璧锋潵鍍忋€屽崱鍦ㄦ渶鍚庝竴涓尮閰嶃€嶃€傜幇鍦?reconcile 妫€娴嬪埌鐢ㄦ埛鍒氱炕杩囬〉灏变繚鐣欑敤鎴风殑浣嶇疆銆?
+- **SiliconFlow 涓婄殑 Kimi K2.5 绛夋ā鍨嬫寕姝?*锛圼#216](https://github.com/hAcKlyc/HamunaAgent/issues/216)锛夛細SiliconFlow 鐨?Anthropic 鍏煎灞傚杩欑被妯″瀷杩斿洖闈炶鑼冪殑 thinking block锛孲DK 鎶?`Content block is not a text block` 鐩存帴鎸傛浼氳瘽锛堟姤鍛婅€呬竴澶╅亣鍒?43 娆★級銆傞璁炬敼璧板畠鐨?OpenAI 鍏煎灞傦紙`/v1`锛夛紝reasoning_content / tool_calls 閮芥爣鍑嗭紝宸叉湁鐨?OpenAI Bridge 涔熸樉寮忛€傞厤 Kimi K2.5 鐨?reasoning_content銆?
+- **Chat 杈撳叆妗?Todo 鍗＄墖琚彂閫侀槦鍒楅伄浣?*锛欰gentStatusPanel 涓?QueuedMessagesPanel 閮藉湪杈撳叆妗嗘涓婃柟鍙冲榻?z-20 娓叉煋锛屽彂娑堟伅鍚庢帓闃熷崱浼氱洊浣?Todo銆備袱鑰呭悎骞跺埌鍚屼竴琛?flex 鎺掑竷锛屼笉鍐嶆姠 Z 灞傘€?
+- **WeCom 缇よ亰銆屽叏閮ㄦ秷鎭€嶅紑鍏宠鏄?*锛氫紒寰?AI Bot 骞冲彴 webhook 浠呭湪 @ 鏈哄櫒浜烘椂涓嬪彂浜嬩欢锛屽師鐢熸病鏈夈€屾湭 @ 涔熷搷搴旀墍鏈夌兢娑堟伅銆嶇殑鑳藉姏銆傝缃〉閲岀鐢ㄨ娓犻亾鐨勩€屽叏閮ㄦ秷鎭€嶅紑鍏冲苟缁欏嚭 tooltip 璇存槑锛岄伩鍏嶇敤鎴疯浠ヤ负鍏虫帀灏辫兘璺戙€?
 
 ---
 
 ## [0.2.18] - 2026-05-19
 
-> 引入「Session 间异步消息」——AI 现在可以用一行 `hamuna session send` 让另一个 session 帮忙处理子任务，跑完自动把结果推回。Chat 顶部 Cmd+F 长会话搜索打通虚拟化，再也不会出现 "0 matches"。CLI 端 `task` 补齐缺口，从命令行就能搭起带 IM 推送的循环任务。配套修了一批 cron 历史会话、IM 渠道、Markdown 渲染上的细碎问题。
+> 寮曞叆銆孲ession 闂村紓姝ユ秷鎭€嶁€斺€擜I 鐜板湪鍙互鐢ㄤ竴琛?`hamuna session send` 璁╁彟涓€涓?session 甯繖澶勭悊瀛愪换鍔★紝璺戝畬鑷姩鎶婄粨鏋滄帹鍥炪€侰hat 椤堕儴 Cmd+F 闀夸細璇濇悳绱㈡墦閫氳櫄鎷熷寲锛屽啀涔熶笉浼氬嚭鐜?"0 matches"銆侰LI 绔?`task` 琛ラ綈缂哄彛锛屼粠鍛戒护琛屽氨鑳芥惌璧峰甫 IM 鎺ㄩ€佺殑寰幆浠诲姟銆傞厤濂椾慨浜嗕竴鎵?cron 鍘嗗彶浼氳瘽銆両M 娓犻亾銆丮arkdown 娓叉煋涓婄殑缁嗙闂銆?
 
 ### Added
 
-- **Session 间异步消息通道（Session Inbox）**：AI 通过 `hamuna session send <sid> -p "..."` 把 prompt 投递给另一个 session，target 处理完自动把回复推回 caller 的下一个 turn。Fire-and-forget 不阻塞，支持 `--no-reply` 单向投递（target 收到后不回包）。秘书 AI、并行调研、跨 workspace 协作场景的基础设施。
-- **长会话 Cmd+F 搜索打通虚拟化**（[#209](https://github.com/hAcKlyc/HamunaAgent/issues/209)）：之前 Chat 搜索只在已渲染的消息里扫，长会话往上的关键词显示 "0 matches"，要手动滚到那条才能搜到。现在直接扫消息数组，跳转时自动滚动定位并高亮命中位置，落点还有 pulse 提示。
-- **`hamuna task` CLI 全 flag 支持**（[#205](https://github.com/hAcKlyc/HamunaAgent/issues/205)）：`task create-direct` 现在能接 `--intervalMinutes / --cronExpression / --cronTimezone / --dispatchAt`，以及 `--notificationBotChannelId / --notificationBotThread / --notificationDesktop / --notificationEvents` 等 IM 推送字段，纯命令行就能搭起 recurring Task Center 任务。新增 `task update <id>`（与 `cron update` 能力对齐），可在创建后改 interval / cron / notification / prompt / 各 runtime 覆写；通知字段是客户端 merge，不会一改 `--notificationDesktop` 就把 botChannelId 一起抹掉。
+- **Session 闂村紓姝ユ秷鎭€氶亾锛圫ession Inbox锛?*锛欰I 閫氳繃 `hamuna session send <sid> -p "..."` 鎶?prompt 鎶曢€掔粰鍙︿竴涓?session锛宼arget 澶勭悊瀹岃嚜鍔ㄦ妸鍥炲鎺ㄥ洖 caller 鐨勪笅涓€涓?turn銆侳ire-and-forget 涓嶉樆濉烇紝鏀寔 `--no-reply` 鍗曞悜鎶曢€掞紙target 鏀跺埌鍚庝笉鍥炲寘锛夈€傜涔?AI銆佸苟琛岃皟鐮斻€佽法 workspace 鍗忎綔鍦烘櫙鐨勫熀纭€璁炬柦銆?
+- **闀夸細璇?Cmd+F 鎼滅储鎵撻€氳櫄鎷熷寲**锛圼#209](https://github.com/hAcKlyc/HamunaAgent/issues/209)锛夛細涔嬪墠 Chat 鎼滅储鍙湪宸叉覆鏌撶殑娑堟伅閲屾壂锛岄暱浼氳瘽寰€涓婄殑鍏抽敭璇嶆樉绀?"0 matches"锛岃鎵嬪姩婊氬埌閭ｆ潯鎵嶈兘鎼滃埌銆傜幇鍦ㄧ洿鎺ユ壂娑堟伅鏁扮粍锛岃烦杞椂鑷姩婊氬姩瀹氫綅骞堕珮浜懡涓綅缃紝钀界偣杩樻湁 pulse 鎻愮ず銆?
+- **`hamuna task` CLI 鍏?flag 鏀寔**锛圼#205](https://github.com/hAcKlyc/HamunaAgent/issues/205)锛夛細`task create-direct` 鐜板湪鑳芥帴 `--intervalMinutes / --cronExpression / --cronTimezone / --dispatchAt`锛屼互鍙?`--notificationBotChannelId / --notificationBotThread / --notificationDesktop / --notificationEvents` 绛?IM 鎺ㄩ€佸瓧娈碉紝绾懡浠よ灏辫兘鎼捣 recurring Task Center 浠诲姟銆傛柊澧?`task update <id>`锛堜笌 `cron update` 鑳藉姏瀵归綈锛夛紝鍙湪鍒涘缓鍚庢敼 interval / cron / notification / prompt / 鍚?runtime 瑕嗗啓锛涢€氱煡瀛楁鏄鎴风 merge锛屼笉浼氫竴鏀?`--notificationDesktop` 灏辨妸 botChannelId 涓€璧锋姽鎺夈€?
 
 ### Fixed
 
-- **`task remove` 与 `im --help` 命令补齐**（[#205](https://github.com/hAcKlyc/HamunaAgent/issues/205)）：`task remove` 不再 404，是 `task delete` 的别名；`im --help` 不再返回硬编码的过期组列表，fallback 由真实 `HELP_TEXTS` 自动派生，并补上 `im / thought / widget / skill / diagnose` 五组 `--help` 文案。`task get` 在 recurring/scheduled/loop 任务上显式标出「IM 推送：未配置」，recurring 不带 interval 时直接 warning，避免静默走 60 分钟默认。
-- **Cron `new_session` 历史会话不再被任务面板挡住**（[#206](https://github.com/hAcKlyc/HamunaAgent/issues/206)）：`runMode: new_session` 模式下每次执行都换新 sessionId，从「任务详情 → 关联会话」打开的历史会话本就是只读的一次性记录，但之前还会显示 CronTask Overlay 把输入框挡住。现在 new_session 历史会话与普通会话一致；single_session（连续模式）行为不变。
-- **WeCom 渠道凭据被静默覆盖**（[#207](https://github.com/hAcKlyc/HamunaAgent/issues/207)）：通过 dualConfig 表单填的 botId / secret 在保存时会被空 customFields 覆盖，重开渠道发现凭据没了。现已修正保存逻辑。
-- **OpenClaw 第三方插件适配**（[#208](https://github.com/hAcKlyc/HamunaAgent/issues/208)）：openclaw-plugin-yuanbao 等第三方插件首次收消息时报 `Cannot read properties of undefined (reading 'debouncer')` 而崩溃。补全 channel-inbound / reply-pipeline 两个 shim 后正常路由。
-- **Markdown 自动修正过于激进**：之前会把 `#210`（issue 引用）、`#topic`（tag）改成 h1，把 `0.2.18` `2026.5.18` `192.168.1.1` 改成 ordered list，把 `-50%` 改成 unordered list。现在只在明确是列表的场景（`1.item` → `1. item`、`-item` → `- item`）改写，其余依 CommonMark 原样渲染。
-- **IM Bot Bridge 启动时序**（[#211](https://github.com/hAcKlyc/HamunaAgent/issues/211)）：Bridge `/status` 在 spawn 后 ~13ms 第一次查询时会因 ECONNREFUSED 直接退出，导致渠道偶发起不来。现在连接失败按 retry 处理，仍在 15s 重试窗口内。
+- **`task remove` 涓?`im --help` 鍛戒护琛ラ綈**锛圼#205](https://github.com/hAcKlyc/HamunaAgent/issues/205)锛夛細`task remove` 涓嶅啀 404锛屾槸 `task delete` 鐨勫埆鍚嶏紱`im --help` 涓嶅啀杩斿洖纭紪鐮佺殑杩囨湡缁勫垪琛紝fallback 鐢辩湡瀹?`HELP_TEXTS` 鑷姩娲剧敓锛屽苟琛ヤ笂 `im / thought / widget / skill / diagnose` 浜旂粍 `--help` 鏂囨銆俙task get` 鍦?recurring/scheduled/loop 浠诲姟涓婃樉寮忔爣鍑恒€孖M 鎺ㄩ€侊細鏈厤缃€嶏紝recurring 涓嶅甫 interval 鏃剁洿鎺?warning锛岄伩鍏嶉潤榛樿蛋 60 鍒嗛挓榛樿銆?
+- **Cron `new_session` 鍘嗗彶浼氳瘽涓嶅啀琚换鍔￠潰鏉挎尅浣?*锛圼#206](https://github.com/hAcKlyc/HamunaAgent/issues/206)锛夛細`runMode: new_session` 妯″紡涓嬫瘡娆℃墽琛岄兘鎹㈡柊 sessionId锛屼粠銆屼换鍔¤鎯?鈫?鍏宠仈浼氳瘽銆嶆墦寮€鐨勫巻鍙蹭細璇濇湰灏辨槸鍙鐨勪竴娆℃€ц褰曪紝浣嗕箣鍓嶈繕浼氭樉绀?CronTask Overlay 鎶婅緭鍏ユ鎸′綇銆傜幇鍦?new_session 鍘嗗彶浼氳瘽涓庢櫘閫氫細璇濅竴鑷达紱single_session锛堣繛缁ā寮忥級琛屼负涓嶅彉銆?
+- **WeCom 娓犻亾鍑嵁琚潤榛樿鐩?*锛圼#207](https://github.com/hAcKlyc/HamunaAgent/issues/207)锛夛細閫氳繃 dualConfig 琛ㄥ崟濉殑 botId / secret 鍦ㄤ繚瀛樻椂浼氳绌?customFields 瑕嗙洊锛岄噸寮€娓犻亾鍙戠幇鍑嵁娌′簡銆傜幇宸蹭慨姝ｄ繚瀛橀€昏緫銆?
+- **OpenClaw 绗笁鏂规彃浠堕€傞厤**锛圼#208](https://github.com/hAcKlyc/HamunaAgent/issues/208)锛夛細openclaw-plugin-yuanbao 绛夌涓夋柟鎻掍欢棣栨鏀舵秷鎭椂鎶?`Cannot read properties of undefined (reading 'debouncer')` 鑰屽穿婧冦€傝ˉ鍏?channel-inbound / reply-pipeline 涓や釜 shim 鍚庢甯歌矾鐢便€?
+- **Markdown 鑷姩淇杩囦簬婵€杩?*锛氫箣鍓嶄細鎶?`#210`锛坕ssue 寮曠敤锛夈€乣#topic`锛坱ag锛夋敼鎴?h1锛屾妸 `0.2.18` `2026.5.18` `192.168.1.1` 鏀规垚 ordered list锛屾妸 `-50%` 鏀规垚 unordered list銆傜幇鍦ㄥ彧鍦ㄦ槑纭槸鍒楄〃鐨勫満鏅紙`1.item` 鈫?`1. item`銆乣-item` 鈫?`- item`锛夋敼鍐欙紝鍏朵綑渚?CommonMark 鍘熸牱娓叉煋銆?
+- **IM Bot Bridge 鍚姩鏃跺簭**锛圼#211](https://github.com/hAcKlyc/HamunaAgent/issues/211)锛夛細Bridge `/status` 鍦?spawn 鍚?~13ms 绗竴娆℃煡璇㈡椂浼氬洜 ECONNREFUSED 鐩存帴閫€鍑猴紝瀵艰嚧娓犻亾鍋跺彂璧蜂笉鏉ャ€傜幇鍦ㄨ繛鎺ュけ璐ユ寜 retry 澶勭悊锛屼粛鍦?15s 閲嶈瘯绐楀彛鍐呫€?
 
 ---
 
 ## [0.2.17] - 2026-05-17
 
-> 支持安装 Claude 插件，一行链接装一个，带 skills、子 agent、工具、hook 一并到位。新增 Chat 顶部 Agent Status 悬浮条，让你随时看到当前任务的 Todo 进度和正在跑的子 Agent。供应商可拖拽排序与按需启用，让模型选择器和 fallback 链只显示你在用的。
+> 鏀寔瀹夎 Claude 鎻掍欢锛屼竴琛岄摼鎺ヨ涓€涓紝甯?skills銆佸瓙 agent銆佸伐鍏枫€乭ook 涓€骞跺埌浣嶃€傛柊澧?Chat 椤堕儴 Agent Status 鎮诞鏉★紝璁╀綘闅忔椂鐪嬪埌褰撳墠浠诲姟鐨?Todo 杩涘害鍜屾鍦ㄨ窇鐨勫瓙 Agent銆備緵搴斿晢鍙嫋鎷芥帓搴忎笌鎸夐渶鍚敤锛岃妯″瀷閫夋嫨鍣ㄥ拰 fallback 閾惧彧鏄剧ず浣犲湪鐢ㄧ殑銆?
 
 ### Added
 
-- **Claude 插件支持**：设置页新增「插件」Tab，支持 `owner/repo`、GitHub 链接、`.zip` 直链、本地目录四种来源一键安装；插件自带的 skills、子 agent、MCP 工具、hook 由运行时自动接入。
-- **批量装插件**：一个仓库里平铺多个插件时（如 `anthropics/claude-for-legal` 的 13 个法律插件），安装弹窗自动列出全部候选默认全选，逐个安装；失败的不影响其它继续装。
-- **按工作区启用插件**：设置页的开关只决定「这个插件在工作区里是否能看到」；是否对当前工作区生效，在 Chat 输入框「工具 → 插件」子菜单或 Agent 设置面板「插件」一行勾选，两个入口同步。
-- **Chat 顶部 Agent Status 悬浮面板**：实时汇总当前轮的 Todo 进度和正在跑的子 Agent，点击展开看详情；点子 Agent 卡片直接跳到对话里发起它的位置；全部完成后自动淡出。
-- **供应商启用与排序**（[#201](https://github.com/hAcKlyc/HamunaAgent/pull/201) by [@Wesegm](https://github.com/Wesegm)，社区贡献 🙏）：设置 → 供应商新增「启用和排序」对话框，可拖拽排序、按需开关。禁用的供应商从模型选择器、fallback 链、cron 路由、IM Bot 选择器全面隐藏，但 API Key 和配置保留，重新启用即恢复。
-- **CLI `hamuna cc-plugin` 子命令**：`list / install / uninstall / enable / disable / show`，命令行管理 Claude 插件。
+- **Claude 鎻掍欢鏀寔**锛氳缃〉鏂板銆屾彃浠躲€峊ab锛屾敮鎸?`owner/repo`銆丟itHub 閾炬帴銆乣.zip` 鐩撮摼銆佹湰鍦扮洰褰曞洓绉嶆潵婧愪竴閿畨瑁咃紱鎻掍欢鑷甫鐨?skills銆佸瓙 agent銆丮CP 宸ュ叿銆乭ook 鐢辫繍琛屾椂鑷姩鎺ュ叆銆?
+- **鎵归噺瑁呮彃浠?*锛氫竴涓粨搴撻噷骞抽摵澶氫釜鎻掍欢鏃讹紙濡?`anthropics/claude-for-legal` 鐨?13 涓硶寰嬫彃浠讹級锛屽畨瑁呭脊绐楄嚜鍔ㄥ垪鍑哄叏閮ㄥ€欓€夐粯璁ゅ叏閫夛紝閫愪釜瀹夎锛涘け璐ョ殑涓嶅奖鍝嶅叾瀹冪户缁銆?
+- **鎸夊伐浣滃尯鍚敤鎻掍欢**锛氳缃〉鐨勫紑鍏冲彧鍐冲畾銆岃繖涓彃浠跺湪宸ヤ綔鍖洪噷鏄惁鑳界湅鍒般€嶏紱鏄惁瀵瑰綋鍓嶅伐浣滃尯鐢熸晥锛屽湪 Chat 杈撳叆妗嗐€屽伐鍏?鈫?鎻掍欢銆嶅瓙鑿滃崟鎴?Agent 璁剧疆闈㈡澘銆屾彃浠躲€嶄竴琛屽嬀閫夛紝涓や釜鍏ュ彛鍚屾銆?
+- **Chat 椤堕儴 Agent Status 鎮诞闈㈡澘**锛氬疄鏃舵眹鎬诲綋鍓嶈疆鐨?Todo 杩涘害鍜屾鍦ㄨ窇鐨勫瓙 Agent锛岀偣鍑诲睍寮€鐪嬭鎯咃紱鐐瑰瓙 Agent 鍗＄墖鐩存帴璺冲埌瀵硅瘽閲屽彂璧峰畠鐨勪綅缃紱鍏ㄩ儴瀹屾垚鍚庤嚜鍔ㄦ贰鍑恒€?
+- **渚涘簲鍟嗗惎鐢ㄤ笌鎺掑簭**锛圼#201](https://github.com/hAcKlyc/HamunaAgent/pull/201) by [@Wesegm](https://github.com/Wesegm)锛岀ぞ鍖鸿础鐚?馃檹锛夛細璁剧疆 鈫?渚涘簲鍟嗘柊澧炪€屽惎鐢ㄥ拰鎺掑簭銆嶅璇濇锛屽彲鎷栨嫿鎺掑簭銆佹寜闇€寮€鍏炽€傜鐢ㄧ殑渚涘簲鍟嗕粠妯″瀷閫夋嫨鍣ㄣ€乫allback 閾俱€乧ron 璺敱銆両M Bot 閫夋嫨鍣ㄥ叏闈㈤殣钘忥紝浣?API Key 鍜岄厤缃繚鐣欙紝閲嶆柊鍚敤鍗虫仮澶嶃€?
+- **CLI `hamuna cc-plugin` 瀛愬懡浠?*锛歚list / install / uninstall / enable / disable / show`锛屽懡浠よ绠＄悊 Claude 鎻掍欢銆?
 
 ### Fixed
 
-- **订阅登录识别**（[#203](https://github.com/hAcKlyc/HamunaAgent/issues/203)，感谢 [@TimCheung-jx](https://github.com/TimCheung-jx) 反馈）：在 Claude Code CLI 上只跑过 `claude auth login`、OAuth token 仅存在系统 Keychain 的用户，之前会被误判成「未登录」导致订阅模型不可用。现在能正确识别。
-- **Cron 任务的 `--model` 在外部 Runtime 生效**（[#204](https://github.com/hAcKlyc/HamunaAgent/issues/204)，感谢 [@sundanian1991](https://github.com/sundanian1991) 反馈）：之前 `hamuna task create-direct --runtime codex --model X` 里的 `--model` 会被 Agent 默认模型覆盖，Codex 等模型名不同的 Runtime 会直接报 unknown model。现已修正优先级。
+- **璁㈤槄鐧诲綍璇嗗埆**锛圼#203](https://github.com/hAcKlyc/HamunaAgent/issues/203)锛屾劅璋?[@TimCheung-jx](https://github.com/TimCheung-jx) 鍙嶉锛夛細鍦?Claude Code CLI 涓婂彧璺戣繃 `claude auth login`銆丱Auth token 浠呭瓨鍦ㄧ郴缁?Keychain 鐨勭敤鎴凤紝涔嬪墠浼氳璇垽鎴愩€屾湭鐧诲綍銆嶅鑷磋闃呮ā鍨嬩笉鍙敤銆傜幇鍦ㄨ兘姝ｇ‘璇嗗埆銆?
+- **Cron 浠诲姟鐨?`--model` 鍦ㄥ閮?Runtime 鐢熸晥**锛圼#204](https://github.com/hAcKlyc/HamunaAgent/issues/204)锛屾劅璋?[@sundanian1991](https://github.com/sundanian1991) 鍙嶉锛夛細涔嬪墠 `hamuna task create-direct --runtime codex --model X` 閲岀殑 `--model` 浼氳 Agent 榛樿妯″瀷瑕嗙洊锛孋odex 绛夋ā鍨嬪悕涓嶅悓鐨?Runtime 浼氱洿鎺ユ姤 unknown model銆傜幇宸蹭慨姝ｄ紭鍏堢骇銆?
 
 ---
 
 ## [0.2.16] - 2026-05-16
 
-> 全局快捷键 + 想法归档两个常用快捷动作；Codex Runtime 的「为什么不工作」终于看得见；订阅验证、IM 群消息、工作区文件树几条体验断点修齐。
+> 鍏ㄥ眬蹇嵎閿?+ 鎯虫硶褰掓。涓や釜甯哥敤蹇嵎鍔ㄤ綔锛汣odex Runtime 鐨勩€屼负浠€涔堜笉宸ヤ綔銆嶇粓浜庣湅寰楄锛涜闃呴獙璇併€両M 缇ゆ秷鎭€佸伐浣滃尯鏂囦欢鏍戝嚑鏉′綋楠屾柇鐐逛慨榻愩€?
 
 ### Added
 
-- **全局快捷键唤起 HamunaAgent**：默认 `⌘⇧M`（Windows / Linux: `Ctrl+Shift+M`），按一下前台、再按一下隐藏到托盘（Raycast 风格 toggle）。可在 设置 → 通用 → 启动设置 改键或关闭。当前 tab / 焦点保持不变——快捷键纯粹是窗口显隐切换，不抢焦点也不强切到 launcher。
-- **Codex Runtime 自诊断面板 + 每 Agent 网络代理选择**（#194）：用 Codex Runtime 时如果遇到登录、MCP server、外部连接器（artifact-tool 等）问题，chat 顶栏会自动浮出一条诊断条让你直接看到「哪里挂了」，不用翻日志。每个 Agent 的「基础设置」也多了一项「网络代理」二选一：**HamunaAgent 代理**（默认，与桌面端 设置 → 网络代理 一致）和 **跟随终端**（等同于在你电脑的终端里手动启动这个 CLI 时看到的环境变量）。解决一类典型问题：用户终端里能调到的外部连接器，HamunaAgent 里因为代理不一致调不到。
-- **想法可归档**：想法列表的「更多」菜单和批量操作栏都加了归档/取消归档。归档后从默认视图隐藏但全文搜索仍可命中（邮箱式语义）。在已归档分段里也能直接新建想法（会自动切回活跃视图）。Launcher 最近想法行 / 输入框 `#` picker 默认不展示已归档项。
-- **链接右键菜单**：chat 消息 / AI 回复里的链接，右键弹自定义菜单「预览（内置浏览器）/ 拷贝链接 / 在系统浏览器中打开」——之前只能直接外部打开。「预览」在 split view 启用时会落到右侧浏览器面板。
-- **CLI 新增 runtime 诊断子命令**：`hamuna runtime diagnose codex`（或 `hamuna diagnose runtime codex`），返回结构化 JSON 可直接贴 GitHub issue。
+- **鍏ㄥ眬蹇嵎閿敜璧?HamunaAgent**锛氶粯璁?`鈱樷嚙M`锛圵indows / Linux: `Ctrl+Shift+M`锛夛紝鎸変竴涓嬪墠鍙般€佸啀鎸変竴涓嬮殣钘忓埌鎵樼洏锛圧aycast 椋庢牸 toggle锛夈€傚彲鍦?璁剧疆 鈫?閫氱敤 鈫?鍚姩璁剧疆 鏀归敭鎴栧叧闂€傚綋鍓?tab / 鐒︾偣淇濇寔涓嶅彉鈥斺€斿揩鎹烽敭绾补鏄獥鍙ｆ樉闅愬垏鎹紝涓嶆姠鐒︾偣涔熶笉寮哄垏鍒?launcher銆?
+- **Codex Runtime 鑷瘖鏂潰鏉?+ 姣?Agent 缃戠粶浠ｇ悊閫夋嫨**锛?194锛夛細鐢?Codex Runtime 鏃跺鏋滈亣鍒扮櫥褰曘€丮CP server銆佸閮ㄨ繛鎺ュ櫒锛坅rtifact-tool 绛夛級闂锛宑hat 椤舵爮浼氳嚜鍔ㄦ诞鍑轰竴鏉¤瘖鏂潯璁╀綘鐩存帴鐪嬪埌銆屽摢閲屾寕浜嗐€嶏紝涓嶇敤缈绘棩蹇椼€傛瘡涓?Agent 鐨勩€屽熀纭€璁剧疆銆嶄篃澶氫簡涓€椤广€岀綉缁滀唬鐞嗐€嶄簩閫変竴锛?*HamunaAgent 浠ｇ悊**锛堥粯璁わ紝涓庢闈㈢ 璁剧疆 鈫?缃戠粶浠ｇ悊 涓€鑷达級鍜?**璺熼殢缁堢**锛堢瓑鍚屼簬鍦ㄤ綘鐢佃剳鐨勭粓绔噷鎵嬪姩鍚姩杩欎釜 CLI 鏃剁湅鍒扮殑鐜鍙橀噺锛夈€傝В鍐充竴绫诲吀鍨嬮棶棰橈細鐢ㄦ埛缁堢閲岃兘璋冨埌鐨勫閮ㄨ繛鎺ュ櫒锛孒amunaAgent 閲屽洜涓轰唬鐞嗕笉涓€鑷磋皟涓嶅埌銆?
+- **鎯虫硶鍙綊妗?*锛氭兂娉曞垪琛ㄧ殑銆屾洿澶氥€嶈彍鍗曞拰鎵归噺鎿嶄綔鏍忛兘鍔犱簡褰掓。/鍙栨秷褰掓。銆傚綊妗ｅ悗浠庨粯璁よ鍥鹃殣钘忎絾鍏ㄦ枃鎼滅储浠嶅彲鍛戒腑锛堥偖绠卞紡璇箟锛夈€傚湪宸插綊妗ｅ垎娈甸噷涔熻兘鐩存帴鏂板缓鎯虫硶锛堜細鑷姩鍒囧洖娲昏穬瑙嗗浘锛夈€侺auncher 鏈€杩戞兂娉曡 / 杈撳叆妗?`#` picker 榛樿涓嶅睍绀哄凡褰掓。椤广€?
+- **閾炬帴鍙抽敭鑿滃崟**锛歝hat 娑堟伅 / AI 鍥炲閲岀殑閾炬帴锛屽彸閿脊鑷畾涔夎彍鍗曘€岄瑙堬紙鍐呯疆娴忚鍣級/ 鎷疯礉閾炬帴 / 鍦ㄧ郴缁熸祻瑙堝櫒涓墦寮€銆嶁€斺€斾箣鍓嶅彧鑳界洿鎺ュ閮ㄦ墦寮€銆傘€岄瑙堛€嶅湪 split view 鍚敤鏃朵細钀藉埌鍙充晶娴忚鍣ㄩ潰鏉裤€?
+- **CLI 鏂板 runtime 璇婃柇瀛愬懡浠?*锛歚hamuna runtime diagnose codex`锛堟垨 `hamuna diagnose runtime codex`锛夛紝杩斿洖缁撴瀯鍖?JSON 鍙洿鎺ヨ创 GitHub issue銆?
 
 ### Fixed
 
-- **工作区文件树不再每次 AI 写文件后就收起**：展开了多层目录后，AI 跑工具 / 保存文件 / 文件 watcher 事件 / 120s 后台轮询任意一个动作都会让深层目录视觉上收回去——多层嵌套项目用户感受明显。现在 tab 生命周期里展开状态稳定。
-- **第三方迁订阅用户的 Anthropic 订阅验证不再 403**（#199）：从 cc-switch / Claude Code Router 等第三方 CLI 工具迁过来的用户，`~/.claude/settings.json` 里残留的 `apiKeyHelper` 字段会让 SDK 拒绝走 OAuth → verify 报 403。verify 路径不再加载这个文件，与 chat session 行为一致，SDK 走 macOS Keychain 完成认证。
-- **CLI 创建的定时任务能正确用工作区 provider 与模型**（#197）：`hamuna cron add` 创建的任务之前会忽略工作区 Agent 配的第三方 provider，回退到订阅 + Sonnet 默认模型，上游报 403。现在与桌面端 Chat 路径对齐，自动从 Agent 配置捕获 providerId + model；存量旧 cron 在执行时也会动态解析 provider env。
-- **Codex Runtime 切换不再带走旧 runtime 的模型设置**（#194）：从 Gemini Agent 切到 Codex，新开 tab 之前会继续把 `gemini-3.1-pro-preview` 喂给 Codex，CLI 直接报 "model not supported"。Settings 面板 / Launcher / CLI `agent set runtime` 三条切换路径现在统一清理跨 runtime 不通用的字段；启动时还会自动扫描并修复旧版本残留的污染配置。
-- **Codex 已登录用户不再误报"需要登录"**（#194）：诊断面板把 Codex 的产品级元标志当成了用户态信号，已登录的 ChatGPT 账号也会被判定"需要登录 Codex"。现在按真信号判断。
-- **打开 Codex / Gemini 历史会话从 8-10 秒变成几乎瞬间**：以前切到 prewarm 过的同一 session 还要再等一遍 CLI 冷启动，纯白屏；现在同 session 切换立即返回。
-- **Gemini Runtime 启动不再卡 30-40 秒**：之前打开 Gemini Tab 时两个并发的 `gemini --acp` 会互抢资源各自 timeout 30 秒，重试才能正常起来。修了并发协调 + stderr 管道阻塞，冷启动现在按预期完成。
-- **企业微信群里 @ 机器人不再静默丢失**：之前每次 @ 都被识别成"非 mention"丢进 history buffer 不路由给 AI，机器人不回。同时群内消息现在能正确带 `[from: 发言人 时间]` 标签，AI 在群里能区分不同发言人。
-- **主窗口右键打开链接不再劫持整个 App**：之前右键 chat 里的链接 → WKWebView 原生菜单选 "Open Link" → 整个 App 被替换成被点链接的页面，没有返回路径。现在外链统一走系统浏览器；恶意 `data:` URL 也无法替换主窗（潜在 XSS 风险一并堵了）。
-- **macOS 顶栏红黄绿按钮垂直居中**：开源以来一直略偏下 4 像素的祖传错位顺手修了。
+- **宸ヤ綔鍖烘枃浠舵爲涓嶅啀姣忔 AI 鍐欐枃浠跺悗灏辨敹璧?*锛氬睍寮€浜嗗灞傜洰褰曞悗锛孉I 璺戝伐鍏?/ 淇濆瓨鏂囦欢 / 鏂囦欢 watcher 浜嬩欢 / 120s 鍚庡彴杞浠绘剰涓€涓姩浣滈兘浼氳娣卞眰鐩綍瑙嗚涓婃敹鍥炲幓鈥斺€斿灞傚祵濂楅」鐩敤鎴锋劅鍙楁槑鏄俱€傜幇鍦?tab 鐢熷懡鍛ㄦ湡閲屽睍寮€鐘舵€佺ǔ瀹氥€?
+- **绗笁鏂硅縼璁㈤槄鐢ㄦ埛鐨?Anthropic 璁㈤槄楠岃瘉涓嶅啀 403**锛?199锛夛細浠?cc-switch / Claude Code Router 绛夌涓夋柟 CLI 宸ュ叿杩佽繃鏉ョ殑鐢ㄦ埛锛宍~/.claude/settings.json` 閲屾畫鐣欑殑 `apiKeyHelper` 瀛楁浼氳 SDK 鎷掔粷璧?OAuth 鈫?verify 鎶?403銆倂erify 璺緞涓嶅啀鍔犺浇杩欎釜鏂囦欢锛屼笌 chat session 琛屼负涓€鑷达紝SDK 璧?macOS Keychain 瀹屾垚璁よ瘉銆?
+- **CLI 鍒涘缓鐨勫畾鏃朵换鍔¤兘姝ｇ‘鐢ㄥ伐浣滃尯 provider 涓庢ā鍨?*锛?197锛夛細`hamuna cron add` 鍒涘缓鐨勪换鍔′箣鍓嶄細蹇界暐宸ヤ綔鍖?Agent 閰嶇殑绗笁鏂?provider锛屽洖閫€鍒拌闃?+ Sonnet 榛樿妯″瀷锛屼笂娓告姤 403銆傜幇鍦ㄤ笌妗岄潰绔?Chat 璺緞瀵归綈锛岃嚜鍔ㄤ粠 Agent 閰嶇疆鎹曡幏 providerId + model锛涘瓨閲忔棫 cron 鍦ㄦ墽琛屾椂涔熶細鍔ㄦ€佽В鏋?provider env銆?
+- **Codex Runtime 鍒囨崲涓嶅啀甯﹁蛋鏃?runtime 鐨勬ā鍨嬭缃?*锛?194锛夛細浠?Gemini Agent 鍒囧埌 Codex锛屾柊寮€ tab 涔嬪墠浼氱户缁妸 `gemini-3.1-pro-preview` 鍠傜粰 Codex锛孋LI 鐩存帴鎶?"model not supported"銆係ettings 闈㈡澘 / Launcher / CLI `agent set runtime` 涓夋潯鍒囨崲璺緞鐜板湪缁熶竴娓呯悊璺?runtime 涓嶉€氱敤鐨勫瓧娈碉紱鍚姩鏃惰繕浼氳嚜鍔ㄦ壂鎻忓苟淇鏃х増鏈畫鐣欑殑姹℃煋閰嶇疆銆?
+- **Codex 宸茬櫥褰曠敤鎴蜂笉鍐嶈鎶?闇€瑕佺櫥褰?**锛?194锛夛細璇婃柇闈㈡澘鎶?Codex 鐨勪骇鍝佺骇鍏冩爣蹇楀綋鎴愪簡鐢ㄦ埛鎬佷俊鍙凤紝宸茬櫥褰曠殑 ChatGPT 璐﹀彿涔熶細琚垽瀹?闇€瑕佺櫥褰?Codex"銆傜幇鍦ㄦ寜鐪熶俊鍙峰垽鏂€?
+- **鎵撳紑 Codex / Gemini 鍘嗗彶浼氳瘽浠?8-10 绉掑彉鎴愬嚑涔庣灛闂?*锛氫互鍓嶅垏鍒?prewarm 杩囩殑鍚屼竴 session 杩樿鍐嶇瓑涓€閬?CLI 鍐峰惎鍔紝绾櫧灞忥紱鐜板湪鍚?session 鍒囨崲绔嬪嵆杩斿洖銆?
+- **Gemini Runtime 鍚姩涓嶅啀鍗?30-40 绉?*锛氫箣鍓嶆墦寮€ Gemini Tab 鏃朵袱涓苟鍙戠殑 `gemini --acp` 浼氫簰鎶㈣祫婧愬悇鑷?timeout 30 绉掞紝閲嶈瘯鎵嶈兘姝ｅ父璧锋潵銆備慨浜嗗苟鍙戝崗璋?+ stderr 绠￠亾闃诲锛屽喎鍚姩鐜板湪鎸夐鏈熷畬鎴愩€?
+- **浼佷笟寰俊缇ら噷 @ 鏈哄櫒浜轰笉鍐嶉潤榛樹涪澶?*锛氫箣鍓嶆瘡娆?@ 閮借璇嗗埆鎴?闈?mention"涓㈣繘 history buffer 涓嶈矾鐢辩粰 AI锛屾満鍣ㄤ汉涓嶅洖銆傚悓鏃剁兢鍐呮秷鎭幇鍦ㄨ兘姝ｇ‘甯?`[from: 鍙戣█浜?鏃堕棿]` 鏍囩锛孉I 鍦ㄧ兢閲岃兘鍖哄垎涓嶅悓鍙戣█浜恒€?
+- **涓荤獥鍙ｅ彸閿墦寮€閾炬帴涓嶅啀鍔寔鏁翠釜 App**锛氫箣鍓嶅彸閿?chat 閲岀殑閾炬帴 鈫?WKWebView 鍘熺敓鑿滃崟閫?"Open Link" 鈫?鏁翠釜 App 琚浛鎹㈡垚琚偣閾炬帴鐨勯〉闈紝娌℃湁杩斿洖璺緞銆傜幇鍦ㄥ閾剧粺涓€璧扮郴缁熸祻瑙堝櫒锛涙伓鎰?`data:` URL 涔熸棤娉曟浛鎹富绐楋紙娼滃湪 XSS 椋庨櫓涓€骞跺牭浜嗭級銆?
+- **macOS 椤舵爮绾㈤粍缁挎寜閽瀭鐩村眳涓?*锛氬紑婧愪互鏉ヤ竴鐩寸暐鍋忎笅 4 鍍忕礌鐨勭浼犻敊浣嶉『鎵嬩慨浜嗐€?
 
 ### Changed
 
-- **从 GitHub 安装 Skill 的超时窗口拉宽到 5 分钟**（#193）：之前 10s / 60s 的三层超时在 CN 代理或慢网络下基本每次 install 都撞超时。
+- **浠?GitHub 瀹夎 Skill 鐨勮秴鏃剁獥鍙ｆ媺瀹藉埌 5 鍒嗛挓**锛?193锛夛細涔嬪墠 10s / 60s 鐨勪笁灞傝秴鏃跺湪 CN 浠ｇ悊鎴栨參缃戠粶涓嬪熀鏈瘡娆?install 閮芥挒瓒呮椂銆?
 
 ### Internal
 
-- 新增 `RuntimeEnvPolicy` 共享校验入口、`shell.ts` 启动期抓取用户 shell 的 8 个 proxy 环境变量、Rust `apply_to_subprocess` 统一清除继承的 `ALL_PROXY`/`all_proxy`，为「跟随终端」模式提供基础设施。
-- 工作区文件树新增 `treeMerge.ts` 模块（4 个纯函数 + 27 vitest 用例）：merge stale lazy children 作 fallback + frontier dirExpand 重抓 + 同路径死循环防护 + BFS 级联上限。
-- 三视角 cross-review 流水线（Claude Code 代码质量 / Codex 对抗测试 / 架构合规）整合到合并前流程，本次发现 5 个 critical / warning 问题已全部修复。
-- `tech_docs/multi_agent_runtime.md` / `proxy_config.md` / `cli_architecture.md` 同步 envPolicy + Codex 诊断 + CLI diagnose 子命令的契约文档。
+- 鏂板 `RuntimeEnvPolicy` 鍏变韩鏍￠獙鍏ュ彛銆乣shell.ts` 鍚姩鏈熸姄鍙栫敤鎴?shell 鐨?8 涓?proxy 鐜鍙橀噺銆丷ust `apply_to_subprocess` 缁熶竴娓呴櫎缁ф壙鐨?`ALL_PROXY`/`all_proxy`锛屼负銆岃窡闅忕粓绔€嶆ā寮忔彁渚涘熀纭€璁炬柦銆?
+- 宸ヤ綔鍖烘枃浠舵爲鏂板 `treeMerge.ts` 妯″潡锛? 涓函鍑芥暟 + 27 vitest 鐢ㄤ緥锛夛細merge stale lazy children 浣?fallback + frontier dirExpand 閲嶆姄 + 鍚岃矾寰勬寰幆闃叉姢 + BFS 绾ц仈涓婇檺銆?
+- 涓夎瑙?cross-review 娴佹按绾匡紙Claude Code 浠ｇ爜璐ㄩ噺 / Codex 瀵规姉娴嬭瘯 / 鏋舵瀯鍚堣锛夋暣鍚堝埌鍚堝苟鍓嶆祦绋嬶紝鏈鍙戠幇 5 涓?critical / warning 闂宸插叏閮ㄤ慨澶嶃€?
+- `tech_docs/multi_agent_runtime.md` / `proxy_config.md` / `cli_architecture.md` 鍚屾 envPolicy + Codex 璇婃柇 + CLI diagnose 瀛愬懡浠ょ殑濂戠害鏂囨。銆?
 
 ---
 
 ## [0.2.15] - 2026-05-12
 
-> 长对话回溯、长任务执行、Codex 工具图片三条常见路径的可靠性收紧；外部 Runtime、Windows 下的几条阻塞性问题一并处理。
+> 闀垮璇濆洖婧€侀暱浠诲姟鎵ц銆丆odex 宸ュ叿鍥剧墖涓夋潯甯歌璺緞鐨勫彲闈犳€ф敹绱э紱澶栭儴 Runtime銆乄indows 涓嬬殑鍑犳潯闃诲鎬ч棶棰樹竴骞跺鐞嗐€?
 
 ### Added
 
-- **Codex Runtime 现在能渲染工具返回的图片**：让 Codex 用 OpenAI 官方 `image_generation` 工具画图、调返回图片的 MCP 工具、走 dynamic tool 拿回图片等场景，之前在 Chat 里完全不显示。现在与 builtin runtime 行为一致，附件随会话历史持久化，reload 后仍可看。顺带把 webSearch / fileChange / plan / review mode 等几个长期被静默丢弃的 Codex 事件类型补齐。
+- **Codex Runtime 鐜板湪鑳芥覆鏌撳伐鍏疯繑鍥炵殑鍥剧墖**锛氳 Codex 鐢?OpenAI 瀹樻柟 `image_generation` 宸ュ叿鐢诲浘銆佽皟杩斿洖鍥剧墖鐨?MCP 宸ュ叿銆佽蛋 dynamic tool 鎷垮洖鍥剧墖绛夊満鏅紝涔嬪墠鍦?Chat 閲屽畬鍏ㄤ笉鏄剧ず銆傜幇鍦ㄤ笌 builtin runtime 琛屼负涓€鑷达紝闄勪欢闅忎細璇濆巻鍙叉寔涔呭寲锛宺eload 鍚庝粛鍙湅銆傞『甯︽妸 webSearch / fileChange / plan / review mode 绛夊嚑涓暱鏈熻闈欓粯涓㈠純鐨?Codex 浜嬩欢绫诲瀷琛ラ綈銆?
 
 ### Fixed
 
-- **长对话里的时间回溯真的能回溯了**（#189）：40+ 条消息的对话里中断 AI 后再 Retry / 回溯时，过去回溯失败会把整个 session 重建——UI 顶部少几条但 AI 把之前的对话**全部忘光**。Fork 出来后立即回溯也是同样：UI 截断生效，AI 仍按完整 source 内容回复。两条路径都已修，回溯后 AI 看到的就是用户在 UI 上看到的。
-- **长任务不再被记忆维护打断**（#190）：写作 / 研究 / 长工具调用进行中时，自动记忆维护会插一条指令把 AI 切走、半路回一句 "MEMORY_UPDATE_OK"。现在会话进行中时自动记忆维护会跳过，等空闲后再补做；手动触发不受影响。
-- **外部 Runtime 长 turn 不再误报"AI 调用失败：网络错误"**（#188）：Codex / Gemini 跑 2 分钟以上的 turn 时桌面端会假性报错——AI 还在干活，只是前端等不到。
-- **Windows 上 Claude Code CLI runtime 不再丢上下文**：之前 Windows 切到 Claude Code CLI runtime 后，每条消息都开新 session 导致多轮对话失忆。
-- **元宝等 OpenClaw 插件升级后启动不再报缺接口**（#187）：插件升级后频繁出现 "does not provide an export named X"、bridge 启动超时——这次从生成器层做结构性修复，未来同类升级不再触发同样的失败。
-- **点开 user-level skill / command 的文件不再误报"文件预览失败"**：在工作区里点开 `.claude/skills/<skill>/SKILL.md` 等通过 junction 链接到 `~/.hamuna/skills` 的文件能正常预览。Windows 上尤其常见。
-- **文件预览快速点击不再错位**：工作区面板里连点两个文件不再"看到的是先点的那个"，错误提示也不再双弹。
-- **代码块行号不再被选中/复制**：跨多行框选代码时不再把左侧行号带上。
+- **闀垮璇濋噷鐨勬椂闂村洖婧湡鐨勮兘鍥炴函浜?*锛?189锛夛細40+ 鏉℃秷鎭殑瀵硅瘽閲屼腑鏂?AI 鍚庡啀 Retry / 鍥炴函鏃讹紝杩囧幓鍥炴函澶辫触浼氭妸鏁翠釜 session 閲嶅缓鈥斺€擴I 椤堕儴灏戝嚑鏉′絾 AI 鎶婁箣鍓嶇殑瀵硅瘽**鍏ㄩ儴蹇樺厜**銆侳ork 鍑烘潵鍚庣珛鍗冲洖婧篃鏄悓鏍凤細UI 鎴柇鐢熸晥锛孉I 浠嶆寜瀹屾暣 source 鍐呭鍥炲銆備袱鏉¤矾寰勯兘宸蹭慨锛屽洖婧悗 AI 鐪嬪埌鐨勫氨鏄敤鎴峰湪 UI 涓婄湅鍒扮殑銆?
+- **闀夸换鍔′笉鍐嶈璁板繂缁存姢鎵撴柇**锛?190锛夛細鍐欎綔 / 鐮旂┒ / 闀垮伐鍏疯皟鐢ㄨ繘琛屼腑鏃讹紝鑷姩璁板繂缁存姢浼氭彃涓€鏉℃寚浠ゆ妸 AI 鍒囪蛋銆佸崐璺洖涓€鍙?"MEMORY_UPDATE_OK"銆傜幇鍦ㄤ細璇濊繘琛屼腑鏃惰嚜鍔ㄨ蹇嗙淮鎶や細璺宠繃锛岀瓑绌洪棽鍚庡啀琛ュ仛锛涙墜鍔ㄨЕ鍙戜笉鍙楀奖鍝嶃€?
+- **澶栭儴 Runtime 闀?turn 涓嶅啀璇姤"AI 璋冪敤澶辫触锛氱綉缁滈敊璇?**锛?188锛夛細Codex / Gemini 璺?2 鍒嗛挓浠ヤ笂鐨?turn 鏃舵闈㈢浼氬亣鎬ф姤閿欌€斺€擜I 杩樺湪骞叉椿锛屽彧鏄墠绔瓑涓嶅埌銆?
+- **Windows 涓?Claude Code CLI runtime 涓嶅啀涓笂涓嬫枃**锛氫箣鍓?Windows 鍒囧埌 Claude Code CLI runtime 鍚庯紝姣忔潯娑堟伅閮藉紑鏂?session 瀵艰嚧澶氳疆瀵硅瘽澶卞繂銆?
+- **鍏冨疂绛?OpenClaw 鎻掍欢鍗囩骇鍚庡惎鍔ㄤ笉鍐嶆姤缂烘帴鍙?*锛?187锛夛細鎻掍欢鍗囩骇鍚庨绻佸嚭鐜?"does not provide an export named X"銆乥ridge 鍚姩瓒呮椂鈥斺€旇繖娆′粠鐢熸垚鍣ㄥ眰鍋氱粨鏋勬€т慨澶嶏紝鏈潵鍚岀被鍗囩骇涓嶅啀瑙﹀彂鍚屾牱鐨勫け璐ャ€?
+- **鐐瑰紑 user-level skill / command 鐨勬枃浠朵笉鍐嶈鎶?鏂囦欢棰勮澶辫触"**锛氬湪宸ヤ綔鍖洪噷鐐瑰紑 `.claude/skills/<skill>/SKILL.md` 绛夐€氳繃 junction 閾炬帴鍒?`~/.hamuna/skills` 鐨勬枃浠惰兘姝ｅ父棰勮銆俉indows 涓婂挨鍏跺父瑙併€?
+- **鏂囦欢棰勮蹇€熺偣鍑讳笉鍐嶉敊浣?*锛氬伐浣滃尯闈㈡澘閲岃繛鐐逛袱涓枃浠朵笉鍐?鐪嬪埌鐨勬槸鍏堢偣鐨勯偅涓?锛岄敊璇彁绀轰篃涓嶅啀鍙屽脊銆?
+- **浠ｇ爜鍧楄鍙蜂笉鍐嶈閫変腑/澶嶅埗**锛氳法澶氳妗嗛€変唬鐮佹椂涓嶅啀鎶婂乏渚ц鍙峰甫涓娿€?
 
 ### Changed
 
-- **想法输入框默认更高**：Task Center 的「想法」输入区默认高度由 2 行提升到 3 行，更适合写完整想法。
+- **鎯虫硶杈撳叆妗嗛粯璁ゆ洿楂?*锛歍ask Center 鐨勩€屾兂娉曘€嶈緭鍏ュ尯榛樿楂樺害鐢?2 琛屾彁鍗囧埌 3 琛岋紝鏇撮€傚悎鍐欏畬鏁存兂娉曘€?
 
 ---
 
 ## [0.2.14] - 2026-05-11
 
-> Session 当前由谁在驱动一目了然，对话能在桌面 ↔ 飞书/Telegram/微信之间无缝流转；顺手把通知系统、Plan 模式、IM 配置变更几条最痛的 papercut 都处理了。
+> Session 褰撳墠鐢辫皝鍦ㄩ┍鍔ㄤ竴鐩簡鐒讹紝瀵硅瘽鑳藉湪妗岄潰 鈫?椋炰功/Telegram/寰俊涔嬮棿鏃犵紳娴佽浆锛涢『鎵嬫妸閫氱煡绯荤粺銆丳lan 妯″紡銆両M 閰嶇疆鍙樻洿鍑犳潯鏈€鐥涚殑 papercut 閮藉鐞嗕簡銆?
 
 ### Added
 
-- **顶栏会显示 session 当前绑定的 IM channel / 定时任务**：之前一个 session 是从飞书 channel 路由过来的，顶栏什么都没说，只能去历史抽屉里才能看出来。现在 session 标题后直接挂一个 `●飞书` / `●定时` 小标签，与历史抽屉风格一致。
-- **新对话按钮在 channel-bound session 上会一起把绑定挪到新 session**：之前桌面端点 + 新对话只是清空桌面，飞书 channel 还停在老 session 上——等于"我以为换了对话，其实只换了一边"。现在等价于在 IM 里发 `/new`：channel 跟着到新 session，桌面顶栏的 `●飞书` 标签保持不动。
-- **桌面 session 主动交接到 IM channel**：纯桌面 session 顶栏多了一个 `📤` 图标（与 channel 标签互斥，已绑定就消失）。点击弹窗列出当前工作区对应 Agent 的所有在线 channel，选中即把这条对话推过去——飞书/Telegram/钉钉 那边会收到一条「桌面端已将对话交接到此 channel」系统提示，IM 端用户接着聊就行；桌面端顶栏立即出现 channel 标签。继续在手机上工作的核心场景终于打通。
-- **桌面 session 里的发言会镜像到绑定的 IM channel**：之前是单向的——IM 用户发什么桌面看得到，桌面发什么 IM 看不到，导致 IM 端用户视角丢一段对话。现在桌面用户消息以 `[From: 桌面端用户消息]` 前缀推到 IM，AI 回复正常推送（与直接对 bot 提问的流式格式一致）。镜像范围：用户文本 + 用户上传的 PNG/JPG + AI 文本回复块；不镜像工具调用、`canUseTool` 审批卡片、partial chunk（避免双端冲突 + 信息噪音）。
-- **会话顶栏新增 ⋯ 菜单**：替代之前的条件式按钮，把 session 的 6 个常用操作（重命名 / 收藏 / 导出 md / 会话 Token 统计 / 上下文 Token 详情 / 绑定 Bot ▸ / 删除）聚合到一个稳定入口。"上下文 Token 详情" 直接以用户身份触发 `/context`，无需手动输入。
-- **AI 出错后可一键重发**：错误 banner 上的「召唤小助理」换成「重新发送」按钮——直接回退并重新发送上一条用户消息，不需要重新打字。
-- **Plan 模式可写修改意见**：AI 进入 plan 模式时，确认卡片下方多了一个文本框。留空提交是常规拒绝；填写反馈后提交则把意见送回 AI，AI 在同一回合内修订方案并重新出 plan，省去回到输入框重发的折腾。
-- **OS 通知：跨平台体验完整化**：(a) 通知点击会唤起前台并切到对应 tab，三平台都生效——Windows 之前在企业环境下点了没反应的问题也修了；(b) 通知声音可在设置里关掉（默认开），三平台用各自的系统默认音；(c) 「启用通知」主开关现在真的生效——之前它是装饰性的，关掉之后通知照样响。升级后如果你之前在配置里把通知关了，会保留你的选择。
-- **Agent 工作区 Runtime 变更时，IM bot 会自动迁到新会话**：之前在工作区把 Agent runtime 从 Claude Code CLI 切到 builtin（或反向）后，IM bot 还连在老 runtime 创建的 session 上——下次发消息要么没回应，要么报模型不存在。现在配置变更时会自动给 IM 推一条「Agent 工作区 Runtime 从「X」更新为「Y」，开始新会话（xxxxxxxx）」，新对话从干净的状态开始。老对话仍然完整保留在历史里，从桌面打开会按"它当时的 runtime + 配置"加载，跟其他历史会话表现一致。
+- **椤舵爮浼氭樉绀?session 褰撳墠缁戝畾鐨?IM channel / 瀹氭椂浠诲姟**锛氫箣鍓嶄竴涓?session 鏄粠椋炰功 channel 璺敱杩囨潵鐨勶紝椤舵爮浠€涔堥兘娌¤锛屽彧鑳藉幓鍘嗗彶鎶藉眽閲屾墠鑳界湅鍑烘潵銆傜幇鍦?session 鏍囬鍚庣洿鎺ユ寕涓€涓?`鈼忛涔 / `鈼忓畾鏃禶 灏忔爣绛撅紝涓庡巻鍙叉娊灞夐鏍间竴鑷淬€?
+- **鏂板璇濇寜閽湪 channel-bound session 涓婁細涓€璧锋妸缁戝畾鎸埌鏂?session**锛氫箣鍓嶆闈㈢鐐?+ 鏂板璇濆彧鏄竻绌烘闈紝椋炰功 channel 杩樺仠鍦ㄨ€?session 涓娾€斺€旂瓑浜?鎴戜互涓烘崲浜嗗璇濓紝鍏跺疄鍙崲浜嗕竴杈?銆傜幇鍦ㄧ瓑浠蜂簬鍦?IM 閲屽彂 `/new`锛歝hannel 璺熺潃鍒版柊 session锛屾闈㈤《鏍忕殑 `鈼忛涔 鏍囩淇濇寔涓嶅姩銆?
+- **妗岄潰 session 涓诲姩浜ゆ帴鍒?IM channel**锛氱函妗岄潰 session 椤舵爮澶氫簡涓€涓?`馃摛` 鍥炬爣锛堜笌 channel 鏍囩浜掓枼锛屽凡缁戝畾灏辨秷澶憋級銆傜偣鍑诲脊绐楀垪鍑哄綋鍓嶅伐浣滃尯瀵瑰簲 Agent 鐨勬墍鏈夊湪绾?channel锛岄€変腑鍗虫妸杩欐潯瀵硅瘽鎺ㄨ繃鍘烩€斺€旈涔?Telegram/閽夐拤 閭ｈ竟浼氭敹鍒颁竴鏉°€屾闈㈢宸插皢瀵硅瘽浜ゆ帴鍒版 channel銆嶇郴缁熸彁绀猴紝IM 绔敤鎴锋帴鐫€鑱婂氨琛岋紱妗岄潰绔《鏍忕珛鍗冲嚭鐜?channel 鏍囩銆傜户缁湪鎵嬫満涓婂伐浣滅殑鏍稿績鍦烘櫙缁堜簬鎵撻€氥€?
+- **妗岄潰 session 閲岀殑鍙戣█浼氶暅鍍忓埌缁戝畾鐨?IM channel**锛氫箣鍓嶆槸鍗曞悜鐨勨€斺€擨M 鐢ㄦ埛鍙戜粈涔堟闈㈢湅寰楀埌锛屾闈㈠彂浠€涔?IM 鐪嬩笉鍒帮紝瀵艰嚧 IM 绔敤鎴疯瑙掍涪涓€娈靛璇濄€傜幇鍦ㄦ闈㈢敤鎴锋秷鎭互 `[From: 妗岄潰绔敤鎴锋秷鎭痌` 鍓嶇紑鎺ㄥ埌 IM锛孉I 鍥炲姝ｅ父鎺ㄩ€侊紙涓庣洿鎺ュ bot 鎻愰棶鐨勬祦寮忔牸寮忎竴鑷达級銆傞暅鍍忚寖鍥达細鐢ㄦ埛鏂囨湰 + 鐢ㄦ埛涓婁紶鐨?PNG/JPG + AI 鏂囨湰鍥炲鍧楋紱涓嶉暅鍍忓伐鍏疯皟鐢ㄣ€乣canUseTool` 瀹℃壒鍗＄墖銆乸artial chunk锛堥伩鍏嶅弻绔啿绐?+ 淇℃伅鍣煶锛夈€?
+- **浼氳瘽椤舵爮鏂板 鈰?鑿滃崟**锛氭浛浠ｄ箣鍓嶇殑鏉′欢寮忔寜閽紝鎶?session 鐨?6 涓父鐢ㄦ搷浣滐紙閲嶅懡鍚?/ 鏀惰棌 / 瀵煎嚭 md / 浼氳瘽 Token 缁熻 / 涓婁笅鏂?Token 璇︽儏 / 缁戝畾 Bot 鈻?/ 鍒犻櫎锛夎仛鍚堝埌涓€涓ǔ瀹氬叆鍙ｃ€?涓婁笅鏂?Token 璇︽儏" 鐩存帴浠ョ敤鎴疯韩浠借Е鍙?`/context`锛屾棤闇€鎵嬪姩杈撳叆銆?
+- **AI 鍑洪敊鍚庡彲涓€閿噸鍙?*锛氶敊璇?banner 涓婄殑銆屽彫鍞ゅ皬鍔╃悊銆嶆崲鎴愩€岄噸鏂板彂閫併€嶆寜閽€斺€旂洿鎺ュ洖閫€骞堕噸鏂板彂閫佷笂涓€鏉＄敤鎴锋秷鎭紝涓嶉渶瑕侀噸鏂版墦瀛椼€?
+- **Plan 妯″紡鍙啓淇敼鎰忚**锛欰I 杩涘叆 plan 妯″紡鏃讹紝纭鍗＄墖涓嬫柟澶氫簡涓€涓枃鏈銆傜暀绌烘彁浜ゆ槸甯歌鎷掔粷锛涘～鍐欏弽棣堝悗鎻愪氦鍒欐妸鎰忚閫佸洖 AI锛孉I 鍦ㄥ悓涓€鍥炲悎鍐呬慨璁㈡柟妗堝苟閲嶆柊鍑?plan锛岀渷鍘诲洖鍒拌緭鍏ユ閲嶅彂鐨勬姌鑵俱€?
+- **OS 閫氱煡锛氳法骞冲彴浣撻獙瀹屾暣鍖?*锛?a) 閫氱煡鐐瑰嚮浼氬敜璧峰墠鍙板苟鍒囧埌瀵瑰簲 tab锛屼笁骞冲彴閮界敓鏁堚€斺€擶indows 涔嬪墠鍦ㄤ紒涓氱幆澧冧笅鐐逛簡娌″弽搴旂殑闂涔熶慨浜嗭紱(b) 閫氱煡澹伴煶鍙湪璁剧疆閲屽叧鎺夛紙榛樿寮€锛夛紝涓夊钩鍙扮敤鍚勮嚜鐨勭郴缁熼粯璁ら煶锛?c) 銆屽惎鐢ㄩ€氱煡銆嶄富寮€鍏崇幇鍦ㄧ湡鐨勭敓鏁堚€斺€斾箣鍓嶅畠鏄楗版€х殑锛屽叧鎺変箣鍚庨€氱煡鐓ф牱鍝嶃€傚崌绾у悗濡傛灉浣犱箣鍓嶅湪閰嶇疆閲屾妸閫氱煡鍏充簡锛屼細淇濈暀浣犵殑閫夋嫨銆?
+- **Agent 宸ヤ綔鍖?Runtime 鍙樻洿鏃讹紝IM bot 浼氳嚜鍔ㄨ縼鍒版柊浼氳瘽**锛氫箣鍓嶅湪宸ヤ綔鍖烘妸 Agent runtime 浠?Claude Code CLI 鍒囧埌 builtin锛堟垨鍙嶅悜锛夊悗锛孖M bot 杩樿繛鍦ㄨ€?runtime 鍒涘缓鐨?session 涓娾€斺€斾笅娆″彂娑堟伅瑕佷箞娌″洖搴旓紝瑕佷箞鎶ユā鍨嬩笉瀛樺湪銆傜幇鍦ㄩ厤缃彉鏇存椂浼氳嚜鍔ㄧ粰 IM 鎺ㄤ竴鏉°€孉gent 宸ヤ綔鍖?Runtime 浠庛€孹銆嶆洿鏂颁负銆孻銆嶏紝寮€濮嬫柊浼氳瘽锛坸xxxxxxx锛夈€嶏紝鏂板璇濅粠骞插噣鐨勭姸鎬佸紑濮嬨€傝€佸璇濅粛鐒跺畬鏁翠繚鐣欏湪鍘嗗彶閲岋紝浠庢闈㈡墦寮€浼氭寜"瀹冨綋鏃剁殑 runtime + 閰嶇疆"鍔犺浇锛岃窡鍏朵粬鍘嗗彶浼氳瘽琛ㄧ幇涓€鑷淬€?
 
 ### Fixed
 
-- **AskUserQuestion / Plan 确认 / 权限请求弹窗不再 10 分钟后自动消失**：之前 AI 抛出选择题、计划确认或权限请求时，如果用户离开电脑超过 10 分钟回来，弹窗已经被静默清掉、AI 那边按"用户拒绝/未答"继续往下走——用户的体感是"刚才那个选择去哪了？"。Mac 睡眠唤醒时尤其明显，`setTimeout` 在唤醒瞬间就触发。修复后弹窗会一直停留直到用户回应（对齐 Claude Code CLI 行为）。
-- **IM bot 绑定在 Agent 配置热更新时不再丢失**（issue #169 同类）：之前在工作区改 MCP / Skills 等设置触发 sidecar 重启时，bot ↔ chat 的绑定会被一并清掉，要么收到"Channel 没有最近活跃的对话"提示，要么得在 IM 里重新发条消息才把绑定建回来。现在绑定在 sidecar 重启时正确保留。
-- **慢首次回合不再被错误标为 "AI 启动中"**：触发 `/context` 这类需要本地多轮内部计算的命令时（实测 40+ 秒），顶栏会一直停在 "AI 启动中（首次启动可能较慢）"，让人以为卡住了。现在用 SDK 自己的 ready 信号判断，启动期通常 3–5 秒就脱掉这个标签。
-- **会话统计弹窗不再被工作区面板遮盖**：在右侧工作区打开的情况下点 ⋯ → 会话 Token 消耗统计，弹窗以前会被工作区面板覆盖。
-- **Popover 外点击不再误关上层 ConfirmDialog**（issue #178）：之前在 Popover 内触发删除等需要二次确认的对话框，点确认按钮会被 Popover 当作"外部点击"误关，得用 Enter 才能确认。
-- **元宝 Channel Plugin 2.13.x 能正常启动**（issue #180）：之前装上后 bridge 直接报 "Plugin did not register a channel"，无法进 IM 流。
+- **AskUserQuestion / Plan 纭 / 鏉冮檺璇锋眰寮圭獥涓嶅啀 10 鍒嗛挓鍚庤嚜鍔ㄦ秷澶?*锛氫箣鍓?AI 鎶涘嚭閫夋嫨棰樸€佽鍒掔‘璁ゆ垨鏉冮檺璇锋眰鏃讹紝濡傛灉鐢ㄦ埛绂诲紑鐢佃剳瓒呰繃 10 鍒嗛挓鍥炴潵锛屽脊绐楀凡缁忚闈欓粯娓呮帀銆丄I 閭ｈ竟鎸?鐢ㄦ埛鎷掔粷/鏈瓟"缁х画寰€涓嬭蛋鈥斺€旂敤鎴风殑浣撴劅鏄?鍒氭墠閭ｄ釜閫夋嫨鍘诲摢浜嗭紵"銆侻ac 鐫＄湢鍞ら啋鏃跺挨鍏舵槑鏄撅紝`setTimeout` 鍦ㄥ敜閱掔灛闂村氨瑙﹀彂銆備慨澶嶅悗寮圭獥浼氫竴鐩村仠鐣欑洿鍒扮敤鎴峰洖搴旓紙瀵归綈 Claude Code CLI 琛屼负锛夈€?
+- **IM bot 缁戝畾鍦?Agent 閰嶇疆鐑洿鏂版椂涓嶅啀涓㈠け**锛坕ssue #169 鍚岀被锛夛細涔嬪墠鍦ㄥ伐浣滃尯鏀?MCP / Skills 绛夎缃Е鍙?sidecar 閲嶅惎鏃讹紝bot 鈫?chat 鐨勭粦瀹氫細琚竴骞舵竻鎺夛紝瑕佷箞鏀跺埌"Channel 娌℃湁鏈€杩戞椿璺冪殑瀵硅瘽"鎻愮ず锛岃涔堝緱鍦?IM 閲岄噸鏂板彂鏉℃秷鎭墠鎶婄粦瀹氬缓鍥炴潵銆傜幇鍦ㄧ粦瀹氬湪 sidecar 閲嶅惎鏃舵纭繚鐣欍€?
+- **鎱㈤娆″洖鍚堜笉鍐嶈閿欒鏍囦负 "AI 鍚姩涓?**锛氳Е鍙?`/context` 杩欑被闇€瑕佹湰鍦板杞唴閮ㄨ绠楃殑鍛戒护鏃讹紙瀹炴祴 40+ 绉掞級锛岄《鏍忎細涓€鐩村仠鍦?"AI 鍚姩涓紙棣栨鍚姩鍙兘杈冩參锛?锛岃浜轰互涓哄崱浣忎簡銆傜幇鍦ㄧ敤 SDK 鑷繁鐨?ready 淇″彿鍒ゆ柇锛屽惎鍔ㄦ湡閫氬父 3鈥? 绉掑氨鑴辨帀杩欎釜鏍囩銆?
+- **浼氳瘽缁熻寮圭獥涓嶅啀琚伐浣滃尯闈㈡澘閬洊**锛氬湪鍙充晶宸ヤ綔鍖烘墦寮€鐨勬儏鍐典笅鐐?鈰?鈫?浼氳瘽 Token 娑堣€楃粺璁★紝寮圭獥浠ュ墠浼氳宸ヤ綔鍖洪潰鏉胯鐩栥€?
+- **Popover 澶栫偣鍑讳笉鍐嶈鍏充笂灞?ConfirmDialog**锛坕ssue #178锛夛細涔嬪墠鍦?Popover 鍐呰Е鍙戝垹闄ょ瓑闇€瑕佷簩娆＄‘璁ょ殑瀵硅瘽妗嗭紝鐐圭‘璁ゆ寜閽細琚?Popover 褰撲綔"澶栭儴鐐瑰嚮"璇叧锛屽緱鐢?Enter 鎵嶈兘纭銆?
+- **鍏冨疂 Channel Plugin 2.13.x 鑳芥甯稿惎鍔?*锛坕ssue #180锛夛細涔嬪墠瑁呬笂鍚?bridge 鐩存帴鎶?"Plugin did not register a channel"锛屾棤娉曡繘 IM 娴併€?
 
 ### Internal
 
-- 抽 `drainPendingInteractiveRequests` 统一 helper 处理四类 pending request 的 drain。
-- Surface handover：`cmd_handover_session_to_channel` 重写 `peer_sessions[chat_key]` + 转移 `SidecarOwner::Agent` 所有权 + 通过 channel adapter 发送系统消息。镜像走新管理 API 端点 `/api/im/mirror`，Sidecar 在 desktop turn 的 user-message 持久化点 + AI text block-end 点 push。
-- Runtime-change 编排：`cmd_update_agent_config` 检测 runtime 变更后调 `freeze_and_rotate_for_runtime_change`，对每个 peer_session 走"sidecar HTTP `/api/session/freeze` 优先 / 文件锁兜底"双写路径打 `OwnedSessionSnapshot`，再 mint 新 UUID 替换 `peer_sessions[*].session_id`。新增 `OwnedSessionSnapshot` 共享类型（TS Pick + Rust struct），sidecar 端点和 Rust 兜底走对称的 selective patch（只写存在字段 + 自带 `configSnapshotAt = now`）。
-- Notification：Windows 走 `tauri-winrt-notification` 的 `on_activated` 闭包捕获 tab_id；macOS / Linux 走 `Empty / Single / Ambiguous` 三态 latch + 30s TTL（含两个 boundary case：旧 Single 过期当 Empty、旧 Ambiguous 过期重置为 Single）。`tray::show_main_window` 提为 `pub`，托盘点击 / 第二实例启动 / WinRT 通知点击三处共享。
-- `updateSessionMetadata` 的 read-modify-write 全量挪到 `withSessionsLock` 内部，杜绝并发 writer 互相覆盖（freeze 端点的高频写入暴露的 pre-existing race）。
-- `AbortSession` 在 provider-switch 终止后正确重置，避免下一条用户消息被 startup 守卫误判为"用户按了 Stop"丢弃；该守卫额外暴露 `chat:agent-error` 让 #183 的重发 banner 兜底任意 future 类似泄漏。
+- 鎶?`drainPendingInteractiveRequests` 缁熶竴 helper 澶勭悊鍥涚被 pending request 鐨?drain銆?
+- Surface handover锛歚cmd_handover_session_to_channel` 閲嶅啓 `peer_sessions[chat_key]` + 杞Щ `SidecarOwner::Agent` 鎵€鏈夋潈 + 閫氳繃 channel adapter 鍙戦€佺郴缁熸秷鎭€傞暅鍍忚蛋鏂扮鐞?API 绔偣 `/api/im/mirror`锛孲idecar 鍦?desktop turn 鐨?user-message 鎸佷箙鍖栫偣 + AI text block-end 鐐?push銆?
+- Runtime-change 缂栨帓锛歚cmd_update_agent_config` 妫€娴?runtime 鍙樻洿鍚庤皟 `freeze_and_rotate_for_runtime_change`锛屽姣忎釜 peer_session 璧?sidecar HTTP `/api/session/freeze` 浼樺厛 / 鏂囦欢閿佸厹搴?鍙屽啓璺緞鎵?`OwnedSessionSnapshot`锛屽啀 mint 鏂?UUID 鏇挎崲 `peer_sessions[*].session_id`銆傛柊澧?`OwnedSessionSnapshot` 鍏变韩绫诲瀷锛圱S Pick + Rust struct锛夛紝sidecar 绔偣鍜?Rust 鍏滃簳璧板绉扮殑 selective patch锛堝彧鍐欏瓨鍦ㄥ瓧娈?+ 鑷甫 `configSnapshotAt = now`锛夈€?
+- Notification锛歐indows 璧?`tauri-winrt-notification` 鐨?`on_activated` 闂寘鎹曡幏 tab_id锛沵acOS / Linux 璧?`Empty / Single / Ambiguous` 涓夋€?latch + 30s TTL锛堝惈涓や釜 boundary case锛氭棫 Single 杩囨湡褰?Empty銆佹棫 Ambiguous 杩囨湡閲嶇疆涓?Single锛夈€俙tray::show_main_window` 鎻愪负 `pub`锛屾墭鐩樼偣鍑?/ 绗簩瀹炰緥鍚姩 / WinRT 閫氱煡鐐瑰嚮涓夊鍏变韩銆?
+- `updateSessionMetadata` 鐨?read-modify-write 鍏ㄩ噺鎸埌 `withSessionsLock` 鍐呴儴锛屾潨缁濆苟鍙?writer 浜掔浉瑕嗙洊锛坒reeze 绔偣鐨勯珮棰戝啓鍏ユ毚闇茬殑 pre-existing race锛夈€?
+- `AbortSession` 鍦?provider-switch 缁堟鍚庢纭噸缃紝閬垮厤涓嬩竴鏉＄敤鎴锋秷鎭 startup 瀹堝崼璇垽涓?鐢ㄦ埛鎸変簡 Stop"涓㈠純锛涜瀹堝崼棰濆鏆撮湶 `chat:agent-error` 璁?#183 鐨勯噸鍙?banner 鍏滃簳浠绘剰 future 绫讳技娉勬紡銆?
 
 ---
 
 ## [0.2.13] - 2026-05-09
 
-> 0.2.12 紧急修复：消息显示两遍、多 Agent 状态错位、关闭 tab 后回切丢失 AI 回复。
+> 0.2.12 绱ф€ヤ慨澶嶏細娑堟伅鏄剧ず涓ら亶銆佸 Agent 鐘舵€侀敊浣嶃€佸叧闂?tab 鍚庡洖鍒囦涪澶?AI 鍥炲銆?
 
 ### Fixed
 
-- **每条发出去的消息不再显示两遍（issue #173）**：0.2.12 的队列重写引入回归——每发一条消息，聊天里出现两个一模一样的气泡，会话存档里也写入两条记录。问题来自后端把同一条消息推了两次，前端去重又因 id 不同没生效。修复后每条消息只渲染一次、只存档一次。
-- **并行 Agent 任务的状态指示器与文字一致（issue #175）**：用 Agent 工具同时派多个子任务时，列表里的绿灯指示器会灭、Loader 图标也是静态的，但展开后文字写"Agent is running"。现在指示器、Loader、文字三者状态严格同步——每个并行任务都有自己的实时状态。
-- **关闭 tab 后立刻从历史打开同一会话，AI 正在生成的内容不再丢失**：之前关闭 tab 时虽然提示「进入后台继续完成」、后端确实启动了后台任务保活，但只要用户立刻从历史菜单回到这个会话，前端会先取消后台、再重建 Sidecar——这一瞬间 AI 进程没有任何持有者就被回收了，30 秒思考与工具调用全部丢失。修复后用户回切时先把新 tab 接成持有者，再释放后台标记，AI 进程跨 tab 无缝接管，回复完整保留（这个隐患从 v0.1.14 引入后台续跑功能时就存在，触发条件较窄）。
+- **姣忔潯鍙戝嚭鍘荤殑娑堟伅涓嶅啀鏄剧ず涓ら亶锛坕ssue #173锛?*锛?.2.12 鐨勯槦鍒楅噸鍐欏紩鍏ュ洖褰掆€斺€旀瘡鍙戜竴鏉℃秷鎭紝鑱婂ぉ閲屽嚭鐜颁袱涓竴妯′竴鏍风殑姘旀场锛屼細璇濆瓨妗ｉ噷涔熷啓鍏ヤ袱鏉¤褰曘€傞棶棰樻潵鑷悗绔妸鍚屼竴鏉℃秷鎭帹浜嗕袱娆★紝鍓嶇鍘婚噸鍙堝洜 id 涓嶅悓娌＄敓鏁堛€備慨澶嶅悗姣忔潯娑堟伅鍙覆鏌撲竴娆°€佸彧瀛樻。涓€娆°€?
+- **骞惰 Agent 浠诲姟鐨勭姸鎬佹寚绀哄櫒涓庢枃瀛椾竴鑷达紙issue #175锛?*锛氱敤 Agent 宸ュ叿鍚屾椂娲惧涓瓙浠诲姟鏃讹紝鍒楄〃閲岀殑缁跨伅鎸囩ず鍣ㄤ細鐏€丩oader 鍥炬爣涔熸槸闈欐€佺殑锛屼絾灞曞紑鍚庢枃瀛楀啓"Agent is running"銆傜幇鍦ㄦ寚绀哄櫒銆丩oader銆佹枃瀛椾笁鑰呯姸鎬佷弗鏍煎悓姝モ€斺€旀瘡涓苟琛屼换鍔￠兘鏈夎嚜宸辩殑瀹炴椂鐘舵€併€?
+- **鍏抽棴 tab 鍚庣珛鍒讳粠鍘嗗彶鎵撳紑鍚屼竴浼氳瘽锛孉I 姝ｅ湪鐢熸垚鐨勫唴瀹逛笉鍐嶄涪澶?*锛氫箣鍓嶅叧闂?tab 鏃惰櫧鐒舵彁绀恒€岃繘鍏ュ悗鍙扮户缁畬鎴愩€嶃€佸悗绔‘瀹炲惎鍔ㄤ簡鍚庡彴浠诲姟淇濇椿锛屼絾鍙鐢ㄦ埛绔嬪埢浠庡巻鍙茶彍鍗曞洖鍒拌繖涓細璇濓紝鍓嶇浼氬厛鍙栨秷鍚庡彴銆佸啀閲嶅缓 Sidecar鈥斺€旇繖涓€鐬棿 AI 杩涚▼娌℃湁浠讳綍鎸佹湁鑰呭氨琚洖鏀朵簡锛?0 绉掓€濊€冧笌宸ュ叿璋冪敤鍏ㄩ儴涓㈠け銆備慨澶嶅悗鐢ㄦ埛鍥炲垏鏃跺厛鎶婃柊 tab 鎺ユ垚鎸佹湁鑰咃紝鍐嶉噴鏀惧悗鍙版爣璁帮紝AI 杩涚▼璺?tab 鏃犵紳鎺ョ锛屽洖澶嶅畬鏁翠繚鐣欙紙杩欎釜闅愭偅浠?v0.1.14 寮曞叆鍚庡彴缁窇鍔熻兘鏃跺氨瀛樺湪锛岃Е鍙戞潯浠惰緝绐勶級銆?
 
 ---
 
 ## [0.2.12] - 2026-05-09
 
-> 0.2.11 残留问题集中修复：定时任务能跑、Windows 用户能用、AI 中文输出不走样、对话细节回到正轨。
+> 0.2.11 娈嬬暀闂闆嗕腑淇锛氬畾鏃朵换鍔¤兘璺戙€乄indows 鐢ㄦ埛鑳界敤銆丄I 涓枃杈撳嚭涓嶈蛋鏍枫€佸璇濈粏鑺傚洖鍒版杞ㄣ€?
 
 ### Fixed
 
-- **定时任务真的会执行（issue #166）**：`0 21 * * 0`（每周日 21 点）这类标准 cron 表达式之前会卡在 running 状态、永远不触发，用户完全无感知。
-- **AI 中文输出的加粗和表格不再走样（issue #167）**：DeepSeek / MiniMax 等中文模型输出的全角星号 `＊＊文字＊＊` 现在能正确渲染为粗体。
-- **Windows 外部 runtime 解封（issue #170）**：Codex / Claude Code / Gemini 在 Windows 启动后永久挂起的问题修复；调用外部 runtime 和 MCP 时也不再频繁弹出黑色控制台窗口；带引号或特殊字符的参数（如 Codex 的 TOML 配置）能正确传入。
-- **手动编辑过的配置文件不再丢数据（issue #170）**：用 Notepad 等工具保存的 `config.json` / `cron_tasks.json` / `sessions.json`（带 UTF-8 BOM）之前会被静默丢弃回退到备份，看起来像数据丢失。
-- **AI 输出过程中追加消息更及时**：AI 还在输出时按 ⏎ 追加的新消息能立即进入当前轮处理，不再等本轮完整结束。
-- **同账号开多 Tab 不互相错杀（issue #169）**：两个 Tab 打开同一会话时切换不再产生路由错乱。
-- **删除对话的确认按钮不再被历史菜单挡住**。
-- **F5 / Cmd+R 不再误退到 launcher**，当前 Tab 上下文不会丢失。
-- **微信 / 飞书 / 钉钉 bot 跟上 OpenClaw 升级（issue #171）**：插件升级后启动报「host too old or plugin SDK contract violated」的问题修复。
+- **瀹氭椂浠诲姟鐪熺殑浼氭墽琛岋紙issue #166锛?*锛歚0 21 * * 0`锛堟瘡鍛ㄦ棩 21 鐐癸級杩欑被鏍囧噯 cron 琛ㄨ揪寮忎箣鍓嶄細鍗″湪 running 鐘舵€併€佹案杩滀笉瑙﹀彂锛岀敤鎴峰畬鍏ㄦ棤鎰熺煡銆?
+- **AI 涓枃杈撳嚭鐨勫姞绮楀拰琛ㄦ牸涓嶅啀璧版牱锛坕ssue #167锛?*锛欴eepSeek / MiniMax 绛変腑鏂囨ā鍨嬭緭鍑虹殑鍏ㄨ鏄熷彿 `锛婏紛鏂囧瓧锛婏紛` 鐜板湪鑳芥纭覆鏌撲负绮椾綋銆?
+- **Windows 澶栭儴 runtime 瑙ｅ皝锛坕ssue #170锛?*锛欳odex / Claude Code / Gemini 鍦?Windows 鍚姩鍚庢案涔呮寕璧风殑闂淇锛涜皟鐢ㄥ閮?runtime 鍜?MCP 鏃朵篃涓嶅啀棰戠箒寮瑰嚭榛戣壊鎺у埗鍙扮獥鍙ｏ紱甯﹀紩鍙锋垨鐗规畩瀛楃鐨勫弬鏁帮紙濡?Codex 鐨?TOML 閰嶇疆锛夎兘姝ｇ‘浼犲叆銆?
+- **鎵嬪姩缂栬緫杩囩殑閰嶇疆鏂囦欢涓嶅啀涓㈡暟鎹紙issue #170锛?*锛氱敤 Notepad 绛夊伐鍏蜂繚瀛樼殑 `config.json` / `cron_tasks.json` / `sessions.json`锛堝甫 UTF-8 BOM锛変箣鍓嶄細琚潤榛樹涪寮冨洖閫€鍒板浠斤紝鐪嬭捣鏉ュ儚鏁版嵁涓㈠け銆?
+- **AI 杈撳嚭杩囩▼涓拷鍔犳秷鎭洿鍙婃椂**锛欰I 杩樺湪杈撳嚭鏃舵寜 鈴?杩藉姞鐨勬柊娑堟伅鑳界珛鍗宠繘鍏ュ綋鍓嶈疆澶勭悊锛屼笉鍐嶇瓑鏈疆瀹屾暣缁撴潫銆?
+- **鍚岃处鍙峰紑澶?Tab 涓嶄簰鐩搁敊鏉€锛坕ssue #169锛?*锛氫袱涓?Tab 鎵撳紑鍚屼竴浼氳瘽鏃跺垏鎹笉鍐嶄骇鐢熻矾鐢遍敊涔便€?
+- **鍒犻櫎瀵硅瘽鐨勭‘璁ゆ寜閽笉鍐嶈鍘嗗彶鑿滃崟鎸′綇**銆?
+- **F5 / Cmd+R 涓嶅啀璇€€鍒?launcher**锛屽綋鍓?Tab 涓婁笅鏂囦笉浼氫涪澶便€?
+- **寰俊 / 椋炰功 / 閽夐拤 bot 璺熶笂 OpenClaw 鍗囩骇锛坕ssue #171锛?*锛氭彃浠跺崌绾у悗鍚姩鎶ャ€宧ost too old or plugin SDK contract violated銆嶇殑闂淇銆?
 
 ---
 
 ## [0.2.11] - 2026-05-08
 
-> 重点修复：微信 bot 升级到 2.4.2 后能正常启动；切到 IM bot 历史会话不再被弹回 Launcher；订阅版 Sonnet 4.6 不再撞 1M 限额；流式输出中"取消排队消息"真的能取消。同时把定时任务 / 退出 cron / IM 发图统一到 `hamuna` CLI，让外部 runtime（Codex / Gemini / Claude Code CLI）也能用。
+> 閲嶇偣淇锛氬井淇?bot 鍗囩骇鍒?2.4.2 鍚庤兘姝ｅ父鍚姩锛涘垏鍒?IM bot 鍘嗗彶浼氳瘽涓嶅啀琚脊鍥?Launcher锛涜闃呯増 Sonnet 4.6 涓嶅啀鎾?1M 闄愰锛涙祦寮忚緭鍑轰腑"鍙栨秷鎺掗槦娑堟伅"鐪熺殑鑳藉彇娑堛€傚悓鏃舵妸瀹氭椂浠诲姟 / 閫€鍑?cron / IM 鍙戝浘缁熶竴鍒?`hamuna` CLI锛岃澶栭儴 runtime锛圕odex / Gemini / Claude Code CLI锛変篃鑳界敤銆?
 
 ### Added
 
-- **说一声「记一下…」AI 直接落库**：在桌面 / IM bot / agent 渠道里，用户说「记一下周五要准备演讲」「帮我记…」「note this down」「remember this」，AI 会调 `hamuna thought create` 把内容存进收件箱，而不只是嘴上回复"好的我记住了"。触发器严格区分"明确请求记录" vs "顺嘴提到的想法"——FYI / 偏好 / 头脑风暴等不会误存。
+- **璇翠竴澹般€岃涓€涓嬧€︺€岮I 鐩存帴钀藉簱**锛氬湪妗岄潰 / IM bot / agent 娓犻亾閲岋紝鐢ㄦ埛璇淬€岃涓€涓嬪懆浜旇鍑嗗婕旇銆嶃€屽府鎴戣鈥︺€嶃€宯ote this down銆嶃€宺emember this銆嶏紝AI 浼氳皟 `hamuna thought create` 鎶婂唴瀹瑰瓨杩涙敹浠剁锛岃€屼笉鍙槸鍢翠笂鍥炲"濂界殑鎴戣浣忎簡"銆傝Е鍙戝櫒涓ユ牸鍖哄垎"鏄庣‘璇锋眰璁板綍" vs "椤哄槾鎻愬埌鐨勬兂娉?鈥斺€擣YI / 鍋忓ソ / 澶磋剳椋庢毚绛変笉浼氳瀛樸€?
 
 ### Changed
 
-- **定时任务 / cron 退出 / IM 发图统一走 CLI**：之前这三类能力是 builtin Claude Agent SDK 专属的内置 MCP 工具，外部 runtime（Codex CLI / Gemini CLI / Claude Code CLI）用不了。现在改为通过 `hamuna` CLI 提供，所有 runtime 行为一致。同时 cron 增加跨 workspace 隔离——一个 workspace 里创建的定时任务不能被另一个 workspace 的会话删除 / 修改 / 立即执行。
+- **瀹氭椂浠诲姟 / cron 閫€鍑?/ IM 鍙戝浘缁熶竴璧?CLI**锛氫箣鍓嶈繖涓夌被鑳藉姏鏄?builtin Claude Agent SDK 涓撳睘鐨勫唴缃?MCP 宸ュ叿锛屽閮?runtime锛圕odex CLI / Gemini CLI / Claude Code CLI锛夌敤涓嶄簡銆傜幇鍦ㄦ敼涓洪€氳繃 `hamuna` CLI 鎻愪緵锛屾墍鏈?runtime 琛屼负涓€鑷淬€傚悓鏃?cron 澧炲姞璺?workspace 闅旂鈥斺€斾竴涓?workspace 閲屽垱寤虹殑瀹氭椂浠诲姟涓嶈兘琚彟涓€涓?workspace 鐨勪細璇濆垹闄?/ 淇敼 / 绔嬪嵆鎵ц銆?
 
 ### Fixed
 
-- **微信 bot 升级到 2.4.2 后能启动**：插件升级后要求宿主在 startup 时提供新的 `channelRuntime` 接口，0.2.10 之前的 bridge 没注入这个字段，启动直接报"host too old or plugin SDK contract violated"。修复后微信 bot 重新可用，企业微信 / 飞书 / QQ bot 不受影响。
-- **切到历史 IM bot 会话不再回弹 Launcher**：在桌面 workspace 里点历史下拉里某个 IM bot session 时，过去会因竞态被弹回 Launcher 视图——sessionId 已切到新会话，但视图、agent 目录、标题没跟上。现在切换流程把这几项原子写入。
-- **流式输出中点 × 取消排队消息真的能取消**：AI 还在输出时用户用"深入讲讲"等快捷动作把消息塞进队列，再点 × 取消——之前内部已同步把消息丢进 SDK，× 只删 UI，AI 仍然会回。现在排队消息延后到 AI 当前轮结束才下发，期间取消即真取消（IM bot 上的取消请求若失败会如实返回 409 而非假装成功）。
-- **订阅版 Sonnet 4.6 不再撞 1M 限额**：`Anthropic（订阅）`预设里 sonnet-4-6 之前被标为 1M 上下文，但订阅默认只给 200K，结果发消息直接报 `Extra usage is required for 1M context`。校正回 200K，订阅用户开箱即用；想用 1M 的可以自定义 provider 显式启用。
-- **删除会话时确认按钮无响应**：会话历史里点删除，确认按钮不触发任何事件——改用统一确认弹窗组件。
-- **行动模式下 AI 调用 `hamuna thought create` 不再弹权限框**：AI 用单引号包裹内容（防 shell 注入）调 thought create，过去仍要用户点一次"允许"才能落库。现在符合"单引号、无尾随 shell 元字符"形式直接放行；双引号 / 不带引号等任何不安全形式仍会拦截。
-- **Windows CLI 一组体感问题（issue #149）**：
-  - `cron add --dry-run` 之前会真的写入任务（CLI 没把 flag 传给 server），现在按 `mcp add --dry-run` 同款形态返回 `[DRY RUN] Would apply:` 预览。
-  - `hamuna thought create` 在 Windows 上偶尔丢内容报 422，新增 `--content-file <abs-path>` 跨平台保底通道（写文件 → 传路径，不受任何 shell 引号问题影响），CLI 端把空内容拦在 API round-trip 之前给可恢复错误提示。
-  - `hamuna thought readme` 之前返回 `Unknown admin route`，现在返回简短指引（含 `--content-file` 用法）。
-  - `plugin list` 之前每行字段都是 `?`（CLI formatter 字段名跟 Rust 返回结构对不上），修正字段映射。
-  - `config get / mcp env get / agent channel list` 之前只显示 `✓ <action>` 没数据，补 3 个 formatter 渲染实际 key/value / env map / channel 列表。
-  - `mcp show / agent show / runtime describe / task get` 在 Windows 报 "Missing required argument"（根因待 Windows 端调试，无法在 macOS 复现）：CLI 端早期校验把不清晰的 server 422 替换为带 `--<flag>` workaround 提示的清晰错误。
+- **寰俊 bot 鍗囩骇鍒?2.4.2 鍚庤兘鍚姩**锛氭彃浠跺崌绾у悗瑕佹眰瀹夸富鍦?startup 鏃舵彁渚涙柊鐨?`channelRuntime` 鎺ュ彛锛?.2.10 涔嬪墠鐨?bridge 娌℃敞鍏ヨ繖涓瓧娈碉紝鍚姩鐩存帴鎶?host too old or plugin SDK contract violated"銆備慨澶嶅悗寰俊 bot 閲嶆柊鍙敤锛屼紒涓氬井淇?/ 椋炰功 / QQ bot 涓嶅彈褰卞搷銆?
+- **鍒囧埌鍘嗗彶 IM bot 浼氳瘽涓嶅啀鍥炲脊 Launcher**锛氬湪妗岄潰 workspace 閲岀偣鍘嗗彶涓嬫媺閲屾煇涓?IM bot session 鏃讹紝杩囧幓浼氬洜绔炴€佽寮瑰洖 Launcher 瑙嗗浘鈥斺€攕essionId 宸插垏鍒版柊浼氳瘽锛屼絾瑙嗗浘銆乤gent 鐩綍銆佹爣棰樻病璺熶笂銆傜幇鍦ㄥ垏鎹㈡祦绋嬫妸杩欏嚑椤瑰師瀛愬啓鍏ャ€?
+- **娴佸紡杈撳嚭涓偣 脳 鍙栨秷鎺掗槦娑堟伅鐪熺殑鑳藉彇娑?*锛欰I 杩樺湪杈撳嚭鏃剁敤鎴风敤"娣卞叆璁茶"绛夊揩鎹峰姩浣滄妸娑堟伅濉炶繘闃熷垪锛屽啀鐐?脳 鍙栨秷鈥斺€斾箣鍓嶅唴閮ㄥ凡鍚屾鎶婃秷鎭涪杩?SDK锛屆?鍙垹 UI锛孉I 浠嶇劧浼氬洖銆傜幇鍦ㄦ帓闃熸秷鎭欢鍚庡埌 AI 褰撳墠杞粨鏉熸墠涓嬪彂锛屾湡闂村彇娑堝嵆鐪熷彇娑堬紙IM bot 涓婄殑鍙栨秷璇锋眰鑻ュけ璐ヤ細濡傚疄杩斿洖 409 鑰岄潪鍋囪鎴愬姛锛夈€?
+- **璁㈤槄鐗?Sonnet 4.6 涓嶅啀鎾?1M 闄愰**锛歚Anthropic锛堣闃咃級`棰勮閲?sonnet-4-6 涔嬪墠琚爣涓?1M 涓婁笅鏂囷紝浣嗚闃呴粯璁ゅ彧缁?200K锛岀粨鏋滃彂娑堟伅鐩存帴鎶?`Extra usage is required for 1M context`銆傛牎姝ｅ洖 200K锛岃闃呯敤鎴峰紑绠卞嵆鐢紱鎯崇敤 1M 鐨勫彲浠ヨ嚜瀹氫箟 provider 鏄惧紡鍚敤銆?
+- **鍒犻櫎浼氳瘽鏃剁‘璁ゆ寜閽棤鍝嶅簲**锛氫細璇濆巻鍙查噷鐐瑰垹闄わ紝纭鎸夐挳涓嶈Е鍙戜换浣曚簨浠垛€斺€旀敼鐢ㄧ粺涓€纭寮圭獥缁勪欢銆?
+- **琛屽姩妯″紡涓?AI 璋冪敤 `hamuna thought create` 涓嶅啀寮规潈闄愭**锛欰I 鐢ㄥ崟寮曞彿鍖呰９鍐呭锛堥槻 shell 娉ㄥ叆锛夎皟 thought create锛岃繃鍘讳粛瑕佺敤鎴风偣涓€娆?鍏佽"鎵嶈兘钀藉簱銆傜幇鍦ㄧ鍚?鍗曞紩鍙枫€佹棤灏鹃殢 shell 鍏冨瓧绗?褰㈠紡鐩存帴鏀捐锛涘弻寮曞彿 / 涓嶅甫寮曞彿绛変换浣曚笉瀹夊叏褰㈠紡浠嶄細鎷︽埅銆?
+- **Windows CLI 涓€缁勪綋鎰熼棶棰橈紙issue #149锛?*锛?
+  - `cron add --dry-run` 涔嬪墠浼氱湡鐨勫啓鍏ヤ换鍔★紙CLI 娌℃妸 flag 浼犵粰 server锛夛紝鐜板湪鎸?`mcp add --dry-run` 鍚屾褰㈡€佽繑鍥?`[DRY RUN] Would apply:` 棰勮銆?
+  - `hamuna thought create` 鍦?Windows 涓婂伓灏斾涪鍐呭鎶?422锛屾柊澧?`--content-file <abs-path>` 璺ㄥ钩鍙颁繚搴曢€氶亾锛堝啓鏂囦欢 鈫?浼犺矾寰勶紝涓嶅彈浠讳綍 shell 寮曞彿闂褰卞搷锛夛紝CLI 绔妸绌哄唴瀹规嫤鍦?API round-trip 涔嬪墠缁欏彲鎭㈠閿欒鎻愮ず銆?
+  - `hamuna thought readme` 涔嬪墠杩斿洖 `Unknown admin route`锛岀幇鍦ㄨ繑鍥炵畝鐭寚寮曪紙鍚?`--content-file` 鐢ㄦ硶锛夈€?
+  - `plugin list` 涔嬪墠姣忚瀛楁閮芥槸 `?`锛圕LI formatter 瀛楁鍚嶈窡 Rust 杩斿洖缁撴瀯瀵逛笉涓婏級锛屼慨姝ｅ瓧娈垫槧灏勩€?
+  - `config get / mcp env get / agent channel list` 涔嬪墠鍙樉绀?`鉁?<action>` 娌℃暟鎹紝琛?3 涓?formatter 娓叉煋瀹為檯 key/value / env map / channel 鍒楄〃銆?
+  - `mcp show / agent show / runtime describe / task get` 鍦?Windows 鎶?"Missing required argument"锛堟牴鍥犲緟 Windows 绔皟璇曪紝鏃犳硶鍦?macOS 澶嶇幇锛夛細CLI 绔棭鏈熸牎楠屾妸涓嶆竻鏅扮殑 server 422 鏇挎崲涓哄甫 `--<flag>` workaround 鎻愮ず鐨勬竻鏅伴敊璇€?
 
 ---
 
 ## [0.2.10] - 2026-05-07
 
-> 重点修复：1M 上下文模型真正按 1M 用、上游 API 抖动期间能手动停止、切模型 / 切供应商后立即发消息不再丢或跑错配置；安全侧补一个工作区内 symlink 逃逸的口子。
+> 閲嶇偣淇锛?M 涓婁笅鏂囨ā鍨嬬湡姝ｆ寜 1M 鐢ㄣ€佷笂娓?API 鎶栧姩鏈熼棿鑳芥墜鍔ㄥ仠姝€佸垏妯″瀷 / 鍒囦緵搴斿晢鍚庣珛鍗冲彂娑堟伅涓嶅啀涓㈡垨璺戦敊閰嶇疆锛涘畨鍏ㄤ晶琛ヤ竴涓伐浣滃尯鍐?symlink 閫冮€哥殑鍙ｅ瓙銆?
 
 ### Fixed
 
-- **1M 模型真的按 1M 上下文用**：选了 1M 窗口的模型（DeepSeek V4 Pro / Gemini 2.5 / GPT-5.4 / Claude 1M ……），`/context` 现在显示 1M、长对话不会过早被自动压缩、附件也不会被提前截。之前所有非 Anthropic 协议的 1M 模型都被当 200K 处理，长上下文优势用不上。
-- **切模型后立即发消息保证用新模型**：模型选择器换模型后立刻按发送，首条消息现在保证在新模型上跑——之前有内部异步窗口，首轮偶尔会跑在旧模型上。
-- **API 抖动期间停止按钮可用**：上游 API 临时故障时内部会指数退避重试（最长 ~5 分钟），过去用户只能干等——停止按钮被禁用。现在期间显示红色「停止重试」按钮，可以随时退出。
-- **切供应商后立即发消息不会被静默吞掉**：之前内部延迟重启的逻辑会误把刚起好的子进程关掉，前端默默回到空闲、用户消息丢失。
-- **聊天滚动定位**：发消息 / Tab 切换后能正确停在最底，多 tool 调用的长助手消息不会停在中段；切走再切回时不会错误退出「自动跟随最新」模式。
-- **Widget 标签出现在消息正文不破坏渲染**：当 AI 在解释或讨论 `<generative-ui-widget>` 协议本身时（inline code、文字中提及、一条消息含两个 widget），消息能完整显示，不再被错当成「未闭合 widget」吞掉后续内容。
-- **Windows 非系统盘工作区 / 项目级 skill 的「打开」按钮**：工作区在 `D:\` / 外接卷上、或项目里的 skill / command 路径，「在 Finder/资源管理器中显示」和「用默认应用打开」现在能正常工作（之前一律报 "Path not allowed"）。
-- **渠道列表显示真实 bot 名，不再是 npm 包名**：同一个插件下挂多个 bot 时（比如两个飞书 bot），列表里之前都显示成 npm 包名（`larksuite/openclaw-lark` × 2）看不清谁是谁。现在直接拉飞书 / QQ 各自 API 的真实 bot displayName 显示。0.2.10 之前已经被写到磁盘的旧「包名」状态会在下次 channel 启动时自动清掉。
+- **1M 妯″瀷鐪熺殑鎸?1M 涓婁笅鏂囩敤**锛氶€変簡 1M 绐楀彛鐨勬ā鍨嬶紙DeepSeek V4 Pro / Gemini 2.5 / GPT-5.4 / Claude 1M 鈥︹€︼級锛宍/context` 鐜板湪鏄剧ず 1M銆侀暱瀵硅瘽涓嶄細杩囨棭琚嚜鍔ㄥ帇缂┿€侀檮浠朵篃涓嶄細琚彁鍓嶆埅銆備箣鍓嶆墍鏈夐潪 Anthropic 鍗忚鐨?1M 妯″瀷閮借褰?200K 澶勭悊锛岄暱涓婁笅鏂囦紭鍔跨敤涓嶄笂銆?
+- **鍒囨ā鍨嬪悗绔嬪嵆鍙戞秷鎭繚璇佺敤鏂版ā鍨?*锛氭ā鍨嬮€夋嫨鍣ㄦ崲妯″瀷鍚庣珛鍒绘寜鍙戦€侊紝棣栨潯娑堟伅鐜板湪淇濊瘉鍦ㄦ柊妯″瀷涓婅窇鈥斺€斾箣鍓嶆湁鍐呴儴寮傛绐楀彛锛岄杞伓灏斾細璺戝湪鏃фā鍨嬩笂銆?
+- **API 鎶栧姩鏈熼棿鍋滄鎸夐挳鍙敤**锛氫笂娓?API 涓存椂鏁呴殰鏃跺唴閮ㄤ細鎸囨暟閫€閬块噸璇曪紙鏈€闀?~5 鍒嗛挓锛夛紝杩囧幓鐢ㄦ埛鍙兘骞茬瓑鈥斺€斿仠姝㈡寜閽绂佺敤銆傜幇鍦ㄦ湡闂存樉绀虹孩鑹层€屽仠姝㈤噸璇曘€嶆寜閽紝鍙互闅忔椂閫€鍑恒€?
+- **鍒囦緵搴斿晢鍚庣珛鍗冲彂娑堟伅涓嶄細琚潤榛樺悶鎺?*锛氫箣鍓嶅唴閮ㄥ欢杩熼噸鍚殑閫昏緫浼氳鎶婂垰璧峰ソ鐨勫瓙杩涚▼鍏虫帀锛屽墠绔粯榛樺洖鍒扮┖闂层€佺敤鎴锋秷鎭涪澶便€?
+- **鑱婂ぉ婊氬姩瀹氫綅**锛氬彂娑堟伅 / Tab 鍒囨崲鍚庤兘姝ｇ‘鍋滃湪鏈€搴曪紝澶?tool 璋冪敤鐨勯暱鍔╂墜娑堟伅涓嶄細鍋滃湪涓锛涘垏璧板啀鍒囧洖鏃朵笉浼氶敊璇€€鍑恒€岃嚜鍔ㄨ窡闅忔渶鏂般€嶆ā寮忋€?
+- **Widget 鏍囩鍑虹幇鍦ㄦ秷鎭鏂囦笉鐮村潖娓叉煋**锛氬綋 AI 鍦ㄨВ閲婃垨璁ㄨ `<generative-ui-widget>` 鍗忚鏈韩鏃讹紙inline code銆佹枃瀛椾腑鎻愬強銆佷竴鏉℃秷鎭惈涓や釜 widget锛夛紝娑堟伅鑳藉畬鏁存樉绀猴紝涓嶅啀琚敊褰撴垚銆屾湭闂悎 widget銆嶅悶鎺夊悗缁唴瀹广€?
+- **Windows 闈炵郴缁熺洏宸ヤ綔鍖?/ 椤圭洰绾?skill 鐨勩€屾墦寮€銆嶆寜閽?*锛氬伐浣滃尯鍦?`D:\` / 澶栨帴鍗蜂笂銆佹垨椤圭洰閲岀殑 skill / command 璺緞锛屻€屽湪 Finder/璧勬簮绠＄悊鍣ㄤ腑鏄剧ず銆嶅拰銆岀敤榛樿搴旂敤鎵撳紑銆嶇幇鍦ㄨ兘姝ｅ父宸ヤ綔锛堜箣鍓嶄竴寰嬫姤 "Path not allowed"锛夈€?
+- **娓犻亾鍒楄〃鏄剧ず鐪熷疄 bot 鍚嶏紝涓嶅啀鏄?npm 鍖呭悕**锛氬悓涓€涓彃浠朵笅鎸傚涓?bot 鏃讹紙姣斿涓や釜椋炰功 bot锛夛紝鍒楄〃閲屼箣鍓嶉兘鏄剧ず鎴?npm 鍖呭悕锛坄larksuite/openclaw-lark` 脳 2锛夌湅涓嶆竻璋佹槸璋併€傜幇鍦ㄧ洿鎺ユ媺椋炰功 / QQ 鍚勮嚜 API 鐨勭湡瀹?bot displayName 鏄剧ず銆?.2.10 涔嬪墠宸茬粡琚啓鍒扮鐩樼殑鏃с€屽寘鍚嶃€嶇姸鎬佷細鍦ㄤ笅娆?channel 鍚姩鏃惰嚜鍔ㄦ竻鎺夈€?
 
 ### Improved
 
-- **飞书 Channel 配置向导更顺**：凭证步骤删掉多余的几张引导图、凭证填好后顶部出现「凭证已验证 / 接下来要做的 3 步」的状态条，整个绑定流程不再让人原地懵。
+- **椋炰功 Channel 閰嶇疆鍚戝鏇撮『**锛氬嚟璇佹楠ゅ垹鎺夊浣欑殑鍑犲紶寮曞鍥俱€佸嚟璇佸～濂藉悗椤堕儴鍑虹幇銆屽嚟璇佸凡楠岃瘉 / 鎺ヤ笅鏉ヨ鍋氱殑 3 姝ャ€嶇殑鐘舵€佹潯锛屾暣涓粦瀹氭祦绋嬩笉鍐嶈浜哄師鍦版嚨銆?
 
 ### Security
 
-- **工作区里的 symlink 不再能指向工作区外被系统打开**：repo 中存在 `leak → ~/.ssh/id_rsa` 这类 symlink 时（无论是误提交还是恶意构造），过去会被系统级「打开」跟随到外部敏感文件。现在 reveal / 默认应用打开两条路径都会做 canonical 校验，逃逸 symlink 直接被拒。
+- **宸ヤ綔鍖洪噷鐨?symlink 涓嶅啀鑳芥寚鍚戝伐浣滃尯澶栬绯荤粺鎵撳紑**锛歳epo 涓瓨鍦?`leak 鈫?~/.ssh/id_rsa` 杩欑被 symlink 鏃讹紙鏃犺鏄鎻愪氦杩樻槸鎭舵剰鏋勯€狅級锛岃繃鍘讳細琚郴缁熺骇銆屾墦寮€銆嶈窡闅忓埌澶栭儴鏁忔劅鏂囦欢銆傜幇鍦?reveal / 榛樿搴旂敤鎵撳紑涓ゆ潯璺緞閮戒細鍋?canonical 鏍￠獙锛岄€冮€?symlink 鐩存帴琚嫆銆?
 
 ### Changed
 
-- **AI 决定何时画图改为基于内容**：之前要用户说「可视化 / 画一张图 / 做表」AI 才会动用 generative-ui widget；现在 AI 自己根据内容判断——比较、流程、结构、时间轴这类用图比用字更清楚的场景。多个运行时（builtin SDK / Claude Code / Codex / Gemini CLI）行为统一。
+- **AI 鍐冲畾浣曟椂鐢诲浘鏀逛负鍩轰簬鍐呭**锛氫箣鍓嶈鐢ㄦ埛璇淬€屽彲瑙嗗寲 / 鐢讳竴寮犲浘 / 鍋氳〃銆岮I 鎵嶄細鍔ㄧ敤 generative-ui widget锛涚幇鍦?AI 鑷繁鏍规嵁鍐呭鍒ゆ柇鈥斺€旀瘮杈冦€佹祦绋嬨€佺粨鏋勩€佹椂闂磋酱杩欑被鐢ㄥ浘姣旂敤瀛楁洿娓呮鐨勫満鏅€傚涓繍琛屾椂锛坆uiltin SDK / Claude Code / Codex / Gemini CLI锛夎涓虹粺涓€銆?
 
 ---
 
@@ -994,30 +1007,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **任务编辑器：模型选择器跨厂商**：任务的「高级配置 → 模型」现在按厂商分组列出全部已配置的 provider，和 Chat / Agent 设置一致；外部 runtime（Codex / Claude Code / Gemini）也带自家的 model picker (#130)。
-- **Markdown 链接 Cmd/Ctrl+click 直接走系统浏览器**：绕开内置浏览器面板 (#126)。
-- **输入框跟随内容自动撑高**：去掉手动展开按钮，最多 9 行后内部滚动 (#129)。
+- **浠诲姟缂栬緫鍣細妯″瀷閫夋嫨鍣ㄨ法鍘傚晢**锛氫换鍔＄殑銆岄珮绾ч厤缃?鈫?妯″瀷銆嶇幇鍦ㄦ寜鍘傚晢鍒嗙粍鍒楀嚭鍏ㄩ儴宸查厤缃殑 provider锛屽拰 Chat / Agent 璁剧疆涓€鑷达紱澶栭儴 runtime锛圕odex / Claude Code / Gemini锛変篃甯﹁嚜瀹剁殑 model picker (#130)銆?
+- **Markdown 閾炬帴 Cmd/Ctrl+click 鐩存帴璧扮郴缁熸祻瑙堝櫒**锛氱粫寮€鍐呯疆娴忚鍣ㄩ潰鏉?(#126)銆?
+- **杈撳叆妗嗚窡闅忓唴瀹硅嚜鍔ㄦ拺楂?*锛氬幓鎺夋墜鍔ㄥ睍寮€鎸夐挳锛屾渶澶?9 琛屽悗鍐呴儴婊氬姩 (#129)銆?
 
 ### Changed
 
-- **API Key 轮换立即对在跑的任务/定时任务生效**：之前任务里"用哪个 provider"是创建时的快照——你换 Key 后还得重存一遍每个任务才生效。现在任务只记住 provider 的选择，每次执行都从设置里实时读 Key / baseUrl。
-- **任务编辑校验**：保存任务时检查"provider + model 配对"和"外部 runtime ↔ provider 互斥"，避免出现执行时静默走错配置的情况。
+- **API Key 杞崲绔嬪嵆瀵瑰湪璺戠殑浠诲姟/瀹氭椂浠诲姟鐢熸晥**锛氫箣鍓嶄换鍔￠噷"鐢ㄥ摢涓?provider"鏄垱寤烘椂鐨勫揩鐓р€斺€斾綘鎹?Key 鍚庤繕寰楅噸瀛樹竴閬嶆瘡涓换鍔℃墠鐢熸晥銆傜幇鍦ㄤ换鍔″彧璁颁綇 provider 鐨勯€夋嫨锛屾瘡娆℃墽琛岄兘浠庤缃噷瀹炴椂璇?Key / baseUrl銆?
+- **浠诲姟缂栬緫鏍￠獙**锛氫繚瀛樹换鍔℃椂妫€鏌?provider + model 閰嶅"鍜?澶栭儴 runtime 鈫?provider 浜掓枼"锛岄伩鍏嶅嚭鐜版墽琛屾椂闈欓粯璧伴敊閰嶇疆鐨勬儏鍐点€?
 
 ### Fixed
 
-- **切回订阅后定时任务仍跑在第三方供应商**：PRD #119 留下的潜在 bug，订阅切换语义现在正确。
-- **第三方供应商被删除后老定时任务还在用旧 Key**：删除后的下一次 tick 不再偷跑，会把任务标 Blocked。
-- **空白 API Key 被当合法值发到上游产生 401**：现在直接拒绝并提示"未配置 Key"。
-- **阿里百炼 Coding Plan 添加后模型管理报错** (#127)：跳过该 provider 的模型探活。
-- **Windows 上点外链每次闪一个 CMD 黑窗**。
-- **飞书慢响应时 IM Bot 消息挂死直到分钟级 OS 超时**：上游 fetch 现在带 30s 超时 + 父级取消传递。
-- **Plan Mode 下用户拒绝方案后 AI 仍继续执行其他工具** (#131)：现在拒绝即终止整轮回答，UI 弹窗在后端超时 / 中断后也会自动消失，不再出现"前端已取消但后端不认识"的错位状态。
-- **极端情况下崩溃日志暴涨到几百 GB 撑爆磁盘** (#132, #133)：sidecar 在父进程关闭其 stdout / stderr 管道后，原本会陷入 EPIPE → uncaughtException → 写日志 → 再 EPIPE 的递归循环，单文件可在几分钟内写到 100 GB。修复：捕获并静默 stdio 关闭、避免崩溃处理器递归触发；单文件 50MB 上限 + 目录 200MB 上限 + 同 fingerprint 异常去重，多重防线避免重复异常烧光预算。
-- **Fork 分支后切换模型，首条消息丢上下文 / 静默失败** (#134, #135)：原来 fork 关系在第一次 SDK 启动后立即丢弃，模型切换触发 SDK 重启时找不到 session，AI 失忆。现在 fork 元数据保留到 SDK 真正持久化后才清除，期间任何重启会自动重走 fork。
+- **鍒囧洖璁㈤槄鍚庡畾鏃朵换鍔′粛璺戝湪绗笁鏂逛緵搴斿晢**锛歅RD #119 鐣欎笅鐨勬綔鍦?bug锛岃闃呭垏鎹㈣涔夌幇鍦ㄦ纭€?
+- **绗笁鏂逛緵搴斿晢琚垹闄ゅ悗鑰佸畾鏃朵换鍔¤繕鍦ㄧ敤鏃?Key**锛氬垹闄ゅ悗鐨勪笅涓€娆?tick 涓嶅啀鍋疯窇锛屼細鎶婁换鍔℃爣 Blocked銆?
+- **绌虹櫧 API Key 琚綋鍚堟硶鍊煎彂鍒颁笂娓镐骇鐢?401**锛氱幇鍦ㄧ洿鎺ユ嫆缁濆苟鎻愮ず"鏈厤缃?Key"銆?
+- **闃块噷鐧剧偧 Coding Plan 娣诲姞鍚庢ā鍨嬬鐞嗘姤閿?* (#127)锛氳烦杩囪 provider 鐨勬ā鍨嬫帰娲汇€?
+- **Windows 涓婄偣澶栭摼姣忔闂竴涓?CMD 榛戠獥**銆?
+- **椋炰功鎱㈠搷搴旀椂 IM Bot 娑堟伅鎸傛鐩村埌鍒嗛挓绾?OS 瓒呮椂**锛氫笂娓?fetch 鐜板湪甯?30s 瓒呮椂 + 鐖剁骇鍙栨秷浼犻€掋€?
+- **Plan Mode 涓嬬敤鎴锋嫆缁濇柟妗堝悗 AI 浠嶇户缁墽琛屽叾浠栧伐鍏?* (#131)锛氱幇鍦ㄦ嫆缁濆嵆缁堟鏁磋疆鍥炵瓟锛孶I 寮圭獥鍦ㄥ悗绔秴鏃?/ 涓柇鍚庝篃浼氳嚜鍔ㄦ秷澶憋紝涓嶅啀鍑虹幇"鍓嶇宸插彇娑堜絾鍚庣涓嶈璇?鐨勯敊浣嶇姸鎬併€?
+- **鏋佺鎯呭喌涓嬪穿婧冩棩蹇楁毚娑ㄥ埌鍑犵櫨 GB 鎾戠垎纾佺洏** (#132, #133)锛歴idecar 鍦ㄧ埗杩涚▼鍏抽棴鍏?stdout / stderr 绠￠亾鍚庯紝鍘熸湰浼氶櫡鍏?EPIPE 鈫?uncaughtException 鈫?鍐欐棩蹇?鈫?鍐?EPIPE 鐨勯€掑綊寰幆锛屽崟鏂囦欢鍙湪鍑犲垎閽熷唴鍐欏埌 100 GB銆備慨澶嶏細鎹曡幏骞堕潤榛?stdio 鍏抽棴銆侀伩鍏嶅穿婧冨鐞嗗櫒閫掑綊瑙﹀彂锛涘崟鏂囦欢 50MB 涓婇檺 + 鐩綍 200MB 涓婇檺 + 鍚?fingerprint 寮傚父鍘婚噸锛屽閲嶉槻绾块伩鍏嶉噸澶嶅紓甯哥儳鍏夐绠椼€?
+- **Fork 鍒嗘敮鍚庡垏鎹㈡ā鍨嬶紝棣栨潯娑堟伅涓笂涓嬫枃 / 闈欓粯澶辫触** (#134, #135)锛氬師鏉?fork 鍏崇郴鍦ㄧ涓€娆?SDK 鍚姩鍚庣珛鍗充涪寮冿紝妯″瀷鍒囨崲瑙﹀彂 SDK 閲嶅惎鏃舵壘涓嶅埌 session锛孉I 澶卞繂銆傜幇鍦?fork 鍏冩暟鎹繚鐣欏埌 SDK 鐪熸鎸佷箙鍖栧悗鎵嶆竻闄わ紝鏈熼棿浠讳綍閲嶅惎浼氳嚜鍔ㄩ噸璧?fork銆?
 
 ### Migration
 
-- 0.2.8 及更早创建、带凭据快照的定时任务仍可加载执行（兼容路径），用户在「任务编辑」里保存任意一次即迁到新的实时解析路径。
+- 0.2.8 鍙婃洿鏃╁垱寤恒€佸甫鍑嵁蹇収鐨勫畾鏃朵换鍔′粛鍙姞杞芥墽琛岋紙鍏煎璺緞锛夛紝鐢ㄦ埛鍦ㄣ€屼换鍔＄紪杈戙€嶉噷淇濆瓨浠绘剰涓€娆″嵆杩佸埌鏂扮殑瀹炴椂瑙ｆ瀽璺緞銆?
 
 ---
 
@@ -1025,17 +1038,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **AI 小助理 inbox 加「历史」入口**：设置页右上角新增「历史」按钮，点选直接新开 Tab 进会话 (#120)。
-- **任意会话都能驱动 HamunaAgent 自身**：`/self-config` 升级为全局 `/hamuna-cli`，Chat / IM Bot / Cron 都能用。
+- **AI 灏忓姪鐞?inbox 鍔犮€屽巻鍙层€嶅叆鍙?*锛氳缃〉鍙充笂瑙掓柊澧炪€屽巻鍙层€嶆寜閽紝鐐归€夌洿鎺ユ柊寮€ Tab 杩涗細璇?(#120)銆?
+- **浠绘剰浼氳瘽閮借兘椹卞姩 HamunaAgent 鑷韩**锛歚/self-config` 鍗囩骇涓哄叏灞€ `/hamuna-cli`锛孋hat / IM Bot / Cron 閮借兘鐢ㄣ€?
 
 ### Fixed
 
-- **第三方供应商定时任务跑错模型**：agent 切供应商后老 cron 会拿错配的 model + endpoint 静默失败，现在每条 cron 锁定自己的供应商意图，不再被 agent 切换搞乱 (#119)。
-- **验证供应商时把当前对话搞挂**：OpenAI 协议会话进行中点别的供应商 verify、或后台生成标题，原会污染当前会话路由让 Chat 报 `<synthetic>` 错。多个验证现在可以并发不相互踩 (#124)。
-- **浏览器面板 file:// 链接 / 本地绝对路径打不开**：现在用 OS 默认应用打开（仍走安全校验），Windows 长路径兼容 (#125)。
-- **第三方输入法语音识别刷重复内容发出去**：macOS 上微信输入法偶发把识别文本刷几十次进输入框，发送前现在会弹确认，且必须显式点按钮 (#123)。
-- **最近几天日志被字节配额误清**：总量上限提到 5GB + 最近 7 天硬保护，排查问题用的日志不会因配额溢出被清 (#121)。
-- **任务编辑器误显示用不了的 runtime 选项**：未开启 multi-agent runtime 时不再列出 Claude Code / Codex / Gemini CLI 选项，与 Chat / Launcher 一致。
+- **绗笁鏂逛緵搴斿晢瀹氭椂浠诲姟璺戦敊妯″瀷**锛歛gent 鍒囦緵搴斿晢鍚庤€?cron 浼氭嬁閿欓厤鐨?model + endpoint 闈欓粯澶辫触锛岀幇鍦ㄦ瘡鏉?cron 閿佸畾鑷繁鐨勪緵搴斿晢鎰忓浘锛屼笉鍐嶈 agent 鍒囨崲鎼炰贡 (#119)銆?
+- **楠岃瘉渚涘簲鍟嗘椂鎶婂綋鍓嶅璇濇悶鎸?*锛歄penAI 鍗忚浼氳瘽杩涜涓偣鍒殑渚涘簲鍟?verify銆佹垨鍚庡彴鐢熸垚鏍囬锛屽師浼氭薄鏌撳綋鍓嶄細璇濊矾鐢辫 Chat 鎶?`<synthetic>` 閿欍€傚涓獙璇佺幇鍦ㄥ彲浠ュ苟鍙戜笉鐩镐簰韪?(#124)銆?
+- **娴忚鍣ㄩ潰鏉?file:// 閾炬帴 / 鏈湴缁濆璺緞鎵撲笉寮€**锛氱幇鍦ㄧ敤 OS 榛樿搴旂敤鎵撳紑锛堜粛璧板畨鍏ㄦ牎楠岋級锛學indows 闀胯矾寰勫吋瀹?(#125)銆?
+- **绗笁鏂硅緭鍏ユ硶璇煶璇嗗埆鍒烽噸澶嶅唴瀹瑰彂鍑哄幓**锛歮acOS 涓婂井淇¤緭鍏ユ硶鍋跺彂鎶婅瘑鍒枃鏈埛鍑犲崄娆¤繘杈撳叆妗嗭紝鍙戦€佸墠鐜板湪浼氬脊纭锛屼笖蹇呴』鏄惧紡鐐规寜閽?(#123)銆?
+- **鏈€杩戝嚑澶╂棩蹇楄瀛楄妭閰嶉璇竻**锛氭€婚噺涓婇檺鎻愬埌 5GB + 鏈€杩?7 澶╃‖淇濇姢锛屾帓鏌ラ棶棰樼敤鐨勬棩蹇椾笉浼氬洜閰嶉婧㈠嚭琚竻 (#121)銆?
+- **浠诲姟缂栬緫鍣ㄨ鏄剧ず鐢ㄤ笉浜嗙殑 runtime 閫夐」**锛氭湭寮€鍚?multi-agent runtime 鏃朵笉鍐嶅垪鍑?Claude Code / Codex / Gemini CLI 閫夐」锛屼笌 Chat / Launcher 涓€鑷淬€?
 
 ---
 
@@ -1043,25 +1056,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **启动页升级为「项目主页」**：启动页输入框现在可以直接 `@` 引用文件、贴图、拖放上传，不再需要先开聊天；侧栏目录、文件预览、引用、复制路径、在 Finder 中显示在没有打开会话时也能用。
-- **WorkspaceSelector 重做**：工作区下拉改为带标题的扁平列表；hover 出现「设为默认」；触摸板滚动顺滑；整体视觉与启动页输入区对齐。
-- **会话收藏**：任务中心列表行 hover 出现 ★ 收藏按钮，顶部多了「收藏」筛选 chip，方便沉淀长期关注的会话。
-- **MA 小助理 inbox 直接挂在「设置 → AI 供应商」页顶部**：不用再翻菜单找入口。
-- **目录就地重命名 + 新建笔记**：右键目录里的文件可直接改名；右键空白处「新建笔记」自动建一个 `note-…md` 并跳进编辑模式。
-- **文件预览底部信息栏显示绝对路径 + 在 Finder 中显示**：点图标直接揭示文件位置。
+- **鍚姩椤靛崌绾т负銆岄」鐩富椤点€?*锛氬惎鍔ㄩ〉杈撳叆妗嗙幇鍦ㄥ彲浠ョ洿鎺?`@` 寮曠敤鏂囦欢銆佽创鍥俱€佹嫋鏀句笂浼狅紝涓嶅啀闇€瑕佸厛寮€鑱婂ぉ锛涗晶鏍忕洰褰曘€佹枃浠堕瑙堛€佸紩鐢ㄣ€佸鍒惰矾寰勩€佸湪 Finder 涓樉绀哄湪娌℃湁鎵撳紑浼氳瘽鏃朵篃鑳界敤銆?
+- **WorkspaceSelector 閲嶅仛**锛氬伐浣滃尯涓嬫媺鏀逛负甯︽爣棰樼殑鎵佸钩鍒楄〃锛沨over 鍑虹幇銆岃涓洪粯璁ゃ€嶏紱瑙︽懜鏉挎粴鍔ㄩ『婊戯紱鏁翠綋瑙嗚涓庡惎鍔ㄩ〉杈撳叆鍖哄榻愩€?
+- **浼氳瘽鏀惰棌**锛氫换鍔′腑蹇冨垪琛ㄨ hover 鍑虹幇 鈽?鏀惰棌鎸夐挳锛岄《閮ㄥ浜嗐€屾敹钘忋€嶇瓫閫?chip锛屾柟渚挎矇娣€闀挎湡鍏虫敞鐨勪細璇濄€?
+- **MA 灏忓姪鐞?inbox 鐩存帴鎸傚湪銆岃缃?鈫?AI 渚涘簲鍟嗐€嶉〉椤堕儴**锛氫笉鐢ㄥ啀缈昏彍鍗曟壘鍏ュ彛銆?
+- **鐩綍灏卞湴閲嶅懡鍚?+ 鏂板缓绗旇**锛氬彸閿洰褰曢噷鐨勬枃浠跺彲鐩存帴鏀瑰悕锛涘彸閿┖鐧藉銆屾柊寤虹瑪璁般€嶈嚜鍔ㄥ缓涓€涓?`note-鈥d` 骞惰烦杩涚紪杈戞ā寮忋€?
+- **鏂囦欢棰勮搴曢儴淇℃伅鏍忔樉绀虹粷瀵硅矾寰?+ 鍦?Finder 涓樉绀?*锛氱偣鍥炬爣鐩存帴鎻ず鏂囦欢浣嶇疆銆?
 
 ### Fixed
 
-- **OpenAI 协议供应商在中国大陆 + Clash 等系统代理下 `fetch failed`**：第三方 OpenAI 兼容协议（Gemini、DeepSeek、Kimi 等通过 OpenAI 协议接入的供应商）走系统代理时不再因 undici 跨版本协议漂移报错。
-- **任务中心打开非 cron 保活的历史会话进入空 UI**：之前打开某些被释放的历史会话会看到空白聊天 + 日志爆 "No running sidecar"，需要切 Tab 才能恢复。现在 sidecar 终结时 Tab 会自动回到启动页状态，刷新一致。
-- **macOS 长时间使用后 Cmd+W / 关闭面板偶发不响应**：47 处事件监听点统一收口为防 race 的注册器，长会话期间不再积累 Tauri listener 泄漏。
+- **OpenAI 鍗忚渚涘簲鍟嗗湪涓浗澶ч檰 + Clash 绛夌郴缁熶唬鐞嗕笅 `fetch failed`**锛氱涓夋柟 OpenAI 鍏煎鍗忚锛圙emini銆丏eepSeek銆並imi 绛夐€氳繃 OpenAI 鍗忚鎺ュ叆鐨勪緵搴斿晢锛夎蛋绯荤粺浠ｇ悊鏃朵笉鍐嶅洜 undici 璺ㄧ増鏈崗璁紓绉绘姤閿欍€?
+- **浠诲姟涓績鎵撳紑闈?cron 淇濇椿鐨勫巻鍙蹭細璇濊繘鍏ョ┖ UI**锛氫箣鍓嶆墦寮€鏌愪簺琚噴鏀剧殑鍘嗗彶浼氳瘽浼氱湅鍒扮┖鐧借亰澶?+ 鏃ュ織鐖?"No running sidecar"锛岄渶瑕佸垏 Tab 鎵嶈兘鎭㈠銆傜幇鍦?sidecar 缁堢粨鏃?Tab 浼氳嚜鍔ㄥ洖鍒板惎鍔ㄩ〉鐘舵€侊紝鍒锋柊涓€鑷淬€?
+- **macOS 闀挎椂闂翠娇鐢ㄥ悗 Cmd+W / 鍏抽棴闈㈡澘鍋跺彂涓嶅搷搴?*锛?7 澶勪簨浠剁洃鍚偣缁熶竴鏀跺彛涓洪槻 race 鐨勬敞鍐屽櫒锛岄暱浼氳瘽鏈熼棿涓嶅啀绉疮 Tauri listener 娉勬紡銆?
 
 ### Improved
 
-- **Tool 输出渲染简化**：工具结果不再有「点开后又出现一层带文件计数的折叠」这种二阶嵌套。外层用 chip 直接概览（多少个文件、多少行）。
-- **启动页输入区视觉**：动画以中心为轴对称展开；底栏 chip 加阴影并与输入框同高度感；「想法」picker 与 `@` 弹出菜单行为一致。
-- **任务中心 hover 按钮提示**：行 hover 按钮提示从原生 title 改为统一 Tip 组件（暗色、对齐光标、不再被滚动条遮挡）。
-- **设置页 helper inbox 工具栏对齐 Chat 输入框**：按钮居中、不再显示快捷键 hint，外观与发消息那条工具栏统一。
+- **Tool 杈撳嚭娓叉煋绠€鍖?*锛氬伐鍏风粨鏋滀笉鍐嶆湁銆岀偣寮€鍚庡張鍑虹幇涓€灞傚甫鏂囦欢璁℃暟鐨勬姌鍙犮€嶈繖绉嶄簩闃跺祵濂椼€傚灞傜敤 chip 鐩存帴姒傝锛堝灏戜釜鏂囦欢銆佸灏戣锛夈€?
+- **鍚姩椤佃緭鍏ュ尯瑙嗚**锛氬姩鐢讳互涓績涓鸿酱瀵圭О灞曞紑锛涘簳鏍?chip 鍔犻槾褰卞苟涓庤緭鍏ユ鍚岄珮搴︽劅锛涖€屾兂娉曘€峱icker 涓?`@` 寮瑰嚭鑿滃崟琛屼负涓€鑷淬€?
+- **浠诲姟涓績 hover 鎸夐挳鎻愮ず**锛氳 hover 鎸夐挳鎻愮ず浠庡師鐢?title 鏀逛负缁熶竴 Tip 缁勪欢锛堟殫鑹层€佸榻愬厜鏍囥€佷笉鍐嶈婊氬姩鏉￠伄鎸★級銆?
+- **璁剧疆椤?helper inbox 宸ュ叿鏍忓榻?Chat 杈撳叆妗?*锛氭寜閽眳涓€佷笉鍐嶆樉绀哄揩鎹烽敭 hint锛屽瑙備笌鍙戞秷鎭偅鏉″伐鍏锋爮缁熶竴銆?
 
 ---
 
@@ -1069,11 +1082,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **同 Tab 内切到另一段历史会话后，新消息能正常发送并收到流式回复**：0.2.5 在同一个 Tab 里跳到另一段历史会话后发消息没有结果，要重新加载历史才能看到。
-- **从 Chat 顶部 banner / MCP 对话框唤起 MA 小助理时，正确加载 helper 自己的工作区设置**：之前可能误用当前 Tab 的工作区，导致 helper 看不到自己的 skills / agents。
-- **删除一个内置 helper agent 时 picker 选项偶发错位**：删除项时不再误带走相邻项。
-- **`~/.hamuna/skills/` 里有断链 symlink 时全局 sidecar 启动崩溃**：升级到 Node v24 后，任何残留的指向已删目录的 symlink 都会让 sidecar 反复 abort、Tauri 健康检查反复重启，陷入死循环。现在启动时会安全清理这类断链。
-- **静默更新偶发卡死或失败**：静默下载和点击下载共用同一份缓存；更新流程的 UI 锁定路径修整，Tauri updater 在弱网下不再静默失败。
+- **鍚?Tab 鍐呭垏鍒板彟涓€娈靛巻鍙蹭細璇濆悗锛屾柊娑堟伅鑳芥甯稿彂閫佸苟鏀跺埌娴佸紡鍥炲**锛?.2.5 鍦ㄥ悓涓€涓?Tab 閲岃烦鍒板彟涓€娈靛巻鍙蹭細璇濆悗鍙戞秷鎭病鏈夌粨鏋滐紝瑕侀噸鏂板姞杞藉巻鍙叉墠鑳界湅鍒般€?
+- **浠?Chat 椤堕儴 banner / MCP 瀵硅瘽妗嗗敜璧?MA 灏忓姪鐞嗘椂锛屾纭姞杞?helper 鑷繁鐨勫伐浣滃尯璁剧疆**锛氫箣鍓嶅彲鑳借鐢ㄥ綋鍓?Tab 鐨勫伐浣滃尯锛屽鑷?helper 鐪嬩笉鍒拌嚜宸辩殑 skills / agents銆?
+- **鍒犻櫎涓€涓唴缃?helper agent 鏃?picker 閫夐」鍋跺彂閿欎綅**锛氬垹闄ら」鏃朵笉鍐嶈甯﹁蛋鐩搁偦椤广€?
+- **`~/.hamuna/skills/` 閲屾湁鏂摼 symlink 鏃跺叏灞€ sidecar 鍚姩宕╂簝**锛氬崌绾у埌 Node v24 鍚庯紝浠讳綍娈嬬暀鐨勬寚鍚戝凡鍒犵洰褰曠殑 symlink 閮戒細璁?sidecar 鍙嶅 abort銆乀auri 鍋ュ悍妫€鏌ュ弽澶嶉噸鍚紝闄峰叆姝诲惊鐜€傜幇鍦ㄥ惎鍔ㄦ椂浼氬畨鍏ㄦ竻鐞嗚繖绫绘柇閾俱€?
+- **闈欓粯鏇存柊鍋跺彂鍗℃鎴栧け璐?*锛氶潤榛樹笅杞藉拰鐐瑰嚮涓嬭浇鍏辩敤鍚屼竴浠界紦瀛橈紱鏇存柊娴佺▼鐨?UI 閿佸畾璺緞淇暣锛孴auri updater 鍦ㄥ急缃戜笅涓嶅啀闈欓粯澶辫触銆?
 
 ---
 
@@ -1081,20 +1094,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **每日定时任务卡在工具权限上（0.2.4 引入的回归）**：升级到 0.2.4 之后，原本稳跑的 cron 日报会被默认权限拦下 WebSearch / Bash / MCP 工具，AI 写"工具被拒"还被错误标成成功。修复后未主动选权限的 cron 一律给最大权限。桌面对话不受影响。老配置首次启动会自动迁移一次。
-- **删除定时任务后执行历史文件残留**：删除时会把 `cron_runs/` 里对应的 jsonl 一并清掉。
-- **`cron update` 改时区被覆盖回 UTC**：用纯表达式（如 `"30 * * * *"`）改 schedule 时不再丢失原本设的 `Asia/Shanghai`。
-- **`hamuna task run` 报错指向 HTTP 路径**：错误提示改为可直接复制的 `hamuna task rerun <id>`。
-- **`hamuna cron start` 文档误导**：以前文案写"立即执行"实际只是恢复调度。重写说明，并新增 `run-now` 才是真的立即触发。
-- **CLI 偶发 `Unexpected token...` 错误信息**：当后端返回非 JSON 响应（参数格式错、后端异常等）时，CLI 会把真实的服务端错误文本透出来，不再变成无意义的 JSON 解析错。
-- **macOS 输入框方向键 / Cmd+V 仍偶发泄露 tofu 字符（0.2.3 没修干净）**：上版本只过滤了 NSFunctionKey 一段范围，漏掉 ANSI C0 控制字符这条隐藏路径。这次连 Cmd+V 空剪贴板触发的同款问题也一并修了。
+- **姣忔棩瀹氭椂浠诲姟鍗″湪宸ュ叿鏉冮檺涓婏紙0.2.4 寮曞叆鐨勫洖褰掞級**锛氬崌绾у埌 0.2.4 涔嬪悗锛屽師鏈ǔ璺戠殑 cron 鏃ユ姤浼氳榛樿鏉冮檺鎷︿笅 WebSearch / Bash / MCP 宸ュ叿锛孉I 鍐?宸ュ叿琚嫆"杩樿閿欒鏍囨垚鎴愬姛銆備慨澶嶅悗鏈富鍔ㄩ€夋潈闄愮殑 cron 涓€寰嬬粰鏈€澶ф潈闄愩€傛闈㈠璇濅笉鍙楀奖鍝嶃€傝€侀厤缃娆″惎鍔ㄤ細鑷姩杩佺Щ涓€娆°€?
+- **鍒犻櫎瀹氭椂浠诲姟鍚庢墽琛屽巻鍙叉枃浠舵畫鐣?*锛氬垹闄ゆ椂浼氭妸 `cron_runs/` 閲屽搴旂殑 jsonl 涓€骞舵竻鎺夈€?
+- **`cron update` 鏀规椂鍖鸿瑕嗙洊鍥?UTC**锛氱敤绾〃杈惧紡锛堝 `"30 * * * *"`锛夋敼 schedule 鏃朵笉鍐嶄涪澶卞師鏈鐨?`Asia/Shanghai`銆?
+- **`hamuna task run` 鎶ラ敊鎸囧悜 HTTP 璺緞**锛氶敊璇彁绀烘敼涓哄彲鐩存帴澶嶅埗鐨?`hamuna task rerun <id>`銆?
+- **`hamuna cron start` 鏂囨。璇**锛氫互鍓嶆枃妗堝啓"绔嬪嵆鎵ц"瀹為檯鍙槸鎭㈠璋冨害銆傞噸鍐欒鏄庯紝骞舵柊澧?`run-now` 鎵嶆槸鐪熺殑绔嬪嵆瑙﹀彂銆?
+- **CLI 鍋跺彂 `Unexpected token...` 閿欒淇℃伅**锛氬綋鍚庣杩斿洖闈?JSON 鍝嶅簲锛堝弬鏁版牸寮忛敊銆佸悗绔紓甯哥瓑锛夋椂锛孋LI 浼氭妸鐪熷疄鐨勬湇鍔＄閿欒鏂囨湰閫忓嚭鏉ワ紝涓嶅啀鍙樻垚鏃犳剰涔夌殑 JSON 瑙ｆ瀽閿欍€?
+- **macOS 杈撳叆妗嗘柟鍚戦敭 / Cmd+V 浠嶅伓鍙戞硠闇?tofu 瀛楃锛?.2.3 娌′慨骞插噣锛?*锛氫笂鐗堟湰鍙繃婊や簡 NSFunctionKey 涓€娈佃寖鍥达紝婕忔帀 ANSI C0 鎺у埗瀛楃杩欐潯闅愯棌璺緞銆傝繖娆¤繛 Cmd+V 绌哄壀璐存澘瑙﹀彂鐨勫悓娆鹃棶棰樹篃涓€骞朵慨浜嗐€?
 
 ### Added
 
-- **`hamuna cron run-now <id>`**：立即跑一次而不动调度 / 状态。CLI 立即返回，会话 ID 一并打出来好查。任务正在执行时拒绝重叠。
-- **`cron list` 多了几列实用信息**：下次触发时间、上次成败 ✓✗、上次耗时、总执行次数。任务此刻在跑时 ID 后会出现 `*` 标记。
-- **`cron runs` 默认折行截断 + `--full` 旗标**：长输出不再撑乱表格；要看全文加 `--full`。
-- **`cron update` 立即显示下次触发时间**：改完 schedule 后 CLI 直接打 `next fire: 2026-05-01 20:33 Asia/Shanghai (in 1m 33s)`，不用再 list 自己核。
+- **`hamuna cron run-now <id>`**锛氱珛鍗宠窇涓€娆¤€屼笉鍔ㄨ皟搴?/ 鐘舵€併€侰LI 绔嬪嵆杩斿洖锛屼細璇?ID 涓€骞舵墦鍑烘潵濂芥煡銆備换鍔℃鍦ㄦ墽琛屾椂鎷掔粷閲嶅彔銆?
+- **`cron list` 澶氫簡鍑犲垪瀹炵敤淇℃伅**锛氫笅娆¤Е鍙戞椂闂淬€佷笂娆℃垚璐?鉁撯湕銆佷笂娆¤€楁椂銆佹€绘墽琛屾鏁般€備换鍔℃鍒诲湪璺戞椂 ID 鍚庝細鍑虹幇 `*` 鏍囪銆?
+- **`cron runs` 榛樿鎶樿鎴柇 + `--full` 鏃楁爣**锛氶暱杈撳嚭涓嶅啀鎾戜贡琛ㄦ牸锛涜鐪嬪叏鏂囧姞 `--full`銆?
+- **`cron update` 绔嬪嵆鏄剧ず涓嬫瑙﹀彂鏃堕棿**锛氭敼瀹?schedule 鍚?CLI 鐩存帴鎵?`next fire: 2026-05-01 20:33 Asia/Shanghai (in 1m 33s)`锛屼笉鐢ㄥ啀 list 鑷繁鏍搞€?
 
 ---
 
@@ -1102,29 +1115,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **任务高级配置**：派发和编辑面板新增「高级配置」折叠区，单个任务可单独覆盖 runtime（builtin / Claude Code / Codex / Gemini）、模型、权限模式、MCP 服务器，不影响工作区默认。
-- **想法多选合并 / 删除**：框选多条想法批量合并或删除。
-- **想法搜索关键词高亮**。
-- **AI 输入框 `@` 引用支持「想法」**：`@` picker 增加想法 tab，⌘/Ctrl+←/→ 切 tab，回车插入全文。
-- **任务卡 hover「查看任务会话」按钮**：单击直达该任务最近一次会话 Tab。
-- **派发任务时一并写 verify.md**：建任务时同步落盘验收清单。
-- **任务编辑模式开放三份文档**：task.md / verify.md 可编辑，progress.md 只读预览。
-- **内嵌浏览器面板**：工作区工具栏新增地球图标，分屏面板里打开浏览器；地址栏、前进后退、刷新、在系统浏览器打开、关闭俱全。Cmd / Ctrl / 中键点链接跳系统默认浏览器。
+- **浠诲姟楂樼骇閰嶇疆**锛氭淳鍙戝拰缂栬緫闈㈡澘鏂板銆岄珮绾ч厤缃€嶆姌鍙犲尯锛屽崟涓换鍔″彲鍗曠嫭瑕嗙洊 runtime锛坆uiltin / Claude Code / Codex / Gemini锛夈€佹ā鍨嬨€佹潈闄愭ā寮忋€丮CP 鏈嶅姟鍣紝涓嶅奖鍝嶅伐浣滃尯榛樿銆?
+- **鎯虫硶澶氶€夊悎骞?/ 鍒犻櫎**锛氭閫夊鏉℃兂娉曟壒閲忓悎骞舵垨鍒犻櫎銆?
+- **鎯虫硶鎼滅储鍏抽敭璇嶉珮浜?*銆?
+- **AI 杈撳叆妗?`@` 寮曠敤鏀寔銆屾兂娉曘€?*锛歚@` picker 澧炲姞鎯虫硶 tab锛屸寴/Ctrl+鈫?鈫?鍒?tab锛屽洖杞︽彃鍏ュ叏鏂囥€?
+- **浠诲姟鍗?hover銆屾煡鐪嬩换鍔′細璇濄€嶆寜閽?*锛氬崟鍑荤洿杈捐浠诲姟鏈€杩戜竴娆′細璇?Tab銆?
+- **娲惧彂浠诲姟鏃朵竴骞跺啓 verify.md**锛氬缓浠诲姟鏃跺悓姝ヨ惤鐩橀獙鏀舵竻鍗曘€?
+- **浠诲姟缂栬緫妯″紡寮€鏀句笁浠芥枃妗?*锛歵ask.md / verify.md 鍙紪杈戯紝progress.md 鍙棰勮銆?
+- **鍐呭祵娴忚鍣ㄩ潰鏉?*锛氬伐浣滃尯宸ュ叿鏍忔柊澧炲湴鐞冨浘鏍囷紝鍒嗗睆闈㈡澘閲屾墦寮€娴忚鍣紱鍦板潃鏍忋€佸墠杩涘悗閫€銆佸埛鏂般€佸湪绯荤粺娴忚鍣ㄦ墦寮€銆佸叧闂勘鍏ㄣ€侰md / Ctrl / 涓敭鐐归摼鎺ヨ烦绯荤粺榛樿娴忚鍣ㄣ€?
 
 ### Fixed
 
-- **Cron 日报偶发不送达 IM Bot（自 0.2.2 起的回归）**：定时任务结果不再丢，最迟 30 分钟内一定送达。
-- **任务级 MCP override 配了不生效**：高级配置勾的 MCP 在 cron 触发时立即应用。
-- **多个 Cron tick 并发互相打断**：高频任务不再串扰；跟随 Agent 模式不会被前一任务的覆盖配置污染。
-- **聊天流式输出时切 Tab 回来不再丢底部锚定 / 不再跳到对话顶部**。
+- **Cron 鏃ユ姤鍋跺彂涓嶉€佽揪 IM Bot锛堣嚜 0.2.2 璧风殑鍥炲綊锛?*锛氬畾鏃朵换鍔＄粨鏋滀笉鍐嶄涪锛屾渶杩?30 鍒嗛挓鍐呬竴瀹氶€佽揪銆?
+- **浠诲姟绾?MCP override 閰嶄簡涓嶇敓鏁?*锛氶珮绾ч厤缃嬀鐨?MCP 鍦?cron 瑙﹀彂鏃剁珛鍗冲簲鐢ㄣ€?
+- **澶氫釜 Cron tick 骞跺彂浜掔浉鎵撴柇**锛氶珮棰戜换鍔′笉鍐嶄覆鎵帮紱璺熼殢 Agent 妯″紡涓嶄細琚墠涓€浠诲姟鐨勮鐩栭厤缃薄鏌撱€?
+- **鑱婂ぉ娴佸紡杈撳嚭鏃跺垏 Tab 鍥炴潵涓嶅啀涓㈠簳閮ㄩ敋瀹?/ 涓嶅啀璺冲埌瀵硅瘽椤堕儴**銆?
 
 ### Improved
 
-- **任务派发 / 详情 / 编辑三面板视觉打通**：宽度、间距、标题层级、Toggle、快捷键全部对齐。
-- **任务卡 progress.md 长内容自动收纳**：默认 ~280px 高加渐隐 +「展开全部 / 收起」。
-- **任务卡活动栏改单行**：长内容截断不再撑爆卡片。
-- **任务多选交互精简**：去掉「多选模式」横条，浮动菜单贴左。
-- **「会话详情」按钮换 icon + 文案 + 黑色 tooltip**：更显眼。
+- **浠诲姟娲惧彂 / 璇︽儏 / 缂栬緫涓夐潰鏉胯瑙夋墦閫?*锛氬搴︺€侀棿璺濄€佹爣棰樺眰绾с€乀oggle銆佸揩鎹烽敭鍏ㄩ儴瀵归綈銆?
+- **浠诲姟鍗?progress.md 闀垮唴瀹硅嚜鍔ㄦ敹绾?*锛氶粯璁?~280px 楂樺姞娓愰殣 +銆屽睍寮€鍏ㄩ儴 / 鏀惰捣銆嶃€?
+- **浠诲姟鍗℃椿鍔ㄦ爮鏀瑰崟琛?*锛氶暱鍐呭鎴柇涓嶅啀鎾戠垎鍗＄墖銆?
+- **浠诲姟澶氶€変氦浜掔簿绠€**锛氬幓鎺夈€屽閫夋ā寮忋€嶆í鏉★紝娴姩鑿滃崟璐村乏銆?
+- **銆屼細璇濊鎯呫€嶆寜閽崲 icon + 鏂囨 + 榛戣壊 tooltip**锛氭洿鏄剧溂銆?
 
 ---
 
@@ -1132,25 +1145,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **任务中心「想法 → AI 讨论」体验改进**：从想法卡片直接发起讨论时，原本会出现「query 在屏幕上但没有 loading 提示，~10 秒后才进入响应中」的怪异中间态。现在新 Tab 一打开就显示「AI 启动中」直到 AI 真正开始流式输出，状态全程一致。配套优化：外部 runtime（Gemini CLI / Codex CLI）的 Tab 启动从 ~17s 缩短到 ~10s（消除了重复的 CLI 进程冷启动）。
-- **文件预览支持引用到聊天**：在文件预览面板里，可以选择整文件或某几行直接引用到当前聊天输入框。
-- **图片粘贴在不支持图像的模型下也不丢失**：以前在 DeepSeek、Kimi 文本模型等不支持图片输入的模型下粘图，sidecar 会偷偷把图片丢掉、只把文本送给 AI。现在改成自动把图片存到工作区 `hamuna_files/`，输入框里出现 `@图片路径` 引用，AI 至少知道你给了它什么文件，可以用 Read / OCR 等工具自己想办法处理。Tab UI（粘贴 + 拖拽）和 IM Bot（飞书 / Telegram / 钉钉 / 微信收图）都覆盖。Toast 文案也从「会自动过滤，仅文本送达」改成「已转为文件存入工作区供模型读取」。
-- **右键 Skill / Agent 列表的「设置」直达详情**：以前要先点开 Skill / Agent 再切到设置，现在右键直接进入详情面板。
+- **浠诲姟涓績銆屾兂娉?鈫?AI 璁ㄨ銆嶄綋楠屾敼杩?*锛氫粠鎯虫硶鍗＄墖鐩存帴鍙戣捣璁ㄨ鏃讹紝鍘熸湰浼氬嚭鐜般€宷uery 鍦ㄥ睆骞曚笂浣嗘病鏈?loading 鎻愮ず锛寏10 绉掑悗鎵嶈繘鍏ュ搷搴斾腑銆嶇殑鎬紓涓棿鎬併€傜幇鍦ㄦ柊 Tab 涓€鎵撳紑灏辨樉绀恒€孉I 鍚姩涓€嶇洿鍒?AI 鐪熸寮€濮嬫祦寮忚緭鍑猴紝鐘舵€佸叏绋嬩竴鑷淬€傞厤濂椾紭鍖栵細澶栭儴 runtime锛圙emini CLI / Codex CLI锛夌殑 Tab 鍚姩浠?~17s 缂╃煭鍒?~10s锛堟秷闄や簡閲嶅鐨?CLI 杩涚▼鍐峰惎鍔級銆?
+- **鏂囦欢棰勮鏀寔寮曠敤鍒拌亰澶?*锛氬湪鏂囦欢棰勮闈㈡澘閲岋紝鍙互閫夋嫨鏁存枃浠舵垨鏌愬嚑琛岀洿鎺ュ紩鐢ㄥ埌褰撳墠鑱婂ぉ杈撳叆妗嗐€?
+- **鍥剧墖绮樿创鍦ㄤ笉鏀寔鍥惧儚鐨勬ā鍨嬩笅涔熶笉涓㈠け**锛氫互鍓嶅湪 DeepSeek銆並imi 鏂囨湰妯″瀷绛変笉鏀寔鍥剧墖杈撳叆鐨勬ā鍨嬩笅绮樺浘锛宻idecar 浼氬伔鍋锋妸鍥剧墖涓㈡帀銆佸彧鎶婃枃鏈€佺粰 AI銆傜幇鍦ㄦ敼鎴愯嚜鍔ㄦ妸鍥剧墖瀛樺埌宸ヤ綔鍖?`hamuna_files/`锛岃緭鍏ユ閲屽嚭鐜?`@鍥剧墖璺緞` 寮曠敤锛孉I 鑷冲皯鐭ラ亾浣犵粰浜嗗畠浠€涔堟枃浠讹紝鍙互鐢?Read / OCR 绛夊伐鍏疯嚜宸辨兂鍔炴硶澶勭悊銆俆ab UI锛堢矘璐?+ 鎷栨嫿锛夊拰 IM Bot锛堥涔?/ Telegram / 閽夐拤 / 寰俊鏀跺浘锛夐兘瑕嗙洊銆俆oast 鏂囨涔熶粠銆屼細鑷姩杩囨护锛屼粎鏂囨湰閫佽揪銆嶆敼鎴愩€屽凡杞负鏂囦欢瀛樺叆宸ヤ綔鍖轰緵妯″瀷璇诲彇銆嶃€?
+- **鍙抽敭 Skill / Agent 鍒楄〃鐨勩€岃缃€嶇洿杈捐鎯?*锛氫互鍓嶈鍏堢偣寮€ Skill / Agent 鍐嶅垏鍒拌缃紝鐜板湪鍙抽敭鐩存帴杩涘叆璇︽儏闈㈡澘銆?
 
 ### Fixed
 
-- **从「想法 → AI 讨论」启动会话时 API key 验证失败（P1）**：当工作区配置的 AI 供应商和全局默认供应商不一致时（例如工作区用 Anthropic、全局默认是 OpenRouter），讨论 Tab 启动时会用错位的供应商 + 工作区的 model 名发请求，立刻撞 API key 验证失败。修复后所有从工作区发起的会话严格遵守 `Agent → 工作区 → 全局默认` 的优先级链。
-- **macOS 输入栏偶尔出现 tofu / 乱码字符**：在 macOS 上当输入光标处于文本边界时按方向键 / Page-Up / Page-Down / Home / End 等功能键，会把 WebKit 内部私有码点泄漏到输入框值里显示成 tofu。已彻底拦掉。
-- **IM Bot 闲置后日志反复刷重试连接**：IM Bot 进入空闲后 sidecar 正常关闭，但事件订阅器还在每 5 秒尝试连一次已经退出的端口，统一日志会被反复刷屏。修复后 sidecar 生命周期与事件订阅严格对齐。
-- **IM Bot 首条消息可能没用上工作区 MCP**：预热 SDK 时还没注入 context MCP，首条消息进来 AI 的工具列表不完整。现在预热完成后立即注入。
-- **`/new` 重置会话后第一轮回复偶尔不抵达 IM Bot**：在外部 runtime（Gemini / Codex CLI）下，`/new` 之后第一条 AI 回复有时没投递到 bot 端，已修复。
-- **OpenClaw 插件兼容性提升（飞书 / 微信 / 企业微信 / QQ）**：一连串底层兼容修（fetch 适配、HTTP 客户端 patch、媒体上传参数翻译、出站媒体接口实现），OpenClaw 插件链路更稳，社区插件接入不再需要逐一验证 HTTP 行为。
-- **聊天滚动时用户气泡偶尔消失**：滚动容器的样式调整后气泡不再被裁切。
-- **Gemini CLI 偶发会话失效能自动恢复**：CLI 报告会话过期时不再需要手动重启 Tab，自动重建会话继续。
+- **浠庛€屾兂娉?鈫?AI 璁ㄨ銆嶅惎鍔ㄤ細璇濇椂 API key 楠岃瘉澶辫触锛圥1锛?*锛氬綋宸ヤ綔鍖洪厤缃殑 AI 渚涘簲鍟嗗拰鍏ㄥ眬榛樿渚涘簲鍟嗕笉涓€鑷存椂锛堜緥濡傚伐浣滃尯鐢?Anthropic銆佸叏灞€榛樿鏄?OpenRouter锛夛紝璁ㄨ Tab 鍚姩鏃朵細鐢ㄩ敊浣嶇殑渚涘簲鍟?+ 宸ヤ綔鍖虹殑 model 鍚嶅彂璇锋眰锛岀珛鍒绘挒 API key 楠岃瘉澶辫触銆備慨澶嶅悗鎵€鏈変粠宸ヤ綔鍖哄彂璧风殑浼氳瘽涓ユ牸閬靛畧 `Agent 鈫?宸ヤ綔鍖?鈫?鍏ㄥ眬榛樿` 鐨勪紭鍏堢骇閾俱€?
+- **macOS 杈撳叆鏍忓伓灏斿嚭鐜?tofu / 涔辩爜瀛楃**锛氬湪 macOS 涓婂綋杈撳叆鍏夋爣澶勪簬鏂囨湰杈圭晫鏃舵寜鏂瑰悜閿?/ Page-Up / Page-Down / Home / End 绛夊姛鑳介敭锛屼細鎶?WebKit 鍐呴儴绉佹湁鐮佺偣娉勬紡鍒拌緭鍏ユ鍊奸噷鏄剧ず鎴?tofu銆傚凡褰诲簳鎷︽帀銆?
+- **IM Bot 闂茬疆鍚庢棩蹇楀弽澶嶅埛閲嶈瘯杩炴帴**锛欼M Bot 杩涘叆绌洪棽鍚?sidecar 姝ｅ父鍏抽棴锛屼絾浜嬩欢璁㈤槄鍣ㄨ繕鍦ㄦ瘡 5 绉掑皾璇曡繛涓€娆″凡缁忛€€鍑虹殑绔彛锛岀粺涓€鏃ュ織浼氳鍙嶅鍒峰睆銆備慨澶嶅悗 sidecar 鐢熷懡鍛ㄦ湡涓庝簨浠惰闃呬弗鏍煎榻愩€?
+- **IM Bot 棣栨潯娑堟伅鍙兘娌＄敤涓婂伐浣滃尯 MCP**锛氶鐑?SDK 鏃惰繕娌℃敞鍏?context MCP锛岄鏉℃秷鎭繘鏉?AI 鐨勫伐鍏峰垪琛ㄤ笉瀹屾暣銆傜幇鍦ㄩ鐑畬鎴愬悗绔嬪嵆娉ㄥ叆銆?
+- **`/new` 閲嶇疆浼氳瘽鍚庣涓€杞洖澶嶅伓灏斾笉鎶佃揪 IM Bot**锛氬湪澶栭儴 runtime锛圙emini / Codex CLI锛変笅锛宍/new` 涔嬪悗绗竴鏉?AI 鍥炲鏈夋椂娌℃姇閫掑埌 bot 绔紝宸蹭慨澶嶃€?
+- **OpenClaw 鎻掍欢鍏煎鎬ф彁鍗囷紙椋炰功 / 寰俊 / 浼佷笟寰俊 / QQ锛?*锛氫竴杩炰覆搴曞眰鍏煎淇紙fetch 閫傞厤銆丠TTP 瀹㈡埛绔?patch銆佸獟浣撲笂浼犲弬鏁扮炕璇戙€佸嚭绔欏獟浣撴帴鍙ｅ疄鐜帮級锛孫penClaw 鎻掍欢閾捐矾鏇寸ǔ锛岀ぞ鍖烘彃浠舵帴鍏ヤ笉鍐嶉渶瑕侀€愪竴楠岃瘉 HTTP 琛屼负銆?
+- **鑱婂ぉ婊氬姩鏃剁敤鎴锋皵娉″伓灏旀秷澶?*锛氭粴鍔ㄥ鍣ㄧ殑鏍峰紡璋冩暣鍚庢皵娉′笉鍐嶈瑁佸垏銆?
+- **Gemini CLI 鍋跺彂浼氳瘽澶辨晥鑳借嚜鍔ㄦ仮澶?*锛欳LI 鎶ュ憡浼氳瘽杩囨湡鏃朵笉鍐嶉渶瑕佹墜鍔ㄩ噸鍚?Tab锛岃嚜鍔ㄩ噸寤轰細璇濈户缁€?
 
 ### Improved
 
-- **图像 fallback 时 toast 文案更准确**：以前批量上传里只有部分图片 fallback 到工作区文件、其余实际成功，仍会弹绿色「全部成功」toast。现在 fallback-only 批次抑制该 toast。
+- **鍥惧儚 fallback 鏃?toast 鏂囨鏇村噯纭?*锛氫互鍓嶆壒閲忎笂浼犻噷鍙湁閮ㄥ垎鍥剧墖 fallback 鍒板伐浣滃尯鏂囦欢銆佸叾浣欏疄闄呮垚鍔燂紝浠嶄細寮圭豢鑹层€屽叏閮ㄦ垚鍔熴€峵oast銆傜幇鍦?fallback-only 鎵规鎶戝埗璇?toast銆?
 
 ---
 
@@ -1158,19 +1171,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **CLAUDE.md / 使用指南 空状态升级为引导卡片**：以前只有一个孤零零的「创建」按钮，现在 CLAUDE.md 空状态变成三张卡片——「智能生成」一键让 AI 分析项目结构自动写出 CLAUDE.md（运行 `/init`），「从模板库添加」可以挑一个内置或自己保存的 Agent 模板合并到当前工作区（覆盖前会列出所有受影响文件让你确认），「手动创建」从空白进入编辑器。使用指南页面对齐了同款布局。
-- **Markdown 编辑器换成实时保存 + 预览/编辑切换**：以前要点「编辑」「保存」「取消」三段式，重而繁琐。现在像 Typora / Obsidian 一样默默落盘，标题栏右侧用一个 `预览 | 编辑` 切换按钮在两种视图间切换。
+- **CLAUDE.md / 浣跨敤鎸囧崡 绌虹姸鎬佸崌绾т负寮曞鍗＄墖**锛氫互鍓嶅彧鏈変竴涓闆堕浂鐨勩€屽垱寤恒€嶆寜閽紝鐜板湪 CLAUDE.md 绌虹姸鎬佸彉鎴愪笁寮犲崱鐗団€斺€斻€屾櫤鑳界敓鎴愩€嶄竴閿 AI 鍒嗘瀽椤圭洰缁撴瀯鑷姩鍐欏嚭 CLAUDE.md锛堣繍琛?`/init`锛夛紝銆屼粠妯℃澘搴撴坊鍔犮€嶅彲浠ユ寫涓€涓唴缃垨鑷繁淇濆瓨鐨?Agent 妯℃澘鍚堝苟鍒板綋鍓嶅伐浣滃尯锛堣鐩栧墠浼氬垪鍑烘墍鏈夊彈褰卞搷鏂囦欢璁╀綘纭锛夛紝銆屾墜鍔ㄥ垱寤恒€嶄粠绌虹櫧杩涘叆缂栬緫鍣ㄣ€備娇鐢ㄦ寚鍗楅〉闈㈠榻愪簡鍚屾甯冨眬銆?
+- **Markdown 缂栬緫鍣ㄦ崲鎴愬疄鏃朵繚瀛?+ 棰勮/缂栬緫鍒囨崲**锛氫互鍓嶈鐐广€岀紪杈戙€嶃€屼繚瀛樸€嶃€屽彇娑堛€嶄笁娈靛紡锛岄噸鑰岀箒鐞愩€傜幇鍦ㄥ儚 Typora / Obsidian 涓€鏍烽粯榛樿惤鐩橈紝鏍囬鏍忓彸渚х敤涓€涓?`棰勮 | 缂栬緫` 鍒囨崲鎸夐挳鍦ㄤ袱绉嶈鍥鹃棿鍒囨崲銆?
 
 ### Improved
 
-- **Markdown 编辑器更适合中文写作**：单换行也会渲染换行（之前要打两个空格才认）；编辑器字号从 13 加大到 14；右侧加了视觉边距，文字不再贴边或被滚动条挡住。
-- **代码 / Markdown 编辑器在中文场景下不再"嘈杂"**：全角标点 `，` `。` `；` 不再被橙色方框圈起来；光标停留时不再到处闪 highlight；双击中文不再一选选一整段——会以中文标点为边界停下，更接近预期。
-- **使用统计图表正确响应时间范围**：以前选「7 天」依然显示 60 多根柱子（任何最近活跃过的会话都会把整段历史灌进来），顶部数字与图表也对不上。现在严格按范围过滤，summary 与图表数字保持一致；日期标签也会随密度自动倾斜或转纵向，不再叠成一团。
+- **Markdown 缂栬緫鍣ㄦ洿閫傚悎涓枃鍐欎綔**锛氬崟鎹㈣涔熶細娓叉煋鎹㈣锛堜箣鍓嶈鎵撲袱涓┖鏍兼墠璁わ級锛涚紪杈戝櫒瀛楀彿浠?13 鍔犲ぇ鍒?14锛涘彸渚у姞浜嗚瑙夎竟璺濓紝鏂囧瓧涓嶅啀璐磋竟鎴栬婊氬姩鏉℃尅浣忋€?
+- **浠ｇ爜 / Markdown 缂栬緫鍣ㄥ湪涓枃鍦烘櫙涓嬩笉鍐?鍢堟潅"**锛氬叏瑙掓爣鐐?`锛宍 `銆俙 `锛沗 涓嶅啀琚鑹叉柟妗嗗湀璧锋潵锛涘厜鏍囧仠鐣欐椂涓嶅啀鍒板闂?highlight锛涘弻鍑讳腑鏂囦笉鍐嶄竴閫夐€変竴鏁存鈥斺€斾細浠ヤ腑鏂囨爣鐐逛负杈圭晫鍋滀笅锛屾洿鎺ヨ繎棰勬湡銆?
+- **浣跨敤缁熻鍥捐〃姝ｇ‘鍝嶅簲鏃堕棿鑼冨洿**锛氫互鍓嶉€夈€? 澶┿€嶄緷鐒舵樉绀?60 澶氭牴鏌卞瓙锛堜换浣曟渶杩戞椿璺冭繃鐨勪細璇濋兘浼氭妸鏁存鍘嗗彶鐏岃繘鏉ワ級锛岄《閮ㄦ暟瀛椾笌鍥捐〃涔熷涓嶄笂銆傜幇鍦ㄤ弗鏍兼寜鑼冨洿杩囨护锛宻ummary 涓庡浘琛ㄦ暟瀛椾繚鎸佷竴鑷达紱鏃ユ湡鏍囩涔熶細闅忓瘑搴﹁嚜鍔ㄥ€炬枩鎴栬浆绾靛悜锛屼笉鍐嶅彔鎴愪竴鍥€?
 
 ### Fixed
 
-- **统一日志中再降一层噪音**：v0.2.1 已经把 Rust 侧「关 tab 时还有飞行请求」一类的事件从 ERROR 降到 WARN，但渲染器侧还在把同一事件记成 ERROR，统一日志里两条信号互相矛盾。现在渲染器侧也按相同规则分类——生命周期事件 console.warn，真正的错误才 console.error。
-- **主动点停止时不再弹「工具执行被中断」横幅**：AI 流式输出时点停止已经不弹了，但 AI 正在调用工具的瞬间被你停掉还会弹一个「可重新发送让 AI 重试」的横幅——明明是你主动停的，多此一举。现在两种时机一视同仁，主动停止不再被横幅打扰。
+- **缁熶竴鏃ュ織涓啀闄嶄竴灞傚櫔闊?*锛歷0.2.1 宸茬粡鎶?Rust 渚с€屽叧 tab 鏃惰繕鏈夐琛岃姹傘€嶄竴绫荤殑浜嬩欢浠?ERROR 闄嶅埌 WARN锛屼絾娓叉煋鍣ㄤ晶杩樺湪鎶婂悓涓€浜嬩欢璁版垚 ERROR锛岀粺涓€鏃ュ織閲屼袱鏉′俊鍙蜂簰鐩哥煕鐩俱€傜幇鍦ㄦ覆鏌撳櫒渚т篃鎸夌浉鍚岃鍒欏垎绫烩€斺€旂敓鍛藉懆鏈熶簨浠?console.warn锛岀湡姝ｇ殑閿欒鎵?console.error銆?
+- **涓诲姩鐐瑰仠姝㈡椂涓嶅啀寮广€屽伐鍏锋墽琛岃涓柇銆嶆í骞?*锛欰I 娴佸紡杈撳嚭鏃剁偣鍋滄宸茬粡涓嶅脊浜嗭紝浣?AI 姝ｅ湪璋冪敤宸ュ叿鐨勭灛闂磋浣犲仠鎺夎繕浼氬脊涓€涓€屽彲閲嶆柊鍙戦€佽 AI 閲嶈瘯銆嶇殑妯箙鈥斺€旀槑鏄庢槸浣犱富鍔ㄥ仠鐨勶紝澶氭涓€涓俱€傜幇鍦ㄤ袱绉嶆椂鏈轰竴瑙嗗悓浠侊紝涓诲姩鍋滄涓嶅啀琚í骞呮墦鎵般€?
 
 ---
 
@@ -1178,1451 +1191,1451 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **大工作区文件树打不开 / 长会话恢复失败（修复 #109）**：在 macOS 上打开几千文件的工作区（笔记仓库 / 知识库类），左侧文件树会一直显示「Load failed」；恢复历史很长的对话时也偶发同样的报错。任何超过 1 MB 的响应都会撞到这个坑，所以现象不止文件树。
-- **顺手把不必要的错误日志降级**：标签关闭时还有飞行中的请求、子进程被回收时正在传输的响应——这两类正常生命周期事件之前都按 ERROR 记，把统一日志噪音占满。现在这两类降到 WARN，真正的错误更容易被看到。
+- **澶у伐浣滃尯鏂囦欢鏍戞墦涓嶅紑 / 闀夸細璇濇仮澶嶅け璐ワ紙淇 #109锛?*锛氬湪 macOS 涓婃墦寮€鍑犲崈鏂囦欢鐨勫伐浣滃尯锛堢瑪璁颁粨搴?/ 鐭ヨ瘑搴撶被锛夛紝宸︿晶鏂囦欢鏍戜細涓€鐩存樉绀恒€孡oad failed銆嶏紱鎭㈠鍘嗗彶寰堥暱鐨勫璇濇椂涔熷伓鍙戝悓鏍风殑鎶ラ敊銆備换浣曡秴杩?1 MB 鐨勫搷搴旈兘浼氭挒鍒拌繖涓潙锛屾墍浠ョ幇璞′笉姝㈡枃浠舵爲銆?
+- **椤烘墜鎶婁笉蹇呰鐨勯敊璇棩蹇楅檷绾?*锛氭爣绛惧叧闂椂杩樻湁椋炶涓殑璇锋眰銆佸瓙杩涚▼琚洖鏀舵椂姝ｅ湪浼犺緭鐨勫搷搴斺€斺€旇繖涓ょ被姝ｅ父鐢熷懡鍛ㄦ湡浜嬩欢涔嬪墠閮芥寜 ERROR 璁帮紝鎶婄粺涓€鏃ュ織鍣煶鍗犳弧銆傜幇鍦ㄨ繖涓ょ被闄嶅埌 WARN锛岀湡姝ｇ殑閿欒鏇村鏄撹鐪嬪埌銆?
 
 ### Improved
 
-- **文件树首次加载更快**：以前不论工作区多大，都把目录递归走 6 层（最多 5 万条目）才返回。现在第一次只展开 4 层、最多 1 万条目，更深的目录点开时按需加载。结果：4000 文件的工作区打开速度从「秒级 → 不到 50 毫秒」。
+- **鏂囦欢鏍戦娆″姞杞芥洿蹇?*锛氫互鍓嶄笉璁哄伐浣滃尯澶氬ぇ锛岄兘鎶婄洰褰曢€掑綊璧?6 灞傦紙鏈€澶?5 涓囨潯鐩級鎵嶈繑鍥炪€傜幇鍦ㄧ涓€娆″彧灞曞紑 4 灞傘€佹渶澶?1 涓囨潯鐩紝鏇存繁鐨勭洰褰曠偣寮€鏃舵寜闇€鍔犺浇銆傜粨鏋滐細4000 鏂囦欢鐨勫伐浣滃尯鎵撳紑閫熷害浠庛€岀绾?鈫?涓嶅埌 50 姣銆嶃€?
 
 
 ---
 
 ## [0.2.0] - 2026-04-26
 
-> 本版本紧接 0.1.70。底层运行时从 Bun 切到 Node.js v24，外加一批 Windows / Linux 平台问题修复和启动加速。
+> 鏈増鏈揣鎺?0.1.70銆傚簳灞傝繍琛屾椂浠?Bun 鍒囧埌 Node.js v24锛屽鍔犱竴鎵?Windows / Linux 骞冲彴闂淇鍜屽惎鍔ㄥ姞閫熴€?
 
 ### Breaking
 
-- **`agent-browser` 浏览器自动化 CLI 不再随应用打包**：DMG / 安装包体积减少 ~84 MB。首次让 AI 做浏览器自动化任务时，会自动用 `npm install -g` 装一次（约 10 秒），之后即时可用。网络受限环境也可临时让 AI 用 `npx` 顶替。
-- **少数从 v0.1.x 直接跨级升级用户首次访问网站需要重新登录**：旧的浏览器 Cookie 持久化迁移随同 `agent-browser` bundle 一起清理。如果你之前一直跟着小版本升级（0.1.65 → 0.1.66 → … → 0.1.70 → 0.2.0），不会受影响。
-- **运行时切到 Node.js v24，Bun 移除**：用户侧完全无感（应用启动方式 / 配置 / 数据都不变）。开发者从此用 `npm install` / `npm run` 代替 `bun install` / `bun run`；同步把 Claude Agent SDK 升到 0.2.119（按平台 native binary 分发，安装包随之变大但跨架构兼容性更好）。
+- **`agent-browser` 娴忚鍣ㄨ嚜鍔ㄥ寲 CLI 涓嶅啀闅忓簲鐢ㄦ墦鍖?*锛欴MG / 瀹夎鍖呬綋绉噺灏?~84 MB銆傞娆¤ AI 鍋氭祻瑙堝櫒鑷姩鍖栦换鍔℃椂锛屼細鑷姩鐢?`npm install -g` 瑁呬竴娆★紙绾?10 绉掞級锛屼箣鍚庡嵆鏃跺彲鐢ㄣ€傜綉缁滃彈闄愮幆澧冧篃鍙复鏃惰 AI 鐢?`npx` 椤舵浛銆?
+- **灏戞暟浠?v0.1.x 鐩存帴璺ㄧ骇鍗囩骇鐢ㄦ埛棣栨璁块棶缃戠珯闇€瑕侀噸鏂扮櫥褰?*锛氭棫鐨勬祻瑙堝櫒 Cookie 鎸佷箙鍖栬縼绉婚殢鍚?`agent-browser` bundle 涓€璧锋竻鐞嗐€傚鏋滀綘涔嬪墠涓€鐩磋窡鐫€灏忕増鏈崌绾э紙0.1.65 鈫?0.1.66 鈫?鈥?鈫?0.1.70 鈫?0.2.0锛夛紝涓嶄細鍙楀奖鍝嶃€?
+- **杩愯鏃跺垏鍒?Node.js v24锛孊un 绉婚櫎**锛氱敤鎴蜂晶瀹屽叏鏃犳劅锛堝簲鐢ㄥ惎鍔ㄦ柟寮?/ 閰嶇疆 / 鏁版嵁閮戒笉鍙橈級銆傚紑鍙戣€呬粠姝ょ敤 `npm install` / `npm run` 浠ｆ浛 `bun install` / `bun run`锛涘悓姝ユ妸 Claude Agent SDK 鍗囧埌 0.2.119锛堟寜骞冲彴 native binary 鍒嗗彂锛屽畨瑁呭寘闅忎箣鍙樺ぇ浣嗚法鏋舵瀯鍏煎鎬ф洿濂斤級銆?
 
 ### Improved
 
-- **Plugin Bridge 兼容性跃升**：飞书 / QQ / 微信 / 企业微信等 OpenClaw 插件之前偶发 30 秒挂起 / 静默连不上的问题彻底消失。社区新插件接入不再需要一个一个验证 HTTP 行为是否兼容。
-- **长对话稳定性提升**：30 分钟以上的连续对话内存增长被显著抑制，长 session 不再越用越卡。
-- **大文件上传不再吃光内存**：长视频 / 大图片改为流式上传，单文件几百 MB 也不会让 Sidecar 内存爆掉。
-- **错误信息更清晰**：以前看到孤单的 `exit code -1`，现在直接告诉你「找不到可执行文件」/「CPU 架构不匹配」等真实原因。
+- **Plugin Bridge 鍏煎鎬ц穬鍗?*锛氶涔?/ QQ / 寰俊 / 浼佷笟寰俊绛?OpenClaw 鎻掍欢涔嬪墠鍋跺彂 30 绉掓寕璧?/ 闈欓粯杩炰笉涓婄殑闂褰诲簳娑堝け銆傜ぞ鍖烘柊鎻掍欢鎺ュ叆涓嶅啀闇€瑕佷竴涓竴涓獙璇?HTTP 琛屼负鏄惁鍏煎銆?
+- **闀垮璇濈ǔ瀹氭€ф彁鍗?*锛?0 鍒嗛挓浠ヤ笂鐨勮繛缁璇濆唴瀛樺闀胯鏄捐憲鎶戝埗锛岄暱 session 涓嶅啀瓒婄敤瓒婂崱銆?
+- **澶ф枃浠朵笂浼犱笉鍐嶅悆鍏夊唴瀛?*锛氶暱瑙嗛 / 澶у浘鐗囨敼涓烘祦寮忎笂浼狅紝鍗曟枃浠跺嚑鐧?MB 涔熶笉浼氳 Sidecar 鍐呭瓨鐖嗘帀銆?
+- **閿欒淇℃伅鏇存竻鏅?*锛氫互鍓嶇湅鍒板鍗曠殑 `exit code -1`锛岀幇鍦ㄧ洿鎺ュ憡璇変綘銆屾壘涓嶅埌鍙墽琛屾枃浠躲€?銆孋PU 鏋舵瀯涓嶅尮閰嶃€嶇瓑鐪熷疄鍘熷洜銆?
 
 ### Fixed
 
-- **Windows 安装后能正常启动**：之前 Windows 用户装好 0.2.0 打开应用，会卡在「正在加载历史会话」永远进不去。现在 Windows 一键启动，和 macOS 一样开箱即用。
-- **Linux 上 `hamuna` CLI 能直接执行**：之前在 Linux 装完应用后跑 `hamuna --help` 会被系统拒绝（脚本头部多了一行旧时代留下的 shebang），现在恢复正常。
-- **Windows 上保存配置 / 项目列表 / 启动页历史不再失败**：之前在 Windows 上偶尔出现「拒绝访问」的红色错误（杀软 / OneDrive / Backblaze 在我们写完文件的瞬间扫描占用），导致刚切换的工作区下次打开应用就丢了。现在自动等开扫窗口过去再写盘，用户感知不到。
-- **Windows 上 npm 安装的 CLI 工具能正常调用**：之前从 npm 装的 `codex` / `gemini` / `npx` 等带 `.cmd` 后缀的命令在 Windows 上启动失败，现在恢复正常。
-- **Windows 大日志导出不再卡死**：之前在 Windows 上用 zip 打包大日志或者 PowerShell 命令输出大量内容时偶尔会无限挂起，已修复。
-- **IM Bot 自动启动稳定**：飞书 / 企业微信 / 微信 / QQ 等 OpenClaw 插件之前偶发「启动失败 → 自动重试 → 又失败」的循环（多个 Bot 同时启动时会互相破坏对方的依赖目录）。现在多个 Bot 并发启动彼此隔离，重启 / 切工作区不再触发这个问题。
-- **应用闪退后 `hamuna` CLI 不再损坏**：极端情况下应用进程被强杀的瞬间正好在同步 CLI，会把 `~/.hamuna/bin/hamuna` 写到一半，下次终端调用直接报「文件损坏」。现在采用原子替换，要么旧版本要么新版本，不会卡在中间态。
-- **任务中心「想法」输入光标位置精确**：在想法输入框打 `#标签` 时，标签的高亮位置偶尔会跟实际文字错开半个字符，长内容下越走越偏。修复后高亮、光标、文本三层永远对齐。
-- **AI 实时输出更稳**：少数情况下 AI 的实时事件（外部 Runtime 状态切换、turn 完成等）在网络抖动时会被静默丢弃，前端看到「打字打了一半就停了」。所有结构性事件现在都标记为关键优先级，背压时优先送达。
-- **OpenAI 兼容供应商在系统代理后面能正常走代理**：之前接 OpenAI 兼容供应商时系统代理 / SOCKS5 会被静默绕过，请求直连，现在严格走代理。
-- **磁盘满时大工具结果不再连累界面**：以前磁盘满时前端会被大块工具结果直接灌爆 UI，现在直接告失败而不是把整个会话拖下水。
-- **外部 Runtime 子进程不再变僵尸**：终止 Claude Code / Codex / Gemini 时模型 / 工具子进程会随之退出，不会留在后台。
-- **多个 IM Bot 并发时身份不再串线**：之前在同一时间多个 IM 入口同时触达时，偶发把 A 用户的 OAuth 票据 / cron 任务 / 媒体投递错给 B 的极小概率问题修复。
+- **Windows 瀹夎鍚庤兘姝ｅ父鍚姩**锛氫箣鍓?Windows 鐢ㄦ埛瑁呭ソ 0.2.0 鎵撳紑搴旂敤锛屼細鍗″湪銆屾鍦ㄥ姞杞藉巻鍙蹭細璇濄€嶆案杩滆繘涓嶅幓銆傜幇鍦?Windows 涓€閿惎鍔紝鍜?macOS 涓€鏍峰紑绠卞嵆鐢ㄣ€?
+- **Linux 涓?`hamuna` CLI 鑳界洿鎺ユ墽琛?*锛氫箣鍓嶅湪 Linux 瑁呭畬搴旂敤鍚庤窇 `hamuna --help` 浼氳绯荤粺鎷掔粷锛堣剼鏈ご閮ㄥ浜嗕竴琛屾棫鏃朵唬鐣欎笅鐨?shebang锛夛紝鐜板湪鎭㈠姝ｅ父銆?
+- **Windows 涓婁繚瀛橀厤缃?/ 椤圭洰鍒楄〃 / 鍚姩椤靛巻鍙蹭笉鍐嶅け璐?*锛氫箣鍓嶅湪 Windows 涓婂伓灏斿嚭鐜般€屾嫆缁濊闂€嶇殑绾㈣壊閿欒锛堟潃杞?/ OneDrive / Backblaze 鍦ㄦ垜浠啓瀹屾枃浠剁殑鐬棿鎵弿鍗犵敤锛夛紝瀵艰嚧鍒氬垏鎹㈢殑宸ヤ綔鍖轰笅娆℃墦寮€搴旂敤灏变涪浜嗐€傜幇鍦ㄨ嚜鍔ㄧ瓑寮€鎵獥鍙ｈ繃鍘诲啀鍐欑洏锛岀敤鎴锋劅鐭ヤ笉鍒般€?
+- **Windows 涓?npm 瀹夎鐨?CLI 宸ュ叿鑳芥甯歌皟鐢?*锛氫箣鍓嶄粠 npm 瑁呯殑 `codex` / `gemini` / `npx` 绛夊甫 `.cmd` 鍚庣紑鐨勫懡浠ゅ湪 Windows 涓婂惎鍔ㄥけ璐ワ紝鐜板湪鎭㈠姝ｅ父銆?
+- **Windows 澶ф棩蹇楀鍑轰笉鍐嶅崱姝?*锛氫箣鍓嶅湪 Windows 涓婄敤 zip 鎵撳寘澶ф棩蹇楁垨鑰?PowerShell 鍛戒护杈撳嚭澶ч噺鍐呭鏃跺伓灏斾細鏃犻檺鎸傝捣锛屽凡淇銆?
+- **IM Bot 鑷姩鍚姩绋冲畾**锛氶涔?/ 浼佷笟寰俊 / 寰俊 / QQ 绛?OpenClaw 鎻掍欢涔嬪墠鍋跺彂銆屽惎鍔ㄥけ璐?鈫?鑷姩閲嶈瘯 鈫?鍙堝け璐ャ€嶇殑寰幆锛堝涓?Bot 鍚屾椂鍚姩鏃朵細浜掔浉鐮村潖瀵规柟鐨勪緷璧栫洰褰曪級銆傜幇鍦ㄥ涓?Bot 骞跺彂鍚姩褰兼闅旂锛岄噸鍚?/ 鍒囧伐浣滃尯涓嶅啀瑙﹀彂杩欎釜闂銆?
+- **搴旂敤闂€€鍚?`hamuna` CLI 涓嶅啀鎹熷潖**锛氭瀬绔儏鍐典笅搴旂敤杩涚▼琚己鏉€鐨勭灛闂存濂藉湪鍚屾 CLI锛屼細鎶?`~/.hamuna/bin/hamuna` 鍐欏埌涓€鍗婏紝涓嬫缁堢璋冪敤鐩存帴鎶ャ€屾枃浠舵崯鍧忋€嶃€傜幇鍦ㄩ噰鐢ㄥ師瀛愭浛鎹紝瑕佷箞鏃х増鏈涔堟柊鐗堟湰锛屼笉浼氬崱鍦ㄤ腑闂存€併€?
+- **浠诲姟涓績銆屾兂娉曘€嶈緭鍏ュ厜鏍囦綅缃簿纭?*锛氬湪鎯虫硶杈撳叆妗嗘墦 `#鏍囩` 鏃讹紝鏍囩鐨勯珮浜綅缃伓灏斾細璺熷疄闄呮枃瀛楅敊寮€鍗婁釜瀛楃锛岄暱鍐呭涓嬭秺璧拌秺鍋忋€備慨澶嶅悗楂樹寒銆佸厜鏍囥€佹枃鏈笁灞傛案杩滃榻愩€?
+- **AI 瀹炴椂杈撳嚭鏇寸ǔ**锛氬皯鏁版儏鍐典笅 AI 鐨勫疄鏃朵簨浠讹紙澶栭儴 Runtime 鐘舵€佸垏鎹€乼urn 瀹屾垚绛夛級鍦ㄧ綉缁滄姈鍔ㄦ椂浼氳闈欓粯涓㈠純锛屽墠绔湅鍒般€屾墦瀛楁墦浜嗕竴鍗婂氨鍋滀簡銆嶃€傛墍鏈夌粨鏋勬€т簨浠剁幇鍦ㄩ兘鏍囪涓哄叧閿紭鍏堢骇锛岃儗鍘嬫椂浼樺厛閫佽揪銆?
+- **OpenAI 鍏煎渚涘簲鍟嗗湪绯荤粺浠ｇ悊鍚庨潰鑳芥甯歌蛋浠ｇ悊**锛氫箣鍓嶆帴 OpenAI 鍏煎渚涘簲鍟嗘椂绯荤粺浠ｇ悊 / SOCKS5 浼氳闈欓粯缁曡繃锛岃姹傜洿杩烇紝鐜板湪涓ユ牸璧颁唬鐞嗐€?
+- **纾佺洏婊℃椂澶у伐鍏风粨鏋滀笉鍐嶈繛绱晫闈?*锛氫互鍓嶇鐩樻弧鏃跺墠绔細琚ぇ鍧楀伐鍏风粨鏋滅洿鎺ョ亴鐖?UI锛岀幇鍦ㄧ洿鎺ュ憡澶辫触鑰屼笉鏄妸鏁翠釜浼氳瘽鎷栦笅姘淬€?
+- **澶栭儴 Runtime 瀛愯繘绋嬩笉鍐嶅彉鍍靛案**锛氱粓姝?Claude Code / Codex / Gemini 鏃舵ā鍨?/ 宸ュ叿瀛愯繘绋嬩細闅忎箣閫€鍑猴紝涓嶄細鐣欏湪鍚庡彴銆?
+- **澶氫釜 IM Bot 骞跺彂鏃惰韩浠戒笉鍐嶄覆绾?*锛氫箣鍓嶅湪鍚屼竴鏃堕棿澶氫釜 IM 鍏ュ彛鍚屾椂瑙﹁揪鏃讹紝鍋跺彂鎶?A 鐢ㄦ埛鐨?OAuth 绁ㄦ嵁 / cron 浠诲姟 / 濯掍綋鎶曢€掗敊缁?B 鐨勬瀬灏忔鐜囬棶棰樹慨澶嶃€?
 
 ### Performance
 
-- **Sidecar 冷启动从 ~5-7 秒降到 ~2-3 秒**：新开 Tab / 唤起对话的等待感显著缩短。多处优化叠加的结果——HTTP 服务器优先就绪、内置 MCP 懒加载（首次用到才加载）、Tab 切换跳过不必要的磁盘扫描，以及 Rust 端 health check 改成指数退避。
+- **Sidecar 鍐峰惎鍔ㄤ粠 ~5-7 绉掗檷鍒?~2-3 绉?*锛氭柊寮€ Tab / 鍞よ捣瀵硅瘽鐨勭瓑寰呮劅鏄捐憲缂╃煭銆傚澶勪紭鍖栧彔鍔犵殑缁撴灉鈥斺€擧TTP 鏈嶅姟鍣ㄤ紭鍏堝氨缁€佸唴缃?MCP 鎳掑姞杞斤紙棣栨鐢ㄥ埌鎵嶅姞杞斤級銆乀ab 鍒囨崲璺宠繃涓嶅繀瑕佺殑纾佺洏鎵弿锛屼互鍙?Rust 绔?health check 鏀规垚鎸囨暟閫€閬裤€?
 
 ---
 
 ## [0.1.70] - 2026-04-24
 
 ### Added
-- **启动页「想法」模式拥有和任务中心一模一样的体验**：输入 `#` 弹候选、文本里 `#标签` 实时高亮、输入框下方有 `#` 按钮，⌘/Ctrl+Enter 提交。任务/想法模式切换时草稿和附件完整保留，不再因切换丢失。
-- **`#` 标签候选默认包含所有 Agent 工作区名字**：按下 `#` 一眼就能把想法归类到任意工作区，不需要先手动打过一次该 tag 才出现在候选里。和右侧的「Agent 工作区」面板一一对应（过滤掉诊断目录等内部工作区）。
-- **`hamuna mcp show <id>`**：查看单个 MCP 服务器的完整配置、全局 / 工作区两级启用状态、传输层信息（env / headers 自动脱敏）。和 `agent show` / `runtime describe` 形态对等。
-- **`hamuna cron --schedule` 支持 JSON 形式**：除了原有的 cron 表达式（`"*/30 * * * *"`），现在也直接接受与内部结构一致的 JSON —— `{"kind":"at","at":"..."}` / `{"kind":"every","minutes":30}` / `{"kind":"cron","expr":"...","tz":"..."}` / `{"kind":"loop"}`。字段校验在 CLI 边界立即报错，不再出现莫名的 "Failed to parse JSON"。`--message` 是 `--prompt` 的正式别名。
-- **SiliconFlow 预设刷新**：Kimi K2.6、GLM 5.1、MiniMax M2.5 开箱即用。
-- **DeepSeek 预设刷新**：DeepSeek V4 Pro / V4 Flash 两个新模型已进入预设，Pro 为默认首选；子 Agent 别名对齐（sonnet/opus → Pro、haiku → Flash）。旧 `deepseek-chat` / `deepseek-reasoner` 保留在列表中，升级后老工作区的选择不会消失。
+- **鍚姩椤点€屾兂娉曘€嶆ā寮忔嫢鏈夊拰浠诲姟涓績涓€妯′竴鏍风殑浣撻獙**锛氳緭鍏?`#` 寮瑰€欓€夈€佹枃鏈噷 `#鏍囩` 瀹炴椂楂樹寒銆佽緭鍏ユ涓嬫柟鏈?`#` 鎸夐挳锛屸寴/Ctrl+Enter 鎻愪氦銆備换鍔?鎯虫硶妯″紡鍒囨崲鏃惰崏绋垮拰闄勪欢瀹屾暣淇濈暀锛屼笉鍐嶅洜鍒囨崲涓㈠け銆?
+- **`#` 鏍囩鍊欓€夐粯璁ゅ寘鍚墍鏈?Agent 宸ヤ綔鍖哄悕瀛?*锛氭寜涓?`#` 涓€鐪煎氨鑳芥妸鎯虫硶褰掔被鍒颁换鎰忓伐浣滃尯锛屼笉闇€瑕佸厛鎵嬪姩鎵撹繃涓€娆¤ tag 鎵嶅嚭鐜板湪鍊欓€夐噷銆傚拰鍙充晶鐨勩€孉gent 宸ヤ綔鍖恒€嶉潰鏉夸竴涓€瀵瑰簲锛堣繃婊ゆ帀璇婃柇鐩綍绛夊唴閮ㄥ伐浣滃尯锛夈€?
+- **`hamuna mcp show <id>`**锛氭煡鐪嬪崟涓?MCP 鏈嶅姟鍣ㄧ殑瀹屾暣閰嶇疆銆佸叏灞€ / 宸ヤ綔鍖轰袱绾у惎鐢ㄧ姸鎬併€佷紶杈撳眰淇℃伅锛坋nv / headers 鑷姩鑴辨晱锛夈€傚拰 `agent show` / `runtime describe` 褰㈡€佸绛夈€?
+- **`hamuna cron --schedule` 鏀寔 JSON 褰㈠紡**锛氶櫎浜嗗師鏈夌殑 cron 琛ㄨ揪寮忥紙`"*/30 * * * *"`锛夛紝鐜板湪涔熺洿鎺ユ帴鍙椾笌鍐呴儴缁撴瀯涓€鑷寸殑 JSON 鈥斺€?`{"kind":"at","at":"..."}` / `{"kind":"every","minutes":30}` / `{"kind":"cron","expr":"...","tz":"..."}` / `{"kind":"loop"}`銆傚瓧娈垫牎楠屽湪 CLI 杈圭晫绔嬪嵆鎶ラ敊锛屼笉鍐嶅嚭鐜拌帿鍚嶇殑 "Failed to parse JSON"銆俙--message` 鏄?`--prompt` 鐨勬寮忓埆鍚嶃€?
+- **SiliconFlow 棰勮鍒锋柊**锛欿imi K2.6銆丟LM 5.1銆丮iniMax M2.5 寮€绠卞嵆鐢ㄣ€?
+- **DeepSeek 棰勮鍒锋柊**锛欴eepSeek V4 Pro / V4 Flash 涓や釜鏂版ā鍨嬪凡杩涘叆棰勮锛孭ro 涓洪粯璁ら閫夛紱瀛?Agent 鍒悕瀵归綈锛坰onnet/opus 鈫?Pro銆乭aiku 鈫?Flash锛夈€傛棫 `deepseek-chat` / `deepseek-reasoner` 淇濈暀鍦ㄥ垪琛ㄤ腑锛屽崌绾у悗鑰佸伐浣滃尯鐨勯€夋嫨涓嶄細娑堝け銆?
 
 ### Improved
-- **Agent 设置的「模型」下拉只显示可用供应商**：和 AI 对话框的模型切换器完全一致 —— 只显示已配置 API Key 或完成订阅登录的供应商。如果之前保存的供应商后来失去了凭据，会显示「⚠ 暂不可用」提示你重新选择。
-- **Cmd/Ctrl+Shift+T 快捷键在启动页真正切换任务/想法模式**：之前这个组合键和新开 Tab 撞车，按下去直接新开 Tab 而不是切换模式；现在两个快捷键各行其道。
-- **弹层遮挡优化**：嵌在 Overlay 里的下拉菜单（Runtime 选择器 / Skill 详情 / BugReport 模型选择 / Template 图标选择等）不再被自身面板遮住。
-- **SubAgent 模型 / 工具 / 提示词修改立刻生效**：编辑 `~/.hamuna/agents/<agent>/<name>.md` 后执行 `hamuna reload`，下一轮对话就能看到新配置，不再需要重启整个应用。
+- **Agent 璁剧疆鐨勩€屾ā鍨嬨€嶄笅鎷夊彧鏄剧ず鍙敤渚涘簲鍟?*锛氬拰 AI 瀵硅瘽妗嗙殑妯″瀷鍒囨崲鍣ㄥ畬鍏ㄤ竴鑷?鈥斺€?鍙樉绀哄凡閰嶇疆 API Key 鎴栧畬鎴愯闃呯櫥褰曠殑渚涘簲鍟嗐€傚鏋滀箣鍓嶄繚瀛樼殑渚涘簲鍟嗗悗鏉ュけ鍘讳簡鍑嵁锛屼細鏄剧ず銆屸殸 鏆備笉鍙敤銆嶆彁绀轰綘閲嶆柊閫夋嫨銆?
+- **Cmd/Ctrl+Shift+T 蹇嵎閿湪鍚姩椤电湡姝ｅ垏鎹换鍔?鎯虫硶妯″紡**锛氫箣鍓嶈繖涓粍鍚堥敭鍜屾柊寮€ Tab 鎾炶溅锛屾寜涓嬪幓鐩存帴鏂板紑 Tab 鑰屼笉鏄垏鎹㈡ā寮忥紱鐜板湪涓や釜蹇嵎閿悇琛屽叾閬撱€?
+- **寮瑰眰閬尅浼樺寲**锛氬祵鍦?Overlay 閲岀殑涓嬫媺鑿滃崟锛圧untime 閫夋嫨鍣?/ Skill 璇︽儏 / BugReport 妯″瀷閫夋嫨 / Template 鍥炬爣閫夋嫨绛夛級涓嶅啀琚嚜韬潰鏉块伄浣忋€?
+- **SubAgent 妯″瀷 / 宸ュ叿 / 鎻愮ず璇嶄慨鏀圭珛鍒荤敓鏁?*锛氱紪杈?`~/.hamuna/agents/<agent>/<name>.md` 鍚庢墽琛?`hamuna reload`锛屼笅涓€杞璇濆氨鑳界湅鍒版柊閰嶇疆锛屼笉鍐嶉渶瑕侀噸鍚暣涓簲鐢ㄣ€?
 
 ### Fixed
-- **Windows 首次启动卡 10 秒**：旧 Sidecar 清理移到后台，主线程不再阻塞，打开应用瞬时可见 UI。
-- **外部 Runtime（Claude Code / Gemini）会话自动恢复**：当 CLI 那边清理掉会话 ID 后，HamunaAgent 能检测到并自动新开对话，不再死循环报错。
-- **技能稳定性**：symlink / junction 形式的技能目录现在能正确识别并展示；skill 安装后 `/health` 不再短暂阻塞；sub-agent 扫描对齐 Claude Agent SDK 最新协议，非标准布局的 Agent 目录也能正确找到。
-- **Chat Tab 切换时偶现的 UI 状态错乱**：按 PRD v0.1.69 §4.3 对齐双写策略。
-- **CLI 错误信息友好化**：`hamuna mcp show` 从原来的「Unknown admin route」恢复为正常命令；`cron --schedule` 错误提示在 CLI 边界清晰给出。
+- **Windows 棣栨鍚姩鍗?10 绉?*锛氭棫 Sidecar 娓呯悊绉诲埌鍚庡彴锛屼富绾跨▼涓嶅啀闃诲锛屾墦寮€搴旂敤鐬椂鍙 UI銆?
+- **澶栭儴 Runtime锛圕laude Code / Gemini锛変細璇濊嚜鍔ㄦ仮澶?*锛氬綋 CLI 閭ｈ竟娓呯悊鎺変細璇?ID 鍚庯紝HamunaAgent 鑳芥娴嬪埌骞惰嚜鍔ㄦ柊寮€瀵硅瘽锛屼笉鍐嶆寰幆鎶ラ敊銆?
+- **鎶€鑳界ǔ瀹氭€?*锛歴ymlink / junction 褰㈠紡鐨勬妧鑳界洰褰曠幇鍦ㄨ兘姝ｇ‘璇嗗埆骞跺睍绀猴紱skill 瀹夎鍚?`/health` 涓嶅啀鐭殏闃诲锛泂ub-agent 鎵弿瀵归綈 Claude Agent SDK 鏈€鏂板崗璁紝闈炴爣鍑嗗竷灞€鐨?Agent 鐩綍涔熻兘姝ｇ‘鎵惧埌銆?
+- **Chat Tab 鍒囨崲鏃跺伓鐜扮殑 UI 鐘舵€侀敊涔?*锛氭寜 PRD v0.1.69 搂4.3 瀵归綈鍙屽啓绛栫暐銆?
+- **CLI 閿欒淇℃伅鍙嬪ソ鍖?*锛歚hamuna mcp show` 浠庡師鏉ョ殑銆孶nknown admin route銆嶆仮澶嶄负姝ｅ父鍛戒护锛沗cron --schedule` 閿欒鎻愮ず鍦?CLI 杈圭晫娓呮櫚缁欏嚭銆?
 
 ### Notes
-- GetNote MCP（社区第三方工具）的 `list_notes` 返回 tag 显示为 `[object Object]` 是**上游 MCP server 自己的序列化 bug**，与 HamunaAgent 无关，请到对应仓库报告。HamunaAgent 对 MCP 返回内容是原样透传的。
+- GetNote MCP锛堢ぞ鍖虹涓夋柟宸ュ叿锛夌殑 `list_notes` 杩斿洖 tag 鏄剧ず涓?`[object Object]` 鏄?*涓婃父 MCP server 鑷繁鐨勫簭鍒楀寲 bug**锛屼笌 HamunaAgent 鏃犲叧锛岃鍒板搴斾粨搴撴姤鍛娿€侶amunaAgent 瀵?MCP 杩斿洖鍐呭鏄師鏍烽€忎紶鐨勩€?
 
 ---
 
 ## [0.1.69] - 2026-04-23
 
 ### Added
-- **任务中心（Task Center）**：全新的任务管理 Tab，左栏是「想法」速记流（`#tag` 自动识别 + 按月归档），右栏是任务列表（进行中 / 规划中 / 已完成三段式 + 卡片 / 列表双视图）。点击任务卡唤起详情 Overlay，包含：
-  - 完整的任务编辑面板 —— 名称、描述、Prompt、执行模式（一次性 / 定时）、per-task 覆盖 Runtime / 模型 / 权限模式、结束条件（执行次数 / deadline）、通知订阅
-  - 定时任务的 interval（每 N 分钟）和 cron 表达式统一在一个切换器里配置
-  - 运行统计、状态变更历史、关联 Session 列表，支持立即执行、重新派发、状态变更、归档、删除
-  - 任务 / 想法搜索栏（独立过滤）+ 全局 ⌘K 搜索都能检索任务内容
-  - 顶部导航栏新增「任务」入口
-- **任务 / 想法 模式切换器**：启动页 + Chat Tab 输入框上方都有 `任务 | 想法` 切换（`Cmd/Ctrl+Shift+T` 快捷键）。选中「想法」后回车保存为想法而非启动对话，写完自动切回「任务」。
-- **AI 讨论路径（想法 → 正式任务）**：想法卡「AI 讨论」按钮打开新 Chat Tab，自动注入 `task-alignment` Skill；对齐完成后 AI 直接把四份文档（alignment / task / verify / progress）迁入正式任务目录，登记为「AI 对齐」任务，一键就能开始执行。
-- **执行闭环：编辑即生效**：任务立即执行 / 重新派发时，每次触发都会动态从最新的 task.md 读取内容构造首条消息。你中途编辑任务描述后，下一次执行立即生效，不需要手动同步。定时任务走同一套机制。
-- **`hamuna task` / `thought` CLI**：AI 和用户通过终端完整自管任务生命周期 —— `task list / get / run / rerun / update-status / update-progress / append-session / archive / delete / create-direct / create-from-alignment` + `thought list / create`。支持 per-task 运行时 / 模型 / 权限模式覆盖参数。AI 子进程、用户终端、UI 三条入口的身份自动识别，互不伪造，审计链可追溯。
-- **通知系统**：每次任务状态变更自动分发 —— 桌面通知 + IM Bot 消息（`done / blocked / endCondition` 默认订阅 + per-task 自定义）。派发对话框和任务详情 Overlay 两处都能编辑通知配置。通知 Bot 选择器按「工作区 · 平台」分组展示，稳定排序。
-- **状态机 + 审计链 + 实时同步**：Task 持久化状态变更历史（谁、何时、从什么状态到什么状态、原因），每次变更原子写入 + 追加到 progress.md + 广播 SSE 事件，所有打开的任务中心 Tab 实时同步；崩溃恢复自动把遗留 running / verifying 状态迁到 blocked 并记入历史；删除也写入审计可溯。
-- **想法 ↔ 任务双向绑定**：派发想法生成的任务 ID 自动追加回想法记录；任务被删除时反向清理想法中的绑定。
-- **Moonshot Kimi-K2.6 + CodingPlan 预设**：供应商下拉新增 Moonshot 官方 Coding 预设，Kimi-K2.6 模型开箱即用。
-- **Claude Code 的 AskUserQuestion 走结构化 UI**：CC Runtime 下 AI 问用户问题（多选）时，前端直接渲染成可点击按钮组，而不是纯文本让你手打答案。
+- **浠诲姟涓績锛圱ask Center锛?*锛氬叏鏂扮殑浠诲姟绠＄悊 Tab锛屽乏鏍忔槸銆屾兂娉曘€嶉€熻娴侊紙`#tag` 鑷姩璇嗗埆 + 鎸夋湀褰掓。锛夛紝鍙虫爮鏄换鍔″垪琛紙杩涜涓?/ 瑙勫垝涓?/ 宸插畬鎴愪笁娈靛紡 + 鍗＄墖 / 鍒楄〃鍙岃鍥撅級銆傜偣鍑讳换鍔″崱鍞よ捣璇︽儏 Overlay锛屽寘鍚細
+  - 瀹屾暣鐨勪换鍔＄紪杈戦潰鏉?鈥斺€?鍚嶇О銆佹弿杩般€丳rompt銆佹墽琛屾ā寮忥紙涓€娆℃€?/ 瀹氭椂锛夈€乸er-task 瑕嗙洊 Runtime / 妯″瀷 / 鏉冮檺妯″紡銆佺粨鏉熸潯浠讹紙鎵ц娆℃暟 / deadline锛夈€侀€氱煡璁㈤槄
+  - 瀹氭椂浠诲姟鐨?interval锛堟瘡 N 鍒嗛挓锛夊拰 cron 琛ㄨ揪寮忕粺涓€鍦ㄤ竴涓垏鎹㈠櫒閲岄厤缃?
+  - 杩愯缁熻銆佺姸鎬佸彉鏇村巻鍙层€佸叧鑱?Session 鍒楄〃锛屾敮鎸佺珛鍗虫墽琛屻€侀噸鏂版淳鍙戙€佺姸鎬佸彉鏇淬€佸綊妗ｃ€佸垹闄?
+  - 浠诲姟 / 鎯虫硶鎼滅储鏍忥紙鐙珛杩囨护锛? 鍏ㄥ眬 鈱楰 鎼滅储閮借兘妫€绱换鍔″唴瀹?
+  - 椤堕儴瀵艰埅鏍忔柊澧炪€屼换鍔°€嶅叆鍙?
+- **浠诲姟 / 鎯虫硶 妯″紡鍒囨崲鍣?*锛氬惎鍔ㄩ〉 + Chat Tab 杈撳叆妗嗕笂鏂归兘鏈?`浠诲姟 | 鎯虫硶` 鍒囨崲锛坄Cmd/Ctrl+Shift+T` 蹇嵎閿級銆傞€変腑銆屾兂娉曘€嶅悗鍥炶溅淇濆瓨涓烘兂娉曡€岄潪鍚姩瀵硅瘽锛屽啓瀹岃嚜鍔ㄥ垏鍥炪€屼换鍔°€嶃€?
+- **AI 璁ㄨ璺緞锛堟兂娉?鈫?姝ｅ紡浠诲姟锛?*锛氭兂娉曞崱銆孉I 璁ㄨ銆嶆寜閽墦寮€鏂?Chat Tab锛岃嚜鍔ㄦ敞鍏?`task-alignment` Skill锛涘榻愬畬鎴愬悗 AI 鐩存帴鎶婂洓浠芥枃妗ｏ紙alignment / task / verify / progress锛夎縼鍏ユ寮忎换鍔＄洰褰曪紝鐧昏涓恒€孉I 瀵归綈銆嶄换鍔★紝涓€閿氨鑳藉紑濮嬫墽琛屻€?
+- **鎵ц闂幆锛氱紪杈戝嵆鐢熸晥**锛氫换鍔＄珛鍗虫墽琛?/ 閲嶆柊娲惧彂鏃讹紝姣忔瑙﹀彂閮戒細鍔ㄦ€佷粠鏈€鏂扮殑 task.md 璇诲彇鍐呭鏋勯€犻鏉℃秷鎭€備綘涓€旂紪杈戜换鍔℃弿杩板悗锛屼笅涓€娆℃墽琛岀珛鍗崇敓鏁堬紝涓嶉渶瑕佹墜鍔ㄥ悓姝ャ€傚畾鏃朵换鍔¤蛋鍚屼竴濂楁満鍒躲€?
+- **`hamuna task` / `thought` CLI**锛欰I 鍜岀敤鎴烽€氳繃缁堢瀹屾暣鑷浠诲姟鐢熷懡鍛ㄦ湡 鈥斺€?`task list / get / run / rerun / update-status / update-progress / append-session / archive / delete / create-direct / create-from-alignment` + `thought list / create`銆傛敮鎸?per-task 杩愯鏃?/ 妯″瀷 / 鏉冮檺妯″紡瑕嗙洊鍙傛暟銆侫I 瀛愯繘绋嬨€佺敤鎴风粓绔€乁I 涓夋潯鍏ュ彛鐨勮韩浠借嚜鍔ㄨ瘑鍒紝浜掍笉浼€狅紝瀹¤閾惧彲杩芥函銆?
+- **閫氱煡绯荤粺**锛氭瘡娆′换鍔＄姸鎬佸彉鏇磋嚜鍔ㄥ垎鍙?鈥斺€?妗岄潰閫氱煡 + IM Bot 娑堟伅锛坄done / blocked / endCondition` 榛樿璁㈤槄 + per-task 鑷畾涔夛級銆傛淳鍙戝璇濇鍜屼换鍔¤鎯?Overlay 涓ゅ閮借兘缂栬緫閫氱煡閰嶇疆銆傞€氱煡 Bot 閫夋嫨鍣ㄦ寜銆屽伐浣滃尯 路 骞冲彴銆嶅垎缁勫睍绀猴紝绋冲畾鎺掑簭銆?
+- **鐘舵€佹満 + 瀹¤閾?+ 瀹炴椂鍚屾**锛歍ask 鎸佷箙鍖栫姸鎬佸彉鏇村巻鍙诧紙璋併€佷綍鏃躲€佷粠浠€涔堢姸鎬佸埌浠€涔堢姸鎬併€佸師鍥狅級锛屾瘡娆″彉鏇村師瀛愬啓鍏?+ 杩藉姞鍒?progress.md + 骞挎挱 SSE 浜嬩欢锛屾墍鏈夋墦寮€鐨勪换鍔′腑蹇?Tab 瀹炴椂鍚屾锛涘穿婧冩仮澶嶈嚜鍔ㄦ妸閬楃暀 running / verifying 鐘舵€佽縼鍒?blocked 骞惰鍏ュ巻鍙诧紱鍒犻櫎涔熷啓鍏ュ璁″彲婧€?
+- **鎯虫硶 鈫?浠诲姟鍙屽悜缁戝畾**锛氭淳鍙戞兂娉曠敓鎴愮殑浠诲姟 ID 鑷姩杩藉姞鍥炴兂娉曡褰曪紱浠诲姟琚垹闄ゆ椂鍙嶅悜娓呯悊鎯虫硶涓殑缁戝畾銆?
+- **Moonshot Kimi-K2.6 + CodingPlan 棰勮**锛氫緵搴斿晢涓嬫媺鏂板 Moonshot 瀹樻柟 Coding 棰勮锛孠imi-K2.6 妯″瀷寮€绠卞嵆鐢ㄣ€?
+- **Claude Code 鐨?AskUserQuestion 璧扮粨鏋勫寲 UI**锛欳C Runtime 涓?AI 闂敤鎴烽棶棰橈紙澶氶€夛級鏃讹紝鍓嶇鐩存帴娓叉煋鎴愬彲鐐瑰嚮鎸夐挳缁勶紝鑰屼笉鏄函鏂囨湰璁╀綘鎵嬫墦绛旀銆?
 
 ### Improved
-- **启动页 / 任务中心 / 聊天输入框视觉升级**：
-  - 卡片系统 V2 —— 悬浮式无边框卡片、阴影降一档，整体更轻盈
-  - 启动页模式切换器改为 macOS 风格图标分段控件（任务 / 对话）
-  - 13 处下拉菜单统一用新的 Popover 原语，弹出位置、翻转方向、关闭行为一致
-  - 点击反馈动画统一 scale(0.98) 并正确 scope 到最内层元素（点卡片里的按钮不再带动整张卡片动）
-  - 任务（CheckSquare）、小助理（Bot）、记录想法（PenLine）等图标调整
-- **聊天页稳定性**：
-  - 工具调用卡片不再把一段连续文本切成两半
-  - 工具数量 badge 和弹窗里的工具列表对齐
-  - Virtuoso 滚动在"强制到底"模式下不再卡顿
-  - 切 Tab 时全局监听器不再越权响应其他 Tab 的事件
-  - AI 中止期间 SDK 的诊断噪音被抑制，不再刷屏
+- **鍚姩椤?/ 浠诲姟涓績 / 鑱婂ぉ杈撳叆妗嗚瑙夊崌绾?*锛?
+  - 鍗＄墖绯荤粺 V2 鈥斺€?鎮诞寮忔棤杈规鍗＄墖銆侀槾褰遍檷涓€妗ｏ紝鏁翠綋鏇磋交鐩?
+  - 鍚姩椤垫ā寮忓垏鎹㈠櫒鏀逛负 macOS 椋庢牸鍥炬爣鍒嗘鎺т欢锛堜换鍔?/ 瀵硅瘽锛?
+  - 13 澶勪笅鎷夎彍鍗曠粺涓€鐢ㄦ柊鐨?Popover 鍘熻锛屽脊鍑轰綅缃€佺炕杞柟鍚戙€佸叧闂涓轰竴鑷?
+  - 鐐瑰嚮鍙嶉鍔ㄧ敾缁熶竴 scale(0.98) 骞舵纭?scope 鍒版渶鍐呭眰鍏冪礌锛堢偣鍗＄墖閲岀殑鎸夐挳涓嶅啀甯﹀姩鏁村紶鍗＄墖鍔級
+  - 浠诲姟锛圕heckSquare锛夈€佸皬鍔╃悊锛圔ot锛夈€佽褰曟兂娉曪紙PenLine锛夌瓑鍥炬爣璋冩暣
+- **鑱婂ぉ椤电ǔ瀹氭€?*锛?
+  - 宸ュ叿璋冪敤鍗＄墖涓嶅啀鎶婁竴娈佃繛缁枃鏈垏鎴愪袱鍗?
+  - 宸ュ叿鏁伴噺 badge 鍜屽脊绐楅噷鐨勫伐鍏峰垪琛ㄥ榻?
+  - Virtuoso 婊氬姩鍦?寮哄埗鍒板簳"妯″紡涓嬩笉鍐嶅崱椤?
+  - 鍒?Tab 鏃跺叏灞€鐩戝惉鍣ㄤ笉鍐嶈秺鏉冨搷搴斿叾浠?Tab 鐨勪簨浠?
+  - AI 涓鏈熼棿 SDK 鐨勮瘖鏂櫔闊宠鎶戝埗锛屼笉鍐嶅埛灞?
 
 ### Fixed
-- **Windows 硬杀会话时消息不丢失**：之前在 Windows 上中断会话可能让最近几条消息丢失，现在队列生命周期架构化处理，即使硬杀也能完整保留。
-- **Gemini 临时提示词文件不再残留**：之前 Gemini 进程意外退出时会留下临时的 system prompt 文件，现在改由 session 生命周期管理，进程 crash / 空闲超时都会正确清理。
-- **Sidecar 未就绪时的竞态**：打开 Tab 瞬间发消息偶尔会因为 Sidecar 还没起好而失败，现在会先等待就绪再发送，用户无感。
-- **macOS 触摸板轻按首次点击失效**：之前在 macOS 上用触摸板 tap 某些按钮，物理按下正常但轻按首次无反应（隐蔽的焦点抢夺陷阱）。修复后所有按钮触摸板轻按稳定响应。
-- **启动页 Tab 切换按钮真的会切换**：之前 tooltip 说"点击切换模式"但点了没反应，现在 Tab 键 + 点击都能正常切换任务 / 对话模式。
-- **Bun-on-Windows 目录创建崩溃**：系统性修复 Windows 平台下 Bun 在多处零散出现的 `mkdirSync` 遇到已存在目录报 EEXIST 的问题。
-- **Claude Code 订阅登录隔离**：CC Runtime 现在完全由 CLI 自己管推理路由，HamunaAgent 不再尝试注入 provider，避免跨入口（Tab / 微信 / 定时任务）互相干扰订阅登录态。
-- **验证供应商时的错误提示**：之前桥接连接失败统一显示"超时"，现在区分真正的超时和连接错误，给出具体原因。
-- **Runtime 切换防串线加固**：外部 Runtime 的会话标识以 session 为权威来源，切换 Runtime / 续接历史时不再发生 runtime 不匹配导致的状态污染。
-- **系统级 Skills 强制更新**：`task-alignment` / `task-implement` 作为系统 Skill 随版本强制更新，确保你本地的任务对齐和执行逻辑永远与产品同步。
-- **内置 MA 小助理升级**：`self-config` Skill 新增任务中心 CLI 操作说明（建任务 / 管想法 / 改配置都可以直接对小助理说），`task-alignment` Skill 补充 AI 讨论路径自动化指令。
+- **Windows 纭潃浼氳瘽鏃舵秷鎭笉涓㈠け**锛氫箣鍓嶅湪 Windows 涓婁腑鏂細璇濆彲鑳借鏈€杩戝嚑鏉℃秷鎭涪澶憋紝鐜板湪闃熷垪鐢熷懡鍛ㄦ湡鏋舵瀯鍖栧鐞嗭紝鍗充娇纭潃涔熻兘瀹屾暣淇濈暀銆?
+- **Gemini 涓存椂鎻愮ず璇嶆枃浠朵笉鍐嶆畫鐣?*锛氫箣鍓?Gemini 杩涚▼鎰忓閫€鍑烘椂浼氱暀涓嬩复鏃剁殑 system prompt 鏂囦欢锛岀幇鍦ㄦ敼鐢?session 鐢熷懡鍛ㄦ湡绠＄悊锛岃繘绋?crash / 绌洪棽瓒呮椂閮戒細姝ｇ‘娓呯悊銆?
+- **Sidecar 鏈氨缁椂鐨勭珵鎬?*锛氭墦寮€ Tab 鐬棿鍙戞秷鎭伓灏斾細鍥犱负 Sidecar 杩樻病璧峰ソ鑰屽け璐ワ紝鐜板湪浼氬厛绛夊緟灏辩华鍐嶅彂閫侊紝鐢ㄦ埛鏃犳劅銆?
+- **macOS 瑙︽懜鏉胯交鎸夐娆＄偣鍑诲け鏁?*锛氫箣鍓嶅湪 macOS 涓婄敤瑙︽懜鏉?tap 鏌愪簺鎸夐挳锛岀墿鐞嗘寜涓嬫甯镐絾杞绘寜棣栨鏃犲弽搴旓紙闅愯斀鐨勭劍鐐规姠澶洪櫡闃憋級銆備慨澶嶅悗鎵€鏈夋寜閽Е鎽告澘杞绘寜绋冲畾鍝嶅簲銆?
+- **鍚姩椤?Tab 鍒囨崲鎸夐挳鐪熺殑浼氬垏鎹?*锛氫箣鍓?tooltip 璇?鐐瑰嚮鍒囨崲妯″紡"浣嗙偣浜嗘病鍙嶅簲锛岀幇鍦?Tab 閿?+ 鐐瑰嚮閮借兘姝ｅ父鍒囨崲浠诲姟 / 瀵硅瘽妯″紡銆?
+- **Bun-on-Windows 鐩綍鍒涘缓宕╂簝**锛氱郴缁熸€т慨澶?Windows 骞冲彴涓?Bun 鍦ㄥ澶勯浂鏁ｅ嚭鐜扮殑 `mkdirSync` 閬囧埌宸插瓨鍦ㄧ洰褰曟姤 EEXIST 鐨勯棶棰樸€?
+- **Claude Code 璁㈤槄鐧诲綍闅旂**锛欳C Runtime 鐜板湪瀹屽叏鐢?CLI 鑷繁绠℃帹鐞嗚矾鐢憋紝HamunaAgent 涓嶅啀灏濊瘯娉ㄥ叆 provider锛岄伩鍏嶈法鍏ュ彛锛圱ab / 寰俊 / 瀹氭椂浠诲姟锛変簰鐩稿共鎵拌闃呯櫥褰曟€併€?
+- **楠岃瘉渚涘簲鍟嗘椂鐨勯敊璇彁绀?*锛氫箣鍓嶆ˉ鎺ヨ繛鎺ュけ璐ョ粺涓€鏄剧ず"瓒呮椂"锛岀幇鍦ㄥ尯鍒嗙湡姝ｇ殑瓒呮椂鍜岃繛鎺ラ敊璇紝缁欏嚭鍏蜂綋鍘熷洜銆?
+- **Runtime 鍒囨崲闃蹭覆绾垮姞鍥?*锛氬閮?Runtime 鐨勪細璇濇爣璇嗕互 session 涓烘潈濞佹潵婧愶紝鍒囨崲 Runtime / 缁帴鍘嗗彶鏃朵笉鍐嶅彂鐢?runtime 涓嶅尮閰嶅鑷寸殑鐘舵€佹薄鏌撱€?
+- **绯荤粺绾?Skills 寮哄埗鏇存柊**锛歚task-alignment` / `task-implement` 浣滀负绯荤粺 Skill 闅忕増鏈己鍒舵洿鏂帮紝纭繚浣犳湰鍦扮殑浠诲姟瀵归綈鍜屾墽琛岄€昏緫姘歌繙涓庝骇鍝佸悓姝ャ€?
+- **鍐呯疆 MA 灏忓姪鐞嗗崌绾?*锛歚self-config` Skill 鏂板浠诲姟涓績 CLI 鎿嶄綔璇存槑锛堝缓浠诲姟 / 绠℃兂娉?/ 鏀归厤缃兘鍙互鐩存帴瀵瑰皬鍔╃悊璇达級锛宍task-alignment` Skill 琛ュ厖 AI 璁ㄨ璺緞鑷姩鍖栨寚浠ゃ€?
 
 ---
 
 ## [0.1.68] - 2026-04-17
 
 ### Added
-- **Gemini / Codex 自动继承项目 CLAUDE.md 和 .claude/rules**：切到外部 Runtime 后，AI 也能读到你项目里写好的开发约束和规则文件，不再"失忆"。Codex 走原生配置发现，Gemini 写入合并后的系统提示，零额外配置。
-- **外部 Runtime 会话标题自动生成**：之前切到 Gemini / Claude Code / Codex 后，会话标题一直显示默认名。现在会用对应 Runtime 自动生成摘要标题，和内置 Runtime 体验一致。
-- **外部 Runtime 冷启动加速（Pre-warm）**：首次发消息前在后台预启动 Runtime 进程，隐藏 10-15 秒的冷启动延迟。
-- **Anthropic 模型别名锁定**：新版 SDK 移除了 `claude-sonnet-4-20250514` 等旧 ID 的内置映射，现在 HamunaAgent 在启动时主动注入 `sonnet → claude-sonnet-4-20250514` 等别名，子 Agent 指定 `model: "sonnet"` 不再报"模型不存在"。
+- **Gemini / Codex 鑷姩缁ф壙椤圭洰 CLAUDE.md 鍜?.claude/rules**锛氬垏鍒板閮?Runtime 鍚庯紝AI 涔熻兘璇诲埌浣犻」鐩噷鍐欏ソ鐨勫紑鍙戠害鏉熷拰瑙勫垯鏂囦欢锛屼笉鍐?澶卞繂"銆侰odex 璧板師鐢熼厤缃彂鐜帮紝Gemini 鍐欏叆鍚堝苟鍚庣殑绯荤粺鎻愮ず锛岄浂棰濆閰嶇疆銆?
+- **澶栭儴 Runtime 浼氳瘽鏍囬鑷姩鐢熸垚**锛氫箣鍓嶅垏鍒?Gemini / Claude Code / Codex 鍚庯紝浼氳瘽鏍囬涓€鐩存樉绀洪粯璁ゅ悕銆傜幇鍦ㄤ細鐢ㄥ搴?Runtime 鑷姩鐢熸垚鎽樿鏍囬锛屽拰鍐呯疆 Runtime 浣撻獙涓€鑷淬€?
+- **澶栭儴 Runtime 鍐峰惎鍔ㄥ姞閫燂紙Pre-warm锛?*锛氶娆″彂娑堟伅鍓嶅湪鍚庡彴棰勫惎鍔?Runtime 杩涚▼锛岄殣钘?10-15 绉掔殑鍐峰惎鍔ㄥ欢杩熴€?
+- **Anthropic 妯″瀷鍒悕閿佸畾**锛氭柊鐗?SDK 绉婚櫎浜?`claude-sonnet-4-20250514` 绛夋棫 ID 鐨勫唴缃槧灏勶紝鐜板湪 HamunaAgent 鍦ㄥ惎鍔ㄦ椂涓诲姩娉ㄥ叆 `sonnet 鈫?claude-sonnet-4-20250514` 绛夊埆鍚嶏紝瀛?Agent 鎸囧畾 `model: "sonnet"` 涓嶅啀鎶?妯″瀷涓嶅瓨鍦?銆?
 
 ### Fixed
-- **Gemini 长时间工具调用不再误报超时**：之前 Gemini 执行耗时工具（如网络搜索）超过 10 分钟会弹红色错误。现在取消了硬超时，改由无活动看门狗兜底，正常执行不受影响。
-- **Gemini Edit 工具结果显示真实 diff**：之前 Gemini 编辑文件后结果栏只显示"Tool executed"，现在正确提取并展示 unified-diff 格式的修改内容。
-- **Gemini Read / Grep / Glob 工具结果文案优化**：这些工具的输出由 Gemini 内部消化不对外暴露，之前统一显示"Tool executed"容易误解，现在显示更准确的提示。
-- **外部 Runtime 工具调用行在执行中也可展开**：之前工具输入为空时（如 Read），执行期间工具行无法展开、没有箭头，现在执行中即可交互查看。
-- **后台任务完成状态显示在正确位置**：之前后台任务完成后状态可能渲染到错误的聊天位置，根因是内部 ID 不匹配，已修复。
-- **安全加固**：工作区指令注入增加 symlink 拒绝、文件大小限额、递归深度限制；后台任务状态池增加 LRU 淘汰防内存泄漏；配置变更重启原因可追溯。
+- **Gemini 闀挎椂闂村伐鍏疯皟鐢ㄤ笉鍐嶈鎶ヨ秴鏃?*锛氫箣鍓?Gemini 鎵ц鑰楁椂宸ュ叿锛堝缃戠粶鎼滅储锛夎秴杩?10 鍒嗛挓浼氬脊绾㈣壊閿欒銆傜幇鍦ㄥ彇娑堜簡纭秴鏃讹紝鏀圭敱鏃犳椿鍔ㄧ湅闂ㄧ嫍鍏滃簳锛屾甯告墽琛屼笉鍙楀奖鍝嶃€?
+- **Gemini Edit 宸ュ叿缁撴灉鏄剧ず鐪熷疄 diff**锛氫箣鍓?Gemini 缂栬緫鏂囦欢鍚庣粨鏋滄爮鍙樉绀?Tool executed"锛岀幇鍦ㄦ纭彁鍙栧苟灞曠ず unified-diff 鏍煎紡鐨勪慨鏀瑰唴瀹广€?
+- **Gemini Read / Grep / Glob 宸ュ叿缁撴灉鏂囨浼樺寲**锛氳繖浜涘伐鍏风殑杈撳嚭鐢?Gemini 鍐呴儴娑堝寲涓嶅澶栨毚闇诧紝涔嬪墠缁熶竴鏄剧ず"Tool executed"瀹规槗璇В锛岀幇鍦ㄦ樉绀烘洿鍑嗙‘鐨勬彁绀恒€?
+- **澶栭儴 Runtime 宸ュ叿璋冪敤琛屽湪鎵ц涓篃鍙睍寮€**锛氫箣鍓嶅伐鍏疯緭鍏ヤ负绌烘椂锛堝 Read锛夛紝鎵ц鏈熼棿宸ュ叿琛屾棤娉曞睍寮€銆佹病鏈夌澶达紝鐜板湪鎵ц涓嵆鍙氦浜掓煡鐪嬨€?
+- **鍚庡彴浠诲姟瀹屾垚鐘舵€佹樉绀哄湪姝ｇ‘浣嶇疆**锛氫箣鍓嶅悗鍙颁换鍔″畬鎴愬悗鐘舵€佸彲鑳芥覆鏌撳埌閿欒鐨勮亰澶╀綅缃紝鏍瑰洜鏄唴閮?ID 涓嶅尮閰嶏紝宸蹭慨澶嶃€?
+- **瀹夊叏鍔犲浐**锛氬伐浣滃尯鎸囦护娉ㄥ叆澧炲姞 symlink 鎷掔粷銆佹枃浠跺ぇ灏忛檺棰濄€侀€掑綊娣卞害闄愬埗锛涘悗鍙颁换鍔＄姸鎬佹睜澧炲姞 LRU 娣樻卑闃插唴瀛樻硠婕忥紱閰嶇疆鍙樻洿閲嶅惎鍘熷洜鍙拷婧€?
 
 ---
 
 ## [0.1.67] - 2026-04-16
 
 ### Added
-- **内置 cuse 电脑操作 MCP(macOS / Windows)**:开箱即用的桌面操作工具,让 AI 能直接帮你点鼠标、打字、截屏、在应用之间切换,不再需要手动装任何命令行工具或配置 MCP。首次使用时 macOS 会弹窗申请屏幕录制、辅助功能、Apple Events 权限,授权一次以后持久生效。Linux 暂不支持(工具列表里会自动隐藏)。
-- **切到 Gemini / Claude Code / Codex 也能用定时任务、发图、生成图表卡片**:之前这三项能力是 HamunaAgent 内置 Runtime 专属,换到外部 Runtime 后就丢了。现在这些 Runtime 也可以创建心跳循环、让 Bot 发图片 / 视频 / 音频、生成可交互的数据图表卡片 —— 和内置 Runtime 体验一致,无缝切换。
-- **AI 回答中断时显示原因和行动按钮**:之前 AI "突然停了" 只能干瞪眼。现在会显示具体原因,比如:
-  - 对话轮数达上限 → 黄色提示条 + 「新开会话」按钮
-  - 上下文装不下了 → 红色提示条 + 说明
-  - 图片解析失败 / 模型报错 → 具体错误信息
-  - 正常结束或你主动点停止 → 不打扰
-- **定时任务支持超长 prompt 从文件读入**:如果你的心跳循环 prompt 很长(几千字起跳),之前只能挤在一行参数里,现在可以写到一个文件里用 `hamuna cron add --prompt-file <path>` 传入,体验参考 `git commit -F`。
+- **鍐呯疆 cuse 鐢佃剳鎿嶄綔 MCP(macOS / Windows)**:寮€绠卞嵆鐢ㄧ殑妗岄潰鎿嶄綔宸ュ叿,璁?AI 鑳界洿鎺ュ府浣犵偣榧犳爣銆佹墦瀛椼€佹埅灞忋€佸湪搴旂敤涔嬮棿鍒囨崲,涓嶅啀闇€瑕佹墜鍔ㄨ浠讳綍鍛戒护琛屽伐鍏锋垨閰嶇疆 MCP銆傞娆′娇鐢ㄦ椂 macOS 浼氬脊绐楃敵璇峰睆骞曞綍鍒躲€佽緟鍔╁姛鑳姐€丄pple Events 鏉冮檺,鎺堟潈涓€娆′互鍚庢寔涔呯敓鏁堛€侺inux 鏆備笉鏀寔(宸ュ叿鍒楄〃閲屼細鑷姩闅愯棌)銆?
+- **鍒囧埌 Gemini / Claude Code / Codex 涔熻兘鐢ㄥ畾鏃朵换鍔°€佸彂鍥俱€佺敓鎴愬浘琛ㄥ崱鐗?*:涔嬪墠杩欎笁椤硅兘鍔涙槸 HamunaAgent 鍐呯疆 Runtime 涓撳睘,鎹㈠埌澶栭儴 Runtime 鍚庡氨涓簡銆傜幇鍦ㄨ繖浜?Runtime 涔熷彲浠ュ垱寤哄績璺冲惊鐜€佽 Bot 鍙戝浘鐗?/ 瑙嗛 / 闊抽銆佺敓鎴愬彲浜や簰鐨勬暟鎹浘琛ㄥ崱鐗?鈥斺€?鍜屽唴缃?Runtime 浣撻獙涓€鑷?鏃犵紳鍒囨崲銆?
+- **AI 鍥炵瓟涓柇鏃舵樉绀哄師鍥犲拰琛屽姩鎸夐挳**:涔嬪墠 AI "绐佺劧鍋滀簡" 鍙兘骞茬灙鐪笺€傜幇鍦ㄤ細鏄剧ず鍏蜂綋鍘熷洜,姣斿:
+  - 瀵硅瘽杞暟杈句笂闄?鈫?榛勮壊鎻愮ず鏉?+ 銆屾柊寮€浼氳瘽銆嶆寜閽?
+  - 涓婁笅鏂囪涓嶄笅浜?鈫?绾㈣壊鎻愮ず鏉?+ 璇存槑
+  - 鍥剧墖瑙ｆ瀽澶辫触 / 妯″瀷鎶ラ敊 鈫?鍏蜂綋閿欒淇℃伅
+  - 姝ｅ父缁撴潫鎴栦綘涓诲姩鐐瑰仠姝?鈫?涓嶆墦鎵?
+- **瀹氭椂浠诲姟鏀寔瓒呴暱 prompt 浠庢枃浠惰鍏?*:濡傛灉浣犵殑蹇冭烦寰幆 prompt 寰堥暱(鍑犲崈瀛楄捣璺?,涔嬪墠鍙兘鎸ゅ湪涓€琛屽弬鏁伴噷,鐜板湪鍙互鍐欏埌涓€涓枃浠堕噷鐢?`hamuna cron add --prompt-file <path>` 浼犲叆,浣撻獙鍙傝€?`git commit -F`銆?
 
 ### Fixed
-- **macOS 点 X 按钮关不掉窗口**:最近几个版本在 macOS 上点窗口左上角的 X 按钮,窗口不会关闭(无论"最小化到托盘"是否开启)。有循环任务时弹出的退出确认框,点"退出"也没反应。本版本修复 —— 之前只能靠 Cmd+Q 或托盘"退出"菜单来关。
-- **Claude Code 订阅登录被项目里的 .env 文件破坏**:如果你订阅模式登录了 Claude Code,但打开的项目目录里有 `.env` 文件且含 `ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here` 这类占位符(比如从 `.env.example` 拷贝出来忘了改),之前会收到"Not logged in · Please run /login"报错。现在会正确忽略这些占位符,你的 Keychain 登录状态不再被破坏。
-- **Windows 中文显示为宋体**:中文版 Windows 上,工具调用结果、文件搜索、部分正文区域中文会显示为宋体(SimSun/NSimSun)而非微软雅黑,观感粗糙。根因是字体链里一个容易踩的陷阱,现已修复为正确使用 Microsoft YaHei / YaHei UI。
-- **"回复被中断"横幅不再无意义打扰**:之前用户主动点停止、切换 Runtime、配置变更等场景会误触发黄色提示条,现已正确识别这些预期行为不再打扰,但会记录到统一日志便于事后排查。
-- **安全加固:发图工具的路径校验**:IM Bot 发图 / 视频 / 音频时对文件路径做了严格的白名单 + symlink 真实路径校验,防御通过 symlink 泄露敏感文件(如 `~/.ssh/id_rsa`)的风险。
+- **macOS 鐐?X 鎸夐挳鍏充笉鎺夌獥鍙?*:鏈€杩戝嚑涓増鏈湪 macOS 涓婄偣绐楀彛宸︿笂瑙掔殑 X 鎸夐挳,绐楀彛涓嶄細鍏抽棴(鏃犺"鏈€灏忓寲鍒版墭鐩?鏄惁寮€鍚?銆傛湁寰幆浠诲姟鏃跺脊鍑虹殑閫€鍑虹‘璁ゆ,鐐?閫€鍑?涔熸病鍙嶅簲銆傛湰鐗堟湰淇 鈥斺€?涔嬪墠鍙兘闈?Cmd+Q 鎴栨墭鐩?閫€鍑?鑿滃崟鏉ュ叧銆?
+- **Claude Code 璁㈤槄鐧诲綍琚」鐩噷鐨?.env 鏂囦欢鐮村潖**:濡傛灉浣犺闃呮ā寮忕櫥褰曚簡 Claude Code,浣嗘墦寮€鐨勯」鐩洰褰曢噷鏈?`.env` 鏂囦欢涓斿惈 `ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here` 杩欑被鍗犱綅绗?姣斿浠?`.env.example` 鎷疯礉鍑烘潵蹇樹簡鏀?,涔嬪墠浼氭敹鍒?Not logged in 路 Please run /login"鎶ラ敊銆傜幇鍦ㄤ細姝ｇ‘蹇界暐杩欎簺鍗犱綅绗?浣犵殑 Keychain 鐧诲綍鐘舵€佷笉鍐嶈鐮村潖銆?
+- **Windows 涓枃鏄剧ず涓哄畫浣?*:涓枃鐗?Windows 涓?宸ュ叿璋冪敤缁撴灉銆佹枃浠舵悳绱€侀儴鍒嗘鏂囧尯鍩熶腑鏂囦細鏄剧ず涓哄畫浣?SimSun/NSimSun)鑰岄潪寰蒋闆呴粦,瑙傛劅绮楃硻銆傛牴鍥犳槸瀛椾綋閾鹃噷涓€涓鏄撹俯鐨勯櫡闃?鐜板凡淇涓烘纭娇鐢?Microsoft YaHei / YaHei UI銆?
+- **"鍥炲琚腑鏂?妯箙涓嶅啀鏃犳剰涔夋墦鎵?*:涔嬪墠鐢ㄦ埛涓诲姩鐐瑰仠姝€佸垏鎹?Runtime銆侀厤缃彉鏇寸瓑鍦烘櫙浼氳瑙﹀彂榛勮壊鎻愮ず鏉?鐜板凡姝ｇ‘璇嗗埆杩欎簺棰勬湡琛屼负涓嶅啀鎵撴壈,浣嗕細璁板綍鍒扮粺涓€鏃ュ織渚夸簬浜嬪悗鎺掓煡銆?
+- **瀹夊叏鍔犲浐:鍙戝浘宸ュ叿鐨勮矾寰勬牎楠?*:IM Bot 鍙戝浘 / 瑙嗛 / 闊抽鏃跺鏂囦欢璺緞鍋氫簡涓ユ牸鐨勭櫧鍚嶅崟 + symlink 鐪熷疄璺緞鏍￠獙,闃插尽閫氳繃 symlink 娉勯湶鏁忔劅鏂囦欢(濡?`~/.ssh/id_rsa`)鐨勯闄┿€?
 
 ---
 
 ## [0.1.66] - 2026-04-15
 
 ### Added
-- **Gemini CLI 加入 Agent Runtime 阵容**:在原有的内置、Claude Code、Codex 之外,新增 Google Gemini CLI 作为第四个可选运行环境。只要你本机装好 `gemini` 并登录过,设置里一键切过去就能用 —— HamunaAgent 完全不管 API Key / OAuth,你原来怎么登录的还是怎么用。
-  - 支持 Gemini 3.1 Pro、Gemini 3 Flash、Gemini 2.5 Pro 等**当前账户可用的全部模型**,Settings 下拉列表是实时从 Gemini CLI 读出来的,不用手动维护
-  - 工具调用(Shell / Read / Edit / Grep / Glob / WebFetch / WebSearch)、思考过程、Token 用量都正常显示,和 Claude Code / Codex 一致
-  - 工具 badge 展示 Gemini 的**原始工具名**(比如 `run_shell_command`、`grep_search`),点开看到命令/参数/输出的完整细节,不再是干巴巴的 "Run command"
-  - 桌面 Chat、定时任务、IM Bot(微信 / 飞书 / 钉钉 / Telegram) 三条路径全部打通,切换到 Gemini 后所有入口都用它
-- **从 GitHub URL 安装技能**:Skills 设置页新增"从 URL 导入"入口,粘贴任意 GitHub 仓库或 npm 包地址就能把对方写好的 Skill 拉到你本地。内置 AI 助手 MA 也能通过 `npx` 等命令直接帮你装技能。
-- **聊天内文本查找 (⌘F / Ctrl+F)**:在对话里按快捷键唤起顶部查找栏,高亮所有匹配、方向键切换、回车跳转。作用域仅限当前已加载的消息,全历史搜索仍然用 ⌘K。
+- **Gemini CLI 鍔犲叆 Agent Runtime 闃靛**:鍦ㄥ師鏈夌殑鍐呯疆銆丆laude Code銆丆odex 涔嬪,鏂板 Google Gemini CLI 浣滀负绗洓涓彲閫夎繍琛岀幆澧冦€傚彧瑕佷綘鏈満瑁呭ソ `gemini` 骞剁櫥褰曡繃,璁剧疆閲屼竴閿垏杩囧幓灏辫兘鐢?鈥斺€?HamunaAgent 瀹屽叏涓嶇 API Key / OAuth,浣犲師鏉ユ€庝箞鐧诲綍鐨勮繕鏄€庝箞鐢ㄣ€?
+  - 鏀寔 Gemini 3.1 Pro銆丟emini 3 Flash銆丟emini 2.5 Pro 绛?*褰撳墠璐︽埛鍙敤鐨勫叏閮ㄦā鍨?*,Settings 涓嬫媺鍒楄〃鏄疄鏃朵粠 Gemini CLI 璇诲嚭鏉ョ殑,涓嶇敤鎵嬪姩缁存姢
+  - 宸ュ叿璋冪敤(Shell / Read / Edit / Grep / Glob / WebFetch / WebSearch)銆佹€濊€冭繃绋嬨€乀oken 鐢ㄩ噺閮芥甯告樉绀?鍜?Claude Code / Codex 涓€鑷?
+  - 宸ュ叿 badge 灞曠ず Gemini 鐨?*鍘熷宸ュ叿鍚?*(姣斿 `run_shell_command`銆乣grep_search`),鐐瑰紑鐪嬪埌鍛戒护/鍙傛暟/杈撳嚭鐨勫畬鏁寸粏鑺?涓嶅啀鏄共宸村反鐨?"Run command"
+  - 妗岄潰 Chat銆佸畾鏃朵换鍔°€両M Bot(寰俊 / 椋炰功 / 閽夐拤 / Telegram) 涓夋潯璺緞鍏ㄩ儴鎵撻€?鍒囨崲鍒?Gemini 鍚庢墍鏈夊叆鍙ｉ兘鐢ㄥ畠
+- **浠?GitHub URL 瀹夎鎶€鑳?*:Skills 璁剧疆椤垫柊澧?浠?URL 瀵煎叆"鍏ュ彛,绮樿创浠绘剰 GitHub 浠撳簱鎴?npm 鍖呭湴鍧€灏辫兘鎶婂鏂瑰啓濂界殑 Skill 鎷夊埌浣犳湰鍦般€傚唴缃?AI 鍔╂墜 MA 涔熻兘閫氳繃 `npx` 绛夊懡浠ょ洿鎺ュ府浣犺鎶€鑳姐€?
+- **鑱婂ぉ鍐呮枃鏈煡鎵?(鈱楩 / Ctrl+F)**:鍦ㄥ璇濋噷鎸夊揩鎹烽敭鍞よ捣椤堕儴鏌ユ壘鏍?楂樹寒鎵€鏈夊尮閰嶃€佹柟鍚戦敭鍒囨崲銆佸洖杞﹁烦杞€備綔鐢ㄥ煙浠呴檺褰撳墠宸插姞杞界殑娑堟伅,鍏ㄥ巻鍙叉悳绱粛鐒剁敤 鈱楰銆?
 
 ### Changed
-- **Agent 身份提示现在真实反映当前 Runtime**:AI 回答"你在哪运行?"时会正确说"HamunaAgent + Gemini CLI / Claude Code / Codex / 内置 SDK",而不是一律说"基于 Claude Agent SDK"。换 Runtime 后立刻生效。
-- **Claude Agent SDK 升级至 0.2.107**:跟进上游修复与稳定性改进。
+- **Agent 韬唤鎻愮ず鐜板湪鐪熷疄鍙嶆槧褰撳墠 Runtime**:AI 鍥炵瓟"浣犲湪鍝繍琛?"鏃朵細姝ｇ‘璇?HamunaAgent + Gemini CLI / Claude Code / Codex / 鍐呯疆 SDK",鑰屼笉鏄竴寰嬭"鍩轰簬 Claude Agent SDK"銆傛崲 Runtime 鍚庣珛鍒荤敓鏁堛€?
+- **Claude Agent SDK 鍗囩骇鑷?0.2.107**:璺熻繘涓婃父淇涓庣ǔ瀹氭€ф敼杩涖€?
 
 ### Fixed
-- **切换 Agent Runtime 后微信 Bot 自动开新对话 + 提示**:当你在 Settings 里把 Agent 的 Runtime 换了(比如 Codex → Gemini),下一条 IM 消息会自动检测并创建一条新对话,微信里会收到 "🔁 运行环境已切换为 XXX,已自动创建新对话 (xxxxxxxx)" 提示,旧历史仍然保留在会话记录里可以翻回来。之前会出现"换了 Runtime 但 Bot 还在用老的"的情况,现在不会了。
-- **切回 Claude Code 时微信 Bot 不再报 "Please run /login"**:修复了 CC CLI 在 IM 场景下的一个启动参数导致 OAuth 登录状态被忽略的问题。现在只要你在本机 `claude /login` 登录过,所有入口(Tab / 微信 / 飞书 / Cron)都能正常用。
-- **恢复历史 Gemini 会话不再出现"回答复读一次"**:之前加载旧 Gemini 对话会把上一轮的回复当作新消息再显示一次,现已正确识别并过滤回放事件。
-- **Gemini 会话空闲超时的吓人报错不再弹**:当 Gemini 进程在两轮对话间被系统回收内存时,不再向用户显示"Gemini process exited with code 137"红色错误,下一条消息会自动无感恢复。
-- **权限模式和默认模型显示与实际一致**:之前用 Gemini 时权限下拉栏经常显示 "Default" 但实际跑的是别的模式,现在 UI 和后台统一。切换 Runtime 时持久化的旧值会自动校正到新 Runtime 合法的选项。
-- **安装 Skill 的一些边角问题**:修复了从 URL 安装时的 SSRF 风险、部分失败后残留文件、超大 YAML 导致卡住等问题。
-- **终端侧栏错误横幅不会被消息完成覆盖**:Agent 报错后的警示条在后续消息写入时仍然保留。
+- **鍒囨崲 Agent Runtime 鍚庡井淇?Bot 鑷姩寮€鏂板璇?+ 鎻愮ず**:褰撲綘鍦?Settings 閲屾妸 Agent 鐨?Runtime 鎹簡(姣斿 Codex 鈫?Gemini),涓嬩竴鏉?IM 娑堟伅浼氳嚜鍔ㄦ娴嬪苟鍒涘缓涓€鏉℃柊瀵硅瘽,寰俊閲屼細鏀跺埌 "馃攣 杩愯鐜宸插垏鎹负 XXX,宸茶嚜鍔ㄥ垱寤烘柊瀵硅瘽 (xxxxxxxx)" 鎻愮ず,鏃у巻鍙蹭粛鐒朵繚鐣欏湪浼氳瘽璁板綍閲屽彲浠ョ炕鍥炴潵銆備箣鍓嶄細鍑虹幇"鎹簡 Runtime 浣?Bot 杩樺湪鐢ㄨ€佺殑"鐨勬儏鍐?鐜板湪涓嶄細浜嗐€?
+- **鍒囧洖 Claude Code 鏃跺井淇?Bot 涓嶅啀鎶?"Please run /login"**:淇浜?CC CLI 鍦?IM 鍦烘櫙涓嬬殑涓€涓惎鍔ㄥ弬鏁板鑷?OAuth 鐧诲綍鐘舵€佽蹇界暐鐨勯棶棰樸€傜幇鍦ㄥ彧瑕佷綘鍦ㄦ湰鏈?`claude /login` 鐧诲綍杩?鎵€鏈夊叆鍙?Tab / 寰俊 / 椋炰功 / Cron)閮借兘姝ｅ父鐢ㄣ€?
+- **鎭㈠鍘嗗彶 Gemini 浼氳瘽涓嶅啀鍑虹幇"鍥炵瓟澶嶈涓€娆?**:涔嬪墠鍔犺浇鏃?Gemini 瀵硅瘽浼氭妸涓婁竴杞殑鍥炲褰撲綔鏂版秷鎭啀鏄剧ず涓€娆?鐜板凡姝ｇ‘璇嗗埆骞惰繃婊ゅ洖鏀句簨浠躲€?
+- **Gemini 浼氳瘽绌洪棽瓒呮椂鐨勫悡浜烘姤閿欎笉鍐嶅脊**:褰?Gemini 杩涚▼鍦ㄤ袱杞璇濋棿琚郴缁熷洖鏀跺唴瀛樻椂,涓嶅啀鍚戠敤鎴锋樉绀?Gemini process exited with code 137"绾㈣壊閿欒,涓嬩竴鏉℃秷鎭細鑷姩鏃犳劅鎭㈠銆?
+- **鏉冮檺妯″紡鍜岄粯璁ゆā鍨嬫樉绀轰笌瀹為檯涓€鑷?*:涔嬪墠鐢?Gemini 鏃舵潈闄愪笅鎷夋爮缁忓父鏄剧ず "Default" 浣嗗疄闄呰窇鐨勬槸鍒殑妯″紡,鐜板湪 UI 鍜屽悗鍙扮粺涓€銆傚垏鎹?Runtime 鏃舵寔涔呭寲鐨勬棫鍊间細鑷姩鏍℃鍒版柊 Runtime 鍚堟硶鐨勯€夐」銆?
+- **瀹夎 Skill 鐨勪竴浜涜竟瑙掗棶棰?*:淇浜嗕粠 URL 瀹夎鏃剁殑 SSRF 椋庨櫓銆侀儴鍒嗗け璐ュ悗娈嬬暀鏂囦欢銆佽秴澶?YAML 瀵艰嚧鍗′綇绛夐棶棰樸€?
+- **缁堢渚ф爮閿欒妯箙涓嶄細琚秷鎭畬鎴愯鐩?*:Agent 鎶ラ敊鍚庣殑璀︾ず鏉″湪鍚庣画娑堟伅鍐欏叆鏃朵粛鐒朵繚鐣欍€?
 
 ---
 
 ## [0.1.65] - 2026-04-14
 
 ### Added
-- **全文搜索**：⌘F 唤起全局搜索，一次性检索所有历史会话和工作区文件，中文分词支持，长期积累的对话和代码随用随找
+- **鍏ㄦ枃鎼滅储**锛氣寴F 鍞よ捣鍏ㄥ眬鎼滅储锛屼竴娆℃€ф绱㈡墍鏈夊巻鍙蹭細璇濆拰宸ヤ綔鍖烘枃浠讹紝涓枃鍒嗚瘝鏀寔锛岄暱鏈熺Н绱殑瀵硅瘽鍜屼唬鐮侀殢鐢ㄩ殢鎵?
 
 ### Improved
-- **告别长会话/多窗口卡顿**：专门针对"开多个 Tab 跑任务 + 任务完成回来点击"的日常场景做了深度优化，典型的几秒 UI 冻结场景现在都是毫秒级响应
-  - 打开含大量截图的历史会话秒开，不再需要等服务端把图片塞进响应体
-  - 切换到超长会话（数百条消息）不再卡顿，首屏只加载最近内容，向上滚动按需补齐更早的历史
-  - 后台定时任务完成后回到前台，新消息增量追加而不是整段重载，点击立即响应
-  - 多窗口同时流式输出时主界面保持流畅
+- **鍛婂埆闀夸細璇?澶氱獥鍙ｅ崱椤?*锛氫笓闂ㄩ拡瀵?寮€澶氫釜 Tab 璺戜换鍔?+ 浠诲姟瀹屾垚鍥炴潵鐐瑰嚮"鐨勬棩甯稿満鏅仛浜嗘繁搴︿紭鍖栵紝鍏稿瀷鐨勫嚑绉?UI 鍐荤粨鍦烘櫙鐜板湪閮芥槸姣绾у搷搴?
+  - 鎵撳紑鍚ぇ閲忔埅鍥剧殑鍘嗗彶浼氳瘽绉掑紑锛屼笉鍐嶉渶瑕佺瓑鏈嶅姟绔妸鍥剧墖濉炶繘鍝嶅簲浣?
+  - 鍒囨崲鍒拌秴闀夸細璇濓紙鏁扮櫨鏉℃秷鎭級涓嶅啀鍗￠】锛岄灞忓彧鍔犺浇鏈€杩戝唴瀹癸紝鍚戜笂婊氬姩鎸夐渶琛ラ綈鏇存棭鐨勫巻鍙?
+  - 鍚庡彴瀹氭椂浠诲姟瀹屾垚鍚庡洖鍒板墠鍙帮紝鏂版秷鎭閲忚拷鍔犺€屼笉鏄暣娈甸噸杞斤紝鐐瑰嚮绔嬪嵆鍝嶅簲
+  - 澶氱獥鍙ｅ悓鏃舵祦寮忚緭鍑烘椂涓荤晫闈繚鎸佹祦鐣?
 
 ### Fixed
-- **打开旧会话不再"闪一下就空白"**：打开某些早期会话时，历史会显示一两秒后又变空白的情况彻底消失，即使底层会话上下文无法恢复，你看到的 14 条/28 条历史也会稳定保留在界面上
-- **活跃工作区打开历史会话不再频繁访问后端**：工作区里有 tsc/vite 等后台写文件时，打开一个静态历史会话不再每秒反复刷文件路径检测接口
-- **IM Bot 工具调用不再卡住**：IM 场景下 AI 调用工具不再因为没人点权限确认而永久等待，Bot 会自动信任工具并持续响应
-- **外部 Runtime 的启动页发送按钮**：使用 Claude Code CLI / Codex CLI 时，启动页发送按钮不再意外置灰
-- **代理配置界面不再反复刷新**：填入相对路径代理 URL 时会正确提示而不是触发界面连锁重渲染
-- **内嵌浏览器打开失败静默问题**：AI 回复里的链接无法在内嵌浏览器打开时，会明确提示原因而不是无反应
-- **Markdown 链接点击稳定性**：链接点击路径的渲染稳定性补齐，点击长对话里的链接不再偶发掉字
+- **鎵撳紑鏃т細璇濅笉鍐?闂竴涓嬪氨绌虹櫧"**锛氭墦寮€鏌愪簺鏃╂湡浼氳瘽鏃讹紝鍘嗗彶浼氭樉绀轰竴涓ょ鍚庡張鍙樼┖鐧界殑鎯呭喌褰诲簳娑堝け锛屽嵆浣垮簳灞備細璇濅笂涓嬫枃鏃犳硶鎭㈠锛屼綘鐪嬪埌鐨?14 鏉?28 鏉″巻鍙蹭篃浼氱ǔ瀹氫繚鐣欏湪鐣岄潰涓?
+- **娲昏穬宸ヤ綔鍖烘墦寮€鍘嗗彶浼氳瘽涓嶅啀棰戠箒璁块棶鍚庣**锛氬伐浣滃尯閲屾湁 tsc/vite 绛夊悗鍙板啓鏂囦欢鏃讹紝鎵撳紑涓€涓潤鎬佸巻鍙蹭細璇濅笉鍐嶆瘡绉掑弽澶嶅埛鏂囦欢璺緞妫€娴嬫帴鍙?
+- **IM Bot 宸ュ叿璋冪敤涓嶅啀鍗′綇**锛欼M 鍦烘櫙涓?AI 璋冪敤宸ュ叿涓嶅啀鍥犱负娌′汉鐐规潈闄愮‘璁よ€屾案涔呯瓑寰咃紝Bot 浼氳嚜鍔ㄤ俊浠诲伐鍏峰苟鎸佺画鍝嶅簲
+- **澶栭儴 Runtime 鐨勫惎鍔ㄩ〉鍙戦€佹寜閽?*锛氫娇鐢?Claude Code CLI / Codex CLI 鏃讹紝鍚姩椤靛彂閫佹寜閽笉鍐嶆剰澶栫疆鐏?
+- **浠ｇ悊閰嶇疆鐣岄潰涓嶅啀鍙嶅鍒锋柊**锛氬～鍏ョ浉瀵硅矾寰勪唬鐞?URL 鏃朵細姝ｇ‘鎻愮ず鑰屼笉鏄Е鍙戠晫闈㈣繛閿侀噸娓叉煋
+- **鍐呭祵娴忚鍣ㄦ墦寮€澶辫触闈欓粯闂**锛欰I 鍥炲閲岀殑閾炬帴鏃犳硶鍦ㄥ唴宓屾祻瑙堝櫒鎵撳紑鏃讹紝浼氭槑纭彁绀哄師鍥犺€屼笉鏄棤鍙嶅簲
+- **Markdown 閾炬帴鐐瑰嚮绋冲畾鎬?*锛氶摼鎺ョ偣鍑昏矾寰勭殑娓叉煋绋冲畾鎬цˉ榻愶紝鐐瑰嚮闀垮璇濋噷鐨勯摼鎺ヤ笉鍐嶅伓鍙戞帀瀛?
 
 ---
 
 ## [0.1.64] - 2026-04-11
 
 ### Improved
-- **工作区文件树更稳定**：文件/文件夹拖拽移动保留原有交互体验，并解决多窗口或多标签场景下的界面渲染错误
-- **IM Bot 外部 Runtime 体验对齐**：使用 Codex 或 Claude Code CLI 时，Bot 会按当前 Runtime 的模型与权限运行，不再混用内置供应商配置
-- **IM Bot 模型与权限指令优化**：`/provider` 会清晰说明当前 Runtime 的供应商管理方式，`/model` 和 `/mode` 可用于查看或切换当前 Runtime 支持的选项
-- **日志体积优化**：流式输出和长内容日志更紧凑，排查问题时能保留关键信息并减少冗余刷屏
+- **宸ヤ綔鍖烘枃浠舵爲鏇寸ǔ瀹?*锛氭枃浠?鏂囦欢澶规嫋鎷界Щ鍔ㄤ繚鐣欏師鏈変氦浜掍綋楠岋紝骞惰В鍐冲绐楀彛鎴栧鏍囩鍦烘櫙涓嬬殑鐣岄潰娓叉煋閿欒
+- **IM Bot 澶栭儴 Runtime 浣撻獙瀵归綈**锛氫娇鐢?Codex 鎴?Claude Code CLI 鏃讹紝Bot 浼氭寜褰撳墠 Runtime 鐨勬ā鍨嬩笌鏉冮檺杩愯锛屼笉鍐嶆贩鐢ㄥ唴缃緵搴斿晢閰嶇疆
+- **IM Bot 妯″瀷涓庢潈闄愭寚浠や紭鍖?*锛歚/provider` 浼氭竻鏅拌鏄庡綋鍓?Runtime 鐨勪緵搴斿晢绠＄悊鏂瑰紡锛宍/model` 鍜?`/mode` 鍙敤浜庢煡鐪嬫垨鍒囨崲褰撳墠 Runtime 鏀寔鐨勯€夐」
+- **鏃ュ織浣撶Н浼樺寲**锛氭祦寮忚緭鍑哄拰闀垮唴瀹规棩蹇楁洿绱у噾锛屾帓鏌ラ棶棰樻椂鑳戒繚鐣欏叧閿俊鎭苟鍑忓皯鍐椾綑鍒峰睆
 
 ### Fixed
-- **Codex Bot 模型串线**：工作区切到 Codex 后，微信等 IM Bot 不会再把内置模型传给 Codex 导致请求失败
-- **外部 Runtime 后台任务一致性**：Codex 与 Claude Code CLI 在 IM、心跳和定时任务入口下会使用一致的 Runtime 配置与权限策略
-- **任务列表刷新一致性**：最近任务和后台任务状态刷新更稳定，降低任务状态与实际会话不一致的情况
+- **Codex Bot 妯″瀷涓茬嚎**锛氬伐浣滃尯鍒囧埌 Codex 鍚庯紝寰俊绛?IM Bot 涓嶄細鍐嶆妸鍐呯疆妯″瀷浼犵粰 Codex 瀵艰嚧璇锋眰澶辫触
+- **澶栭儴 Runtime 鍚庡彴浠诲姟涓€鑷存€?*锛欳odex 涓?Claude Code CLI 鍦?IM銆佸績璺冲拰瀹氭椂浠诲姟鍏ュ彛涓嬩細浣跨敤涓€鑷寸殑 Runtime 閰嶇疆涓庢潈闄愮瓥鐣?
+- **浠诲姟鍒楄〃鍒锋柊涓€鑷存€?*锛氭渶杩戜换鍔″拰鍚庡彴浠诲姟鐘舵€佸埛鏂版洿绋冲畾锛岄檷浣庝换鍔＄姸鎬佷笌瀹為檯浼氳瘽涓嶄竴鑷寸殑鎯呭喌
 
 ---
 
 ## [0.1.63] - 2026-04-10
 
 ### Improved
-- **Codex 工具结果展示**：使用 Codex Runtime 时，Bash/编辑/搜索等工具调用现在会显示更完整的过程与结果，命令输出阅读体验更接近终端
-- **Bash 卡片样式统一**：外部 Runtime 的 Bash 工具输入和输出统一为终端样式，查看命令与结果更直观
+- **Codex 宸ュ叿缁撴灉灞曠ず**锛氫娇鐢?Codex Runtime 鏃讹紝Bash/缂栬緫/鎼滅储绛夊伐鍏疯皟鐢ㄧ幇鍦ㄤ細鏄剧ず鏇村畬鏁寸殑杩囩▼涓庣粨鏋滐紝鍛戒护杈撳嚭闃呰浣撻獙鏇存帴杩戠粓绔?
+- **Bash 鍗＄墖鏍峰紡缁熶竴**锛氬閮?Runtime 鐨?Bash 宸ュ叿杈撳叆鍜岃緭鍑虹粺涓€涓虹粓绔牱寮忥紝鏌ョ湅鍛戒护涓庣粨鏋滄洿鐩磋
 
 ### Fixed
-- **Claude 切换提示修正**：切换模型时的“需新开会话”提示只会在真正需要的 Anthropic 会话场景出现，不再在 Anthropic/OpenAI 兼容协议之间误弹
-- **Claude 历史签名保护补齐**：切换到受签名历史约束的 Claude 会话时，桌面端、Channel 等不同入口现在都会一致地安全处理历史记录
-- **最近任务恢复空白**：使用 Codex 或 Claude Code CLI 时，AI 在后台继续执行期间从最近任务重新打开会话，不会再先看到空白页
-- **Codex 首条短回复不再丢失**：Codex 返回很短的文本回复时，聊天页不会再出现消息已保存但界面显示空白的情况
+- **Claude 鍒囨崲鎻愮ず淇**锛氬垏鎹㈡ā鍨嬫椂鐨勨€滈渶鏂板紑浼氳瘽鈥濇彁绀哄彧浼氬湪鐪熸闇€瑕佺殑 Anthropic 浼氳瘽鍦烘櫙鍑虹幇锛屼笉鍐嶅湪 Anthropic/OpenAI 鍏煎鍗忚涔嬮棿璇脊
+- **Claude 鍘嗗彶绛惧悕淇濇姢琛ラ綈**锛氬垏鎹㈠埌鍙楃鍚嶅巻鍙茬害鏉熺殑 Claude 浼氳瘽鏃讹紝妗岄潰绔€丆hannel 绛変笉鍚屽叆鍙ｇ幇鍦ㄩ兘浼氫竴鑷村湴瀹夊叏澶勭悊鍘嗗彶璁板綍
+- **鏈€杩戜换鍔℃仮澶嶇┖鐧?*锛氫娇鐢?Codex 鎴?Claude Code CLI 鏃讹紝AI 鍦ㄥ悗鍙扮户缁墽琛屾湡闂翠粠鏈€杩戜换鍔￠噸鏂版墦寮€浼氳瘽锛屼笉浼氬啀鍏堢湅鍒扮┖鐧介〉
+- **Codex 棣栨潯鐭洖澶嶄笉鍐嶄涪澶?*锛欳odex 杩斿洖寰堢煭鐨勬枃鏈洖澶嶆椂锛岃亰澶╅〉涓嶄細鍐嶅嚭鐜版秷鎭凡淇濆瓨浣嗙晫闈㈡樉绀虹┖鐧界殑鎯呭喌
 
 ---
 
 ## [0.1.62] - 2026-04-10
 
 ### Added
-- **日志面板搜索**：⌘F 打开搜索，关键词高亮 + 上下跳转，快速定位问题日志
+- **鏃ュ織闈㈡澘鎼滅储**锛氣寴F 鎵撳紑鎼滅储锛屽叧閿瘝楂樹寒 + 涓婁笅璺宠浆锛屽揩閫熷畾浣嶉棶棰樻棩蹇?
 
 ### Improved
-- **外部 Runtime 日志诊断**：Claude Code CLI 和 Codex CLI 的日志增加完整参数（模型、工具、token 用量等），排查问题不再需要猜测
-- **Runtime 切换稳定性**：切换 Runtime 后旧会话不再错误尝试恢复，已有会话始终使用创建时的 Runtime
+- **澶栭儴 Runtime 鏃ュ織璇婃柇**锛欳laude Code CLI 鍜?Codex CLI 鐨勬棩蹇楀鍔犲畬鏁村弬鏁帮紙妯″瀷銆佸伐鍏枫€乼oken 鐢ㄩ噺绛夛級锛屾帓鏌ラ棶棰樹笉鍐嶉渶瑕佺寽娴?
+- **Runtime 鍒囨崲绋冲畾鎬?*锛氬垏鎹?Runtime 鍚庢棫浼氳瘽涓嶅啀閿欒灏濊瘯鎭㈠锛屽凡鏈変細璇濆缁堜娇鐢ㄥ垱寤烘椂鐨?Runtime
 
 ### Fixed
-- **短回复空白问题**：使用 Claude Code CLI 时，AI 简短回复（如数学计算）偶尔显示空白，现已修复
-- **Windows 频繁崩溃**：Windows 用户编辑配置文件后应用反复崩溃（UTF-8 BOM 导致），现已自动兼容
-- **外部 Runtime 默认模型**：模型选择器显示的默认模型（如 gpt-5.4）未实际传递给 Runtime，现已修复
-- **macOS 外部 CLI 检测**：从 Finder 启动时，NVM/fnm 安装的 claude/codex CLI 检测不到，现已修复
+- **鐭洖澶嶇┖鐧介棶棰?*锛氫娇鐢?Claude Code CLI 鏃讹紝AI 绠€鐭洖澶嶏紙濡傛暟瀛﹁绠楋級鍋跺皵鏄剧ず绌虹櫧锛岀幇宸蹭慨澶?
+- **Windows 棰戠箒宕╂簝**锛歐indows 鐢ㄦ埛缂栬緫閰嶇疆鏂囦欢鍚庡簲鐢ㄥ弽澶嶅穿婧冿紙UTF-8 BOM 瀵艰嚧锛夛紝鐜板凡鑷姩鍏煎
+- **澶栭儴 Runtime 榛樿妯″瀷**锛氭ā鍨嬮€夋嫨鍣ㄦ樉绀虹殑榛樿妯″瀷锛堝 gpt-5.4锛夋湭瀹為檯浼犻€掔粰 Runtime锛岀幇宸蹭慨澶?
+- **macOS 澶栭儴 CLI 妫€娴?*锛氫粠 Finder 鍚姩鏃讹紝NVM/fnm 瀹夎鐨?claude/codex CLI 妫€娴嬩笉鍒帮紝鐜板凡淇
 
 ### Security
-- **路径遍历防护**：工作区文件读写接口增加路径验证，阻止访问系统敏感目录
-- **XSS 防护加强**：AI 回复中的 HTML 预览使用 DOMParser 替代正则清理，Mermaid 图表启用 strict 安全模式
-- **OAuth 安全**：Token 端点强制 HTTPS（localhost 除外），撤销授权时尝试服务端 token 撤销
+- **璺緞閬嶅巻闃叉姢**锛氬伐浣滃尯鏂囦欢璇诲啓鎺ュ彛澧炲姞璺緞楠岃瘉锛岄樆姝㈣闂郴缁熸晱鎰熺洰褰?
+- **XSS 闃叉姢鍔犲己**锛欰I 鍥炲涓殑 HTML 棰勮浣跨敤 DOMParser 鏇夸唬姝ｅ垯娓呯悊锛孧ermaid 鍥捐〃鍚敤 strict 瀹夊叏妯″紡
+- **OAuth 瀹夊叏**锛歍oken 绔偣寮哄埗 HTTPS锛坙ocalhost 闄ゅ锛夛紝鎾ら攢鎺堟潈鏃跺皾璇曟湇鍔＄ token 鎾ら攢
 
 ---
 
 ## [0.1.61] - 2026-04-09
 
 ### Added
-- **外部 Runtime 图片支持**：使用 Claude Code CLI 或 Codex CLI 时，现在可以发送图片给 AI，不再提示"没有附带图片"
-- **三方供应商工具截图保存**：使用 DeepSeek/Gemini 等三方供应商时，MCP 工具返回的截图/图片不再丢失，自动保存到工作区并告知 AI 路径
+- **澶栭儴 Runtime 鍥剧墖鏀寔**锛氫娇鐢?Claude Code CLI 鎴?Codex CLI 鏃讹紝鐜板湪鍙互鍙戦€佸浘鐗囩粰 AI锛屼笉鍐嶆彁绀?娌℃湁闄勫甫鍥剧墖"
+- **涓夋柟渚涘簲鍟嗗伐鍏锋埅鍥句繚瀛?*锛氫娇鐢?DeepSeek/Gemini 绛変笁鏂逛緵搴斿晢鏃讹紝MCP 宸ュ叿杩斿洖鐨勬埅鍥?鍥剧墖涓嶅啀涓㈠け锛岃嚜鍔ㄤ繚瀛樺埌宸ヤ綔鍖哄苟鍛婄煡 AI 璺緞
 
 ### Improved
-- **AI 回复排版优化**：Markdown 渲染全面对齐设计规范 — 标题行高、段落间距、代码配色、表格样式、有序列表序号，长文阅读更舒适
-- **工作区文件目录统一**：Gemini 生成图片、TTS 音频、工具截图等所有 AI 生成的文件统一放在 `hamuna_files/` 目录下，不再散落在多个顶级目录
-- **错误提示优化**：API 临时异常（限流/重试）不再弹出红色错误横幅，只有真正失败时才提示
+- **AI 鍥炲鎺掔増浼樺寲**锛歁arkdown 娓叉煋鍏ㄩ潰瀵归綈璁捐瑙勮寖 鈥?鏍囬琛岄珮銆佹钀介棿璺濄€佷唬鐮侀厤鑹层€佽〃鏍兼牱寮忋€佹湁搴忓垪琛ㄥ簭鍙凤紝闀挎枃闃呰鏇磋垝閫?
+- **宸ヤ綔鍖烘枃浠剁洰褰曠粺涓€**锛欸emini 鐢熸垚鍥剧墖銆乀TS 闊抽銆佸伐鍏锋埅鍥剧瓑鎵€鏈?AI 鐢熸垚鐨勬枃浠剁粺涓€鏀惧湪 `hamuna_files/` 鐩綍涓嬶紝涓嶅啀鏁ｈ惤鍦ㄥ涓《绾х洰褰?
+- **閿欒鎻愮ず浼樺寲**锛欰PI 涓存椂寮傚父锛堥檺娴?閲嶈瘯锛変笉鍐嶅脊鍑虹孩鑹查敊璇í骞咃紝鍙湁鐪熸澶辫触鏃舵墠鎻愮ず
 
 ### Fixed
-- **切换 Runtime 后无限弹窗**：切换到 Claude Code/Codex Runtime 后发送消息，反复弹出"此会话由其他 Runtime 创建"对话框并不断开新 Tab
-- **外部 Runtime 检测失败**：从 Finder 启动应用时，因系统 PATH 缺少 Homebrew 路径导致检测不到已安装的 Claude Code CLI 和 Codex CLI
-- **Markdown HTML 安全加固**：AI 回复中的 raw HTML 现在经过清理过滤，防止潜在的脚本注入风险
+- **鍒囨崲 Runtime 鍚庢棤闄愬脊绐?*锛氬垏鎹㈠埌 Claude Code/Codex Runtime 鍚庡彂閫佹秷鎭紝鍙嶅寮瑰嚭"姝や細璇濈敱鍏朵粬 Runtime 鍒涘缓"瀵硅瘽妗嗗苟涓嶆柇寮€鏂?Tab
+- **澶栭儴 Runtime 妫€娴嬪け璐?*锛氫粠 Finder 鍚姩搴旂敤鏃讹紝鍥犵郴缁?PATH 缂哄皯 Homebrew 璺緞瀵艰嚧妫€娴嬩笉鍒板凡瀹夎鐨?Claude Code CLI 鍜?Codex CLI
+- **Markdown HTML 瀹夊叏鍔犲浐**锛欰I 鍥炲涓殑 raw HTML 鐜板湪缁忚繃娓呯悊杩囨护锛岄槻姝㈡綔鍦ㄧ殑鑴氭湰娉ㄥ叆椋庨櫓
 
 ---
 
 ## [0.1.60] - 2026-04-07
 
 ### Added
-- **多 Agent Runtime 支持（实验室）**：除内置 Claude Agent SDK 外，可接入 Claude Code CLI 和 OpenAI Codex 作为 AI 运行时。在「关于 → 实验室」中开启后，每个工作区可独立选择 Runtime
-- **MCP OAuth 认证**：MCP 工具支持 OAuth 授权流程，设置页自动检测需要认证的工具并引导完成授权
+- **澶?Agent Runtime 鏀寔锛堝疄楠屽锛?*锛氶櫎鍐呯疆 Claude Agent SDK 澶栵紝鍙帴鍏?Claude Code CLI 鍜?OpenAI Codex 浣滀负 AI 杩愯鏃躲€傚湪銆屽叧浜?鈫?瀹為獙瀹ゃ€嶄腑寮€鍚悗锛屾瘡涓伐浣滃尯鍙嫭绔嬮€夋嫨 Runtime
+- **MCP OAuth 璁よ瘉**锛歁CP 宸ュ叿鏀寔 OAuth 鎺堟潈娴佺▼锛岃缃〉鑷姩妫€娴嬮渶瑕佽璇佺殑宸ュ叿骞跺紩瀵煎畬鎴愭巿鏉?
 
 ### Improved
-- **自定义供应商模型输入**：添加模型时新增「+」按钮，除回车外多一种添加方式
-- **子 Agent 设置面板**：模型和权限选择器改为自定义下拉框，Skills 输入支持从可用列表选择
-- **启动页 Runtime 适配**：工作区配置了外部 Runtime 时，启动页输入栏自动显示对应 Runtime 的模型和权限选项
-- **三方供应商切换保护**：从三方供应商切换到 Anthropic 原生时，弹窗确认并新开 Tab，避免历史消息不兼容
+- **鑷畾涔変緵搴斿晢妯″瀷杈撳叆**锛氭坊鍔犳ā鍨嬫椂鏂板銆?銆嶆寜閽紝闄ゅ洖杞﹀澶氫竴绉嶆坊鍔犳柟寮?
+- **瀛?Agent 璁剧疆闈㈡澘**锛氭ā鍨嬪拰鏉冮檺閫夋嫨鍣ㄦ敼涓鸿嚜瀹氫箟涓嬫媺妗嗭紝Skills 杈撳叆鏀寔浠庡彲鐢ㄥ垪琛ㄩ€夋嫨
+- **鍚姩椤?Runtime 閫傞厤**锛氬伐浣滃尯閰嶇疆浜嗗閮?Runtime 鏃讹紝鍚姩椤佃緭鍏ユ爮鑷姩鏄剧ず瀵瑰簲 Runtime 鐨勬ā鍨嬪拰鏉冮檺閫夐」
+- **涓夋柟渚涘簲鍟嗗垏鎹繚鎶?*锛氫粠涓夋柟渚涘簲鍟嗗垏鎹㈠埌 Anthropic 鍘熺敓鏃讹紝寮圭獥纭骞舵柊寮€ Tab锛岄伩鍏嶅巻鍙叉秷鎭笉鍏煎
 
 ### Fixed
-- **AI 思考状态卡住**：AI 思考指示器可能卡住数十分钟不消失（实际后台已完成）。修复了子 Agent 思考块未正确关闭、turn 边界遗漏清理等多个根因
-- **QR 登录空白页**：OpenClaw 插件扫码登录时，wizard 步骤冲突导致页面空白
-- **三方供应商思考签名污染**：使用 Gemini 等思考模型时，签名字段污染 SDK 历史导致后续请求报错
+- **AI 鎬濊€冪姸鎬佸崱浣?*锛欰I 鎬濊€冩寚绀哄櫒鍙兘鍗′綇鏁板崄鍒嗛挓涓嶆秷澶憋紙瀹為檯鍚庡彴宸插畬鎴愶級銆備慨澶嶄簡瀛?Agent 鎬濊€冨潡鏈纭叧闂€乼urn 杈圭晫閬楁紡娓呯悊绛夊涓牴鍥?
+- **QR 鐧诲綍绌虹櫧椤?*锛歄penClaw 鎻掍欢鎵爜鐧诲綍鏃讹紝wizard 姝ラ鍐茬獊瀵艰嚧椤甸潰绌虹櫧
+- **涓夋柟渚涘簲鍟嗘€濊€冪鍚嶆薄鏌?*锛氫娇鐢?Gemini 绛夋€濊€冩ā鍨嬫椂锛岀鍚嶅瓧娈垫薄鏌?SDK 鍘嗗彶瀵艰嚧鍚庣画璇锋眰鎶ラ敊
 
 ---
 
 ## [0.1.59] - 2026-04-04
 
 ### Added
-- **内嵌浏览器**：Chat 分屏新增网页预览面板，AI 消息中的链接和 HTML 文件优先在应用内打开。支持前进/后退/刷新、地址栏编辑导航、在系统浏览器中打开
-- **HTML 实时预览**：点击工作区 .html 文件直接渲染预览，工具栏一键切换「编辑源码 ↔ 网页预览」，编辑自动保存后预览同步刷新
-- **模型管理面板**：供应商设置新增统一模型管理入口，支持从 API 自动发现可用模型、设置首选模型、删除/添加模型
-- **工作区使用指南**：支持 INTRODUCTION.md 文件，新建对话时自动展示 Agent 使用说明
-- **群聊智能回复**：群聊消息注入发送者、时间戳、@提及标记，AI 能区分多人对话并按需回复
-- **文件树拖拽分栏**：工作区文件树与 Agent 能力面板支持上下拖拽调整比例
+- **鍐呭祵娴忚鍣?*锛欳hat 鍒嗗睆鏂板缃戦〉棰勮闈㈡澘锛孉I 娑堟伅涓殑閾炬帴鍜?HTML 鏂囦欢浼樺厛鍦ㄥ簲鐢ㄥ唴鎵撳紑銆傛敮鎸佸墠杩?鍚庨€€/鍒锋柊銆佸湴鍧€鏍忕紪杈戝鑸€佸湪绯荤粺娴忚鍣ㄤ腑鎵撳紑
+- **HTML 瀹炴椂棰勮**锛氱偣鍑诲伐浣滃尯 .html 鏂囦欢鐩存帴娓叉煋棰勮锛屽伐鍏锋爮涓€閿垏鎹€岀紪杈戞簮鐮?鈫?缃戦〉棰勮銆嶏紝缂栬緫鑷姩淇濆瓨鍚庨瑙堝悓姝ュ埛鏂?
+- **妯″瀷绠＄悊闈㈡澘**锛氫緵搴斿晢璁剧疆鏂板缁熶竴妯″瀷绠＄悊鍏ュ彛锛屾敮鎸佷粠 API 鑷姩鍙戠幇鍙敤妯″瀷銆佽缃閫夋ā鍨嬨€佸垹闄?娣诲姞妯″瀷
+- **宸ヤ綔鍖轰娇鐢ㄦ寚鍗?*锛氭敮鎸?INTRODUCTION.md 鏂囦欢锛屾柊寤哄璇濇椂鑷姩灞曠ず Agent 浣跨敤璇存槑
+- **缇よ亰鏅鸿兘鍥炲**锛氱兢鑱婃秷鎭敞鍏ュ彂閫佽€呫€佹椂闂存埑銆丂鎻愬強鏍囪锛孉I 鑳藉尯鍒嗗浜哄璇濆苟鎸夐渶鍥炲
+- **鏂囦欢鏍戞嫋鎷藉垎鏍?*锛氬伐浣滃尯鏂囦欢鏍戜笌 Agent 鑳藉姏闈㈡澘鏀寔涓婁笅鎷栨嫿璋冩暣姣斾緥
 
 ### Improved
-- **Cmd+W 层级关闭**：关闭快捷键按层级递进（弹窗 → 分屏面板 → 标签页 → 启动页），不再意外退出程序
-- **弹窗交互优化**：所有弹窗遮罩层改用 mouseDown 关闭，防止选中文字拖拽到外部时意外关闭面板
-- **后台任务通知**：后台任务完成后在对话中插入状态卡片，消除 AI "自说自话" 的困惑感
-- **Permission Mode 同步**：Plan 模式等权限切换在前后端实时同步，UI 开关始终反映实际状态
+- **Cmd+W 灞傜骇鍏抽棴**锛氬叧闂揩鎹烽敭鎸夊眰绾ч€掕繘锛堝脊绐?鈫?鍒嗗睆闈㈡澘 鈫?鏍囩椤?鈫?鍚姩椤碉級锛屼笉鍐嶆剰澶栭€€鍑虹▼搴?
+- **寮圭獥浜や簰浼樺寲**锛氭墍鏈夊脊绐楅伄缃╁眰鏀圭敤 mouseDown 鍏抽棴锛岄槻姝㈤€変腑鏂囧瓧鎷栨嫿鍒板閮ㄦ椂鎰忓鍏抽棴闈㈡澘
+- **鍚庡彴浠诲姟閫氱煡**锛氬悗鍙颁换鍔″畬鎴愬悗鍦ㄥ璇濅腑鎻掑叆鐘舵€佸崱鐗囷紝娑堥櫎 AI "鑷鑷瘽" 鐨勫洶鎯戞劅
+- **Permission Mode 鍚屾**锛歅lan 妯″紡绛夋潈闄愬垏鎹㈠湪鍓嶅悗绔疄鏃跺悓姝ワ紝UI 寮€鍏冲缁堝弽鏄犲疄闄呯姸鎬?
 
 ### Fixed
-- **MCP 工具卡死**：停止响应后 MCP 工具可能挂起长达 10 分钟。现在 3 秒内强制终止
-- **飞书群聊消息路由错误**：群聊回复发送到私聊、群消息被策略拦截、群组自动发现重复等系列问题
-- **MCP 配置加载崩溃**：config.json 中数组字段类型异常时不再报 TypeError
-- **OpenClaw 通道名称**：Bot 显示名改用 Agent 名称替代 npm 包名
-- **Thinking 计时器泄漏**：历史消息的思考时间指示器不再永久运行
+- **MCP 宸ュ叿鍗℃**锛氬仠姝㈠搷搴斿悗 MCP 宸ュ叿鍙兘鎸傝捣闀胯揪 10 鍒嗛挓銆傜幇鍦?3 绉掑唴寮哄埗缁堟
+- **椋炰功缇よ亰娑堟伅璺敱閿欒**锛氱兢鑱婂洖澶嶅彂閫佸埌绉佽亰銆佺兢娑堟伅琚瓥鐣ユ嫤鎴€佺兢缁勮嚜鍔ㄥ彂鐜伴噸澶嶇瓑绯诲垪闂
+- **MCP 閰嶇疆鍔犺浇宕╂簝**锛歝onfig.json 涓暟缁勫瓧娈电被鍨嬪紓甯告椂涓嶅啀鎶?TypeError
+- **OpenClaw 閫氶亾鍚嶇О**锛欱ot 鏄剧ず鍚嶆敼鐢?Agent 鍚嶇О鏇夸唬 npm 鍖呭悕
+- **Thinking 璁℃椂鍣ㄦ硠婕?*锛氬巻鍙叉秷鎭殑鎬濊€冩椂闂存寚绀哄櫒涓嶅啀姘镐箙杩愯
 
 ---
 
 ## [0.1.58] - 2026-04-02
 
 ### Fixed
-- **飞书 Bot 不回复**：飞书 Bot 收到消息后无任何回复，由上一版修复企微时引入的回归问题导致
-- **Windows 更新失败**：更新或卸载时因 node.exe 文件锁导致安装器报错
+- **椋炰功 Bot 涓嶅洖澶?*锛氶涔?Bot 鏀跺埌娑堟伅鍚庢棤浠讳綍鍥炲锛岀敱涓婁竴鐗堜慨澶嶄紒寰椂寮曞叆鐨勫洖褰掗棶棰樺鑷?
+- **Windows 鏇存柊澶辫触**锛氭洿鏂版垨鍗歌浇鏃跺洜 node.exe 鏂囦欢閿佸鑷村畨瑁呭櫒鎶ラ敊
 
 ---
 
 ## [0.1.57] - 2026-04-02
 
 ### Added
-- **内嵌终端**：Chat 页面右侧新增分屏终端，无需切换窗口即可执行命令。支持日间/夜间主题自动切换、Tab 切换时状态保持、Shell 退出自动清理
-- **代码编辑**：文件预览支持直接编辑并自动保存，体验接近 VSCode
-- **企业微信 Bot**：新增企业微信渠道，支持扫码和手动配置两种创建方式
-- **更新进度可视化**：应用更新下载时显示进度百分比和进度条
-- **快速求助**：AI 出错时，错误横幅新增「召唤小助理」按钮，一键跳转诊断
+- **鍐呭祵缁堢**锛欳hat 椤甸潰鍙充晶鏂板鍒嗗睆缁堢锛屾棤闇€鍒囨崲绐楀彛鍗冲彲鎵ц鍛戒护銆傛敮鎸佹棩闂?澶滈棿涓婚鑷姩鍒囨崲銆乀ab 鍒囨崲鏃剁姸鎬佷繚鎸併€丼hell 閫€鍑鸿嚜鍔ㄦ竻鐞?
+- **浠ｇ爜缂栬緫**锛氭枃浠堕瑙堟敮鎸佺洿鎺ョ紪杈戝苟鑷姩淇濆瓨锛屼綋楠屾帴杩?VSCode
+- **浼佷笟寰俊 Bot**锛氭柊澧炰紒涓氬井淇℃笭閬擄紝鏀寔鎵爜鍜屾墜鍔ㄩ厤缃袱绉嶅垱寤烘柟寮?
+- **鏇存柊杩涘害鍙鍖?*锛氬簲鐢ㄦ洿鏂颁笅杞芥椂鏄剧ず杩涘害鐧惧垎姣斿拰杩涘害鏉?
+- **蹇€熸眰鍔?*锛欰I 鍑洪敊鏃讹紝閿欒妯箙鏂板銆屽彫鍞ゅ皬鍔╃悊銆嶆寜閽紝涓€閿烦杞瘖鏂?
 
 ### Improved
-- **文件预览升级**：预览器从 react-syntax-highlighter 升级至 Monaco Editor，语法高亮更准确，大文件性能更好
-- **交互反馈**：所有按钮和列表项点击时统一添加了微缩反馈动效
+- **鏂囦欢棰勮鍗囩骇**锛氶瑙堝櫒浠?react-syntax-highlighter 鍗囩骇鑷?Monaco Editor锛岃娉曢珮浜洿鍑嗙‘锛屽ぇ鏂囦欢鎬ц兘鏇村ソ
+- **浜や簰鍙嶉**锛氭墍鏈夋寜閽拰鍒楄〃椤圭偣鍑绘椂缁熶竴娣诲姞浜嗗井缂╁弽棣堝姩鏁?
 
 ### Fixed
-- **应用冻结**：快速切换 Tab 时可能触发端口竞态导致应用卡死最长 5 分钟
-- **MCP 工具崩溃**：添加与 SDK 保留名同名的 MCP 工具（如 computer-use）会导致 session 反复崩溃重启
-- **代理环境联网**：使用系统代理时 MCP 子进程无法访问网络
-- **供应商验证**：硅基流动等供应商验证超时或报 400 错误
-- **企微插件崩溃**：企业微信插件因 runtime 上下文缺失导致消息收发失败
-- **SSE 重连重复**：重连后 AI 思考过程内容重复显示
-- **Windows 终端无法使用**：内嵌终端在 Windows 上降级到 cmd.exe，所有 Unix 风格命令（ls/pwd/clear 等）均无效。修复 shell 检测链加入 PowerShell 5.1（Windows 自带）
-- **终端中文字体**：终端字体栈缺少中文字体，Windows 中文显示为宋体。补充 PingFang SC / Microsoft YaHei
-- **终端标题 Windows 路径**：标题栏路径分割未处理反斜杠，Windows 下显示为 `~/C:\full\path`
+- **搴旂敤鍐荤粨**锛氬揩閫熷垏鎹?Tab 鏃跺彲鑳借Е鍙戠鍙ｇ珵鎬佸鑷村簲鐢ㄥ崱姝绘渶闀?5 鍒嗛挓
+- **MCP 宸ュ叿宕╂簝**锛氭坊鍔犱笌 SDK 淇濈暀鍚嶅悓鍚嶇殑 MCP 宸ュ叿锛堝 computer-use锛変細瀵艰嚧 session 鍙嶅宕╂簝閲嶅惎
+- **浠ｇ悊鐜鑱旂綉**锛氫娇鐢ㄧ郴缁熶唬鐞嗘椂 MCP 瀛愯繘绋嬫棤娉曡闂綉缁?
+- **渚涘簲鍟嗛獙璇?*锛氱鍩烘祦鍔ㄧ瓑渚涘簲鍟嗛獙璇佽秴鏃舵垨鎶?400 閿欒
+- **浼佸井鎻掍欢宕╂簝**锛氫紒涓氬井淇℃彃浠跺洜 runtime 涓婁笅鏂囩己澶卞鑷存秷鎭敹鍙戝け璐?
+- **SSE 閲嶈繛閲嶅**锛氶噸杩炲悗 AI 鎬濊€冭繃绋嬪唴瀹归噸澶嶆樉绀?
+- **Windows 缁堢鏃犳硶浣跨敤**锛氬唴宓岀粓绔湪 Windows 涓婇檷绾у埌 cmd.exe锛屾墍鏈?Unix 椋庢牸鍛戒护锛坙s/pwd/clear 绛夛級鍧囨棤鏁堛€備慨澶?shell 妫€娴嬮摼鍔犲叆 PowerShell 5.1锛圵indows 鑷甫锛?
+- **缁堢涓枃瀛椾綋**锛氱粓绔瓧浣撴爤缂哄皯涓枃瀛椾綋锛學indows 涓枃鏄剧ず涓哄畫浣撱€傝ˉ鍏?PingFang SC / Microsoft YaHei
+- **缁堢鏍囬 Windows 璺緞**锛氭爣棰樻爮璺緞鍒嗗壊鏈鐞嗗弽鏂滄潬锛學indows 涓嬫樉绀轰负 `~/C:\full\path`
 
 ---
 
 ## [0.1.56] - 2026-03-30
 
 ### Added
-- **分屏文件预览**：点击工作区文件在右侧分屏打开预览（支持代码高亮、Markdown 渲染、编辑），默认开启，可在设置中关闭
-- **目录树吸顶**：深度浏览文件时，父目录固定在顶部显示（最多 3 层），点击可收起
-- **工作区悬浮模式**：窄屏或分屏时，工作区文件列表变为右侧悬浮抽屉，不再挤压对话区域
+- **鍒嗗睆鏂囦欢棰勮**锛氱偣鍑诲伐浣滃尯鏂囦欢鍦ㄥ彸渚у垎灞忔墦寮€棰勮锛堟敮鎸佷唬鐮侀珮浜€丮arkdown 娓叉煋銆佺紪杈戯級锛岄粯璁ゅ紑鍚紝鍙湪璁剧疆涓叧闂?
+- **鐩綍鏍戝惛椤?*锛氭繁搴︽祻瑙堟枃浠舵椂锛岀埗鐩綍鍥哄畾鍦ㄩ《閮ㄦ樉绀猴紙鏈€澶?3 灞傦級锛岀偣鍑诲彲鏀惰捣
+- **宸ヤ綔鍖烘偓娴ā寮?*锛氱獎灞忔垨鍒嗗睆鏃讹紝宸ヤ綔鍖烘枃浠跺垪琛ㄥ彉涓哄彸渚ф偓娴娊灞夛紝涓嶅啀鎸ゅ帇瀵硅瘽鍖哄煙
 
 ### Improved
-- **停止按钮响应提速**：从最慢 25 秒缩短到 5 秒，MCP 工具卡死时也能可靠终止
-- **飞书插件工具完整性**：修复 OAuth 授权失败导致 19/34 个工具被静默过滤的问题
-- **全屏预览加宽**：文件预览弹窗显示面积增大，减少两侧空白
-- **右上角入口**：「反馈」改为「小助理」，更贴合产品定位
+- **鍋滄鎸夐挳鍝嶅簲鎻愰€?*锛氫粠鏈€鎱?25 绉掔缉鐭埌 5 绉掞紝MCP 宸ュ叿鍗℃鏃朵篃鑳藉彲闈犵粓姝?
+- **椋炰功鎻掍欢宸ュ叿瀹屾暣鎬?*锛氫慨澶?OAuth 鎺堟潈澶辫触瀵艰嚧 19/34 涓伐鍏疯闈欓粯杩囨护鐨勯棶棰?
+- **鍏ㄥ睆棰勮鍔犲**锛氭枃浠堕瑙堝脊绐楁樉绀洪潰绉澶э紝鍑忓皯涓や晶绌虹櫧
+- **鍙充笂瑙掑叆鍙?*锛氥€屽弽棣堛€嶆敼涓恒€屽皬鍔╃悊銆嶏紝鏇磋创鍚堜骇鍝佸畾浣?
 
 ### Fixed
-- **MCP 工具调用永久挂起**：Playwright 等 MCP 工具无响应时，10 分钟后自动终止并提示用户重试，Stop 按钮也能可靠恢复会话
-- **第三方供应商报错**：硅基流动等 Anthropic 协议供应商因 thinking 参数不兼容导致 400 错误
+- **MCP 宸ュ叿璋冪敤姘镐箙鎸傝捣**锛歅laywright 绛?MCP 宸ュ叿鏃犲搷搴旀椂锛?0 鍒嗛挓鍚庤嚜鍔ㄧ粓姝㈠苟鎻愮ず鐢ㄦ埛閲嶈瘯锛孲top 鎸夐挳涔熻兘鍙潬鎭㈠浼氳瘽
+- **绗笁鏂逛緵搴斿晢鎶ラ敊**锛氱鍩烘祦鍔ㄧ瓑 Anthropic 鍗忚渚涘簲鍟嗗洜 thinking 鍙傛暟涓嶅吋瀹瑰鑷?400 閿欒
 
 ---
 
 ## [0.1.55] - 2026-03-29
 
 ### Added
-- **Generative UI**：AI 可以在对话中生成交互式可视化组件（图表、表单、仪表盘等），支持流式渲染，对话即应用
-- **MCP 工具名称优化**：工具列表显示来源 MCP 服务名称和彩色图标，一眼区分工具归属
+- **Generative UI**锛欰I 鍙互鍦ㄥ璇濅腑鐢熸垚浜や簰寮忓彲瑙嗗寲缁勪欢锛堝浘琛ㄣ€佽〃鍗曘€佷华琛ㄧ洏绛夛級锛屾敮鎸佹祦寮忔覆鏌擄紝瀵硅瘽鍗冲簲鐢?
+- **MCP 宸ュ叿鍚嶇О浼樺寲**锛氬伐鍏峰垪琛ㄦ樉绀烘潵婧?MCP 鏈嶅姟鍚嶇О鍜屽僵鑹插浘鏍囷紝涓€鐪煎尯鍒嗗伐鍏峰綊灞?
 
 ### Improved
-- **Widget 渲染体验**：骨架屏 shimmer 动画 + 基于实际高度的智能展开，消除加载跳动
-- **定时任务管理**：Agent 设置页只显示活跃任务并按时间倒序；Launcher 点击执行历史可直接跳转到对应对话
+- **Widget 娓叉煋浣撻獙**锛氶鏋跺睆 shimmer 鍔ㄧ敾 + 鍩轰簬瀹為檯楂樺害鐨勬櫤鑳藉睍寮€锛屾秷闄ゅ姞杞借烦鍔?
+- **瀹氭椂浠诲姟绠＄悊**锛欰gent 璁剧疆椤靛彧鏄剧ず娲昏穬浠诲姟骞舵寜鏃堕棿鍊掑簭锛汱auncher 鐐瑰嚮鎵ц鍘嗗彶鍙洿鎺ヨ烦杞埌瀵瑰簲瀵硅瘽
 
 ### Fixed
-- **对话历史丢失**：Rewind（时间回溯）后产生的新对话不会出现在历史列表，即使手动命名也找不到。同时加固了历史索引文件的写入安全性，防止异常中断导致数据丢失
-- **应用启动闪断**：Windows 上启动时健康检查过于激进，误判正在初始化的后台服务为异常并强制重启，导致短暂的功能不可用
+- **瀵硅瘽鍘嗗彶涓㈠け**锛歊ewind锛堟椂闂村洖婧級鍚庝骇鐢熺殑鏂板璇濅笉浼氬嚭鐜板湪鍘嗗彶鍒楄〃锛屽嵆浣挎墜鍔ㄥ懡鍚嶄篃鎵句笉鍒般€傚悓鏃跺姞鍥轰簡鍘嗗彶绱㈠紩鏂囦欢鐨勫啓鍏ュ畨鍏ㄦ€э紝闃叉寮傚父涓柇瀵艰嚧鏁版嵁涓㈠け
+- **搴旂敤鍚姩闂柇**锛歐indows 涓婂惎鍔ㄦ椂鍋ュ悍妫€鏌ヨ繃浜庢縺杩涳紝璇垽姝ｅ湪鍒濆鍖栫殑鍚庡彴鏈嶅姟涓哄紓甯稿苟寮哄埗閲嶅惎锛屽鑷寸煭鏆傜殑鍔熻兘涓嶅彲鐢?
 
 ---
 
 ## [0.1.54] - 2026-03-28
 
 ### Added
-- **定时任务结果投递到 IM**：桌面端创建的定时任务执行完成后，可将结果自动发送到飞书、微信等 IM 渠道，不再需要打开客户端查看
-- **无限循环任务**：新增 Ralph Loop 模式 — 任务完成后自动触发下一次执行，失败时自动退避等待，适合需要持续运行的场景
-- **文本选中操作**：选中 AI 回复中的文字，弹出「引用」和「深入讲讲」快捷操作
-- **对话导出**：历史记录中支持将任意对话导出为 Markdown 文件
-- **IM 即时反馈**：IM Bot 收到消息后立即显示「思考中…」提示，用户不再面对长时间的空白等待
-- **系统消息标记**：对话中来自定时任务和心跳的系统消息会显示来源标签，便于区分
-- **超长消息折叠**：过长的用户消息自动折叠，点击即可展开查看完整内容
+- **瀹氭椂浠诲姟缁撴灉鎶曢€掑埌 IM**锛氭闈㈢鍒涘缓鐨勫畾鏃朵换鍔℃墽琛屽畬鎴愬悗锛屽彲灏嗙粨鏋滆嚜鍔ㄥ彂閫佸埌椋炰功銆佸井淇＄瓑 IM 娓犻亾锛屼笉鍐嶉渶瑕佹墦寮€瀹㈡埛绔煡鐪?
+- **鏃犻檺寰幆浠诲姟**锛氭柊澧?Ralph Loop 妯″紡 鈥?浠诲姟瀹屾垚鍚庤嚜鍔ㄨЕ鍙戜笅涓€娆℃墽琛岋紝澶辫触鏃惰嚜鍔ㄩ€€閬跨瓑寰咃紝閫傚悎闇€瑕佹寔缁繍琛岀殑鍦烘櫙
+- **鏂囨湰閫変腑鎿嶄綔**锛氶€変腑 AI 鍥炲涓殑鏂囧瓧锛屽脊鍑恒€屽紩鐢ㄣ€嶅拰銆屾繁鍏ヨ璁层€嶅揩鎹锋搷浣?
+- **瀵硅瘽瀵煎嚭**锛氬巻鍙茶褰曚腑鏀寔灏嗕换鎰忓璇濆鍑轰负 Markdown 鏂囦欢
+- **IM 鍗虫椂鍙嶉**锛欼M Bot 鏀跺埌娑堟伅鍚庣珛鍗虫樉绀恒€屾€濊€冧腑鈥︺€嶆彁绀猴紝鐢ㄦ埛涓嶅啀闈㈠闀挎椂闂寸殑绌虹櫧绛夊緟
+- **绯荤粺娑堟伅鏍囪**锛氬璇濅腑鏉ヨ嚜瀹氭椂浠诲姟鍜屽績璺崇殑绯荤粺娑堟伅浼氭樉绀烘潵婧愭爣绛撅紝渚夸簬鍖哄垎
+- **瓒呴暱娑堟伅鎶樺彔**锛氳繃闀跨殑鐢ㄦ埛娑堟伅鑷姩鎶樺彔锛岀偣鍑诲嵆鍙睍寮€鏌ョ湅瀹屾暣鍐呭
 
 ### Improved
-- **Claude Agent SDK 升级至 0.2.84**
-- **网络代理**：未配置代理时自动继承系统网络设置（如 Clash 全局代理），不再强制直连
-- **目录树刷新**：文件变化实时推送更新，不再依赖 2 分钟轮询
-- **MCP 环境变量**：支持同时填写变量名和值后一步添加，增加重复检测
-- **OpenClaw 插件兼容**：全量覆盖 SDK 154 个子模块，社区插件不再因缺少模块而崩溃
+- **Claude Agent SDK 鍗囩骇鑷?0.2.84**
+- **缃戠粶浠ｇ悊**锛氭湭閰嶇疆浠ｇ悊鏃惰嚜鍔ㄧ户鎵跨郴缁熺綉缁滆缃紙濡?Clash 鍏ㄥ眬浠ｇ悊锛夛紝涓嶅啀寮哄埗鐩磋繛
+- **鐩綍鏍戝埛鏂?*锛氭枃浠跺彉鍖栧疄鏃舵帹閫佹洿鏂帮紝涓嶅啀渚濊禆 2 鍒嗛挓杞
+- **MCP 鐜鍙橀噺**锛氭敮鎸佸悓鏃跺～鍐欏彉閲忓悕鍜屽€煎悗涓€姝ユ坊鍔狅紝澧炲姞閲嶅妫€娴?
+- **OpenClaw 鎻掍欢鍏煎**锛氬叏閲忚鐩?SDK 154 涓瓙妯″潡锛岀ぞ鍖烘彃浠朵笉鍐嶅洜缂哄皯妯″潡鑰屽穿婧?
 
 ### Fixed
-- **时间回溯失败后 UI 不回滚**：后端回溯失败时前端消息列表恢复到回溯前状态
-- **新建 IM Bot 报「模型不可用」**：首次启动时缺少默认供应商配置
-- **Agent 页面定时任务不显示**：桌面端创建的任务在 Agent 设置页无法看到
-- **MCP 工具配置错误导致全部 MCP 不可用**：单个 MCP 配置出错不再影响其他工具
-- **AI 不知道当前时间**：系统提示词引导 AI 主动获取时间信息
+- **鏃堕棿鍥炴函澶辫触鍚?UI 涓嶅洖婊?*锛氬悗绔洖婧け璐ユ椂鍓嶇娑堟伅鍒楄〃鎭㈠鍒板洖婧墠鐘舵€?
+- **鏂板缓 IM Bot 鎶ャ€屾ā鍨嬩笉鍙敤銆?*锛氶娆″惎鍔ㄦ椂缂哄皯榛樿渚涘簲鍟嗛厤缃?
+- **Agent 椤甸潰瀹氭椂浠诲姟涓嶆樉绀?*锛氭闈㈢鍒涘缓鐨勪换鍔″湪 Agent 璁剧疆椤垫棤娉曠湅鍒?
+- **MCP 宸ュ叿閰嶇疆閿欒瀵艰嚧鍏ㄩ儴 MCP 涓嶅彲鐢?*锛氬崟涓?MCP 閰嶇疆鍑洪敊涓嶅啀褰卞搷鍏朵粬宸ュ叿
+- **AI 涓嶇煡閬撳綋鍓嶆椂闂?*锛氱郴缁熸彁绀鸿瘝寮曞 AI 涓诲姩鑾峰彇鏃堕棿淇℃伅
 
 ---
 
 ## [0.1.53] - 2026-03-26
 
 ### Added
-- **三方供应商子 Agent 模型别名映射**：通过 `ANTHROPIC_DEFAULT_SONNET/OPUS/HAIKU_MODEL` 环境变量 + OpenAI Bridge `modelMapping`，子 Agent 指定 `model: "sonnet"` 时自动映射到供应商模型（如 `deepseek-chat`），不再发送 raw `claude-*` 导致卡住
-- **OpenClaw plugin shim 升级至 3.22 兼容级别**：新增 `channel-config-schema`、`channel-contract`、`command-auth`、`core`、`infra-runtime`、`plugin-entry`、`text-runtime` 7 个 shim 模块，解决微信插件 v2.0.1 启动 crash
-- **SSE Last-Value Cache**：新客户端连接 SSE 时立即 replay 缓存的 `chat:status`，Tab 中途接入 IM 运行中的 session 不再短暂闪过 idle 状态
-- **Boot Banner**：应用启动和 Sidecar 创建时输出 `[boot]` 单行自检信息（版本/OS/Provider/MCP/Agent/Cron 数量），`grep '[boot]'` 即可获取完整环境
-- **`system_binary` 模块**：集中系统工具查找（taskkill/pgrep/wmic），pit-of-success 模式
+- **涓夋柟渚涘簲鍟嗗瓙 Agent 妯″瀷鍒悕鏄犲皠**锛氶€氳繃 `ANTHROPIC_DEFAULT_SONNET/OPUS/HAIKU_MODEL` 鐜鍙橀噺 + OpenAI Bridge `modelMapping`锛屽瓙 Agent 鎸囧畾 `model: "sonnet"` 鏃惰嚜鍔ㄦ槧灏勫埌渚涘簲鍟嗘ā鍨嬶紙濡?`deepseek-chat`锛夛紝涓嶅啀鍙戦€?raw `claude-*` 瀵艰嚧鍗′綇
+- **OpenClaw plugin shim 鍗囩骇鑷?3.22 鍏煎绾у埆**锛氭柊澧?`channel-config-schema`銆乣channel-contract`銆乣command-auth`銆乣core`銆乣infra-runtime`銆乣plugin-entry`銆乣text-runtime` 7 涓?shim 妯″潡锛岃В鍐冲井淇℃彃浠?v2.0.1 鍚姩 crash
+- **SSE Last-Value Cache**锛氭柊瀹㈡埛绔繛鎺?SSE 鏃剁珛鍗?replay 缂撳瓨鐨?`chat:status`锛孴ab 涓€旀帴鍏?IM 杩愯涓殑 session 涓嶅啀鐭殏闂繃 idle 鐘舵€?
+- **Boot Banner**锛氬簲鐢ㄥ惎鍔ㄥ拰 Sidecar 鍒涘缓鏃惰緭鍑?`[boot]` 鍗曡鑷淇℃伅锛堢増鏈?OS/Provider/MCP/Agent/Cron 鏁伴噺锛夛紝`grep '[boot]'` 鍗冲彲鑾峰彇瀹屾暣鐜
+- **`system_binary` 妯″潡**锛氶泦涓郴缁熷伐鍏锋煡鎵撅紙taskkill/pgrep/wmic锛夛紝pit-of-success 妯″紡
 
 ### Improved
-- **统一日志降噪**：SSE 流式事件静默、Health Check 静默、HTTP 路由高频路径静默、SDK message 去重（摘要替代完整 JSON）、bun-out 彻底去重（Bun logger 初始化后停止 stdout 捕获），日志信噪比从 36% → ~85%
-- **插件刷新并行**：多个 Bot 刷新按钮可同时点击，互不影响
-- **供应商设置 UI**：`maxOutputTokensParamName` 改用 Select 下拉；原生 select 替换为 CustomSelect 统一设计系统
+- **缁熶竴鏃ュ織闄嶅櫔**锛歋SE 娴佸紡浜嬩欢闈欓粯銆丠ealth Check 闈欓粯銆丠TTP 璺敱楂橀璺緞闈欓粯銆丼DK message 鍘婚噸锛堟憳瑕佹浛浠ｅ畬鏁?JSON锛夈€乥un-out 褰诲簳鍘婚噸锛圔un logger 鍒濆鍖栧悗鍋滄 stdout 鎹曡幏锛夛紝鏃ュ織淇″櫔姣斾粠 36% 鈫?~85%
+- **鎻掍欢鍒锋柊骞惰**锛氬涓?Bot 鍒锋柊鎸夐挳鍙悓鏃剁偣鍑伙紝浜掍笉褰卞搷
+- **渚涘簲鍟嗚缃?UI**锛歚maxOutputTokensParamName` 鏀圭敤 Select 涓嬫媺锛涘師鐢?select 鏇挎崲涓?CustomSelect 缁熶竴璁捐绯荤粺
 
 ### Fixed
-- **Rewind 死锁**：`forceAbortCurrentTurnAndRecover` 不再 eager pre-warm，消除 `await sessionTerminationPromise` 永久阻塞；所有 6 处 await 加 10 秒超时兜底
-- **Rewind 失忆**：`startStreamingSession` 的 `currentSessionUuids.clear()` 改为仅非 resume session 执行，关闭 Tab 重开后 rewind 保留上下文
-- **IM Bot / Cron "Not logged in"**：pit-of-success 架构修复，订阅模式 Sidecar 不再误注入三方 Provider 环境
-- **自定义供应商 modelAliases 默认值**：无配置时自动用 `primaryModel` 兜底
-- **旧版内置飞书入口隐藏**：聊天机器人 Bot 页面移除旧版飞书卡片（已被 OpenClaw 官方插件替代）
-- **插件更新 icon 闪烁**：刷新时保持平台 icon 不变，仅首次安装显示 loading
-- **Agent 工具样式**：复用 Task 子 Agent 样式，显示 `subagent_type` + `description`
+- **Rewind 姝婚攣**锛歚forceAbortCurrentTurnAndRecover` 涓嶅啀 eager pre-warm锛屾秷闄?`await sessionTerminationPromise` 姘镐箙闃诲锛涙墍鏈?6 澶?await 鍔?10 绉掕秴鏃跺厹搴?
+- **Rewind 澶卞繂**锛歚startStreamingSession` 鐨?`currentSessionUuids.clear()` 鏀逛负浠呴潪 resume session 鎵ц锛屽叧闂?Tab 閲嶅紑鍚?rewind 淇濈暀涓婁笅鏂?
+- **IM Bot / Cron "Not logged in"**锛歱it-of-success 鏋舵瀯淇锛岃闃呮ā寮?Sidecar 涓嶅啀璇敞鍏ヤ笁鏂?Provider 鐜
+- **鑷畾涔変緵搴斿晢 modelAliases 榛樿鍊?*锛氭棤閰嶇疆鏃惰嚜鍔ㄧ敤 `primaryModel` 鍏滃簳
+- **鏃х増鍐呯疆椋炰功鍏ュ彛闅愯棌**锛氳亰澶╂満鍣ㄤ汉 Bot 椤甸潰绉婚櫎鏃х増椋炰功鍗＄墖锛堝凡琚?OpenClaw 瀹樻柟鎻掍欢鏇夸唬锛?
+- **鎻掍欢鏇存柊 icon 闂儊**锛氬埛鏂版椂淇濇寔骞冲彴 icon 涓嶅彉锛屼粎棣栨瀹夎鏄剧ず loading
+- **Agent 宸ュ叿鏍峰紡**锛氬鐢?Task 瀛?Agent 鏍峰紡锛屾樉绀?`subagent_type` + `description`
 
 ---
 
 ## [0.1.52] - 2026-03-24
 
 ### Added
-- **OpenAI Bridge `maxOutputTokensParamName` 配置**：用户可选 `max_tokens`（默认，兼容 DeepSeek/Qwen 等）、`max_completion_tokens`（OpenAI o1/o3/GPT-5、vLLM）、`max_output_tokens`（Responses API），UI 改为接口格式 + key-value 联动形式
-- **Bridge `supports_edit` 能力自适应**：从 Plugin `/capabilities` 接口读取 `edit` 能力，不支持编辑的插件（如微信）自动跳过 draft+edit 流程，一次性发送完整消息
-- **单实例 PID lock file**：`~/.hamuna/app.lock` 防止 macOS 自动重启导致生产版与 debug 版双实例冲突
-- **`app_dirs` 模块**：集中管理数据目录路径 `hamuna_data_dir()`，预留未来 dev/prod 隔离扩展点
+- **OpenAI Bridge `maxOutputTokensParamName` 閰嶇疆**锛氱敤鎴峰彲閫?`max_tokens`锛堥粯璁わ紝鍏煎 DeepSeek/Qwen 绛夛級銆乣max_completion_tokens`锛圤penAI o1/o3/GPT-5銆乿LLM锛夈€乣max_output_tokens`锛圧esponses API锛夛紝UI 鏀逛负鎺ュ彛鏍煎紡 + key-value 鑱斿姩褰㈠紡
+- **Bridge `supports_edit` 鑳藉姏鑷€傚簲**锛氫粠 Plugin `/capabilities` 鎺ュ彛璇诲彇 `edit` 鑳藉姏锛屼笉鏀寔缂栬緫鐨勬彃浠讹紙濡傚井淇★級鑷姩璺宠繃 draft+edit 娴佺▼锛屼竴娆℃€у彂閫佸畬鏁存秷鎭?
+- **鍗曞疄渚?PID lock file**锛歚~/.hamuna/app.lock` 闃叉 macOS 鑷姩閲嶅惎瀵艰嚧鐢熶骇鐗堜笌 debug 鐗堝弻瀹炰緥鍐茬獊
+- **`app_dirs` 妯″潡**锛氶泦涓鐞嗘暟鎹洰褰曡矾寰?`hamuna_data_dir()`锛岄鐣欐湭鏉?dev/prod 闅旂鎵╁睍鐐?
 
 ### Fixed
-- **OpenAI Bridge 兼容性**：不再默认转发 `max_tokens`/`temperature`/`top_p`/`stop`，解决 OpenAI 推理模型（o1/o3/GPT-5）返回 400 的问题
-- **微信 Bot 长文丢失**：finalize 检测到 501 时发送完整消息替代静默丢弃，用户不再只看到前 50 字符
-- **Session Sidecar SSE 自动恢复**：系统休眠/crash 后 Tab 不再永久 loading
-- **定时任务"仅一次"模式显示错误**：StatusBar/Overlay 未读 schedule 字段导致显示为"每 30 分钟"
-- **飞书 Bot 输出中断**：`capabilities.edit` 从 `editMessage` 函数存在性推导，飞书不再被误判为不支持编辑
-- **时间回溯丢失 Session 上下文**：从磁盘消息种子填充 `currentSessionUuids`，pre-warm 窗口期 rewind 不再创建空 session
+- **OpenAI Bridge 鍏煎鎬?*锛氫笉鍐嶉粯璁よ浆鍙?`max_tokens`/`temperature`/`top_p`/`stop`锛岃В鍐?OpenAI 鎺ㄧ悊妯″瀷锛坥1/o3/GPT-5锛夎繑鍥?400 鐨勯棶棰?
+- **寰俊 Bot 闀挎枃涓㈠け**锛歠inalize 妫€娴嬪埌 501 鏃跺彂閫佸畬鏁存秷鎭浛浠ｉ潤榛樹涪寮冿紝鐢ㄦ埛涓嶅啀鍙湅鍒板墠 50 瀛楃
+- **Session Sidecar SSE 鑷姩鎭㈠**锛氱郴缁熶紤鐪?crash 鍚?Tab 涓嶅啀姘镐箙 loading
+- **瀹氭椂浠诲姟"浠呬竴娆?妯″紡鏄剧ず閿欒**锛歋tatusBar/Overlay 鏈 schedule 瀛楁瀵艰嚧鏄剧ず涓?姣?30 鍒嗛挓"
+- **椋炰功 Bot 杈撳嚭涓柇**锛歚capabilities.edit` 浠?`editMessage` 鍑芥暟瀛樺湪鎬ф帹瀵硷紝椋炰功涓嶅啀琚鍒や负涓嶆敮鎸佺紪杈?
+- **鏃堕棿鍥炴函涓㈠け Session 涓婁笅鏂?*锛氫粠纾佺洏娑堟伅绉嶅瓙濉厖 `currentSessionUuids`锛宲re-warm 绐楀彛鏈?rewind 涓嶅啀鍒涘缓绌?session
 
 ---
 
 ## [0.1.51] - 2026-03-24
 
 ### Added
-- **MCP OAuth 规范完整实现**：零配置授权 + Token 生命周期管理（发现、注册、PKCE 授权、刷新、撤销），支持 OAuth 2.1 保护的远程 MCP Server
-- **浏览器并发隔离**：Playwright isolated 模式 + storage-state 持久化，多 Session 独立 cookie/登录态
-- **CLI 模式**：Tauri 二进制支持 CLI 参数（`hamuna --help/status/mcp/model/cron/plugin`），修复 Issue #43 所有子命令无输出
-- **Admin API 完整性补齐**：定时任务（cron）8 个路由、OpenClaw 插件管理 3 个路由、Agent 运行时状态、版本信息——CLI 管理通道与 GUI 对等覆盖
-- **SDK shim 全面补齐**：openclaw plugin-sdk 从 5 个 → 16 个 shim 模块，覆盖 lark 插件新版所有依赖
-- **浏览器模式选择器**：Playwright 设置面板支持 isolated/persistent 模式切换 + cookie 管理 UI
+- **MCP OAuth 瑙勮寖瀹屾暣瀹炵幇**锛氶浂閰嶇疆鎺堟潈 + Token 鐢熷懡鍛ㄦ湡绠＄悊锛堝彂鐜般€佹敞鍐屻€丳KCE 鎺堟潈銆佸埛鏂般€佹挙閿€锛夛紝鏀寔 OAuth 2.1 淇濇姢鐨勮繙绋?MCP Server
+- **娴忚鍣ㄥ苟鍙戦殧绂?*锛歅laywright isolated 妯″紡 + storage-state 鎸佷箙鍖栵紝澶?Session 鐙珛 cookie/鐧诲綍鎬?
+- **CLI 妯″紡**锛歍auri 浜岃繘鍒舵敮鎸?CLI 鍙傛暟锛坄hamuna --help/status/mcp/model/cron/plugin`锛夛紝淇 Issue #43 鎵€鏈夊瓙鍛戒护鏃犺緭鍑?
+- **Admin API 瀹屾暣鎬цˉ榻?*锛氬畾鏃朵换鍔★紙cron锛? 涓矾鐢便€丱penClaw 鎻掍欢绠＄悊 3 涓矾鐢便€丄gent 杩愯鏃剁姸鎬併€佺増鏈俊鎭€斺€擟LI 绠＄悊閫氶亾涓?GUI 瀵圭瓑瑕嗙洊
+- **SDK shim 鍏ㄩ潰琛ラ綈**锛歰penclaw plugin-sdk 浠?5 涓?鈫?16 涓?shim 妯″潡锛岃鐩?lark 鎻掍欢鏂扮増鎵€鏈変緷璧?
+- **娴忚鍣ㄦā寮忛€夋嫨鍣?*锛歅laywright 璁剧疆闈㈡澘鏀寔 isolated/persistent 妯″紡鍒囨崲 + cookie 绠＄悊 UI
 
 ### Improved
-- **Helper 小助理元认知升级**：CLAUDE.md 新增管理通道架构图、CLI 能力域表格、配置修改用 CLI 原则；self-config/support skill 触发优化
-- **插件安装 UI**：Bot 图标安装时保持稳定（半透明 + 叠加 spinner），不再整个替换为 loading
+- **Helper 灏忓姪鐞嗗厓璁ょ煡鍗囩骇**锛欳LAUDE.md 鏂板绠＄悊閫氶亾鏋舵瀯鍥俱€丆LI 鑳藉姏鍩熻〃鏍笺€侀厤缃慨鏀圭敤 CLI 鍘熷垯锛泂elf-config/support skill 瑙﹀彂浼樺寲
+- **鎻掍欢瀹夎 UI**锛欱ot 鍥炬爣瀹夎鏃朵繚鎸佺ǔ瀹氾紙鍗婇€忔槑 + 鍙犲姞 spinner锛夛紝涓嶅啀鏁翠釜鏇挎崲涓?loading
 
 ### Fixed
-- **微信 Bot 短消息重复发送**：Bridge finalize_message 对 501 Not Implemented 的 fallback 重发问题，改为结构化 status code 匹配
-- **插件 restart 卡住 3 分钟**：heartbeat 持 router 锁调 ensure_sidecar 阻塞 shutdown，改为 abort() 立即释放锁
-- **飞书插件启动失败**：SDK shim 缺 channel-status + tool-send 等模块 + exports 白名单未注册
-- **飞书群聊历史丢失**：reply-history shim 的 buildPendingHistoryContextFromMap 未正确委托，recordPendingHistoryEntry 未读 params.entry
-- **Intel Mac Node.js 架构不匹配**：构建脚本按目标架构下载对应 Node.js
-- **MCP OAuth 安全修复**：TOCTOU 竞态、dead code、缓存一致性、并行刷新 token
-- **bridge-tools 误报 ERROR**：微信等不提供 MCP 工具的插件，日志从 warn 降为 log
-- **ADMIN_AGENT_VERSION 未 bump**：新增禁止规则——修改 helper 后必须 bump 版本
+- **寰俊 Bot 鐭秷鎭噸澶嶅彂閫?*锛欱ridge finalize_message 瀵?501 Not Implemented 鐨?fallback 閲嶅彂闂锛屾敼涓虹粨鏋勫寲 status code 鍖归厤
+- **鎻掍欢 restart 鍗′綇 3 鍒嗛挓**锛歨eartbeat 鎸?router 閿佽皟 ensure_sidecar 闃诲 shutdown锛屾敼涓?abort() 绔嬪嵆閲婃斁閿?
+- **椋炰功鎻掍欢鍚姩澶辫触**锛歋DK shim 缂?channel-status + tool-send 绛夋ā鍧?+ exports 鐧藉悕鍗曟湭娉ㄥ唽
+- **椋炰功缇よ亰鍘嗗彶涓㈠け**锛歳eply-history shim 鐨?buildPendingHistoryContextFromMap 鏈纭鎵橈紝recordPendingHistoryEntry 鏈 params.entry
+- **Intel Mac Node.js 鏋舵瀯涓嶅尮閰?*锛氭瀯寤鸿剼鏈寜鐩爣鏋舵瀯涓嬭浇瀵瑰簲 Node.js
+- **MCP OAuth 瀹夊叏淇**锛歍OCTOU 绔炴€併€乨ead code銆佺紦瀛樹竴鑷存€с€佸苟琛屽埛鏂?token
+- **bridge-tools 璇姤 ERROR**锛氬井淇＄瓑涓嶆彁渚?MCP 宸ュ叿鐨勬彃浠讹紝鏃ュ織浠?warn 闄嶄负 log
+- **ADMIN_AGENT_VERSION 鏈?bump**锛氭柊澧炵姝㈣鍒欌€斺€斾慨鏀?helper 鍚庡繀椤?bump 鐗堟湰
 
 ---
 
 ## [0.1.50] - 2026-03-23
 
 ### Added
-- **Session Sidecar 健康监控**：15 秒间隔检测死掉的 Session Sidecar（Tab/Cron/IM），自动重启并保留 owner 关联，recovery queue 机制确保重启失败后不丢失跟踪
-- **Agent Channel 健康监控**：30 秒间隔检测 Error/Stopped 的 IM Bot Channel，自动从磁盘配置重建，支持指数退避（30s→300s）和 orphaned channel 重试
-- **IM 发送诊断日志**：Bridge adapter 4 个发送函数 + stream_to_im 全链路约 50 处静默 `let _ =` 改为带上下文的 `ulog_warn` 日志
-- **QR 登录状态展示**：Channel 详情页 QR 区域在已登录时显示绿点 + accountId + "重新扫码"按钮
+- **Session Sidecar 鍋ュ悍鐩戞帶**锛?5 绉掗棿闅旀娴嬫鎺夌殑 Session Sidecar锛圱ab/Cron/IM锛夛紝鑷姩閲嶅惎骞朵繚鐣?owner 鍏宠仈锛宺ecovery queue 鏈哄埗纭繚閲嶅惎澶辫触鍚庝笉涓㈠け璺熻釜
+- **Agent Channel 鍋ュ悍鐩戞帶**锛?0 绉掗棿闅旀娴?Error/Stopped 鐨?IM Bot Channel锛岃嚜鍔ㄤ粠纾佺洏閰嶇疆閲嶅缓锛屾敮鎸佹寚鏁伴€€閬匡紙30s鈫?00s锛夊拰 orphaned channel 閲嶈瘯
+- **IM 鍙戦€佽瘖鏂棩蹇?*锛欱ridge adapter 4 涓彂閫佸嚱鏁?+ stream_to_im 鍏ㄩ摼璺害 50 澶勯潤榛?`let _ =` 鏀逛负甯︿笂涓嬫枃鐨?`ulog_warn` 鏃ュ織
+- **QR 鐧诲綍鐘舵€佸睍绀?*锛欳hannel 璇︽儏椤?QR 鍖哄煙鍦ㄥ凡鐧诲綍鏃舵樉绀虹豢鐐?+ accountId + "閲嶆柊鎵爜"鎸夐挳
 
 ### Fixed
-- **微信 QR 重新登录后消息不回复**：sendText/sendMedia 闭包捕获了 loadPlugin() 时的局部 `account` 变量，QR 重登录更新 `currentAccount` 后闭包仍用旧 token，改为引用模块级 `currentAccount`
-- **微信图标**：替换手绘 SVG 为真实微信 App 圆角矩形 PNG 图标
+- **寰俊 QR 閲嶆柊鐧诲綍鍚庢秷鎭笉鍥炲**锛歴endText/sendMedia 闂寘鎹曡幏浜?loadPlugin() 鏃剁殑灞€閮?`account` 鍙橀噺锛孮R 閲嶇櫥褰曟洿鏂?`currentAccount` 鍚庨棴鍖呬粛鐢ㄦ棫 token锛屾敼涓哄紩鐢ㄦā鍧楃骇 `currentAccount`
+- **寰俊鍥炬爣**锛氭浛鎹㈡墜缁?SVG 涓虹湡瀹炲井淇?App 鍦嗚鐭╁舰 PNG 鍥炬爣
 
 ---
 
 ## [0.1.49] - 2026-03-23
 
 ### Added
-- **AgentConfig 通用化架构**：每个工作区自动创建 basicAgent，AgentConfig 成为 model/provider/permissionMode/MCP 的单一数据源，Tab 输入栏与 Agent 设置面板双向同步
-- **Plugin Bridge 附件传递**：支持图片/文件/语音/视频在 IM 和 AI 之间双向传递
-- **Self-Config CLI**：内置 `hamuna` CLI 让 AI Agent 通过 Bash 自主配置 MCP/Model/Agent
-- **QR 扫码登录**：Channel 详情页支持 QR 扫码登录（微信等 OpenClaw 插件）
-- **Cron 跨 Channel 投递**：桌面端创建的定时任务可发送结果到 IM Channel
-- **Sidecar 自解析架构**：消除 IM Bot 对物化视图的依赖，Sidecar 启动时自行解析 AgentConfig
-- **运行时 fallback 链**：Bun/Node.js 每个场景增加系统级兜底
-- **微信 OpenClaw 插件支持**：npmSpec 清洗 + SDK shim 补全 + QR 扫码登录
+- **AgentConfig 閫氱敤鍖栨灦鏋?*锛氭瘡涓伐浣滃尯鑷姩鍒涘缓 basicAgent锛孉gentConfig 鎴愪负 model/provider/permissionMode/MCP 鐨勫崟涓€鏁版嵁婧愶紝Tab 杈撳叆鏍忎笌 Agent 璁剧疆闈㈡澘鍙屽悜鍚屾
+- **Plugin Bridge 闄勪欢浼犻€?*锛氭敮鎸佸浘鐗?鏂囦欢/璇煶/瑙嗛鍦?IM 鍜?AI 涔嬮棿鍙屽悜浼犻€?
+- **Self-Config CLI**锛氬唴缃?`hamuna` CLI 璁?AI Agent 閫氳繃 Bash 鑷富閰嶇疆 MCP/Model/Agent
+- **QR 鎵爜鐧诲綍**锛欳hannel 璇︽儏椤垫敮鎸?QR 鎵爜鐧诲綍锛堝井淇＄瓑 OpenClaw 鎻掍欢锛?
+- **Cron 璺?Channel 鎶曢€?*锛氭闈㈢鍒涘缓鐨勫畾鏃朵换鍔″彲鍙戦€佺粨鏋滃埌 IM Channel
+- **Sidecar 鑷В鏋愭灦鏋?*锛氭秷闄?IM Bot 瀵圭墿鍖栬鍥剧殑渚濊禆锛孲idecar 鍚姩鏃惰嚜琛岃В鏋?AgentConfig
+- **杩愯鏃?fallback 閾?*锛欱un/Node.js 姣忎釜鍦烘櫙澧炲姞绯荤粺绾у厹搴?
+- **寰俊 OpenClaw 鎻掍欢鏀寔**锛歯pmSpec 娓呮礂 + SDK shim 琛ュ叏 + QR 鎵爜鐧诲綍
 
 ### Improved
-- **Claude Agent SDK 升级**：0.2.45 → 0.2.80，适配新功能
-- **Node.js 运行时优先级翻转**：系统 Node.js 优先（用户维护、npm 更可靠），内置兜底
-- **Helper 小助手增强**：self-config Skill 自动同步 + 行动优先原则 + description 精准化
-- **model add/remove**：支持通过 CLI 添加/删除自定义模型供应商 + 完整 mcp test/model verify
+- **Claude Agent SDK 鍗囩骇**锛?.2.45 鈫?0.2.80锛岄€傞厤鏂板姛鑳?
+- **Node.js 杩愯鏃朵紭鍏堢骇缈昏浆**锛氱郴缁?Node.js 浼樺厛锛堢敤鎴风淮鎶ゃ€乶pm 鏇村彲闈狅級锛屽唴缃厹搴?
+- **Helper 灏忓姪鎵嬪寮?*锛歴elf-config Skill 鑷姩鍚屾 + 琛屽姩浼樺厛鍘熷垯 + description 绮惧噯鍖?
+- **model add/remove**锛氭敮鎸侀€氳繃 CLI 娣诲姞/鍒犻櫎鑷畾涔夋ā鍨嬩緵搴斿晢 + 瀹屾暣 mcp test/model verify
 
 ### Fixed
-- **删除当前 session 后断联**：resetSession 不再清空 sessionId，避免 Tab 与 Sidecar 失联
-- **安全修复（cross-review）**：路径穿越 + 原型污染 + CLI flag 泄漏 + 6 项安全修复
-- **IM Bot 供应商被 Heartbeat 重置**：4 项 provider 迁移修复
-- **心跳误报 + 错误螺旋**：HEARTBEAT_OK 误报 + 连续失败后 IM 暂停通知
-- **Rewind/Fork 修复**：UUID 校验 + JSONL 持久化不同步 + fork UUID 校验误判
-- **QR 登录全链路修复**：sessionKey 透传、CSP 图片策略、超时自动重试、凭证持久化
-- **Plugin Bridge 协议对齐**：gateway context 补全 + isConfigured 签名修正 + MIME 类型处理
-- **工作区卡片 channel tag**：统一短名称显示，与最近任务一致
-- **SDK 0.2.80 兼容**：exports 限制导致 cli.js 解析失败
-- **飞书用户名**：优先 nickname 显示
+- **鍒犻櫎褰撳墠 session 鍚庢柇鑱?*锛歳esetSession 涓嶅啀娓呯┖ sessionId锛岄伩鍏?Tab 涓?Sidecar 澶辫仈
+- **瀹夊叏淇锛坈ross-review锛?*锛氳矾寰勭┛瓒?+ 鍘熷瀷姹℃煋 + CLI flag 娉勬紡 + 6 椤瑰畨鍏ㄤ慨澶?
+- **IM Bot 渚涘簲鍟嗚 Heartbeat 閲嶇疆**锛? 椤?provider 杩佺Щ淇
+- **蹇冭烦璇姤 + 閿欒铻烘棆**锛欻EARTBEAT_OK 璇姤 + 杩炵画澶辫触鍚?IM 鏆傚仠閫氱煡
+- **Rewind/Fork 淇**锛歎UID 鏍￠獙 + JSONL 鎸佷箙鍖栦笉鍚屾 + fork UUID 鏍￠獙璇垽
+- **QR 鐧诲綍鍏ㄩ摼璺慨澶?*锛歴essionKey 閫忎紶銆丆SP 鍥剧墖绛栫暐銆佽秴鏃惰嚜鍔ㄩ噸璇曘€佸嚟璇佹寔涔呭寲
+- **Plugin Bridge 鍗忚瀵归綈**锛歡ateway context 琛ュ叏 + isConfigured 绛惧悕淇 + MIME 绫诲瀷澶勭悊
+- **宸ヤ綔鍖哄崱鐗?channel tag**锛氱粺涓€鐭悕绉版樉绀猴紝涓庢渶杩戜换鍔′竴鑷?
+- **SDK 0.2.80 鍏煎**锛歟xports 闄愬埗瀵艰嚧 cli.js 瑙ｆ瀽澶辫触
+- **椋炰功鐢ㄦ埛鍚?*锛氫紭鍏?nickname 鏄剧ず
 
 ### Security
-- 路径穿越防护、原型污染防护、CLI flag 泄漏修复
+- 璺緞绌胯秺闃叉姢銆佸師鍨嬫薄鏌撻槻鎶ゃ€丆LI flag 娉勬紡淇
 
 ### Hotfix
-- **微信 Bot 回复丢失**：stub dispatcher 空函数被误判为真实协议回调 + mid-turn injection 时 imCallbackNulledDuringTurn 未重置导致 SSE 事件被过滤（Windows 特有时序触发）
-- **Channel 崩溃后无法重启**：Bridge 进程死亡后 channel 条目未从 HashMap 移除，dedup 检查误判为 "already running"，Error/Stopped 状态现允许重启
-- **微信向导多余 BIND 口令**：QR 登录插件不再显示 BindCodePanel，替换为"扫码即可使用"提示
-- **Channel 详情页已绑定用户为空**：QR 登录 dmPolicy=open 不需要白名单，UI 对齐
+- **寰俊 Bot 鍥炲涓㈠け**锛歴tub dispatcher 绌哄嚱鏁拌璇垽涓虹湡瀹炲崗璁洖璋?+ mid-turn injection 鏃?imCallbackNulledDuringTurn 鏈噸缃鑷?SSE 浜嬩欢琚繃婊わ紙Windows 鐗规湁鏃跺簭瑙﹀彂锛?
+- **Channel 宕╂簝鍚庢棤娉曢噸鍚?*锛欱ridge 杩涚▼姝讳骸鍚?channel 鏉＄洰鏈粠 HashMap 绉婚櫎锛宒edup 妫€鏌ヨ鍒や负 "already running"锛孍rror/Stopped 鐘舵€佺幇鍏佽閲嶅惎
+- **寰俊鍚戝澶氫綑 BIND 鍙ｄ护**锛歈R 鐧诲綍鎻掍欢涓嶅啀鏄剧ず BindCodePanel锛屾浛鎹负"鎵爜鍗冲彲浣跨敤"鎻愮ず
+- **Channel 璇︽儏椤靛凡缁戝畾鐢ㄦ埛涓虹┖**锛歈R 鐧诲綍 dmPolicy=open 涓嶉渶瑕佺櫧鍚嶅崟锛孶I 瀵归綈
 
 ---
 
 ## [0.1.46] - 2026-03-20
 
 ### Improved
-- **插件安装兼容性**：OpenClaw 插件安装从 Bun 切换到内置 Node.js (npm)，解决 Windows 上部分 npm 包安装失败的问题。Bun 保留为 fallback
-- **内置 Node.js 升级**：v22.16.0 → v24.14.0 (最新 LTS)，支持要求 node >=24 的 npm 包
-- **智能起名 prompt**：增加显式生成指令，防止模型输出元指令（如"对话标题应该是什么"）作为标题
+- **鎻掍欢瀹夎鍏煎鎬?*锛歄penClaw 鎻掍欢瀹夎浠?Bun 鍒囨崲鍒板唴缃?Node.js (npm)锛岃В鍐?Windows 涓婇儴鍒?npm 鍖呭畨瑁呭け璐ョ殑闂銆侭un 淇濈暀涓?fallback
+- **鍐呯疆 Node.js 鍗囩骇**锛歷22.16.0 鈫?v24.14.0 (鏈€鏂?LTS)锛屾敮鎸佽姹?node >=24 鐨?npm 鍖?
+- **鏅鸿兘璧峰悕 prompt**锛氬鍔犳樉寮忕敓鎴愭寚浠わ紝闃叉妯″瀷杈撳嚭鍏冩寚浠わ紙濡?瀵硅瘽鏍囬搴旇鏄粈涔?锛変綔涓烘爣棰?
 
 ### Fixed
-- **Fork 按钮流式不可见**：assistant 消息的 sdkUuid 未通过 SSE 广播到前端，且 `chat:message-sdk-uuid` 事件未注册 SSE 白名单导致前端静默丢弃。通过 message-complete 事件捎带 sdkUuid 绕过前后端消息 ID 不匹配
-- **npm postinstall 失败**：插件安装时 npm 子进程的 PATH 未包含内置 Node.js 目录，导致 postinstall 脚本 `node: command not found`
-- **Settings 页面 macOS 无法滚动**：flex 行布局中右侧内容区缺少显式高度声明，WebKit 不触发 overflow 滚动
-- **proxy 注入逻辑重复**：提取 `apply_proxy_env()` 共享函数，bridge spawn 和 npm install 统一使用
+- **Fork 鎸夐挳娴佸紡涓嶅彲瑙?*锛歛ssistant 娑堟伅鐨?sdkUuid 鏈€氳繃 SSE 骞挎挱鍒板墠绔紝涓?`chat:message-sdk-uuid` 浜嬩欢鏈敞鍐?SSE 鐧藉悕鍗曞鑷村墠绔潤榛樹涪寮冦€傞€氳繃 message-complete 浜嬩欢鎹庡甫 sdkUuid 缁曡繃鍓嶅悗绔秷鎭?ID 涓嶅尮閰?
+- **npm postinstall 澶辫触**锛氭彃浠跺畨瑁呮椂 npm 瀛愯繘绋嬬殑 PATH 鏈寘鍚唴缃?Node.js 鐩綍锛屽鑷?postinstall 鑴氭湰 `node: command not found`
+- **Settings 椤甸潰 macOS 鏃犳硶婊氬姩**锛歠lex 琛屽竷灞€涓彸渚у唴瀹瑰尯缂哄皯鏄惧紡楂樺害澹版槑锛學ebKit 涓嶈Е鍙?overflow 婊氬姩
+- **proxy 娉ㄥ叆閫昏緫閲嶅**锛氭彁鍙?`apply_proxy_env()` 鍏变韩鍑芥暟锛宐ridge spawn 鍜?npm install 缁熶竴浣跨敤
 
 ---
 
 ## [0.1.45] - 2026-03-20
 
 ### Added
-- **Session Fork（会话分支）**：从任意助手消息创建会话分支，类似 git branch，在已有对话的任意节点分叉出新方向，原对话不受影响
-- **消息列表虚拟化**：使用 react-virtuoso 替代平铺渲染，支持上百轮长对话不卡顿，自动跟踪滚动 + 用户滚离底部自动停止跟踪
-- **SOCKS5 代理支持**：自动检测 socks5:// 代理并启动 HTTP-to-SOCKS5 bridge，解决 Bun/Node.js 不原生支持 SOCKS5 的问题
-- **MCP OAuth 2.0 授权**：支持需要 OAuth 授权的 MCP Server，自动发现、授权码流程（含 PKCE）、Token 持久化与自动刷新
-- **Bridge 群聊完整支持**：飞书插件群聊元数据透传、群名显示、引用回复、群系统提示注入，群聊体验与私聊对齐
-- **Tool Result 展示优化**：Bash 输出终端风格渲染、JSON 自动解析高亮、Read/Grep/Glob 结果结构化展示、超长内容限高可展开
+- **Session Fork锛堜細璇濆垎鏀級**锛氫粠浠绘剰鍔╂墜娑堟伅鍒涘缓浼氳瘽鍒嗘敮锛岀被浼?git branch锛屽湪宸叉湁瀵硅瘽鐨勪换鎰忚妭鐐瑰垎鍙夊嚭鏂版柟鍚戯紝鍘熷璇濅笉鍙楀奖鍝?
+- **娑堟伅鍒楄〃铏氭嫙鍖?*锛氫娇鐢?react-virtuoso 鏇夸唬骞抽摵娓叉煋锛屾敮鎸佷笂鐧捐疆闀垮璇濅笉鍗￠】锛岃嚜鍔ㄨ窡韪粴鍔?+ 鐢ㄦ埛婊氱搴曢儴鑷姩鍋滄璺熻釜
+- **SOCKS5 浠ｇ悊鏀寔**锛氳嚜鍔ㄦ娴?socks5:// 浠ｇ悊骞跺惎鍔?HTTP-to-SOCKS5 bridge锛岃В鍐?Bun/Node.js 涓嶅師鐢熸敮鎸?SOCKS5 鐨勯棶棰?
+- **MCP OAuth 2.0 鎺堟潈**锛氭敮鎸侀渶瑕?OAuth 鎺堟潈鐨?MCP Server锛岃嚜鍔ㄥ彂鐜般€佹巿鏉冪爜娴佺▼锛堝惈 PKCE锛夈€乀oken 鎸佷箙鍖栦笌鑷姩鍒锋柊
+- **Bridge 缇よ亰瀹屾暣鏀寔**锛氶涔︽彃浠剁兢鑱婂厓鏁版嵁閫忎紶銆佺兢鍚嶆樉绀恒€佸紩鐢ㄥ洖澶嶃€佺兢绯荤粺鎻愮ず娉ㄥ叆锛岀兢鑱婁綋楠屼笌绉佽亰瀵归綈
+- **Tool Result 灞曠ず浼樺寲**锛欱ash 杈撳嚭缁堢椋庢牸娓叉煋銆丣SON 鑷姩瑙ｆ瀽楂樹寒銆丷ead/Grep/Glob 缁撴灉缁撴瀯鍖栧睍绀恒€佽秴闀垮唴瀹归檺楂樺彲灞曞紑
 
 ### Improved
-- **智能起名准确度**：从 1 轮对话就起名改为 3 轮对话后触发，基于多轮上下文提炼主题，禁止摘抄原文，标题更准确。1-2 轮对话显示用户消息截取
-- **预设供应商模型显示**：模型标签显示真实模型 ID（如 `kimi-k2.5`）而非友好名（Kimi K2.5），避免用户填错模型名
-- **超长图片处理**：统一 1568px 阈值，超长图按 1:2 比例切片上传，图片处理失败时通知用户而非静默丢弃
+- **鏅鸿兘璧峰悕鍑嗙‘搴?*锛氫粠 1 杞璇濆氨璧峰悕鏀逛负 3 杞璇濆悗瑙﹀彂锛屽熀浜庡杞笂涓嬫枃鎻愮偧涓婚锛岀姝㈡憳鎶勫師鏂囷紝鏍囬鏇村噯纭€?-2 杞璇濇樉绀虹敤鎴锋秷鎭埅鍙?
+- **棰勮渚涘簲鍟嗘ā鍨嬫樉绀?*锛氭ā鍨嬫爣绛炬樉绀虹湡瀹炴ā鍨?ID锛堝 `kimi-k2.5`锛夎€岄潪鍙嬪ソ鍚嶏紙Kimi K2.5锛夛紝閬垮厤鐢ㄦ埛濉敊妯″瀷鍚?
+- **瓒呴暱鍥剧墖澶勭悊**锛氱粺涓€ 1568px 闃堝€硷紝瓒呴暱鍥炬寜 1:2 姣斾緥鍒囩墖涓婁紶锛屽浘鐗囧鐞嗗け璐ユ椂閫氱煡鐢ㄦ埛鑰岄潪闈欓粯涓㈠純
 
 ### Fixed
-- **自主操作权限**：Heartbeat、定时任务、记忆更新统一使用 fullAgency 权限，不再因无人审批导致 Bash 等工具 10 分钟超时后被拒绝
-- **记忆更新打断用户对话**：记忆更新前检查 session 最近 15 分钟是否有用户活动，活跃的 session 推迟 15 分钟后重试
-- **飞书 Bot 消息分发崩溃**：dispatch 函数缺少返回值导致解构 null 报错
-- **飞书群聊 isMention 误判**：默认值从全局 true 改为按 chatType 区分（私聊 true、群聊 false）
-- **群聊权限命令失败**：群内 /allow、/block 等权限命令未查询 ManagedAgents，显示 "Bot not running"
-- **未配置供应商时误导**：移除默认 fallback 到 Anthropic 订阅的逻辑，避免未登录用户看到 "need to log in" 错误
-- **IM 定时任务立即执行失败**：cron 工具 `run_now` 未正确路由到执行端点
-- **飞书消息投递失败**：Plugin Bridge 消息发送路径修复
+- **鑷富鎿嶄綔鏉冮檺**锛欻eartbeat銆佸畾鏃朵换鍔°€佽蹇嗘洿鏂扮粺涓€浣跨敤 fullAgency 鏉冮檺锛屼笉鍐嶅洜鏃犱汉瀹℃壒瀵艰嚧 Bash 绛夊伐鍏?10 鍒嗛挓瓒呮椂鍚庤鎷掔粷
+- **璁板繂鏇存柊鎵撴柇鐢ㄦ埛瀵硅瘽**锛氳蹇嗘洿鏂板墠妫€鏌?session 鏈€杩?15 鍒嗛挓鏄惁鏈夌敤鎴锋椿鍔紝娲昏穬鐨?session 鎺ㄨ繜 15 鍒嗛挓鍚庨噸璇?
+- **椋炰功 Bot 娑堟伅鍒嗗彂宕╂簝**锛歞ispatch 鍑芥暟缂哄皯杩斿洖鍊煎鑷磋В鏋?null 鎶ラ敊
+- **椋炰功缇よ亰 isMention 璇垽**锛氶粯璁ゅ€间粠鍏ㄥ眬 true 鏀逛负鎸?chatType 鍖哄垎锛堢鑱?true銆佺兢鑱?false锛?
+- **缇よ亰鏉冮檺鍛戒护澶辫触**锛氱兢鍐?/allow銆?block 绛夋潈闄愬懡浠ゆ湭鏌ヨ ManagedAgents锛屾樉绀?"Bot not running"
+- **鏈厤缃緵搴斿晢鏃惰瀵?*锛氱Щ闄ら粯璁?fallback 鍒?Anthropic 璁㈤槄鐨勯€昏緫锛岄伩鍏嶆湭鐧诲綍鐢ㄦ埛鐪嬪埌 "need to log in" 閿欒
+- **IM 瀹氭椂浠诲姟绔嬪嵆鎵ц澶辫触**锛歝ron 宸ュ叿 `run_now` 鏈纭矾鐢卞埌鎵ц绔偣
+- **椋炰功娑堟伅鎶曢€掑け璐?*锛歅lugin Bridge 娑堟伅鍙戦€佽矾寰勪慨澶?
 
 ---
 
 ## [0.1.44] - 2026-03-18
 
 ### Added
-- **双运行时架构**：内置 Node.js 运行 MCP Server / 社区 npm 包，Bun 运行 Agent Runtime / Sidecar。用户无需自行安装任何运行时。PATH 注入优先级：bundledBun → bundledNode → ~/.hamuna/bin → 系统路径
-- **OpenClaw 插件工具动态透传**：Bridge MCP handler 动态发现插件注册的工具，通过 im-bridge-tools 创建 SDK MCP server 透传到 AI，支持工具组过滤与 ownerOnly 权限控制
-- **OpenClaw 插件斜杠命令**：Rust 层路由插件注册的 `/feishu auth`、`/feishu_diagnose` 等命令，/help 中展示并翻译为中文
-- **飞书自动 OAuth 授权**：工具返回 `need_user_authorization` 时自动触发授权卡片，用户无需手动发送 `/feishu auth`
+- **鍙岃繍琛屾椂鏋舵瀯**锛氬唴缃?Node.js 杩愯 MCP Server / 绀惧尯 npm 鍖咃紝Bun 杩愯 Agent Runtime / Sidecar銆傜敤鎴锋棤闇€鑷瀹夎浠讳綍杩愯鏃躲€侾ATH 娉ㄥ叆浼樺厛绾э細bundledBun 鈫?bundledNode 鈫?~/.hamuna/bin 鈫?绯荤粺璺緞
+- **OpenClaw 鎻掍欢宸ュ叿鍔ㄦ€侀€忎紶**锛欱ridge MCP handler 鍔ㄦ€佸彂鐜版彃浠舵敞鍐岀殑宸ュ叿锛岄€氳繃 im-bridge-tools 鍒涘缓 SDK MCP server 閫忎紶鍒?AI锛屾敮鎸佸伐鍏风粍杩囨护涓?ownerOnly 鏉冮檺鎺у埗
+- **OpenClaw 鎻掍欢鏂滄潬鍛戒护**锛歊ust 灞傝矾鐢辨彃浠舵敞鍐岀殑 `/feishu auth`銆乣/feishu_diagnose` 绛夊懡浠わ紝/help 涓睍绀哄苟缈昏瘧涓轰腑鏂?
+- **椋炰功鑷姩 OAuth 鎺堟潈**锛氬伐鍏疯繑鍥?`need_user_authorization` 鏃惰嚜鍔ㄨЕ鍙戞巿鏉冨崱鐗囷紝鐢ㄦ埛鏃犻渶鎵嬪姩鍙戦€?`/feishu auth`
 
 ### Improved
-- **飞书流式响应速度**：CardKit streaming 节流从 100ms 提升到 500ms，减少 5 倍 API 调用量，响应延迟从 15 秒降至 ≤5 秒
-- **Channel 模型选择器**：增加「默认（继承 Agent）」选项，Channel 可不指定独立模型
-- **Channel AI config 持久化**：写入 agentConfig.overrides，重启不丢失
+- **椋炰功娴佸紡鍝嶅簲閫熷害**锛欳ardKit streaming 鑺傛祦浠?100ms 鎻愬崌鍒?500ms锛屽噺灏?5 鍊?API 璋冪敤閲忥紝鍝嶅簲寤惰繜浠?15 绉掗檷鑷?鈮? 绉?
+- **Channel 妯″瀷閫夋嫨鍣?*锛氬鍔犮€岄粯璁わ紙缁ф壙 Agent锛夈€嶉€夐」锛孋hannel 鍙笉鎸囧畾鐙珛妯″瀷
+- **Channel AI config 鎸佷箙鍖?*锛氬啓鍏?agentConfig.overrides锛岄噸鍚笉涓㈠け
 
 ### Fixed
-- **飞书流式内容三倍重复**：`mergeStreamingText()` 的 append fallback 在 AI 中途切换 Markdown 格式时触发拼接，改为 `return next`（累积文本总是最新权威版本）
-- **Pre-warm 竞态导致消息孤立**：`schedulePreWarm` 从 stale await 改为递归重试 + enqueueUserMessage 安全网 + interruptCurrentResponse 孤立队列清理
-- **Stop 按钮 UI 卡死**：`alreadyStopped` 分支 flushSync 重置 isLoading/isStreamingRef
-- **Tab 加入已完成 IM 会话时 isLoading 卡住**
-- **Bridge 工具组匹配 403**：从精确 key 匹配改为前缀推断
-- **OpenClaw execute 参数顺序 + 返回值格式**
-- **ownerOnly fail-closed**：无白名单 = 无 owner，非 owner 调用 ownerOnly 工具被拒绝
-- **群聊 mention 门控**：插件斜杠命令绕过 mention 检查（与内置 /help /model 一致）
-- **macOS 构建 Node.js 二进制签名**：补充 TCC/notarization codesign
-- **Memory Update toggle 尺寸**：与 Heartbeat toggle 统一
+- **椋炰功娴佸紡鍐呭涓夊€嶉噸澶?*锛歚mergeStreamingText()` 鐨?append fallback 鍦?AI 涓€斿垏鎹?Markdown 鏍煎紡鏃惰Е鍙戞嫾鎺ワ紝鏀逛负 `return next`锛堢疮绉枃鏈€绘槸鏈€鏂版潈濞佺増鏈級
+- **Pre-warm 绔炴€佸鑷存秷鎭绔?*锛歚schedulePreWarm` 浠?stale await 鏀逛负閫掑綊閲嶈瘯 + enqueueUserMessage 瀹夊叏缃?+ interruptCurrentResponse 瀛ょ珛闃熷垪娓呯悊
+- **Stop 鎸夐挳 UI 鍗℃**锛歚alreadyStopped` 鍒嗘敮 flushSync 閲嶇疆 isLoading/isStreamingRef
+- **Tab 鍔犲叆宸插畬鎴?IM 浼氳瘽鏃?isLoading 鍗′綇**
+- **Bridge 宸ュ叿缁勫尮閰?403**锛氫粠绮剧‘ key 鍖归厤鏀逛负鍓嶇紑鎺ㄦ柇
+- **OpenClaw execute 鍙傛暟椤哄簭 + 杩斿洖鍊兼牸寮?*
+- **ownerOnly fail-closed**锛氭棤鐧藉悕鍗?= 鏃?owner锛岄潪 owner 璋冪敤 ownerOnly 宸ュ叿琚嫆缁?
+- **缇よ亰 mention 闂ㄦ帶**锛氭彃浠舵枩鏉犲懡浠ょ粫杩?mention 妫€鏌ワ紙涓庡唴缃?/help /model 涓€鑷达級
+- **macOS 鏋勫缓 Node.js 浜岃繘鍒剁鍚?*锛氳ˉ鍏?TCC/notarization codesign
+- **Memory Update toggle 灏哄**锛氫笌 Heartbeat toggle 缁熶竴
 
 ---
 
 ## [0.1.43] - 2026-03-17
 
 ### Added
-- **记忆自动更新**：Agent 在夜间窗口（默认 00:00-06:00）自动对工作区内所有达标 session 执行 UPDATE_MEMORY.md 中的记忆维护指令。支持配置更新间隔（24/48/72h）、触发阈值、时间窗口。搭载心跳周期检查，tokio::spawn 独立批次任务，同 Agent 内串行、不同 Agent 间并发
-- **Query Navigator**：Chat 页面右侧浮动导航器，快速跳转 session 内的用户 query。未 hover 时显示微弱横杠指示，hover 展开文字面板（backdrop-blur + 渐隐遮罩），点击平滑滚动到对应消息。IntersectionObserver 跟踪当前可视区 query
-- **工作区文件读写命令**：新增 `cmd_read_workspace_file` / `cmd_write_workspace_file` Rust 命令，绕过 Tauri fs plugin scope 限制，支持任意上下文（Tab/Launcher/Settings）读写工作区文件
+- **璁板繂鑷姩鏇存柊**锛欰gent 鍦ㄥ闂寸獥鍙ｏ紙榛樿 00:00-06:00锛夎嚜鍔ㄥ宸ヤ綔鍖哄唴鎵€鏈夎揪鏍?session 鎵ц UPDATE_MEMORY.md 涓殑璁板繂缁存姢鎸囦护銆傛敮鎸侀厤缃洿鏂伴棿闅旓紙24/48/72h锛夈€佽Е鍙戦槇鍊笺€佹椂闂寸獥鍙ｃ€傛惌杞藉績璺冲懆鏈熸鏌ワ紝tokio::spawn 鐙珛鎵规浠诲姟锛屽悓 Agent 鍐呬覆琛屻€佷笉鍚?Agent 闂村苟鍙?
+- **Query Navigator**锛欳hat 椤甸潰鍙充晶娴姩瀵艰埅鍣紝蹇€熻烦杞?session 鍐呯殑鐢ㄦ埛 query銆傛湭 hover 鏃舵樉绀哄井寮辨í鏉犳寚绀猴紝hover 灞曞紑鏂囧瓧闈㈡澘锛坆ackdrop-blur + 娓愰殣閬僵锛夛紝鐐瑰嚮骞虫粦婊氬姩鍒板搴旀秷鎭€侷ntersectionObserver 璺熻釜褰撳墠鍙鍖?query
+- **宸ヤ綔鍖烘枃浠惰鍐欏懡浠?*锛氭柊澧?`cmd_read_workspace_file` / `cmd_write_workspace_file` Rust 鍛戒护锛岀粫杩?Tauri fs plugin scope 闄愬埗锛屾敮鎸佷换鎰忎笂涓嬫枃锛圱ab/Launcher/Settings锛夎鍐欏伐浣滃尯鏂囦欢
 
 ### Improved
-- **HEARTBEAT 机制对齐**：心跳 prompt 增加 `<system-reminder>` 外层包裹、YAML frontmatter 剥离、自动创建的 HEARTBEAT.md 带 description 说明
-- **夜间模式**：全量 CSS Token 化 + "暖夜"主题
-- **活跃中筛选**：增加 48h 时间门控，防止遗留 IM session 永久出现在活跃列表
+- **HEARTBEAT 鏈哄埗瀵归綈**锛氬績璺?prompt 澧炲姞 `<system-reminder>` 澶栧眰鍖呰９銆乊AML frontmatter 鍓ョ銆佽嚜鍔ㄥ垱寤虹殑 HEARTBEAT.md 甯?description 璇存槑
+- **澶滈棿妯″紡**锛氬叏閲?CSS Token 鍖?+ "鏆栧"涓婚
+- **娲昏穬涓瓫閫?*锛氬鍔?48h 鏃堕棿闂ㄦ帶锛岄槻姝㈤仐鐣?IM session 姘镐箙鍑虹幇鍦ㄦ椿璺冨垪琛?
 
 ### Fixed
-- **系统注入消息隔离**：HEARTBEAT/MEMORY_UPDATE 等系统消息不再覆盖 session 的 lastMessagePreview 和 lastActiveAt
-- **OpenClaw 插件显示名**：session 列表标签优先使用 PLATFORM_DISPLAY_NAMES（"QQ"而非"QQ Bot"），与 Agent 设置保持一致
-- **MCP warmup 退出码**：非 0/1 退出码一律 warmup_failed；'not found' 关键词收紧为 'package not found'/'module not found'
-- **BugReportOverlay**：排除 invalid 状态的 provider
-- **BlockGroup hasTextAfter 死 prop 清理**
-- **Launcher patchProject 类型还原**：`Record<string, unknown>` 改回 `Partial<Omit<Project, 'id'>>`
-- **SimpleChatInput provider helpers**：从 render body 提取到 module-level 纯函数
-- **超长 session 加载不滚动到底部**
-- **Chat header 渐变阴影暗色模式适配**
-- **Agent 设置图标 dark mode 反色**
-- **WebView 心跳健康监测误判**：移除（macOS App Nap 导致误判自动重载）
+- **绯荤粺娉ㄥ叆娑堟伅闅旂**锛欻EARTBEAT/MEMORY_UPDATE 绛夌郴缁熸秷鎭笉鍐嶈鐩?session 鐨?lastMessagePreview 鍜?lastActiveAt
+- **OpenClaw 鎻掍欢鏄剧ず鍚?*锛歴ession 鍒楄〃鏍囩浼樺厛浣跨敤 PLATFORM_DISPLAY_NAMES锛?QQ"鑰岄潪"QQ Bot"锛夛紝涓?Agent 璁剧疆淇濇寔涓€鑷?
+- **MCP warmup 閫€鍑虹爜**锛氶潪 0/1 閫€鍑虹爜涓€寰?warmup_failed锛?not found' 鍏抽敭璇嶆敹绱т负 'package not found'/'module not found'
+- **BugReportOverlay**锛氭帓闄?invalid 鐘舵€佺殑 provider
+- **BlockGroup hasTextAfter 姝?prop 娓呯悊**
+- **Launcher patchProject 绫诲瀷杩樺師**锛歚Record<string, unknown>` 鏀瑰洖 `Partial<Omit<Project, 'id'>>`
+- **SimpleChatInput provider helpers**锛氫粠 render body 鎻愬彇鍒?module-level 绾嚱鏁?
+- **瓒呴暱 session 鍔犺浇涓嶆粴鍔ㄥ埌搴曢儴**
+- **Chat header 娓愬彉闃村奖鏆楄壊妯″紡閫傞厤**
+- **Agent 璁剧疆鍥炬爣 dark mode 鍙嶈壊**
+- **WebView 蹇冭烦鍋ュ悍鐩戞祴璇垽**锛氱Щ闄わ紙macOS App Nap 瀵艰嚧璇垽鑷姩閲嶈浇锛?
 
 ---
 
 ## [0.1.42] - 2026-03-16
 
 ### Added
-- **定时任务能力升级**：支持独立创建定时任务（从任务中心/首页直接创建，无需先打开 Chat）、三种调度类型（固定间隔/Cron 表达式/一次性）、执行模式选择（新开对话/连续对话）、可视化调度构建器、执行历史查看
-- **定时任务详情页编辑模式**：点击编辑切换为内联编辑视图，支持修改调度计划、结束条件、通知设置
-- **Chat 定时面板改造**：执行模式选择 + 三种调度类型 + 新开对话路径
-- **飞书官方 OpenClaw 插件接入**：CardKit Streaming、工具桥接（多维表格/日历/任务/群聊等 25 个工具）、SDK Shim 兼容层
-- **Tab 状态指示器**：运行中/思考中圆点 + 自定义 tooltip + 通知点击自动跳转
-- **WebView 崩溃保护**：React Error Boundary 兜底白屏崩溃
+- **瀹氭椂浠诲姟鑳藉姏鍗囩骇**锛氭敮鎸佺嫭绔嬪垱寤哄畾鏃朵换鍔★紙浠庝换鍔′腑蹇?棣栭〉鐩存帴鍒涘缓锛屾棤闇€鍏堟墦寮€ Chat锛夈€佷笁绉嶈皟搴︾被鍨嬶紙鍥哄畾闂撮殧/Cron 琛ㄨ揪寮?涓€娆℃€э級銆佹墽琛屾ā寮忛€夋嫨锛堟柊寮€瀵硅瘽/杩炵画瀵硅瘽锛夈€佸彲瑙嗗寲璋冨害鏋勫缓鍣ㄣ€佹墽琛屽巻鍙叉煡鐪?
+- **瀹氭椂浠诲姟璇︽儏椤电紪杈戞ā寮?*锛氱偣鍑荤紪杈戝垏鎹负鍐呰仈缂栬緫瑙嗗浘锛屾敮鎸佷慨鏀硅皟搴﹁鍒掋€佺粨鏉熸潯浠躲€侀€氱煡璁剧疆
+- **Chat 瀹氭椂闈㈡澘鏀归€?*锛氭墽琛屾ā寮忛€夋嫨 + 涓夌璋冨害绫诲瀷 + 鏂板紑瀵硅瘽璺緞
+- **椋炰功瀹樻柟 OpenClaw 鎻掍欢鎺ュ叆**锛欳ardKit Streaming銆佸伐鍏锋ˉ鎺ワ紙澶氱淮琛ㄦ牸/鏃ュ巻/浠诲姟/缇よ亰绛?25 涓伐鍏凤級銆丼DK Shim 鍏煎灞?
+- **Tab 鐘舵€佹寚绀哄櫒**锛氳繍琛屼腑/鎬濊€冧腑鍦嗙偣 + 鑷畾涔?tooltip + 閫氱煡鐐瑰嚮鑷姩璺宠浆
+- **WebView 宕╂簝淇濇姢**锛歊eact Error Boundary 鍏滃簳鐧藉睆宕╂簝
 
 ### Fixed
-- **Windows 白屏死循环**：agent.channels undefined 导致 React 崩溃 → 错误边界卸载 App → cleanup 杀 sidecar → 死循环。防御性归一化 + 移除 useEffect cleanup 中的 stopAllSidecars
-- **定时任务 loading 卡死**：Cron 执行改用 fullAgency 权限，避免 Bash 等工具 permission request 在无人值守时永远阻塞
-- **定时任务创建后列表不刷新**：RecentTasks 传 onCreated 回调给 TaskCreateModal
-- **im-cron 跨 workspace 安全漏洞**：添加 verifyTaskOwnership 校验，防止跨 session 修改/删除其他工作区的任务
-- **CronTaskSettingsModal executionTarget 重置**：从 initialConfig 初始化，防止重开 modal 时静默重置
-- **CronTaskDetailPanel 缺 isMountedRef guard**：4 个 async handler 添加 unmount 保护
-- **无效 Cron 表达式可提交**：cron 表达式格式验证加入 errors
-- **通知导航 hijack**：timeout 从 10s 缩至 2s，仅 hidden→visible 转换时消费
-- **CustomSelect dropdown 滚动脱离**：添加 scroll/resize 事件监听动态更新位置
-- **「允许 AI 自主结束任务」选项隐藏**：永久运行模式下也显示该选项
-- **/new 后飞书 Bridge 工具丢失**：IM context（im-media/im-bridge-tools）改为 Sidecar 级别生命周期，不在 session 结束时清除
-- **IM Bot provider 不同步**：patchAgentConfig 自动解析 providerEnvJson + AgentInstance 初始化补全
-- **飞书插件消息处理崩溃**：compat-runtime 补全 config/logging/system 模块
-- **Bridge 进程不使用代理配置**：导致飞书 API 超时
-- **CardKit streaming 400 错误**：withReplyDispatcher 返回值修复
-- **IM Bot idle collector 误杀长任务 sidecar**
+- **Windows 鐧藉睆姝诲惊鐜?*锛歛gent.channels undefined 瀵艰嚧 React 宕╂簝 鈫?閿欒杈圭晫鍗歌浇 App 鈫?cleanup 鏉€ sidecar 鈫?姝诲惊鐜€傞槻寰℃€у綊涓€鍖?+ 绉婚櫎 useEffect cleanup 涓殑 stopAllSidecars
+- **瀹氭椂浠诲姟 loading 鍗℃**锛欳ron 鎵ц鏀圭敤 fullAgency 鏉冮檺锛岄伩鍏?Bash 绛夊伐鍏?permission request 鍦ㄦ棤浜哄€煎畧鏃舵案杩滈樆濉?
+- **瀹氭椂浠诲姟鍒涘缓鍚庡垪琛ㄤ笉鍒锋柊**锛歊ecentTasks 浼?onCreated 鍥炶皟缁?TaskCreateModal
+- **im-cron 璺?workspace 瀹夊叏婕忔礊**锛氭坊鍔?verifyTaskOwnership 鏍￠獙锛岄槻姝㈣法 session 淇敼/鍒犻櫎鍏朵粬宸ヤ綔鍖虹殑浠诲姟
+- **CronTaskSettingsModal executionTarget 閲嶇疆**锛氫粠 initialConfig 鍒濆鍖栵紝闃叉閲嶅紑 modal 鏃堕潤榛橀噸缃?
+- **CronTaskDetailPanel 缂?isMountedRef guard**锛? 涓?async handler 娣诲姞 unmount 淇濇姢
+- **鏃犳晥 Cron 琛ㄨ揪寮忓彲鎻愪氦**锛歝ron 琛ㄨ揪寮忔牸寮忛獙璇佸姞鍏?errors
+- **閫氱煡瀵艰埅 hijack**锛歵imeout 浠?10s 缂╄嚦 2s锛屼粎 hidden鈫抳isible 杞崲鏃舵秷璐?
+- **CustomSelect dropdown 婊氬姩鑴辩**锛氭坊鍔?scroll/resize 浜嬩欢鐩戝惉鍔ㄦ€佹洿鏂颁綅缃?
+- **銆屽厑璁?AI 鑷富缁撴潫浠诲姟銆嶉€夐」闅愯棌**锛氭案涔呰繍琛屾ā寮忎笅涔熸樉绀鸿閫夐」
+- **/new 鍚庨涔?Bridge 宸ュ叿涓㈠け**锛欼M context锛坕m-media/im-bridge-tools锛夋敼涓?Sidecar 绾у埆鐢熷懡鍛ㄦ湡锛屼笉鍦?session 缁撴潫鏃舵竻闄?
+- **IM Bot provider 涓嶅悓姝?*锛歱atchAgentConfig 鑷姩瑙ｆ瀽 providerEnvJson + AgentInstance 鍒濆鍖栬ˉ鍏?
+- **椋炰功鎻掍欢娑堟伅澶勭悊宕╂簝**锛歝ompat-runtime 琛ュ叏 config/logging/system 妯″潡
+- **Bridge 杩涚▼涓嶄娇鐢ㄤ唬鐞嗛厤缃?*锛氬鑷撮涔?API 瓒呮椂
+- **CardKit streaming 400 閿欒**锛歸ithReplyDispatcher 杩斿洖鍊间慨澶?
+- **IM Bot idle collector 璇潃闀夸换鍔?sidecar**
 
 ### Changed
-- **「循环」文案统一改为「定时」**
-- **添加 IM Bot 选择平台隐藏内置飞书**：由官方插件版本替代
-- **任务中心 tag 文案统一**：Feishu→飞书、QQ Bot→QQ，与 Agent 工作区一致
+- **銆屽惊鐜€嶆枃妗堢粺涓€鏀逛负銆屽畾鏃躲€?*
+- **娣诲姞 IM Bot 閫夋嫨骞冲彴闅愯棌鍐呯疆椋炰功**锛氱敱瀹樻柟鎻掍欢鐗堟湰鏇夸唬
+- **浠诲姟涓績 tag 鏂囨缁熶竴**锛欶eishu鈫掗涔︺€丵Q Bot鈫扱Q锛屼笌 Agent 宸ヤ綔鍖轰竴鑷?
 
 ---
 
 ## [0.1.41] - 2026-03-14
 
 ### Added
-- **Agent 中心架构升级**：IM Bot 中心架构全面升级为 Agent 中心架构，数据模型迁移、Rust 层重构、UI 改造三阶段完成。旧版 ImBotConfig 自动迁移为 AgentConfig，按工作区聚合、保留 bot ID 作为 channel ID
-- **供应商子 Agent 模型别名映射**：解决 SDK 内置子 Agent 硬编码模型问题，支持自定义供应商模型别名
-- **文件预览器增强**：空文档占位提示与编辑入口、二进制黑名单判断替代文本白名单、createPortal 修复滚动穿透
-- **文件树图标 + 拖拽移动**：基于 @dnd-kit 重构，替换 HTML5 DnD
-- **Launcher 主动 Agent UX 改进**：卡片展示 channel 状态标签、心跳图标、Agent 设置快捷入口
+- **Agent 涓績鏋舵瀯鍗囩骇**锛欼M Bot 涓績鏋舵瀯鍏ㄩ潰鍗囩骇涓?Agent 涓績鏋舵瀯锛屾暟鎹ā鍨嬭縼绉汇€丷ust 灞傞噸鏋勩€乁I 鏀归€犱笁闃舵瀹屾垚銆傛棫鐗?ImBotConfig 鑷姩杩佺Щ涓?AgentConfig锛屾寜宸ヤ綔鍖鸿仛鍚堛€佷繚鐣?bot ID 浣滀负 channel ID
+- **渚涘簲鍟嗗瓙 Agent 妯″瀷鍒悕鏄犲皠**锛氳В鍐?SDK 鍐呯疆瀛?Agent 纭紪鐮佹ā鍨嬮棶棰橈紝鏀寔鑷畾涔変緵搴斿晢妯″瀷鍒悕
+- **鏂囦欢棰勮鍣ㄥ寮?*锛氱┖鏂囨。鍗犱綅鎻愮ず涓庣紪杈戝叆鍙ｃ€佷簩杩涘埗榛戝悕鍗曞垽鏂浛浠ｆ枃鏈櫧鍚嶅崟銆乧reatePortal 淇婊氬姩绌块€?
+- **鏂囦欢鏍戝浘鏍?+ 鎷栨嫿绉诲姩**锛氬熀浜?@dnd-kit 閲嶆瀯锛屾浛鎹?HTML5 DnD
+- **Launcher 涓诲姩 Agent UX 鏀硅繘**锛氬崱鐗囧睍绀?channel 鐘舵€佹爣绛俱€佸績璺冲浘鏍囥€丄gent 璁剧疆蹇嵎鍏ュ彛
 
 ### Fixed
-- **Windows 标题生成 404** (#23)：双层修复 — (1) generateSessionTitle 改用 Tab-scoped API 替代 Global Sidecar；(2) pre-warm 竞态导致 system_init 永不 replay，前端 sessionId 停留在 pending 占位符
-- **fullAgency 模式下工具仍请求权限**：permissionMode/model 跟踪变量在 session abort 期间丢失，收窄更新范围至 abort 场景
-- **Gemini thinking 模型 400 错误** (#22)：thought_signature 持久化 + 双位置归一化 + direct/extra_content.google 同步
-- **定时任务系统休眠后延迟数小时触发**：改用 wall-clock 轮询替代 setInterval
-- **后台 Agent 子任务完成后 UI 状态不更新**
-- **AI 小助理面板**：模型下拉被遮挡（移除 overflow-hidden）、底部圆角溢出、右键选中文本
-- **session 加载时消息跳动 + 空白屏优化**
-- **OpenClaw 插件更新后版本号消失 + 自动重启相关 Bot**
-- **Tray 退出改为 app.exit(0)**：不再绕行前端 WebView
-- **Windows VM bun 崩溃**：切换 baseline 构建 + 系统 fallback
-- **v0.1.41 技术债清理 (TD-1 ~ TD-6 主体)**：消除 IM Bot 兼容层，start_channel 提取、agent: session key 激活、健康文件路径迁移、shim 删除、ImSettings 移除
+- **Windows 鏍囬鐢熸垚 404** (#23)锛氬弻灞備慨澶?鈥?(1) generateSessionTitle 鏀圭敤 Tab-scoped API 鏇夸唬 Global Sidecar锛?2) pre-warm 绔炴€佸鑷?system_init 姘镐笉 replay锛屽墠绔?sessionId 鍋滅暀鍦?pending 鍗犱綅绗?
+- **fullAgency 妯″紡涓嬪伐鍏蜂粛璇锋眰鏉冮檺**锛歱ermissionMode/model 璺熻釜鍙橀噺鍦?session abort 鏈熼棿涓㈠け锛屾敹绐勬洿鏂拌寖鍥磋嚦 abort 鍦烘櫙
+- **Gemini thinking 妯″瀷 400 閿欒** (#22)锛歵hought_signature 鎸佷箙鍖?+ 鍙屼綅缃綊涓€鍖?+ direct/extra_content.google 鍚屾
+- **瀹氭椂浠诲姟绯荤粺浼戠湢鍚庡欢杩熸暟灏忔椂瑙﹀彂**锛氭敼鐢?wall-clock 杞鏇夸唬 setInterval
+- **鍚庡彴 Agent 瀛愪换鍔″畬鎴愬悗 UI 鐘舵€佷笉鏇存柊**
+- **AI 灏忓姪鐞嗛潰鏉?*锛氭ā鍨嬩笅鎷夎閬尅锛堢Щ闄?overflow-hidden锛夈€佸簳閮ㄥ渾瑙掓孩鍑恒€佸彸閿€変腑鏂囨湰
+- **session 鍔犺浇鏃舵秷鎭烦鍔?+ 绌虹櫧灞忎紭鍖?*
+- **OpenClaw 鎻掍欢鏇存柊鍚庣増鏈彿娑堝け + 鑷姩閲嶅惎鐩稿叧 Bot**
+- **Tray 閫€鍑烘敼涓?app.exit(0)**锛氫笉鍐嶇粫琛屽墠绔?WebView
+- **Windows VM bun 宕╂簝**锛氬垏鎹?baseline 鏋勫缓 + 绯荤粺 fallback
+- **v0.1.41 鎶€鏈€烘竻鐞?(TD-1 ~ TD-6 涓讳綋)**锛氭秷闄?IM Bot 鍏煎灞傦紝start_channel 鎻愬彇銆乤gent: session key 婵€娲汇€佸仴搴锋枃浠惰矾寰勮縼绉汇€乻him 鍒犻櫎銆両mSettings 绉婚櫎
 
 ### Changed
-- **关于页面排版优化**：产品描述改为「开发者来信」风格
-- **「心跳循环」更名为「循环」**：图标换为 Timer
-- **「项目设置」统一更名为「Agent 设置」**
-- **Tauri crate 升级**：2.9.5 → 2.9.6
+- **鍏充簬椤甸潰鎺掔増浼樺寲**锛氫骇鍝佹弿杩版敼涓恒€屽紑鍙戣€呮潵淇°€嶉鏍?
+- **銆屽績璺冲惊鐜€嶆洿鍚嶄负銆屽惊鐜€?*锛氬浘鏍囨崲涓?Timer
+- **銆岄」鐩缃€嶇粺涓€鏇村悕涓恒€孉gent 璁剧疆銆?*
+- **Tauri crate 鍗囩骇**锛?.9.5 鈫?2.9.6
 
 ---
 
 ## [0.1.40] - 2026-03-10
 
 ### Added
-- **飞书 Card Kit v2.0 原生渲染**：含表格或代码块的消息自动使用 Interactive Card 发送，飞书客户端原生渲染 markdown 表格和代码高亮
-- **Global Sidecar 健康监控**：后台进程死亡自动重启，前端日志熔断器防止刷屏
+- **椋炰功 Card Kit v2.0 鍘熺敓娓叉煋**锛氬惈琛ㄦ牸鎴栦唬鐮佸潡鐨勬秷鎭嚜鍔ㄤ娇鐢?Interactive Card 鍙戦€侊紝椋炰功瀹㈡埛绔師鐢熸覆鏌?markdown 琛ㄦ牸鍜屼唬鐮侀珮浜?
+- **Global Sidecar 鍋ュ悍鐩戞帶**锛氬悗鍙拌繘绋嬫浜¤嚜鍔ㄩ噸鍚紝鍓嶇鏃ュ織鐔旀柇鍣ㄩ槻姝㈠埛灞?
 
 ### Fixed
-- **钉钉/飞书 WS 连接因 NAT 静默断开频繁重连**：新增客户端 ping（30s 间隔）保持 NAT 映射存活
-- **IM Bot 会话中断**：健康检查误判 + interrupt 超时级联故障修复
-- **AI 回复结束后页面跳动**：spacer 收缩动画优化 + AssistantActions 延迟渲染
-- **Windows 首次安装后 SDK 找不到 bun/git**：bun.exe 别名 + Git PATH 发现 + 重复 PATH 去重
-- **Markdown 表格内 inline code 占位符未还原**（显示 ◆CODE{n}◆）
-- **rewind 阻塞 103 秒**：5s 超时 + 图片 MIME type 丢失修复
-- **飞书 Card 表格内加粗标记未渲染**：发送前 strip 表格行内 `**` 标记
-- **Sidecar 指数退避溢出**：连续失败 61 次后 panic，改用 saturating 算术
-- **Windows portable 构建 bun.exe 过期**：始终覆盖确保版本一致
-- **API watchdog 误杀复杂任务**：超时从 5 分钟放宽至 15 分钟
+- **閽夐拤/椋炰功 WS 杩炴帴鍥?NAT 闈欓粯鏂紑棰戠箒閲嶈繛**锛氭柊澧炲鎴风 ping锛?0s 闂撮殧锛変繚鎸?NAT 鏄犲皠瀛樻椿
+- **IM Bot 浼氳瘽涓柇**锛氬仴搴锋鏌ヨ鍒?+ interrupt 瓒呮椂绾ц仈鏁呴殰淇
+- **AI 鍥炲缁撴潫鍚庨〉闈㈣烦鍔?*锛歴pacer 鏀剁缉鍔ㄧ敾浼樺寲 + AssistantActions 寤惰繜娓叉煋
+- **Windows 棣栨瀹夎鍚?SDK 鎵句笉鍒?bun/git**锛歜un.exe 鍒悕 + Git PATH 鍙戠幇 + 閲嶅 PATH 鍘婚噸
+- **Markdown 琛ㄦ牸鍐?inline code 鍗犱綅绗︽湭杩樺師**锛堟樉绀?鈼咰ODE{n}鈼嗭級
+- **rewind 闃诲 103 绉?*锛?s 瓒呮椂 + 鍥剧墖 MIME type 涓㈠け淇
+- **椋炰功 Card 琛ㄦ牸鍐呭姞绮楁爣璁版湭娓叉煋**锛氬彂閫佸墠 strip 琛ㄦ牸琛屽唴 `**` 鏍囪
+- **Sidecar 鎸囨暟閫€閬挎孩鍑?*锛氳繛缁け璐?61 娆″悗 panic锛屾敼鐢?saturating 绠楁湳
+- **Windows portable 鏋勫缓 bun.exe 杩囨湡**锛氬缁堣鐩栫‘淇濈増鏈竴鑷?
+- **API watchdog 璇潃澶嶆潅浠诲姟**锛氳秴鏃朵粠 5 鍒嗛挓鏀惧鑷?15 鍒嗛挓
 
 ### Changed
-- **流式首发攒句优化**：累积到标点或 20 字后才首发，避免单字闪烁
-- **移除 ZenMux 预设 zenmux/auto 模型**
+- **娴佸紡棣栧彂鏀掑彞浼樺寲**锛氱疮绉埌鏍囩偣鎴?20 瀛楀悗鎵嶉鍙戯紝閬垮厤鍗曞瓧闂儊
+- **绉婚櫎 ZenMux 棰勮 zenmux/auto 妯″瀷**
 
 ---
 
 ## [0.1.39] - 2026-03-10
 
 ### Added
-- **对话流内联 TTS 音频播放** (#14)：TTS 工具结果支持内联播放/暂停控件，音频文件存储到工作区 `hamuna-generated/` 目录
-- **思考中实时显示已用时间**：思考过程中显示 "思考中… (3s)"，完成后显示 "思考了 5s"
-- **API 响应超时 watchdog**：检测 Sidecar 响应超时并提供中止选项
+- **瀵硅瘽娴佸唴鑱?TTS 闊抽鎾斁** (#14)锛歍TS 宸ュ叿缁撴灉鏀寔鍐呰仈鎾斁/鏆傚仠鎺т欢锛岄煶棰戞枃浠跺瓨鍌ㄥ埌宸ヤ綔鍖?`hamuna-generated/` 鐩綍
+- **鎬濊€冧腑瀹炴椂鏄剧ず宸茬敤鏃堕棿**锛氭€濊€冭繃绋嬩腑鏄剧ず "鎬濊€冧腑鈥?(3s)"锛屽畬鎴愬悗鏄剧ず "鎬濊€冧簡 5s"
+- **API 鍝嶅簲瓒呮椂 watchdog**锛氭娴?Sidecar 鍝嶅簲瓒呮椂骞舵彁渚涗腑姝㈤€夐」
 
 ### Fixed
-- **Spacer 收缩跳动**：CSS transition 改 JS RAF 动画，每帧检测 scrollTop 位置，消除自动滚动时的视觉抖动
-- **Markdown 预处理破坏 GFM 表格**：含 `#` 的单元格被误判为标题
-- **CSS 变量未定义**：`--accent-hover` → `--accent-warm-hover`
-- **watchdog 空闲后误触发**：abort handler 增加 `signal.aborted` 前置检查
-- **`hamuna-generated/` 目录自动创建 `.gitignore`**：防止误提交生成文件
-- **思考完成后始终显示耗时秒数**：不足 1s 时显示 1s
-- **Windows asset 协议兼容**：convertFileSrc + CSP `https://asset.localhost`
+- **Spacer 鏀剁缉璺冲姩**锛欳SS transition 鏀?JS RAF 鍔ㄧ敾锛屾瘡甯ф娴?scrollTop 浣嶇疆锛屾秷闄よ嚜鍔ㄦ粴鍔ㄦ椂鐨勮瑙夋姈鍔?
+- **Markdown 棰勫鐞嗙牬鍧?GFM 琛ㄦ牸**锛氬惈 `#` 鐨勫崟鍏冩牸琚鍒や负鏍囬
+- **CSS 鍙橀噺鏈畾涔?*锛歚--accent-hover` 鈫?`--accent-warm-hover`
+- **watchdog 绌洪棽鍚庤瑙﹀彂**锛歛bort handler 澧炲姞 `signal.aborted` 鍓嶇疆妫€鏌?
+- **`hamuna-generated/` 鐩綍鑷姩鍒涘缓 `.gitignore`**锛氶槻姝㈣鎻愪氦鐢熸垚鏂囦欢
+- **鎬濊€冨畬鎴愬悗濮嬬粓鏄剧ず鑰楁椂绉掓暟**锛氫笉瓒?1s 鏃舵樉绀?1s
+- **Windows asset 鍗忚鍏煎**锛歝onvertFileSrc + CSP `https://asset.localhost`
 
 ### Changed
-- **音频播放器重构**：toggleAudio 移入 singleton、AudioState 去重、watchdog 可读性改进
-- **TTS/图片生成文件存储重构**：统一存储到工作区 `hamuna-generated/` 目录
+- **闊抽鎾斁鍣ㄩ噸鏋?*锛歵oggleAudio 绉诲叆 singleton銆丄udioState 鍘婚噸銆亀atchdog 鍙鎬ф敼杩?
+- **TTS/鍥剧墖鐢熸垚鏂囦欢瀛樺偍閲嶆瀯**锛氱粺涓€瀛樺偍鍒板伐浣滃尯 `hamuna-generated/` 鐩綍
 
 ---
 
 ## [0.1.38] - 2026-03-09
 
 ### Added
-- **OpenClaw Channel Plugin 兼容**：Plugin Bridge 架构，支持社区 Channel 插件（如 QQ Bot）以独立 Bun 进程加载运行，Promoted Plugin 获得一等 UI 待遇（自定义图标、品牌色、安装引导）
-- **Mid-turn message injection**：去除 turn 级阻塞，支持 AI 处理中注入新消息，无需等待当前回复完成
-- **标题栏反馈按钮**：快速反馈入口
+- **OpenClaw Channel Plugin 鍏煎**锛歅lugin Bridge 鏋舵瀯锛屾敮鎸佺ぞ鍖?Channel 鎻掍欢锛堝 QQ Bot锛変互鐙珛 Bun 杩涚▼鍔犺浇杩愯锛孭romoted Plugin 鑾峰緱涓€绛?UI 寰呴亣锛堣嚜瀹氫箟鍥炬爣銆佸搧鐗岃壊銆佸畨瑁呭紩瀵硷級
+- **Mid-turn message injection**锛氬幓闄?turn 绾ч樆濉烇紝鏀寔 AI 澶勭悊涓敞鍏ユ柊娑堟伅锛屾棤闇€绛夊緟褰撳墠鍥炲瀹屾垚
+- **鏍囬鏍忓弽棣堟寜閽?*锛氬揩閫熷弽棣堝叆鍙?
 
 ### Fixed
-- **聊天页自动滚动全面优化**：content-aware 双目标滚动公式（用户消息置顶 → 跟随 AI 内容）、动态 spacer 按需扩缩（避免过大空白）、wasClamped 启发式防止布局钳制误禁用自动滚动、平滑动画替代瞬间跳跃
-- **后台任务运行时 chat 中断卡死**：SDK Task 生命周期消息处理修复
-- **引用全局 Agent 时 Task 工具无法识别自定义 sub-agent** (#13)
-- **自动更新请求未走用户代理配置**：更新检查现通过用户配置的代理发送
-- **Plugin Bridge 进程崩溃后残留**：添加 sidecar 标记确保清理
-- **Bridge 进程因 --hamuna-sidecar 参数崩溃**
-- **插件安装后配置字段未预填 + 安装 toast 提示**
-- **QQ Bot npm 包名修正**：更正为 @sliverp/qqbot
-- **路径遍历、pluginId 不匹配、Popover 交互**：cross-review 修复
+- **鑱婂ぉ椤佃嚜鍔ㄦ粴鍔ㄥ叏闈紭鍖?*锛歝ontent-aware 鍙岀洰鏍囨粴鍔ㄥ叕寮忥紙鐢ㄦ埛娑堟伅缃《 鈫?璺熼殢 AI 鍐呭锛夈€佸姩鎬?spacer 鎸夐渶鎵╃缉锛堥伩鍏嶈繃澶х┖鐧斤級銆亀asClamped 鍚彂寮忛槻姝㈠竷灞€閽冲埗璇鐢ㄨ嚜鍔ㄦ粴鍔ㄣ€佸钩婊戝姩鐢绘浛浠ｇ灛闂磋烦璺?
+- **鍚庡彴浠诲姟杩愯鏃?chat 涓柇鍗℃**锛歋DK Task 鐢熷懡鍛ㄦ湡娑堟伅澶勭悊淇
+- **寮曠敤鍏ㄥ眬 Agent 鏃?Task 宸ュ叿鏃犳硶璇嗗埆鑷畾涔?sub-agent** (#13)
+- **鑷姩鏇存柊璇锋眰鏈蛋鐢ㄦ埛浠ｇ悊閰嶇疆**锛氭洿鏂版鏌ョ幇閫氳繃鐢ㄦ埛閰嶇疆鐨勪唬鐞嗗彂閫?
+- **Plugin Bridge 杩涚▼宕╂簝鍚庢畫鐣?*锛氭坊鍔?sidecar 鏍囪纭繚娓呯悊
+- **Bridge 杩涚▼鍥?--hamuna-sidecar 鍙傛暟宕╂簝**
+- **鎻掍欢瀹夎鍚庨厤缃瓧娈垫湭棰勫～ + 瀹夎 toast 鎻愮ず**
+- **QQ Bot npm 鍖呭悕淇**锛氭洿姝ｄ负 @sliverp/qqbot
+- **璺緞閬嶅巻銆乸luginId 涓嶅尮閰嶃€丳opover 浜や簰**锛歝ross-review 淇
 
 ### Changed
-- **依赖升级**：@tauri-apps/api ~2.10、plugin-updater ~2.10
+- **渚濊禆鍗囩骇**锛欯tauri-apps/api ~2.10銆乸lugin-updater ~2.10
 
 ---
 
 ## [0.1.37] - 2026-03-07
 
 ### Added
-- **埋点系统升级**：新增 15 个前端事件（session_rewind/title_edit、message_retry/copy、agent_add/remove、skill_use、im_bot_create/toggle/remove、workspace_create、tts_play、task_center_open、bug_report_submit）+ 服务端统一 `ai_turn_complete` 指标覆盖所有 AI 执行来源（交互对话/IM Bot/定时任务/Heartbeat）
-- **工作区模板库**：新增「从模板创建工作区」功能，内置 Mino 模板；Phosphor 图标系统支持 50+ 工作区图标选择
-- **Tavily 搜索预设**：新增 Tavily Web Search MCP 预设工具 + MCP 设置引导优化
-- **macOS 本地化**：Info.plist 声明 CFBundleLocalizations，原生 UI（WebView 右键菜单等）跟随系统语言
-- **Windows 平台增强**：VC++ Runtime app-local 部署、Sidecar 启动失败诊断增强、用户友好错误提示
+- **鍩嬬偣绯荤粺鍗囩骇**锛氭柊澧?15 涓墠绔簨浠讹紙session_rewind/title_edit銆乵essage_retry/copy銆乤gent_add/remove銆乻kill_use銆乮m_bot_create/toggle/remove銆亀orkspace_create銆乼ts_play銆乼ask_center_open銆乥ug_report_submit锛? 鏈嶅姟绔粺涓€ `ai_turn_complete` 鎸囨爣瑕嗙洊鎵€鏈?AI 鎵ц鏉ユ簮锛堜氦浜掑璇?IM Bot/瀹氭椂浠诲姟/Heartbeat锛?
+- **宸ヤ綔鍖烘ā鏉垮簱**锛氭柊澧炪€屼粠妯℃澘鍒涘缓宸ヤ綔鍖恒€嶅姛鑳斤紝鍐呯疆 Mino 妯℃澘锛汸hosphor 鍥炬爣绯荤粺鏀寔 50+ 宸ヤ綔鍖哄浘鏍囬€夋嫨
+- **Tavily 鎼滅储棰勮**锛氭柊澧?Tavily Web Search MCP 棰勮宸ュ叿 + MCP 璁剧疆寮曞浼樺寲
+- **macOS 鏈湴鍖?*锛欼nfo.plist 澹版槑 CFBundleLocalizations锛屽師鐢?UI锛圵ebView 鍙抽敭鑿滃崟绛夛級璺熼殢绯荤粺璇█
+- **Windows 骞冲彴澧炲己**锛歏C++ Runtime app-local 閮ㄧ讲銆丼idecar 鍚姩澶辫触璇婃柇澧炲己銆佺敤鎴峰弸濂介敊璇彁绀?
 
 ### Fixed
-- **AI 回复最后几个字丢失**：React 18 批处理竞态导致流式输出末尾内容未渲染
-- **Gemini thinking 模型 400 错误**：工具调用后 `thought_signature` 丢失，全链路透传修复
-- **Sub-Agent 重命名后列表仍显示旧名称**：Agent 列表未刷新缓存
-- **飞书 Bot 群聊管理空状态提示**：优化空群组引导文案
-- **触摸板横滑切换 Tab 冲突**：与内部可横滑元素（代码块等）手势冲突
-- **右键菜单改进**：AgentCapabilitiesPanel 菜单项补全 icon；生产环境屏蔽原生 Reload/Inspect Element 菜单，保留输入框/文本选中/媒体元素原生菜单
-- **MCP 列表 UX**：简化 DuckDuckGo 描述文案；截断文本 hover 展示完整内容；设置面板标题下方展示副标题描述
-- **服务端埋点健壮性**：config 缓存加 TTL 重试修复启动竞态；endpoint 校验与前端三重检查一致
+- **AI 鍥炲鏈€鍚庡嚑涓瓧涓㈠け**锛歊eact 18 鎵瑰鐞嗙珵鎬佸鑷存祦寮忚緭鍑烘湯灏惧唴瀹规湭娓叉煋
+- **Gemini thinking 妯″瀷 400 閿欒**锛氬伐鍏疯皟鐢ㄥ悗 `thought_signature` 涓㈠け锛屽叏閾捐矾閫忎紶淇
+- **Sub-Agent 閲嶅懡鍚嶅悗鍒楄〃浠嶆樉绀烘棫鍚嶇О**锛欰gent 鍒楄〃鏈埛鏂扮紦瀛?
+- **椋炰功 Bot 缇よ亰绠＄悊绌虹姸鎬佹彁绀?*锛氫紭鍖栫┖缇ょ粍寮曞鏂囨
+- **瑙︽懜鏉挎í婊戝垏鎹?Tab 鍐茬獊**锛氫笌鍐呴儴鍙í婊戝厓绱狅紙浠ｇ爜鍧楃瓑锛夋墜鍔垮啿绐?
+- **鍙抽敭鑿滃崟鏀硅繘**锛欰gentCapabilitiesPanel 鑿滃崟椤硅ˉ鍏?icon锛涚敓浜х幆澧冨睆钄藉師鐢?Reload/Inspect Element 鑿滃崟锛屼繚鐣欒緭鍏ユ/鏂囨湰閫変腑/濯掍綋鍏冪礌鍘熺敓鑿滃崟
+- **MCP 鍒楄〃 UX**锛氱畝鍖?DuckDuckGo 鎻忚堪鏂囨锛涙埅鏂枃鏈?hover 灞曠ず瀹屾暣鍐呭锛涜缃潰鏉挎爣棰樹笅鏂瑰睍绀哄壇鏍囬鎻忚堪
+- **鏈嶅姟绔煁鐐瑰仴澹€?*锛歝onfig 缂撳瓨鍔?TTL 閲嶈瘯淇鍚姩绔炴€侊紱endpoint 鏍￠獙涓庡墠绔笁閲嶆鏌ヤ竴鑷?
 
 ### Changed
-- **对话页侧栏重构**：工作区面板与 Launcher 风格统一、两行布局 + 能力面板排序优化
-- **埋点开源最佳实践**：移除硬编码 endpoint，`isAnalyticsEnabled()` 强化为三重检查，fork 构建零泄漏
+- **瀵硅瘽椤典晶鏍忛噸鏋?*锛氬伐浣滃尯闈㈡澘涓?Launcher 椋庢牸缁熶竴銆佷袱琛屽竷灞€ + 鑳藉姏闈㈡澘鎺掑簭浼樺寲
+- **鍩嬬偣寮€婧愭渶浣冲疄璺?*锛氱Щ闄ょ‖缂栫爜 endpoint锛宍isAnalyticsEnabled()` 寮哄寲涓轰笁閲嶆鏌ワ紝fork 鏋勫缓闆舵硠婕?
 
 ---
 
 ## [0.1.36] - 2026-03-06
 
 ### Added
-- **Session 智能标题自动生成**：首轮 QA 后 AI 自动生成语义化短标题（≤30 字），贯穿 Tab 栏、Chat 顶栏、历史记录、任务中心；支持 Chat 顶栏内联点击重命名，手动重命名后不再自动覆盖（`titleSource` 三态：default/auto/user）
-- **触控板双指水平滑动切换 Tab**：跟手动画 + 惯性检测 + 边界回弹，支持 macOS 触控板自然手势
-- **对话文件路径菜单「打开」选项**：右键文件路径可直接在系统中打开
-- **模型用量分布表格供应商筛选器**：使用统计页支持按供应商筛选模型用量
+- **Session 鏅鸿兘鏍囬鑷姩鐢熸垚**锛氶杞?QA 鍚?AI 鑷姩鐢熸垚璇箟鍖栫煭鏍囬锛堚墹30 瀛楋級锛岃疮绌?Tab 鏍忋€丆hat 椤舵爮銆佸巻鍙茶褰曘€佷换鍔′腑蹇冿紱鏀寔 Chat 椤舵爮鍐呰仈鐐瑰嚮閲嶅懡鍚嶏紝鎵嬪姩閲嶅懡鍚嶅悗涓嶅啀鑷姩瑕嗙洊锛坄titleSource` 涓夋€侊細default/auto/user锛?
+- **瑙︽帶鏉垮弻鎸囨按骞虫粦鍔ㄥ垏鎹?Tab**锛氳窡鎵嬪姩鐢?+ 鎯€ф娴?+ 杈圭晫鍥炲脊锛屾敮鎸?macOS 瑙︽帶鏉胯嚜鐒舵墜鍔?
+- **瀵硅瘽鏂囦欢璺緞鑿滃崟銆屾墦寮€銆嶉€夐」**锛氬彸閿枃浠惰矾寰勫彲鐩存帴鍦ㄧ郴缁熶腑鎵撳紑
+- **妯″瀷鐢ㄩ噺鍒嗗竷琛ㄦ牸渚涘簲鍟嗙瓫閫夊櫒**锛氫娇鐢ㄧ粺璁￠〉鏀寔鎸変緵搴斿晢绛涢€夋ā鍨嬬敤閲?
 
 ### Fixed
-- **飞书群聊管理未识别群组** (#11)：飞书 Bot 仅通过生命周期事件发现群组，新增与钉钉相同的消息级自动发现机制
-- **Gemini 工具调用 400 错误** (#10)：OpenAI 桥接层丢失 Gemini 思考模型的 `thought_signature` 字段，全链路增加透传
-- **代码块选中复制换行问题**：视觉换行被当成真实换行复制
-- **输入框工具栏窄屏换行**：工具栏按钮在窄宽度下自动隐藏文字标签，模型名称截断显示
-- **Rust 代理层缺少 PATCH 方法**：`proxy_http_request` 不支持 PATCH，导致 session 更新（重命名等）静默失败
-- **AI 分析内容误触发 Agent error 横幅**：非流式供应商正常响应被误显示为错误
-- **会话统计弹窗层级错误**：Modal 嵌套在 dropdown 内导致输入框浮于遮罩之上，改用 Portal 渲染到 document root
-- **会话统计弹窗样式**：卡片/表头背景与设置页使用统计面板风格统一（paper-elevated）
-- **飞书 Bot 权限缺失**：补充 `contact:contact.base:readonly` 权限
+- **椋炰功缇よ亰绠＄悊鏈瘑鍒兢缁?* (#11)锛氶涔?Bot 浠呴€氳繃鐢熷懡鍛ㄦ湡浜嬩欢鍙戠幇缇ょ粍锛屾柊澧炰笌閽夐拤鐩稿悓鐨勬秷鎭骇鑷姩鍙戠幇鏈哄埗
+- **Gemini 宸ュ叿璋冪敤 400 閿欒** (#10)锛歄penAI 妗ユ帴灞備涪澶?Gemini 鎬濊€冩ā鍨嬬殑 `thought_signature` 瀛楁锛屽叏閾捐矾澧炲姞閫忎紶
+- **浠ｇ爜鍧楅€変腑澶嶅埗鎹㈣闂**锛氳瑙夋崲琛岃褰撴垚鐪熷疄鎹㈣澶嶅埗
+- **杈撳叆妗嗗伐鍏锋爮绐勫睆鎹㈣**锛氬伐鍏锋爮鎸夐挳鍦ㄧ獎瀹藉害涓嬭嚜鍔ㄩ殣钘忔枃瀛楁爣绛撅紝妯″瀷鍚嶇О鎴柇鏄剧ず
+- **Rust 浠ｇ悊灞傜己灏?PATCH 鏂规硶**锛歚proxy_http_request` 涓嶆敮鎸?PATCH锛屽鑷?session 鏇存柊锛堥噸鍛藉悕绛夛級闈欓粯澶辫触
+- **AI 鍒嗘瀽鍐呭璇Е鍙?Agent error 妯箙**锛氶潪娴佸紡渚涘簲鍟嗘甯稿搷搴旇璇樉绀轰负閿欒
+- **浼氳瘽缁熻寮圭獥灞傜骇閿欒**锛歁odal 宓屽鍦?dropdown 鍐呭鑷磋緭鍏ユ娴簬閬僵涔嬩笂锛屾敼鐢?Portal 娓叉煋鍒?document root
+- **浼氳瘽缁熻寮圭獥鏍峰紡**锛氬崱鐗?琛ㄥご鑳屾櫙涓庤缃〉浣跨敤缁熻闈㈡澘椋庢牸缁熶竴锛坧aper-elevated锛?
+- **椋炰功 Bot 鏉冮檺缂哄け**锛氳ˉ鍏?`contact:contact.base:readonly` 鏉冮檺
 
 ---
 
 ## [0.1.35] - 2026-03-05
 
 ### Fixed
-- **「不再提示」全局配置覆盖弹窗**：重启应用后弹窗仍然显示，修复持久化逻辑
-- **Bridge thinking 模式 tool_call**：thinking 模式下 tool_call 消息缺失 reasoning_content
-- **IM Bot im-media 工具丢失**：IM 频道发送图片/文件时工具不可用 + 首消息 SSE 超时
-- **AI 小助理面板圆角**：底部圆角被子元素背景色遮挡，添加 overflow-hidden
+- **銆屼笉鍐嶆彁绀恒€嶅叏灞€閰嶇疆瑕嗙洊寮圭獥**锛氶噸鍚簲鐢ㄥ悗寮圭獥浠嶇劧鏄剧ず锛屼慨澶嶆寔涔呭寲閫昏緫
+- **Bridge thinking 妯″紡 tool_call**锛歵hinking 妯″紡涓?tool_call 娑堟伅缂哄け reasoning_content
+- **IM Bot im-media 宸ュ叿涓㈠け**锛欼M 棰戦亾鍙戦€佸浘鐗?鏂囦欢鏃跺伐鍏蜂笉鍙敤 + 棣栨秷鎭?SSE 瓒呮椂
+- **AI 灏忓姪鐞嗛潰鏉垮渾瑙?*锛氬簳閮ㄥ渾瑙掕瀛愬厓绱犺儗鏅壊閬尅锛屾坊鍔?overflow-hidden
 
 ### Changed
-- **Design Polish v2.2**：CSS Token 重建 + 组件样式统一 + 页面视觉打磨
-- **模型选择器重构**：从两级菜单（先选供应商 → 再选模型）改为单级分组菜单，按供应商分组平铺所有可用模型；空状态显示引导跳转设置页
-- **Settings 文案修正**："工具 & MCP" → "工具 MCP"
+- **Design Polish v2.2**锛欳SS Token 閲嶅缓 + 缁勪欢鏍峰紡缁熶竴 + 椤甸潰瑙嗚鎵撶（
+- **妯″瀷閫夋嫨鍣ㄩ噸鏋?*锛氫粠涓ょ骇鑿滃崟锛堝厛閫変緵搴斿晢 鈫?鍐嶉€夋ā鍨嬶級鏀逛负鍗曠骇鍒嗙粍鑿滃崟锛屾寜渚涘簲鍟嗗垎缁勫钩閾烘墍鏈夊彲鐢ㄦā鍨嬶紱绌虹姸鎬佹樉绀哄紩瀵艰烦杞缃〉
+- **Settings 鏂囨淇**锛?宸ュ叿 & MCP" 鈫?"宸ュ叿 MCP"
 
 ---
 
 ## [0.1.34] - 2026-03-04
 
 ### Added
-- **Edge TTS 语音合成**：新增免费 TTS MCP 工具，基于自研 WebSocket 协议实现（绕过 Bun ws polyfill 限制），支持 400+ 语音、语速/音量/音调调节、多种输出格式
-- **Gemini Image 工具前端组件**：AI 生成图片支持内联预览展示
-- **AI 消息操作栏**：新增复制/重试按钮，用户消息操作栏布局重构
-- **Google Gemini 预设供应商**：添加 Gemini（OpenAI 协议兼容）预设配置
-- **Playwright MCP 设置面板升级**：结构化控件替代通用对话框
-- **Chat 工具弹窗设置入口**：增加设置图标，点击跳转 Settings MCP 配置面板
-- **MCP 预设工具「免费」标签**：帮助用户识别无需 API Key 的免费工具
-- **Telegram Draft 流式打字机**：sendMessageDraft 实验性流式打字效果
+- **Edge TTS 璇煶鍚堟垚**锛氭柊澧炲厤璐?TTS MCP 宸ュ叿锛屽熀浜庤嚜鐮?WebSocket 鍗忚瀹炵幇锛堢粫杩?Bun ws polyfill 闄愬埗锛夛紝鏀寔 400+ 璇煶銆佽閫?闊抽噺/闊宠皟璋冭妭銆佸绉嶈緭鍑烘牸寮?
+- **Gemini Image 宸ュ叿鍓嶇缁勪欢**锛欰I 鐢熸垚鍥剧墖鏀寔鍐呰仈棰勮灞曠ず
+- **AI 娑堟伅鎿嶄綔鏍?*锛氭柊澧炲鍒?閲嶈瘯鎸夐挳锛岀敤鎴锋秷鎭搷浣滄爮甯冨眬閲嶆瀯
+- **Google Gemini 棰勮渚涘簲鍟?*锛氭坊鍔?Gemini锛圤penAI 鍗忚鍏煎锛夐璁鹃厤缃?
+- **Playwright MCP 璁剧疆闈㈡澘鍗囩骇**锛氱粨鏋勫寲鎺т欢鏇夸唬閫氱敤瀵硅瘽妗?
+- **Chat 宸ュ叿寮圭獥璁剧疆鍏ュ彛**锛氬鍔犺缃浘鏍囷紝鐐瑰嚮璺宠浆 Settings MCP 閰嶇疆闈㈡澘
+- **MCP 棰勮宸ュ叿銆屽厤璐广€嶆爣绛?*锛氬府鍔╃敤鎴疯瘑鍒棤闇€ API Key 鐨勫厤璐瑰伐鍏?
+- **Telegram Draft 娴佸紡鎵撳瓧鏈?*锛歴endMessageDraft 瀹為獙鎬ф祦寮忔墦瀛楁晥鏋?
 
 ### Fixed
-- **Bridge 429 无限重试**：区分 quota-exhausted（永久限速）与临时 429，避免无限循环
-- **Session 死亡自动恢复**：防止 generator 死亡导致消息队列卡死
-- **MCP Streamable HTTP 验证**：Accept 头不符合规范导致智谱等端点 400 错误
-- **Feishu IM 稳定性**：撤回通知处理 + 排队消息响应丢失 + cross-turn 防护
-- **IM Bot MCP 工具**：取消勾选失败 + Telegram Draft 默认开启
-- **消息操作栏样式**：hover 时间戳残留 + 图标对齐 + 间距优化
-- **非流式供应商误报错**：正常响应被误显示为 Agent error 横幅
+- **Bridge 429 鏃犻檺閲嶈瘯**锛氬尯鍒?quota-exhausted锛堟案涔呴檺閫燂級涓庝复鏃?429锛岄伩鍏嶆棤闄愬惊鐜?
+- **Session 姝讳骸鑷姩鎭㈠**锛氶槻姝?generator 姝讳骸瀵艰嚧娑堟伅闃熷垪鍗℃
+- **MCP Streamable HTTP 楠岃瘉**锛欰ccept 澶翠笉绗﹀悎瑙勮寖瀵艰嚧鏅鸿氨绛夌鐐?400 閿欒
+- **Feishu IM 绋冲畾鎬?*锛氭挙鍥為€氱煡澶勭悊 + 鎺掗槦娑堟伅鍝嶅簲涓㈠け + cross-turn 闃叉姢
+- **IM Bot MCP 宸ュ叿**锛氬彇娑堝嬀閫夊け璐?+ Telegram Draft 榛樿寮€鍚?
+- **娑堟伅鎿嶄綔鏍忔牱寮?*锛歨over 鏃堕棿鎴虫畫鐣?+ 鍥炬爣瀵归綈 + 闂磋窛浼樺寲
+- **闈炴祦寮忎緵搴斿晢璇姤閿?*锛氭甯稿搷搴旇璇樉绀轰负 Agent error 妯箙
 
 ### Changed
-- **Builtin MCP 注册模式重构**：统一 registry pattern + config fingerprint 变更检测
-- **CSP 安全策略更新**：添加 media-src 指令支持音频 Blob URL 播放
+- **Builtin MCP 娉ㄥ唽妯″紡閲嶆瀯**锛氱粺涓€ registry pattern + config fingerprint 鍙樻洿妫€娴?
+- **CSP 瀹夊叏绛栫暐鏇存柊**锛氭坊鍔?media-src 鎸囦护鏀寔闊抽 Blob URL 鎾斁
 
 ---
 
 ## [0.1.33] - 2026-03-03
 
 ### Added
-- **钉钉 Bot 集成**：新增钉钉机器人 IM 渠道，支持私聊和群聊；Windows 单实例防护避免多开冲突
-- **OpenAI Bridge Responses API**：兼容 OpenAI Responses API 格式 (`upstreamFormat: 'responses'`)，支持 `maxOutputTokens` 配置上限
-- **全局 Token 使用统计**：Settings 页新增使用统计面板，含 5 项汇总卡片、每日用量趋势 SVG 柱状图、模型用量分布表，支持 7 天 / 30 天 / 60 天时间范围切换
-- **项目设置重构**：双 Tab 布局（系统提示词 + 项目设置），支持多文件系统提示词管理
-- **MCP 运行环境弹窗**：增加「让 AI 小助理安装」按钮，一键委托 AI 安装 MCP 依赖
-- **全局配置覆盖弹窗**：增加「不再提示」选项，避免重复确认
+- **閽夐拤 Bot 闆嗘垚**锛氭柊澧為拤閽夋満鍣ㄤ汉 IM 娓犻亾锛屾敮鎸佺鑱婂拰缇よ亰锛沇indows 鍗曞疄渚嬮槻鎶ら伩鍏嶅寮€鍐茬獊
+- **OpenAI Bridge Responses API**锛氬吋瀹?OpenAI Responses API 鏍煎紡 (`upstreamFormat: 'responses'`)锛屾敮鎸?`maxOutputTokens` 閰嶇疆涓婇檺
+- **鍏ㄥ眬 Token 浣跨敤缁熻**锛歋ettings 椤垫柊澧炰娇鐢ㄧ粺璁￠潰鏉匡紝鍚?5 椤规眹鎬诲崱鐗囥€佹瘡鏃ョ敤閲忚秼鍔?SVG 鏌辩姸鍥俱€佹ā鍨嬬敤閲忓垎甯冭〃锛屾敮鎸?7 澶?/ 30 澶?/ 60 澶╂椂闂磋寖鍥村垏鎹?
+- **椤圭洰璁剧疆閲嶆瀯**锛氬弻 Tab 甯冨眬锛堢郴缁熸彁绀鸿瘝 + 椤圭洰璁剧疆锛夛紝鏀寔澶氭枃浠剁郴缁熸彁绀鸿瘝绠＄悊
+- **MCP 杩愯鐜寮圭獥**锛氬鍔犮€岃 AI 灏忓姪鐞嗗畨瑁呫€嶆寜閽紝涓€閿鎵?AI 瀹夎 MCP 渚濊禆
+- **鍏ㄥ眬閰嶇疆瑕嗙洊寮圭獥**锛氬鍔犮€屼笉鍐嶆彁绀恒€嶉€夐」锛岄伩鍏嶉噸澶嶇‘璁?
 
 ### Fixed
-- **MCP 超尺寸图片**：工具返回超大 base64 图片导致 Claude API 400 错误，增加尺寸检测与压缩
-- **供应商验证竞态**：并发验证请求中，超时的过期请求覆盖已成功的验证状态，使用 generation counter 丢弃过期结果
-- **OpenAI 协议验证 max_tokens 超限**：验证流程未传递 `maxOutputTokens` 导致 Bridge 无法限制默认 token 上限
-- **cron_task ProviderEnv 构造补全**：定时任务缺失 provider 环境变量字段
-- **日志降噪**：恢复重要 SDK 消息日志，截断超长字符串；AI 反馈答疑文案改为"AI 小助理"
-- **项目设置 Overlay**：删除文件后编辑态未重置 + tooltip 被 overflow 裁切不可见
+- **MCP 瓒呭昂瀵稿浘鐗?*锛氬伐鍏疯繑鍥炶秴澶?base64 鍥剧墖瀵艰嚧 Claude API 400 閿欒锛屽鍔犲昂瀵告娴嬩笌鍘嬬缉
+- **渚涘簲鍟嗛獙璇佺珵鎬?*锛氬苟鍙戦獙璇佽姹備腑锛岃秴鏃剁殑杩囨湡璇锋眰瑕嗙洊宸叉垚鍔熺殑楠岃瘉鐘舵€侊紝浣跨敤 generation counter 涓㈠純杩囨湡缁撴灉
+- **OpenAI 鍗忚楠岃瘉 max_tokens 瓒呴檺**锛氶獙璇佹祦绋嬫湭浼犻€?`maxOutputTokens` 瀵艰嚧 Bridge 鏃犳硶闄愬埗榛樿 token 涓婇檺
+- **cron_task ProviderEnv 鏋勯€犺ˉ鍏?*锛氬畾鏃朵换鍔＄己澶?provider 鐜鍙橀噺瀛楁
+- **鏃ュ織闄嶅櫔**锛氭仮澶嶉噸瑕?SDK 娑堟伅鏃ュ織锛屾埅鏂秴闀垮瓧绗︿覆锛汚I 鍙嶉绛旂枒鏂囨鏀逛负"AI 灏忓姪鐞?
+- **椤圭洰璁剧疆 Overlay**锛氬垹闄ゆ枃浠跺悗缂栬緫鎬佹湭閲嶇疆 + tooltip 琚?overflow 瑁佸垏涓嶅彲瑙?
 
 ### Changed
-- **GitHub Release 上传脚本拆分**：发布上传逻辑拆分为独立脚本，`publish_release.sh` / `publish_windows.ps1` 调用
-- **CLAUDE.md 精简**：从 562 行精简至 126 行最佳实践
-- **OpenAI Bridge 代码清理**：重构 Bridge 模块 + Settings UI 优化
+- **GitHub Release 涓婁紶鑴氭湰鎷嗗垎**锛氬彂甯冧笂浼犻€昏緫鎷嗗垎涓虹嫭绔嬭剼鏈紝`publish_release.sh` / `publish_windows.ps1` 璋冪敤
+- **CLAUDE.md 绮剧畝**锛氫粠 562 琛岀簿绠€鑷?126 琛屾渶浣冲疄璺?
+- **OpenAI Bridge 浠ｇ爜娓呯悊**锛氶噸鏋?Bridge 妯″潡 + Settings UI 浼樺寲
 
 ---
 
 ## [0.1.32] - 2026-03-02
 
 ### Added
-- **AI 智能 Bug 上报**：一键向开发者报告问题，AI 自动收集运行日志、系统环境、对话上下文，生成结构化 Bug Report
-  - 支持图片上传、粘贴和拖拽附加截图
-  - 模型菜单只显示可用 provider，无可用 provider 时引导跳转设置
-  - 重构为 bundled-agents 文件化架构（`bundled-agents/hamuna_helper/`）
-- **内置助手 v2**：全新 `hamuna_helper` Agent，增加产品定位与开发者愿景、工作区写保护约束
-- **Launcher 无 Provider 引导**：未配置任何 API Key 时显示「配置模型供应商」引导入口
+- **AI 鏅鸿兘 Bug 涓婃姤**锛氫竴閿悜寮€鍙戣€呮姤鍛婇棶棰橈紝AI 鑷姩鏀堕泦杩愯鏃ュ織銆佺郴缁熺幆澧冦€佸璇濅笂涓嬫枃锛岀敓鎴愮粨鏋勫寲 Bug Report
+  - 鏀寔鍥剧墖涓婁紶銆佺矘璐村拰鎷栨嫿闄勫姞鎴浘
+  - 妯″瀷鑿滃崟鍙樉绀哄彲鐢?provider锛屾棤鍙敤 provider 鏃跺紩瀵艰烦杞缃?
+  - 閲嶆瀯涓?bundled-agents 鏂囦欢鍖栨灦鏋勶紙`bundled-agents/hamuna_helper/`锛?
+- **鍐呯疆鍔╂墜 v2**锛氬叏鏂?`hamuna_helper` Agent锛屽鍔犱骇鍝佸畾浣嶄笌寮€鍙戣€呮効鏅€佸伐浣滃尯鍐欎繚鎶ょ害鏉?
+- **Launcher 鏃?Provider 寮曞**锛氭湭閰嶇疆浠讳綍 API Key 鏃舵樉绀恒€岄厤缃ā鍨嬩緵搴斿晢銆嶅紩瀵煎叆鍙?
 
 ### Fixed
-- **RecentTasks 显示数量修复**：列表条目计数逻辑修正
-- **关闭 AI 对话中的 Tab**：不再弹确认框，改为 toast 提示
-- **`.gitignore` 修正**：只忽略根目录 `.claude/`，允许子目录 `.claude/` 被 Git 跟踪
+- **RecentTasks 鏄剧ず鏁伴噺淇**锛氬垪琛ㄦ潯鐩鏁伴€昏緫淇
+- **鍏抽棴 AI 瀵硅瘽涓殑 Tab**锛氫笉鍐嶅脊纭妗嗭紝鏀逛负 toast 鎻愮ず
+- **`.gitignore` 淇**锛氬彧蹇界暐鏍圭洰褰?`.claude/`锛屽厑璁稿瓙鐩綍 `.claude/` 琚?Git 璺熻釜
 
 ### Changed
-- **统一系统提示词架构**：重构为三层 Prompt 架构（L1 基础身份 + L2 交互方式 + L3 场景指令），所有场景统一使用 append 模式
-  - AI 始终知道自己运行在 HamunaAgent 产品中（桌面聊天、IM Bot、Cron 任务）
-  - 旧 SystemPromptConfig（preset/replace/append 三模式）替换为 InteractionScenario 类型
-  - IM Bot 启动时传递 botName，AI 感知自身 Bot 名称
-  - 模板内容内联为字符串常量（bun build 禁止 `__dirname`）
-- **IM Bot 文件存储重构**：运行时状态文件从 `~/.hamuna/im_{botId}_*.json` 扁平散落迁移到 `~/.hamuna/im_bots/{botId}/` 子目录组织
-  - 三代自动迁移（v1 单 bot → v2 flat 多 bot → v3 子目录）
-  - 孤儿文件启动时自动清理，删除 bot 时清理持久化数据
-- **统一日志优化**：本地化时间戳、减少噪音
-- **Settings 页面 UI 重构**：「报告问题」从「关于」移至「通用」运行日志下方
+- **缁熶竴绯荤粺鎻愮ず璇嶆灦鏋?*锛氶噸鏋勪负涓夊眰 Prompt 鏋舵瀯锛圠1 鍩虹韬唤 + L2 浜や簰鏂瑰紡 + L3 鍦烘櫙鎸囦护锛夛紝鎵€鏈夊満鏅粺涓€浣跨敤 append 妯″紡
+  - AI 濮嬬粓鐭ラ亾鑷繁杩愯鍦?HamunaAgent 浜у搧涓紙妗岄潰鑱婂ぉ銆両M Bot銆丆ron 浠诲姟锛?
+  - 鏃?SystemPromptConfig锛坧reset/replace/append 涓夋ā寮忥級鏇挎崲涓?InteractionScenario 绫诲瀷
+  - IM Bot 鍚姩鏃朵紶閫?botName锛孉I 鎰熺煡鑷韩 Bot 鍚嶇О
+  - 妯℃澘鍐呭鍐呰仈涓哄瓧绗︿覆甯搁噺锛坆un build 绂佹 `__dirname`锛?
+- **IM Bot 鏂囦欢瀛樺偍閲嶆瀯**锛氳繍琛屾椂鐘舵€佹枃浠朵粠 `~/.hamuna/im_{botId}_*.json` 鎵佸钩鏁ｈ惤杩佺Щ鍒?`~/.hamuna/im_bots/{botId}/` 瀛愮洰褰曠粍缁?
+  - 涓変唬鑷姩杩佺Щ锛坴1 鍗?bot 鈫?v2 flat 澶?bot 鈫?v3 瀛愮洰褰曪級
+  - 瀛ゅ効鏂囦欢鍚姩鏃惰嚜鍔ㄦ竻鐞嗭紝鍒犻櫎 bot 鏃舵竻鐞嗘寔涔呭寲鏁版嵁
+- **缁熶竴鏃ュ織浼樺寲**锛氭湰鍦板寲鏃堕棿鎴炽€佸噺灏戝櫔闊?
+- **Settings 椤甸潰 UI 閲嶆瀯**锛氥€屾姤鍛婇棶棰樸€嶄粠銆屽叧浜庛€嶇Щ鑷炽€岄€氱敤銆嶈繍琛屾棩蹇椾笅鏂?
 
 ---
 
 ## [0.1.31] - 2026-03-01
 
 ### Fixed
-- **agent-browser 反检测配置路径统一**：使用 `~/.agent-browser/config.json`（agent-browser 默认路径），移除 `AGENT_BROWSER_CONFIG` 环境变量，避免路径不一致
-- **agent-browser Profile 路径统一**：与 Playwright MCP 共享 `~/.playwright-mcp-profile/`，避免重复登录
-- **agent-browser comma-in-args bug**：`--window-size=1440,900` 被 Rust CLI 按逗号拆分导致参数错误，改用 `--start-maximized`
-- **Windows agent-browser 不可用**：上游 daemon 在 Windows 使用 Unix socket 导致连接失败（vercel-labs/agent-browser#398），暂时在 Windows 上跳过 agent-browser 技能加载
-- **agent-browser 反检测参数优化**：禁用自动化控制标志、匹配系统 locale、最大化窗口绕过 viewport 指纹
+- **agent-browser 鍙嶆娴嬮厤缃矾寰勭粺涓€**锛氫娇鐢?`~/.agent-browser/config.json`锛坅gent-browser 榛樿璺緞锛夛紝绉婚櫎 `AGENT_BROWSER_CONFIG` 鐜鍙橀噺锛岄伩鍏嶈矾寰勪笉涓€鑷?
+- **agent-browser Profile 璺緞缁熶竴**锛氫笌 Playwright MCP 鍏变韩 `~/.playwright-mcp-profile/`锛岄伩鍏嶉噸澶嶇櫥褰?
+- **agent-browser comma-in-args bug**锛歚--window-size=1440,900` 琚?Rust CLI 鎸夐€楀彿鎷嗗垎瀵艰嚧鍙傛暟閿欒锛屾敼鐢?`--start-maximized`
+- **Windows agent-browser 涓嶅彲鐢?*锛氫笂娓?daemon 鍦?Windows 浣跨敤 Unix socket 瀵艰嚧杩炴帴澶辫触锛坴ercel-labs/agent-browser#398锛夛紝鏆傛椂鍦?Windows 涓婅烦杩?agent-browser 鎶€鑳藉姞杞?
+- **agent-browser 鍙嶆娴嬪弬鏁颁紭鍖?*锛氱鐢ㄨ嚜鍔ㄥ寲鎺у埗鏍囧織銆佸尮閰嶇郴缁?locale銆佹渶澶у寲绐楀彛缁曡繃 viewport 鎸囩汗
 
 ### Changed
-- **平台技能屏蔽机制**：新增 `PLATFORM_BLOCKED_SKILLS` 集中配置，支持按平台跳过不可用的内置技能（seed / wrapper / symlink / API 列表统一过滤）
-- **发布脚本集成 GitHub Release 上传**：`publish_release.sh` 和 `publish_windows.ps1` 在 R2 上传后自动将构建产物上传到 GitHub Release
+- **骞冲彴鎶€鑳藉睆钄芥満鍒?*锛氭柊澧?`PLATFORM_BLOCKED_SKILLS` 闆嗕腑閰嶇疆锛屾敮鎸佹寜骞冲彴璺宠繃涓嶅彲鐢ㄧ殑鍐呯疆鎶€鑳斤紙seed / wrapper / symlink / API 鍒楄〃缁熶竴杩囨护锛?
+- **鍙戝竷鑴氭湰闆嗘垚 GitHub Release 涓婁紶**锛歚publish_release.sh` 鍜?`publish_windows.ps1` 鍦?R2 涓婁紶鍚庤嚜鍔ㄥ皢鏋勫缓浜х墿涓婁紶鍒?GitHub Release
 
 ---
 
 ## [0.1.30] - 2026-02-28
 
 ### Added
-- **agent-browser 内置浏览器自动化**：集成 agent-browser CLI 作为内置技能，支持网页截图、表单填写、数据提取
-  - Chromium 自动安装（文件锁防并发）
-  - 开发模式自动安装 + 首次使用提示
-  - 项目技能右键「同步至全局技能」
-- **IM Bot 多媒体发送**：SDK 自定义工具 send_media，支持发送图片/文档到 IM
-- **代理配置热更新**：Settings 修改代理后实时传播到所有运行中 Sidecar
-- **MCP 添加面板 JSON 批量导入**：支持一次性导入多个 MCP 服务器 + DDG-Search 预设
-- **工作区右键「用默认应用打开」**：文件可用系统默认程序打开
-- **检测并清除 settings.json 环境变量覆盖**：防止 CLAUDE_CONFIG_DIR 等覆盖影响认证
-- **agent-browser 反检测默认配置 + Profile 持久化**：自动生成 headed 模式、真实 UA、持久化 Profile 的反检测配置，解决知乎/微博等网站被拦截问题
+- **agent-browser 鍐呯疆娴忚鍣ㄨ嚜鍔ㄥ寲**锛氶泦鎴?agent-browser CLI 浣滀负鍐呯疆鎶€鑳斤紝鏀寔缃戦〉鎴浘銆佽〃鍗曞～鍐欍€佹暟鎹彁鍙?
+  - Chromium 鑷姩瀹夎锛堟枃浠堕攣闃插苟鍙戯級
+  - 寮€鍙戞ā寮忚嚜鍔ㄥ畨瑁?+ 棣栨浣跨敤鎻愮ず
+  - 椤圭洰鎶€鑳藉彸閿€屽悓姝ヨ嚦鍏ㄥ眬鎶€鑳姐€?
+- **IM Bot 澶氬獟浣撳彂閫?*锛歋DK 鑷畾涔夊伐鍏?send_media锛屾敮鎸佸彂閫佸浘鐗?鏂囨。鍒?IM
+- **浠ｇ悊閰嶇疆鐑洿鏂?*锛歋ettings 淇敼浠ｇ悊鍚庡疄鏃朵紶鎾埌鎵€鏈夎繍琛屼腑 Sidecar
+- **MCP 娣诲姞闈㈡澘 JSON 鎵归噺瀵煎叆**锛氭敮鎸佷竴娆℃€у鍏ュ涓?MCP 鏈嶅姟鍣?+ DDG-Search 棰勮
+- **宸ヤ綔鍖哄彸閿€岀敤榛樿搴旂敤鎵撳紑銆?*锛氭枃浠跺彲鐢ㄧ郴缁熼粯璁ょ▼搴忔墦寮€
+- **妫€娴嬪苟娓呴櫎 settings.json 鐜鍙橀噺瑕嗙洊**锛氶槻姝?CLAUDE_CONFIG_DIR 绛夎鐩栧奖鍝嶈璇?
+- **agent-browser 鍙嶆娴嬮粯璁ら厤缃?+ Profile 鎸佷箙鍖?*锛氳嚜鍔ㄧ敓鎴?headed 妯″紡銆佺湡瀹?UA銆佹寔涔呭寲 Profile 鐨勫弽妫€娴嬮厤缃紝瑙ｅ喅鐭ヤ箮/寰崥绛夌綉绔欒鎷︽埅闂
 
 ### Fixed
-- **Windows Sidecar 启动失败**：UNC 路径前缀导致 Bun 无法识别资源路径
-- **Windows agent-browser 浏览器自动化不可用**：daemon 启动失败（无 Node.js）+ 命令找不到（Git Bash 不识别 .cmd）
-- **Windows 技能同步失败**：symlink junction 删除需要 recursive 选项
-- **Windows 启动诊断增强**：崩溃日志跨平台 + 启动 beacon + 健康检查可见化
-- **agent-browser 构建产物缺失**：运行时报 "No binary found"
-- **agent-browser 构建脚本预装卡死**：改用预生成 lockfile 秒级安装
-- **macOS 公证失败**：agent-browser 原生二进制未签名
-- **Global Sidecar pre-warm 异常**：无效 pre-warm 启动 + Tab pre-warm 超时误杀 + 僵尸进程
-- **Global Sidecar 意外加载 MCP**：Settings/Launcher 不应加载用户 MCP 配置
-- **IM Bot 重启后 "No conversation found" 死循环**
-- **新会话首条消息 loading 状态闪断**
-- **Windows 文件重命名导致文件被移到 AppData 目录**
-- **供应商选择菜单溢出屏幕**
-- **工作区大目录无法展开**（条目上限 50000）
-- **macOS 全屏退出后 Tab 遮挡红绿灯**
-- **Provider 验证 auth 错误未正确检测**：SDK 返回 403/401 时误报验证成功
+- **Windows Sidecar 鍚姩澶辫触**锛歎NC 璺緞鍓嶇紑瀵艰嚧 Bun 鏃犳硶璇嗗埆璧勬簮璺緞
+- **Windows agent-browser 娴忚鍣ㄨ嚜鍔ㄥ寲涓嶅彲鐢?*锛歞aemon 鍚姩澶辫触锛堟棤 Node.js锛? 鍛戒护鎵句笉鍒帮紙Git Bash 涓嶈瘑鍒?.cmd锛?
+- **Windows 鎶€鑳藉悓姝ュけ璐?*锛歴ymlink junction 鍒犻櫎闇€瑕?recursive 閫夐」
+- **Windows 鍚姩璇婃柇澧炲己**锛氬穿婧冩棩蹇楄法骞冲彴 + 鍚姩 beacon + 鍋ュ悍妫€鏌ュ彲瑙佸寲
+- **agent-browser 鏋勫缓浜х墿缂哄け**锛氳繍琛屾椂鎶?"No binary found"
+- **agent-browser 鏋勫缓鑴氭湰棰勮鍗℃**锛氭敼鐢ㄩ鐢熸垚 lockfile 绉掔骇瀹夎
+- **macOS 鍏瘉澶辫触**锛歛gent-browser 鍘熺敓浜岃繘鍒舵湭绛惧悕
+- **Global Sidecar pre-warm 寮傚父**锛氭棤鏁?pre-warm 鍚姩 + Tab pre-warm 瓒呮椂璇潃 + 鍍靛案杩涚▼
+- **Global Sidecar 鎰忓鍔犺浇 MCP**锛歋ettings/Launcher 涓嶅簲鍔犺浇鐢ㄦ埛 MCP 閰嶇疆
+- **IM Bot 閲嶅惎鍚?"No conversation found" 姝诲惊鐜?*
+- **鏂颁細璇濋鏉℃秷鎭?loading 鐘舵€侀棯鏂?*
+- **Windows 鏂囦欢閲嶅懡鍚嶅鑷存枃浠惰绉诲埌 AppData 鐩綍**
+- **渚涘簲鍟嗛€夋嫨鑿滃崟婧㈠嚭灞忓箷**
+- **宸ヤ綔鍖哄ぇ鐩綍鏃犳硶灞曞紑**锛堟潯鐩笂闄?50000锛?
+- **macOS 鍏ㄥ睆閫€鍑哄悗 Tab 閬尅绾㈢豢鐏?*
+- **Provider 楠岃瘉 auth 閿欒鏈纭娴?*锛歋DK 杩斿洖 403/401 鏃惰鎶ラ獙璇佹垚鍔?
 
 ### Changed
-- **路径 normalize Pit of Success 重构**：源头统一处理，消除消费端重复 strip
-- **Bun 输出接入统一日志**：Sidecar stdout/stderr 可在日志面板查看
-- **消除 Rust 编译 warning**：平台分离 graceful shutdown 逻辑
-- **Code Review 修复**：构建版本校验 + 签名失败硬中断 + 死代码清理
+- **璺緞 normalize Pit of Success 閲嶆瀯**锛氭簮澶寸粺涓€澶勭悊锛屾秷闄ゆ秷璐圭閲嶅 strip
+- **Bun 杈撳嚭鎺ュ叆缁熶竴鏃ュ織**锛歋idecar stdout/stderr 鍙湪鏃ュ織闈㈡澘鏌ョ湅
+- **娑堥櫎 Rust 缂栬瘧 warning**锛氬钩鍙板垎绂?graceful shutdown 閫昏緫
+- **Code Review 淇**锛氭瀯寤虹増鏈牎楠?+ 绛惧悕澶辫触纭腑鏂?+ 姝讳唬鐮佹竻鐞?
 
 ---
 
 ## [0.1.29] - 2026-02-27
 
 ### Added
-- **火山方舟双供应商拆分**：原「火山引擎」拆分为两个独立供应商
-  - 「火山方舟 Coding Plan」：baseUrl `/api/coding`，预设 Doubao Seed 2.0 Code、GLM 4.7、DeepSeek V3.2、Kimi K2.5
-  - 「火山方舟 API调用」：baseUrl `/api/compatible`，预设 Doubao Seed 2.0 Pro/Code Preview/Lite
-- **用户级 Skill 原生可用**：Skill enable/disable 通过 SDK staging directory 过滤，支持项目级 symlink 同步
-- **远程 MCP 连接验证**：新增 SSE/HTTP 类型 MCP 服务器的连接可达性检测
-- **新增阿里云百炼供应商**：Coding Plan 预设，支持 Qwen 3.5 Plus、Kimi K2.5、GLM 5、MiniMax M2.5
+- **鐏北鏂硅垷鍙屼緵搴斿晢鎷嗗垎**锛氬師銆岀伀灞卞紩鎿庛€嶆媶鍒嗕负涓や釜鐙珛渚涘簲鍟?
+  - 銆岀伀灞辨柟鑸?Coding Plan銆嶏細baseUrl `/api/coding`锛岄璁?Doubao Seed 2.0 Code銆丟LM 4.7銆丏eepSeek V3.2銆並imi K2.5
+  - 銆岀伀灞辨柟鑸?API璋冪敤銆嶏細baseUrl `/api/compatible`锛岄璁?Doubao Seed 2.0 Pro/Code Preview/Lite
+- **鐢ㄦ埛绾?Skill 鍘熺敓鍙敤**锛歋kill enable/disable 閫氳繃 SDK staging directory 杩囨护锛屾敮鎸侀」鐩骇 symlink 鍚屾
+- **杩滅▼ MCP 杩炴帴楠岃瘉**锛氭柊澧?SSE/HTTP 绫诲瀷 MCP 鏈嶅姟鍣ㄧ殑杩炴帴鍙揪鎬ф娴?
+- **鏂板闃块噷浜戠櫨鐐间緵搴斿晢**锛欳oding Plan 棰勮锛屾敮鎸?Qwen 3.5 Plus銆並imi K2.5銆丟LM 5銆丮iniMax M2.5
 
 ### Fixed
-- **系统代理泄漏导致网络超时**：清理继承的代理环境变量 + 禁用 SDK 非必要流量
-- **IM Bot "No conversation found" 死循环**：过期 session 自动重置
-- **飞书 WebSocket 死连接检测**：增加 read timeout 及时发现断线
-- **Skill symlink 完整性**：CRUD 同步 + 悬空清理 + 死代码清除
-- **全局 Command 同步到项目目录**：SDK 静默错误在持久 Session 中可靠展示
-- **供应商切换按钮可点击区域过小**：增大 hover/click 区域提升交互体验
+- **绯荤粺浠ｇ悊娉勬紡瀵艰嚧缃戠粶瓒呮椂**锛氭竻鐞嗙户鎵跨殑浠ｇ悊鐜鍙橀噺 + 绂佺敤 SDK 闈炲繀瑕佹祦閲?
+- **IM Bot "No conversation found" 姝诲惊鐜?*锛氳繃鏈?session 鑷姩閲嶇疆
+- **椋炰功 WebSocket 姝昏繛鎺ユ娴?*锛氬鍔?read timeout 鍙婃椂鍙戠幇鏂嚎
+- **Skill symlink 瀹屾暣鎬?*锛欳RUD 鍚屾 + 鎮┖娓呯悊 + 姝讳唬鐮佹竻闄?
+- **鍏ㄥ眬 Command 鍚屾鍒伴」鐩洰褰?*锛歋DK 闈欓粯閿欒鍦ㄦ寔涔?Session 涓彲闈犲睍绀?
+- **渚涘簲鍟嗗垏鎹㈡寜閽彲鐐瑰嚮鍖哄煙杩囧皬**锛氬澶?hover/click 鍖哄煙鎻愬崌浜や簰浣撻獙
 
 ### Changed
-- **Skill 同步改用项目级 symlink**：避免 CLAUDE_CONFIG_DIR 破坏订阅认证
-- **Code Review 修复**：is_error 错误样式 + 函数重命名 + Windows 注释
+- **Skill 鍚屾鏀圭敤椤圭洰绾?symlink**锛氶伩鍏?CLAUDE_CONFIG_DIR 鐮村潖璁㈤槄璁よ瘉
+- **Code Review 淇**锛歩s_error 閿欒鏍峰紡 + 鍑芥暟閲嶅懡鍚?+ Windows 娉ㄩ噴
 
 ---
 
 ## [0.1.28] - 2026-02-26
 
 ### Added
-- **IM Bot 群聊完整支持**：实现群聊全链路功能
-  - 群授权审批流程：Bot 入群 → 桌面端 pending/approved 管理 → 群内提示消息
-  - 智能触发模式：mention 模式（@Bot / 回复 Bot / `/ask`）+ always 模式（NO_REPLY 静默）
-  - 群聊上下文增强：发送者身份 `[from: name]`、Pending History 积累、群聊系统提示
-  - 安全隔离：群工具黑名单（SDK disallowedTools）、Heartbeat 屏蔽群聊
-  - 前端 UI：群权限管理列表（折叠/徽标）+ 激活模式切换
-  - 飞书：用户名 LRU 缓存、群事件检测、@mention 检测
-  - Telegram：my_chat_member 订阅、reply-to-bot 检测、大小写不敏感 @mention
-- **ultra-research bundled skill**：新增 ultra-research 内置技能
+- **IM Bot 缇よ亰瀹屾暣鏀寔**锛氬疄鐜扮兢鑱婂叏閾捐矾鍔熻兘
+  - 缇ゆ巿鏉冨鎵规祦绋嬶細Bot 鍏ョ兢 鈫?妗岄潰绔?pending/approved 绠＄悊 鈫?缇ゅ唴鎻愮ず娑堟伅
+  - 鏅鸿兘瑙﹀彂妯″紡锛歮ention 妯″紡锛園Bot / 鍥炲 Bot / `/ask`锛? always 妯″紡锛圢O_REPLY 闈欓粯锛?
+  - 缇よ亰涓婁笅鏂囧寮猴細鍙戦€佽€呰韩浠?`[from: name]`銆丳ending History 绉疮銆佺兢鑱婄郴缁熸彁绀?
+  - 瀹夊叏闅旂锛氱兢宸ュ叿榛戝悕鍗曪紙SDK disallowedTools锛夈€丠eartbeat 灞忚斀缇よ亰
+  - 鍓嶇 UI锛氱兢鏉冮檺绠＄悊鍒楄〃锛堟姌鍙?寰芥爣锛? 婵€娲绘ā寮忓垏鎹?
+  - 椋炰功锛氱敤鎴峰悕 LRU 缂撳瓨銆佺兢浜嬩欢妫€娴嬨€丂mention 妫€娴?
+  - Telegram锛歮y_chat_member 璁㈤槄銆乺eply-to-bot 妫€娴嬨€佸ぇ灏忓啓涓嶆晱鎰?@mention
+- **ultra-research bundled skill**锛氭柊澧?ultra-research 鍐呯疆鎶€鑳?
 
 ### Fixed
-- **定时任务不执行**：SDK 升级后要求 `--resume` 参数为标准 UUID 格式，旧 `cron-im-{uuid}` 前缀格式被拒绝导致进程退出。Session ID 改用纯 UUID，并增加三级 UUID 校验策略兼容历史数据
-- **用户消息换行符双倍渲染**：`whitespace-pre-wrap` CSS 与 `remarkBreaks` 插件冲突，ReactMarkdown 在块元素间插入的 `\n` 文本节点被二次渲染为可见换行
-- **图片自动缩放移至后端统一处理**：前端 Canvas API 缩放无法覆盖 IM Bot 图片路径（Telegram/飞书图片走 Rust→Bun 管道），且 GIF 缩放后 mimeType 不一致。迁移到后端 `enqueueUserMessage()` 使用 jimp 统一处理
+- **瀹氭椂浠诲姟涓嶆墽琛?*锛歋DK 鍗囩骇鍚庤姹?`--resume` 鍙傛暟涓烘爣鍑?UUID 鏍煎紡锛屾棫 `cron-im-{uuid}` 鍓嶇紑鏍煎紡琚嫆缁濆鑷磋繘绋嬮€€鍑恒€係ession ID 鏀圭敤绾?UUID锛屽苟澧炲姞涓夌骇 UUID 鏍￠獙绛栫暐鍏煎鍘嗗彶鏁版嵁
+- **鐢ㄦ埛娑堟伅鎹㈣绗﹀弻鍊嶆覆鏌?*锛歚whitespace-pre-wrap` CSS 涓?`remarkBreaks` 鎻掍欢鍐茬獊锛孯eactMarkdown 鍦ㄥ潡鍏冪礌闂存彃鍏ョ殑 `\n` 鏂囨湰鑺傜偣琚簩娆℃覆鏌撲负鍙鎹㈣
+- **鍥剧墖鑷姩缂╂斁绉昏嚦鍚庣缁熶竴澶勭悊**锛氬墠绔?Canvas API 缂╂斁鏃犳硶瑕嗙洊 IM Bot 鍥剧墖璺緞锛圱elegram/椋炰功鍥剧墖璧?Rust鈫払un 绠￠亾锛夛紝涓?GIF 缂╂斁鍚?mimeType 涓嶄竴鑷淬€傝縼绉诲埌鍚庣 `enqueueUserMessage()` 浣跨敤 jimp 缁熶竴澶勭悊
 
 ---
 
 ## [0.1.27] - 2026-02-25
 
 ### Added
-- **Cron 工具 runs/status/wake 能力增强**：IM Bot 的 `cron` 工具新增三个 action
-  - `runs`：查询任务历次执行记录（JSONL 持久化，上限 500 条）
-  - `status`：查询当前 Bot 的任务统计（总数/运行中/最近执行/下次执行）
-  - `wake`：手动触发即时心跳检查，支持注入文本到 Bot Sidecar
-- **Cron 任务 `updatedAt` 字段**：记录最后活动时间（创建/启动/停止/执行/编辑），任务列表按最近操作排序
+- **Cron 宸ュ叿 runs/status/wake 鑳藉姏澧炲己**锛欼M Bot 鐨?`cron` 宸ュ叿鏂板涓変釜 action
+  - `runs`锛氭煡璇换鍔″巻娆℃墽琛岃褰曪紙JSONL 鎸佷箙鍖栵紝涓婇檺 500 鏉★級
+  - `status`锛氭煡璇㈠綋鍓?Bot 鐨勪换鍔＄粺璁★紙鎬绘暟/杩愯涓?鏈€杩戞墽琛?涓嬫鎵ц锛?
+  - `wake`锛氭墜鍔ㄨЕ鍙戝嵆鏃跺績璺虫鏌ワ紝鏀寔娉ㄥ叆鏂囨湰鍒?Bot Sidecar
+- **Cron 浠诲姟 `updatedAt` 瀛楁**锛氳褰曟渶鍚庢椿鍔ㄦ椂闂达紙鍒涘缓/鍚姩/鍋滄/鎵ц/缂栬緫锛夛紝浠诲姟鍒楄〃鎸夋渶杩戞搷浣滄帓搴?
 
 ### Fixed
-- **Heartbeat 502 Bad Gateway**：HeartbeatRunner 的 reqwest 客户端缺少 `.no_proxy()`，系统代理拦截 localhost 请求
-- **Cron 结果未投递到 IM**：`deliver_cron_result_to_bot()` 使用 `reqwest::Client::new()` 同样缺少 `.no_proxy()`，system-event POST 失败导致心跳触发普通提示而非 Cron 结果注入
-- **IM Bot Cron 定时任务结果投递链路三层修复**：一次性定时任务执行后立即停止导致跳过投递、heartbeat JSON 解析 `sidecar_port` 类型不匹配、Cron session_id 与 IM peer session_id 不一致
-- **Tab 间 Provider/Model 交叉污染**：`selectedProviderId` 从全局变量改为 Tab 局部状态，避免切换 Tab 时污染其他 Tab 的供应商选择
-- **用户消息气泡换行符不显示**：`<HEARTBEAT>` 标签触发 Markdown HTML block 模式，绕过 remarkBreaks，通过 `whitespace-pre-wrap` 修复
-- **任务中心列表不刷新**：重启任务后列表不更新，新增 `cron:task-started` 事件从 Rust 同步发射，前端即时监听刷新
-- **Session 消息计数归零**：Sidecar 重启后首条消息触发 `createSessionMetadata()` + `saveSessionMetadata()` 全量替换 sessions.json 条目，导致累积 stats 被清空。改为先检查已有 metadata 再决定创建或更新
-- **统一日志日期不一致**：Bun 侧 `toISOString()` 产生 UTC 日期，与 Rust 本地日期不同，UTC+8 时区下日志分散到不同文件
+- **Heartbeat 502 Bad Gateway**锛欻eartbeatRunner 鐨?reqwest 瀹㈡埛绔己灏?`.no_proxy()`锛岀郴缁熶唬鐞嗘嫤鎴?localhost 璇锋眰
+- **Cron 缁撴灉鏈姇閫掑埌 IM**锛歚deliver_cron_result_to_bot()` 浣跨敤 `reqwest::Client::new()` 鍚屾牱缂哄皯 `.no_proxy()`锛宻ystem-event POST 澶辫触瀵艰嚧蹇冭烦瑙﹀彂鏅€氭彁绀鸿€岄潪 Cron 缁撴灉娉ㄥ叆
+- **IM Bot Cron 瀹氭椂浠诲姟缁撴灉鎶曢€掗摼璺笁灞備慨澶?*锛氫竴娆℃€у畾鏃朵换鍔℃墽琛屽悗绔嬪嵆鍋滄瀵艰嚧璺宠繃鎶曢€掋€乭eartbeat JSON 瑙ｆ瀽 `sidecar_port` 绫诲瀷涓嶅尮閰嶃€丆ron session_id 涓?IM peer session_id 涓嶄竴鑷?
+- **Tab 闂?Provider/Model 浜ゅ弶姹℃煋**锛歚selectedProviderId` 浠庡叏灞€鍙橀噺鏀逛负 Tab 灞€閮ㄧ姸鎬侊紝閬垮厤鍒囨崲 Tab 鏃舵薄鏌撳叾浠?Tab 鐨勪緵搴斿晢閫夋嫨
+- **鐢ㄦ埛娑堟伅姘旀场鎹㈣绗︿笉鏄剧ず**锛歚<HEARTBEAT>` 鏍囩瑙﹀彂 Markdown HTML block 妯″紡锛岀粫杩?remarkBreaks锛岄€氳繃 `whitespace-pre-wrap` 淇
+- **浠诲姟涓績鍒楄〃涓嶅埛鏂?*锛氶噸鍚换鍔″悗鍒楄〃涓嶆洿鏂帮紝鏂板 `cron:task-started` 浜嬩欢浠?Rust 鍚屾鍙戝皠锛屽墠绔嵆鏃剁洃鍚埛鏂?
+- **Session 娑堟伅璁℃暟褰掗浂**锛歋idecar 閲嶅惎鍚庨鏉℃秷鎭Е鍙?`createSessionMetadata()` + `saveSessionMetadata()` 鍏ㄩ噺鏇挎崲 sessions.json 鏉＄洰锛屽鑷寸疮绉?stats 琚竻绌恒€傛敼涓哄厛妫€鏌ュ凡鏈?metadata 鍐嶅喅瀹氬垱寤烘垨鏇存柊
+- **缁熶竴鏃ュ織鏃ユ湡涓嶄竴鑷?*锛欱un 渚?`toISOString()` 浜х敓 UTC 鏃ユ湡锛屼笌 Rust 鏈湴鏃ユ湡涓嶅悓锛孶TC+8 鏃跺尯涓嬫棩蹇楀垎鏁ｅ埌涓嶅悓鏂囦欢
 
 ### Changed
-- **`local_http` 模块集中化**：所有 localhost reqwest 客户端统一通过 `crate::local_http::builder()` 创建，内置 `.no_proxy()`，消除散落在 7 个文件中 11 处 `.no_proxy()` 调用的遗漏风险
-- **定时任务列表排序优化**：running 组按 nextExecutionAt 升序，stopped 组按 updatedAt 降序（最近有操作的在前）
+- **`local_http` 妯″潡闆嗕腑鍖?*锛氭墍鏈?localhost reqwest 瀹㈡埛绔粺涓€閫氳繃 `crate::local_http::builder()` 鍒涘缓锛屽唴缃?`.no_proxy()`锛屾秷闄ゆ暎钀藉湪 7 涓枃浠朵腑 11 澶?`.no_proxy()` 璋冪敤鐨勯仐婕忛闄?
+- **瀹氭椂浠诲姟鍒楄〃鎺掑簭浼樺寲**锛歳unning 缁勬寜 nextExecutionAt 鍗囧簭锛宻topped 缁勬寜 updatedAt 闄嶅簭锛堟渶杩戞湁鎿嶄綔鐨勫湪鍓嶏級
 
 ---
 
 ## [0.1.26] - 2026-02-24
 
 ### Changed
-- **前端配置服务域拆分**：将 1028 行 configService.ts 上帝模块拆分为 6 个域模块（configStore / appConfigService / providerService / mcpService / projectService / projectSettingsService），原文件保留为 barrel re-export，所有现有 import 无需修改
-- **ConfigProvider 共享状态架构**：新增 ConfigProvider 双 Context（ConfigDataContext + ConfigActionsContext），消除 useConfig 独立 hook 多调用者状态不同步问题。useConfig 改为兼容 wrapper，现有消费者零改动
-- **消除 CONFIG_CHANGED DOM 事件桥接**：配置变更通过 ConfigProvider 的 setState 直接同步，不再依赖 window.dispatchEvent 临时方案
-- **im:bot-config-changed 监听上移**：从 ImBotDetail 移入 ConfigProvider，所有消费者通过 Context 自动获得最新配置
-- **atomicModifyConfig 统一写入模式**：providerService 和 mcpService 的 9 处写入函数从手动 lock+read+write 改为 atomicModifyConfig，_writeAppConfigLocked 收为模块私有
-- **IM Bot 配置架构统一**：建立 Rust 层作为 IM Bot 配置唯一管理者，前端和 IM 命令共享同一条配置变更通道
+- **鍓嶇閰嶇疆鏈嶅姟鍩熸媶鍒?*锛氬皢 1028 琛?configService.ts 涓婂笣妯″潡鎷嗗垎涓?6 涓煙妯″潡锛坈onfigStore / appConfigService / providerService / mcpService / projectService / projectSettingsService锛夛紝鍘熸枃浠朵繚鐣欎负 barrel re-export锛屾墍鏈夌幇鏈?import 鏃犻渶淇敼
+- **ConfigProvider 鍏变韩鐘舵€佹灦鏋?*锛氭柊澧?ConfigProvider 鍙?Context锛圕onfigDataContext + ConfigActionsContext锛夛紝娑堥櫎 useConfig 鐙珛 hook 澶氳皟鐢ㄨ€呯姸鎬佷笉鍚屾闂銆倁seConfig 鏀逛负鍏煎 wrapper锛岀幇鏈夋秷璐硅€呴浂鏀瑰姩
+- **娑堥櫎 CONFIG_CHANGED DOM 浜嬩欢妗ユ帴**锛氶厤缃彉鏇撮€氳繃 ConfigProvider 鐨?setState 鐩存帴鍚屾锛屼笉鍐嶄緷璧?window.dispatchEvent 涓存椂鏂规
+- **im:bot-config-changed 鐩戝惉涓婄Щ**锛氫粠 ImBotDetail 绉诲叆 ConfigProvider锛屾墍鏈夋秷璐硅€呴€氳繃 Context 鑷姩鑾峰緱鏈€鏂伴厤缃?
+- **atomicModifyConfig 缁熶竴鍐欏叆妯″紡**锛歱roviderService 鍜?mcpService 鐨?9 澶勫啓鍏ュ嚱鏁颁粠鎵嬪姩 lock+read+write 鏀逛负 atomicModifyConfig锛宊writeAppConfigLocked 鏀朵负妯″潡绉佹湁
+- **IM Bot 閰嶇疆鏋舵瀯缁熶竴**锛氬缓绔?Rust 灞備綔涓?IM Bot 閰嶇疆鍞竴绠＄悊鑰咃紝鍓嶇鍜?IM 鍛戒护鍏变韩鍚屼竴鏉￠厤缃彉鏇撮€氶亾
 
 ### Fixed
-- **safeWriteJson 并发读写竞态**：备份步骤从 rename（删除原文件）改为 copyFile（保留原文件），消除并发读取时 "No such file or directory" 错误
-- **safeLoadJson 读操作中写文件竞态**：改为纯只读恢复，不在读操作中触发写入
-- **共享 isLoading 全局闪烁**：移除 Launcher/Settings 的冗余 reloadConfig 调用，避免 ConfigProvider 共享 isLoading 导致 ImSettings 等组件闪烁
-- **Windows 手动检查更新误报「已是最新版本」**
+- **safeWriteJson 骞跺彂璇诲啓绔炴€?*锛氬浠芥楠や粠 rename锛堝垹闄ゅ師鏂囦欢锛夋敼涓?copyFile锛堜繚鐣欏師鏂囦欢锛夛紝娑堥櫎骞跺彂璇诲彇鏃?"No such file or directory" 閿欒
+- **safeLoadJson 璇绘搷浣滀腑鍐欐枃浠剁珵鎬?*锛氭敼涓虹函鍙鎭㈠锛屼笉鍦ㄨ鎿嶄綔涓Е鍙戝啓鍏?
+- **鍏变韩 isLoading 鍏ㄥ眬闂儊**锛氱Щ闄?Launcher/Settings 鐨勫啑浣?reloadConfig 璋冪敤锛岄伩鍏?ConfigProvider 鍏变韩 isLoading 瀵艰嚧 ImSettings 绛夌粍浠堕棯鐑?
+- **Windows 鎵嬪姩妫€鏌ユ洿鏂拌鎶ャ€屽凡鏄渶鏂扮増鏈€?*
 
 ---
 
 ## [0.1.25] - 2026-02-23
 
 ### Added
-- **任务中心（Task Center）**：新增全局任务面板，集中查看所有会话（对话、定时任务、IM Bot 后台会话）
-  - 会话列表支持分类标签（对话/定时/IM）和最后一条消息预览
-  - 定时任务详情面板，展示 cron 信息和运行状态
-  - 后端支持 cron 信息聚合、后台会话查询、IM 事件上报
-- **会话列表 Hover 菜单**：会话列表项支持悬停显示统计信息和删除操作，ConfirmDialog 支持键盘操作（Enter/Escape）
-- **PlanMode 方案审核**：接入 SDK 的 ExitPlanMode/EnterPlanMode 工具
-  - ExitPlanMode 卡片展示 AI 生成的方案内容，用户可批准/拒绝
-  - 卡片在用户决策后保留显示「已批准/已拒绝」状态
-  - 支持权限模式热切换（运行中切换 Plan ↔ Auto）
-  - EnterPlanMode 自动批准，无需用户手动确认
+- **浠诲姟涓績锛圱ask Center锛?*锛氭柊澧炲叏灞€浠诲姟闈㈡澘锛岄泦涓煡鐪嬫墍鏈変細璇濓紙瀵硅瘽銆佸畾鏃朵换鍔°€両M Bot 鍚庡彴浼氳瘽锛?
+  - 浼氳瘽鍒楄〃鏀寔鍒嗙被鏍囩锛堝璇?瀹氭椂/IM锛夊拰鏈€鍚庝竴鏉℃秷鎭瑙?
+  - 瀹氭椂浠诲姟璇︽儏闈㈡澘锛屽睍绀?cron 淇℃伅鍜岃繍琛岀姸鎬?
+  - 鍚庣鏀寔 cron 淇℃伅鑱氬悎銆佸悗鍙颁細璇濇煡璇€両M 浜嬩欢涓婃姤
+- **浼氳瘽鍒楄〃 Hover 鑿滃崟**锛氫細璇濆垪琛ㄩ」鏀寔鎮仠鏄剧ず缁熻淇℃伅鍜屽垹闄ゆ搷浣滐紝ConfirmDialog 鏀寔閿洏鎿嶄綔锛圗nter/Escape锛?
+- **PlanMode 鏂规瀹℃牳**锛氭帴鍏?SDK 鐨?ExitPlanMode/EnterPlanMode 宸ュ叿
+  - ExitPlanMode 鍗＄墖灞曠ず AI 鐢熸垚鐨勬柟妗堝唴瀹癸紝鐢ㄦ埛鍙壒鍑?鎷掔粷
+  - 鍗＄墖鍦ㄧ敤鎴峰喅绛栧悗淇濈暀鏄剧ず銆屽凡鎵瑰噯/宸叉嫆缁濄€嶇姸鎬?
+  - 鏀寔鏉冮檺妯″紡鐑垏鎹紙杩愯涓垏鎹?Plan 鈫?Auto锛?
+  - EnterPlanMode 鑷姩鎵瑰噯锛屾棤闇€鐢ㄦ埛鎵嬪姩纭
 
 ### Fixed
-- **中文文件名图片预览 500 错误**：含中文字符的图片路径导致预览接口返回 500
-- **Agent 错误展示**：报错时展示详细错误描述，而非仅显示错误码
-- **ExitPlanMode 卡片位置错位**：卡片从 Message 外部移入内部（slot 模式），解决用户批准后新内容「插入」到卡片上方的视觉问题
+- **涓枃鏂囦欢鍚嶅浘鐗囬瑙?500 閿欒**锛氬惈涓枃瀛楃鐨勫浘鐗囪矾寰勫鑷撮瑙堟帴鍙ｈ繑鍥?500
+- **Agent 閿欒灞曠ず**锛氭姤閿欐椂灞曠ず璇︾粏閿欒鎻忚堪锛岃€岄潪浠呮樉绀洪敊璇爜
+- **ExitPlanMode 鍗＄墖浣嶇疆閿欎綅**锛氬崱鐗囦粠 Message 澶栭儴绉诲叆鍐呴儴锛坰lot 妯″紡锛夛紝瑙ｅ喅鐢ㄦ埛鎵瑰噯鍚庢柊鍐呭銆屾彃鍏ャ€嶅埌鍗＄墖涓婃柟鐨勮瑙夐棶棰?
 
 ### Changed
-- **全局 Overlay 毛玻璃遮罩统一**：所有 Overlay 遮罩统一使用 `bg-black/30 backdrop-blur-sm`
-- **ExitPlanMode 卡片样式**：宽度与工具行对齐（撑满父容器），方案内容区高度增加 30%
-- **ProcessRow 简化**：移除 thinking 指示器的特殊颜色样式
+- **鍏ㄥ眬 Overlay 姣涚幓鐠冮伄缃╃粺涓€**锛氭墍鏈?Overlay 閬僵缁熶竴浣跨敤 `bg-black/30 backdrop-blur-sm`
+- **ExitPlanMode 鍗＄墖鏍峰紡**锛氬搴︿笌宸ュ叿琛屽榻愶紙鎾戞弧鐖跺鍣級锛屾柟妗堝唴瀹瑰尯楂樺害澧炲姞 30%
+- **ProcessRow 绠€鍖?*锛氱Щ闄?thinking 鎸囩ず鍣ㄧ殑鐗规畩棰滆壊鏍峰紡
 
 ---
 
 ## [0.1.24] - 2026-02-23
 
 ### Added
-- **OpenAI 兼容协议桥接**：内置 Anthropic → OpenAI Chat Completions API 转译桥，支持 OpenAI 兼容端点（DeepSeek、Qwen 等）通过 loopback 架构接入 Claude Agent SDK。包含完整的请求/响应转译、SSE 流式传输、`reasoning_content` ↔ thinking block 双向映射、代理感知上游请求
-- **统一日志导出**：设置 > 通用 > 运行日志区域新增导出按钮，将近 3 天统一日志打包为 zip 导出到桌面
+- **OpenAI 鍏煎鍗忚妗ユ帴**锛氬唴缃?Anthropic 鈫?OpenAI Chat Completions API 杞瘧妗ワ紝鏀寔 OpenAI 鍏煎绔偣锛圖eepSeek銆丵wen 绛夛級閫氳繃 loopback 鏋舵瀯鎺ュ叆 Claude Agent SDK銆傚寘鍚畬鏁寸殑璇锋眰/鍝嶅簲杞瘧銆丼SE 娴佸紡浼犺緭銆乣reasoning_content` 鈫?thinking block 鍙屽悜鏄犲皠銆佷唬鐞嗘劅鐭ヤ笂娓歌姹?
+- **缁熶竴鏃ュ織瀵煎嚭**锛氳缃?> 閫氱敤 > 杩愯鏃ュ織鍖哄煙鏂板瀵煎嚭鎸夐挳锛屽皢杩?3 澶╃粺涓€鏃ュ織鎵撳寘涓?zip 瀵煎嚭鍒版闈?
 
 ### Fixed
-- **IM Bot `/provider` & `/model` 命令配置持久化**：命令切换 Provider/Model 后持久化到 config.json 并同步 Sidecar，前端设置页实时刷新
-- **IM Bot Session ID 失同步**：第三方 → Anthropic 供应商切换时 Bun 内部新建 session，Rust 侧通过 `upgrade_peer_session_id()` 同步 PeerSession + SidecarManager
-- **IM Bot auto-start availableProvidersJson 缺失**：前端启动时持久化 `availableProvidersJson` 到磁盘，Rust auto-start 迁移逻辑兼容旧配置
-- **IM Bot `/model` 动态模型列表**：`/model` 命令显示当前供应商可用模型索引列表，支持按序号选择
+- **IM Bot `/provider` & `/model` 鍛戒护閰嶇疆鎸佷箙鍖?*锛氬懡浠ゅ垏鎹?Provider/Model 鍚庢寔涔呭寲鍒?config.json 骞跺悓姝?Sidecar锛屽墠绔缃〉瀹炴椂鍒锋柊
+- **IM Bot Session ID 澶卞悓姝?*锛氱涓夋柟 鈫?Anthropic 渚涘簲鍟嗗垏鎹㈡椂 Bun 鍐呴儴鏂板缓 session锛孯ust 渚ч€氳繃 `upgrade_peer_session_id()` 鍚屾 PeerSession + SidecarManager
+- **IM Bot auto-start availableProvidersJson 缂哄け**锛氬墠绔惎鍔ㄦ椂鎸佷箙鍖?`availableProvidersJson` 鍒扮鐩橈紝Rust auto-start 杩佺Щ閫昏緫鍏煎鏃ч厤缃?
+- **IM Bot `/model` 鍔ㄦ€佹ā鍨嬪垪琛?*锛歚/model` 鍛戒护鏄剧ず褰撳墠渚涘簲鍟嗗彲鐢ㄦā鍨嬬储寮曞垪琛紝鏀寔鎸夊簭鍙烽€夋嫨
 
 ---
 
 ## [0.1.23] - 2026-02-22
 
 ### Fixed
-- **IM Bot 第三方模型 auto-start 失败**：`providerEnvJson`（含 baseUrl/apiKey/authType）只在前端手动启动时构建，Rust auto-start 从磁盘读不到 → 第三方供应商（DeepSeek、Moonshot 等）报 "所选模型不可用"。现在前端在启动/切换 Provider 时持久化 `providerEnvJson` 到 config.json
-- **IM Bot auto-start 向前兼容迁移**：Rust 侧新增 `migrate_provider_env()`，对旧配置（无 `providerEnvJson` 字段）从 `providerApiKeys` + 预设供应商 baseUrl 映射自动重建，确保升级后首次 auto-start 即可用
-- **IM Bot `/new` 命令 port 0 崩溃**：App 重启后恢复的 session `sidecar_port` 为 0，`/new` 发起 HTTP 请求到 `127.0.0.1:0` 导致报错。现在检测 port 0 时本地重置 session 元数据
-- **IM Bot SDK 错误透传与本地化**：SDK `is_error` 标志正确透传到 IM 端、图片历史污染自动重置 session、新增 6 类错误中文本地化（认证失败、频率限制、余额不足、模型不可用等）
-- **更新检查 Toast 重复**：后台下载进行中时重复弹出"正在下载更新"提示
+- **IM Bot 绗笁鏂规ā鍨?auto-start 澶辫触**锛歚providerEnvJson`锛堝惈 baseUrl/apiKey/authType锛夊彧鍦ㄥ墠绔墜鍔ㄥ惎鍔ㄦ椂鏋勫缓锛孯ust auto-start 浠庣鐩樿涓嶅埌 鈫?绗笁鏂逛緵搴斿晢锛圖eepSeek銆丮oonshot 绛夛級鎶?"鎵€閫夋ā鍨嬩笉鍙敤"銆傜幇鍦ㄥ墠绔湪鍚姩/鍒囨崲 Provider 鏃舵寔涔呭寲 `providerEnvJson` 鍒?config.json
+- **IM Bot auto-start 鍚戝墠鍏煎杩佺Щ**锛歊ust 渚ф柊澧?`migrate_provider_env()`锛屽鏃ч厤缃紙鏃?`providerEnvJson` 瀛楁锛変粠 `providerApiKeys` + 棰勮渚涘簲鍟?baseUrl 鏄犲皠鑷姩閲嶅缓锛岀‘淇濆崌绾у悗棣栨 auto-start 鍗冲彲鐢?
+- **IM Bot `/new` 鍛戒护 port 0 宕╂簝**锛欰pp 閲嶅惎鍚庢仮澶嶇殑 session `sidecar_port` 涓?0锛宍/new` 鍙戣捣 HTTP 璇锋眰鍒?`127.0.0.1:0` 瀵艰嚧鎶ラ敊銆傜幇鍦ㄦ娴?port 0 鏃舵湰鍦伴噸缃?session 鍏冩暟鎹?
+- **IM Bot SDK 閿欒閫忎紶涓庢湰鍦板寲**锛歋DK `is_error` 鏍囧織姝ｇ‘閫忎紶鍒?IM 绔€佸浘鐗囧巻鍙叉薄鏌撹嚜鍔ㄩ噸缃?session銆佹柊澧?6 绫婚敊璇腑鏂囨湰鍦板寲锛堣璇佸け璐ャ€侀鐜囬檺鍒躲€佷綑棰濅笉瓒炽€佹ā鍨嬩笉鍙敤绛夛級
+- **鏇存柊妫€鏌?Toast 閲嶅**锛氬悗鍙颁笅杞借繘琛屼腑鏃堕噸澶嶅脊鍑?姝ｅ湪涓嬭浇鏇存柊"鎻愮ず
 
 ---
 
 ## [0.1.22] - 2026-02-22
 
 ### Added
-- **飞书 Bot 多媒体接收**：支持接收图片、文件、音频、视频附件，图片走 SDK Vision，文件保存到工作区
-- **MCP 内置服务器 args/env 配置**：内置 MCP 服务器支持自定义启动参数和环境变量
-- **download-anything 内置 Skill**：新增文件下载 bundled skill
-- **Mermaid 图表预览/代码切换**：Mermaid 代码块新增预览/源码切换按钮和复制按钮
-- **YAML Frontmatter 代码高亮**：文件预览中 YAML frontmatter 渲染为语法高亮代码块
-- **上传文件功能升级**：Plus 菜单「上传图片」升级为「上传文件」，支持更多文件类型
+- **椋炰功 Bot 澶氬獟浣撴帴鏀?*锛氭敮鎸佹帴鏀跺浘鐗囥€佹枃浠躲€侀煶棰戙€佽棰戦檮浠讹紝鍥剧墖璧?SDK Vision锛屾枃浠朵繚瀛樺埌宸ヤ綔鍖?
+- **MCP 鍐呯疆鏈嶅姟鍣?args/env 閰嶇疆**锛氬唴缃?MCP 鏈嶅姟鍣ㄦ敮鎸佽嚜瀹氫箟鍚姩鍙傛暟鍜岀幆澧冨彉閲?
+- **download-anything 鍐呯疆 Skill**锛氭柊澧炴枃浠朵笅杞?bundled skill
+- **Mermaid 鍥捐〃棰勮/浠ｇ爜鍒囨崲**锛歁ermaid 浠ｇ爜鍧楁柊澧為瑙?婧愮爜鍒囨崲鎸夐挳鍜屽鍒舵寜閽?
+- **YAML Frontmatter 浠ｇ爜楂樹寒**锛氭枃浠堕瑙堜腑 YAML frontmatter 娓叉煋涓鸿娉曢珮浜唬鐮佸潡
+- **涓婁紶鏂囦欢鍔熻兘鍗囩骇**锛歅lus 鑿滃崟銆屼笂浼犲浘鐗囥€嶅崌绾т负銆屼笂浼犳枃浠躲€嶏紝鏀寔鏇村鏂囦欢绫诲瀷
 
 ### Fixed
-- **心跳/IM 消息竞态条件**：心跳 runner 未获取 peer_lock 导致与用户消息并发访问 imStreamCallback，造成响应丢失和双重 "(No response)"。现在心跳与用户消息通过 peer_lock 串行化，Bun 侧增加纵深防御
-- **Monaco 编辑器 CJK 输入法**：修复中日韩输入法组合输入时的闪烁和异常行为（两轮修复）
-- **Mermaid 图表加载卡死**：多图表场景下 Mermaid 渲染卡在 loading 状态
-- **模态框拖拽误关闭**：拖拽选中文本到遮罩层时不再误触发关闭
-- **Bot 工作区复制校验**：从 bundled mino 复制工作区时增加校验和 fallback
-- **飞书向导步骤优化**：「添加应用能力-机器人」提前到 Step 1，减少配置遗漏
+- **蹇冭烦/IM 娑堟伅绔炴€佹潯浠?*锛氬績璺?runner 鏈幏鍙?peer_lock 瀵艰嚧涓庣敤鎴锋秷鎭苟鍙戣闂?imStreamCallback锛岄€犳垚鍝嶅簲涓㈠け鍜屽弻閲?"(No response)"銆傜幇鍦ㄥ績璺充笌鐢ㄦ埛娑堟伅閫氳繃 peer_lock 涓茶鍖栵紝Bun 渚у鍔犵旱娣遍槻寰?
+- **Monaco 缂栬緫鍣?CJK 杈撳叆娉?*锛氫慨澶嶄腑鏃ラ煩杈撳叆娉曠粍鍚堣緭鍏ユ椂鐨勯棯鐑佸拰寮傚父琛屼负锛堜袱杞慨澶嶏級
+- **Mermaid 鍥捐〃鍔犺浇鍗℃**锛氬鍥捐〃鍦烘櫙涓?Mermaid 娓叉煋鍗″湪 loading 鐘舵€?
+- **妯℃€佹鎷栨嫿璇叧闂?*锛氭嫋鎷介€変腑鏂囨湰鍒伴伄缃╁眰鏃朵笉鍐嶈瑙﹀彂鍏抽棴
+- **Bot 宸ヤ綔鍖哄鍒舵牎楠?*锛氫粠 bundled mino 澶嶅埗宸ヤ綔鍖烘椂澧炲姞鏍￠獙鍜?fallback
+- **椋炰功鍚戝姝ラ浼樺寲**锛氥€屾坊鍔犲簲鐢ㄨ兘鍔?鏈哄櫒浜恒€嶆彁鍓嶅埌 Step 1锛屽噺灏戦厤缃仐婕?
 
 ### Changed
-- **Launcher 工作区选择器**：从输入框上方浮动 pill 移入输入框工具栏内，布局更紧凑
-- **README 更新**：同步当前功能列表、支持的供应商和架构说明
+- **Launcher 宸ヤ綔鍖洪€夋嫨鍣?*锛氫粠杈撳叆妗嗕笂鏂规诞鍔?pill 绉诲叆杈撳叆妗嗗伐鍏锋爮鍐咃紝甯冨眬鏇寸揣鍑?
+- **README 鏇存柊**锛氬悓姝ュ綋鍓嶅姛鑳藉垪琛ㄣ€佹敮鎸佺殑渚涘簲鍟嗗拰鏋舵瀯璇存槑
 
 ---
 
 ## [0.1.21] - 2026-02-21
 
 ### Added
-- **Bot 创建向导新增工作区步骤**：创建 Bot 时可直接配置独立工作区路径
-- **飞书 Post 富文本消息支持**：Bot 接收飞书 Post 类型消息（含代码块、加粗、列表等富文本），解析 text/a/at/img/emotion/code_block 元素为纯文本
-- **IM Bot /help 命令**：飞书和 Telegram Bot 均支持 `/help` 查看所有可用命令
-- **IM Bot /mode 命令**：通过 `/mode plan|auto|full` 切换权限模式（计划/自动/全自主）
-- **工作区文件单击预览**：右侧「项目工作区」面板中单击文件直接触发预览（原需双击），Ctrl+单击多选保持不变
+- **Bot 鍒涘缓鍚戝鏂板宸ヤ綔鍖烘楠?*锛氬垱寤?Bot 鏃跺彲鐩存帴閰嶇疆鐙珛宸ヤ綔鍖鸿矾寰?
+- **椋炰功 Post 瀵屾枃鏈秷鎭敮鎸?*锛欱ot 鎺ユ敹椋炰功 Post 绫诲瀷娑堟伅锛堝惈浠ｇ爜鍧椼€佸姞绮椼€佸垪琛ㄧ瓑瀵屾枃鏈級锛岃В鏋?text/a/at/img/emotion/code_block 鍏冪礌涓虹函鏂囨湰
+- **IM Bot /help 鍛戒护**锛氶涔﹀拰 Telegram Bot 鍧囨敮鎸?`/help` 鏌ョ湅鎵€鏈夊彲鐢ㄥ懡浠?
+- **IM Bot /mode 鍛戒护**锛氶€氳繃 `/mode plan|auto|full` 鍒囨崲鏉冮檺妯″紡锛堣鍒?鑷姩/鍏ㄨ嚜涓伙級
+- **宸ヤ綔鍖烘枃浠跺崟鍑婚瑙?*锛氬彸渚с€岄」鐩伐浣滃尯銆嶉潰鏉夸腑鍗曞嚮鏂囦欢鐩存帴瑙﹀彂棰勮锛堝師闇€鍙屽嚮锛夛紝Ctrl+鍗曞嚮澶氶€変繚鎸佷笉鍙?
 
 ### Fixed
-- **飞书 Bot 幽灵消息**：dedup 缓存持久化到磁盘（TTL 72h），App 重启后不再重复处理飞书重传的旧事件
-- **飞书消息静默丢失**：含代码块/加粗等格式的消息（msg_type: post）不再被忽略
-- **IM 来源标签错误**：飞书消息不再显示 "via Telegram 群聊"，改用 SOURCE_LABELS 映射正确显示平台名
-- **Provider API Key 验证超时**：使用 project-level settingSources 和 bypassPermissions 避免用户级插件加载阻塞
-- **文件预览 FileReader 挂起**：添加 onerror/reject 处理，防止 Blob 损坏时 isPreviewLoading 永久卡死
-- **Tab 关闭确认误弹**：持久 Owner 保持 Sidecar 存活时跳过关闭确认
-- **Telegram 向导输入顺序**：修正向导步骤输入框顺序，跳过按钮改为返回按钮
-- **绑定消息误处理**：已绑定用户的 BIND 消息静默忽略，避免重复处理
+- **椋炰功 Bot 骞界伒娑堟伅**锛歞edup 缂撳瓨鎸佷箙鍖栧埌纾佺洏锛圱TL 72h锛夛紝App 閲嶅惎鍚庝笉鍐嶉噸澶嶅鐞嗛涔﹂噸浼犵殑鏃т簨浠?
+- **椋炰功娑堟伅闈欓粯涓㈠け**锛氬惈浠ｇ爜鍧?鍔犵矖绛夋牸寮忕殑娑堟伅锛坢sg_type: post锛変笉鍐嶈蹇界暐
+- **IM 鏉ユ簮鏍囩閿欒**锛氶涔︽秷鎭笉鍐嶆樉绀?"via Telegram 缇よ亰"锛屾敼鐢?SOURCE_LABELS 鏄犲皠姝ｇ‘鏄剧ず骞冲彴鍚?
+- **Provider API Key 楠岃瘉瓒呮椂**锛氫娇鐢?project-level settingSources 鍜?bypassPermissions 閬垮厤鐢ㄦ埛绾ф彃浠跺姞杞介樆濉?
+- **鏂囦欢棰勮 FileReader 鎸傝捣**锛氭坊鍔?onerror/reject 澶勭悊锛岄槻姝?Blob 鎹熷潖鏃?isPreviewLoading 姘镐箙鍗℃
+- **Tab 鍏抽棴纭璇脊**锛氭寔涔?Owner 淇濇寔 Sidecar 瀛樻椿鏃惰烦杩囧叧闂‘璁?
+- **Telegram 鍚戝杈撳叆椤哄簭**锛氫慨姝ｅ悜瀵兼楠よ緭鍏ユ椤哄簭锛岃烦杩囨寜閽敼涓鸿繑鍥炴寜閽?
+- **缁戝畾娑堟伅璇鐞?*锛氬凡缁戝畾鐢ㄦ埛鐨?BIND 娑堟伅闈欓粯蹇界暐锛岄伩鍏嶉噸澶嶅鐞?
 
 ### Performance
-- **前端流式消息隔离**：Playwright tool.result 从前端剥离，流式消息状态独立管理，减少不必要的重渲染
+- **鍓嶇娴佸紡娑堟伅闅旂**锛歅laywright tool.result 浠庡墠绔墺绂伙紝娴佸紡娑堟伅鐘舵€佺嫭绔嬬鐞嗭紝鍑忓皯涓嶅繀瑕佺殑閲嶆覆鏌?
 
 ### Changed
-- **飞书代码块输出样式**：AI 回复中的代码块使用 `─── ✦ ───` 分隔线 + 斜体缩进，内联代码映射为加粗+斜体
-- **IM Bot 热更新**：权限模式、MCP 服务器、Provider 等配置变更无需重启 Bot
-- **Heartbeat 系统提示词**：心跳检查使用独立 system prompt，修复 Bot 停止/重启可靠性
+- **椋炰功浠ｇ爜鍧楄緭鍑烘牱寮?*锛欰I 鍥炲涓殑浠ｇ爜鍧椾娇鐢?`鈹€鈹€鈹€ 鉁?鈹€鈹€鈹€` 鍒嗛殧绾?+ 鏂滀綋缂╄繘锛屽唴鑱斾唬鐮佹槧灏勪负鍔犵矖+鏂滀綋
+- **IM Bot 鐑洿鏂?*锛氭潈闄愭ā寮忋€丮CP 鏈嶅姟鍣ㄣ€丳rovider 绛夐厤缃彉鏇存棤闇€閲嶅惎 Bot
+- **Heartbeat 绯荤粺鎻愮ず璇?*锛氬績璺虫鏌ヤ娇鐢ㄧ嫭绔?system prompt锛屼慨澶?Bot 鍋滄/閲嶅惎鍙潬鎬?
 
 ---
 
 ## [0.1.20] - 2026-02-19
 
 ### Added
-- **飞书 Bot 平台支持**：新增飞书适配器（WebSocket 长连接 + protobuf），与 Telegram 共享多 Bot 架构、Session 路由、消息缓冲
-- **IM Bot 交互式权限审批**：非 fullAgency 模式下，工具权限请求通过飞书交互卡片 / Telegram Inline Keyboard 展示，用户点击按钮或回复文本完成审批
-- **ZenMux 预设供应商**：新增 ZenMux 云服务商聚合平台，支持 9 个预设模型（zenmux/auto、Gemini 3.1 Pro、Claude Sonnet/Opus 4.6 等）
+- **椋炰功 Bot 骞冲彴鏀寔**锛氭柊澧為涔﹂€傞厤鍣紙WebSocket 闀胯繛鎺?+ protobuf锛夛紝涓?Telegram 鍏变韩澶?Bot 鏋舵瀯銆丼ession 璺敱銆佹秷鎭紦鍐?
+- **IM Bot 浜や簰寮忔潈闄愬鎵?*锛氶潪 fullAgency 妯″紡涓嬶紝宸ュ叿鏉冮檺璇锋眰閫氳繃椋炰功浜や簰鍗＄墖 / Telegram Inline Keyboard 灞曠ず锛岀敤鎴风偣鍑绘寜閽垨鍥炲鏂囨湰瀹屾垚瀹℃壒
+- **ZenMux 棰勮渚涘簲鍟?*锛氭柊澧?ZenMux 浜戞湇鍔″晢鑱氬悎骞冲彴锛屾敮鎸?9 涓璁炬ā鍨嬶紙zenmux/auto銆丟emini 3.1 Pro銆丆laude Sonnet/Opus 4.6 绛夛級
 
 ### Fixed
-- **飞书 WebSocket 事件重放**：新增数据帧 ACK 机制，dedup 缓存 TTL 从 30 分钟延长至 24 小时，防止断连重连后消息重复处理
-- **IM Bot 停止按钮状态回弹**：`toggleBot` 写盘后未调用 `refreshConfig()` 同步 React 状态，导致轮询 fallback 到过期的 `cfg.enabled`
-- **工具输入截断 UTF-8 panic**：权限审批卡片中 `tool_input[..200]` 字节截断改为 `char_indices().nth(200)` 字符安全截断
+- **椋炰功 WebSocket 浜嬩欢閲嶆斁**锛氭柊澧炴暟鎹抚 ACK 鏈哄埗锛宒edup 缂撳瓨 TTL 浠?30 鍒嗛挓寤堕暱鑷?24 灏忔椂锛岄槻姝㈡柇杩為噸杩炲悗娑堟伅閲嶅澶勭悊
+- **IM Bot 鍋滄鎸夐挳鐘舵€佸洖寮?*锛歚toggleBot` 鍐欑洏鍚庢湭璋冪敤 `refreshConfig()` 鍚屾 React 鐘舵€侊紝瀵艰嚧杞 fallback 鍒拌繃鏈熺殑 `cfg.enabled`
+- **宸ュ叿杈撳叆鎴柇 UTF-8 panic**锛氭潈闄愬鎵瑰崱鐗囦腑 `tool_input[..200]` 瀛楄妭鎴柇鏀逛负 `char_indices().nth(200)` 瀛楃瀹夊叏鎴柇
 
 ---
 
 ## [0.1.19] - 2026-02-18
 
 ### Added
-- **IM 多 Bot 架构**：支持创建和管理多个 Telegram Bot 实例，独立配置工作区、权限、AI 供应商和 MCP 工具
-- **IM Bot AI 配置**：每个 Bot 独立设置 Provider/Model/MCP 服务，支持 Telegram `/model` 和 `/provider` 命令切换
-- **Telegram 多媒体消息支持**：支持图片（SDK Vision）、语音、音频、视频、文档（保存到工作区）、贴纸、位置、相册（500ms 缓冲合并）
-- **IM Bot 自动启动**：应用启动时自动恢复上次运行中的 Bot
+- **IM 澶?Bot 鏋舵瀯**锛氭敮鎸佸垱寤哄拰绠＄悊澶氫釜 Telegram Bot 瀹炰緥锛岀嫭绔嬮厤缃伐浣滃尯銆佹潈闄愩€丄I 渚涘簲鍟嗗拰 MCP 宸ュ叿
+- **IM Bot AI 閰嶇疆**锛氭瘡涓?Bot 鐙珛璁剧疆 Provider/Model/MCP 鏈嶅姟锛屾敮鎸?Telegram `/model` 鍜?`/provider` 鍛戒护鍒囨崲
+- **Telegram 澶氬獟浣撴秷鎭敮鎸?*锛氭敮鎸佸浘鐗囷紙SDK Vision锛夈€佽闊炽€侀煶棰戙€佽棰戙€佹枃妗ｏ紙淇濆瓨鍒板伐浣滃尯锛夈€佽创绾搞€佷綅缃€佺浉鍐岋紙500ms 缂撳啿鍚堝苟锛?
+- **IM Bot 鑷姩鍚姩**锛氬簲鐢ㄥ惎鍔ㄦ椂鑷姩鎭㈠涓婃杩愯涓殑 Bot
 
 ### Fixed
-- **Telegram 代理支持**：文件下载复用代理配置的 HTTP 客户端
-- **IM Bot 启停按钮状态回弹**：轮询跳过正在操作的 Bot，避免覆盖乐观更新；toggleBot 使用 ref 读取最新状态消除闭包陈旧
-- **TodoWriteTool 白屏崩溃**：流式 JSON 解析中间态 `todos` 可能为对象而非数组，改用 `Array.isArray()` 守卫
-- **IM 私聊 emoji 移除**：去掉 Telegram 私聊消息的手机 emoji，群聊保留群组图标
-- **IM Bot 列表页 UI 闪烁**：消除空状态闪烁和按钮颜色闪烁
-- **多媒体安全加固**：文件名路径穿越防护（sanitize_filename）、下载大小限制（20MB）、图片编码限制（10MB）、异步文件 I/O
+- **Telegram 浠ｇ悊鏀寔**锛氭枃浠朵笅杞藉鐢ㄤ唬鐞嗛厤缃殑 HTTP 瀹㈡埛绔?
+- **IM Bot 鍚仠鎸夐挳鐘舵€佸洖寮?*锛氳疆璇㈣烦杩囨鍦ㄦ搷浣滅殑 Bot锛岄伩鍏嶈鐩栦箰瑙傛洿鏂帮紱toggleBot 浣跨敤 ref 璇诲彇鏈€鏂扮姸鎬佹秷闄ら棴鍖呴檲鏃?
+- **TodoWriteTool 鐧藉睆宕╂簝**锛氭祦寮?JSON 瑙ｆ瀽涓棿鎬?`todos` 鍙兘涓哄璞¤€岄潪鏁扮粍锛屾敼鐢?`Array.isArray()` 瀹堝崼
+- **IM 绉佽亰 emoji 绉婚櫎**锛氬幓鎺?Telegram 绉佽亰娑堟伅鐨勬墜鏈?emoji锛岀兢鑱婁繚鐣欑兢缁勫浘鏍?
+- **IM Bot 鍒楄〃椤?UI 闂儊**锛氭秷闄ょ┖鐘舵€侀棯鐑佸拰鎸夐挳棰滆壊闂儊
+- **澶氬獟浣撳畨鍏ㄥ姞鍥?*锛氭枃浠跺悕璺緞绌胯秺闃叉姢锛坰anitize_filename锛夈€佷笅杞藉ぇ灏忛檺鍒讹紙20MB锛夈€佸浘鐗囩紪鐮侀檺鍒讹紙10MB锛夈€佸紓姝ユ枃浠?I/O
 
 ### Changed
-- **IM 会话列表标签化**：用平台标签替代 emoji 标识 IM 来源
-- **SDK 升级**：claude-agent-sdk 升级至 0.2.45
-- **模型更新**：新增 Sonnet 4.6，移除 Opus 4.5
+- **IM 浼氳瘽鍒楄〃鏍囩鍖?*锛氱敤骞冲彴鏍囩鏇夸唬 emoji 鏍囪瘑 IM 鏉ユ簮
+- **SDK 鍗囩骇**锛歝laude-agent-sdk 鍗囩骇鑷?0.2.45
+- **妯″瀷鏇存柊**锛氭柊澧?Sonnet 4.6锛岀Щ闄?Opus 4.5
 
 ---
 
 ## [0.1.18] - 2026-02-17
 
 ### Added
-- **用户消息气泡 Hover 菜单**：鼠标悬停显示操作菜单（复制、时间回溯），Tooltip 提示
-- **时间回溯功能**：回溯对话到指定用户消息之前的状态，回退文件修改，被回溯的消息文本恢复到输入框
-- **Launcher 工作区设置双向同步**：工作区卡片设置面板变更实时同步到已打开的 Tab
+- **鐢ㄦ埛娑堟伅姘旀场 Hover 鑿滃崟**锛氶紶鏍囨偓鍋滄樉绀烘搷浣滆彍鍗曪紙澶嶅埗銆佹椂闂村洖婧級锛孴ooltip 鎻愮ず
+- **鏃堕棿鍥炴函鍔熻兘**锛氬洖婧璇濆埌鎸囧畾鐢ㄦ埛娑堟伅涔嬪墠鐨勭姸鎬侊紝鍥為€€鏂囦欢淇敼锛岃鍥炴函鐨勬秷鎭枃鏈仮澶嶅埌杈撳叆妗?
+- **Launcher 宸ヤ綔鍖鸿缃弻鍚戝悓姝?*锛氬伐浣滃尯鍗＄墖璁剧疆闈㈡澘鍙樻洿瀹炴椂鍚屾鍒板凡鎵撳紑鐨?Tab
 
 ### Performance
-- **持久 Session 架构**：SDK subprocess 全程存活，消除每轮对话的 spawn → init → MCP 连接 → 历史重放开销
-  - 事件驱动 Promise 门控替代 100ms 轮询，消息交付零延迟
-  - 对话延迟不再随历史消息增长线性退化
-  - 净减少约 106 行代码（删除 `executeRewind` 等死代码）
+- **鎸佷箙 Session 鏋舵瀯**锛歋DK subprocess 鍏ㄧ▼瀛樻椿锛屾秷闄ゆ瘡杞璇濈殑 spawn 鈫?init 鈫?MCP 杩炴帴 鈫?鍘嗗彶閲嶆斁寮€閿€
+  - 浜嬩欢椹卞姩 Promise 闂ㄦ帶鏇夸唬 100ms 杞锛屾秷鎭氦浠橀浂寤惰繜
+  - 瀵硅瘽寤惰繜涓嶅啀闅忓巻鍙叉秷鎭闀跨嚎鎬ч€€鍖?
+  - 鍑€鍑忓皯绾?106 琛屼唬鐮侊紙鍒犻櫎 `executeRewind` 绛夋浠ｇ爜锛?
 
 ### Fixed
-- **permissionMode 映射错误**：「自主行动」（auto）和「规划模式」（plan）权限模式实际使用了 `default`，现已正确映射到 SDK 的 `acceptEdits` 和 `plan`
-- **订阅供应商误显可用**：未验证订阅的供应商不再显示为可用，发送按钮和 Enter 键增加供应商可用性守卫
-- **持久 Session 启动超时死锁**：startup timeout 改用统一中止 `abortPersistentSession()`，解除 generator Promise 门控阻塞
-- **Rewind SDK 历史未截断**：`resumeSessionAt` 在 pre-warm 中正确传递，确保 SDK 历史与前端同步截断
-- **Rewind 后 AI 重复已回答内容**：assistant `sdkUuid` 改存最后一条消息（text）而非第一条（thinking），确保 `resumeSessionAt` 保留完整回复
-- **超时链路对齐**：Cron 执行超时 11min → 60min，智谱 AI 超时 50min → 10min，Permission 等待 5min → 10min
-- **用户消息气泡宽度**：最大宽度改为容器 2/3，文字先横向扩展再换行
+- **permissionMode 鏄犲皠閿欒**锛氥€岃嚜涓昏鍔ㄣ€嶏紙auto锛夊拰銆岃鍒掓ā寮忋€嶏紙plan锛夋潈闄愭ā寮忓疄闄呬娇鐢ㄤ簡 `default`锛岀幇宸叉纭槧灏勫埌 SDK 鐨?`acceptEdits` 鍜?`plan`
+- **璁㈤槄渚涘簲鍟嗚鏄惧彲鐢?*锛氭湭楠岃瘉璁㈤槄鐨勪緵搴斿晢涓嶅啀鏄剧ず涓哄彲鐢紝鍙戦€佹寜閽拰 Enter 閿鍔犱緵搴斿晢鍙敤鎬у畧鍗?
+- **鎸佷箙 Session 鍚姩瓒呮椂姝婚攣**锛歴tartup timeout 鏀圭敤缁熶竴涓 `abortPersistentSession()`锛岃В闄?generator Promise 闂ㄦ帶闃诲
+- **Rewind SDK 鍘嗗彶鏈埅鏂?*锛歚resumeSessionAt` 鍦?pre-warm 涓纭紶閫掞紝纭繚 SDK 鍘嗗彶涓庡墠绔悓姝ユ埅鏂?
+- **Rewind 鍚?AI 閲嶅宸插洖绛斿唴瀹?*锛歛ssistant `sdkUuid` 鏀瑰瓨鏈€鍚庝竴鏉℃秷鎭紙text锛夎€岄潪绗竴鏉★紙thinking锛夛紝纭繚 `resumeSessionAt` 淇濈暀瀹屾暣鍥炲
+- **瓒呮椂閾捐矾瀵归綈**锛欳ron 鎵ц瓒呮椂 11min 鈫?60min锛屾櫤璋?AI 瓒呮椂 50min 鈫?10min锛孭ermission 绛夊緟 5min 鈫?10min
+- **鐢ㄦ埛娑堟伅姘旀场瀹藉害**锛氭渶澶у搴︽敼涓哄鍣?2/3锛屾枃瀛楀厛妯悜鎵╁睍鍐嶆崲琛?
 
 ---
 
 ## [0.1.17] - 2026-02-16
 
 ### Added
-- **工作区记住模型和权限模式**：每个工作区独立保存最近使用的 model 和 permissionMode，切换时自动恢复
+- **宸ヤ綔鍖鸿浣忔ā鍨嬪拰鏉冮檺妯″紡**锛氭瘡涓伐浣滃尯鐙珛淇濆瓨鏈€杩戜娇鐢ㄧ殑 model 鍜?permissionMode锛屽垏鎹㈡椂鑷姩鎭㈠
 
 ### Performance
-- **Tab 切换性能深度优化**：隔离 isActive 到独立 TabActiveContext，content-visibility 延迟渲染，组件 memo + ref 稳定化，消除切换时全量重渲染
+- **Tab 鍒囨崲鎬ц兘娣卞害浼樺寲**锛氶殧绂?isActive 鍒扮嫭绔?TabActiveContext锛宑ontent-visibility 寤惰繜娓叉煋锛岀粍浠?memo + ref 绋冲畾鍖栵紝娑堥櫎鍒囨崲鏃跺叏閲忛噸娓叉煋
 
 ### Fixed
-- **启动页图片粘贴报错** + Tab 栏单击不选中
-- **首次启动卡死**：projects.json 损坏恢复 + 日志重复修复
-- **Windows 更新重启 bun 进程未清理**：kill_process 改用 taskkill /T /F 杀进程树，新增 shutdown_for_update 阻塞等待所有进程退出，Settings 页更新按钮同步修复
-- **JSON 持久化加固**：所有 JSON 配置文件统一使用原子写入（.tmp → .bak → rename），三级恢复链（.json → .bak → .tmp）+ 结构校验，防止进程崩溃导致数据丢失
+- **鍚姩椤靛浘鐗囩矘璐存姤閿?* + Tab 鏍忓崟鍑讳笉閫変腑
+- **棣栨鍚姩鍗℃**锛歱rojects.json 鎹熷潖鎭㈠ + 鏃ュ織閲嶅淇
+- **Windows 鏇存柊閲嶅惎 bun 杩涚▼鏈竻鐞?*锛歬ill_process 鏀圭敤 taskkill /T /F 鏉€杩涚▼鏍戯紝鏂板 shutdown_for_update 闃诲绛夊緟鎵€鏈夎繘绋嬮€€鍑猴紝Settings 椤垫洿鏂版寜閽悓姝ヤ慨澶?
+- **JSON 鎸佷箙鍖栧姞鍥?*锛氭墍鏈?JSON 閰嶇疆鏂囦欢缁熶竴浣跨敤鍘熷瓙鍐欏叆锛?tmp 鈫?.bak 鈫?rename锛夛紝涓夌骇鎭㈠閾撅紙.json 鈫?.bak 鈫?.tmp锛? 缁撴瀯鏍￠獙锛岄槻姝㈣繘绋嬪穿婧冨鑷存暟鎹涪澶?
 
 ---
 
 ## [0.1.16] - 2026-02-14
 
 ### Added
-- **启动页改版——任务优先模式**：左侧 BrandSection 新增全功能输入框 + 工作区选择器，支持直接发送消息启动工作区
-  - 工作区选择器：默认/最近打开分组、向上展开菜单
-  - 输入框复用 SimpleChatInput，支持文本、图片、Provider/Model、权限模式、MCP 工具选择
-  - 发送设置自动持久化，下次启动恢复上次选择
-- **默认工作区 mino**：内置 openmino 预设工作区，首次启动自动复制到用户目录
-- **Settings 默认工作区配置**：通用设置新增默认工作区选择，自定义 CustomSelect 替换原生 select
-- **Windows setup 补充 mino 克隆**：`setup_windows.ps1` 与 macOS `setup.sh` 对齐
+- **鍚姩椤垫敼鐗堚€斺€斾换鍔′紭鍏堟ā寮?*锛氬乏渚?BrandSection 鏂板鍏ㄥ姛鑳借緭鍏ユ + 宸ヤ綔鍖洪€夋嫨鍣紝鏀寔鐩存帴鍙戦€佹秷鎭惎鍔ㄥ伐浣滃尯
+  - 宸ヤ綔鍖洪€夋嫨鍣細榛樿/鏈€杩戞墦寮€鍒嗙粍銆佸悜涓婂睍寮€鑿滃崟
+  - 杈撳叆妗嗗鐢?SimpleChatInput锛屾敮鎸佹枃鏈€佸浘鐗囥€丳rovider/Model銆佹潈闄愭ā寮忋€丮CP 宸ュ叿閫夋嫨
+  - 鍙戦€佽缃嚜鍔ㄦ寔涔呭寲锛屼笅娆″惎鍔ㄦ仮澶嶄笂娆￠€夋嫨
+- **榛樿宸ヤ綔鍖?mino**锛氬唴缃?openmino 棰勮宸ヤ綔鍖猴紝棣栨鍚姩鑷姩澶嶅埗鍒扮敤鎴风洰褰?
+- **Settings 榛樿宸ヤ綔鍖洪厤缃?*锛氶€氱敤璁剧疆鏂板榛樿宸ヤ綔鍖洪€夋嫨锛岃嚜瀹氫箟 CustomSelect 鏇挎崲鍘熺敓 select
+- **Windows setup 琛ュ厖 mino 鍏嬮殕**锛歚setup_windows.ps1` 涓?macOS `setup.sh` 瀵归綈
 
 ### Changed
-- **Launcher 右侧面板精简**：移除快捷功能区块，工作区卡片精简为可点击双列紧凑卡片
-  - 移除 Provider 选择器、启动按钮、三点菜单
-  - 整卡点击启动，右键上下文菜单移除工作区
-  - 工作区列表从单列改为双列 grid 布局
-- **视觉统一与细节打磨**
-  - Launcher 左右区域背景色统一，分割线改为不到顶的浮动线
-  - Settings 侧边栏分割线同步改为浮动线
-  - 品牌标题字号调小、字间距加宽，Slogan 更新为中文
-  - MCP 工具菜单开关样式对齐设置页（accent 暖色 + 白色滑块）
-  - Provider/MCP 静态卡片移除无效 hover 阴影
-- **日志面板改版**：过滤器三组重构、新增导出功能、默认隐藏 stream/analytics
+- **Launcher 鍙充晶闈㈡澘绮剧畝**锛氱Щ闄ゅ揩鎹峰姛鑳藉尯鍧楋紝宸ヤ綔鍖哄崱鐗囩簿绠€涓哄彲鐐瑰嚮鍙屽垪绱у噾鍗＄墖
+  - 绉婚櫎 Provider 閫夋嫨鍣ㄣ€佸惎鍔ㄦ寜閽€佷笁鐐硅彍鍗?
+  - 鏁村崱鐐瑰嚮鍚姩锛屽彸閿笂涓嬫枃鑿滃崟绉婚櫎宸ヤ綔鍖?
+  - 宸ヤ綔鍖哄垪琛ㄤ粠鍗曞垪鏀逛负鍙屽垪 grid 甯冨眬
+- **瑙嗚缁熶竴涓庣粏鑺傛墦纾?*
+  - Launcher 宸﹀彸鍖哄煙鑳屾櫙鑹茬粺涓€锛屽垎鍓茬嚎鏀逛负涓嶅埌椤剁殑娴姩绾?
+  - Settings 渚ц竟鏍忓垎鍓茬嚎鍚屾鏀逛负娴姩绾?
+  - 鍝佺墝鏍囬瀛楀彿璋冨皬銆佸瓧闂磋窛鍔犲锛孲logan 鏇存柊涓轰腑鏂?
+  - MCP 宸ュ叿鑿滃崟寮€鍏虫牱寮忓榻愯缃〉锛坅ccent 鏆栬壊 + 鐧借壊婊戝潡锛?
+  - Provider/MCP 闈欐€佸崱鐗囩Щ闄ゆ棤鏁?hover 闃村奖
+- **鏃ュ織闈㈡澘鏀圭増**锛氳繃婊ゅ櫒涓夌粍閲嶆瀯銆佹柊澧炲鍑哄姛鑳姐€侀粯璁ら殣钘?stream/analytics
 
 ### Removed
-- 移除 Launcher 死代码：subscriptionStatus 无用 API 调用、onOpenSettings 死 prop、QuickAccess 组件
+- 绉婚櫎 Launcher 姝讳唬鐮侊細subscriptionStatus 鏃犵敤 API 璋冪敤銆乷nOpenSettings 姝?prop銆丵uickAccess 缁勪欢
 
 ---
 
 ## [0.1.15] - 2026-02-13
 
 ### Added
-- **文件预览器 Markdown 本地图片加载**：相对路径引用的图片通过 download API 解析显示，支持 `./`、`../` 路径
-- **MiniMax 预设新增模型**：M2.5、M2.5-lightning，M2.5 设为默认
-- **文件预览器顶部信息优化**：文件大小改 KB/MB 格式、副标题改路径显示、新增「打开所在文件夹」按钮
-- **macOS 路径显示缩短**：全局路径展示将 `/Users/<name>/` 替换为 `~/`
+- **鏂囦欢棰勮鍣?Markdown 鏈湴鍥剧墖鍔犺浇**锛氱浉瀵硅矾寰勫紩鐢ㄧ殑鍥剧墖閫氳繃 download API 瑙ｆ瀽鏄剧ず锛屾敮鎸?`./`銆乣../` 璺緞
+- **MiniMax 棰勮鏂板妯″瀷**锛歁2.5銆丮2.5-lightning锛孧2.5 璁句负榛樿
+- **鏂囦欢棰勮鍣ㄩ《閮ㄤ俊鎭紭鍖?*锛氭枃浠跺ぇ灏忔敼 KB/MB 鏍煎紡銆佸壇鏍囬鏀硅矾寰勬樉绀恒€佹柊澧炪€屾墦寮€鎵€鍦ㄦ枃浠跺す銆嶆寜閽?
+- **macOS 璺緞鏄剧ず缂╃煭**锛氬叏灞€璺緞灞曠ず灏?`/Users/<name>/` 鏇挎崲涓?`~/`
 
 ### Performance
-- 流式渲染性能优化：消除级联重渲染，输入框/侧边栏不再卡顿
+- 娴佸紡娓叉煋鎬ц兘浼樺寲锛氭秷闄ょ骇鑱旈噸娓叉煋锛岃緭鍏ユ/渚ц竟鏍忎笉鍐嶅崱椤?
 
 ### Fixed
-- 修复流式回复中段落分裂（防御性合并相邻文本块）
-- 修复系统暗色主题导致 UI 颜色异常（强制日间模式）
+- 淇娴佸紡鍥炲涓钀藉垎瑁傦紙闃插尽鎬у悎骞剁浉閭绘枃鏈潡锛?
+- 淇绯荤粺鏆楄壊涓婚瀵艰嚧 UI 棰滆壊寮傚父锛堝己鍒舵棩闂存ā寮忥級
 
 ---
 
 ## [0.1.14] - 2026-02-11
 
 ### Added
-- **后台会话完成**：AI 流式回复中切换对话/关闭标签页不再丢失数据，旧 Sidecar 在后台继续运行直到回复完成
-- **手动检查更新**：设置页「关于」区域增加检查更新按钮与下载进度展示
-- **MCP 服务器编辑**：自定义 MCP 卡片增加设置按钮，复用添加弹窗编辑配置
-- **新增预设供应商**：硅基流动 SiliconFlow（Kimi K2.5、GLM 4.7、DeepSeek V3.2、MiniMax M2.1、Step 3.5 Flash）
-- **供应商「去官网」链接**：7 个预设供应商卡片增加官网入口
-- **智谱 AI 新增 GLM 5 模型**
-- **Settings 双栏布局**：供应商、MCP、技能、Agent 页面统一为双栏卡片网格
+- **鍚庡彴浼氳瘽瀹屾垚**锛欰I 娴佸紡鍥炲涓垏鎹㈠璇?鍏抽棴鏍囩椤典笉鍐嶄涪澶辨暟鎹紝鏃?Sidecar 鍦ㄥ悗鍙扮户缁繍琛岀洿鍒板洖澶嶅畬鎴?
+- **鎵嬪姩妫€鏌ユ洿鏂?*锛氳缃〉銆屽叧浜庛€嶅尯鍩熷鍔犳鏌ユ洿鏂版寜閽笌涓嬭浇杩涘害灞曠ず
+- **MCP 鏈嶅姟鍣ㄧ紪杈?*锛氳嚜瀹氫箟 MCP 鍗＄墖澧炲姞璁剧疆鎸夐挳锛屽鐢ㄦ坊鍔犲脊绐楃紪杈戦厤缃?
+- **鏂板棰勮渚涘簲鍟?*锛氱鍩烘祦鍔?SiliconFlow锛圞imi K2.5銆丟LM 4.7銆丏eepSeek V3.2銆丮iniMax M2.1銆丼tep 3.5 Flash锛?
+- **渚涘簲鍟嗐€屽幓瀹樼綉銆嶉摼鎺?*锛? 涓璁句緵搴斿晢鍗＄墖澧炲姞瀹樼綉鍏ュ彛
+- **鏅鸿氨 AI 鏂板 GLM 5 妯″瀷**
+- **Settings 鍙屾爮甯冨眬**锛氫緵搴斿晢銆丮CP銆佹妧鑳姐€丄gent 椤甸潰缁熶竴涓哄弻鏍忓崱鐗囩綉鏍?
 
 ### Changed
-- Settings 页面样式全面统一（Toggle、Button、Card、Input、Modal 共 24 处对齐）
+- Settings 椤甸潰鏍峰紡鍏ㄩ潰缁熶竴锛圱oggle銆丅utton銆丆ard銆両nput銆丮odal 鍏?24 澶勫榻愶級
 
 ### Fixed
-- 修复首消息 5~13 秒延迟（stale resumeSessionId + 模型未同步导致阻塞）
-- 修复编辑供应商保存时 API Key 被清空（React config 状态覆盖磁盘数据）
-- 修复定时任务超时导致流式数据丢失（四层防御）
-- 修复自定义 MCP 启用检测找不到系统 npx/node（PATH 环境变量未传递）
-- 修复 MCP 设置按钮无响应 & 切换 Tab 残留 MCP 面板（Modal 渲染位置错误）
-- 修复 Launcher 移除按钮使用未定义 CSS 变量 `--danger`
-- 修复 Windows CSP 配置缺失导致 IPC 通信失败
+- 淇棣栨秷鎭?5~13 绉掑欢杩燂紙stale resumeSessionId + 妯″瀷鏈悓姝ュ鑷撮樆濉烇級
+- 淇缂栬緫渚涘簲鍟嗕繚瀛樻椂 API Key 琚竻绌猴紙React config 鐘舵€佽鐩栫鐩樻暟鎹級
+- 淇瀹氭椂浠诲姟瓒呮椂瀵艰嚧娴佸紡鏁版嵁涓㈠け锛堝洓灞傞槻寰★級
+- 淇鑷畾涔?MCP 鍚敤妫€娴嬫壘涓嶅埌绯荤粺 npx/node锛圥ATH 鐜鍙橀噺鏈紶閫掞級
+- 淇 MCP 璁剧疆鎸夐挳鏃犲搷搴?& 鍒囨崲 Tab 娈嬬暀 MCP 闈㈡澘锛圡odal 娓叉煋浣嶇疆閿欒锛?
+- 淇 Launcher 绉婚櫎鎸夐挳浣跨敤鏈畾涔?CSS 鍙橀噺 `--danger`
+- 淇 Windows CSP 閰嶇疆缂哄け瀵艰嚧 IPC 閫氫俊澶辫触
 
 ---
 
 ## [0.1.13] - 2026-02-10
 
 ### Added
-- **消息队列**：AI 响应中可追加发送消息，排队消息在当前响应完成后自动执行
-  - 排队消息合并为右对齐半透明面板，支持取消和立即发送操作
-  - 采用 Optimistic UI 模式，回车即清空输入框
-  - 与心跳循环兼容：Cron 消息走正常队列，不中断当前 AI 响应
-- **后台任务实时统计**：后台 Agent 运行时显示实时运行时间和工具调用次数
-  - 通过轮询 output_file 获取增量数据，3 秒刷新
-  - 折叠视图显示"后台"徽标和"(后台)"标签后缀
-- **自定义服务商认证方式选择器**：创建/编辑自定义服务商时可选择 AUTH_TOKEN 或 API_KEY
-- **工作区文件夹右键刷新**：文件夹右键菜单新增「刷新」按钮，ContextMenu 组件支持分隔线
+- **娑堟伅闃熷垪**锛欰I 鍝嶅簲涓彲杩藉姞鍙戦€佹秷鎭紝鎺掗槦娑堟伅鍦ㄥ綋鍓嶅搷搴斿畬鎴愬悗鑷姩鎵ц
+  - 鎺掗槦娑堟伅鍚堝苟涓哄彸瀵归綈鍗婇€忔槑闈㈡澘锛屾敮鎸佸彇娑堝拰绔嬪嵆鍙戦€佹搷浣?
+  - 閲囩敤 Optimistic UI 妯″紡锛屽洖杞﹀嵆娓呯┖杈撳叆妗?
+  - 涓庡績璺冲惊鐜吋瀹癸細Cron 娑堟伅璧版甯搁槦鍒楋紝涓嶄腑鏂綋鍓?AI 鍝嶅簲
+- **鍚庡彴浠诲姟瀹炴椂缁熻**锛氬悗鍙?Agent 杩愯鏃舵樉绀哄疄鏃惰繍琛屾椂闂村拰宸ュ叿璋冪敤娆℃暟
+  - 閫氳繃杞 output_file 鑾峰彇澧為噺鏁版嵁锛? 绉掑埛鏂?
+  - 鎶樺彔瑙嗗浘鏄剧ず"鍚庡彴"寰芥爣鍜?(鍚庡彴)"鏍囩鍚庣紑
+- **鑷畾涔夋湇鍔″晢璁よ瘉鏂瑰紡閫夋嫨鍣?*锛氬垱寤?缂栬緫鑷畾涔夋湇鍔″晢鏃跺彲閫夋嫨 AUTH_TOKEN 鎴?API_KEY
+- **宸ヤ綔鍖烘枃浠跺す鍙抽敭鍒锋柊**锛氭枃浠跺す鍙抽敭鑿滃崟鏂板銆屽埛鏂般€嶆寜閽紝ContextMenu 缁勪欢鏀寔鍒嗛殧绾?
 
 ### Changed
-- **停止按钮三态交互**：点击停止按钮立即显示"停止中"视觉反馈（Loader 旋转），后端中断超时从 10s 缩短至 5s
+- **鍋滄鎸夐挳涓夋€佷氦浜?*锛氱偣鍑诲仠姝㈡寜閽珛鍗虫樉绀?鍋滄涓?瑙嗚鍙嶉锛圠oader 鏃嬭浆锛夛紝鍚庣涓柇瓒呮椂浠?10s 缂╃煭鑷?5s
 
 ### Fixed
-- 修复历史会话切换供应商时 "Session ID already in use" 错误（区分历史/新会话的 resume 策略）
-- 修复 Provider 切换时 pre-warm 未完成导致 resume 无效 session ID 的错误
-- 修复 Cron single_session 模式下误中断当前 AI 响应
-- 修复队列 SSE 事件未注册导致前端排队面板不显示
-- 修复心跳循环状态栏背景透明导致内容透出
-- 修复排队面板与心跳状态栏层级顺序（心跳始终紧贴输入框）
+- 淇鍘嗗彶浼氳瘽鍒囨崲渚涘簲鍟嗘椂 "Session ID already in use" 閿欒锛堝尯鍒嗗巻鍙?鏂颁細璇濈殑 resume 绛栫暐锛?
+- 淇 Provider 鍒囨崲鏃?pre-warm 鏈畬鎴愬鑷?resume 鏃犳晥 session ID 鐨勯敊璇?
+- 淇 Cron single_session 妯″紡涓嬭涓柇褰撳墠 AI 鍝嶅簲
+- 淇闃熷垪 SSE 浜嬩欢鏈敞鍐屽鑷村墠绔帓闃熼潰鏉夸笉鏄剧ず
+- 淇蹇冭烦寰幆鐘舵€佹爮鑳屾櫙閫忔槑瀵艰嚧鍐呭閫忓嚭
+- 淇鎺掗槦闈㈡澘涓庡績璺崇姸鎬佹爮灞傜骇椤哄簭锛堝績璺冲缁堢揣璐磋緭鍏ユ锛?
 
 ### Security
-- 修复后台任务轮询端点路径穿越漏洞（resolve + homeDir 校验）
-- 错误消息 ID 改用 crypto.randomUUID() 避免碰撞
-- queue:started 广播携带 attachments，消除前端附件数据源不可靠隐患
+- 淇鍚庡彴浠诲姟杞绔偣璺緞绌胯秺婕忔礊锛坮esolve + homeDir 鏍￠獙锛?
+- 閿欒娑堟伅 ID 鏀圭敤 crypto.randomUUID() 閬垮厤纰版挒
+- queue:started 骞挎挱鎼哄甫 attachments锛屾秷闄ゅ墠绔檮浠舵暟鎹簮涓嶅彲闈犻殣鎮?
 
 ---
 
 ## [0.1.12] - 2026-02-08
 
 ### Added
-- **AI 输出路径可交互**：对话中内联代码如果是真实存在的文件/文件夹路径，自动显示虚线下划线，点击或右键弹出快捷菜单（预览、引用、打开所在文件夹）
+- **AI 杈撳嚭璺緞鍙氦浜?*锛氬璇濅腑鍐呰仈浠ｇ爜濡傛灉鏄湡瀹炲瓨鍦ㄧ殑鏂囦欢/鏂囦欢澶硅矾寰勶紝鑷姩鏄剧ず铏氱嚎涓嬪垝绾匡紝鐐瑰嚮鎴栧彸閿脊鍑哄揩鎹疯彍鍗曪紙棰勮銆佸紩鐢ㄣ€佹墦寮€鎵€鍦ㄦ枃浠跺す锛?
 
 ### Fixed
-- **Tab 栏触控板交互优化**：Mac 触控板轻触切换 Tab 不再误触发拖拽
-- **Tab 关闭按钮偶尔无响应**：缩小拖拽监听范围至标题区域，扩大关闭按钮热区
-- **Monaco Editor 大文件卡死**：延迟挂载编辑器 + 大文件自动降级纯文本模式
-- **图片文件右键预览菜单**：右键菜单的「预览」选项现在对图片文件也可用
+- **Tab 鏍忚Е鎺ф澘浜や簰浼樺寲**锛歁ac 瑙︽帶鏉胯交瑙﹀垏鎹?Tab 涓嶅啀璇Е鍙戞嫋鎷?
+- **Tab 鍏抽棴鎸夐挳鍋跺皵鏃犲搷搴?*锛氱缉灏忔嫋鎷界洃鍚寖鍥磋嚦鏍囬鍖哄煙锛屾墿澶у叧闂寜閽儹鍖?
+- **Monaco Editor 澶ф枃浠跺崱姝?*锛氬欢杩熸寕杞界紪杈戝櫒 + 澶ф枃浠惰嚜鍔ㄩ檷绾х函鏂囨湰妯″紡
+- **鍥剧墖鏂囦欢鍙抽敭棰勮鑿滃崟**锛氬彸閿彍鍗曠殑銆岄瑙堛€嶉€夐」鐜板湪瀵瑰浘鐗囨枃浠朵篃鍙敤
 
 ---
 
 ## [0.1.11] - 2026-02-06
 
 ### Added
-- **Sub-Agent 能力管理**：为 AI 配备多种"专家角色"，模型自主判断何时委派
-  - 支持全局 Agent（`~/.hamuna/agents/`）和项目 Agent（`.claude/agents/`）双层管理
-  - Agent 定义文件与 Claude Code 格式完全兼容（Markdown + YAML Frontmatter）
-  - 可配置工具限制、模型选择、权限模式、最大轮次等
-  - 项目工作区支持引入全局 Agent（引用机制，实时同步）
-  - 启用/禁用控制，禁用的 Agent 不注入 SDK
-  - 从 Claude Code 同步全局 Agent
-- **Chat 侧边栏「Agent 能力」面板**：展示当前项目已启用的 Sub-Agents / Skills / Commands
-  - 折叠/展开面板，按类型分组显示
-  - 悬停查看描述，点击 Skill/Command 插入到输入框
-  - 右键菜单快速跳转设置页
-- **预置内置技能**：开箱即用 6 个常用技能
-  - docx（Word 文档）、pdf、pptx（PPT）、xlsx（Excel）、skill-creator（技能创建向导）、summarize（内容摘要）
-  - 首次启动自动种子到 `~/.hamuna/skills/`，不覆盖用户已有内容
-- **全局技能启用/禁用**：Settings 技能列表支持 toggle 开关
-  - 禁用的技能不出现在 `/` 斜杠命令和能力面板中
-  - 状态持久化到 `~/.hamuna/skills-config.json`
+- **Sub-Agent 鑳藉姏绠＄悊**锛氫负 AI 閰嶅澶氱"涓撳瑙掕壊"锛屾ā鍨嬭嚜涓诲垽鏂綍鏃跺娲?
+  - 鏀寔鍏ㄥ眬 Agent锛坄~/.hamuna/agents/`锛夊拰椤圭洰 Agent锛坄.claude/agents/`锛夊弻灞傜鐞?
+  - Agent 瀹氫箟鏂囦欢涓?Claude Code 鏍煎紡瀹屽叏鍏煎锛圡arkdown + YAML Frontmatter锛?
+  - 鍙厤缃伐鍏烽檺鍒躲€佹ā鍨嬮€夋嫨銆佹潈闄愭ā寮忋€佹渶澶ц疆娆＄瓑
+  - 椤圭洰宸ヤ綔鍖烘敮鎸佸紩鍏ュ叏灞€ Agent锛堝紩鐢ㄦ満鍒讹紝瀹炴椂鍚屾锛?
+  - 鍚敤/绂佺敤鎺у埗锛岀鐢ㄧ殑 Agent 涓嶆敞鍏?SDK
+  - 浠?Claude Code 鍚屾鍏ㄥ眬 Agent
+- **Chat 渚ц竟鏍忋€孉gent 鑳藉姏銆嶉潰鏉?*锛氬睍绀哄綋鍓嶉」鐩凡鍚敤鐨?Sub-Agents / Skills / Commands
+  - 鎶樺彔/灞曞紑闈㈡澘锛屾寜绫诲瀷鍒嗙粍鏄剧ず
+  - 鎮仠鏌ョ湅鎻忚堪锛岀偣鍑?Skill/Command 鎻掑叆鍒拌緭鍏ユ
+  - 鍙抽敭鑿滃崟蹇€熻烦杞缃〉
+- **棰勭疆鍐呯疆鎶€鑳?*锛氬紑绠卞嵆鐢?6 涓父鐢ㄦ妧鑳?
+  - docx锛圵ord 鏂囨。锛夈€乸df銆乸ptx锛圥PT锛夈€亁lsx锛圗xcel锛夈€乻kill-creator锛堟妧鑳藉垱寤哄悜瀵硷級銆乻ummarize锛堝唴瀹规憳瑕侊級
+  - 棣栨鍚姩鑷姩绉嶅瓙鍒?`~/.hamuna/skills/`锛屼笉瑕嗙洊鐢ㄦ埛宸叉湁鍐呭
+- **鍏ㄥ眬鎶€鑳藉惎鐢?绂佺敤**锛歋ettings 鎶€鑳藉垪琛ㄦ敮鎸?toggle 寮€鍏?
+  - 绂佺敤鐨勬妧鑳戒笉鍑虹幇鍦?`/` 鏂滄潬鍛戒护鍜岃兘鍔涢潰鏉夸腑
+  - 鐘舵€佹寔涔呭寲鍒?`~/.hamuna/skills-config.json`
 
 ### Changed
-- **统一 Session ID 架构**：通过 SDK 0.2.33 新特性消除双 ID 映射，新 session 在产品层和 SDK 层使用同一 ID
-- 升级 Claude Agent SDK 到 0.2.34
-- **SDK 预热机制**：打开 Tab 时提前启动 SDK 子进程和 MCP 服务器，消除首次发送消息的冷启动延迟
-  - 500ms 防抖批量处理快速配置变更
-  - 预热失败自动重试（最多 3 次），配置变更时重置
-  - 预热会话对前端不可见，首条消息时无缝切换为活跃状态
-- **MCP 版本锁定**：预设 MCP 服务（Playwright）锁定到具体版本号，避免每次启动的 npm 注册表查询延迟（2-5s）
-- **网络代理设置移至「通用」**：从「关于 - 开发者模式」移至「通用设置」，普通用户可直接使用
-- Settings 页面新增 Agents 分区，与 Skills 平级
-- WorkspaceConfigPanel 新增 Agents Tab
+- **缁熶竴 Session ID 鏋舵瀯**锛氶€氳繃 SDK 0.2.33 鏂扮壒鎬ф秷闄ゅ弻 ID 鏄犲皠锛屾柊 session 鍦ㄤ骇鍝佸眰鍜?SDK 灞備娇鐢ㄥ悓涓€ ID
+- 鍗囩骇 Claude Agent SDK 鍒?0.2.34
+- **SDK 棰勭儹鏈哄埗**锛氭墦寮€ Tab 鏃舵彁鍓嶅惎鍔?SDK 瀛愯繘绋嬪拰 MCP 鏈嶅姟鍣紝娑堥櫎棣栨鍙戦€佹秷鎭殑鍐峰惎鍔ㄥ欢杩?
+  - 500ms 闃叉姈鎵归噺澶勭悊蹇€熼厤缃彉鏇?
+  - 棰勭儹澶辫触鑷姩閲嶈瘯锛堟渶澶?3 娆★級锛岄厤缃彉鏇存椂閲嶇疆
+  - 棰勭儹浼氳瘽瀵瑰墠绔笉鍙锛岄鏉℃秷鎭椂鏃犵紳鍒囨崲涓烘椿璺冪姸鎬?
+- **MCP 鐗堟湰閿佸畾**锛氶璁?MCP 鏈嶅姟锛圥laywright锛夐攣瀹氬埌鍏蜂綋鐗堟湰鍙凤紝閬垮厤姣忔鍚姩鐨?npm 娉ㄥ唽琛ㄦ煡璇㈠欢杩燂紙2-5s锛?
+- **缃戠粶浠ｇ悊璁剧疆绉昏嚦銆岄€氱敤銆?*锛氫粠銆屽叧浜?- 寮€鍙戣€呮ā寮忋€嶇Щ鑷炽€岄€氱敤璁剧疆銆嶏紝鏅€氱敤鎴峰彲鐩存帴浣跨敤
+- Settings 椤甸潰鏂板 Agents 鍒嗗尯锛屼笌 Skills 骞崇骇
+- WorkspaceConfigPanel 鏂板 Agents Tab
 
 ---
 
 ## [0.1.10] - 2026-02-05
 
 ### Added
-- **定时任务功能**：让 AI Agent 按设定周期自动执行任务
-  - 支持设置任务间隔时间（分钟）
-  - 多种结束条件：截止时间、执行次数、AI 主动退出
-  - 运行模式：单 Session 持续执行 / 每次新建 Session
-  - 任务运行时输入框显示状态遮罩，支持查看设置和停止任务
-  - 历史记录中显示「定时」标签标识
-- **后台运行支持**：应用可最小化到系统托盘持续运行
-  - 点击关闭按钮最小化到托盘（可在设置中关闭）
-  - 托盘右键菜单：打开、设置、退出
-  - macOS 点击 Dock 图标恢复窗口
-  - macOS 菜单栏使用标准模板图标
-  - 退出时若有运行中任务会弹窗确认
-- **通用设置页面**：新增「通用」设置 Tab
-  - 开机启动开关
-  - 最小化到托盘开关
-  - 任务消息通知开关
-- **技术架构升级**：Session-Centric Sidecar 管理，支持多入口（Tab/定时任务）共享 Agent 实例
+- **瀹氭椂浠诲姟鍔熻兘**锛氳 AI Agent 鎸夎瀹氬懆鏈熻嚜鍔ㄦ墽琛屼换鍔?
+  - 鏀寔璁剧疆浠诲姟闂撮殧鏃堕棿锛堝垎閽燂級
+  - 澶氱缁撴潫鏉′欢锛氭埅姝㈡椂闂淬€佹墽琛屾鏁般€丄I 涓诲姩閫€鍑?
+  - 杩愯妯″紡锛氬崟 Session 鎸佺画鎵ц / 姣忔鏂板缓 Session
+  - 浠诲姟杩愯鏃惰緭鍏ユ鏄剧ず鐘舵€侀伄缃╋紝鏀寔鏌ョ湅璁剧疆鍜屽仠姝换鍔?
+  - 鍘嗗彶璁板綍涓樉绀恒€屽畾鏃躲€嶆爣绛炬爣璇?
+- **鍚庡彴杩愯鏀寔**锛氬簲鐢ㄥ彲鏈€灏忓寲鍒扮郴缁熸墭鐩樻寔缁繍琛?
+  - 鐐瑰嚮鍏抽棴鎸夐挳鏈€灏忓寲鍒版墭鐩橈紙鍙湪璁剧疆涓叧闂級
+  - 鎵樼洏鍙抽敭鑿滃崟锛氭墦寮€銆佽缃€侀€€鍑?
+  - macOS 鐐瑰嚮 Dock 鍥炬爣鎭㈠绐楀彛
+  - macOS 鑿滃崟鏍忎娇鐢ㄦ爣鍑嗘ā鏉垮浘鏍?
+  - 閫€鍑烘椂鑻ユ湁杩愯涓换鍔′細寮圭獥纭
+- **閫氱敤璁剧疆椤甸潰**锛氭柊澧炪€岄€氱敤銆嶈缃?Tab
+  - 寮€鏈哄惎鍔ㄥ紑鍏?
+  - 鏈€灏忓寲鍒版墭鐩樺紑鍏?
+  - 浠诲姟娑堟伅閫氱煡寮€鍏?
+- **鎶€鏈灦鏋勫崌绾?*锛歋ession-Centric Sidecar 绠＄悊锛屾敮鎸佸鍏ュ彛锛圱ab/瀹氭椂浠诲姟锛夊叡浜?Agent 瀹炰緥
 
 ---
 
 ## [0.1.9] - 2026-02-02
 
 ### Added
-- **MCP 零门槛使用**：预设 MCP（如 Playwright）使用内置 bun 执行，无需安装 Node.js
-- **MCP 运行时检测**：启用自定义 MCP 时自动检测命令是否存在，不存在则弹窗引导下载
-- **系统通知**：AI 任务完成、权限请求、问答确认时自动发送系统通知（窗口失焦时）
-- 技能/指令卡片展示作者信息
-- Chat 页面顶部显示当前项目名称
+- **MCP 闆堕棬妲涗娇鐢?*锛氶璁?MCP锛堝 Playwright锛変娇鐢ㄥ唴缃?bun 鎵ц锛屾棤闇€瀹夎 Node.js
+- **MCP 杩愯鏃舵娴?*锛氬惎鐢ㄨ嚜瀹氫箟 MCP 鏃惰嚜鍔ㄦ娴嬪懡浠ゆ槸鍚﹀瓨鍦紝涓嶅瓨鍦ㄥ垯寮圭獥寮曞涓嬭浇
+- **绯荤粺閫氱煡**锛欰I 浠诲姟瀹屾垚銆佹潈闄愯姹傘€侀棶绛旂‘璁ゆ椂鑷姩鍙戦€佺郴缁熼€氱煡锛堢獥鍙ｅけ鐒︽椂锛?
+- 鎶€鑳?鎸囦护鍗＄墖灞曠ず浣滆€呬俊鎭?
+- Chat 椤甸潰椤堕儴鏄剧ず褰撳墠椤圭洰鍚嶇О
 
 ### Changed
-- 项目设置只展示项目级数据，新增「查看用户技能/指令」跳转链接
-- 项目设置图标改为黑底白色齿轮
-- 输入框视觉优化：更大的字号和行高
-- 快捷功能卡片改为横向布局
-- 项目工作区折叠按钮移至标题栏最右端
+- 椤圭洰璁剧疆鍙睍绀洪」鐩骇鏁版嵁锛屾柊澧炪€屾煡鐪嬬敤鎴锋妧鑳?鎸囦护銆嶈烦杞摼鎺?
+- 椤圭洰璁剧疆鍥炬爣鏀逛负榛戝簳鐧借壊榻胯疆
+- 杈撳叆妗嗚瑙変紭鍖栵細鏇村ぇ鐨勫瓧鍙峰拰琛岄珮
+- 蹇嵎鍔熻兘鍗＄墖鏀逛负妯悜甯冨眬
+- 椤圭洰宸ヤ綔鍖烘姌鍙犳寜閽Щ鑷虫爣棰樻爮鏈€鍙崇
 
 ### Fixed
-- 彻底修复 Chat 页面滚动回弹问题
-- **Windows 10 1909 兼容性修复**：安装程序自动安装 Git for Windows（Claude Agent SDK 依赖）
+- 褰诲簳淇 Chat 椤甸潰婊氬姩鍥炲脊闂
+- **Windows 10 1909 鍏煎鎬т慨澶?*锛氬畨瑁呯▼搴忚嚜鍔ㄥ畨瑁?Git for Windows锛圕laude Agent SDK 渚濊禆锛?
 
 ---
 
 ## [0.1.8] - 2026-02-01
 
 ### Added
-- **Analytics 系统**
-  - 匿名使用统计，帮助改进产品体验
-  - 默认关闭，需通过环境变量 `HAMUNA_ANALYTICS_ENABLED=true` 启用
-  - 支持事件批量发送、防抖、节流（每分钟最多 200 事件）
-  - 数据加密传输，不收集任何敏感信息（代码、对话内容等）
-  - device_id 持久化存储到 `~/.hamuna/device_id`（跨安装保持一致）
+- **Analytics 绯荤粺**
+  - 鍖垮悕浣跨敤缁熻锛屽府鍔╂敼杩涗骇鍝佷綋楠?
+  - 榛樿鍏抽棴锛岄渶閫氳繃鐜鍙橀噺 `HAMUNA_ANALYTICS_ENABLED=true` 鍚敤
+  - 鏀寔浜嬩欢鎵归噺鍙戦€併€侀槻鎶栥€佽妭娴侊紙姣忓垎閽熸渶澶?200 浜嬩欢锛?
+  - 鏁版嵁鍔犲瘑浼犺緭锛屼笉鏀堕泦浠讳綍鏁忔劅淇℃伅锛堜唬鐮併€佸璇濆唴瀹圭瓑锛?
+  - device_id 鎸佷箙鍖栧瓨鍌ㄥ埌 `~/.hamuna/device_id`锛堣法瀹夎淇濇寔涓€鑷达級
 
 
 ---
@@ -2630,263 +2643,263 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.7] - 2026-01-31
 
 ### Added
-- Windows 平台开发工具（`build_dev_win.ps1`）
-- 设置页面「关于」新增用户交流群二维码（自动缓存，离线可用）
-- 代理配置支持（Settings > About > Developer Mode）
-  - 支持 HTTP/HTTPS/SOCKS5 协议
-  - 自动应用于 Claude Agent SDK 和应用更新下载
+- Windows 骞冲彴寮€鍙戝伐鍏凤紙`build_dev_win.ps1`锛?
+- 璁剧疆椤甸潰銆屽叧浜庛€嶆柊澧炵敤鎴蜂氦娴佺兢浜岀淮鐮侊紙鑷姩缂撳瓨锛岀绾垮彲鐢級
+- 浠ｇ悊閰嶇疆鏀寔锛圫ettings > About > Developer Mode锛?
+  - 鏀寔 HTTP/HTTPS/SOCKS5 鍗忚
+  - 鑷姩搴旂敤浜?Claude Agent SDK 鍜屽簲鐢ㄦ洿鏂颁笅杞?
 
 ### Changed
-- 改进 Windows 安装器升级体验，支持直接覆盖安装（无需先卸载旧版本）
-- 优化网络连接池配置（降低资源占用）
+- 鏀硅繘 Windows 瀹夎鍣ㄥ崌绾т綋楠岋紝鏀寔鐩存帴瑕嗙洊瀹夎锛堟棤闇€鍏堝嵏杞芥棫鐗堟湰锛?
+- 浼樺寲缃戠粶杩炴帴姹犻厤缃紙闄嶄綆璧勬簮鍗犵敤锛?
 
 ### Fixed
-- **Windows 平台关键修复**：
-  - 修复 Windows 生产包无法启动的问题
-  - 修复 Sidecar 连接失败（代理配置冲突）
-  - 修复 Windows Tauri IPC 通信错误（CSP 配置不完整）
-  - 修复构建脚本导致的配置缓存问题
-  - 修复启动页工作区名称显示完整路径（应显示文件夹名）
-  - 修复工具徽章 Windows 路径显示问题（3 处）
-- 修复二维码加载失败问题（Windows CSP 限制）
-- 修复代理环境下 localhost 连接失败
-- 修复 Tab 关闭确认对话框无效（正在生成时关闭未被阻止）
-- 修复 Windows 关闭最后一个 Tab 时程序退出
-- 修复 React ref 在渲染期间更新（ESLint 警告）
-- 修复多项代码质量问题（进程清理竞态、错误处理等）
+- **Windows 骞冲彴鍏抽敭淇**锛?
+  - 淇 Windows 鐢熶骇鍖呮棤娉曞惎鍔ㄧ殑闂
+  - 淇 Sidecar 杩炴帴澶辫触锛堜唬鐞嗛厤缃啿绐侊級
+  - 淇 Windows Tauri IPC 閫氫俊閿欒锛圕SP 閰嶇疆涓嶅畬鏁达級
+  - 淇鏋勫缓鑴氭湰瀵艰嚧鐨勯厤缃紦瀛橀棶棰?
+  - 淇鍚姩椤靛伐浣滃尯鍚嶇О鏄剧ず瀹屾暣璺緞锛堝簲鏄剧ず鏂囦欢澶瑰悕锛?
+  - 淇宸ュ叿寰界珷 Windows 璺緞鏄剧ず闂锛? 澶勶級
+- 淇浜岀淮鐮佸姞杞藉け璐ラ棶棰橈紙Windows CSP 闄愬埗锛?
+- 淇浠ｇ悊鐜涓?localhost 杩炴帴澶辫触
+- 淇 Tab 鍏抽棴纭瀵硅瘽妗嗘棤鏁堬紙姝ｅ湪鐢熸垚鏃跺叧闂湭琚樆姝級
+- 淇 Windows 鍏抽棴鏈€鍚庝竴涓?Tab 鏃剁▼搴忛€€鍑?
+- 淇 React ref 鍦ㄦ覆鏌撴湡闂存洿鏂帮紙ESLint 璀﹀憡锛?
+- 淇澶氶」浠ｇ爜璐ㄩ噺闂锛堣繘绋嬫竻鐞嗙珵鎬併€侀敊璇鐞嗙瓑锛?
 
 ### Technical
-- 统一代理配置模块，消除代码重复
-- Tab 关闭确认重构：使用 ConfirmDialog 替代 window.confirm()（符合 React 声明式编程）
-- 路径处理标准化：优先使用 Tauri `basename()` API，同步场景使用 `/[/\\]/` 正则
-- 完善错误处理和日志记录
-- 增强构建脚本健壮性（清理验证、容错处理）
-- 新增技术文档：代理配置、构建问题排查、Windows 平台指南
+- 缁熶竴浠ｇ悊閰嶇疆妯″潡锛屾秷闄や唬鐮侀噸澶?
+- Tab 鍏抽棴纭閲嶆瀯锛氫娇鐢?ConfirmDialog 鏇夸唬 window.confirm()锛堢鍚?React 澹版槑寮忕紪绋嬶級
+- 璺緞澶勭悊鏍囧噯鍖栵細浼樺厛浣跨敤 Tauri `basename()` API锛屽悓姝ュ満鏅娇鐢?`/[/\\]/` 姝ｅ垯
+- 瀹屽杽閿欒澶勭悊鍜屾棩蹇楄褰?
+- 澧炲己鏋勫缓鑴氭湰鍋ュ．鎬э紙娓呯悊楠岃瘉銆佸閿欏鐞嗭級
+- 鏂板鎶€鏈枃妗ｏ細浠ｇ悊閰嶇疆銆佹瀯寤洪棶棰樻帓鏌ャ€乄indows 骞冲彴鎸囧崡
 
-**详见**: [specs/prd/prd_0.1.7.md](./specs/prd/prd_0.1.7.md)
+**璇﹁**: [specs/prd/prd_0.1.7.md](./specs/prd/prd_0.1.7.md)
 
 ---
 
 ## [0.1.6] - 2026-01-30
 
 ### Added
-- **Windows 客户端支持**
-  - NSIS 安装包 (`HamunaAgent_x.x.x_x64-setup.exe`)
-  - 便携版 ZIP (`HamunaAgent_x.x.x_x86_64-portable.zip`)
-  - 自动更新支持（共用 Tauri 签名密钥）
-- 新增 Windows 构建脚本
-  - `setup_windows.ps1` - 环境初始化
-  - `build_windows.ps1` - 构建脚本
-  - `publish_windows.ps1` - 发布脚本（含 `latest_win.json` 生成）
-- 新增 `src/server/utils/platform.ts` 跨平台工具模块
-- **支持 `server_tool_use` 内容块类型**（第三方 API 如智谱 GLM-4.7 的服务端工具调用）
-- **设置页面添加用户交流群二维码**
-  - 位于「关于」页面，从 R2 动态加载
-  - 网络异常时自动隐藏
-  - 新增 `upload_qr_code.sh` 上传脚本
-- **MCP 表单 UI 改进**
-  - 优化服务器配置表单交互体验
+- **Windows 瀹㈡埛绔敮鎸?*
+  - NSIS 瀹夎鍖?(`HamunaAgent_x.x.x_x64-setup.exe`)
+  - 渚挎惡鐗?ZIP (`HamunaAgent_x.x.x_x86_64-portable.zip`)
+  - 鑷姩鏇存柊鏀寔锛堝叡鐢?Tauri 绛惧悕瀵嗛挜锛?
+- 鏂板 Windows 鏋勫缓鑴氭湰
+  - `setup_windows.ps1` - 鐜鍒濆鍖?
+  - `build_windows.ps1` - 鏋勫缓鑴氭湰
+  - `publish_windows.ps1` - 鍙戝竷鑴氭湰锛堝惈 `latest_win.json` 鐢熸垚锛?
+- 鏂板 `src/server/utils/platform.ts` 璺ㄥ钩鍙板伐鍏锋ā鍧?
+- **鏀寔 `server_tool_use` 鍐呭鍧楃被鍨?*锛堢涓夋柟 API 濡傛櫤璋?GLM-4.7 鐨勬湇鍔＄宸ュ叿璋冪敤锛?
+- **璁剧疆椤甸潰娣诲姞鐢ㄦ埛浜ゆ祦缇や簩缁寸爜**
+  - 浣嶄簬銆屽叧浜庛€嶉〉闈紝浠?R2 鍔ㄦ€佸姞杞?
+  - 缃戠粶寮傚父鏃惰嚜鍔ㄩ殣钘?
+  - 鏂板 `upload_qr_code.sh` 涓婁紶鑴氭湰
+- **MCP 琛ㄥ崟 UI 鏀硅繘**
+  - 浼樺寲鏈嶅姟鍣ㄩ厤缃〃鍗曚氦浜掍綋楠?
 
 ### Changed
-- `runtime.ts` 支持 Windows 路径检测 (`bun.exe`, `%USERPROFILE%\.bun`, etc.)
-- `sidecar.rs` 支持 Windows 进程管理 (`wmic` + `taskkill`)
-- 统一跨平台环境变量处理（消除 10+ 处重复代码）
-- **全局视觉优化与设计规范更新**
-- 工作区右键菜单「快速预览」改为「预览」
-- **会话统计 UI 优化**
-  - 「缓存读取」改为「输入缓存」（= cache_read + cache_creation）
-  - 消息明细新增「输入缓存」列
+- `runtime.ts` 鏀寔 Windows 璺緞妫€娴?(`bun.exe`, `%USERPROFILE%\.bun`, etc.)
+- `sidecar.rs` 鏀寔 Windows 杩涚▼绠＄悊 (`wmic` + `taskkill`)
+- 缁熶竴璺ㄥ钩鍙扮幆澧冨彉閲忓鐞嗭紙娑堥櫎 10+ 澶勯噸澶嶄唬鐮侊級
+- **鍏ㄥ眬瑙嗚浼樺寲涓庤璁¤鑼冩洿鏂?*
+- 宸ヤ綔鍖哄彸閿彍鍗曘€屽揩閫熼瑙堛€嶆敼涓恒€岄瑙堛€?
+- **浼氳瘽缁熻 UI 浼樺寲**
+  - 銆岀紦瀛樿鍙栥€嶆敼涓恒€岃緭鍏ョ紦瀛樸€嶏紙= cache_read + cache_creation锛?
+  - 娑堟伅鏄庣粏鏂板銆岃緭鍏ョ紦瀛樸€嶅垪
 
 ### Fixed
-- 修复 Windows 自定义标题栏按钮无效（缺少 Tauri 权限）
-- 修复 UI 卡在 loading 状态（`chat:system-status` 事件未注册 + React 批量更新延迟）
-- 修复 `MultiEdit` 工具完成后工作区不刷新
-- 修复 MCP 服务器和命令系统的 Windows 跨平台路径问题
-- 修复智谱 GLM-4.7 `server_tool_use` 的输入解析（JSON 字符串 → 对象）
-- 过滤智谱 API 返回的装饰性工具文本（避免干扰正常内容显示）
-- **Token 统计修复**
-  - 从 SDK result 消息提取统计数据（更可靠）
-  - 支持多模型分别统计（新增 `modelUsage` 字段）
-  - 修复智谱/Anthropic 等供应商统计数据为 0 的问题
-- 修复流式输出中空白 chunk 过滤（保留有效换行和空格）
-- 修复进程终止信号被错误保存为错误消息
-- 为未知工具添加兜底图标 (Wrench)
+- 淇 Windows 鑷畾涔夋爣棰樻爮鎸夐挳鏃犳晥锛堢己灏?Tauri 鏉冮檺锛?
+- 淇 UI 鍗″湪 loading 鐘舵€侊紙`chat:system-status` 浜嬩欢鏈敞鍐?+ React 鎵归噺鏇存柊寤惰繜锛?
+- 淇 `MultiEdit` 宸ュ叿瀹屾垚鍚庡伐浣滃尯涓嶅埛鏂?
+- 淇 MCP 鏈嶅姟鍣ㄥ拰鍛戒护绯荤粺鐨?Windows 璺ㄥ钩鍙拌矾寰勯棶棰?
+- 淇鏅鸿氨 GLM-4.7 `server_tool_use` 鐨勮緭鍏ヨВ鏋愶紙JSON 瀛楃涓?鈫?瀵硅薄锛?
+- 杩囨护鏅鸿氨 API 杩斿洖鐨勮楗版€у伐鍏锋枃鏈紙閬垮厤骞叉壈姝ｅ父鍐呭鏄剧ず锛?
+- **Token 缁熻淇**
+  - 浠?SDK result 娑堟伅鎻愬彇缁熻鏁版嵁锛堟洿鍙潬锛?
+  - 鏀寔澶氭ā鍨嬪垎鍒粺璁★紙鏂板 `modelUsage` 瀛楁锛?
+  - 淇鏅鸿氨/Anthropic 绛変緵搴斿晢缁熻鏁版嵁涓?0 鐨勯棶棰?
+- 淇娴佸紡杈撳嚭涓┖鐧?chunk 杩囨护锛堜繚鐣欐湁鏁堟崲琛屽拰绌烘牸锛?
+- 淇杩涚▼缁堟淇″彿琚敊璇繚瀛樹负閿欒娑堟伅
+- 涓烘湭鐭ュ伐鍏锋坊鍔犲厹搴曞浘鏍?(Wrench)
 
 ### Technical
-- Windows 数据目录：`%APPDATA%\HamunaAgent\`
-- 添加 `buildCrossPlatformEnv()` 统一子进程环境变量构建
-- 使用 `flushSync` 强制同步关键 UI 状态更新
-- 装饰性文本过滤使用多条件匹配，避免误伤正常内容
-- 新增 `ModelUsageEntry` 类型支持按模型分组存储 token 统计
+- Windows 鏁版嵁鐩綍锛歚%APPDATA%\HamunaAgent\`
+- 娣诲姞 `buildCrossPlatformEnv()` 缁熶竴瀛愯繘绋嬬幆澧冨彉閲忔瀯寤?
+- 浣跨敤 `flushSync` 寮哄埗鍚屾鍏抽敭 UI 鐘舵€佹洿鏂?
+- 瑁呴グ鎬ф枃鏈繃婊や娇鐢ㄥ鏉′欢鍖归厤锛岄伩鍏嶈浼ゆ甯稿唴瀹?
+- 鏂板 `ModelUsageEntry` 绫诲瀷鏀寔鎸夋ā鍨嬪垎缁勫瓨鍌?token 缁熻
 
-**详见**: [specs/prd/prd_0.1.6.md](./specs/prd/prd_0.1.6.md)
+**璇﹁**: [specs/prd/prd_0.1.6.md](./specs/prd/prd_0.1.6.md)
 
 ---
 
 ## [0.1.5] - 2026-01-29
 
 ### Added
-- 添加网络代理设置功能（开发者模式）
-  - 支持 HTTP/SOCKS5 协议
-  - 设置入口：设置 → 关于 → 点击 Logo 5次 → 开发者区域
-  - Sidecar 启动时自动注入 HTTP_PROXY/HTTPS_PROXY 环境变量
+- 娣诲姞缃戠粶浠ｇ悊璁剧疆鍔熻兘锛堝紑鍙戣€呮ā寮忥級
+  - 鏀寔 HTTP/SOCKS5 鍗忚
+  - 璁剧疆鍏ュ彛锛氳缃?鈫?鍏充簬 鈫?鐐瑰嚮 Logo 5娆?鈫?寮€鍙戣€呭尯鍩?
+  - Sidecar 鍚姩鏃惰嚜鍔ㄦ敞鍏?HTTP_PROXY/HTTPS_PROXY 鐜鍙橀噺
 
 ### Changed
-- 升级 Claude Agent SDK 从 0.2.7 到 0.2.23
-- 建立 E2E 测试基础设施（Anthropic/Moonshot 双供应商测试）
-- 统一 `/api/commands` 端点的命令解析逻辑
-  - 使用 `parseFullCommandContent()` 替代 `parseYamlFrontmatter()`
-  - 优先使用 frontmatter.name，回退到文件名
-  - 提取 `scanCommandsDir()` 消除代码重复
-- 统一版本记录到 CHANGELOG.md（移除 specs/version.md）
+- 鍗囩骇 Claude Agent SDK 浠?0.2.7 鍒?0.2.23
+- 寤虹珛 E2E 娴嬭瘯鍩虹璁炬柦锛圓nthropic/Moonshot 鍙屼緵搴斿晢娴嬭瘯锛?
+- 缁熶竴 `/api/commands` 绔偣鐨勫懡浠よВ鏋愰€昏緫
+  - 浣跨敤 `parseFullCommandContent()` 鏇夸唬 `parseYamlFrontmatter()`
+  - 浼樺厛浣跨敤 frontmatter.name锛屽洖閫€鍒版枃浠跺悕
+  - 鎻愬彇 `scanCommandsDir()` 娑堥櫎浠ｇ爜閲嶅
+- 缁熶竴鐗堟湰璁板綍鍒?CHANGELOG.md锛堢Щ闄?specs/version.md锛?
 
 ### Fixed
-- 修复全局用户指令在对话 `/` 菜单中不显示的问题
-  - `/api/commands` 端点新增扫描 `~/.hamuna/commands/` 目录
+- 淇鍏ㄥ眬鐢ㄦ埛鎸囦护鍦ㄥ璇?`/` 鑿滃崟涓笉鏄剧ず鐨勯棶棰?
+  - `/api/commands` 绔偣鏂板鎵弿 `~/.hamuna/commands/` 鐩綍
 
 ### Technical
-- 代理设置提取 `PROXY_DEFAULTS` 常量，消除魔数
-- 添加 `isValidProxyHost()` 验证函数
-- Rust 侧同步添加默认值常量
+- 浠ｇ悊璁剧疆鎻愬彇 `PROXY_DEFAULTS` 甯搁噺锛屾秷闄ら瓟鏁?
+- 娣诲姞 `isValidProxyHost()` 楠岃瘉鍑芥暟
+- Rust 渚у悓姝ユ坊鍔犻粯璁ゅ€煎父閲?
 
 ---
 
 ## [0.1.4] - 2026-01-29
 
 ### Added
-- 支持编辑自定义供应商的名称、云服务商标签、Base URL、模型列表
-- 编辑面板内增加「删除」按钮，附确认弹窗
-- 删除供应商时自动切换受影响项目到其他可用供应商
-- 模型标签 hover 显示删除按钮（用户添加的模型可删除）
-- 预设供应商支持用户添加自定义模型
-- 预设模型显示「预设」标签，不可删除
-- 历史记录显示消息数和 Token 消耗统计
-- 新增统计详情弹窗（按模型分组、消息明细）
-- 无 MCP 工具时显示引导文案，链接至设置页面
-- 工作区右键菜单「引用」（文件/文件夹/多选均支持插入 `@路径`）
-- 新建技能对话框增加「导入文件夹」选项（桌面端）
-- Moonshot 供应商新增 Kimi K2.5 模型
+- 鏀寔缂栬緫鑷畾涔変緵搴斿晢鐨勫悕绉般€佷簯鏈嶅姟鍟嗘爣绛俱€丅ase URL銆佹ā鍨嬪垪琛?
+- 缂栬緫闈㈡澘鍐呭鍔犮€屽垹闄ゃ€嶆寜閽紝闄勭‘璁ゅ脊绐?
+- 鍒犻櫎渚涘簲鍟嗘椂鑷姩鍒囨崲鍙楀奖鍝嶉」鐩埌鍏朵粬鍙敤渚涘簲鍟?
+- 妯″瀷鏍囩 hover 鏄剧ず鍒犻櫎鎸夐挳锛堢敤鎴锋坊鍔犵殑妯″瀷鍙垹闄わ級
+- 棰勮渚涘簲鍟嗘敮鎸佺敤鎴锋坊鍔犺嚜瀹氫箟妯″瀷
+- 棰勮妯″瀷鏄剧ず銆岄璁俱€嶆爣绛撅紝涓嶅彲鍒犻櫎
+- 鍘嗗彶璁板綍鏄剧ず娑堟伅鏁板拰 Token 娑堣€楃粺璁?
+- 鏂板缁熻璇︽儏寮圭獥锛堟寜妯″瀷鍒嗙粍銆佹秷鎭槑缁嗭級
+- 鏃?MCP 宸ュ叿鏃舵樉绀哄紩瀵兼枃妗堬紝閾炬帴鑷宠缃〉闈?
+- 宸ヤ綔鍖哄彸閿彍鍗曘€屽紩鐢ㄣ€嶏紙鏂囦欢/鏂囦欢澶?澶氶€夊潎鏀寔鎻掑叆 `@璺緞`锛?
+- 鏂板缓鎶€鑳藉璇濇澧炲姞銆屽鍏ユ枃浠跺す銆嶉€夐」锛堟闈㈢锛?
+- Moonshot 渚涘簲鍟嗘柊澧?Kimi K2.5 妯″瀷
 
 ### Changed
-- 消息存储升级为 JSONL 格式（O(1) 追加，崩溃容错）
-- 增量统计计算、行数缓存、文件锁机制
-- Tab 切换时自动同步供应商、API Key、MCP 配置
-- Slash 命令菜单键盘导航时自动滚动保持选中项可见
+- 娑堟伅瀛樺偍鍗囩骇涓?JSONL 鏍煎紡锛圤(1) 杩藉姞锛屽穿婧冨閿欙級
+- 澧為噺缁熻璁＄畻銆佽鏁扮紦瀛樸€佹枃浠堕攣鏈哄埗
+- Tab 鍒囨崲鏃惰嚜鍔ㄥ悓姝ヤ緵搴斿晢銆丄PI Key銆丮CP 閰嶇疆
+- Slash 鍛戒护鑿滃崟閿洏瀵艰埅鏃惰嚜鍔ㄦ粴鍔ㄤ繚鎸侀€変腑椤瑰彲瑙?
 
 ### Fixed
-- 修复消息中断后 Thinking Block 卡在加载状态
-- 修复 API Key 模式切换到订阅模式报错（`Invalid signature in thinking block`）
-- 修复长文本（如 JSON）在消息气泡中不换行
-- 修复历史记录「当前」标签不更新
-- 修复历史记录按钮点击无法关闭
-- 修复加载历史会话后新消息统计不更新
-- 修复 switchToSession 未终止旧 session 导致模型/供应商切换失效
-- 修复三方供应商切换到 Anthropic 官方时 thinking block 签名冲突
-- 修复第三方供应商模型切换后 UI 卡住（thinking/tool 块加载状态未结束）
-- 修复 AI 回复完成后 Loading 指示器和停止按钮卡住（补全 9 种结束场景的 sessionState 重置）
-- 修复发送消息后不自动滚动到底部
-- 修复系统任务（如 Compact）期间显示停止按钮的误导
-- 修复进程泄露问题（SDK/MCP 子进程随应用关闭正确清理）
-- 优化文件预览性能（React.lazy + useMemo 缓存）
+- 淇娑堟伅涓柇鍚?Thinking Block 鍗″湪鍔犺浇鐘舵€?
+- 淇 API Key 妯″紡鍒囨崲鍒拌闃呮ā寮忔姤閿欙紙`Invalid signature in thinking block`锛?
+- 淇闀挎枃鏈紙濡?JSON锛夊湪娑堟伅姘旀场涓笉鎹㈣
+- 淇鍘嗗彶璁板綍銆屽綋鍓嶃€嶆爣绛句笉鏇存柊
+- 淇鍘嗗彶璁板綍鎸夐挳鐐瑰嚮鏃犳硶鍏抽棴
+- 淇鍔犺浇鍘嗗彶浼氳瘽鍚庢柊娑堟伅缁熻涓嶆洿鏂?
+- 淇 switchToSession 鏈粓姝㈡棫 session 瀵艰嚧妯″瀷/渚涘簲鍟嗗垏鎹㈠け鏁?
+- 淇涓夋柟渚涘簲鍟嗗垏鎹㈠埌 Anthropic 瀹樻柟鏃?thinking block 绛惧悕鍐茬獊
+- 淇绗笁鏂逛緵搴斿晢妯″瀷鍒囨崲鍚?UI 鍗′綇锛坱hinking/tool 鍧楀姞杞界姸鎬佹湭缁撴潫锛?
+- 淇 AI 鍥炲瀹屾垚鍚?Loading 鎸囩ず鍣ㄥ拰鍋滄鎸夐挳鍗′綇锛堣ˉ鍏?9 绉嶇粨鏉熷満鏅殑 sessionState 閲嶇疆锛?
+- 淇鍙戦€佹秷鎭悗涓嶈嚜鍔ㄦ粴鍔ㄥ埌搴曢儴
+- 淇绯荤粺浠诲姟锛堝 Compact锛夋湡闂存樉绀哄仠姝㈡寜閽殑璇
+- 淇杩涚▼娉勯湶闂锛圫DK/MCP 瀛愯繘绋嬮殢搴旂敤鍏抽棴姝ｇ‘娓呯悊锛?
+- 浼樺寲鏂囦欢棰勮鎬ц兘锛圧eact.lazy + useMemo 缂撳瓨锛?
 
 ### Technical
-- 应用退出支持 Cmd+Q 和 Dock 右键退出的进程清理（RunEvent::ExitRequested）
-- 进程清理函数重构，统一 SIGTERM → SIGKILL 两阶段关闭
-- 启动时清理扩展至 SDK 和 MCP 子进程
+- 搴旂敤閫€鍑烘敮鎸?Cmd+Q 鍜?Dock 鍙抽敭閫€鍑虹殑杩涚▼娓呯悊锛圧unEvent::ExitRequested锛?
+- 杩涚▼娓呯悊鍑芥暟閲嶆瀯锛岀粺涓€ SIGTERM 鈫?SIGKILL 涓ら樁娈靛叧闂?
+- 鍚姩鏃舵竻鐞嗘墿灞曡嚦 SDK 鍜?MCP 瀛愯繘绋?
 
-**详见**: [specs/prd/prd_0.1.4.md](./specs/prd/prd_0.1.4.md)
+**璇﹁**: [specs/prd/prd_0.1.4.md](./specs/prd/prd_0.1.4.md)
 
 ---
 
 ## [0.1.3] - 2026-01-27
 
 ### Added
-- 支持从 Claude Code 同步 Skills 配置（`~/.claude/skills/` → `~/.hamuna/skills/`）
-- ProcessRow 显示任务运行时间
-- 展开状态显示实时统计信息（工具调用次数、Token 消耗）
-- 新增 Trace 列表查看子代理工具调用记录
-- Settings 页面增加 Rust 日志监听
+- 鏀寔浠?Claude Code 鍚屾 Skills 閰嶇疆锛坄~/.claude/skills/` 鈫?`~/.hamuna/skills/`锛?
+- ProcessRow 鏄剧ず浠诲姟杩愯鏃堕棿
+- 灞曞紑鐘舵€佹樉绀哄疄鏃剁粺璁′俊鎭紙宸ュ叿璋冪敤娆℃暟銆乀oken 娑堣€楋級
+- 鏂板 Trace 鍒楄〃鏌ョ湅瀛愪唬鐞嗗伐鍏疯皟鐢ㄨ褰?
+- Settings 椤甸潰澧炲姞 Rust 鏃ュ織鐩戝惉
 
 ### Changed
-- 技能/指令详情页焦点控制优化
-- 描述区域支持多行输入
-- 内容区域高度自适应视口
+- 鎶€鑳?鎸囦护璇︽儏椤电劍鐐规帶鍒朵紭鍖?
+- 鎻忚堪鍖哄煙鏀寔澶氳杈撳叆
+- 鍐呭鍖哄煙楂樺害鑷€傚簲瑙嗗彛
 
 ### Fixed
-- 修复 Toast/ImagePreview Context 稳定性问题
-- 统一 useEffect 依赖数组规范
-- 统一定时器初始化模式
-- 修复权限弹框重复弹出问题
-- 修复 Settings 页面事件监听竞态条件
-- 修复 tauri-plugin-updater 架构目标识别问题
-- 移除非标准 platform 字段，符合 Tauri v2 官方 schema
-- 修复事件发射错误处理
-- 修复更新按钮样式（emerald 配色 + rounded-full）
+- 淇 Toast/ImagePreview Context 绋冲畾鎬ч棶棰?
+- 缁熶竴 useEffect 渚濊禆鏁扮粍瑙勮寖
+- 缁熶竴瀹氭椂鍣ㄥ垵濮嬪寲妯″紡
+- 淇鏉冮檺寮规閲嶅寮瑰嚭闂
+- 淇 Settings 椤甸潰浜嬩欢鐩戝惉绔炴€佹潯浠?
+- 淇 tauri-plugin-updater 鏋舵瀯鐩爣璇嗗埆闂
+- 绉婚櫎闈炴爣鍑?platform 瀛楁锛岀鍚?Tauri v2 瀹樻柟 schema
+- 淇浜嬩欢鍙戝皠閿欒澶勭悊
+- 淇鏇存柊鎸夐挳鏍峰紡锛坋merald 閰嶈壊 + rounded-full锛?
 
 ### Technical
-- 增加文件描述符限制至 65536，防止 Bun 启动失败
-- 添加 `--hamuna-sidecar` 标记精确识别进程
-- 实现两阶段清理机制（SIGTERM → SIGKILL）
-- 明确 Tab Sidecar 与 Global Sidecar 使用边界
-- Settings/Launcher 不再包裹 TabProvider
-- Release 构建启用 INFO 级别日志支持诊断
-- 调试日志包装 `isDebugMode()` 避免生产环境刷屏
+- 澧炲姞鏂囦欢鎻忚堪绗﹂檺鍒惰嚦 65536锛岄槻姝?Bun 鍚姩澶辫触
+- 娣诲姞 `--hamuna-sidecar` 鏍囪绮剧‘璇嗗埆杩涚▼
+- 瀹炵幇涓ら樁娈垫竻鐞嗘満鍒讹紙SIGTERM 鈫?SIGKILL锛?
+- 鏄庣‘ Tab Sidecar 涓?Global Sidecar 浣跨敤杈圭晫
+- Settings/Launcher 涓嶅啀鍖呰９ TabProvider
+- Release 鏋勫缓鍚敤 INFO 绾у埆鏃ュ織鏀寔璇婃柇
+- 璋冭瘯鏃ュ織鍖呰 `isDebugMode()` 閬垮厤鐢熶骇鐜鍒峰睆
 
-**详见**: [specs/prd/prd_0.1.3.md](./specs/prd/prd_0.1.3.md)
+**璇﹁**: [specs/prd/prd_0.1.3.md](./specs/prd/prd_0.1.3.md)
 
 ---
 
 ## [0.1.2] - 2026-01-25
 
 ### Added
-- 实现自定义服务商完整的 CRUD 功能
-- 服务商配置持久化到 `~/.hamuna/providers/`
+- 瀹炵幇鑷畾涔夋湇鍔″晢瀹屾暣鐨?CRUD 鍔熻兘
+- 鏈嶅姟鍟嗛厤缃寔涔呭寲鍒?`~/.hamuna/providers/`
 
 ### Fixed
-- 修复 MCP 开关状态与实际请求不一致问题
-- 初始化时始终同步 MCP 配置（包括空数组）
-- MCP 变化时正确重启 SDK 会话
-- 切换配置时保持对话上下文（通过 resume session_id）
-- 修复 AI "失忆" 问题
-- 实现用户级 Skill 按需复制到项目目录
-- `/` 菜单去重（项目级优先）
-- 修复详情页交互问题（保存后自动关闭、名称字段、路径重命名）
-- 修复 `/cost` 和 `/context` 命令输出不显示问题
-- 正确处理 `<local-command-stdout>` 包裹的字符串内容
+- 淇 MCP 寮€鍏崇姸鎬佷笌瀹為檯璇锋眰涓嶄竴鑷撮棶棰?
+- 鍒濆鍖栨椂濮嬬粓鍚屾 MCP 閰嶇疆锛堝寘鎷┖鏁扮粍锛?
+- MCP 鍙樺寲鏃舵纭噸鍚?SDK 浼氳瘽
+- 鍒囨崲閰嶇疆鏃朵繚鎸佸璇濅笂涓嬫枃锛堥€氳繃 resume session_id锛?
+- 淇 AI "澶卞繂" 闂
+- 瀹炵幇鐢ㄦ埛绾?Skill 鎸夐渶澶嶅埗鍒伴」鐩洰褰?
+- `/` 鑿滃崟鍘婚噸锛堥」鐩骇浼樺厛锛?
+- 淇璇︽儏椤典氦浜掗棶棰橈紙淇濆瓨鍚庤嚜鍔ㄥ叧闂€佸悕绉板瓧娈点€佽矾寰勯噸鍛藉悕锛?
+- 淇 `/cost` 鍜?`/context` 鍛戒护杈撳嚭涓嶆樉绀洪棶棰?
+- 姝ｇ‘澶勭悊 `<local-command-stdout>` 鍖呰９鐨勫瓧绗︿覆鍐呭
 
 ### Changed
-- 设置页版本号动态读取
-- 日志规范化（生产环境不输出调试日志）
+- 璁剧疆椤电増鏈彿鍔ㄦ€佽鍙?
+- 鏃ュ織瑙勮寖鍖栵紙鐢熶骇鐜涓嶈緭鍑鸿皟璇曟棩蹇楋級
 
-**详见**: [specs/prd/prd_0.1.2.md](./specs/prd/prd_0.1.2.md)
+**璇﹁**: [specs/prd/prd_0.1.2.md](./specs/prd/prd_0.1.2.md)
 
 ---
 
 ## [0.1.1] - 2026-01-26
 
 ### Added
-- 添加订阅凭证真实验证功能
-- 设置页显示验证状态（验证中/已验证/验证失败）
-- 支持拖拽文件到工作区文件夹
-- 支持 Cmd+V 粘贴文件到工作区
-- 支持拖拽/粘贴文件到对话输入框（自动复制到 `hamuna_files/`）
-- AskUserQuestion 工具向导式问答 UI
-- 单选自动跳转 / 多选手动确认
-- 自定义输入框支持
-- 进度指示器和回退修改
-- Agent 日志懒加载创建
-- 日志存储到 `~/.hamuna/logs/`
-- React/Bun/Rust 日志统一到 UnifiedLogs 面板
+- 娣诲姞璁㈤槄鍑瘉鐪熷疄楠岃瘉鍔熻兘
+- 璁剧疆椤垫樉绀洪獙璇佺姸鎬侊紙楠岃瘉涓?宸查獙璇?楠岃瘉澶辫触锛?
+- 鏀寔鎷栨嫿鏂囦欢鍒板伐浣滃尯鏂囦欢澶?
+- 鏀寔 Cmd+V 绮樿创鏂囦欢鍒板伐浣滃尯
+- 鏀寔鎷栨嫿/绮樿创鏂囦欢鍒板璇濊緭鍏ユ锛堣嚜鍔ㄥ鍒跺埌 `hamuna_files/`锛?
+- AskUserQuestion 宸ュ叿鍚戝寮忛棶绛?UI
+- 鍗曢€夎嚜鍔ㄨ烦杞?/ 澶氶€夋墜鍔ㄧ‘璁?
+- 鑷畾涔夎緭鍏ユ鏀寔
+- 杩涘害鎸囩ず鍣ㄥ拰鍥為€€淇敼
+- Agent 鏃ュ織鎳掑姞杞藉垱寤?
+- 鏃ュ織瀛樺偍鍒?`~/.hamuna/logs/`
+- React/Bun/Rust 鏃ュ織缁熶竴鍒?UnifiedLogs 闈㈡澘
 
 ### Fixed
-- 修复 Anthropic 订阅检测逻辑（`~/.claude.json` 中的 `oauthAccount`）
+- 淇 Anthropic 璁㈤槄妫€娴嬮€昏緫锛坄~/.claude.json` 涓殑 `oauthAccount`锛?
 
 ### Changed
-- 文件名冲突自动重命名
-- Cmd+Z 撤销支持
-- 30 天日志自动清理
+- 鏂囦欢鍚嶅啿绐佽嚜鍔ㄩ噸鍛藉悕
+- Cmd+Z 鎾ら攢鏀寔
+- 30 澶╂棩蹇楄嚜鍔ㄦ竻鐞?
 
-**详见**: [specs/prd/prd_0.1.1.md](./specs/prd/prd_0.1.1.md)
+**璇﹁**: [specs/prd/prd_0.1.1.md](./specs/prd/prd_0.1.1.md)
 
 ---
 
@@ -2918,8 +2931,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bun runtime bundled in app
 - Rust HTTP/SSE proxy layer
 - Chrome-style frameless window
-- 零外部依赖（内置 Bun 运行时）
+- 闆跺閮ㄤ緷璧栵紙鍐呯疆 Bun 杩愯鏃讹級
 
-**详见**: [specs/prd/prd_0.1.0/](./specs/prd/prd_0.1.0/) (21 个迭代 PRD)
+**璇﹁**: [specs/prd/prd_0.1.0/](./specs/prd/prd_0.1.0/) (21 涓凯浠?PRD)
 
 ---
