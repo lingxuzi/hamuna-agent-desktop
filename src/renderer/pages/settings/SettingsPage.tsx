@@ -4874,7 +4874,7 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
        </div>
 
        {/* Product Description — Developer Letter */}
-       <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-elevated)] px-7 py-6">
+       {/* <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-elevated)] px-7 py-6">
         <p className="text-xs font-medium uppercase tracking-widest text-[var(--ink-muted)]/50">{tSettings('about.developerLabel')}</p>
         <div className="mt-4 space-y-5 text-sm leading-[1.9] text-[var(--ink-secondary)]">
          <p>
@@ -4890,7 +4890,7 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           {tSettings('about.developerQuote')}
          </p>
         </div>
-       </div>
+       </div> */}
 
        {/* 实验室 */}
        <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-elevated)] p-5">
@@ -4969,7 +4969,7 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
        </div>
 
        {/* AI Feedback */}
-       <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-elevated)] p-5">
+       {/* <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-elevated)] p-5">
         <div className="flex items-center justify-between">
          <div>
           <h3 className="text-base font-medium text-[var(--ink)]">{tSettings('about.helperTitle')}</h3>
@@ -4984,10 +4984,10 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           {tSettings('about.feedback')}
          </button>
         </div>
-       </div>
+       </div> */}
 
        {/* User Community QR Code - Show loading state, then image when ready */}
-       {(qrCodeLoading || qrCodeDataUrl) && (
+       {/* {(qrCodeLoading || qrCodeDataUrl) && (
         <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-elevated)] p-5">
          <div className="flex flex-col items-center text-center">
           <p className="text-sm font-medium text-[var(--ink)]">{tSettings('about.communityTitle')}</p>
@@ -5005,31 +5005,31 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           )}
          </div>
         </div>
-       )}
+       )} */}
 
        {/* Contact & Links */}
        <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-elevated)] p-5">
         <div className="grid grid-cols-2 gap-4 text-sm">
          <div>
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--ink-muted)]">Developer</p>
-          <p className="mt-1 text-[var(--ink)]">Ethan L</p>
+          <p className="mt-1 text-[var(--ink)]">Hamuna.AI</p>
          </div>
          <div>
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--ink-muted)]">Website</p>
           <ExternalLink
-           href="https://hamuna.io"
+           href="https://hamuna.club"
            className="mt-1 block text-[var(--accent)] hover:underline"
           >
-           hamuna.io
+           https://hamuna.club
           </ExternalLink>
          </div>
-         <div>
+         {/* <div>
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--ink-muted)]">Contact</p>
           <ExternalLink
-           href="mailto:hamuna.io@gmail.com"
+           href="mailto:origerous@live.com"
            className="mt-1 block text-[var(--accent)] hover:underline"
           >
-           hamuna.io@gmail.com
+           origerous@live.com
           </ExternalLink>
          </div>
          <div>
@@ -5038,15 +5038,15 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
            href={HAMUNA_GITHUB_URL}
            className="mt-1 block text-[var(--accent)] hover:underline"
           >
-           github.com/hAcKlyc/HamunaAgent
+           https://gitee.com/opush_1_1662187889/hamuna-agent-desktop.git
           </ExternalLink>
-         </div>
+         </div> */}
         </div>
        </div>
 
        {/* Copyright */}
        <p className="text-center text-xs text-[var(--ink-muted)]">
-        © 2026 Ethan L. All rights reserved.
+        © 2026 Hamuna.Agent. All rights reserved.
        </p>
 
        {/* Developer Section - Hidden by default, unlocked by tapping logo 5 times */}

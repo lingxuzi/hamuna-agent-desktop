@@ -1121,6 +1121,21 @@ struct UpdateJsonFormat {
     url: String,
 }
 
+/// Resolve the updater base URL from the `DOWNLOAD_BASE_URL` env var.
+/// Falls back to the R2 staging default if the env var is not set (e.g. for
+/// installed apps that don't inherit the .env). This keeps the diagnostic
+/// "Test Update Connectivity" button in sync with whatever endpoint
+/// `build_windows.ps1` / `build_macos.sh` baked into the Tauri config.
+fn get_updater_base_url() -> String {
+    std::env::var("DOWNLOAD_BASE_URL")
+        .ok()
+        .map(|s| s.trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev".to_string()
+        })
+}
+
 /// Get the update target string for the current platform
 /// Supports macOS (ARM/Intel) and Windows (x64/ARM)
 fn get_update_target() -> &'static str {
@@ -1158,7 +1173,7 @@ pub async fn test_update_connectivity(app: AppHandle) -> Result<String, String> 
     // Detect architecture
     let target = get_update_target();
 
-    let url = format!("https://download.hamuna.io/update/{}.json", target);
+    let url = format!("{}/update/{}.json", get_updater_base_url(), target);
     logger::info(
         &app,
         format!("[Updater] Testing HTTP connectivity to: {}", url),

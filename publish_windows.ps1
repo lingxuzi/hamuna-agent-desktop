@@ -149,14 +149,19 @@ if (Test-Path $localRclone) {
 # 创建临时 rclone 配置 (凭证通过环境变量传递，更安全)
 $rcloneConfig = [System.IO.Path]::GetTempFileName()
 $script:rcloneConfig = $rcloneConfig
-@"
+$rcloneConfigContent = @"
 [r2]
 type = s3
 provider = Cloudflare
 env_auth = true
 endpoint = https://$R2AccountId.r2.cloudflarestorage.com
 acl = private
-"@ | Set-Content $rcloneConfig -Encoding UTF8
+"@
+# WriteAllText with UTF8Encoding($false) = no BOM. Set-Content -Encoding
+# UTF8 adds a BOM in Windows PowerShell 5.1 which rclone rejects as
+# malformed config (causes 'NoSuchBucket' on upload). -Encoding utf8NoBOM
+# is only valid on PowerShell 7+.
+[System.IO.File]::WriteAllText($rcloneConfig, $rcloneConfigContent, [System.Text.UTF8Encoding]::new($false))
 
 # 设置 rclone 环境变量 (避免在配置文件中存储明文凭证)
 $env:RCLONE_CONFIG_R2_ACCESS_KEY_ID = $R2AccessKeyId

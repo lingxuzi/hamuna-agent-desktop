@@ -673,6 +673,13 @@ try {
     Write-Host "[6/7] 构建 Tauri 应用 (Release)..." -ForegroundColor Blue
     Write-Host "  这可能需要几分钟，请耐心等待..." -ForegroundColor Yellow
 
+    # cargo-tauri's --ci flag is bound to the `CI` env var via clap
+    # ([env: CI=1]). When the env var is set to "1" (common in CI runners
+    # and some OMP shells), clap passes "1" as the value for --ci, but the
+    # flag only accepts `true`/`false` and the build dies with
+    # `error: invalid value '1' for '--ci'`. Unset it so the explicit
+    # `--ci` we don't pass (and don't want) stays out of the argv.
+    Remove-Item Env:CI -ErrorAction SilentlyContinue
     & npx tauri build --target x86_64-pc-windows-msvc --config src-tauri\tauri.windows.conf.json
     if ($LASTEXITCODE -ne 0) {
         throw "Tauri 构建失败"
