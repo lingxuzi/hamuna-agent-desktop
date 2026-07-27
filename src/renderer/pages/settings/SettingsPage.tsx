@@ -4802,6 +4802,10 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
               toast.info(tSettings('about.upToDate'));
              } else if (result === 'downloading') {
               toast.info(tSettings('about.foundDownloading'));
+              // Auto-install: download finished + signature verified, jump straight to
+              // restart+install. The 'Restart to Update' button in the titlebar is still
+              // rendered (propUpdateReady) as a fallback if this auto-call fails.
+              onRestartAndUpdate?.();
              } else if (result === 'disabled') {
               // Silent: UPDATER_DISABLED is currently on (see
               // useUpdater.ts); user clicked but the subsystem
