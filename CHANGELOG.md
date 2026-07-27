@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.10] - 2026-07-27
+
+> 测试在线更新
+
+### Added
+- 测试在线更新
+
+### Changed
+- 测试在线更新
+
+### Fixed
+- 测试在线更新
+
 ## [0.3.9] - 2026-07-27
 
 > 在线更新
