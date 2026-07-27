@@ -79,7 +79,7 @@ const CHECK_INTERVAL_MS = 30 * 60 * 1000;
  * CustomTitleBar / Settings only ever appears via the listeners, so
  * disabling them is sufficient to hide the button.
  */
-const UPDATER_DISABLED = true;
+const UPDATER_DISABLED = false;
 
 function updaterText(key: string): string {
  return String(i18n.t(`app:updater.${key}`));

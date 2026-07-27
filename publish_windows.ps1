@@ -258,16 +258,16 @@ if ($UpdateZip) {
         notes     = "HamunaAgent v$Version"
         pub_date  = $PubDate
         signature = $Signature
-        url       = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$UpdateUploadName"
+        url       = "$DownloadBaseUrl/releases/v$Version/$UpdateUploadName"
     }
 
     # 添加下载链接
     $downloads = @{}
     if ($NsisExe) {
-        $downloads["installer"] = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$($NsisExe.Name)"
+        $downloads["installer"] = "$DownloadBaseUrl/releases/v$Version/$($NsisExe.Name)"
     }
     if ($PortableZip) {
-        $downloads["portable"] = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$($PortableZip.Name)"
+        $downloads["portable"] = "$DownloadBaseUrl/releases/v$Version/$($PortableZip.Name)"
     }
     if ($downloads.Count -gt 0) {
         $manifest["downloads"] = $downloads
@@ -293,7 +293,7 @@ if ($NsisExe) {
     $latestWinDownloads = @{
         "win_x64" = @{
             name = "Windows x64"
-            url  = "$DownloadBaseUrl/$R2Bucket/releases/v$Version/$($NsisExe.Name)"
+            url  = "$DownloadBaseUrl/releases/v$Version/$($NsisExe.Name)"
         }
     }
 

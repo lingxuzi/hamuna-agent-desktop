@@ -83,6 +83,15 @@ try {
         Write-Host "  警告: .env 文件不存在，将使用默认配置" -ForegroundColor Yellow
     }
 
+    # Tauri config override (Plan B): 自部署 R2 时覆盖 updater endpoint
+    # tauri.conf.json 的 endpoints 是 fallback (https://download.hamuna.io/...);
+    # DOWNLOAD_BASE_URL 改了 (非默认) 时, 在 build 时通过 TAURI_CONFIG_OVERRIDES_JSON
+    # 把 endpoint 覆盖成 <DOWNLOAD_BASE_URL>/update/{{target}}.json
+    if ($env:DOWNLOAD_BASE_URL -and $env:DOWNLOAD_BASE_URL -ne "https://download.hamuna.io") {
+        $env:TAURI_CONFIG_OVERRIDES_JSON = '{"plugins":{"updater":{"endpoints":["' + $env:DOWNLOAD_BASE_URL + '/update/{{target}}.json"]}}}'
+        Write-Host "  OK - Tauri config override: updater endpoint -> $($env:DOWNLOAD_BASE_URL)" -ForegroundColor Green
+    }
+
     # 检查 Tauri 签名密钥
     $TauriSigningKey = [Environment]::GetEnvironmentVariable("TAURI_SIGNING_PRIVATE_KEY", "Process")
     if (-not $TauriSigningKey) {

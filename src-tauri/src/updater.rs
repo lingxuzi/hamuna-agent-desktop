@@ -38,7 +38,7 @@ use crate::sidecar::ManagedSidecar;
 /// `check_update_on_startup` task; the TS side gates the 30-min interval
 /// and the manual "Check for Updates" button. The renderer's event
 /// listeners stay mounted but are no-ops without a source.
-pub const UPDATER_DISABLED: bool = true;
+pub const UPDATER_DISABLED: bool = false;
 
 /// Global flag to prevent concurrent update checks/downloads
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);

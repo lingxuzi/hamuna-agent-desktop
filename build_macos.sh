@@ -67,6 +67,15 @@ else
     exit 1
 fi
 
+# Tauri config override (Plan B): 自部署 R2 时覆盖 updater endpoint
+# tauri.conf.json 的 endpoints 是 fallback (https://download.hamuna.io/...);
+# DOWNLOAD_BASE_URL 改了 (非默认) 时, 在 build 时通过 TAURI_CONFIG_OVERRIDES_JSON
+# 把 endpoint 覆盖成 <DOWNLOAD_BASE_URL>/update/{{target}}.json
+if [ -n "$DOWNLOAD_BASE_URL" ] && [ "$DOWNLOAD_BASE_URL" != "https://download.hamuna.io" ]; then
+    export TAURI_CONFIG_OVERRIDES_JSON="{\"plugins\":{\"updater\":{\"endpoints\":[\"$DOWNLOAD_BASE_URL/update/{{target}}.json\"]}}}"
+    echo -e "  ${GREEN}✓ Tauri config override: updater endpoint → $DOWNLOAD_BASE_URL${NC}"
+fi
+
 # 验证签名环境变量
 if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
     echo -e "${RED}错误: APPLE_SIGNING_IDENTITY 未设置!${NC}"
