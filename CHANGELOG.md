@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.4] - 2026-07-27
+
+> HamunaAgent 0.3.4 进一步收紧 R2 发布链路：将 R2 桶名、CSP / 升级端点 / 运行时清单基址等 URL 全部改为可由环境变量配置 (`.env` / `R2_BUCKET` / `DOWNLOAD_BASE_URL` / `RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST`)，让自部署 R2 的用户无需改源码即可切走 `download.hamuna.io`。同时在两个发布脚本里加入版本号一致性 hard-fail，避免 `package.json` 与 `tauri.conf.json` 漂移时静默发出旧版。
+
+### Added
+
+- **可配置 R2 桶名**: `.env` 新增 `R2_BUCKET` (默认 `hamuna-releases`)，`publish_*` / `rollback_*` / `upload_qr_code` / `release.yml` 全部从环境变量读取，不再写死 `r2:hamuna-releases/...`。
+- **CSP 与 Updater 端点 env 化**: `tauri.conf.json` 的 CSP `connect-src` / `img-src` 与 `plugins.updater.endpoints` 改用 `${DOWNLOAD_BASE_URL:-https://download.hamuna.io}` 占位符，R2 自部署用户可通过 `DOWNLOAD_BASE_URL=https://<你的域名>` 一键切走。
+- **Managed Codex Runtime 编译期 env 化**: `src-tauri/src/managed_codex.rs` 的 `RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST` 改用 `option_env!()`，配合 `src-tauri/build.rs` 新增的 `cargo:rerun-if-env-changed` 提示，构建时改 env 会真正触发重编译。
+- **版本号一致性 hard-fail**: `publish_release.sh` / `publish_windows.ps1` 在读取 `tauri.conf.json` 的 `version` 后立即对比 `package.json`，不一致直接 `exit 1` 并打印修复命令 (`npm run version` / `npm version patch`)，杜绝"忘记跑 sync-version 就 publish"的回归。
+
+### Changed
+
+- **Bump**: 0.3.2 → 0.3.4 (`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml`)。
+
+### Fixed
+
+- **CSP `${DOWNLOAD_BASE_URL:-...}` 默认值缺 `https://` schema**: 当 `DOWNLOAD_BASE_URL` 被显式设为完整 URL 时，原 fallback 拼出 `https://https://...` (双 schema)。Fallback 统一为 `https://download.hamuna.io`。
+
 ## [0.3.2] - 2026-07-23
 
 > HamunaAgent 0.3.2 引入完整 Theme System，带来八套可切换主题并统一桌面、Space、终端、编辑器与浮窗视觉；Goal Mode 新增可验证的结束条件，Team Space Registered Agent 也升级为独立执行实例。版本同时收紧核心 System Skill、会话恢复、配置一致性与 IM 渠道边界。
