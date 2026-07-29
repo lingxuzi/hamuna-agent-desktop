@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.12] - 2026-07-29
+
+> Env设置
+
+### Added
+- Env设置
+
+### Changed
+- Env设置
+
+### Fixed
+- Env设置
+
 ## [0.3.11] - 2026-07-28
 
 > 整合Git Installer
