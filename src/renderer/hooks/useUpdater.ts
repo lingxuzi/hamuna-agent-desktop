@@ -17,6 +17,7 @@ import { track } from '@/analytics';
 import { i18n } from '@/i18n';
 import { isTauriEnvironment } from '@/utils/browserMock';
 import { isDebugMode } from '@/utils/debug';
+import { useToastOptional } from '@/components/Toast';
 import { compareVersions } from '../../shared/utils';
 
 export interface UpdateReadyInfo {
@@ -64,14 +65,13 @@ const isWindows = typeof navigator !== 'undefined' && navigator.platform?.includ
 // Periodic check interval: 30 minutes
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
+const UPDATER_DISABLED = false
+
 /**
- * Temporary kill-switch for the auto-update subsystem.
- *
- * `download.hamuna.io` is currently NXDOMAIN (R2 custom domain / DNS not
- * configured yet), so every background check, periodic poll, and manual
- * "Check for Updates" would fail and surface as noise. Flip this to
- * `false` (and the matching `UPDATER_DISABLED` flag in
- * `src-tauri/src/updater.rs`) once DNS + R2 custom domain are restored.
+ * Temporary kill-switch for the auto-update subsystem. Flip both this
+ * and the matching `UPDATER_DISABLED` flag in
+ * `src-tauri/src/updater.rs` to `true` together when `download.hamuna.io`
+ * / R2 needs to be silenced (DNS / custom domain outage, etc.).
  *
  * When `true`: the 30-min interval, the startup pending-update probe, and
  * `checkForUpdate` all short-circuit. The `updater:*` event listeners
@@ -79,13 +79,13 @@ const CHECK_INTERVAL_MS = 30 * 60 * 1000;
  * CustomTitleBar / Settings only ever appears via the listeners, so
  * disabling them is sufficient to hide the button.
  */
-const UPDATER_DISABLED = false;
 
 function updaterText(key: string): string {
  return String(i18n.t(`app:updater.${key}`));
 }
 
 export function useUpdater(): UseUpdaterResult {
+ const toast = useToastOptional();
  const [updateReady, setUpdateReady] = useState(false);
  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
  const [checking, setChecking] = useState(false);
@@ -298,6 +298,10 @@ export function useUpdater(): UseUpdaterResult {
    console.log('[useUpdater] Setting up event listener for updater:ready-to-restart...');
   }
   const ac = new AbortController();
+  // Dedupe toasts: 30-min interval re-fires events for the same pending
+  // version. Only notify once per version.
+  const lastNotifiedFoundRef = { current: null as string | null };
+  const lastNotifiedReadyRef = { current: null as string | null };
 
   void listenWithCleanup<UpdateReadyInfo>('updater:ready-to-restart', (event) => {
    if (isDebugMode()) {
@@ -307,6 +311,10 @@ export function useUpdater(): UseUpdaterResult {
    setUpdateReady(true);
    setDownloading(false);
    setPreparing(false);
+   if (toast && lastNotifiedReadyRef.current !== event.payload.version) {
+    lastNotifiedReadyRef.current = event.payload.version;
+    toast.success(updaterText('updateReady').replace('{{version}}', event.payload.version));
+   }
   }, ac.signal);
 
   // `download-started` hides the install button: the bytes that
@@ -318,6 +326,10 @@ export function useUpdater(): UseUpdaterResult {
     console.log('[useUpdater] Event received: updater:download-started', event.payload);
    }
    setPreparing(true);
+   if (toast && lastNotifiedFoundRef.current !== event.payload.version) {
+    lastNotifiedFoundRef.current = event.payload.version;
+    toast.info(updaterText('newVersionFound').replace('{{version}}', event.payload.version));
+   }
   }, ac.signal);
 
   void listenWithCleanup<UpdateReadyInfo>('updater:download-failed', (event) => {

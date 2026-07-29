@@ -88,7 +88,9 @@
     "submitFailed": "提交失败，请重试"
   },
   "updater": {
-    "remoteVersionParseFailed": "无法解析远程版本信息"
+    "remoteVersionParseFailed": "无法解析远程版本信息",
+    "newVersionFound": "发现新版本 v{{version}}，正在后台下载",
+    "updateReady": "新版本 v{{version}} 已下载完成，点击重启更新"
   },
   "common": {
     "loading": "加载中...",

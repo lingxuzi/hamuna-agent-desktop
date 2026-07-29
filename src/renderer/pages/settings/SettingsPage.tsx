@@ -4807,9 +4807,8 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
               // rendered (propUpdateReady) as a fallback if this auto-call fails.
               onRestartAndUpdate?.();
              } else if (result === 'disabled') {
-              // Silent: UPDATER_DISABLED is currently on (see
-              // useUpdater.ts); user clicked but the subsystem
-              // is intentionally muted. No toast.
+              // Silent: UPDATER_DISABLED kill-switch is on (see useUpdater.ts);
+              // user clicked but the subsystem is intentionally muted. No toast.
              } else if (result === 'error') {
               toast.error(tSettings('about.checkFailed'));
              }
@@ -4825,12 +4824,12 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
             ) : tSettings('about.checkUpdates')}
            </button>
           )}
-          <ExternalLink
+          {/* <ExternalLink
            href={HAMUNA_RELEASES_URL}
            className="rounded-lg bg-[var(--paper-inset)] px-2 py-0.5 text-xs text-[var(--ink-secondary)] transition-colors hover:bg-[var(--paper-elevated)]"
           >
            {tSettings('about.releaseNotes')}
-          </ExternalLink>
+          </ExternalLink> */}
          </div>
          <p className="mt-3 text-base text-[var(--ink-secondary)]">
           {tSettings('about.slogan')}

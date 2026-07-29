@@ -5,6 +5,7 @@ import { delimiter, join } from 'node:path';
 
 import type { RuntimeEnvPolicy } from '../../shared/types/runtime';
 import { getShellEnv, getShellPath, getDetectedTerminalProxyEnv } from '../utils/shell';
+import claudeCodeEnv from './claude-code-env.json';
 
 const PROXY_KEYS_UPPER = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'] as const;
 const PROXY_KEYS_LOWER = ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'] as const;
@@ -91,32 +92,36 @@ export function augmentedProcessEnv(
   if (proxyPolicy === 'hamuna') {
     // Legacy / default — leave inherited proxy vars in place. Rust's
     // `apply_to_subprocess` already populated them in the Sidecar's env.
-    return env;
-  }
+  } else {
+    // 'terminal' — strip every inherited proxy var, then restore whatever the
+    // user's interactive shell would set. Drop the HamunaAgent-injected marker
+    // too so downstream code doesn't mistake a stripped env for a HamunaAgent-
+    // controlled one.
+    for (const k of PROXY_KEYS_ALL) delete env[k];
+    delete env.HAMUNA_PROXY_INJECTED;
 
-  // 'terminal' — strip every inherited proxy var, then restore whatever the
-  // user's interactive shell would set. Drop the HamunaAgent-injected marker
-  // too so downstream code doesn't mistake a stripped env for a HamunaAgent-
-  // controlled one.
-  for (const k of PROXY_KEYS_ALL) delete env[k];
-  delete env.HAMUNA_PROXY_INJECTED;
-
-  const detected = getDetectedTerminalProxyEnv();
-  if (detected) {
-    for (const [k, v] of Object.entries(detected)) {
-      // Skip empty values — those mean "user has the var unset". The strip
-      // above already removed inherited values, so leaving them out is the
-      // correct terminal-parity outcome (and also serves Clash-TUN / VPN
-      // users whose shell typically has no proxy set).
-      if (v && v.length > 0) {
-        env[k] = v;
+    const detected = getDetectedTerminalProxyEnv();
+    if (detected) {
+      for (const [k, v] of Object.entries(detected)) {
+        // Skip empty values — those mean "user has the var unset". The strip
+        // above already removed inherited values, so leaving them out is the
+        // correct terminal-parity outcome (and also serves Clash-TUN / VPN
+        // users whose shell typically has no proxy set).
+        if (v && v.length > 0) {
+          env[k] = v;
+        }
       }
     }
+    // If warmup hasn't completed yet, `detected` is null → env stays stripped.
+    // Caller (codex.ts / claude-code.ts) can choose to await `ensureShellPath()`
+    // beforehand to guarantee the terminal proxy is loaded; production already
+    // does this on first spawn ~5–6s into Sidecar startup.
   }
-  // If warmup hasn't completed yet, `detected` is null → env stays stripped.
-  // Caller (codex.ts / claude-code.ts) can choose to await `ensureShellPath()`
-  // beforehand to guarantee the terminal proxy is loaded; production already
-  // does this on first spawn ~5–6s into Sidecar startup.
+
+  // Merge build-time static env — compiled into server-dist.js by esbuild.
+  // Only keys listed in the JSON are injected; missing file = empty object = no-op.
+  // .gitignored so secrets never enter the repo.
+  Object.assign(env, claudeCodeEnv);
 
   return env;
 }

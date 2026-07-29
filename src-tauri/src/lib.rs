@@ -1276,9 +1276,8 @@ pub fn run() {
             ulog_info!("[App] Agent channel health monitor spawned");
 
             // Start background update check (60s delay, then stale updater temp cleanup).
-            // Skipped when the updater is disabled (UPDATER_DISABLED flag in updater.rs) —
-            // currently the case because download.hamuna.io is NXDOMAIN. Re-enable the
-            // Rust flag in updater.rs AND the matching TS flag in
+            // Skipped when the updater is disabled (UPDATER_DISABLED flag in updater.rs).
+            // Re-enable the Rust flag in updater.rs AND the matching TS flag in
             // src/renderer/hooks/useUpdater.ts to bring this back.
             if !updater::UPDATER_DISABLED {
                 ulog_info!("[App] Setup complete, spawning background update check task...");

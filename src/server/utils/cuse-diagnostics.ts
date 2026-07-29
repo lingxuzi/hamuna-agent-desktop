@@ -11,8 +11,7 @@ import { getBundledCusePath, getBundledResourcePath } from './runtime';
 // Vendored at build time from the same R2 latest.json the build script reads
 // (see scripts/download_cuse.ps1). Kept bundled so runtime diagnostics don't
 // require a network round-trip — and so the app keeps working when the
-// `download.hamuna.io` host is unreachable (it's still NXDOMAIN at the time
-// of this writing; see specs/tech_docs/auto_update.md).
+// `download.hamuna.io` host is temporarily unreachable.
 const CUSE_LATEST_BUNDLED = 'cuse-latest.json';
 const CUSE_LATEST_REMOTE_URL = 'https://download.hamuna.io/cuse/latest.json';
 

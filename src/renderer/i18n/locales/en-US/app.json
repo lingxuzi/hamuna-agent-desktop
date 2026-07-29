@@ -88,7 +88,9 @@
     "submitFailed": "Submit failed. Try again."
   },
   "updater": {
-    "remoteVersionParseFailed": "Could not parse remote version information"
+    "remoteVersionParseFailed": "Could not parse remote version information",
+    "newVersionFound": "New version v{{version}} found, downloading in background",
+    "updateReady": "Update v{{version}} ready — click to restart"
   },
   "common": {
     "loading": "Loading...",

@@ -34,15 +34,14 @@
 | Linux | `download_and_install` 在原地覆盖 AppImage | `relaunch` 直接生效 |
 | Windows | `save_pending_update_to_disk` 写入 NSIS installer 字节 | `install_pending_update` 在 Rust 侧进入 update-quiesce gate，停 IM/Agent/Terminal/Browser/Sidecar，验证进程与关键文件锁清零后再 `Update::install(bytes)`；启动时若发现 pending 字节会弹对话框引导用户安装；安装阶段上游 updater 会在 `%TEMP%` 留下 `HamunaAgent-<version>-updater-*` 派生目录，由启动期 GC 清理 |
 
-## 临时停用（Temporarily Disabled）
+## 临时停用开关
 
-> ⚠️ 当前 `download.hamuna.io` DNS NXDOMAIN（R2 自定义域未配置）。整个自动更新子系统已临时停用，避免 60s 启动检查 / 30 分钟周期 / 手动「Check for Updates」产生持续失败噪声。
->
-> **位置**（两侧必须同时翻转）：
-> - Rust：`src-tauri/src/updater.rs::UPDATER_DISABLED` —— 门控 `check_update_on_startup` 的 60s 启动后台任务
-> - TS：`src/renderer/hooks/useUpdater.ts::UPDATER_DISABLED` —— 门控 30 分钟周期、启动期 pending 探测、`checkForUpdate` 按钮
->
-> **DNS + R2 自定义域恢复后**，把两侧都翻成 `false` 即可恢复。期间 `updater:*` 事件监听器保留挂载（无源则无事件），「重启更新」按钮不会显示。
+整个自动更新子系统由**双侧门控常量**控制：
+
+- Rust：`src-tauri/src/updater.rs::UPDATER_DISABLED` —— 门控 `check_update_on_startup` 的 60s 启动后台任务
+- TS：`src/renderer/hooks/useUpdater.ts::UPDATER_DISABLED` —— 门控 30 分钟周期、启动期 pending 探测、`checkForUpdate` 按钮
+
+当 `download.hamuna.io` / R2 自定义域临时不可达、需要静音启动检查与周期轮询时，把两侧**同时**翻成 `true`。`updater:*` 事件监听器仍保留挂载（无源则无事件），「重启更新」按钮不会显示。恢复时再同时翻回 `false`。
 
 ### Rust 侧
 

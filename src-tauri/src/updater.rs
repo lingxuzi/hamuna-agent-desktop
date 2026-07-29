@@ -26,13 +26,10 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::sidecar::ManagedSidecar;
 
-/// Temporary kill-switch for the entire auto-update subsystem.
-///
-/// `download.hamuna.io` is currently NXDOMAIN (R2 custom domain / DNS not
-/// configured yet), so every background check, periodic poll, and manual
-/// `test_update_connectivity` would fail and surface as noise. Flip this
-/// to `false` (and the matching flag in `src/renderer/hooks/useUpdater.ts`)
-/// once DNS + R2 custom domain are restored.
+/// Temporary kill-switch for the entire auto-update subsystem. Flip both
+/// this and the matching flag in `src/renderer/hooks/useUpdater.ts` to
+/// `true` together when `download.hamuna.io` / R2 needs to be silenced
+/// (DNS / custom domain outage, etc.).
 ///
 /// Both sides MUST be flipped together — the Rust side gates the
 /// `check_update_on_startup` task; the TS side gates the 30-min interval
