@@ -12,7 +12,10 @@ import type {
 import {
   buildStickyAncestors,
   buildTreeListItems,
+  buildVisibleTreeRows,
+  buildWorkspaceNodeMetaByPath,
   computeStickyPushPx,
+  isHiddenNodeName,
   MAX_STICKY_ANCESTOR_DEPTH,
   resolveStickyAncestors,
 } from "./treeFlatten";
@@ -301,5 +304,128 @@ describe("computeStickyPushPx", () => {
     // Depth drops 2 → 0 → push a full row at half fraction (delta 2).
     const double = computeStickyPushPx(4 * ROW + ROW / 2, ROW, (u) => (u === 4 ? 2 : 0));
     expect(double).toBe(ROW);
+  });
+});
+
+describe("isHiddenNodeName", () => {
+  it("returns true for dotfile names", () => {
+    expect(isHiddenNodeName(".env")).toBe(true);
+    expect(isHiddenNodeName(".vscode")).toBe(true);
+    expect(isHiddenNodeName(".gitignore")).toBe(true);
+  });
+
+  it("returns false for normal names, including names containing a dot mid-string", () => {
+    expect(isHiddenNodeName("README.md")).toBe(false);
+    expect(isHiddenNodeName("node_modules")).toBe(false);
+    expect(isHiddenNodeName("foo.bar")).toBe(false);
+  });
+});
+
+describe("buildVisibleTreeRows with showHidden=false", () => {
+  const openPaths = new Set<string>();
+  const loadingPaths = new Set<string>();
+  const selectedPaths = new Set<string>();
+
+  function dotDir(name: string): DirectoryTreeNode {
+    return {
+      id: name,
+      name,
+      path: name,
+      type: "dir",
+      children: [],
+    };
+  }
+  function dotFile(name: string): DirectoryTreeNode {
+    return {
+      id: name,
+      name,
+      path: name,
+      type: "file",
+    };
+  }
+
+  it("drops dotfile siblings at the root", () => {
+    const rows = buildVisibleTreeRows(
+      [dotFile(".env"), dotFile("README.md"), dotDir(".vscode")],
+      openPaths,
+      loadingPaths,
+      selectedPaths,
+      0,
+      null,
+      false,
+    );
+    expect(rows.map((r) => r.path)).toEqual(["README.md"]);
+  });
+
+  it("drops dotfile descendants when a dotfile dir is NOT opened (and so not present)", () => {
+    // .vscode is filtered out at the parent level — its children must not leak.
+    const vscode = dotDir(".vscode");
+    vscode.children = [dotFile("settings.json")];
+    const rows = buildVisibleTreeRows(
+      [dotFile("README.md"), vscode],
+      openPaths,
+      loadingPaths,
+      selectedPaths,
+      0,
+      null,
+      false,
+    );
+    expect(rows.map((r) => r.path)).toEqual(["README.md"]);
+  });
+
+  it("keeps descendants of non-dotfile dirs even if some are dotfiles", () => {
+    const src = {
+      id: "src",
+      name: "src",
+      path: "src",
+      type: "dir" as const,
+      children: [
+        dotFile(".env"),
+        { id: "src/index.ts", name: "index.ts", path: "src/index.ts", type: "file" as const },
+      ],
+    };
+    const rows = buildVisibleTreeRows(
+      [src],
+      new Set(["src"]), // opened
+      loadingPaths,
+      selectedPaths,
+      0,
+      null,
+      false,
+    );
+    expect(rows.map((r) => r.path)).toEqual(["src", "src/index.ts"]);
+  });
+
+  it("returns every node (including dotfiles) when showHidden defaults to true", () => {
+    const rows = buildVisibleTreeRows(
+      [dotFile(".env"), dotFile("README.md")],
+      openPaths,
+      loadingPaths,
+      selectedPaths,
+    );
+    expect(rows.map((r) => r.path)).toEqual([".env", "README.md"]);
+  });
+});
+
+describe("buildWorkspaceNodeMetaByPath with showHidden=false", () => {
+  it("omits dotfile paths from the meta map", () => {
+    const map = buildWorkspaceNodeMetaByPath(
+      [
+        { id: ".env", name: ".env", path: ".env", type: "file" },
+        { id: "README.md", name: "README.md", path: "README.md", type: "file" },
+      ],
+      0,
+      null,
+      false,
+    );
+    expect([...map.keys()]).toEqual(["README.md"]);
+  });
+
+  it("with showHidden=true (default) keeps every path", () => {
+    const map = buildWorkspaceNodeMetaByPath([
+      { id: ".env", name: ".env", path: ".env", type: "file" },
+      { id: "README.md", name: "README.md", path: "README.md", type: "file" },
+    ]);
+    expect([...map.keys()].sort()).toEqual([".env", "README.md"]);
   });
 });

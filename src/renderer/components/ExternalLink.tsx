@@ -9,6 +9,15 @@ interface ExternalLinkProps {
     children: ReactNode;
     className?: string;
     title?: string;
+    /**
+     * Optional click observer. Fires AFTER the default text-selection guard
+     * but BEFORE the openExternal call. Use this for tap-counter easter
+     * eggs (`event.preventDefault()` + `stopPropagation()` will fully cancel
+     * the default navigation). When the user has selected text the observer
+     * is intentionally skipped so text-selection copy keeps the original
+     * UX, matching the standard ExternalLink contract.
+     */
+    onClick?: (e: MouseEvent<HTMLAnchorElement>) => void;
 }
 
 /**
@@ -19,7 +28,7 @@ interface ExternalLinkProps {
  * - Single click without text selection: opens the link
  * - Click after selecting text: does not open (allows copy)
  */
-export function ExternalLink({ href, children, className, title }: ExternalLinkProps) {
+export function ExternalLink({ href, children, className, title, onClick }: ExternalLinkProps) {
     const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
         e.preventDefault();
 
@@ -27,7 +36,11 @@ export function ExternalLink({ href, children, className, title }: ExternalLinkP
         const selection = window.getSelection();
         const hasSelection = selection && selection.toString().length > 0;
 
-        if (!hasSelection && href) {
+        if (!hasSelection) {
+            onClick?.(e);
+        }
+
+        if (!hasSelection && !e.defaultPrevented && href) {
             openExternal(href);
         }
     };

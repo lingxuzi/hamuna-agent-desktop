@@ -9,16 +9,37 @@ import type {
 } from "./treeTypes";
 import { parentDirOfPath, stickyParentPathOf } from "./treeTypes";
 
+/**
+ * Hidden node predicate: a node is "hidden" iff its filename starts with `.`
+ * (dotfile convention, parallel to Git / Finder / VS Code). Distinct from
+ * the Rust-side hard ignore list (`.git`, `Thumbs.db`, ...) — those are
+ * stripped at the command boundary and never reach the renderer. This
+ * filter is the toggleable UX layer over the dotfile family.
+ */
+export function isHiddenNodeName(name: string): boolean {
+  return name.startsWith(".");
+}
+
 export function buildWorkspaceNodeMetaByPath(
   nodes: DirectoryTreeNode[],
   depth = 0,
   parentPath: string | null = null,
+  showHidden = true,
   map = new Map<string, WorkspaceTreeNodeMeta>(),
 ): Map<string, WorkspaceTreeNodeMeta> {
   for (const node of nodes) {
+    if (!showHidden && isHiddenNodeName(node.name)) {
+      continue;
+    }
     map.set(node.path, { data: node, depth, parentPath });
     if (node.type === "dir" && node.children?.length) {
-      buildWorkspaceNodeMetaByPath(node.children, depth + 1, node.path, map);
+      buildWorkspaceNodeMetaByPath(
+        node.children,
+        depth + 1,
+        node.path,
+        showHidden,
+        map,
+      );
     }
   }
   return map;
@@ -31,9 +52,13 @@ export function buildVisibleTreeRows(
   selectedPaths: ReadonlySet<string>,
   depth = 0,
   parentPath: string | null = null,
+  showHidden = true,
   rows: VisibleTreeRow[] = [],
 ): VisibleTreeRow[] {
   for (const node of nodes) {
+    if (!showHidden && isHiddenNodeName(node.name)) {
+      continue;
+    }
     const isDir = node.type === "dir";
     const isOpen = isDir && openPaths.has(node.path);
     rows.push({
@@ -54,6 +79,7 @@ export function buildVisibleTreeRows(
         selectedPaths,
         depth + 1,
         node.path,
+        showHidden,
         rows,
       );
     }

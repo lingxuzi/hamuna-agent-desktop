@@ -103,3 +103,6 @@ specs/assets/avatar-candidates/**/manifest.json
 # Dev
 .claude/plans/hamuna/
 hamuna_files/
+
+.tokensave
+.omp

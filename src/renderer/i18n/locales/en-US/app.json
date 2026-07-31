@@ -128,7 +128,9 @@
   },
   "workspaceTree": {
     "collapseFolder": "Collapse folder",
-    "emptyFolderHint": "Empty folder - drop files here or right-click to create"
+    "emptyFolderHint": "Empty folder - drop files here or right-click to create",
+    "showHidden": "Show hidden files",
+    "hideHidden": "Hide hidden files"
   },
   "sessionTags": {
     "cron": "Scheduled",

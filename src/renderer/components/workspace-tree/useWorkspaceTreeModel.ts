@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { DirectoryTreeNode } from "../../../shared/dir-types";
 
@@ -16,6 +16,10 @@ import type {
   TreeListItem,
   WorkspaceTreeNodeMeta,
 } from "./treeTypes";
+import {
+  dispatchToggleWorkspaceHiddenFiles,
+  subscribeWorkspaceHiddenFilesToggle,
+} from "./workspaceHiddenFiles";
 
 interface UseWorkspaceTreeModelOptions {
   rootChildren: DirectoryTreeNode[];
@@ -37,6 +41,9 @@ export interface WorkspaceTreeModel {
   visibleRows: ReturnType<typeof buildVisibleTreeRows>;
   /** What the virtual list renders: rows + synthetic edit / empty-hint rows. */
   items: TreeListItem[];
+  /** Whether dotfile nodes are visible. Defaults to hidden; session-local. */
+  showHidden: boolean;
+  toggleShowHidden: () => void;
   openPath: (path: string) => void;
   closePath: (path: string) => void;
   togglePath: (path: string) => void;
@@ -70,6 +77,15 @@ export function useWorkspaceTreeModel({
 }: UseWorkspaceTreeModelOptions): WorkspaceTreeModel {
   // `new Set(undefined)` is an empty set, so the no-seed case is unchanged.
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set(initialOpenPaths));
+  // Session-local: dotfile toggle resets on panel remount, matching the
+  // expand/collapse set's lifecycle. Toggled via the workspace-hidden-files
+  // emitter (subscribe) and `toggleShowHidden` (dispatch) — the latter is
+  // kept so future in-tree affordances can hook back into the same state
+  // without going through the global emitter.
+  const [showHidden, setShowHidden] = useState(false);
+  useEffect(() => subscribeWorkspaceHiddenFilesToggle(() => {
+    setShowHidden((prev) => !prev);
+  }), []);
   // `getOpenPaths` identity changes when `openPaths` mutates. Consumers that
   // want a stable reference (e.g. a `useCallback` declared in a parent
   // component above this hook call) should mirror it into a ref via
@@ -80,8 +96,8 @@ export function useWorkspaceTreeModel({
   );
 
   const nodeMetaByPath = useMemo(
-    () => buildWorkspaceNodeMetaByPath(rootChildren),
-    [rootChildren],
+    () => buildWorkspaceNodeMetaByPath(rootChildren, 0, null, showHidden),
+    [rootChildren, showHidden],
   );
   const selectedPathSet = useMemo(
     () => new Set(selectedPaths),
@@ -104,8 +120,11 @@ export function useWorkspaceTreeModel({
         visibleOpenPaths,
         loadingPaths,
         selectedPathSet,
+        0,
+        null,
+        showHidden,
       ),
-    [rootChildren, visibleOpenPaths, loadingPaths, selectedPathSet],
+    [rootChildren, visibleOpenPaths, loadingPaths, selectedPathSet, showHidden],
   );
 
   const items = useMemo(
@@ -173,6 +192,13 @@ export function useWorkspaceTreeModel({
     [items, nodeMetaByPath],
   );
 
+  // Routes through the workspace-hidden-files emitter so any current and
+  // future subscriber (this model + the easter-egg) stays in sync.
+  const toggleShowHidden = useCallback(
+    () => dispatchToggleWorkspaceHiddenFiles(),
+    [],
+  );
+
   return {
     closePath,
     getOpenPaths,
@@ -182,7 +208,9 @@ export function useWorkspaceTreeModel({
     items,
     nodeMetaByPath,
     openPath,
+    showHidden,
     togglePath,
+    toggleShowHidden,
     visibleRows,
   };
 }

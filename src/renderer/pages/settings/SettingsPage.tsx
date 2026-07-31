@@ -78,6 +78,7 @@ import {
  unlockDeveloperSection,
  UNLOCK_CONFIG,
 } from '@/utils/developerMode';
+import { dispatchToggleWorkspaceHiddenFiles } from '@/components/workspace-tree/workspaceHiddenFiles';
 import { REACT_LOG_EVENT } from '@/utils/frontendLogger';
 import { dispatchHelperRequest } from '@/utils/dispatchHelperRequest';
 import { isTauriEnvironment } from '@/utils/browserMock';
@@ -731,6 +732,46 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
   return () => {
    if (logoTapTimerRef.current) {
     clearTimeout(logoTapTimerRef.current);
+   }
+  };
+ }, []);
+
+ // Website-link 5-tap: toggles the workspace tree's hidden-files visibility.
+ // Separate counter from the logo tap (which unlocks the developer section) so
+ // the two easter eggs don't share a queue — clicking the Website link while
+ // unlocking the developer section would otherwise race the logo tap counter.
+ //
+ // The 1st–4th taps are silent counters; the 5th swallows the click so the
+ // workspace tree toggles INSTEAD of opening the browser. Tap below threshold
+ // lets ExternalLink fall through to its default `openExternal` behavior, so
+ // casual users still reach the website normally.
+ const websiteTapCountRef = useRef(0);
+ const websiteTapTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+ const handleWebsiteTap = useCallback((event: React.MouseEvent) => {
+  websiteTapCountRef.current += 1;
+
+  if (websiteTapTimerRef.current) {
+   clearTimeout(websiteTapTimerRef.current);
+  }
+
+  if (websiteTapCountRef.current >= UNLOCK_CONFIG.requiredTaps) {
+   event.preventDefault();
+   event.stopPropagation();
+   dispatchToggleWorkspaceHiddenFiles();
+   websiteTapCountRef.current = 0;
+   return;
+  }
+
+  websiteTapTimerRef.current = setTimeout(() => {
+   websiteTapCountRef.current = 0;
+  }, UNLOCK_CONFIG.timeWindowMs);
+ }, []);
+
+ useEffect(() => {
+  return () => {
+   if (websiteTapTimerRef.current) {
+    clearTimeout(websiteTapTimerRef.current);
    }
   };
  }, []);
@@ -5021,6 +5062,7 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--ink-muted)]">Website</p>
           <ExternalLink
            href="https://hamuna.club"
+           onClick={handleWebsiteTap}
            className="mt-1 block text-[var(--accent)] hover:underline"
           >
            https://hamuna.club
