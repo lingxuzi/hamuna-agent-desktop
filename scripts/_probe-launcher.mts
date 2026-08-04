@@ -1,0 +1,20 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage();
+const errs: string[] = [];
+page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+page.on('response', r => { if (r.status() >= 400) errs.push(`HTTP ${r.status()} ${r.url()}`); });
+await page.goto('http://localhost:5174/', { waitUntil: 'networkidle', timeout: 20000 });
+await page.waitForTimeout(2000);
+const rail = await page.locator('.launcher-rail').count();
+const rows = await page.locator('.launcher-rail .session-row').count();
+const ws = await page.locator('.ws-card').count();
+const empty = await page.locator('.ws-empty').count();
+const hero = await page.locator('.launcher-hero').count();
+console.log(`rail=${rail} session-rows=${rows} ws-cards=${ws} ws-empty=${empty} hero=${hero}`);
+// dump rail text
+const railText = await page.locator('.launcher-rail').textContent().catch(() => 'N/A');
+console.log('rail-text:', (railText ?? '').slice(0, 200));
+console.log('---errors---');
+errs.forEach(e => console.log(e));
+await browser.close();

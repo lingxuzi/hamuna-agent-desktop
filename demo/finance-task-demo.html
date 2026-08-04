@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · TaskCenter 迁移 demo</title>
+<link rel="stylesheet" href="./_shared.css" />
+<style>
+  .page {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: 100%;
+    overflow: hidden;
+  }
+  .thought-panel {
+    border-right: 1px solid var(--line);
+    background: var(--paper);
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    min-height: 0;
+  }
+  .thought-input {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-elevated);
+  }
+  .thought-input textarea {
+    width: 100%; min-height: 72px;
+    background: var(--paper-inset);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 12px; line-height: 1.6;
+    padding: 8px 10px;
+    resize: vertical;
+  }
+  .thought-input textarea:focus {
+    outline: none;
+    border-color: var(--accent-warm);
+  }
+  .thought-input .row {
+    display: flex; gap: 6px; margin-top: 8px;
+    align-items: center;
+  }
+  .thought-input .row .tag {
+    font-family: var(--font-code);
+    font-size: 10px;
+    color: var(--ink-muted);
+    padding: 2px 6px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+  }
+
+  .thought-filters {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex; gap: 6px;
+  }
+  .filter-chip {
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .filter-chip.active {
+    color: var(--accent-warm);
+    border-color: var(--accent-warm-muted);
+    background: rgb(212 162 76 / 0.06);
+  }
+
+  .thought-list {
+    overflow-y: auto;
+    padding: 8px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .thought-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    background: var(--paper-elevated);
+    border-left: 2px solid var(--accent-warm);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .thought-card:hover { border-color: var(--accent-warm-muted); }
+  .thought-card .body {
+    font-size: 12px; color: var(--ink); line-height: 1.5;
+    margin: 0 0 6px;
+  }
+  .thought-card .meta {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    display: flex; gap: 8px;
+  }
+
+  /* ====== Right: TaskListPanel ====== */
+  .task-panel {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-height: 0;
+  }
+  .task-toolbar {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-elevated);
+    display: flex; gap: 8px; align-items: center;
+  }
+  .task-toolbar .search {
+    flex: 1;
+    height: 28px;
+    padding: 0 10px;
+    background: var(--paper-inset);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--ink);
+    font-family: var(--font-code);
+    font-size: 11px;
+  }
+  .task-toolbar .search:focus {
+    outline: none; border-color: var(--accent-warm);
+  }
+  .view-toggle {
+    display: flex; gap: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .view-toggle button {
+    background: transparent; border: 0;
+    padding: 0 10px; height: 28px;
+    color: var(--ink-muted);
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .view-toggle button.active {
+    background: var(--accent-warm-subtle);
+    color: var(--accent-warm);
+  }
+
+  .task-list {
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .bucket-label {
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--ink-subtle);
+    padding: 8px 0 4px;
+    display: flex; justify-content: space-between;
+  }
+  .bucket-label .count { color: var(--accent-warm); }
+
+  .task-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    background: var(--paper-elevated);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+  }
+  .task-card:hover {
+    border-color: var(--accent-warm-muted);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .task-card .title {
+    font-size: 13px; color: var(--ink); font-weight: 500;
+  }
+  .task-card .workspace {
+    font-family: var(--font-code);
+    font-size: 10px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+  .task-card .meta {
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    text-align: right;
+    grid-column: 2; grid-row: 1 / 3;
+  }
+  .task-card .meta .turns { color: var(--accent-warm); }
+
+  .status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-family: var(--font-code);
+    font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 1px solid;
+  }
+  .status.running  { color: var(--info);    border-color: rgb(230 192 104 / 0.4); background: rgb(230 192 104 / 0.06); }
+  .status.todo     { color: var(--ink-muted); border-color: var(--line-strong); }
+  .status.done     { color: var(--success); border-color: rgb(16 185 129 / 0.4); }
+  .status.blocked  { color: var(--warning); border-color: rgb(245 158 11 / 0.4); }
+  .status.archived { color: var(--ink-subtle); border-color: var(--line); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="titlebar">
+    <div class="titlebar-spacer"></div>
+    <div class="titlebar-brand">
+      <b>HAMUNA</b> · 金融终端 · v0.3.13 · 主题: <b>Fintech Terminal · Gold</b>
+    </div>
+    <div class="titlebar-cluster">
+      <button class="tb-btn">⟲ 更新</button>
+      <button class="tb-btn">☁ Team</button>
+      <button class="tb-btn tb-btn-primary">▣ 任务</button>
+      <button class="tb-btn">⚙ 设置</button>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">◆ 主屏</div>
+    <div class="tab">hamuna-agent-desktop</div>
+    <div class="tab active">任务 · 全部 <span class="close">×</span></div>
+    <div class="tab-add">+</div>
+  </div>
+
+  <div class="terminal-strip">
+    <span class="dot"></span>
+    <span class="status">任务模式</span>
+    <span class="sep">·</span>
+    <span class="key">TASKS</span><span class="val">5</span>
+    <span class="sep">·</span>
+    <span class="key">THOUGHTS</span><span class="val">9</span>
+    <span class="sep">·</span>
+    <span class="key">RUNNING</span><span class="val">2</span>
+    <span class="sep">·</span>
+    <span class="key">NEXT</span><span class="val">in 12 min</span>
+  </div>
+
+  <div class="page active">
+
+    <!-- LEFT: ThoughtPanel -->
+    <aside class="thought-panel">
+      <div class="thought-input">
+        <textarea placeholder="记录一个想法 / 灵感 · #workspace 关联到工作区"></textarea>
+        <div class="row">
+          <span class="tag">#hamuna-agent-desktop</span>
+          <span class="tag">+ 标签</span>
+          <button class="btn btn-primary" style="margin-left: auto; height: 24px; padding: 0 10px; font-size: 10px;">派发 ▸</button>
+        </div>
+      </div>
+
+      <div class="thought-filters">
+        <span class="filter-chip active">活跃 9</span>
+        <span class="filter-chip">已归档 23</span>
+        <span class="filter-chip">🔍 搜索</span>
+      </div>
+
+      <div class="thought-list">
+        <div class="thought-card">
+          <div class="body">把 fintech-terminal 主题的样式改成 Hermes 金，titlebar 中间加 mono 11px brand 文字。</div>
+          <div class="meta"><span>2 min</span><span>#hamuna-agent-desktop</span></div>
+        </div>
+        <div class="thought-card">
+          <div class="body">整理 IM bot reconnect 失败链路，重连时不应该 abort in-flight 消息。</div>
+          <div class="meta"><span>1 hr</span><span>#im-bridge</span></div>
+        </div>
+        <div class="thought-card">
+          <div class="body">TaskCenter 任务卡 demo 视觉对齐 + 双栏布局。</div>
+          <div class="meta"><span>2 hr</span><span>#design</span></div>
+        </div>
+        <div class="thought-card">
+          <div class="body">Verify Theme CSS 生成正确性，加 token 一致性测试。</div>
+          <div class="meta"><span>3 hr</span><span>#testing</span></div>
+        </div>
+        <div class="thought-card">
+          <div class="body">PR-#412 review：sessionStore 直写 vs SQLite 走查。</div>
+          <div class="meta"><span>1 day</span><span>#code-review</span></div>
+        </div>
+        <div class="thought-card">
+          <div class="body">MCP server registry 重构，lazy load 边界。</div>
+          <div class="meta"><span>2 days</span><span>#arch</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- RIGHT: TaskListPanel -->
+    <section class="task-panel">
+
+      <div class="task-toolbar">
+        <input class="search" placeholder="搜索任务 · 工作区 · 标签" value="" />
+        <div class="view-toggle">
+          <button class="active">▦ 卡片</button>
+          <button>≡ 列表</button>
+        </div>
+        <button class="btn">+ 新建</button>
+      </div>
+
+      <div class="task-list">
+
+        <!-- ACTIVE -->
+        <div class="bucket-label"><span>ACTIVE · 运行中</span><span class="count">2</span></div>
+
+        <div class="task-card">
+          <div>
+            <div class="title">每日 9:30 抓取 A 股北向资金流向 <span class="status running">RUNNING</span></div>
+            <div class="workspace">~/Developer/finance-monitor · cron @ 09:30 daily</div>
+          </div>
+          <div class="meta">
+            <span class="turns">turn 12/40</span>
+            <span>started 3 min ago</span>
+          </div>
+        </div>
+
+        <div class="task-card">
+          <div>
+            <div class="title">Research notes 周报整理 <span class="status running">RUNNING</span></div>
+            <div class="workspace">~/Documents/research-notes</div>
+          </div>
+          <div class="meta">
+            <span class="turns">turn 5/20</span>
+            <span>started 8 min ago</span>
+          </div>
+        </div>
+
+        <!-- PENDING -->
+        <div class="bucket-label"><span>PENDING · 规划中</span><span class="count">2</span></div>
+
+        <div class="task-card">
+          <div>
+            <div class="title">对齐 fintech-terminal demo 视觉（Settings + Tasks + Space） <span class="status todo">TODO</span></div>
+            <div class="workspace">~/Developer/hamuna-agent-desktop · 手动触发</div>
+          </div>
+          <div class="meta">
+            <span class="turns">— turns</span>
+            <span>created 2 hr ago</span>
+          </div>
+        </div>
+
+        <div class="task-card">
+          <div>
+            <div class="title">窗口打开任务：监控 USD/CNY 破 7.30 报警 <span class="status blocked">BLOCKED</span></div>
+            <div class="workspace">~/Developer/finance-monitor · 依赖: provider-key</div>
+          </div>
+          <div class="meta">
+            <span class="turns">— turns</span>
+            <span>created 4 hr ago</span>
+          </div>
+        </div>
+
+        <!-- FINISHED -->
+        <div class="bucket-label"><span>FINISHED · 已完成</span><span class="count">1</span></div>
+
+        <div class="task-card">
+          <div>
+            <div class="title">收集 8 月份论文 PDF 入库 <span class="status done">DONE</span></div>
+            <div class="workspace">~/Documents/research-notes</div>
+          </div>
+          <div class="meta">
+            <span class="turns">turn 31/40</span>
+            <span>1 day ago</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · Settings / Shortcuts 迁移 demo</title>
+<link rel="stylesheet" href="./_shared.css" />
+<style>
+  .page { display: grid; grid-template-columns: 240px 1fr; height: 100%; overflow: hidden; }
+  .settings-sidebar { background: var(--paper-elevated); border-right: 1px solid var(--line); overflow-y: auto; display: flex; flex-direction: column; }
+  .nav-group-title { font-family: var(--font-code); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-subtle); padding: 14px 16px 6px; }
+  .nav-item { padding: 6px 16px 6px 18px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-left: 2px solid transparent; color: var(--ink-muted); font-size: 12px; }
+  .nav-item:hover { background: rgb(212 162 76 / 0.04); color: var(--ink); }
+  .nav-item.active { border-left-color: var(--accent-warm); background: rgb(212 162 76 / 0.06); color: var(--ink); }
+  .nav-item .icon { width: 14px; display: inline-block; color: var(--accent-warm); }
+  .settings-main { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .settings-content { overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 20px; }
+  .settings-section { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper-elevated); overflow: hidden; }
+  .settings-section .section-head { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--paper-inset); }
+  .settings-section .section-head h2 { margin: 0; font-family: var(--font-code); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-warm); font-weight: 500; }
+  .settings-section .section-head .desc { font-size: 11px; color: var(--ink-muted); margin: 4px 0 0; }
+  .kb-row { display: grid; grid-template-columns: 1fr auto; padding: 10px 16px; border-bottom: 1px solid var(--line-subtle); align-items: center; }
+  .kb-row:last-child { border-bottom: none; }
+  .kb-row .label { font-size: 12px; color: var(--ink); }
+  .kb-row .hint { font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+  .kb-row select { background: var(--paper-inset); border: 1px solid var(--line); color: var(--ink); border-radius: var(--radius-md); padding: 4px 10px; font-family: var(--font-code); font-size: 11px; min-width: 200px; }
+  .keys { display: flex; gap: 4px; }
+  .kbd { font-family: var(--font-code); font-size: 11px; color: var(--ink-secondary); background: var(--paper-inset); border: 1px solid var(--line); border-radius: 3px; padding: 2px 7px; min-width: 24px; text-align: center; box-shadow: 0 1px 0 var(--line-strong); }
+  .kbd.gold { color: var(--accent-warm); border-color: var(--accent-warm-muted); }
+  .kbd-group { display: flex; gap: 4px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar"><div class="titlebar-spacer"></div><div class="titlebar-brand"><b>HAMUNA</b> · 金融终端 · v0.3.13 · 主题: <b>Fintech Terminal · Gold</b></div><div class="titlebar-cluster"><button class="tb-btn">⟲ 更新</button><button class="tb-btn">▣ 任务</button><button class="tb-btn tb-btn-primary">⚙ 设置</button></div></div>
+  <div class="tabbar"><div class="tab">◆ 主屏</div><div class="tab">hamuna-agent-desktop</div><div class="tab active">设置 · 快捷键 <span class="close">×</span></div><div class="tab-add">+</div></div>
+  <div class="terminal-strip"><span class="dot"></span><span class="status">设置模式</span><span class="sep">·</span><span class="key">SECTION</span><span class="val">shortcuts</span></div>
+
+  <div class="page active">
+    <aside class="settings-sidebar">
+      <div class="nav-group-title">通用</div>
+      <div class="nav-item"><span><span class="icon">◇</span> 外观</span></div>
+      <div class="nav-item active"><span><span class="icon">⌘</span> 快捷键</span></div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 语言</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 更新</span></div>
+      <div class="nav-group-title">代理</div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 模型</span></div>
+      <div class="nav-item"><span><span class="icon">⌗</span> 技能</span></div>
+      <div class="nav-item"><span><span class="icon">⏱</span> 定时任务</span></div>
+      <div class="nav-item"><span><span class="icon">⊞</span> MCP 服务</span><span class="num">3</span></div>
+      <div class="nav-group-title">账户</div>
+      <div class="nav-item"><span><span class="icon">⌬</span> Provider</span><span class="num">2</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 日志</span></div>
+      <div class="nav-item"><span><span class="icon">⚠</span> 关于</span></div>
+    </aside>
+
+    <section class="settings-main">
+      <div class="eyebrow"><span>设置 · <span class="count">快捷键</span></span><div class="actions"><button>恢复默认</button></div></div>
+      <div class="settings-content">
+
+        <div class="settings-section">
+          <div class="section-head"><h2>消息发送</h2><div class="desc">在 Chat 输入框中发送消息所用的快捷键。</div></div>
+          <div class="kb-row"><div><div class="label">发送消息</div><div class="hint">Enter 直接发送；Shift+Enter 换行</div></div><div class="keys"><span class="kbd gold">↵ Enter</span></div></div>
+          <div class="kb-row"><div><div class="label">换行（不发送）</div><div class="hint">macOS / Windows / Linux 一致</div></div><div class="keys"><span class="kbd">⇧</span><span class="kbd gold">↵ Enter</span></div></div>
+        </div>
+
+        <div class="settings-section">
+          <div class="section-head"><h2>召唤 HamunaAgent</h2><div class="desc">全局快捷键，从任何 App 调起 HamunaAgent 主窗口。仅桌面端有效。</div></div>
+          <div class="kb-row"><div><div class="label">启用全局快捷键</div><div class="hint">macOS 需要辅助功能权限</div></div><div class="switch on"></div></div>
+          <div class="kb-row"><div><div class="label">当前绑定</div><div class="hint">按住唤起 / 切换窗口</div></div><div class="kb-group"><span class="kbd">⌃ Ctrl</span><span class="kbd">⇧</span><span class="kbd gold">Space</span></div></div>
+          <div class="kb-row"><div><div class="label">录制新快捷键</div><div class="hint">点击后按下目标组合</div></div><button class="btn">▣ 录制</button></div>
+          <div class="kb-row"><div><div class="label">恢复默认</div><div class="hint">⌃ Ctrl + ⇧ Shift + Space</div></div><button class="btn">↺ 恢复</button></div>
+        </div>
+
+        <div class="settings-section">
+          <div class="section-head"><h2>App 内</h2><div class="desc">HamunaAgent 主窗口内的全局快捷键。</div></div>
+          <div class="kb-row"><div><div class="label">新建会话</div></div><div class="keys"><span class="kbd">⌘</span><span class="kbd gold">N</span></div></div>
+          <div class="kb-row"><div><div class="label">关闭当前 Tab</div></div><div class="keys"><span class="kbd">⌘</span><span class="kbd gold">W</span></div></div>
+          <div class="kb-row"><div><div class="label">切换下一个 Tab</div></div><div class="keys"><span class="kbd">⌃ Ctrl</span><span class="kbd gold">→</span></div></div>
+          <div class="kb-row"><div><div class="label">切换上一个 Tab</div></div><div class="keys"><span class="kbd">⌃ Ctrl</span><span class="kbd gold">←</span></div></div>
+          <div class="kb-row"><div><div class="label">打开命令面板</div></div><div class="keys"><span class="kbd">⌘</span><span class="kbd gold">K</span></div></div>
+          <div class="kb-row"><div><div class="label">切换主屏 / 当前 Tab</div></div><div class="keys"><span class="kbd">⌘</span><span class="kbd gold">0</span></div></div>
+          <div class="kb-row"><div><div class="label">切换设置</div></div><div class="keys"><span class="kbd">⌘</span><span class="kbd">,</span></div></div>
+          <div class="kb-row"><div><div class="label">切换任务中心</div></div><div class="keys"><span class="kbd">⌘</span><span class="kbd">⇧</span><span class="kbd gold">T</span></div></div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

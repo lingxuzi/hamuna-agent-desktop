@@ -1,0 +1,1742 @@
+<!doctype html>
+<html lang="zh-CN" data-theme-id="fintech-terminal" data-color-scheme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · 金融终端全界面演示</title>
+<style>
+  /* ============================================================
+     Token system — Hermes Gold on Bloomberg-style dark surface
+     ============================================================ */
+  :root {
+    --font-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans CJK SC', sans-serif;
+    --font-display: 'Inter', 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+    --font-code: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', 'Sarasa Mono SC', 'Source Code Pro', ui-monospace, monospace;
+
+    --ink: #e2e8f0;
+    --ink-secondary: #cbd5e1;
+    --ink-muted: #64748b;
+    --ink-subtle: #475569;
+    --ink-faint: #334155;
+
+    --paper: #050b14;
+    --paper-elevated: #0c1626;
+    --message-user-bg: #0f1a2e;
+    --paper-inset: #020610;
+
+    --accent: #d4a24c;
+    --accent-warm: #d4a24c;
+    --accent-warm-hover: #e6c068;
+    --accent-warm-subtle: rgb(212 162 76 / 0.10);
+    --accent-warm-muted: rgb(212 162 76 / 0.20);
+
+    --success: #10b981;
+    --error: #f43f5e;
+    --warning: #f59e0b;
+    --info: #e6c068;
+
+    --line: rgb(226 232 240 / 0.10);
+    --line-strong: rgb(226 232 240 / 0.18);
+    --line-subtle: rgb(226 232 240 / 0.05);
+
+    --button-primary-bg: #b8862e;
+    --button-primary-bg-hover: #9c7224;
+
+    --radius-sm: 3px;
+    --radius-md: 4px;
+    --radius-lg: 6px;
+
+    --t-fast: 150ms;
+    --t-normal: 220ms;
+    --t-slow: 360ms;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: var(--font-body);
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 700px at 85% -10%, rgb(212 162 76 / 0.10) 0%, rgb(212 162 76 / 0) 55%),
+      radial-gradient(900px 600px at -10% 110%, rgb(230 192 104 / 0.06) 0%, rgb(230 192 104 / 0) 50%),
+      var(--paper);
+    background-attachment: fixed;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "tnum", "calt" 1;
+    letter-spacing: 0.01em;
+    overflow: hidden;
+  }
+
+  /* ============================================================
+     App shell — Titlebar + TabBar + TerminalStrip + 主体区
+     ============================================================ */
+  .app {
+    display: grid;
+    grid-template-rows: auto auto auto 1fr;
+    height: 100vh;
+    animation: app-in var(--t-slow) var(--ease);
+  }
+  @keyframes app-in { from { opacity: 0; } to { opacity: 1; } }
+
+  /* CustomTitleBar */
+  .titlebar {
+    height: 44px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    padding: 0 0 0 12px;
+    gap: 12px;
+    -webkit-app-region: drag;
+  }
+  .titlebar-spacer { width: 70px; }
+  .titlebar-brand {
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    flex: 1;
+  }
+  .titlebar-brand b { color: var(--accent-warm); font-weight: 500; }
+  .titlebar-cluster {
+    display: flex;
+    align-items: stretch;
+    -webkit-app-region: no-drag;
+    border-left: 1px solid var(--line);
+    padding-left: 8px;
+  }
+  .tb-btn {
+    -webkit-app-region: no-drag;
+    height: 28px;
+    min-width: 32px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--ink-secondary);
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    position: relative;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .tb-btn:hover {
+    border-color: var(--accent-warm-muted);
+    color: var(--ink);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .tb-btn:active { transform: scale(0.97); }
+  .tb-btn + .tb-btn::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px;
+    width: 1px;
+    background: var(--line);
+  }
+  .tb-btn-primary {
+    background: var(--button-primary-bg);
+    color: #ffffff;
+    border-color: var(--button-primary-bg);
+  }
+  .tb-btn-primary:hover { background: var(--button-primary-bg-hover); border-color: var(--button-primary-bg-hover); }
+
+  /* TabBar */
+  .tabbar {
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: stretch;
+    padding: 0 8px;
+    height: 40px;
+    overflow-x: auto;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    height: 100%;
+    border-right: 1px solid var(--line-subtle);
+    border-bottom: 2px solid transparent;
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--accent-warm);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .tab:hover { color: var(--ink); background: rgb(212 162 76 / 0.04); }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -2px;
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%, var(--accent-warm) 20%,
+      var(--accent-warm-hover) 50%, var(--accent-warm) 80%, transparent 100%);
+    animation: scan 2.4s linear infinite;
+    box-shadow: 0 0 8px var(--accent-warm);
+  }
+  @keyframes scan {
+    0% { transform: translateX(-30%); opacity: 0.9; }
+    50% { opacity: 1; }
+    100% { transform: translateX(30%); opacity: 0.9; }
+  }
+  .tab .close {
+    width: 14px; height: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 2px;
+    opacity: 0.5;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .tab .close:hover { background: var(--line-strong); opacity: 1; }
+  .tab-add {
+    width: 32px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: color var(--t-fast) var(--ease);
+  }
+  .tab-add:hover { color: var(--accent-warm); }
+
+  /* TerminalStrip */
+  .terminal-strip {
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 16px;
+    background: var(--paper-inset);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-secondary);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .terminal-strip .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent-warm);
+    box-shadow: 0 0 0 2px var(--accent-warm-subtle);
+    display: inline-block;
+    animation: pulse 1.6s var(--ease) infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 2px var(--accent-warm-subtle), 0 0 0 0 rgb(212 162 76 / 0.4); transform: scale(1); }
+    50% { box-shadow: 0 0 0 2px var(--accent-warm-subtle), 0 0 0 6px rgb(212 162 76 / 0); transform: scale(1.1); }
+  }
+  .terminal-strip .sep { color: var(--line-strong); padding: 0 2px; user-select: none; }
+  .terminal-strip .key { color: var(--ink-muted); padding-right: 2px; }
+  .terminal-strip .val { color: var(--ink); font-weight: 500; }
+  .terminal-strip .status { color: var(--ink); font-weight: 500; padding-right: 4px; }
+  .terminal-strip .uptime { font-variant-numeric: tabular-nums; }
+
+  /* ============================================================
+     Page router — hash 切换不同 surface
+     ============================================================ */
+  .router { display: contents; }
+  .page {
+    display: none;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .page.active { display: grid; }
+  .page[data-page='launcher'] { grid-template-columns: 1fr 360px; }
+  .page[data-page='chat']     { grid-template-columns: 240px 1fr; }
+  .page[data-page='settings'] { grid-template-columns: 240px 1fr; }
+  .page[data-page='tasks']    { grid-template-columns: 220px 1fr; }
+  .page[data-page='space']    { grid-template-columns: 240px 1fr 320px; }
+
+  /* ============================================================
+     通用 component styles
+     ============================================================ */
+  .eyebrow {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-muted);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-elevated);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .eyebrow .count { color: var(--accent-warm); font-weight: 500; }
+  .eyebrow .actions { display: flex; gap: 4px; }
+  .eyebrow .actions button {
+    height: 22px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--ink-secondary);
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .eyebrow .actions button:hover {
+    border-color: var(--accent-warm-muted);
+    color: var(--accent-warm);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .eyebrow .actions button:active { transform: scale(0.96); }
+
+  /* 通用 btn */
+  .btn {
+    height: 28px;
+    padding: 0 12px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--ink-secondary);
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .btn:hover {
+    border-color: var(--accent-warm-muted);
+    color: var(--accent-warm);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--button-primary-bg);
+    border-color: var(--button-primary-bg);
+    color: #ffffff;
+  }
+  .btn-primary:hover {
+    background: var(--button-primary-bg-hover);
+    border-color: var(--button-primary-bg-hover);
+    color: #ffffff;
+  }
+  .btn-ghost { border-color: transparent; }
+  .btn-ghost:hover { border-color: var(--accent-warm-muted); }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-warm-muted); }
+
+  /* ============================================================
+     1. LAUNCHER
+     ============================================================ */
+  .launcher-hero {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    background: var(--paper);
+    border-right: 1px solid var(--line);
+  }
+  .launcher-hero-body {
+    padding: 32px 40px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .launcher-eyebrow {
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-muted);
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .launcher-eyebrow b { color: var(--accent-warm); font-weight: 500; }
+  .launcher-clock {
+    font-family: var(--font-code);
+    font-size: 11px;
+    color: var(--accent-warm);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+  }
+  .hero-headline {
+    margin-top: 8px;
+  }
+  .hero-headline h1 {
+    font-family: var(--font-display);
+    font-size: 38px;
+    font-weight: 500;
+    line-height: 1.15;
+    margin: 8px 0;
+    background: linear-gradient(120deg, var(--ink) 0%, var(--accent-warm) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.01em;
+  }
+  .hero-headline p {
+    font-family: var(--font-code);
+    font-size: 13px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+  }
+  .quick-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .quick-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    background: var(--paper-elevated);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 92px;
+  }
+  .quick-card:hover {
+    border-color: var(--accent-warm-muted);
+    background: rgb(212 162 76 / 0.04);
+    transform: translateY(-1px);
+  }
+  .quick-card .icon {
+    font-size: 18px;
+    color: var(--accent-warm);
+  }
+  .quick-card .name {
+    font-family: var(--font-code);
+    font-size: 12px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .quick-card .desc {
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  .workspace-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ws-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    background: var(--paper-elevated);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 16px;
+    align-items: center;
+  }
+  .ws-card:hover {
+    border-color: var(--accent-warm-muted);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .ws-card .name {
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 500;
+    grid-column: 1;
+  }
+  .ws-card .path {
+    font-family: var(--font-code);
+    font-size: 10px;
+    color: var(--ink-muted);
+    grid-column: 1;
+  }
+  .ws-card .meta {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    grid-column: 2;
+    grid-row: 1 / 3;
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-end;
+  }
+  .ws-card .meta .turns { color: var(--accent-warm); font-weight: 500; }
+  .ws-card .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-code);
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--ink-secondary);
+  }
+  .ws-card .badge.gold { border-color: var(--accent-warm-muted); color: var(--accent-warm); }
+
+  /* Launcher right rail */
+  .launcher-rail {
+    background: var(--paper-elevated);
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+  }
+  .rail-section {
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .rail-section + .rail-section {
+    border-top: 1px solid var(--line);
+  }
+
+  /* ============================================================
+     2. CHAT
+     ============================================================ */
+  .chat-sidebar, .settings-sidebar, .tasks-sidebar, .space-sidebar {
+    background: var(--paper-elevated);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+  }
+  .session-row {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line-subtle);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .session-row:hover { background: rgb(212 162 76 / 0.04); }
+  .session-row.active {
+    border-left-color: var(--accent-warm);
+    background: rgb(212 162 76 / 0.06);
+  }
+  .session-row .title {
+    font-size: 12px;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .session-row .meta {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-muted);
+    display: flex; gap: 8px;
+  }
+
+  .chat-main, .settings-main, .tasks-main, .space-main {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 0;
+  }
+  .messages {
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .msg {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--paper-elevated);
+    animation: msg-in var(--t-normal) var(--ease);
+  }
+  @keyframes msg-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg:hover { border-color: var(--line-strong); }
+  .msg.user { background: var(--message-user-bg); }
+  .msg .stamp {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .msg .stamp .role {
+    color: var(--accent-warm);
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .msg.tool .stamp .role { color: var(--info); }
+  .msg.user .stamp .role { color: var(--success); }
+  .msg .body { font-size: 13px; color: var(--ink); line-height: 1.65; }
+  .msg .body code {
+    font-family: var(--font-code);
+    font-size: 12px;
+    padding: 1px 5px;
+    background: var(--paper-inset);
+    border-radius: 3px;
+    color: var(--accent-warm);
+    border: 1px solid var(--line);
+  }
+  pre.code {
+    background: var(--paper-inset);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent-warm);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-family: var(--font-code);
+    font-size: 12px;
+    color: var(--ink);
+    overflow-x: auto;
+    margin: 8px 0 0;
+    line-height: 1.6;
+  }
+  pre.code .kw { color: var(--accent-warm); }
+  pre.code .str { color: var(--success); }
+  pre.code .num { color: var(--warning); font-variant-numeric: tabular-nums; }
+  pre.code .cmt { color: var(--ink-muted); font-style: italic; }
+
+  .msg.streaming .body::after {
+    content: '▌';
+    color: var(--accent-warm);
+    animation: blink 1s steps(2) infinite;
+    margin-left: 2px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .chat-input {
+    border-top: 1px solid var(--line);
+    padding: 12px 24px;
+    background: var(--paper-elevated);
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .chat-input textarea {
+    flex: 1;
+    min-height: 56px;
+    max-height: 180px;
+    padding: 10px 12px;
+    background: var(--paper-inset);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .chat-input textarea:focus {
+    outline: none;
+    border-color: var(--accent-warm);
+    background: var(--paper);
+  }
+  .chat-input button.send {
+    height: 56px;
+    padding: 0 16px;
+    background: var(--button-primary-bg);
+    border: 1px solid var(--button-primary-bg);
+    color: #ffffff;
+    border-radius: var(--radius-md);
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .chat-input button.send:hover { background: var(--button-primary-bg-hover); }
+  .chat-input button.send:active { transform: scale(0.97); }
+
+  /* ============================================================
+     3. SETTINGS
+     ============================================================ */
+  .settings-nav-item {
+    padding: 8px 16px 8px 18px;
+    border-bottom: 1px solid var(--line-subtle);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    transition: all var(--t-fast) var(--ease);
+  }
+  .settings-nav-item:hover {
+    background: rgb(212 162 76 / 0.04);
+    color: var(--ink);
+  }
+  .settings-nav-item.active {
+    border-left-color: var(--accent-warm);
+    background: rgb(212 162 76 / 0.06);
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .settings-nav-item .icon { color: var(--accent-warm); font-family: var(--font-code); font-size: 11px; }
+  .settings-nav-group {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-subtle);
+    padding: 14px 16px 6px;
+  }
+
+  .settings-content {
+    overflow-y: auto;
+    padding: 32px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .settings-section h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .settings-section .sub {
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin: 0 0 16px;
+  }
+  .settings-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line-subtle);
+    align-items: center;
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row .label {
+    font-size: 12px;
+    color: var(--ink-secondary);
+  }
+  .settings-row .label .desc {
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+  .settings-row .control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Toggle switch */
+  .toggle {
+    width: 32px; height: 18px;
+    background: var(--line-strong);
+    border-radius: 9px;
+    position: relative;
+    cursor: pointer;
+    transition: background var(--t-fast) var(--ease);
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    left: 2px; top: 2px;
+    width: 14px; height: 14px;
+    background: var(--ink);
+    border-radius: 50%;
+    transition: transform var(--t-fast) var(--ease);
+  }
+  .toggle.on { background: var(--accent-warm); }
+  .toggle.on::after { transform: translateX(14px); background: var(--paper); }
+
+  /* Select / segmented */
+  .segmented {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .segmented button {
+    background: transparent;
+    border: none;
+    padding: 0 12px;
+    height: 26px;
+    color: var(--ink-muted);
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    border-right: 1px solid var(--line-subtle);
+  }
+  .segmented button:last-child { border-right: none; }
+  .segmented button.active {
+    background: var(--accent-warm-subtle);
+    color: var(--accent-warm);
+  }
+
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .theme-tile {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .theme-tile:hover { border-color: var(--accent-warm-muted); }
+  .theme-tile.active { border-color: var(--accent-warm); background: rgb(212 162 76 / 0.04); }
+  .theme-tile .swatch {
+    height: 40px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+  }
+  .theme-tile .name {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-secondary);
+  }
+
+  /* ============================================================
+     4. TASK CENTER
+     ============================================================ */
+  .task-card {
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--paper-elevated);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .task-card:hover {
+    border-color: var(--accent-warm-muted);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .task-card .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .task-card .name {
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .task-card .status {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line-strong);
+    color: var(--ink-secondary);
+  }
+  .task-card .status.live {
+    border-color: var(--accent-warm-muted);
+    color: var(--accent-warm);
+  }
+  .task-card .status.success {
+    border-color: rgb(16 185 129 / 0.4);
+    color: var(--success);
+  }
+  .task-card .status.error {
+    border-color: rgb(244 63 94 / 0.4);
+    color: var(--error);
+  }
+  .task-card .meta {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-muted);
+    display: flex;
+    gap: 12px;
+  }
+  .task-card .meta b { color: var(--accent-warm); font-weight: 500; }
+
+  .thought-panel {
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent-warm);
+    border-radius: var(--radius-md);
+    background: var(--paper-elevated);
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--ink-secondary);
+    line-height: 1.6;
+  }
+  .thought-panel .ts {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+
+  /* ============================================================
+     5. SPACE (team workbench)
+     ============================================================ */
+  .space-sidebar { padding: 0; }
+  .nav-group-title {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-subtle);
+    padding: 14px 16px 6px;
+  }
+  .nav-item {
+    padding: 6px 16px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 2px solid transparent;
+    color: var(--ink-muted);
+    font-size: 12px;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .nav-item:hover { background: rgb(212 162 76 / 0.04); color: var(--ink); }
+  .nav-item.active {
+    border-left-color: var(--accent-warm);
+    background: rgb(212 162 76 / 0.06);
+    color: var(--ink);
+  }
+  .nav-item .num {
+    font-family: var(--font-code);
+    font-size: 10px;
+    color: var(--ink-muted);
+    background: var(--paper);
+    padding: 0 5px;
+    border-radius: 2px;
+  }
+  .nav-item.active .num { color: var(--accent-warm); }
+
+  .space-canvas {
+    background: var(--paper);
+    overflow-y: auto;
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .issue-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--paper-elevated);
+    align-items: center;
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .issue-row:hover { border-color: var(--accent-warm-muted); }
+  .issue-row .id {
+    font-family: var(--font-code);
+    font-size: 10px;
+    color: var(--ink-muted);
+  }
+  .issue-row .title { font-size: 13px; color: var(--ink); }
+  .issue-row .pri {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+  }
+  .pri.high { border: 1px solid var(--error); color: var(--error); }
+  .pri.med  { border: 1px solid var(--warning); color: var(--warning); }
+  .pri.low  { border: 1px solid var(--line-strong); color: var(--ink-muted); }
+  .issue-row .assignee {
+    font-family: var(--font-code);
+    font-size: 10px;
+    color: var(--ink-secondary);
+  }
+
+  .space-detail {
+    background: var(--paper-elevated);
+    border-left: 1px solid var(--line);
+    padding: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .detail-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .detail-section h3 {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-muted);
+    margin: 0 0 10px;
+    font-weight: 500;
+  }
+  .agent-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    margin: 2px 4px 2px 0;
+    font-size: 11px;
+    color: var(--ink-secondary);
+  }
+  .agent-chip .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+  }
+  .agent-chip .status-dot.busy { background: var(--accent-warm); }
+  .agent-chip .status-dot.idle { background: var(--ink-muted); }
+
+  /* ============================================================
+     浮动导航（surface 切换器）
+     ============================================================ */
+  .nav-rail {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    background: var(--paper-elevated);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+  }
+  .nav-rail a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-radius: var(--radius-sm);
+    transition: all var(--t-fast) var(--ease);
+    min-width: 132px;
+  }
+  .nav-rail a:hover {
+    background: rgb(212 162 76 / 0.06);
+    color: var(--ink);
+  }
+  .nav-rail a.active {
+    background: rgb(212 162 76 / 0.10);
+    color: var(--accent-warm);
+    border-left: 2px solid var(--accent-warm);
+    padding-left: 10px;
+  }
+  .nav-rail a .key {
+    font-family: var(--font-code);
+    font-size: 9px;
+    color: var(--ink-subtle);
+    margin-left: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ TitleBar ============ -->
+  <div class="titlebar">
+    <div class="titlebar-spacer"></div>
+    <div class="titlebar-brand"><b>HAMUNA</b> · 金融终端 · 构建版本 0.3.13 · 主题: <b>Fintech Terminal · Gold</b></div>
+    <div class="titlebar-cluster">
+      <button class="tb-btn">⚡ 更新</button>
+      <button class="tb-btn">▣ 任务 <span style="color:var(--accent-warm);font-size:10px;">3</span></button>
+      <button class="tb-btn">⚙ 设置</button>
+      <button class="tb-btn tb-btn-primary">＋ 新建会话</button>
+      <button class="tb-btn">─</button>
+      <button class="tb-btn">◻</button>
+      <button class="tb-btn">✕</button>
+    </div>
+  </div>
+
+  <!-- ============ TabBar ============ -->
+  <div class="tabbar">
+    <div class="tab active">📊 指数分析 · 运行中 <span class="close">×</span></div>
+    <div class="tab">🤖 Agent 会话 · 空闲 <span class="close">×</span></div>
+    <div class="tab">📁 工作区扫描 <span class="close">×</span></div>
+    <div class="tab">⏰ 每日摘要 <span class="close">×</span></div>
+    <div class="tab-add">＋</div>
+  </div>
+
+  <!-- ============ TerminalStrip ============ -->
+  <div class="terminal-strip" role="status" aria-live="polite">
+    <span class="dot"></span>
+    <span class="status">实时</span>
+    <span class="sep">·</span>
+    <span class="key">会话</span><span class="val">7F2A-9B11</span>
+    <span class="sep">·</span>
+    <span class="key">轮次</span><span class="val">42</span>
+    <span class="sep">·</span>
+    <span class="key">上下文</span><span class="val">87.4K / 200K</span>
+    <span class="sep">·</span>
+    <span class="key">模型</span><span class="val">Claude Sonnet 4.5</span>
+    <span class="sep">·</span>
+    <span class="key">运行时</span><span class="val">HamunaAgent</span>
+    <span class="sep">·</span>
+    <span class="key">MCP</span><span class="val">8</span>
+    <span class="sep">·</span>
+    <span class="key">运行时长</span><span class="val uptime" id="uptime">02:18:44</span>
+  </div>
+
+  <!-- ============ Router ============ -->
+  <div class="router">
+
+    <!-- 1. LAUNCHER -->
+    <section class="page active" data-page="launcher">
+      <div class="launcher-hero">
+        <div class="launcher-hero-body">
+          <div class="launcher-eyebrow">
+            <span><b>HF-AGENT</b> · LIVE · 市场已开盘</span>
+            <span class="launcher-clock" id="launcherClock">09:42:13 · UTC+8</span>
+          </div>
+
+          <div class="hero-headline">
+            <p>下午好,准备好开始工作了吗</p>
+            <h1>让 Agent 帮你<br/>指挥一切</h1>
+          </div>
+
+          <div class="quick-grid">
+            <div class="quick-card">
+              <span class="icon">＋</span>
+              <span class="name">新建会话</span>
+              <span class="desc">在当前工作区打开一个新的 Agent 线程</span>
+            </div>
+            <div class="quick-card">
+              <span class="icon">⌗</span>
+              <span class="name">任务中心</span>
+              <span class="desc">查看正在运行的 3 个定时任务与历史</span>
+            </div>
+            <div class="quick-card">
+              <span class="icon">⌘</span>
+              <span class="name">快捷指令</span>
+              <span class="desc">从 18 个内置 skill 中挑选常用组合</span>
+            </div>
+            <div class="quick-card">
+              <span class="icon">☷</span>
+              <span class="name">打开工作区</span>
+              <span class="desc">载入本地项目目录作为当前上下文</span>
+            </div>
+            <div class="quick-card">
+              <span class="icon">⏱</span>
+              <span class="name">最近会话</span>
+              <span class="desc">从过去 7 天的 47 个会话中快速恢复</span>
+            </div>
+            <div class="quick-card">
+              <span class="icon">✦</span>
+              <span class="name">导入文件</span>
+              <span class="desc">拖入 Markdown / 代码 / PDF 作为引用</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="eyebrow" style="background:transparent;padding:8px 0;border:none;">
+              <span>近期工作区</span>
+              <span class="count">8 个</span>
+            </div>
+            <div class="workspace-list">
+              <div class="ws-card">
+                <div class="name">hamuna-agent-desktop <span class="badge gold">活跃</span></div>
+                <div class="path">~/Coding/hamuna-agent-desktop</div>
+                <div class="meta">
+                  <span class="turns">42 轮</span>
+                  <span>2 分前</span>
+                </div>
+              </div>
+              <div class="ws-card">
+                <div class="name">telemetry-service</div>
+                <div class="path">~/work/telemetry-service</div>
+                <div class="meta">
+                  <span class="turns">18 轮</span>
+                  <span>14 分前</span>
+                </div>
+              </div>
+              <div class="ws-card">
+                <div class="name">research-notes <span class="badge">归档</span></div>
+                <div class="path">~/Documents/research-notes</div>
+                <div class="meta">
+                  <span class="turns">91 轮</span>
+                  <span>3 小时前</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="launcher-rail">
+        <div class="rail-section">
+          <div class="eyebrow">
+            <span>活跃会话</span>
+            <span class="count">3</span>
+          </div>
+          <div class="session-row active">
+            <div class="title">指数分析 · 运行中</div>
+            <div class="meta"><span>7F2A-9B11</span><span>· 42 轮</span></div>
+          </div>
+          <div class="session-row">
+            <div class="title">重构 telemetry.ts</div>
+            <div class="meta"><span>A91C-0023</span><span>· 18 轮</span></div>
+          </div>
+          <div class="session-row">
+            <div class="title">每日摘要</div>
+            <div class="meta"><span>33E4-7710</span><span>· 6 轮</span></div>
+          </div>
+        </div>
+        <div class="rail-section">
+          <div class="eyebrow">
+            <span>快速访问</span>
+          </div>
+          <div class="session-row">
+            <div class="title">📁 工作区</div>
+          </div>
+          <div class="session-row">
+            <div class="title">⌘ 命令面板</div>
+          </div>
+          <div class="session-row">
+            <div class="title">⚙ 设置</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. CHAT -->
+    <section class="page" data-page="chat">
+      <div class="chat-sidebar">
+        <div class="eyebrow">
+          <span>会话列表</span>
+          <span class="count">12</span>
+        </div>
+        <div class="session-row active">
+          <div class="title">指数分析 · 运行中</div>
+          <div class="meta"><span>7F2A-9B11</span><span>· 42 轮</span><span>· 2 分前</span></div>
+        </div>
+        <div class="session-row">
+          <div class="title">重构 telemetry.ts</div>
+          <div class="meta"><span>A91C-0023</span><span>· 18 轮</span><span>· 14 分前</span></div>
+        </div>
+        <div class="session-row">
+          <div class="title">定时任务 · 每日摘要</div>
+          <div class="meta"><span>33E4-7710</span><span>· 6 轮</span><span>· 1 小时前</span></div>
+        </div>
+        <div class="session-row">
+          <div class="title">工作区迁移</div>
+          <div class="meta"><span>DD02-8841</span><span>· 91 轮</span><span>· 3 小时前</span></div>
+        </div>
+        <div class="session-row">
+          <div class="title">Edge TTS 原型</div>
+          <div class="meta"><span>55B0-C209</span><span>· 12 轮</span><span>· 6 小时前</span></div>
+        </div>
+      </div>
+
+      <div class="chat-main">
+        <div class="eyebrow">
+          <span>会话 7F2A-9B11 · 指数分析 · Claude Sonnet 4.5 · HamunaAgent</span>
+          <div class="actions">
+            <button>分享</button>
+            <button>导出</button>
+            <button>分支</button>
+          </div>
+        </div>
+
+        <div class="messages">
+          <div class="msg user">
+            <div class="stamp"><span class="role">用户</span>14:02:11</div>
+            <div class="body">从 <code>~/.hamuna/logs/unified-2026-08-03.log</code> 拉取最近 24 小时的遥测数据。按会话 ID 分组,统计轮次,把任何超过 50 轮的会话标出来。</div>
+          </div>
+          <div class="msg">
+            <div class="stamp"><span class="role">助手</span>14:02:13</div>
+            <div class="body">已扫描统一日志。24 小时窗口内匹配到 14 个会话,其中 3 个超过 50 轮阈值:
+<pre class="code"><span class="cmt">// 高频会话报告</span>
+<span class="kw">会话</span> 7F2A-9B11   <span class="num">87</span> 轮  <span class="str">"指数分析"</span>
+<span class="kw">会话</span> A91C-0023  <span class="num">63</span> 轮  <span class="str">"telemetry 重构"</span>
+<span class="kw">会话</span> DD02-8841  <span class="num">91</span> 轮  <span class="str">"工作区迁移"</span></pre>
+            </div>
+          </div>
+          <div class="msg tool">
+            <div class="stamp"><span class="role">工具</span>14:02:14 · 读取</div>
+            <div class="body"><code>~/.hamuna/logs/unified-2026-08-03.log</code> · 共 4,182 行</div>
+          </div>
+          <div class="msg">
+            <div class="stamp"><span class="role">助手</span>14:02:18</div>
+            <div class="body">DD02-8841 体积最大。3 小时内 91 轮,疑似 MCP 指纹循环 —— pre-warm 中止每 30 秒重启一次。建议:在 <code>ensure_session_sidecar</code> 路径中,于 pre-warm 之前钉死 MCP 权威配置。</div>
+          </div>
+          <div class="msg user">
+            <div class="stamp"><span class="role">用户</span>14:02:31</div>
+            <div class="body">锁定前先确认指纹差异。比较磁盘上的 MCP 配置与会话内存中的配置。</div>
+          </div>
+          <div class="msg streaming">
+            <div class="stamp"><span class="role">助手</span>14:02:33</div>
+            <div class="body">正在对比 MCP 指纹 DD02-8841 · 磁盘 vs 会话内存</div>
+          </div>
+        </div>
+
+        <div class="chat-input">
+          <textarea placeholder="输入命令或消息 · Shift + 回车换行 · ⌘ + 回车发送">对比 MCP 指纹 DD02-8841 — 磁盘与会话内存的差异</textarea>
+          <button class="send">发送 ▶</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. SETTINGS -->
+    <section class="page" data-page="settings">
+      <div class="settings-sidebar">
+        <div class="settings-nav-group">通用</div>
+        <div class="settings-nav-item active"><span class="icon">◇</span> 外观</div>
+        <div class="settings-nav-item"><span class="icon">⌘</span> 快捷键</div>
+        <div class="settings-nav-item"><span class="icon">⌬</span> 语言</div>
+        <div class="settings-nav-item"><span class="icon">⎌</span> 更新</div>
+        <div class="settings-nav-group">代理</div>
+        <div class="settings-nav-item"><span class="icon">⌬</span> 模型</div>
+        <div class="settings-nav-item"><span class="icon">⌗</span> 技能</div>
+        <div class="settings-nav-item"><span class="icon">⏱</span> 定时任务</div>
+        <div class="settings-nav-item"><span class="icon">⊞</span> MCP 服务</div>
+        <div class="settings-nav-group">账户</div>
+        <div class="settings-nav-item"><span class="icon">⌬</span> Provider</div>
+        <div class="settings-nav-item"><span class="icon">⎌</span> 日志</div>
+        <div class="settings-nav-item"><span class="icon">⚠</span> 关于</div>
+      </div>
+
+      <div class="settings-main">
+        <div class="eyebrow">
+          <span>外观</span>
+          <div class="actions">
+            <button>导入</button>
+            <button>导出</button>
+            <button>恢复默认</button>
+          </div>
+        </div>
+
+        <div class="settings-content">
+          <div class="settings-section">
+            <h2>外观</h2>
+            <p class="sub">主题、模式、密度。所有变更立即生效并写入本地配置。</p>
+
+            <div class="settings-row">
+              <div class="label">色彩模式<div class="desc">亮色 / 暗色 / 跟随系统</div></div>
+              <div class="control">
+                <div class="segmented">
+                  <button>亮色</button>
+                  <button class="active">暗色</button>
+                  <button>系统</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="label">主题<div class="desc">当前: Fintech Terminal · Gold</div></div>
+              <div class="control">
+                <div class="theme-grid" style="grid-template-columns:repeat(4,1fr);">
+                  <div class="theme-tile">
+                    <div class="swatch" style="background:linear-gradient(135deg,#0c1626,#050b14);"></div>
+                    <div class="name">Default</div>
+                  </div>
+                  <div class="theme-tile active">
+                    <div class="swatch" style="background:linear-gradient(135deg,#0c1626,#d4a24c);"></div>
+                    <div class="name">Fintech · Gold</div>
+                  </div>
+                  <div class="theme-tile">
+                    <div class="swatch" style="background:linear-gradient(135deg,#1c2e1c,#7ba87b);"></div>
+                    <div class="name">Sage</div>
+                  </div>
+                  <div class="theme-tile">
+                    <div class="swatch" style="background:linear-gradient(135deg,#0e0e10,#a78bfa);"></div>
+                    <div class="name">Linear</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="label">界面密度<div class="desc">影响列表行高与卡片间距</div></div>
+              <div class="control">
+                <div class="segmented">
+                  <button>紧凑</button>
+                  <button class="active">标准</button>
+                  <button>宽松</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="label">终端字体<div class="desc">JetBrains Mono / Sarasa Mono SC</div></div>
+              <div class="control">
+                <div class="segmented">
+                  <button>系统</button>
+                  <button class="active">JetBrains</button>
+                  <button>Sarasa</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h2>行为</h2>
+            <p class="sub">影响 Agent 在新会话中如何行动。</p>
+
+            <div class="settings-row">
+              <div class="label">启动时预热 MCP<div class="desc">首次启动 Sidecar 时预加载 MCP 服务</div></div>
+              <div class="control"><div class="toggle on"></div><span style="font-family:var(--font-code);font-size:11px;color:var(--ink-muted);">已启用</span></div>
+            </div>
+
+            <div class="settings-row">
+              <div class="label">后台心跳检测<div class="desc">每 30 秒检测 Sidecar 存活</div></div>
+              <div class="control"><div class="toggle on"></div><span style="font-family:var(--font-code);font-size:11px;color:var(--ink-muted);">已启用</span></div>
+            </div>
+
+            <div class="settings-row">
+              <div class="label">遥测数据收集<div class="desc">用于改进产品的匿名使用数据</div></div>
+              <div class="control"><div class="toggle"></div><span style="font-family:var(--font-code);font-size:11px;color:var(--ink-muted);">已禁用</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. TASK CENTER -->
+    <section class="page" data-page="tasks">
+      <div class="tasks-sidebar">
+        <div class="eyebrow"><span>视图</span></div>
+        <div class="nav-item active">▣ 全部 <span class="num">12</span></div>
+        <div class="nav-item">▶ 运行中 <span class="num">3</span></div>
+        <div class="nav-item">✓ 已完成 <span class="num">7</span></div>
+        <div class="nav-item">✗ 失败 <span class="num">2</span></div>
+        <div class="nav-item">⏸ 暂停 <span class="num">0</span></div>
+
+        <div class="nav-group-title" style="margin-top:8px;">类别</div>
+        <div class="nav-item">⏰ 定时任务</div>
+        <div class="nav-item">⌗ 后台运行</div>
+        <div class="nav-item">✦ 临时任务</div>
+        <div class="nav-item">⎌ 归档</div>
+      </div>
+
+      <div class="tasks-main">
+        <div class="eyebrow">
+          <span>任务中心 · 全部 · 12 项</span>
+          <div class="actions">
+            <button>新建</button>
+            <button>刷新</button>
+            <button>排序</button>
+          </div>
+        </div>
+
+        <div style="overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;gap:8px;">
+          <div class="thought-panel">
+            <div class="ts">14:02:11 · 助手思路</div>
+            收到 24 小时遥测扫描请求。需要:(1) 读取 unified 日志 → (2) 按 session_id 分组 → (3) 统计轮次 → (4) 输出超过 50 轮的会话清单。计划用一次 read_file + 一次 python_repl 完成聚合。
+          </div>
+
+          <div class="task-card">
+            <div class="head">
+              <div class="name">24h 遥测聚合 · 指数分析</div>
+              <div class="status live">▶ 运行中</div>
+            </div>
+            <div class="meta">
+              <span>Task #T-291</span>
+              <span>会话 <b>7F2A-9B11</b></span>
+              <span>已耗时 00:00:08</span>
+            </div>
+          </div>
+
+          <div class="task-card">
+            <div class="head">
+              <div class="name">每日市场摘要 · 09:30</div>
+              <div class="status success">✓ 已完成</div>
+            </div>
+            <div class="meta">
+              <span>Cron #C-014</span>
+              <span>下次执行 <b>明天 09:30</b></span>
+              <span>耗时 14 秒</span>
+            </div>
+          </div>
+
+          <div class="task-card">
+            <div class="head">
+              <div class="name">重构 telemetry.ts · 子任务</div>
+              <div class="status live">▶ 运行中</div>
+            </div>
+            <div class="meta">
+              <span>Background #B-088</span>
+              <span>会话 <b>A91C-0023</b></span>
+              <span>已耗时 02:14</span>
+            </div>
+          </div>
+
+          <div class="task-card">
+            <div class="head">
+              <div class="name">迁移工作区元数据</div>
+              <div class="status error">✗ 失败</div>
+            </div>
+            <div class="meta">
+              <span>Background #B-079</span>
+              <span>会话 <b>DD02-8841</b></span>
+              <span>14:31 失败</span>
+            </div>
+          </div>
+
+          <div class="task-card">
+            <div class="head">
+              <div class="name">每周代码快照备份</div>
+              <div class="status success">✓ 已完成</div>
+            </div>
+            <div class="meta">
+              <span>Cron #C-003</span>
+              <span>下次执行 <b>周一 02:00</b></span>
+              <span>耗时 2 分 11 秒</span>
+            </div>
+          </div>
+
+          <div class="thought-panel">
+            <div class="ts">13:48:02 · 助手思路</div>
+            工作区迁移失败根因:dest 路径已存在同名目录,而 MCP filesystem server 未开启 overwrite。需要在重试前先清理 dest,或在 task payload 中加 force=true 标志。
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--line);padding:8px 24px;font-family:var(--font-code);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-muted);background:var(--paper-elevated);display:flex;justify-content:space-between;">
+          <span>共 12 项 · 运行中 3 · 已完成 7 · 失败 2</span>
+          <span>调度器:健康</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. SPACE -->
+    <section class="page" data-page="space">
+      <div class="space-sidebar">
+        <div class="nav-group-title">导航</div>
+        <div class="nav-item active">▣ 议题 <span class="num">14</span></div>
+        <div class="nav-item">⚡ 技能 <span class="num">8</span></div>
+        <div class="nav-item">⌬ 代理 <span class="num">5</span></div>
+        <div class="nav-item">⊕ 目标 <span class="num">3</span></div>
+        <div class="nav-item">⚙ 设置</div>
+
+        <div class="nav-group-title" style="margin-top:8px;">过滤器</div>
+        <div class="nav-item">▢ 待处理 <span class="num">6</span></div>
+        <div class="nav-item">▶ 进行中 <span class="num">4</span></div>
+        <div class="nav-item">✓ 已完成 <span class="num">12</span></div>
+        <div class="nav-item">⚠ 阻塞 <span class="num">2</span></div>
+      </div>
+
+      <div class="space-main">
+        <div class="eyebrow">
+          <span>议题 · 全部 · 14 项</span>
+          <div class="actions">
+            <button>新建议题</button>
+            <button>排序</button>
+            <button>导出</button>
+          </div>
+        </div>
+
+        <div class="space-canvas">
+          <div class="issue-row">
+            <div class="id">#ISS-1042</div>
+            <div class="title">MCP 指纹循环修复</div>
+            <div class="pri high">高</div>
+            <div class="assignee">@claude</div>
+          </div>
+          <div class="issue-row">
+            <div class="id">#ISS-1041</div>
+            <div class="title">扩展 unify 日志到 task/cron 维度</div>
+            <div class="pri med">中</div>
+            <div class="assignee">@hamuna_helper</div>
+          </div>
+          <div class="issue-row">
+            <div class="id">#ISS-1040</div>
+            <div class="title">更换 Tailwind utility 颜色硬编码</div>
+            <div class="pri med">中</div>
+            <div class="assignee">@claude_code</div>
+          </div>
+          <div class="issue-row">
+            <div class="id">#ISS-1039</div>
+            <div class="title">Window 控制按钮高 DPI 适配</div>
+            <div class="pri low">低</div>
+            <div class="assignee">@linear</div>
+          </div>
+          <div class="issue-row">
+            <div class="id">#ISS-1038</div>
+            <div class="title">i18n 文案补充 zh-CN · Settings</div>
+            <div class="pri low">低</div>
+            <div class="assignee">@hamuna_helper</div>
+          </div>
+          <div class="issue-row">
+            <div class="id">#ISS-1037</div>
+            <div class="title">预热任务锁竞争修复</div>
+            <div class="pri high">高</div>
+            <div class="assignee">@claude</div>
+          </div>
+          <div class="issue-row">
+            <div class="id">#ISS-1036</div>
+            <div class="title">Sidebar 滚动条暗色优化</div>
+            <div class="pri low">低</div>
+            <div class="assignee">@codex</div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--line);padding:8px 24px;font-family:var(--font-code);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-muted);background:var(--paper-elevated);display:flex;justify-content:space-between;">
+          <span>分配给: 你 5 · @claude 3 · @codex 2</span>
+          <span>同步: 14:02:33</span>
+        </div>
+      </div>
+
+      <div class="space-detail">
+        <div class="detail-section">
+          <div class="eyebrow" style="background:transparent;padding:0 0 8px;border:none;">
+            <span>议题详情</span>
+          </div>
+          <h3 style="font-family:var(--font-display);font-size:16px;color:var(--ink);margin:4px 0 8px;font-weight:500;">#ISS-1042 · MCP 指纹循环修复</h3>
+          <div style="font-family:var(--font-code);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-muted);display:flex;gap:8px;margin-bottom:8px;">
+            <span class="pri high" style="padding:1px 6px;border-radius:3px;">高</span>
+            <span>▶ 进行中</span>
+            <span>@claude</span>
+          </div>
+          <p style="font-size:12px;color:var(--ink-secondary);line-height:1.6;margin:0;">
+            Session DD02-8841 在 3 小时内累计 91 轮,疑似 pre-warm abort 触发 MCP fingerprint 差异。需在 ensure_session_sidecar 锁内权威裁决 MCP 配置,避免 TOCTOU。
+          </p>
+        </div>
+
+        <div class="detail-section">
+          <h3>已分配 Agent</h3>
+          <span class="agent-chip"><span class="status-dot busy"></span>claude · 进行中</span>
+          <span class="agent-chip"><span class="status-dot idle"></span>hamuna_helper · 待命</span>
+          <span class="agent-chip"><span class="status-dot"></span>codex · 可分配</span>
+        </div>
+
+        <div class="detail-section">
+          <h3>关联任务</h3>
+          <div style="font-size:12px;color:var(--ink-secondary);display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line-subtle);">
+              <span>对比 MCP 指纹差异</span><span style="color:var(--accent-warm);font-family:var(--font-code);font-size:10px;text-transform:uppercase;">▶ 进行</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line-subtle);">
+              <span>钉死 MCP authority</span><span style="color:var(--ink-muted);font-family:var(--font-code);font-size:10px;text-transform:uppercase;">▢ 待开始</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;">
+              <span>回归测试</span><span style="color:var(--ink-muted);font-family:var(--font-code);font-size:10px;text-transform:uppercase;">▢ 待开始</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- ============ 浮动导航 ============ -->
+<nav class="nav-rail">
+  <a href="#launcher" class="active" data-goto="launcher">⌂ 启动器 <span class="key">⌘1</span></a>
+  <a href="#chat"     data-goto="chat">💬 对话 <span class="key">⌘2</span></a>
+  <a href="#settings" data-goto="settings">⚙ 设置 <span class="key">⌘3</span></a>
+  <a href="#tasks"    data-goto="tasks">▣ 任务 <span class="key">⌘4</span></a>
+  <a href="#space"    data-goto="space">✧ 协作 <span class="key">⌘5</span></a>
+</nav>
+
+<script>
+  /* surface 切换 */
+  function goto(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === name));
+    document.querySelectorAll('.nav-rail a').forEach(a => a.classList.toggle('active', a.dataset.goto === name));
+    location.hash = name;
+  }
+  document.querySelectorAll('.nav-rail a').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      goto(a.dataset.goto);
+    });
+  });
+  if (location.hash) goto(location.hash.slice(1));
+  else goto('launcher');
+
+  /* 时钟 — Launcher */
+  (function clock() {
+    const el = document.getElementById('launcherClock');
+    if (!el) return;
+    function tick() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} · UTC+8`;
+    }
+    tick(); setInterval(tick, 1000);
+  })();
+
+  /* uptime — TerminalStrip */
+  (function uptime() {
+    const el = document.getElementById('uptime');
+    if (!el) return;
+    let totalSec = 2 * 3600 + 18 * 60 + 44;
+    setInterval(() => {
+      totalSec += 1;
+      const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+      const s = String(totalSec % 60).padStart(2, '0');
+      el.textContent = `${h}:${m}:${s}`;
+    }, 1000);
+  })();
+</script>
+</body>
+</html>

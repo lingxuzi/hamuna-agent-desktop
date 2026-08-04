@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · Settings / Usage Stats 迁移 demo</title>
+<link rel="stylesheet" href="./_shared.css" />
+<style>
+  .page { display: grid; grid-template-columns: 240px 1fr; height: 100%; overflow: hidden; }
+  .settings-sidebar { background: var(--paper-elevated); border-right: 1px solid var(--line); overflow-y: auto; display: flex; flex-direction: column; }
+  .nav-group-title { font-family: var(--font-code); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-subtle); padding: 14px 16px 6px; }
+  .nav-item { padding: 6px 16px 6px 18px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-left: 2px solid transparent; color: var(--ink-muted); font-size: 12px; }
+  .nav-item:hover { background: rgb(212 162 76 / 0.04); color: var(--ink); }
+  .nav-item.active { border-left-color: var(--accent-warm); background: rgb(212 162 76 / 0.06); color: var(--ink); }
+  .nav-item .icon { width: 14px; display: inline-block; color: var(--accent-warm); }
+  .settings-main { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .settings-content { overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+
+  .range-tabs { display: flex; gap: 0; border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; align-self: flex-end; }
+  .range-tabs button { background: transparent; border: 0; padding: 0 10px; height: 26px; color: var(--ink-muted); font-family: var(--font-code); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
+  .range-tabs button.active { background: var(--accent-warm-subtle); color: var(--accent-warm); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .summary-card { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper-elevated); padding: 14px 16px; }
+  .summary-card .label { font-family: var(--font-code); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .summary-card .value { font-family: var(--font-display); font-size: 22px; color: var(--ink); margin: 6px 0 4px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .summary-card .value.gold { color: var(--accent-warm); }
+  .summary-card .delta { font-family: var(--font-code); font-size: 10px; }
+  .delta.up { color: var(--success); }
+  .delta.down { color: var(--error); }
+
+  .chart-block { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper-elevated); padding: 16px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .chart-head h3 { margin: 0; font-family: var(--font-code); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-warm); font-weight: 500; }
+  .chart-head .legend { font-family: var(--font-code); font-size: 10px; color: var(--ink-muted); display: flex; gap: 12px; }
+  .chart-head .legend .swatch { display: inline-block; width: 10px; height: 6px; vertical-align: middle; margin-right: 4px; }
+
+  .trend-svg { width: 100%; height: 180px; }
+  .trend-svg .axis { stroke: var(--line); stroke-width: 1; }
+  .trend-svg .label { fill: var(--ink-muted); font-family: var(--font-code); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .trend-svg .area-input { fill: url(#inputGrad); opacity: 0.6; }
+  .trend-svg .area-output { fill: url(#outputGrad); opacity: 0.6; }
+  .trend-svg .line-input { stroke: var(--accent-warm); stroke-width: 1.5; fill: none; }
+  .trend-svg .line-output { stroke: var(--info); stroke-width: 1.5; fill: none; stroke-dasharray: 3 2; }
+
+  .breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .breakdown-block { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper-elevated); padding: 14px 16px; }
+  .breakdown-block h3 { margin: 0 0 10px; font-family: var(--font-code); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-warm); font-weight: 500; }
+  .bar-row { display: grid; grid-template-columns: 90px 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; font-family: var(--font-code); font-size: 10px; }
+  .bar-row .name { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-row .bar-track { height: 6px; background: var(--paper-inset); border-radius: 3px; overflow: hidden; }
+  .bar-row .bar-fill { height: 100%; background: var(--accent-warm); }
+  .bar-row .value { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar"><div class="titlebar-spacer"></div><div class="titlebar-brand"><b>HAMUNA</b> · 金融终端 · v0.3.13 · 主题: <b>Fintech Terminal · Gold</b></div><div class="titlebar-cluster"><button class="tb-btn">⟲ 更新</button><button class="tb-btn">▣ 任务</button><button class="tb-btn tb-btn-primary">⚙ 设置</button></div></div>
+  <div class="tabbar"><div class="tab">◆ 主屏</div><div class="tab">hamuna-agent-desktop</div><div class="tab active">设置 · 用量统计 <span class="close">×</span></div><div class="tab-add">+</div></div>
+  <div class="terminal-strip"><span class="dot"></span><span class="status">设置模式</span><span class="sep">·</span><span class="key">SECTION</span><span class="val">usage-stats</span><span class="sep">·</span><span class="key">RANGE</span><span class="val">30d</span></div>
+
+  <div class="page active">
+    <aside class="settings-sidebar">
+      <div class="nav-group-title">通用</div>
+      <div class="nav-item"><span><span class="icon">◇</span> 外观</span></div>
+      <div class="nav-item"><span><span class="icon">⌘</span> 快捷键</span></div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 语言</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 更新</span></div>
+      <div class="nav-group-title">代理</div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 模型</span></div>
+      <div class="nav-item"><span><span class="icon">⌗</span> 技能</span></div>
+      <div class="nav-item"><span><span class="icon">⏱</span> 定时任务</span></div>
+      <div class="nav-item"><span><span class="icon">⊞</span> MCP 服务</span><span class="num">3</span></div>
+      <div class="nav-group-title">账户</div>
+      <div class="nav-item active"><span><span class="icon">⌬</span> 用量统计</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 日志</span></div>
+      <div class="nav-item"><span><span class="icon">⚠</span> 关于</span></div>
+    </aside>
+
+    <section class="settings-main">
+      <div class="eyebrow"><span>设置 · <span class="count">用量统计</span></span><div class="actions"><button>⤓ 导出 CSV</button><button>⟲ 刷新</button></div></div>
+      <div class="settings-content">
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 12px; color: var(--ink);">全局用量趋势</div>
+          <div class="range-tabs"><button>7d</button><button class="active">30d</button><button>90d</button><button>全部</button></div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="summary-grid">
+          <div class="summary-card"><div class="label">总 Tokens</div><div class="value gold">4.82M</div><div class="delta up">↑ 12.4% vs prev 30d</div></div>
+          <div class="summary-card"><div class="label">总回合数</div><div class="value">847</div><div class="delta up">↑ 8.1%</div></div>
+          <div class="summary-card"><div class="label">活跃 Provider</div><div class="value">3</div><div class="delta" style="color: var(--ink-muted);">Anthropic · OpenAI · DeepSeek</div></div>
+          <div class="summary-card"><div class="label">估算成本</div><div class="value">$ 18.42</div><div class="delta down">↓ 3.2%</div></div>
+        </div>
+
+        <!-- Trend chart -->
+        <div class="chart-block">
+          <div class="chart-head">
+            <h3>每日 Tokens 趋势</h3>
+            <div class="legend"><span><span class="swatch" style="background: var(--accent-warm);"></span>Input</span><span><span class="swatch" style="background: var(--info); border: 1px dashed var(--info);"></span>Output</span></div>
+          </div>
+          <svg class="trend-svg" viewBox="0 0 800 180" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="inputGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#d4a24c" stop-opacity="0.45"/><stop offset="100%" stop-color="#d4a24c" stop-opacity="0"/></linearGradient>
+              <linearGradient id="outputGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e6c068" stop-opacity="0.45"/><stop offset="100%" stop-color="#e6c068" stop-opacity="0"/></linearGradient>
+            </defs>
+            <line class="axis" x1="0" y1="40" x2="800" y2="40"/>
+            <line class="axis" x1="0" y1="90" x2="800" y2="90"/>
+            <line class="axis" x1="0" y1="140" x2="800" y2="140"/>
+            <text class="label" x="6" y="36">200K</text>
+            <text class="label" x="6" y="86">100K</text>
+            <text class="label" x="6" y="136">0</text>
+            <!-- Input area + line -->
+            <path class="area-input" d="M 0,130 L 30,124 L 60,118 L 90,110 L 120,116 L 150,98 L 180,86 L 210,90 L 240,76 L 270,82 L 300,68 L 330,74 L 360,60 L 390,64 L 420,52 L 450,58 L 480,46 L 510,54 L 540,40 L 570,48 L 600,36 L 630,42 L 660,30 L 690,38 L 720,28 L 750,34 L 780,22 L 800,28 L 800,140 L 0,140 Z"/>
+            <path class="line-input" d="M 0,130 L 30,124 L 60,118 L 90,110 L 120,116 L 150,98 L 180,86 L 210,90 L 240,76 L 270,82 L 300,68 L 330,74 L 360,60 L 390,64 L 420,52 L 450,58 L 480,46 L 510,54 L 540,40 L 570,48 L 600,36 L 630,42 L 660,30 L 690,38 L 720,28 L 750,34 L 780,22 L 800,28"/>
+            <!-- Output line -->
+            <path class="line-output" d="M 0,138 L 30,134 L 60,132 L 90,128 L 120,130 L 150,122 L 180,118 L 210,120 L 240,114 L 270,116 L 300,110 L 330,112 L 360,106 L 390,108 L 420,102 L 450,104 L 480,98 L 510,102 L 540,96 L 570,100 L 600,92 L 630,98 L 660,88 L 690,92 L 720,84 L 750,88 L 780,82 L 800,86"/>
+            <text class="label" x="0" y="172">07/05</text>
+            <text class="label" x="200" y="172">07/15</text>
+            <text class="label" x="400" y="172">07/25</text>
+            <text class="label" x="600" y="172">08/04</text>
+          </svg>
+        </div>
+
+        <!-- Breakdown by provider + model -->
+        <div class="breakdown">
+          <div class="breakdown-block">
+            <h3>按 Provider</h3>
+            <div class="bar-row"><span class="name">Anthropic</span><span class="bar-track"><span class="bar-fill" style="width: 62%;"></span></span><span class="value">2.99M</span></div>
+            <div class="bar-row"><span class="name">OpenAI</span><span class="bar-track"><span class="bar-fill" style="width: 24%; background: var(--info);"></span></span><span class="value">1.16M</span></div>
+            <div class="bar-row"><span class="name">DeepSeek</span><span class="bar-track"><span class="bar-fill" style="width: 14%; background: var(--success);"></span></span><span class="value">0.67M</span></div>
+          </div>
+          <div class="breakdown-block">
+            <h3>按 Model</h3>
+            <div class="bar-row"><span class="name">haiku-4-5</span><span class="bar-track"><span class="bar-fill" style="width: 48%;"></span></span><span class="value">2.31M</span></div>
+            <div class="bar-row"><span class="name">sonnet-4-5</span><span class="bar-track"><span class="bar-fill" style="width: 32%; background: var(--info);"></span></span><span class="value">1.54M</span></div>
+            <div class="bar-row"><span class="name">gpt-4o-mini</span><span class="bar-track"><span class="bar-fill" style="width: 12%; background: var(--success);"></span></span><span class="value">0.58M</span></div>
+            <div class="bar-row"><span class="name">deepseek-coder</span><span class="bar-track"><span class="bar-fill" style="width: 8%; background: var(--warning);"></span></span><span class="value">0.39M</span></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

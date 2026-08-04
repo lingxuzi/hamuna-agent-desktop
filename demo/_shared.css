@@ -1,0 +1,371 @@
+/* ============================================================
+   HamunaAgent Fintech Terminal — 共享视觉规范
+   所有 demo（launcher/chat/settings/task/space）必须引用此文件
+   与 src/renderer/theme/themes/fintech-terminal.css 完全对齐
+   ============================================================ */
+
+:root {
+  --font-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans CJK SC', sans-serif;
+  --font-display: 'Inter', 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+  --font-code: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', 'Sarasa Mono SC', 'Source Code Pro', ui-monospace, monospace;
+
+  /* Hermes 金主品牌色 */
+  --ink: #e2e8f0;
+  --ink-secondary: #cbd5e1;
+  --ink-muted: #64748b;
+  --ink-subtle: #475569;
+  --ink-faint: #334155;
+
+  --paper: #050b14;
+  --paper-elevated: #0c1626;
+  --message-user-bg: #0f1a2e;
+  --paper-inset: #020610;
+
+  --accent: #d4a24c;
+  --accent-warm: #d4a24c;
+  --accent-warm-hover: #e6c068;
+  --accent-warm-subtle: rgb(212 162 76 / 0.10);
+  --accent-warm-muted: rgb(212 162 76 / 0.20);
+  --accent-cool: #c4956c;
+  --accent-cool-hover: #d4a776;
+  --on-accent: #050b14;
+
+  --success: #10b981;
+  --error: #f43f5e;
+  --warning: #f59e0b;
+  --info: #e6c068;
+
+  --line: rgb(226 232 240 / 0.10);
+  --line-strong: rgb(226 232 240 / 0.18);
+  --line-subtle: rgb(226 232 240 / 0.05);
+
+  --button-primary-bg: #b8862e;
+  --button-primary-bg-hover: #9c7224;
+
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  --t-fast: 150ms;
+  --t-normal: 220ms;
+  --t-slow: 360ms;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --body-bg:
+    radial-gradient(1200px 700px at 85% -10%, rgb(212 162 76 / 0.10) 0%, rgb(212 162 76 / 0) 55%),
+    radial-gradient(900px 600px at -10% 110%, rgb(230 192 104 / 0.06) 0%, rgb(230 192 104 / 0) 50%),
+    var(--paper);
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--body-bg);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "tnum", "calt" 1;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-warm-muted); }
+
+/* ============================================================
+   通用 — Eyebrow / Btn / Card
+   ============================================================ */
+.eyebrow {
+  font-family: var(--font-code);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-muted);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-elevated);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+.eyebrow .count { color: var(--accent-warm); font-weight: 500; }
+.eyebrow .actions { display: flex; gap: 4px; }
+.eyebrow .actions button {
+  height: 22px; padding: 0 10px;
+  background: transparent; border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  font-family: var(--font-code);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+}
+.eyebrow .actions button:hover {
+  border-color: var(--accent-warm-muted);
+  color: var(--accent-warm);
+  background: rgb(212 162 76 / 0.04);
+}
+.eyebrow .actions button:active { transform: scale(0.96); }
+
+.btn {
+  height: 28px; padding: 0 12px;
+  background: transparent; border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink-secondary);
+  font-family: var(--font-code);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all var(--t-fast) var(--ease);
+}
+.btn:hover {
+  border-color: var(--accent-warm-muted);
+  color: var(--accent-warm);
+  background: rgb(212 162 76 / 0.04);
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary {
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
+  color: #ffffff;
+}
+.btn-primary:hover {
+  background: var(--button-primary-bg-hover);
+  border-color: var(--button-primary-bg-hover);
+  color: #ffffff;
+}
+.btn-ghost { border-color: transparent; }
+.btn-ghost:hover { border-color: var(--accent-warm-muted); }
+
+/* ============================================================
+   TitleBar / TabBar / TerminalStrip
+   ============================================================ */
+.titlebar {
+  height: 44px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 12px;
+  gap: 12px;
+  -webkit-app-region: drag;
+}
+.titlebar-spacer { width: 70px; flex-shrink: 0; }
+.titlebar-brand {
+  font-family: var(--font-code);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  flex: 1; display: flex; align-items: center; gap: 6px;
+}
+.titlebar-brand b { color: var(--accent-warm); font-weight: 500; }
+.titlebar-cluster {
+  display: flex; align-items: stretch;
+  -webkit-app-region: no-drag;
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+.tb-btn {
+  -webkit-app-region: no-drag;
+  height: 28px; min-width: 32px; padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--ink-secondary);
+  font-family: var(--font-code);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: all var(--t-fast) var(--ease);
+}
+.tb-btn:hover {
+  border-color: var(--accent-warm-muted);
+  color: var(--ink);
+  background: rgb(212 162 76 / 0.04);
+}
+.tb-btn:active { transform: scale(0.97); }
+.tb-btn + .tb-btn::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 1px;
+  background: var(--line);
+}
+.tb-btn-primary {
+  background: var(--button-primary-bg);
+  color: #ffffff;
+  border-color: var(--button-primary-bg);
+}
+.tb-btn-primary:hover { background: var(--button-primary-bg-hover); border-color: var(--button-primary-bg-hover); }
+
+.tabbar {
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: stretch;
+  padding: 0 8px;
+  height: 40px;
+  overflow-x: auto;
+}
+.tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 16px;
+  height: 100%;
+  border-right: 1px solid var(--line-subtle);
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-code);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  transition: all var(--t-fast) var(--ease);
+}
+.tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent-warm);
+  background: rgb(212 162 76 / 0.04);
+}
+.tab:hover { color: var(--ink); background: rgb(212 162 76 / 0.04); }
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -2px;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%, var(--accent-warm) 20%,
+    var(--accent-warm-hover) 50%, var(--accent-warm) 80%, transparent 100%);
+  animation: scan 2.4s linear infinite;
+  box-shadow: 0 0 8px var(--accent-warm);
+}
+@keyframes scan {
+  0% { transform: translateX(-30%); opacity: 0.9; }
+  50% { opacity: 1; }
+  100% { transform: translateX(30%); opacity: 0.9; }
+}
+.tab .close {
+  width: 14px; height: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 2px; opacity: 0.5;
+  transition: all var(--t-fast) var(--ease);
+}
+.tab .close:hover { background: var(--line-strong); opacity: 1; }
+.tab-add {
+  width: 32px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease);
+}
+.tab-add:hover { color: var(--accent-warm); }
+
+.terminal-strip {
+  height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 16px;
+  background: var(--paper-inset);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-code);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-secondary);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.terminal-strip .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-warm);
+  box-shadow: 0 0 0 2px var(--accent-warm-subtle);
+  display: inline-block;
+  animation: pulse 1.6s var(--ease) infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--accent-warm-subtle), 0 0 0 0 rgb(212 162 76 / 0.4); transform: scale(1); }
+  50% { box-shadow: 0 0 0 2px var(--accent-warm-subtle), 0 0 0 6px rgb(212 162 76 / 0); transform: scale(1.1); }
+}
+.terminal-strip .sep { color: var(--line-strong); padding: 0 2px; user-select: none; }
+.terminal-strip .key { color: var(--ink-muted); padding-right: 2px; }
+.terminal-strip .val { color: var(--ink); font-weight: 500; }
+.terminal-strip .status { color: var(--ink); font-weight: 500; padding-right: 4px; }
+.terminal-strip .uptime { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   App shell
+   ============================================================ */
+.app {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  height: 100vh;
+  animation: app-in var(--t-slow) var(--ease);
+}
+@keyframes app-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ============================================================
+   通用 — Section / Card / Status Badge
+   ============================================================ */
+.section-title {
+  font-family: var(--font-code);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--ink-subtle);
+  padding: 14px 16px 6px;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--paper-elevated);
+  transition: all var(--t-fast) var(--ease);
+}
+.card:hover {
+  border-color: var(--accent-warm-muted);
+  background: rgb(212 162 76 / 0.04);
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-code);
+  font-size: 9px; text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+.badge.gold { border-color: var(--accent-warm-muted); color: var(--accent-warm); }
+.badge.success { border-color: rgb(16 185 129 / 0.4); color: var(--success); }
+.badge.error { border-color: rgb(244 63 94 / 0.4); color: var(--error); }
+.badge.warning { border-color: rgb(245 158 11 / 0.4); color: var(--warning); }
+
+/* ============================================================
+   Sidebar nav-item — 共用于 Settings / Task / Space
+   ============================================================ */
+.nav-item {
+  padding: 6px 16px 6px 18px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 2px solid transparent;
+  color: var(--ink-muted);
+  font-size: 12px;
+  transition: all var(--t-fast) var(--ease);
+}
+.nav-item:hover { background: rgb(212 162 76 / 0.04); color: var(--ink); }
+.nav-item.active {
+  border-left-color: var(--accent-warm);
+  background: rgb(212 162 76 / 0.06);
+  color: var(--ink);
+}
+.nav-item .num {
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: var(--ink-muted);
+  background: var(--paper);
+  padding: 0 5px;
+  border-radius: 2px;
+}
+.nav-item.active .num { color: var(--accent-warm); }

@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage();
+const errs: string[] = [];
+page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+page.on('pageerror', e => errs.push(`PAGE: ${e.message}`));
+page.on('requestfailed', r => errs.push(`REQ-FAIL: ${r.url()} - ${r.failure()?.errorText}`));
+page.on('response', r => { if (r.status() >= 400) errs.push(`HTTP ${r.status()} ${r.url()}`); });
+await page.goto('http://localhost:5174/', { waitUntil: 'networkidle', timeout: 20000 }).catch(()=>{});
+await page.waitForTimeout(2000);
+console.log('---errors---');
+errs.forEach(e => console.log(e));
+await browser.close();

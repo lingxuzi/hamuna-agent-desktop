@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · Launcher 迁移 demo</title>
+<link rel="stylesheet" href="./_shared.css" />
+<style>
+  /* ====== Launcher 专属 ====== */
+  .page {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    height: 100%;
+    overflow: hidden;
+  }
+  .launcher-hero {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    background: var(--paper);
+    border-right: 1px solid var(--line);
+  }
+  .launcher-hero-body {
+    padding: 32px 40px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .launcher-eyebrow {
+    font-family: var(--font-code);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em;
+    color: var(--ink-muted);
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .launcher-eyebrow b { color: var(--accent-warm); font-weight: 500; }
+  .launcher-clock {
+    font-family: var(--font-code);
+    font-size: 11px; color: var(--accent-warm);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+  }
+  .hero-headline { margin-top: 8px; }
+  .hero-headline h1 {
+    font-family: var(--font-display);
+    font-size: 38px; font-weight: 500; line-height: 1.15;
+    margin: 8px 0;
+    background: linear-gradient(120deg, var(--ink) 0%, var(--accent-warm) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.01em;
+  }
+  .hero-headline p {
+    font-family: var(--font-code);
+    font-size: 13px; color: var(--ink-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin: 0;
+  }
+  .quick-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .quick-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    background: var(--paper-elevated);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 92px;
+  }
+  .quick-card:hover {
+    border-color: var(--accent-warm-muted);
+    background: rgb(212 162 76 / 0.04);
+    transform: translateY(-1px);
+  }
+  .quick-card .icon { font-size: 18px; color: var(--accent-warm); }
+  .quick-card .name {
+    font-family: var(--font-code);
+    font-size: 12px; color: var(--ink); font-weight: 500;
+  }
+  .quick-card .desc {
+    font-size: 11px; color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  .workspace-list { display: flex; flex-direction: column; gap: 8px; }
+  .ws-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    background: var(--paper-elevated);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 16px;
+    align-items: center;
+  }
+  .ws-card:hover {
+    border-color: var(--accent-warm-muted);
+    background: rgb(212 162 76 / 0.04);
+  }
+  .ws-card .name {
+    font-size: 13px; color: var(--ink); font-weight: 500;
+    grid-column: 1;
+  }
+  .ws-card .path {
+    font-family: var(--font-code);
+    font-size: 10px; color: var(--ink-muted);
+    grid-column: 1;
+  }
+  .ws-card .meta {
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    grid-column: 2;
+    grid-row: 1 / 3;
+    text-align: right;
+    display: flex; flex-direction: column; gap: 2px;
+    align-items: flex-end;
+  }
+  .ws-card .meta .turns { color: var(--accent-warm); font-weight: 500; }
+
+  .launcher-rail {
+    background: var(--paper-elevated);
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+  }
+  .rail-section {
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .rail-section + .rail-section {
+    border-top: 1px solid var(--line);
+  }
+
+  .session-row {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line-subtle);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    display: flex; flex-direction: column; gap: 2px;
+    transition: all var(--t-fast) var(--ease);
+  }
+  .session-row:hover { background: rgb(212 162 76 / 0.04); }
+  .session-row.active {
+    border-left-color: var(--accent-warm);
+    background: rgb(212 162 76 / 0.06);
+  }
+  .session-row .title {
+    font-size: 12px; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-weight: 500;
+  }
+  .session-row .meta {
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--ink-muted);
+    display: flex; gap: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============== TitleBar ============== -->
+  <div class="titlebar">
+    <div class="titlebar-spacer"></div>
+    <div class="titlebar-brand">
+      <b>HAMUNA</b> · 金融终端 · 构建版本 0.3.13 · 主题: <b>Fintech Terminal · Gold</b>
+    </div>
+    <div class="titlebar-cluster">
+      <button class="tb-btn"><span>⌘</span> 帮助</button>
+      <button class="tb-btn">⟲ 更新</button>
+      <button class="tb-btn">☁ Team</button>
+      <button class="tb-btn">▣ 任务</button>
+      <button class="tb-btn">⚙ 设置</button>
+    </div>
+  </div>
+
+  <!-- ============== TabBar ============== -->
+  <div class="tabbar">
+    <div class="tab active">
+      ◆ 主屏 <span class="close">×</span>
+    </div>
+    <div class="tab">
+      hamuna-agent-desktop <span class="close">×</span>
+    </div>
+    <div class="tab">
+      research-notes <span class="close">×</span>
+    </div>
+    <div class="tab-add">+</div>
+  </div>
+
+  <!-- ============== TerminalStrip ============== -->
+  <div class="terminal-strip" role="status" aria-live="polite">
+    <span class="dot"></span>
+    <span class="status">实时</span>
+    <span class="sep">·</span>
+    <span class="key">SESSION</span><span class="val">a3f8e21c</span>
+    <span class="sep">·</span>
+    <span class="key">TURNS</span><span class="val">12</span>
+    <span class="sep">·</span>
+    <span class="key">CTX</span><span class="val">38.4K</span>
+    <span class="sep">·</span>
+    <span class="key">MODEL</span><span class="val">claude-haiku-4-5</span>
+    <span class="sep">·</span>
+    <span class="key">RUNTIME</span><span class="val">Builtin</span>
+    <span class="sep">·</span>
+    <span class="key">MCP</span><span class="val">3</span>
+    <span class="sep">·</span>
+    <span class="key">UPTIME</span><span class="val uptime">02:14:08</span>
+  </div>
+
+  <!-- ============== Launcher (1fr + 360px rail) ============== -->
+  <div class="page active">
+
+    <!-- LEFT: hero + quick + workspaces -->
+    <section class="launcher-hero">
+      <div class="launcher-hero-body">
+
+        <!-- Eyebrow + 时钟 -->
+        <div class="launcher-eyebrow">
+          <span>HF-AGENT · <b>LIVE</b> · SESSION 0xA3F8E21C</span>
+          <span class="launcher-clock" id="launcherClock">09:42:13 · UTC+8</span>
+        </div>
+
+        <!-- Hero -->
+        <div class="hero-headline">
+          <h1>开始今天的对话</h1>
+          <p>Describe intent · pick a workspace · let the agent execute</p>
+        </div>
+
+        <!-- Quick grid (3 列 quick card) -->
+        <div>
+          <div class="section-title" style="padding: 0 0 8px;">QUICK ACTIONS</div>
+          <div class="quick-grid">
+            <div class="quick-card">
+              <div class="icon">⌘</div>
+              <div class="name">新建会话</div>
+              <div class="desc">在当前工作区启动一个新的对话</div>
+            </div>
+            <div class="quick-card">
+              <div class="icon">▣</div>
+              <div class="name">任务中心</div>
+              <div class="desc">查看待处理 / 运行中 / 已完成的任务</div>
+            </div>
+            <div class="quick-card">
+              <div class="icon">⊞</div>
+              <div class="name">MCP 服务</div>
+              <div class="desc">管理工作区可用的 MCP server</div>
+            </div>
+            <div class="quick-card">
+              <div class="icon">⌬</div>
+              <div class="name">切换 Provider</div>
+              <div class="desc">在 Claude / Codex / Gemini 之间切换</div>
+            </div>
+            <div class="quick-card">
+              <div class="icon">⏱</div>
+              <div class="name">定时任务</div>
+              <div class="desc">创建调度执行的任务 / 想法</div>
+            </div>
+            <div class="quick-card">
+              <div class="icon">⎌</div>
+              <div class="name">恢复对话</div>
+              <div class="desc">查看上一次意外退出的可恢复会话</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Workspaces -->
+        <div>
+          <div class="section-title" style="padding: 0 0 8px;">WORKSPACES</div>
+          <div class="workspace-list">
+            <div class="ws-card">
+              <div class="name">hamuna-agent-desktop <span class="badge gold">活跃</span></div>
+              <div class="path">~/Developer/hamuna-agent-desktop</div>
+              <div class="meta">
+                <span class="turns">142 turns</span>
+                <span>last 12 min ago</span>
+              </div>
+            </div>
+            <div class="ws-card">
+              <div class="name">research-notes</div>
+              <div class="path">~/Documents/research-notes</div>
+              <div class="meta">
+                <span>38 turns</span>
+                <span>2 days ago</span>
+              </div>
+            </div>
+            <div class="ws-card">
+              <div class="name">side-projects <span class="badge">归档</span></div>
+              <div class="path">~/Code/side-projects</div>
+              <div class="meta">
+                <span>7 turns</span>
+                <span>archived</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- RIGHT: rail (Workspaces + Sessions) -->
+    <aside class="launcher-rail">
+
+      <!-- 上段：WORKSPACES 列表 -->
+      <div class="rail-section">
+        <div class="eyebrow">
+          <span>WORKSPACES · <span class="count">3</span></span>
+          <div class="actions">
+            <button>+ 添加</button>
+          </div>
+        </div>
+        <div class="workspace-list" style="padding: 8px;">
+          <div class="ws-card">
+            <div class="name">hamuna-agent-desktop</div>
+            <div class="path">~/Developer/hamuna-agent-desktop</div>
+            <div class="meta"><span class="turns">142</span></div>
+          </div>
+          <div class="ws-card">
+            <div class="name">research-notes</div>
+            <div class="path">~/Documents/research-notes</div>
+            <div class="meta"><span>38</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 下段：SESSIONS 列表 -->
+      <div class="rail-section">
+        <div class="eyebrow">
+          <span>ACTIVE SESSIONS · <span class="count">8</span></span>
+          <div class="actions">
+            <button>搜索</button>
+          </div>
+        </div>
+        <div>
+          <div class="session-row active">
+            <div class="title">Fix terminal-strip CSS validator</div>
+            <div class="meta"><span>2 min</span><span>12 turns</span></div>
+          </div>
+          <div class="session-row">
+            <div class="title">Add hero gradient gold token</div>
+            <div class="meta"><span>1 hr</span><span>5 turns</span></div>
+          </div>
+          <div class="session-row">
+            <div class="title">Refactor MCP server registry</div>
+            <div class="meta"><span>3 hr</span><span>27 turns</span></div>
+          </div>
+          <div class="session-row">
+            <div class="title">Investigate IM bot reconnect</div>
+            <div class="meta"><span>1 day</span><span>14 turns</span></div>
+          </div>
+          <div class="session-row">
+            <div class="title">Upgrade TabBar to Bloomberg style</div>
+            <div class="meta"><span>2 days</span><span>9 turns</span></div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+</div>
+
+<script>
+  // 时钟实时刷新
+  setInterval(() => {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    document.getElementById('launcherClock').textContent = `${hh}:${mm}:${ss} · UTC+8`;
+  }, 1000);
+</script>
+</body>
+</html>

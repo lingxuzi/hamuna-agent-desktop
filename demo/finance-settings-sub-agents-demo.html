@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · Settings / Sub-agents 迁移 demo</title>
+<link rel="stylesheet" href="./_shared.css" />
+<style>
+  .page { display: grid; grid-template-columns: 240px 1fr; height: 100%; overflow: hidden; }
+  .settings-sidebar { background: var(--paper-elevated); border-right: 1px solid var(--line); overflow-y: auto; display: flex; flex-direction: column; }
+  .nav-group-title { font-family: var(--font-code); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-subtle); padding: 14px 16px 6px; }
+  .nav-item { padding: 6px 16px 6px 18px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-left: 2px solid transparent; color: var(--ink-muted); font-size: 12px; }
+  .nav-item:hover { background: rgb(212 162 76 / 0.04); color: var(--ink); }
+  .nav-item.active { border-left-color: var(--accent-warm); background: rgb(212 162 76 / 0.06); color: var(--ink); }
+  .nav-item .icon { width: 14px; display: inline-block; color: var(--accent-warm); }
+  .settings-main { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .settings-content { overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; }
+  .toolbar input { flex: 1; height: 28px; padding: 0 10px; background: var(--paper-inset); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink); font-family: var(--font-code); font-size: 11px; }
+  .toolbar input:focus { outline: none; border-color: var(--accent-warm); }
+
+  .agent-list { display: flex; flex-direction: column; gap: 8px; }
+  .agent-card { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper-elevated); padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; cursor: pointer; transition: all var(--t-fast) var(--ease); }
+  .agent-card:hover { border-color: var(--accent-warm-muted); background: rgb(212 162 76 / 0.04); }
+  .agent-card.locked { opacity: 0.6; }
+  .agent-avatar { width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--paper-inset); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--accent-warm); }
+  .agent-name { font-size: 13px; color: var(--ink); font-weight: 500; display: flex; gap: 8px; align-items: center; }
+  .agent-desc { font-size: 11px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5; }
+  .agent-meta { font-family: var(--font-code); font-size: 10px; color: var(--ink-muted); margin-top: 6px; display: flex; gap: 12px; }
+  .agent-meta b { color: var(--ink); font-weight: 500; }
+  .agent-meta .model { color: var(--accent-warm); }
+  .agent-status { font-family: var(--font-code); font-size: 10px; padding: 2px 6px; border-radius: 2px; border: 1px solid; text-transform: uppercase; align-self: start; }
+  .st.active { color: var(--success); border-color: rgb(16 185 129 / 0.4); }
+  .st.draft { color: var(--warning); border-color: rgb(245 158 11 / 0.4); }
+  .st.system { color: var(--ink-subtle); border-color: var(--line); }
+
+  .create-card { border: 1px dashed var(--line-strong); border-radius: var(--radius-md); padding: 14px; display: flex; gap: 12px; align-items: center; cursor: pointer; transition: all var(--t-fast) var(--ease); }
+  .create-card:hover { border-color: var(--accent-warm-muted); background: rgb(212 162 76 / 0.04); }
+  .create-card .icon { color: var(--accent-warm); font-size: 20px; }
+  .create-card .body { font-size: 12px; color: var(--ink); }
+  .create-card .body small { display: block; font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar"><div class="titlebar-spacer"></div><div class="titlebar-brand"><b>HAMUNA</b> · 金融终端 · v0.3.13 · 主题: <b>Fintech Terminal · Gold</b></div><div class="titlebar-cluster"><button class="tb-btn">⟲ 更新</button><button class="tb-btn">▣ 任务</button><button class="tb-btn tb-btn-primary">⚙ 设置</button></div></div>
+  <div class="tabbar"><div class="tab">◆ 主屏</div><div class="tab">hamuna-agent-desktop</div><div class="tab active">设置 · 子代理 <span class="close">×</span></div><div class="tab-add">+</div></div>
+  <div class="terminal-strip"><span class="dot"></span><span class="status">设置模式</span><span class="sep">·</span><span class="key">SECTION</span><span class="val">sub-agents</span><span class="sep">·</span><span class="key">AGENTS</span><span class="val">5</span></div>
+
+  <div class="page active">
+    <aside class="settings-sidebar">
+      <div class="nav-group-title">通用</div>
+      <div class="nav-item"><span><span class="icon">◇</span> 外观</span></div>
+      <div class="nav-item"><span><span class="icon">⌘</span> 快捷键</span></div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 语言</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 更新</span></div>
+      <div class="nav-group-title">代理</div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 模型</span></div>
+      <div class="nav-item active"><span><span class="icon">⌗</span> 技能</span></div>
+      <div class="nav-item"><span><span class="icon">⏱</span> 定时任务</span></div>
+      <div class="nav-item"><span><span class="icon">⊞</span> MCP 服务</span><span class="num">3</span></div>
+      <div class="nav-group-title">账户</div>
+      <div class="nav-item"><span><span class="icon">⌬</span> Provider</span><span class="num">2</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 日志</span></div>
+      <div class="nav-item"><span><span class="icon">⚠</span> 关于</span></div>
+    </aside>
+
+    <section class="settings-main">
+      <div class="eyebrow"><span>设置 · <span class="count">子代理（Sub-agent）</span></span><div class="actions"><button>导出</button><button class="btn-primary">+ 新建代理</button></div></div>
+      <div class="settings-content">
+        <div class="toolbar">
+          <input placeholder="搜索代理 · 名称 / 描述 / 模型" />
+          <select style="background: var(--paper-inset); border: 1px solid var(--line); color: var(--ink); border-radius: 4px; padding: 4px 10px; font-family: var(--font-code); font-size: 11px; height: 28px;"><option>全部范围</option><option>用户</option><option>内置</option><option>项目</option></select>
+        </div>
+
+        <div class="agent-list">
+          <div class="agent-card">
+            <div class="agent-avatar">⌬</div>
+            <div>
+              <div class="agent-name">Explore <span class="agent-status st active">ACTIVE</span></div>
+              <div class="agent-desc">只读探索代理：跨文件 grep / 读 / 不写。在主代理不确定下一步时调用。</div>
+              <div class="agent-meta"><span class="model">claude-haiku-4-5</span><span><b>1.2k</b> spawns</span><span>权限: read · grep · glob</span></div>
+            </div>
+            <div style="display:flex; gap:6px;"><button class="btn">⚙</button></div>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-avatar">⌗</div>
+            <div>
+              <div class="agent-name">Code-Writer <span class="agent-status st active">ACTIVE</span></div>
+              <div class="agent-desc">专门负责写代码的小代理：生成 patch，交给主代理做最终 review。</div>
+              <div class="agent-meta"><span class="model">claude-sonnet-4-5</span><span><b>514</b> spawns</span><span>权限: read · write · bash (受 hook 门控)</span></div>
+            </div>
+            <div style="display:flex; gap:6px;"><button class="btn">⚙</button></div>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-avatar">⏱</div>
+            <div>
+              <div class="agent-name">Test-Runner <span class="agent-status st active">ACTIVE</span></div>
+              <div class="agent-desc">跑测试、收集输出、判断 pass/fail，不修改源代码。</div>
+              <div class="agent-meta"><span class="model">claude-haiku-4-5</span><span><b>298</b> spawns</span><span>权限: bash (vitest / cargo test)</span></div>
+            </div>
+            <div style="display:flex; gap:6px;"><button class="btn">⚙</button></div>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-avatar">▣</div>
+            <div>
+              <div class="agent-name">Doc-Writer <span class="agent-status st draft">DRAFT</span></div>
+              <div class="agent-desc">根据 diff 写 PR 描述 + CHANGELOG 条目。</div>
+              <div class="agent-meta"><span class="model">claude-haiku-4-5</span><span><b>0</b> spawns</span><span>权限: read · write</span></div>
+            </div>
+            <div style="display:flex; gap:6px;"><button class="btn">⚙</button></div>
+          </div>
+
+          <div class="agent-card locked">
+            <div class="agent-avatar">⌬</div>
+            <div>
+              <div class="agent-name">hamuna_helper <span class="agent-status st system">SYSTEM</span></div>
+              <div class="agent-desc">内置 MA 小助理，由 ADMIN_AGENT_VERSION 锁定，不可编辑。</div>
+              <div class="agent-meta"><span class="model">claude-sonnet-4-5</span><span><b>—</b></span><span>v1.4.2 · bundled</span></div>
+            </div>
+            <div style="display:flex; gap:6px;"><button class="btn">⎌</button></div>
+          </div>
+
+          <div class="create-card">
+            <div class="icon">+</div>
+            <div class="body">新建子代理<small>从模板创建 · 或自定义权限 + model + system prompt</small></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

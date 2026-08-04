@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · Chat 迁移 demo</title>
+<link rel="stylesheet" href="./_shared.css" />
+<style>
+  /* ====== Chat page grid ====== */
+  .page {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* ====== Chat sidebar: 上半文件树 + 下半 agent capabilities (可拖拽分割) ====== */
+  .chat-sidebar {
+    background: var(--paper-elevated);
+    border-right: 1px solid var(--line);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-height: 0;
+    min-width: 0;                  /* grid item 必须 min-width:0 才能在 240px 列内正确收缩,
+                                      否则文件名会撑爆 sidebar 边界 */
+    overflow: hidden;              /* 兜底截断 */
+  }
+  .sidebar-top {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    min-height: 0;
+    min-width: 0;                  /* 同上,嵌套 grid 链式声明 */
+    /* 上下两块之间用一条加粗分隔线，对齐两块的 toolbar 基线 */
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .sidebar-bottom {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-height: 0;
+    min-width: 0;                  /* 同上 */
+  }
+
+  /* 通用 toolbar 规范 — sidebar 顶部两块（session-switch / dir-toolbar）和 terminal-strip 同高 36px，
+     视觉权重对齐；cap-panel-head 在 sidebar 内部不和 terminal-strip 竞争，保持 30px */
+  .session-switch,
+  .dir-toolbar {
+    height: 36px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid var(--line-subtle);
+    background: var(--paper-inset);
+  }
+  .cap-panel-head {
+    height: 30px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid var(--line-subtle);
+    background: var(--paper-inset);
+  }
+
+  /* 关键：.label / .name / .title / .search 全部锁同一字号 11px + line-height 1，
+     让 mono 字符 baseline 在同一网格上对齐 — 不能用 10px 标签 + 11px 名字混搭，
+     不同字号下字符的视觉中心会漂移，align-items:center 救不了 baseline 错位 */
+  .session-switch .name,
+  .cap-panel-head .title,
+  .session-switch .label,
+  .dir-toolbar .label,
+  .cap-panel-head .label,
+  .dir-toolbar .search {
+    font-family: var(--font-code);
+    font-size: 11px;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+
+  /* .name / .title — 中间填充块 */
+  .session-switch .name,
+  .cap-panel-head .title {
+    flex: 1;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    align-self: center;
+    min-width: 0;
+  }
+  .session-switch .name small { color: var(--ink-muted); font-family: var(--font-code); font-size: 9px; display: block; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+
+  /* .label — 左侧锚点（小标签感靠 color + letter-spacing 区分，不靠字号） */
+  .session-switch .label,
+  .dir-toolbar .label,
+  .cap-panel-head .label {
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--accent-warm);
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .icon-btn { background: transparent; border: 1px solid var(--line); color: var(--ink-muted); width: 22px; height: 22px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: var(--font-code); font-size: 11px; line-height: 1; padding: 0; flex-shrink: 0; align-self: center; }
+  .icon-btn:hover { border-color: var(--accent-warm-muted); color: var(--accent-warm); }
+
+  /* File tree toolbar */
+  .dir-toolbar .search {
+    flex: 1;
+    height: 22px;
+    padding: 0 8px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--ink);
+    min-width: 0;
+  }
+  .dir-toolbar .search:focus { outline: none; border-color: var(--accent-warm); }
+
+  /* File tree */
+  .file-tree {
+    overflow: hidden auto;          /* 横向 hidden + 纵向 auto,文件名截断不溢出 sidebar */
+    padding: 4px 0;
+    font-family: var(--font-code);
+    font-size: 11px;
+    min-width: 0;                   /* grid item 内的滚动容器需要 min-width:0 才能收缩 */
+  }
+  .tree-row {
+    display: flex; align-items: center; gap: 4px;
+    padding: 2px 12px 2px 8px;
+    cursor: pointer;
+    color: var(--ink-secondary);
+    white-space: nowrap;
+    min-width: 0;                   /* flex item 在 nowrap 场景必须 min-width:0 才能让子项 ellipsis */
+    transition: all var(--t-fast) var(--ease);
+  }
+  .tree-row:hover { background: rgb(212 162 76 / 0.04); }
+  .tree-row.active { background: rgb(212 162 76 / 0.08); color: var(--accent-warm); border-left: 2px solid var(--accent-warm); padding-left: 6px; }
+  .tree-row .indent { display: inline-block; flex-shrink: 0; }
+  .tree-row .caret { width: 10px; flex-shrink: 0; color: var(--ink-subtle); font-size: 9px; }
+  .tree-row .file-ico { width: 12px; flex-shrink: 0; color: var(--ink-muted); font-size: 11px; }
+  .tree-row.active .file-ico { color: var(--accent-warm); }
+  .tree-row .label {
+    flex: 1;                       /* 吃掉中间所有可用空间 */
+    min-width: 0;                  /* flex 子项必须 min-width:0 才能 ellipsis */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tree-row .badge-gold { color: var(--accent-warm); }
+  .tree-row .git-marker { margin-left: auto; padding-left: 8px; font-size: 9px; color: var(--success); flex-shrink: 0; }
+  .tree-row .git-marker.modified { color: var(--warning); }
+  .tree-row .git-marker.untracked { color: var(--info); }
+
+  /* ==== AgentCapabilitiesPanel ==== */
+  .cap-panel-head {
+    cursor: pointer;
+  }
+  .cap-panel-head .title {
+    flex: 1;
+    font-size: 11px;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1;
+  }
+  .cap-panel-head .caret { color: var(--ink-muted); font-size: 10px; line-height: 1; }
+  .cap-panel-body {
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .cap-group {
+    border-bottom: 1px solid var(--line-subtle);
+  }
+  .cap-group-head {
+    padding: 4px 12px;
+    display: flex; align-items: center; gap: 4px;
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .cap-group-head:hover { color: var(--ink); }
+  .cap-group-head .caret { font-size: 9px; width: 10px; }
+  .cap-group-head .count {
+    margin-left: auto;
+    background: var(--paper-inset);
+    padding: 0 4px;
+    border-radius: 2px;
+    color: var(--accent-warm);
+  }
+  .cap-row {
+    padding: 3px 12px 3px 24px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--ink-secondary);
+    cursor: pointer;
+  }
+  .cap-row:hover { background: rgb(212 162 76 / 0.04); color: var(--ink); }
+  .cap-row .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+  .cap-row .dot.warn { background: var(--warning); }
+  .cap-row .dot.muted { background: var(--ink-faint); }
+  .cap-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cap-row .icon-end { color: var(--ink-muted); font-size: 10px; }
+
+  /* ====== Chat main: header + messages + input ====== */
+  .chat-main {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 0;
+  }
+  .messages {
+    overflow-y: auto;
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .msg {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--paper-elevated);
+    animation: msg-in var(--t-normal) var(--ease);
+  }
+  @keyframes msg-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg:hover { border-color: var(--line-strong); }
+  .msg.user { background: var(--message-user-bg); }
+  .msg .stamp {
+    font-family: var(--font-code);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .msg .stamp .role {
+    color: var(--accent-warm);
+    display: block; margin-bottom: 4px; font-weight: 500;
+  }
+  .msg.tool .stamp .role { color: var(--info); }
+  .msg.user .stamp .role { color: var(--success); }
+  .msg .body { font-size: 13px; color: var(--ink); line-height: 1.65; }
+  .msg .body code {
+    font-family: var(--font-code);
+    font-size: 12px; padding: 1px 5px;
+    background: var(--paper-inset);
+    border-radius: 3px;
+    color: var(--accent-warm);
+    border: 1px solid var(--line);
+  }
+  pre.code {
+    background: var(--paper-inset);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent-warm);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-family: var(--font-code);
+    font-size: 12px; color: var(--ink);
+    overflow-x: auto;
+    margin: 8px 0 0;
+    line-height: 1.6;
+  }
+  pre.code .kw { color: var(--accent-warm); }
+  pre.code .str { color: var(--success); }
+  pre.code .num { color: var(--warning); font-variant-numeric: tabular-nums; }
+  pre.code .cmt { color: var(--ink-muted); font-style: italic; }
+
+  .msg.streaming .body::after {
+    content: '▌';
+    color: var(--accent-warm);
+    animation: blink 1s steps(2) infinite;
+    margin-left: 2px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .chat-input {
+    border-top: 1px solid var(--line);
+    padding: 12px 24px;
+    background: var(--paper-elevated);
+    display: flex; gap: 8px; align-items: flex-end;
+  }
+  .chat-input textarea {
+    flex: 1;
+    min-height: 56px;
+    max-height: 180px;
+    padding: 10px 12px;
+    background: var(--paper-inset);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+  }
+  .chat-input textarea:focus {
+    outline: none;
+    border-color: var(--accent-warm);
+    background: var(--paper);
+  }
+  .chat-input button.send {
+    height: 56px;
+    padding: 0 16px;
+    background: var(--button-primary-bg);
+    border: 1px solid var(--button-primary-bg);
+    color: #ffffff;
+    border-radius: var(--radius-md);
+    font-family: var(--font-code);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .chat-input button.send:hover { background: var(--button-primary-bg-hover); }
+  .chat-input button.send:active { transform: scale(0.97); }
+
+  .tool-call {
+    margin-top: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    background: var(--paper-inset);
+    font-family: var(--font-code);
+    font-size: 11px;
+    color: var(--ink-secondary);
+  }
+  .tool-call .tool-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 4px;
+    color: var(--info);
+  }
+  .tool-call .tool-head .tool-name { font-weight: 500; }
+  .tool-call pre { margin: 0; font-size: 11px; line-height: 1.5; color: var(--ink-muted); }
+
+  .attachment {
+    margin-top: 8px;
+    border: 1px solid var(--accent-warm-muted);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    background: rgb(212 162 76 / 0.04);
+    font-family: var(--font-code);
+    font-size: 11px;
+    color: var(--accent-warm);
+    display: inline-flex; gap: 6px; align-items: center;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============== TitleBar ============== -->
+  <div class="titlebar">
+    <div class="titlebar-spacer"></div>
+    <div class="titlebar-brand">
+      <b>HAMUNA</b> · 金融终端 · v0.3.13 · 主题: <b>Fintech Terminal · Gold</b>
+    </div>
+    <div class="titlebar-cluster">
+      <button class="tb-btn">⟲ 更新</button>
+      <button class="tb-btn">☁ Team</button>
+      <button class="tb-btn">▣ 任务</button>
+      <button class="tb-btn">⚙ 设置</button>
+    </div>
+  </div>
+
+  <!-- ============== TabBar ============== -->
+  <div class="tabbar">
+    <div class="tab">◆ 主屏</div>
+    <div class="tab active">
+      hamuna-agent-desktop <span class="close">×</span>
+    </div>
+    <div class="tab">research-notes <span class="close">×</span></div>
+    <div class="tab-add">+</div>
+  </div>
+
+  <!-- ============== TerminalStrip ============== -->
+  <div class="terminal-strip">
+    <span class="dot"></span>
+    <span class="status">运行中</span>
+    <span class="sep">·</span>
+    <span class="key">SESSION</span><span class="val">a3f8e21c</span>
+    <span class="sep">·</span>
+    <span class="key">TURNS</span><span class="val">12</span>
+    <span class="sep">·</span>
+    <span class="key">CTX</span><span class="val">38.4K</span>
+    <span class="sep">·</span>
+    <span class="key">MODEL</span><span class="val">claude-haiku-4-5</span>
+    <span class="sep">·</span>
+    <span class="key">RUNTIME</span><span class="val">Builtin</span>
+    <span class="sep">·</span>
+    <span class="key">MCP</span><span class="val">3</span>
+    <span class="sep">·</span>
+    <span class="key">WORKSPACE</span><span class="val">hamuna-agent-desktop</span>
+    <span class="sep">·</span>
+    <span class="key">BRANCH</span><span class="val">main</span>
+  </div>
+
+  <!-- ============== Chat (240px sidebar + 1fr main) ============== -->
+  <div class="page active">
+
+    <!-- LEFT: workspace file tree + agent capabilities -->
+    <aside class="chat-sidebar">
+
+      <!-- 上半: workspace 文件树 -->
+      <div class="sidebar-top">
+        <!-- Session switcher -->
+        <div class="session-switch">
+          <span class="label">▤ SESSION</span>
+          <div class="name" title="Fix terminal-strip CSS validator · a3f8e21c">
+            Fix terminal-strip CSS validator
+          </div>
+          <button class="icon-btn" title="切换工作区">▤</button>
+          <button class="icon-btn" title="新增文件">+</button>
+        </div>
+
+        <!-- File tree toolbar -->
+        <div class="dir-toolbar">
+          <span class="label">▤ FILES</span>
+          <input class="search" placeholder="搜索文件 · /" />
+          <button class="icon-btn" title="新建文件">+</button>
+          <button class="icon-btn" title="刷新">⟲</button>
+          <button class="icon-btn" title="设置">⚙</button>
+        </div>
+
+        <!-- File tree -->
+        <div class="file-tree">
+          <div class="tree-row"><span class="caret">▾</span><span class="file-ico">▤</span><span class="label">hamuna-agent-desktop/</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret">▾</span><span class="file-ico">▤</span><span class="label">demo/</span></div>
+          <div class="tree-row active"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico badge-gold">★</span><span class="label">finance-launcher-demo.html</span><span class="git-marker modified">M</span></div>
+          <div class="tree-row"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico">★</span><span class="label">finance-chat-demo.html</span></div>
+          <div class="tree-row"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico">★</span><span class="label">finance-settings-demo.html</span><span class="git-marker">✓</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret">▾</span><span class="file-ico">▤</span><span class="label">src/renderer/theme/themes/</span></div>
+          <div class="tree-row"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">fintech-terminal.css</span><span class="git-marker modified">M</span></div>
+          <div class="tree-row"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">fintech-terminal.ts</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret">▾</span><span class="file-ico">▤</span><span class="label">src/renderer/components/</span></div>
+          <div class="tree-row"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">CustomTitleBar.tsx</span></div>
+          <div class="tree-row"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">TerminalStrip.tsx</span><span class="git-marker untracked">U</span></div>
+          <div class="tree-row"><span class="indent" style="width:28px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">directory-panel/</span></div>
+          <div class="tree-row"><span class="indent" style="width:42px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">DirectoryPanel.tsx</span></div>
+          <div class="tree-row"><span class="indent" style="width:42px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">AgentCapabilitiesPanel.tsx</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret">▸</span><span class="file-ico">▤</span><span class="label">src/renderer/pages/</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret">▸</span><span class="file-ico">▤</span><span class="label">src/server/</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">.gitignore</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">package.json</span></div>
+          <div class="tree-row"><span class="indent" style="width:14px"></span><span class="caret"></span><span class="file-ico">⊞</span><span class="label">README.md</span></div>
+        </div>
+      </div>
+
+      <!-- 下半: Agent capabilities panel -->
+      <div class="sidebar-bottom">
+        <div class="cap-panel-head">
+          <span class="label">▣ CAPS</span>
+          <span class="title">Agent Capabilities</span>
+          <button class="icon-btn" title="刷新">⟲</button>
+          <button class="icon-btn" title="打开设置">⚙</button>
+        </div>
+        <div class="cap-panel-body">
+
+          <!-- Sub-Agents -->
+          <div class="cap-group">
+            <div class="cap-group-head"><span class="caret">▾</span>Sub-Agents<span class="count">3</span></div>
+            <div class="cap-row" title="claude-haiku-4-5 · read/grep/glob"><span class="dot"></span><span class="name">Explore</span><span class="icon-end">haiku</span></div>
+            <div class="cap-row" title="claude-sonnet-4-5 · read/write/bash (受 hook 门控)"><span class="dot"></span><span class="name">Code-Writer</span><span class="icon-end">sonnet</span></div>
+            <div class="cap-row" title="claude-haiku-4-5 · bash vitest/cargo test"><span class="dot"></span><span class="name">Test-Runner</span><span class="icon-end">haiku</span></div>
+          </div>
+
+          <!-- Skills -->
+          <div class="cap-group">
+            <div class="cap-group-head"><span class="caret">▾</span>Skills<span class="count">5</span></div>
+            <div class="cap-row" title="围绕一个主题做多轮 web 搜索 → 抓取 → 总结"><span class="dot"></span><span class="name">/deep-research</span><span class="icon-end">⚡</span></div>
+            <div class="cap-row" title="读取 PR diff 给出按文件分组的 review"><span class="dot"></span><span class="name">/code-review</span><span class="icon-end">⚡</span></div>
+            <div class="cap-row" title="根据 staged diff 生成 conventional commit message"><span class="dot"></span><span class="name">/commit-message</span><span class="icon-end">⚡</span></div>
+            <div class="cap-row" title="汇总昨日 git 活动 → 输出团队 standup"><span class="dot warn"></span><span class="name">/daily-standup</span><span class="icon-end">⚡</span></div>
+            <div class="cap-row" title="Yahoo Finance 实时行情"><span class="dot"></span><span class="name">/finance-quote-fetch</span><span class="icon-end">⚡</span></div>
+          </div>
+
+          <!-- Slash Commands -->
+          <div class="cap-group">
+            <div class="cap-group-head"><span class="caret">▸</span>Commands<span class="count">3</span></div>
+          </div>
+
+          <!-- MCP -->
+          <div class="cap-group">
+            <div class="cap-group-head"><span class="caret">▾</span>MCP Servers<span class="count">3</span></div>
+            <div class="cap-row"><span class="dot"></span><span class="name">hamuna-filesystem</span><span class="icon-end">stdio</span></div>
+            <div class="cap-row"><span class="dot"></span><span class="name">fetch</span><span class="icon-end">stdio</span></div>
+            <div class="cap-row"><span class="dot muted"></span><span class="name">git</span><span class="icon-end">off</span></div>
+          </div>
+
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- RIGHT: chat main -->
+    <section class="chat-main">
+
+      <!-- Chat header -->
+      <div class="eyebrow">
+        <span>CHAT · HAMUNA-AGENT-DESKTOP <span class="count">· branch main · 1 modified</span></span>
+        <div class="actions">
+          <button>@ 引用文件</button>
+          <button>⊞ 分屏预览</button>
+          <button>⎘ 复制 session</button>
+          <button>⎌ 归档</button>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages">
+        <div class="msg user">
+          <div class="stamp">
+            <span class="role">USER</span>
+            09:41:22
+          </div>
+          <div class="body">
+            把 fintech-terminal 主题的样式改成 Hermes 金，font-display 渐变用 <code>--accent-warm</code> 做终点色。另外 TitleBar 加一段 mono 11px 的 brand 文字。
+          </div>
+        </div>
+
+        <div class="msg">
+          <div class="stamp">
+            <span class="role">CLAUDE</span>
+            09:41:25
+          </div>
+          <div class="body">
+            好。三个改动一起做：
+            <pre class="code"><span class="cmt">/* fintech-terminal.css */</span>
+<span class="kw">html</span>[data-theme-id=<span class="str">'fintech-terminal'</span>] {
+  <span class="kw">--accent-warm</span>: <span class="num">#d4a24c</span>;
+  <span class="kw">--button-primary-bg</span>: <span class="num">#b8862e</span>;
+}</pre>
+            <pre class="code"><span class="cmt">/* titlebar brand */</span>
+.titlebar-brand {
+  font-family: var(--font-code);
+  font-size: <span class="num">11</span>px;
+  text-transform: uppercase;
+  letter-spacing: <span class="num">0.08</span>em;
+  color: var(--ink-muted);
+}
+.titlebar-brand b { color: var(--accent-warm); font-weight: <span class="num">500</span>; }</pre>
+          </div>
+        </div>
+
+        <div class="msg tool">
+          <div class="stamp">
+            <span class="role">TOOL</span>
+            09:41:28
+          </div>
+          <div class="body">
+            <div class="tool-call">
+              <div class="tool-head">
+                <span class="tool-name">▣ Edit · fintech-terminal.css</span>
+                <span>3s</span>
+              </div>
+              <pre>Replaced 4 tokens, 0 deletions</pre>
+            </div>
+            <div class="tool-call">
+              <div class="tool-head">
+                <span class="tool-name">▣ Edit · CustomTitleBar.tsx</span>
+                <span>2s</span>
+              </div>
+              <pre>Inserted titlebar-brand markup (4 lines)</pre>
+            </div>
+            <div class="tool-call">
+              <div class="tool-head">
+                <span class="tool-name">▣ Read · demo/_shared.css</span>
+                <span>1s</span>
+              </div>
+              <pre>Read 372 lines · @import anchor validated</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <div class="stamp">
+            <span class="role">CLAUDE</span>
+            09:41:33
+          </div>
+          <div class="body">
+            改动完成。两个文件各加 4–6 行，零删除。原 cyan token 已替换为 Hermes 金，TitleBar 中间插入 mono brand 文字。
+            <div class="attachment">▣ Attachment · finance-launcher-demo.png · 142 KB</div>
+          </div>
+        </div>
+
+        <div class="msg streaming">
+          <div class="stamp">
+            <span class="role">CLAUDE</span>
+            09:42:01
+          </div>
+          <div class="body">
+            需要我把这次改动的 diff 也写进 CHANGELOG 吗？另外建议再追加一个验证步骤——切到 fintech-terminal 后用 settings 截图。
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat input -->
+      <div class="chat-input">
+        <textarea placeholder="发送消息 · Shift+Enter 换行 · / 触发命令 · @ 引用文件">把这次的改动也写进 CHANGELOG.md，并跑一遍 npm run typecheck</textarea>
+        <button class="send">▶ 发送</button>
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

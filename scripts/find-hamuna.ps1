@@ -1,0 +1,1 @@
+Get-Process | Where-Object { $_.MainWindowTitle -like '*HAMUNA*' } | Select-Object Id, ProcessName, MainWindowTitle, MainWindowHandle | Format-Table -AutoSize

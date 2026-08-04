@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HamunaAgent · Settings / Skills 迁移 demo</title>
+<link rel="stylesheet" href="./_shared.css" />
+<style>
+  .page { display: grid; grid-template-columns: 240px 1fr; height: 100%; overflow: hidden; }
+  .settings-sidebar { background: var(--paper-elevated); border-right: 1px solid var(--line); overflow-y: auto; display: flex; flex-direction: column; }
+  .nav-group-title { font-family: var(--font-code); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-subtle); padding: 14px 16px 6px; }
+  .nav-item { padding: 6px 16px 6px 18px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-left: 2px solid transparent; color: var(--ink-muted); font-size: 12px; }
+  .nav-item:hover { background: rgb(212 162 76 / 0.04); color: var(--ink); }
+  .nav-item.active { border-left-color: var(--accent-warm); background: rgb(212 162 76 / 0.06); color: var(--ink); }
+  .nav-item .icon { width: 14px; display: inline-block; color: var(--accent-warm); }
+  .settings-main { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .settings-content { overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; }
+  .toolbar input { flex: 1; height: 28px; padding: 0 10px; background: var(--paper-inset); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink); font-family: var(--font-code); font-size: 11px; }
+  .toolbar input:focus { outline: none; border-color: var(--accent-warm); }
+
+  .skill-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .skill-card { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper-elevated); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; transition: all var(--t-fast) var(--ease); cursor: pointer; }
+  .skill-card:hover { border-color: var(--accent-warm-muted); background: rgb(212 162 76 / 0.04); }
+  .skill-card.locked { opacity: 0.55; }
+  .skill-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+  .skill-name { font-size: 13px; color: var(--ink); font-weight: 500; display: flex; gap: 8px; align-items: center; }
+  .skill-icon { color: var(--accent-warm); font-size: 16px; }
+  .skill-tag { font-family: var(--font-code); font-size: 9px; padding: 1px 5px; border-radius: 2px; border: 1px solid; text-transform: uppercase; }
+  .tag.bundled { color: var(--info); border-color: rgb(230 192 104 / 0.4); }
+  .tag.user { color: var(--accent-warm); border-color: var(--accent-warm-muted); }
+  .tag.locked { color: var(--ink-subtle); border-color: var(--line); }
+  .skill-desc { font-size: 11px; color: var(--ink-muted); line-height: 1.5; }
+  .skill-meta { font-family: var(--font-code); font-size: 10px; color: var(--ink-muted); display: flex; gap: 12px; }
+  .skill-meta b { color: var(--ink); font-weight: 500; }
+
+  .scope-tabs { display: flex; gap: 0; border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; align-self: flex-end; }
+  .scope-tabs button { background: transparent; border: 0; padding: 0 10px; height: 28px; color: var(--ink-muted); font-family: var(--font-code); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
+  .scope-tabs button.active { background: var(--accent-warm-subtle); color: var(--accent-warm); }
+
+  .create-card { border: 1px dashed var(--line-strong); border-radius: var(--radius-md); padding: 14px; display: flex; gap: 12px; align-items: center; cursor: pointer; transition: all var(--t-fast) var(--ease); }
+  .create-card:hover { border-color: var(--accent-warm-muted); background: rgb(212 162 76 / 0.04); }
+  .create-card .icon { color: var(--accent-warm); font-size: 20px; }
+  .create-card .body { font-size: 12px; color: var(--ink); }
+  .create-card .body small { display: block; font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar"><div class="titlebar-spacer"></div><div class="titlebar-brand"><b>HAMUNA</b> · 金融终端 · v0.3.13 · 主题: <b>Fintech Terminal · Gold</b></div><div class="titlebar-cluster"><button class="tb-btn">⟲ 更新</button><button class="tb-btn">▣ 任务</button><button class="tb-btn tb-btn-primary">⚙ 设置</button></div></div>
+  <div class="tabbar"><div class="tab">◆ 主屏</div><div class="tab">hamuna-agent-desktop</div><div class="tab active">设置 · 技能 <span class="close">×</span></div><div class="tab-add">+</div></div>
+  <div class="terminal-strip"><span class="dot"></span><span class="status">设置模式</span><span class="sep">·</span><span class="key">SECTION</span><span class="val">skills</span><span class="sep">·</span><span class="key">SKILLS</span><span class="val">7</span></div>
+
+  <div class="page active">
+    <aside class="settings-sidebar">
+      <div class="nav-group-title">通用</div>
+      <div class="nav-item"><span><span class="icon">◇</span> 外观</span></div>
+      <div class="nav-item"><span><span class="icon">⌘</span> 快捷键</span></div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 语言</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 更新</span></div>
+      <div class="nav-group-title">代理</div>
+      <div class="nav-item"><span><span class="icon">⌬</span> 模型</span></div>
+      <div class="nav-item active"><span><span class="icon">⌗</span> 技能</span></div>
+      <div class="nav-item"><span><span class="icon">⏱</span> 定时任务</span></div>
+      <div class="nav-item"><span><span class="icon">⊞</span> MCP 服务</span><span class="num">3</span></div>
+      <div class="nav-group-title">账户</div>
+      <div class="nav-item"><span><span class="icon">⌬</span> Provider</span><span class="num">2</span></div>
+      <div class="nav-item"><span><span class="icon">⎌</span> 日志</span></div>
+      <div class="nav-item"><span><span class="icon">⚠</span> 关于</span></div>
+    </aside>
+
+    <section class="settings-main">
+      <div class="eyebrow"><span>设置 · <span class="count">技能（Skill）</span></span><div class="actions"><button>导出</button><button>⊟ 范围</button><button class="btn-primary">+ 新建技能</button></div></div>
+      <div class="settings-content">
+        <div class="toolbar">
+          <input placeholder="搜索技能 · 名称 / 描述 / 标签" />
+          <div class="scope-tabs"><button>全部</button><button class="active">用户</button><button>内置</button></div>
+          <select style="background: var(--paper-inset); border: 1px solid var(--line); color: var(--ink); border-radius: 4px; padding: 4px 10px; font-family: var(--font-code); font-size: 11px; height: 28px;"><option>按更新时间</option><option>按名称</option><option>按使用频率</option></select>
+        </div>
+
+        <div class="skill-grid">
+          <div class="skill-card">
+            <div class="skill-head"><div class="skill-name"><span class="skill-icon">⌗</span> deep-research</div><span class="skill-tag bundled">BUNDLED</span></div>
+            <div class="skill-desc">围绕一个主题做多轮 web 搜索 → 抓取 → 总结，输出 Markdown 报告。</div>
+            <div class="skill-meta"><span>v0.2.4</span><span><b>312</b> 次调用</span><span>updated 2 hr ago</span></div>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-head"><div class="skill-name"><span class="skill-icon">⌗</span> code-review</div><span class="skill-tag user">USER</span></div>
+            <div class="skill-desc">读取一组 PR diff，给出按文件分组的结构化 review。</div>
+            <div class="skill-meta"><span>v1.1.0</span><span><b>87</b> 次调用</span><span>updated 1 day ago</span></div>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-head"><div class="skill-name"><span class="skill-icon">⌗</span> commit-message</div><span class="skill-tag user">USER</span></div>
+            <div class="skill-desc">根据 staged diff 生成 conventional commit message。</div>
+            <div class="skill-meta"><span>v0.3.1</span><span><b>441</b> 次调用</span><span>updated 3 hr ago</span></div>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-head"><div class="skill-name"><span class="skill-icon">⌗</span> daily-standup</div><span class="skill-tag user">USER</span></div>
+            <div class="skill-desc">汇总昨日 git 活动 → 输出团队 standup 报告。</div>
+            <div class="skill-meta"><span>v0.1.7</span><span><b>14</b> 次调用</span><span>updated 5 days ago</span></div>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-head"><div class="skill-name"><span class="skill-icon">⌗</span> finance-quote-fetch</div><span class="skill-tag bundled">BUNDLED</span></div>
+            <div class="skill-desc">通过 Yahoo Finance 抓取实时行情，支持美股 / 港股 / A 股 ETF。</div>
+            <div class="skill-meta"><span>v2.0.0</span><span><b>2.1k</b> 次调用</span><span>updated 4 hr ago</span></div>
+          </div>
+
+          <div class="skill-card locked">
+            <div class="skill-head"><div class="skill-name"><span class="skill-icon">⌗</span> hamuna-cli</div><span class="skill-tag locked">SYSTEM</span></div>
+            <div class="skill-desc">系统级 CLI 入口，由 AdminAgent 独占，不可编辑。</div>
+            <div class="skill-meta"><span>v1.0.0</span><span><b>—</b></span><span>内置</span></div>
+          </div>
+
+          <div class="create-card">
+            <div class="icon">+</div>
+            <div class="body">新建技能<b>创建 SKILL.md 与 manifest.json</b><small>支持 SKILL.md / Tool 两种形态</small></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>
