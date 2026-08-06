@@ -25,6 +25,7 @@ import LauncherV2 from './pages/LauncherV2';
 import TaskCenterV2 from './pages/TaskCenterV2';
 import SettingsV2 from './pages/SettingsV2';
 import PlaceholderV2 from './pages/PlaceholderV2';
+import SpaceV2 from './pages/SpaceV2';
 import ChatV2 from './pages/ChatV2';
 import TabProvider from '@/context/TabProvider';
 import { useChatControllerV2 } from './hooks/useChatControllerV2';
@@ -128,7 +129,7 @@ export default function AppV2() {
                 ) : activeView === 'settings' ? (
                     <SettingsV2 onShowLogs={() => setView('settings')} />
                 ) : activeView === 'space' ? (
-                    <PlaceholderV2 view={activeView} onBack={() => setView('launcher')} />
+                    <SpaceV2 isActive={activeView === 'space'} />
                 ) : activeView === 'chat' ? (
                     <TabProvider
                         tabId={activeTab.id}
