@@ -158,9 +158,9 @@ Append `> Region > Element`:
 | Settings | IFfik | `[deprecated] Settings Content — A: 分组工作台` | — | 落选变体（2026-08-05 proposal `gv2Uy`）；SectionTabs + 双列 570px SettingCell 网格，最接近现状 |
 | Settings | t2DE7F | `[final] Settings Content — B: Bento 卡片` | Not started | 内容区布局方向（2026-08-05 proposal `gv2Uy` 晋升）；不等尺寸 Bento 瓦片（776/392/584/584w），打破等宽卡片单调；2026-08-05 已铺开落地到 10 处（设计侧）：cTjk2 general 主页内容区（BSMXd 替换为 BentoGrid）+ 9 个子页（shortcuts g9b6R / about uHhSE / providers JW6Ha / mcp KB8c4 / plugins jz3RU / skills ZWkb0 / usage-stats G0RkW / agent e0tbs5 / desktop-pet p4mBrt，全部衬线页头 + ContentPanel + BentoGrid + 真实控件 ref）；代码未开始。2026-08-05 修订：用户指定 providers/mcp/plugins 三页改等宽规则 grid（见 cTjk2 行注），Bento 方向仅在其余 7 页保留。2026-08-05 重建：usage-stats/agent/desktop-pet 三帧（原 dbBZu/pJ97d/w5MeKI）丢失后按代码 1:1 重建为 G0RkW/e0tbs5/p4mBrt |
 | Settings | kOMZn | `[deprecated] Settings Content — C: 表格式` | — | 落选变体（2026-08-05 proposal `gv2Uy`）；分组数据表：标签列+spacer+控件列 + 1px 行分隔线，与现状差异最大 |
-| Task Center | F6p4ws | `[final] Task Center — A: 思想驱动（40/60）` | Not started | v2 Task Center 页面（2026-08-05 晋升） |
+| Task Center | F6p4ws | `[final] Task Center — A: 思想驱动（40/60）` | Synced | v2 Task Center 页面（2026-08-05 晋升）。2026-08-06 落地 `feb0334`：40/60 思想驱动 shell + v1 TaskCenter 数据层（taskCenterStore/useTaskCenterData/api）+ 叶组件 drop-in，功能与 v1 TaskCenter.tsx 1:1 |
 | Task Center | U0JmA2 | `[deprecated] Task Center — B: 任务驱动（看板）` | — | 落选变体；看板视图模式落地时参考 |
-| Space | IlVr6 | `[final] Space — A: 项目管理（Linear 流式 Issue 台）` | Not started | v2 Space 页面（2026-08-05 晋升） |
+| Space | IlVr6 | `[final] Space — A: 项目管理（Linear 流式 Issue 台）` | Synced | v2 Space 页面（2026-08-05 晋升）。2026-08-06 落地 `fc08718`：re-export v1 `src/renderer/pages/Space.tsx`——该页面已实现 IlVr6 全部布局（256px SpaceSidebar + 暖调 Toolbar 搜索/状态分节/目标/与我相关/新建/刷新 + Linear 流式 Issue 行 + 三色状态 pill），theme token（`--accent-warm` 家族 + `--paper-elevated`）与 Pencil `$accent-warm` 变量一致，零重写零 drift |
 | Space | gM5ky | `[deprecated] Space — B: 概览仪表盘（Dashboard）` | — | 落选变体；概览 Dashboard 状态落地时参考 |
 | Floating Ball | zQxyc | `[final] Floating Ball — A: 可爱宠物风（桌角小物）` | Not started | v2 Floating Ball 页面（2026-08-05 晋升） |
 | Floating Ball | m1tw3e | `[deprecated] Floating Ball — B: 极简助手风（几何浮标）` | — | 落选变体；几何浮标/深色玻璃形态落地时参考 |
