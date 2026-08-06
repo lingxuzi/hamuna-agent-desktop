@@ -1,4 +1,9 @@
 {
+  "v2": {
+    "inProgress": "v2 in progress",
+    "placeholderBody": "This page is being rebuilt on the v2 renderer. Switch VITE_UI_RENDER_LAYER in .env back to v1 to see the full feature.",
+    "placeholderBack": "Back to Home"
+  },
   "tabs": {
     "allTabs": "All tabs",
     "openTabs": "Open tabs",
