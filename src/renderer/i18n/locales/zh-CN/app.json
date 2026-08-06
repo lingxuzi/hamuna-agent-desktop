@@ -2,7 +2,14 @@
   "v2": {
     "inProgress": "v2 落地中",
     "placeholderBody": "该页面 v2 渲染层正在实现中。改 .env 的 VITE_UI_RENDER_LAYER 切回 v1 查看完整功能。",
-    "placeholderBack": "返回工作台"
+    "placeholderBack": "返回工作台",
+    "chat": {
+      "agentPanelTitle": "Agent 状态",
+      "agentDockTitle": "Agent 状态",
+      "agentDockBusy": "{{count}} 个进行中任务",
+      "agentDockIdle": "空闲",
+      "agentDockCtx": "上下文用量"
+    }
   },
   "tabs": {
     "allTabs": "所有标签页",

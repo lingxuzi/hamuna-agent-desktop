@@ -9,7 +9,8 @@
  */
 import { useCallback, useReducer } from 'react';
 
-import { type Tab, createNewTab, MAX_TABS } from '@/types/tab';
+import { type Tab, createNewTab, MAX_TABS, buildChatFlipPatch, type SidecarConfigDisposition } from '@/types/tab';
+import type { InitialMessage } from '@/types/tab';
 
 type V2View = Tab['view'];
 
@@ -18,12 +19,28 @@ interface V2TabsState {
     activeTabId: string;
 }
 
+/** Canonical Launcher / TaskCenter → Chat launch fields. Uses buildChatFlipPatch
+ *  so the D1 invariant (non-empty sessionId, explicit disposition) is enforced. */
+export interface LaunchChatFields {
+    agentDir: string;
+    sessionId: string;
+    title: string;
+    initialMessage?: InitialMessage;
+    sidecarConfigDisposition: SidecarConfigDisposition;
+}
+
 type V2TabsAction =
     | { type: 'new-tab' }
     | { type: 'close-tab'; tabId: string }
     | { type: 'select-tab'; tabId: string }
     | { type: 'set-view'; view: V2View }
-    | { type: 'reorder-tabs'; activeId: string; overId: string };
+    | { type: 'reorder-tabs'; activeId: string; overId: string }
+    /** Generic shallow patch of a tab's runtime fields (sessionId upgrades,
+     *  title/rename, generating/unread flags, disposition resolution). */
+    | { type: 'patch-tab'; tabId: string; patch: Partial<Tab> }
+    /** Launcher / TaskCenter → Chat: flip a tab into the chat view with the
+     *  canonical launch fields. */
+    | { type: 'launch-chat'; tabId: string; fields: LaunchChatFields };
 
 function initialV2State(): V2TabsState {
     const tab = createNewTab();
@@ -86,6 +103,26 @@ function v2TabsReducer(state: V2TabsState, action: V2TabsAction): V2TabsState {
             tabs.splice(to, 0, moved);
             return { ...state, tabs };
         }
+        case 'patch-tab':
+            return {
+                ...state,
+                tabs: state.tabs.map((t) =>
+                    t.id === action.tabId ? { ...t, ...action.patch } : t,
+                ),
+            };
+        case 'launch-chat': {
+            // buildChatFlipPatch enforces D1 (non-empty sessionId + explicit
+            // disposition). Throws loud on a falsy sessionId rather than
+            // stranding a blank tab (same rationale as v1 App).
+            const flipped = buildChatFlipPatch(
+                state.tabs.find((t) => t.id === action.tabId) ?? createNewTab(),
+                action.fields,
+            );
+            return {
+                tabs: state.tabs.map((t) => (t.id === action.tabId ? flipped : t)),
+                activeTabId: action.tabId,
+            };
+        }
         default:
             return state;
     }
@@ -100,6 +137,10 @@ export interface V2TabsApi {
     selectTab: (tabId: string) => void;
     setView: (view: V2View) => void;
     reorderTabs: (activeId: string, overId: string) => void;
+    /** Shallow-patch runtime fields of one tab (sessionId/title/flags). */
+    patchTab: (tabId: string, patch: Partial<Tab>) => void;
+    /** Flip a tab into the chat view with canonical launch fields. */
+    launchChatTab: (tabId: string, fields: LaunchChatFields) => void;
 }
 
 export function useV2Tabs(): V2TabsApi {
@@ -116,6 +157,12 @@ export function useV2Tabs(): V2TabsApi {
         (activeId: string, overId: string) => dispatch({ type: 'reorder-tabs', activeId, overId }),
         [],
     );
+    const patchTab = useCallback((tabId: string, patch: Partial<Tab>) => dispatch({ type: 'patch-tab', tabId, patch }), []);
+    const launchChatTab = useCallback(
+        (tabId: string, fields: LaunchChatFields) =>
+            dispatch({ type: 'launch-chat', tabId, fields }),
+        [],
+    );
 
-    return { tabs: state.tabs, activeTabId: state.activeTabId, activeView, newTab, closeTab, selectTab, setView, reorderTabs };
+    return { tabs: state.tabs, activeTabId: state.activeTabId, activeView, newTab, closeTab, selectTab, setView, reorderTabs, patchTab, launchChatTab };
 }

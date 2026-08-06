@@ -302,7 +302,10 @@ export interface ChatControllerV2 {
 
   // split view
   splitFile: SplitPreviewFile | null;
-  setSplitFile: (f: SplitPreviewFile | null) => void;
+  // Updater-form setter to match v1 Chat.tsx call sites (`setSplitFile(prev => …)`
+  // in onExternalContentUpdated/onRenamed). The implementation is useState, so
+  // both direct values and updaters are accepted.
+  setSplitFile: React.Dispatch<React.SetStateAction<SplitPreviewFile | null>>;
   splitRatio: number;
   setSplitRatio: (r: number) => void;
   isDraggingSplit: boolean;

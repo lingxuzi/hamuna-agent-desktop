@@ -2,7 +2,14 @@
   "v2": {
     "inProgress": "v2 in progress",
     "placeholderBody": "This page is being rebuilt on the v2 renderer. Switch VITE_UI_RENDER_LAYER in .env back to v1 to see the full feature.",
-    "placeholderBack": "Back to Home"
+    "placeholderBack": "Back to Home",
+    "chat": {
+      "agentPanelTitle": "Agent status",
+      "agentDockTitle": "Agent status",
+      "agentDockBusy": "{{count}} tasks in progress",
+      "agentDockIdle": "Idle",
+      "agentDockCtx": "Context usage"
+    }
   },
   "tabs": {
     "allTabs": "All tabs",
