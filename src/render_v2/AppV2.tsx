@@ -7,13 +7,14 @@
  * view shows a PlaceholderV2 card — switching back to the full v1 UI requires
  * flipping the env var and restarting dev/build.
  */
-import { useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useCallback, useRef } from 'react';
 
 import { useV2Tabs } from './tabs/useTabs';
 import Chrome from './chrome/Chrome';
+import LauncherV2 from './pages/LauncherV2';
 import PlaceholderV2 from './pages/PlaceholderV2';
 import { useConfig } from '@/hooks/useConfig';
+import type { LauncherLaunchContext } from './hooks/useLauncherDataV2';
 import type { Tab } from '@/types/tab';
 
 export default function AppV2() {
@@ -29,12 +30,27 @@ export default function AppV2() {
         reorderTabs,
     } = useV2Tabs();
 
+    // Launcher → Chat handoff: the launch context is transient. Store it in a
+    // ref so ChatV2 (Step 5) can consume it on mount and clear it; a state would
+    // force a re-render just to carry a one-shot handoff value.
+    const chatLaunchRef = useRef<LauncherLaunchContext | null>(null);
+
     const handleNavigate = useCallback(
         (view: Tab['view']) => {
             if (view !== activeView) setView(view);
         },
         [activeView, setView],
     );
+
+    const launchChat = useCallback(
+        (ctx: LauncherLaunchContext) => {
+            chatLaunchRef.current = ctx;
+            setView('chat');
+        },
+        [setView],
+    );
+
+    const openSettings = useCallback(() => setView('settings'), [setView]);
 
     const handleCloseTab = useCallback(
         (tabId: string) => {
@@ -62,7 +78,11 @@ export default function AppV2() {
                 {isLoading ? (
                     <LoadingSkeleton />
                 ) : activeView === 'launcher' ? (
-                    <LauncherPreview />
+                    <LauncherV2
+                        launchChat={launchChat}
+                        openSettings={openSettings}
+                        isActive={activeView === 'launcher'}
+                    />
                 ) : (
                     <PlaceholderV2 view={activeView} onBack={() => setView('launcher')} />
                 )}
@@ -77,25 +97,6 @@ function LoadingSkeleton() {
         <div className="flex flex-1 flex-col items-center justify-center gap-4">
             <div className="h-3 w-32 rounded-full bg-[var(--paper-inset)]" />
             <div className="h-2.5 w-56 rounded-full bg-[var(--paper-inset)]/60" />
-        </div>
-    );
-}
-
-/**
- * LauncherPreview — placeholder for the Launcher page until LauncherV2 lands.
- * Keeps the view alive so the tab strip / nav still feel wired; the real
- * 60/40 brand-driven launcher replaces this in Step 3.
- */
-function LauncherPreview() {
-    const { t } = useTranslation('app');
-    return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8">
-            <h2 className="text-2xl font-light tracking-[-0.01em] text-[var(--ink)]">
-                {t('v2.inProgress')}
-            </h2>
-            <p className="max-w-md text-center text-sm text-[var(--ink-muted)]">
-                {t('v2.placeholderBody')}
-            </p>
         </div>
     );
 }

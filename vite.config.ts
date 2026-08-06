@@ -36,6 +36,10 @@ const buildVersions = getBuildVersions();
 
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
+  // .env lives at the repo root, not under root/src/renderer. Vite's default
+  // envDir is root, which would silently drop VITE_* vars (analytics, and the
+  // VITE_UI_RENDER_LAYER v2 switch). Point it at the repo root.
+  envDir: resolve(__dirname),
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
     // UMD files loaded via `?raw` (chart.js, d3, lucide) have no ESM exports
