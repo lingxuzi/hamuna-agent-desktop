@@ -35,12 +35,15 @@ function initialV2State(): V2TabsState {
 const V2_VIEWS: readonly V2View[] = ['launcher', 'chat', 'settings', 'taskcenter', 'space'];
 
 /** Dev smoke-test aid: `/#taskcenter` mounts that view directly so each page
- *  can be screenshot-verified without clicking through nav. Harmless in prod
+ *  can be screenshot-verified without clicking through nav. `#settings/general`
+ *  also resolves to `settings` — the first path segment is the view, the rest
+ *  (SettingsV2's `parseSettingsSection`) is the section. Harmless in prod
  *  (no hash → launcher default). */
 function parseInitialView(): V2View | null {
     if (typeof window === 'undefined') return null;
     const raw = window.location.hash.replace(/^#/, '');
-    return (V2_VIEWS as readonly string[]).includes(raw) ? (raw as V2View) : null;
+    const view = raw.split('/')[0];
+    return (V2_VIEWS as readonly string[]).includes(view) ? (view as V2View) : null;
 }
 
 function v2TabsReducer(state: V2TabsState, action: V2TabsAction): V2TabsState {

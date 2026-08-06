@@ -13,6 +13,7 @@ import { useV2Tabs } from './tabs/useTabs';
 import Chrome from './chrome/Chrome';
 import LauncherV2 from './pages/LauncherV2';
 import TaskCenterV2 from './pages/TaskCenterV2';
+import SettingsV2 from './pages/SettingsV2';
 import PlaceholderV2 from './pages/PlaceholderV2';
 import { useConfig } from '@/hooks/useConfig';
 import type { LauncherLaunchContext } from './hooks/useLauncherDataV2';
@@ -106,6 +107,8 @@ export default function AppV2() {
                         isActive={activeView === 'taskcenter'}
                         onDiscussInChat={discussInChat}
                     />
+                ) : activeView === 'settings' ? (
+                    <SettingsV2 onShowLogs={() => setView('settings')} />
                 ) : (
                     <PlaceholderV2 view={activeView} onBack={() => setView('launcher')} />
                 )}

@@ -77,8 +77,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // All API endpoints under /api/ (excludes source files like /api/*.ts)
-      '^/api/(?!.*\\.(ts|tsx|js|jsx)$)': {
+      // All API endpoints under /api/ (excludes source files like /api/*.ts).
+      // The excluded-source check must tolerate the HMR `?t=` timestamp query
+      // that Vite appends to `.ts` imports (`/api/spaceCloud.ts?t=…`) — the old
+      // `\.(ts|tsx|js|jsx)$` anchored on the raw URL end, so a timestamp query
+      // made it look non-source and the request was wrongly proxied to the
+      // sidecar (403/404 → dynamic-import failure → AppErrorBoundary).
+      '^/api/(?!.*\\.(ts|tsx|js|jsx)(\\?|$))': {
         target: 'http://localhost:3000',
         changeOrigin: true,
         rewrite: (path) => path, // Keep path as-is

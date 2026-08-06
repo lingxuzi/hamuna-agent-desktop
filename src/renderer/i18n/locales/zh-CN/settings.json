@@ -36,6 +36,7 @@
     "forceWakeDescription": "开启后即使 AI 没有在运行，电脑也不会自动睡眠。注意：合上盖子仍会睡眠，且会更快消耗电池。",
     "forceWakeEnabled": "已开启常开阻睡",
     "forceWakeDisabled": "已关闭常开阻睡",
+    "workspaceTitle": "工作区",
     "defaultWorkspaceTitle": "启动时打开的工作区",
     "defaultWorkspaceDescription": "启动页默认使用的工作区路径",
     "defaultWorkspaceNone": "无",

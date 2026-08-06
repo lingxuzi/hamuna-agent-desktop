@@ -36,6 +36,7 @@
     "forceWakeDescription": "When enabled, this computer will not automatically sleep even when no AI task is running. Closing the lid still sleeps the computer and battery drains faster.",
     "forceWakeEnabled": "Always-on wake lock enabled",
     "forceWakeDisabled": "Always-on wake lock disabled",
+    "workspaceTitle": "Workspace",
     "defaultWorkspaceTitle": "Workspace opened at startup",
     "defaultWorkspaceDescription": "Default workspace path used on the launcher",
     "defaultWorkspaceNone": "None",
