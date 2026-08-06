@@ -12,10 +12,19 @@ import { useCallback, useRef } from 'react';
 import { useV2Tabs } from './tabs/useTabs';
 import Chrome from './chrome/Chrome';
 import LauncherV2 from './pages/LauncherV2';
+import TaskCenterV2 from './pages/TaskCenterV2';
 import PlaceholderV2 from './pages/PlaceholderV2';
 import { useConfig } from '@/hooks/useConfig';
 import type { LauncherLaunchContext } from './hooks/useLauncherDataV2';
 import type { Tab } from '@/types/tab';
+
+/** Thought-discuss handoff into a Chat tab (Step 5 consumes it). */
+export interface DiscussLaunchContext {
+    thoughtId: string;
+    content: string;
+    tags: string[];
+    workspaceId: string;
+}
 
 export default function AppV2() {
     const { isLoading } = useConfig();
@@ -34,6 +43,7 @@ export default function AppV2() {
     // ref so ChatV2 (Step 5) can consume it on mount and clear it; a state would
     // force a re-render just to carry a one-shot handoff value.
     const chatLaunchRef = useRef<LauncherLaunchContext | null>(null);
+    const discussRef = useRef<DiscussLaunchContext | null>(null);
 
     const handleNavigate = useCallback(
         (view: Tab['view']) => {
@@ -51,6 +61,14 @@ export default function AppV2() {
     );
 
     const openSettings = useCallback(() => setView('settings'), [setView]);
+
+    const discussInChat = useCallback(
+        (ctx: DiscussLaunchContext) => {
+            discussRef.current = ctx;
+            setView('chat');
+        },
+        [setView],
+    );
 
     const handleCloseTab = useCallback(
         (tabId: string) => {
@@ -82,6 +100,11 @@ export default function AppV2() {
                         launchChat={launchChat}
                         openSettings={openSettings}
                         isActive={activeView === 'launcher'}
+                    />
+                ) : activeView === 'taskcenter' ? (
+                    <TaskCenterV2
+                        isActive={activeView === 'taskcenter'}
+                        onDiscussInChat={discussInChat}
                     />
                 ) : (
                     <PlaceholderV2 view={activeView} onBack={() => setView('launcher')} />
