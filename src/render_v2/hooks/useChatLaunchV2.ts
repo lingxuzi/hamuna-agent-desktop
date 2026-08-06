@@ -51,7 +51,7 @@ interface UseChatLaunchV2Options {
 
 /** Build the flip fields for a launch ctx. sessionId: real history id, or
  *  `pending-<tabId>` placeholder for a new session (D1 non-empty). */
-function buildLaunchFields(
+export function buildLaunchFields(
     tab: Tab,
     ctx: LauncherLaunchContext | DiscussLaunchContext,
 ): import('../tabs/useTabs').LaunchChatFields {
@@ -60,7 +60,14 @@ function buildLaunchFields(
     const sessionId = 'sessionId' in ctx && ctx.sessionId
         ? ctx.sessionId
         : `pending-${tab.id}`;
-    const initialMessage: InitialMessage | undefined = 'initialMessage' in ctx ? ctx.initialMessage : undefined;
+    // Launcher passes a ready InitialMessage; a discuss launch carries thought
+    // content that becomes the message text (tags are thought metadata, not an
+    // InitialMessage field). Both must survive the flip or the chat opens blank.
+    const initialMessage: InitialMessage | undefined = 'initialMessage' in ctx
+        ? ctx.initialMessage
+        : 'content' in ctx
+          ? { text: ctx.content }
+          : undefined;
     return {
         agentDir,
         sessionId,

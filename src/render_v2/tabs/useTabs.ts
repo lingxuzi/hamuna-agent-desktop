@@ -42,6 +42,9 @@ type V2TabsAction =
      *  canonical launch fields. */
     | { type: 'launch-chat'; tabId: string; fields: LaunchChatFields };
 
+/** Exported for the unit test to drive the reducer without a component tree. */
+export type { V2TabsAction };
+
 function initialV2State(): V2TabsState {
     const tab = createNewTab();
     const view = parseInitialView();
@@ -63,7 +66,8 @@ function parseInitialView(): V2View | null {
     return (V2_VIEWS as readonly string[]).includes(view) ? (view as V2View) : null;
 }
 
-function v2TabsReducer(state: V2TabsState, action: V2TabsAction): V2TabsState {
+/** Pure reducer — unit-tested directly (no component tree). */
+export function v2TabsReducer(state: V2TabsState, action: V2TabsAction): V2TabsState {
     switch (action.type) {
         case 'new-tab': {
             if (state.tabs.length >= MAX_TABS) return state;
