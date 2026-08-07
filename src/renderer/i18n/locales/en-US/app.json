@@ -121,6 +121,28 @@
         "inProgress": "In progress",
         "done": "Done"
       }
+    },
+    "space": {
+      "sidebarJoin": "Join space",
+      "sidebarCreate": "Create space",
+      "spaceName": "Hamuna Community",
+      "spacePolicy": "Open join · 42 members",
+      "navIssues": "Issues",
+      "navGoals": "Goals",
+      "navSkills": "Skills",
+      "navSettings": "Settings",
+      "accountName": "Lin Mo",
+      "searchHint": "Search issues…",
+      "statusAll": "All",
+      "statusOpen": "In progress",
+      "goalAll": "All goals",
+      "relatedToMe": "Related to me",
+      "newIssue": "New issue",
+      "status": {
+        "todo": "Todo",
+        "inProgress": "In progress",
+        "done": "Done"
+      }
     }
   },
   "tabs": {

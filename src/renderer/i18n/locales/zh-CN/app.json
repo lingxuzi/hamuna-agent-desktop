@@ -121,6 +121,28 @@
         "inProgress": "进行中",
         "done": "已完成"
       }
+    },
+    "space": {
+      "sidebarJoin": "加入空间",
+      "sidebarCreate": "创建空间",
+      "spaceName": "Hamuna 社区",
+      "spacePolicy": "开放加入 · 42 成员",
+      "navIssues": "Issues",
+      "navGoals": "Goals",
+      "navSkills": "Skills",
+      "navSettings": "设置",
+      "accountName": "林墨",
+      "searchHint": "搜索问题…",
+      "statusAll": "全部",
+      "statusOpen": "进行中",
+      "goalAll": "所有目标",
+      "relatedToMe": "与我相关",
+      "newIssue": "新建问题",
+      "status": {
+        "todo": "待办",
+        "inProgress": "进行中",
+        "done": "已完成"
+      }
     }
   },
   "tabs": {
