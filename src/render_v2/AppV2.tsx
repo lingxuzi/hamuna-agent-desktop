@@ -13,6 +13,7 @@ import { useCallback } from 'react';
 
 import { useV2Tabs } from './hooks/useTabs';
 import Chrome from './components/chrome/Chrome';
+import LauncherV2 from './pages/LauncherV2';
 import PlaceholderV2 from './pages/PlaceholderV2';
 import { useConfig } from '@/hooks/useConfig';
 
@@ -46,7 +47,7 @@ export default function AppV2() {
                 {isLoading ? (
                     <LoadingSkeleton />
                 ) : activeView === 'launcher' ? (
-                    <PlaceholderV2 view="launcher" onBack={() => setView('launcher')} />
+                    <LauncherV2 onLaunchChat={() => setView('chat')} />
                 ) : activeView === 'taskcenter' ? (
                     <PlaceholderV2 view="taskcenter" onBack={() => setView('launcher')} />
                 ) : activeView === 'settings' ? (

@@ -11,7 +11,21 @@
       "railNew": "＋ New",
       "viewAll": "View all {{count}} →",
       "recentTitle": "Recent sessions",
-      "emptyRecent": "No sessions yet"
+      "emptyRecent": "No sessions yet",
+      "inputPlaceholder": "Message your agent…",
+      "attach": "Attach",
+      "permission": "Permission mode",
+      "permissionAuto": "Auto",
+      "tools": "Tools",
+      "cron": "Schedule",
+      "chooseModel": "Choose model",
+      "modelDefault": "Default model",
+      "send": "Send",
+      "wsChip": "Workspace",
+      "runtimeChip": "Hamuna Agent",
+      "emptyWorkspaces": "No workspaces yet — create one to begin.",
+      "recentBadge": "Recent",
+      "sessionCount": "sessions"
     },
     "chat": {
       "agentPanelTitle": "Agent status",
@@ -172,8 +186,14 @@
     "configureModel": "Configure a model first →"
   },
   "markdown": {
-    "imageLoadFailed": "Image failed to load: {{src}}",
-    "emptyImagePath": "Image path is empty"
+    "copyCode": "Copy code",
+    "copy": "Copy",
+    "copied": "Copied",
+    "preview": "Preview",
+    "code": "Code",
+    "updating": "Updating...",
+    "diagramRendering": "Rendering diagram...",
+    "renderDiagram": "Rendering diagram..."
   },
   "export": {
     "downloadedPath": "Exported: {{path}}",
@@ -261,16 +281,6 @@
     "preview": "Preview",
     "open": "Open",
     "revealInTree": "Reveal in file tree"
-  },
-  "markdown": {
-    "copyCode": "Copy code",
-    "copy": "Copy",
-    "copied": "Copied",
-    "preview": "Preview",
-    "code": "Code",
-    "updating": "Updating...",
-    "diagramRendering": "Rendering diagram...",
-    "renderDiagram": "Rendering diagram..."
   },
   "inlineCode": {
     "pause": "Pause",

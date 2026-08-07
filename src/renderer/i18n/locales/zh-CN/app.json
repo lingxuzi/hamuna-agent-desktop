@@ -11,7 +11,21 @@
       "railNew": "＋ 新建",
       "viewAll": "查看全部 {{count}} 个 →",
       "recentTitle": "最近的会话",
-      "emptyRecent": "暂无会话"
+      "emptyRecent": "暂无会话",
+      "inputPlaceholder": "输入消息，开始对话…",
+      "attach": "附件",
+      "permission": "权限模式",
+      "permissionAuto": "自动",
+      "tools": "工具",
+      "cron": "定时",
+      "chooseModel": "选择模型",
+      "modelDefault": "默认模型",
+      "send": "发送",
+      "wsChip": "工作区",
+      "runtimeChip": "Hamuna Agent",
+      "emptyWorkspaces": "还没有工作区 — 新建一个开始。",
+      "recentBadge": "最近",
+      "sessionCount": "个会话"
     },
     "chat": {
       "agentPanelTitle": "Agent 状态",
@@ -172,8 +186,14 @@
     "configureModel": "请先配置模型 →"
   },
   "markdown": {
-    "imageLoadFailed": "图片加载失败: {{src}}",
-    "emptyImagePath": "图片路径为空"
+    "copyCode": "复制代码",
+    "copy": "复制",
+    "copied": "已复制",
+    "preview": "预览",
+    "code": "代码",
+    "updating": "更新中...",
+    "diagramRendering": "图表渲染中...",
+    "renderDiagram": "渲染图表..."
   },
   "export": {
     "downloadedPath": "已导出：{{path}}",
@@ -261,16 +281,6 @@
     "preview": "预览",
     "open": "打开",
     "revealInTree": "在文件目录中展示"
-  },
-  "markdown": {
-    "copyCode": "复制代码",
-    "copy": "复制",
-    "copied": "已复制",
-    "preview": "预览",
-    "code": "代码",
-    "updating": "更新中...",
-    "diagramRendering": "图表渲染中...",
-    "renderDiagram": "渲染图表..."
   },
   "inlineCode": {
     "pause": "暂停",
