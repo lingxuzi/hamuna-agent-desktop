@@ -100,6 +100,27 @@
         "queueResponseValue": "按轮次",
         "defaultWorkspaceValue": "~/Workspace"
       }
+    },
+    "taskCenter": {
+      "thoughtTitle": "思想流",
+      "thoughtPlaceholder": "记录一个想法…",
+      "dispatch": "→ 派发为任务",
+      "taskTitle": "任务",
+      "searchPlaceholder": "搜索任务…",
+      "mode": {
+        "list": "列表",
+        "board": "看板"
+      },
+      "bucket": {
+        "todo": "待办",
+        "inProgress": "进行中",
+        "done": "已完成"
+      },
+      "status": {
+        "todo": "待办",
+        "inProgress": "进行中",
+        "done": "已完成"
+      }
     }
   },
   "tabs": {

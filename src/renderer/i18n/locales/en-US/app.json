@@ -100,6 +100,27 @@
         "queueResponseValue": "Per turn",
         "defaultWorkspaceValue": "~/Workspace"
       }
+    },
+    "taskCenter": {
+      "thoughtTitle": "Thoughts",
+      "thoughtPlaceholder": "Write a thought…",
+      "dispatch": "→ Dispatch as task",
+      "taskTitle": "Tasks",
+      "searchPlaceholder": "Search tasks…",
+      "mode": {
+        "list": "List",
+        "board": "Board"
+      },
+      "bucket": {
+        "todo": "To do",
+        "inProgress": "In progress",
+        "done": "Done"
+      },
+      "status": {
+        "todo": "To do",
+        "inProgress": "In progress",
+        "done": "Done"
+      }
     }
   },
   "tabs": {
