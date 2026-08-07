@@ -53,6 +53,53 @@
         "browser": "浏览器"
       },
       "splitComingSoon": "即将上线"
+    },
+    "settings": {
+      "title": "设置",
+      "logs": "Logs",
+      "navGroups": {
+        "model": "模型",
+        "connect": "连接",
+        "data": "数据",
+        "general": "通用"
+      },
+      "nav": {
+        "providers": "模型供应商",
+        "skills": "技能 Skills",
+        "plugins": "插件 Plugins",
+        "mcp": "工具箱",
+        "agent": "聊天机器人 Bot",
+        "desktopPet": "桌面宠物",
+        "usageStats": "使用统计",
+        "general": "通用设置",
+        "shortcuts": "快捷键",
+        "about": "关于&反馈"
+      },
+      "panelTitle": "通用设置",
+      "panelDesc": "应用外观、启动行为、通知与代理",
+      "tiles": {
+        "appearance": "外观",
+        "startup": "启动",
+        "queue": "队列",
+        "workspace": "工作区"
+      },
+      "rows": {
+        "language": "语言",
+        "appearanceMode": "外观模式",
+        "themePreset": "主题预设",
+        "launchOnStartup": "开机自启动",
+        "minimizeToTray": "最小化到托盘",
+        "preventSleep": "阻止电脑睡眠",
+        "queueResponse": "队列响应",
+        "defaultWorkspace": "默认工作区",
+        "languageValue": "跟随系统",
+        "appearanceModeValue": "浅色",
+        "themePresetValue": "苔藓",
+        "onValue": "开启",
+        "offValue": "关闭",
+        "queueResponseValue": "按轮次",
+        "defaultWorkspaceValue": "~/Workspace"
+      }
     }
   },
   "tabs": {

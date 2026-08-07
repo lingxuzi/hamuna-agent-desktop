@@ -53,6 +53,53 @@
         "browser": "Browser"
       },
       "splitComingSoon": "Coming soon"
+    },
+    "settings": {
+      "title": "Settings",
+      "logs": "Logs",
+      "navGroups": {
+        "model": "Model",
+        "connect": "Connect",
+        "data": "Data",
+        "general": "General"
+      },
+      "nav": {
+        "providers": "Model Providers",
+        "skills": "Skills",
+        "plugins": "Plugins",
+        "mcp": "Toolbox",
+        "agent": "Chat Bot",
+        "desktopPet": "Desktop Pet",
+        "usageStats": "Usage Stats",
+        "general": "General Settings",
+        "shortcuts": "Shortcuts",
+        "about": "About & Feedback"
+      },
+      "panelTitle": "General Settings",
+      "panelDesc": "Appearance, launch behavior, notifications and proxy",
+      "tiles": {
+        "appearance": "Appearance",
+        "startup": "Startup",
+        "queue": "Queue",
+        "workspace": "Workspace"
+      },
+      "rows": {
+        "language": "Language",
+        "appearanceMode": "Appearance mode",
+        "themePreset": "Theme preset",
+        "launchOnStartup": "Launch on startup",
+        "minimizeToTray": "Minimize to tray",
+        "preventSleep": "Prevent sleep",
+        "queueResponse": "Queue response",
+        "defaultWorkspace": "Default workspace",
+        "languageValue": "Follow system",
+        "appearanceModeValue": "Light",
+        "themePresetValue": "Moss",
+        "onValue": "On",
+        "offValue": "Off",
+        "queueResponseValue": "Per turn",
+        "defaultWorkspaceValue": "~/Workspace"
+      }
     }
   },
   "tabs": {

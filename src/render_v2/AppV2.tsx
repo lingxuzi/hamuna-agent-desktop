@@ -15,6 +15,7 @@ import { useV2Tabs } from './hooks/useTabs';
 import Chrome from './components/chrome/Chrome';
 import LauncherV2 from './pages/LauncherV2';
 import ChatV2 from './pages/ChatV2';
+import SettingsV2 from './pages/SettingsV2';
 import PlaceholderV2 from './pages/PlaceholderV2';
 import { useConfig } from '@/hooks/useConfig';
 
@@ -52,7 +53,7 @@ export default function AppV2() {
                 ) : activeView === 'taskcenter' ? (
                     <PlaceholderV2 view="taskcenter" onBack={() => setView('launcher')} />
                 ) : activeView === 'settings' ? (
-                    <PlaceholderV2 view="settings" onBack={() => setView('launcher')} />
+                    <SettingsV2 />
                 ) : activeView === 'space' ? (
                     <PlaceholderV2 view="space" onBack={() => setView('launcher')} />
                 ) : (
