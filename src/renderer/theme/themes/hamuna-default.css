@@ -68,6 +68,8 @@ html[data-theme-id='hamuna-default'][data-color-scheme='light'] {
   --accent-primary-hover: #93a883;
   --accent-cool: #2e6f5e;
   --accent-cool-hover: #3d8a75;
+  --accent-sky: #7ba3b8;
+  --accent-sky-hover: #8bb3c8;
   --on-accent: #ffffff;
 
   --heartbeat: #c75050;
@@ -187,6 +189,8 @@ html[data-theme-id='hamuna-default'][data-color-scheme='dark'] {
   --accent-primary-hover: #b3c6a3;
   --accent-cool: #4aad8a;
   --accent-cool-hover: #5ec49e;
+  --accent-sky: #8bb3c8;
+  --accent-sky-hover: #9cc3d6;
   --on-accent: #ffffff;
 
   --heartbeat: #d46060;

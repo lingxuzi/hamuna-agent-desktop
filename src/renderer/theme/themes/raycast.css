@@ -42,6 +42,8 @@ html[data-theme-id='raycast'][data-color-scheme='light'] {
   --accent-cool: #397f75;
   --accent-cool-hover: #397f75;
   --on-accent: #ffffff;
+  --accent-sky: #7ba3b8;
+  --accent-sky-hover: #8bb3c8;
   --heartbeat: #c75050;
   --heartbeat-bg: #f7e2e2;
   --heartbeat-border: rgb(199 80 80 / 0.24);
@@ -154,6 +156,8 @@ html[data-theme-id='raycast'][data-color-scheme='dark'] {
   --accent-cool: #62aa9e;
   --accent-cool-hover: #62aa9e;
   --on-accent: #2b0909;
+  --accent-sky: #8bb3c8;
+  --accent-sky-hover: #9cc3d6;
   --heartbeat: #ed6a6a;
   --heartbeat-bg: rgb(237 106 106 / 0.16);
   --heartbeat-border: rgb(237 106 106 / 0.24);

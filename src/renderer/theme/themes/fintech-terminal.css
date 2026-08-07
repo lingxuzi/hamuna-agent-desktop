@@ -73,6 +73,8 @@ html[data-theme-id='fintech-terminal'][data-color-scheme='light'] {
   --accent-cool: var(--gold-700);
   --accent-cool-hover: var(--gold-800);
   --on-accent: #ffffff;
+  --accent-sky: #7ba3b8;
+  --accent-sky-hover: #8bb3c8;
 
   --heartbeat: #e11d48;
   --heartbeat-bg: rgb(225 29 72 / 0.10);
@@ -207,6 +209,8 @@ html[data-theme-id='fintech-terminal'][data-color-scheme='dark'] {
   --accent-cool: var(--gold-300);
   --accent-cool-hover: var(--gold-100);
   --on-accent: #050b14;
+  --accent-sky: #8bb3c8;
+  --accent-sky-hover: #9cc3d6;
 
   --heartbeat: #f43f5e;
   --heartbeat-bg: rgb(244 63 94 / 0.14);

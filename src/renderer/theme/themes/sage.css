@@ -42,6 +42,8 @@ html[data-theme-id='sage'][data-color-scheme='light'] {
   --accent-cool: #4f8278;
   --accent-cool-hover: #4f8278;
   --on-accent: #ffffff;
+  --accent-sky: #7ba3b8;
+  --accent-sky-hover: #8bb3c8;
   --heartbeat: #c84545;
   --heartbeat-bg: #f5dede;
   --heartbeat-border: rgb(200 69 69 / 0.24);
@@ -154,6 +156,8 @@ html[data-theme-id='sage'][data-color-scheme='dark'] {
   --accent-cool: #6cb3a5;
   --accent-cool-hover: #6cb3a5;
   --on-accent: #0f150f;
+  --accent-sky: #8bb3c8;
+  --accent-sky-hover: #9cc3d6;
   --heartbeat: #ef6b66;
   --heartbeat-bg: rgb(239 107 102 / 0.16);
   --heartbeat-border: rgb(239 107 102 / 0.24);
