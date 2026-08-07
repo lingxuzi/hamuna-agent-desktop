@@ -56,3 +56,8 @@
 1. ~~决定双面板比例和哪个面板为主~~（选定 40/60，思想驱动）
 2. ~~任务卡片的信息密度~~（A 已画：dot+标题+meta+状态 badge）
 3. 落地实现 `[final] Task Center — A`，随后 /visual-qa
+
+## Known caveats / follow-ups
+
+- **v2 Task Center 是静态视觉原型**（2026-08-07 `7bc9928` 从零重建）：思想流 5 条 + 待办/进行中/已完成三桶 6 条均为硬编码样例行，segment 固定在「列表」，未接 v1 `taskCenterStore`/`useTaskCenterData`/api 数据层。解锁：按 v1 TaskCenter.tsx 接数据后，把 `src/render_v2/pages/TaskCenterV2.tsx` 的 `THOUGHTS`/`BUCKETS` 换成真实 store，列表/看板 segment 做成受控。
+- 字体：设计 13px/11px 卡片字落 text-xs（最近 locked step），卡片内两级标题/元信息视觉差被压缩，接真实数据时如需更陡层级可评估 text-sm 主标题。

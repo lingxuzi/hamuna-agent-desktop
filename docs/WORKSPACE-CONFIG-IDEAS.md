@@ -58,3 +58,9 @@
 1. ~~决定编辑器风格（所见即所得 vs 原始 Markdown）~~（Monaco locked，A 落地为文档编辑器 + 实时预览）
 2. ~~技能/Agent 卡片的信息密度~~（B 已画卡片 + 详情面板，落地时参考）
 3. 落地实现 `[final] Workspace Config — A`，随后 /visual-qa
+
+## Known caveats / follow-ups
+
+- **v2 Workspace Config 是静态视觉原型**（2026-08-07 `1f5cfcd` 从零重建）：4 tabs 固定通用 active（带 underline）、toggle 固定 on、名称/路径为只读展示。Monaco 编辑器（decision #2 locked）未接入——真实配置页需 Monaco + token 主题桥接（见 theme_system.md）。
+- **overlay 挂载不进 tab-view 状态**：经 `useWorkspaceConfigOverlay`（`/#workspace-config` hash 首段）在 AppV2 顶部 z-50 渲染，v1 `Tab['view']` 是封闭 5 值 union，overlay 不属于任何 tab。接真实入口（Launcher 工作区设置钮）时把 hash 检测换成受控 open state 即可，组件本身不改。
+

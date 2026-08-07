@@ -116,3 +116,9 @@
 2. ~~Provider 管理的卡片设计~~（B 已画 Provider 卡流，落地时参考）
 3. **待决策：内容页布局方向 A/B/C（见上方 rationale，decision open）**——选定后原子晋升并落地
 4. 落地实现 `[final] Settings — A`，随后 /visual-qa
+
+## Known caveats / follow-ups
+
+- **v2 Settings 是静态视觉原型**（2026-08-07 `1149558` 从零重建）：NavSidebar 10 项、BentoGrid 4 tile、rows 均为硬编码，导航选中项固定在 general，仅渲染 general 主页。解锁：内容区按 v1 SettingsPage.tsx 逐页接线，NavSidebar 选中项做成受控（parseSettingsSection 已支持 `#settings/<section>` hash 直达）。
+- 设计 tile 里 26px 标题落 text-2xl(22)、13/11px 描述落 text-xs——标题/描述视觉差比设计稿略平，接真实内容时可评估。
+

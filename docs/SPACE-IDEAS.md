@@ -57,3 +57,9 @@
 1. ~~决定 Space 首页是否有概览 Dashboard~~（A 选定：Issues 为默认视图，Dashboard 作为可选的概览状态参考，落地时从 B 带过）
 2. ~~Issue 卡片的信息层级~~（A 已画：pill + 标题 + meta / 目标 / 负责人）
 3. 落地实现 `[final] Space — A`，随后 /visual-qa
+
+## Known caveats / follow-ups
+
+- **v2 Space 是静态视觉原型**（2026-08-07 `9f38c31` 从零重建）：6 行 Issue 为硬编码样例行，导航固定 Issues、状态分节固定「全部」。解锁：接真实 Space 数据层后，把 `src/render_v2/pages/SpaceV2.tsx` 的 `ISSUES` 换成 store 数据，Sidebar 四导航与 Toolbar segment 做成受控。
+- **状态 pill 的 20% 底必须用 Tailwind `/20` class，不能用 inline `color-mix()`**：`style={{ backgroundColor: color-mix(...) }}` 在当前构建下解析成实色（不透明），浏览器 DOM 验证过。做法：`STATUS_TINT`（token）供 inline `color`，`STATUS_BG`（同 token 的 `bg-[var(--x)]/20` class）供底色，两表在 `IssueRow.tsx` 必须保持同 token。color-mix 的问题在 Chromium 与 WebKit 表现一致（WebView2 同栈）。
+- 设计侧栏底 `#F2EFEB` 非 token：用 `bg-[var(--paper-inset)]/35` 合成（token 派生，无 orphan hex），如需精确色阶可评估新增 `--paper-muted` token。
