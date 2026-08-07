@@ -14,6 +14,7 @@ import { useCallback } from 'react';
 import { useV2Tabs } from './hooks/useTabs';
 import Chrome from './components/chrome/Chrome';
 import LauncherV2 from './pages/LauncherV2';
+import ChatV2 from './pages/ChatV2';
 import PlaceholderV2 from './pages/PlaceholderV2';
 import { useConfig } from '@/hooks/useConfig';
 
@@ -55,7 +56,7 @@ export default function AppV2() {
                 ) : activeView === 'space' ? (
                     <PlaceholderV2 view="space" onBack={() => setView('launcher')} />
                 ) : (
-                    <PlaceholderV2 view="chat" onBack={() => setView('launcher')} />
+                    <ChatV2 />
                 )}
             </main>
         </div>

@@ -32,7 +32,27 @@
       "agentDockTitle": "Agent status",
       "agentDockBusy": "{{count}} tasks in progress",
       "agentDockIdle": "Idle",
-      "agentDockCtx": "Context usage"
+      "agentDockCtx": "Context usage",
+      "ctxLabel": "Context usage",
+      "ctxValue": "{{pct}}%",
+      "currentModel": "Model",
+      "pendingTasks": "Pending actions",
+      "currentDir": "Working directory",
+      "fileTreeTitle": "Workspace",
+      "fileTreeCollapse": "‹",
+      "chatInputPlaceholder": "Message your agent, Shift+Enter for a newline…",
+      "chatInputHint": "Enter to send · @ mention tools · / commands",
+      "send": "Send",
+      "roleAssistant": "Assistant",
+      "toolDone": "Done",
+      "toolRunning": "Running",
+      "searchPlaceholder": "Search in conversation…",
+      "splitTabs": {
+        "file": "Files",
+        "terminal": "Terminal",
+        "browser": "Browser"
+      },
+      "splitComingSoon": "Coming soon"
     }
   },
   "tabs": {

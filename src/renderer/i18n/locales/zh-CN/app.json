@@ -32,7 +32,27 @@
       "agentDockTitle": "Agent 状态",
       "agentDockBusy": "{{count}} 个进行中任务",
       "agentDockIdle": "空闲",
-      "agentDockCtx": "上下文用量"
+      "agentDockCtx": "上下文用量",
+      "ctxLabel": "上下文用量",
+      "ctxValue": "{{pct}}%",
+      "currentModel": "当前模型",
+      "pendingTasks": "待确认操作",
+      "currentDir": "当前目录",
+      "fileTreeTitle": "工作区",
+      "fileTreeCollapse": "‹",
+      "chatInputPlaceholder": "输入消息，或按 Shift+Enter 换行...",
+      "chatInputHint": "Enter 发送 · @ 提及工具 · / 命令",
+      "send": "发送",
+      "roleAssistant": "助手",
+      "toolDone": "完成",
+      "toolRunning": "进行中",
+      "searchPlaceholder": "在对话中搜索…",
+      "splitTabs": {
+        "file": "文件",
+        "terminal": "终端",
+        "browser": "浏览器"
+      },
+      "splitComingSoon": "即将上线"
     }
   },
   "tabs": {
