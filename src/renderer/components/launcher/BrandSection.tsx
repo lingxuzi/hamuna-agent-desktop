@@ -42,6 +42,13 @@ interface BrandSectionProps {
  defaultWorkspacePath?: string;
  onSelectWorkspace: (project: Project) => void;
  onAddFolder: () => void;
+ /**
+  * Hide the internal Marquee Hero (brand name + slogan block + theme
+  * background) so a v2 caller can render its own hero above the input.
+  * v1 callers omit this → zero visual change. The mode segment + input +
+  * context row still render.
+  */
+ hideHero?: boolean;
  /** Promote a project to the global default workspace (writes
   *  `config.defaultWorkspacePath`). Threaded through to the chip row's
   *  WorkspaceSelector so its hover-only "设为默认" button has somewhere
@@ -144,6 +151,7 @@ export default memo(function BrandSection({
  runtimeDetections,
  onRuntimeChange,
  activeRuntime,
+ hideHero = false,
 }: BrandSectionProps) {
  const { t, i18n } = useTranslation('launcher');
  const resolvedTheme = useResolvedTheme();
@@ -498,7 +506,7 @@ export default memo(function BrandSection({
   <section
    ref={sectionRef}
    className="theme-launcher-hero flex flex-1 flex-col items-center"
-   style={{ ...heroStyle, paddingInline: 'clamp(1rem, 4vw, 3rem)' }}
+   style={hideHero ? { paddingInline: 'clamp(1rem, 4vw, 3rem)' } : { ...heroStyle, paddingInline: 'clamp(1rem, 4vw, 3rem)' }}
    data-theme-hero={resolvedTheme.themeId}
   >
    {/* Marquee Hero — brand name + slogan as a centered visual group
@@ -506,28 +514,33 @@ export default memo(function BrandSection({
                 registry doesn't allow ::before pseudo-elements).
                 The group sits in the upper-middle, the input anchors below.
                 Section gap (--section-gap, 32px) separates "who we are"
-                from "what you're about to do" instead of flex-1 stretching. */}
-   <div className="flex flex-col items-center justify-center pt-[18vh]">
-    <h1 className="theme-launcher-hero-title">
-     <span
-      className="inline-block align-middle"
-      style={{
-       width: 8,
-       height: 8,
-       marginRight: '0.5rem',
-       marginBottom: '0.15em',
-       borderRadius: 2,
-       background: 'var(--accent-warm)',
-      }}
-     />
-     {resolvedTheme.hero.productName}
-    </h1>
-    {/* 品牌 slogan 的 15px/17px 是 DESIGN.md §15.2 立档的展示型字号（display 用途），
+                from "what you're about to do" instead of flex-1 stretching.
+                `hideHero` callers (v2 magazine launcher) render their own
+                hero above the section, so this block + theme background
+                are skipped. */}
+   {!hideHero && (
+    <div className="flex flex-col items-center justify-center pt-[18vh]">
+     <h1 className="theme-launcher-hero-title">
+      <span
+       className="inline-block align-middle"
+       style={{
+        width: 8,
+        height: 8,
+        marginRight: '0.5rem',
+        marginBottom: '0.15em',
+        borderRadius: 2,
+        background: 'var(--accent-warm)',
+       }}
+      />
+      {resolvedTheme.hero.productName}
+     </h1>
+     {/* 品牌 slogan 的 15px/17px 是 DESIGN.md §15.2 立档的展示型字号（display 用途），
                     不属于正文 Type Scale；这是全仓唯一豁免点（PRD 0.2.34）。 */}
-    <p className="theme-launcher-hero-slogan">
-     {resolvedTheme.hero.slogans[sloganLocale]}
-    </p>
-   </div>
+     <p className="theme-launcher-hero-slogan">
+      {resolvedTheme.hero.slogans[sloganLocale]}
+     </p>
+    </div>
+   )}
 
    {/* Mode declaration: 对话 / 想法 (see DESIGN.md §6.8, PRD §4.1).
                 `mt-6 mb-6` opens breathing room above (separating from

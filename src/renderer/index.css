@@ -17,6 +17,7 @@
 @theme inline {
   --font-sans: var(--font-body);
   --font-mono: var(--font-code);
+  --font-serif: var(--font-serif-family);
 
   --radius-*: initial;
   --radius: var(--theme-radius-base);

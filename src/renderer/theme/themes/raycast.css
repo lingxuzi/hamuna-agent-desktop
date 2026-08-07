@@ -2,6 +2,7 @@
 html[data-theme-id='raycast'] {
   --font-body: Inter, 'SF Pro Text', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Microsoft YaHei UI', 'Hiragino Sans GB', sans-serif;
   --font-display: Inter, 'SF Pro Text', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Microsoft YaHei UI', 'Hiragino Sans GB', sans-serif;
+  --font-serif-family: 'Playfair Display', 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
   --font-code: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', 'Fira Code', 'PingFang SC', 'Microsoft YaHei', 'Microsoft YaHei UI', 'Hiragino Sans GB', monospace;
   --theme-radius-base: 4px;
   --theme-radius-sm: 6px;
@@ -36,6 +37,8 @@ html[data-theme-id='raycast'][data-color-scheme='light'] {
   --accent-warm-subtle: rgb(200 63 69 / 0.08);
   --accent-warm-muted: rgb(200 63 69 / 0.15);
   --accent-warm-subtle-a0: rgb(200 63 69 / 0);
+  --accent-primary: #7b8f6b;
+  --accent-primary-hover: #93a883;
   --accent-cool: #397f75;
   --accent-cool-hover: #397f75;
   --on-accent: #ffffff;
@@ -146,6 +149,8 @@ html[data-theme-id='raycast'][data-color-scheme='dark'] {
   --accent-warm-subtle: rgb(255 99 99 / 0.12);
   --accent-warm-muted: rgb(255 99 99 / 0.20);
   --accent-warm-subtle-a0: rgb(255 99 99 / 0);
+  --accent-primary: #9baf8b;
+  --accent-primary-hover: #b3c6a3;
   --accent-cool: #62aa9e;
   --accent-cool-hover: #62aa9e;
   --on-accent: #2b0909;

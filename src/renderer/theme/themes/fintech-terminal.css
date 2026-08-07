@@ -8,6 +8,7 @@
 html[data-theme-id='fintech-terminal'] {
   --font-body: 'Inter', 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Microsoft YaHei UI', 'Hiragino Sans GB', sans-serif;
   --font-display: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Microsoft YaHei UI', 'Hiragino Sans GB', sans-serif;
+  --font-serif-family: 'Playfair Display', 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
   --font-code: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', ui-monospace, 'Fira Code', 'PingFang SC', 'Microsoft YaHei', monospace;
   --theme-radius-base: 2px;
   --theme-radius-sm: 3px;
@@ -67,6 +68,8 @@ html[data-theme-id='fintech-terminal'][data-color-scheme='light'] {
   --accent-warm-subtle: rgb(212 162 76 / 0.10);
   --accent-warm-muted: rgb(212 162 76 / 0.20);
   --accent-warm-subtle-a0: rgb(212 162 76 / 0);
+  --accent-primary: #7b8f6b;
+  --accent-primary-hover: #93a883;
   --accent-cool: var(--gold-700);
   --accent-cool-hover: var(--gold-800);
   --on-accent: #ffffff;
@@ -199,6 +202,8 @@ html[data-theme-id='fintech-terminal'][data-color-scheme='dark'] {
   --accent-warm-subtle: rgb(212 162 76 / 0.10);
   --accent-warm-muted: rgb(212 162 76 / 0.20);
   --accent-warm-subtle-a0: rgb(212 162 76 / 0);
+  --accent-primary: #9baf8b;
+  --accent-primary-hover: #b3c6a3;
   --accent-cool: var(--gold-300);
   --accent-cool-hover: var(--gold-100);
   --on-accent: #050b14;

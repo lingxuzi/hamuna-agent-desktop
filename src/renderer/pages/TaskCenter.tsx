@@ -106,12 +106,15 @@ export default function TaskCenter({ isActive, pendingIntent }: Props) {
       </div>
 
       {/* Two-column body — each panel renders its own section header
-          (icon + label + collapsible 🔍 search toggle). */}
+          (icon + label + collapsible 🔍 search toggle). v2 F6p4ws shifts
+          from a fixed 480px left column to a 40/60 ratio so Thought stream
+          scales with viewport; right pane absorbs the rest. Divider stays
+          at the seam so both panels still feel continuous. */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Thought stream */}
+        {/* Left: Thought stream (40%) */}
         <div
           className="flex flex-col overflow-hidden"
-          style={{ width: '480px' }}
+          style={{ width: '40%' }}
         >
           <ThoughtPanel
             onDispatchThought={handleDispatch}
@@ -134,7 +137,7 @@ export default function TaskCenter({ isActive, pendingIntent }: Props) {
             made the split feel over-emphasized. */}
         <div className="w-px bg-[var(--line-subtle)]" />
 
-        {/* Right: Task list */}
+        {/* Right: Task list (60%) — flex-1 absorbs the remainder */}
         <div className="flex flex-1 flex-col overflow-hidden">
           <TaskListPanel
             refreshKey={`${refreshKey}:${isActive ? '1' : '0'}`}

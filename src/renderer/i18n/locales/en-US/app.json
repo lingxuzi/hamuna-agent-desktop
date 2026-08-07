@@ -3,6 +3,16 @@
     "inProgress": "v2 in progress",
     "placeholderBody": "This page is being rebuilt on the v2 renderer. Switch VITE_UI_RENDER_LAYER in .env back to v1 to see the full feature.",
     "placeholderBack": "Back to Home",
+    "launcher": {
+      "heroLine1": "Take every idea,",
+      "heroLine2": "and make it real work.",
+      "heroSub": "Build alongside your AI on a warm workbench.",
+      "railTitle": "Workspaces",
+      "railNew": "＋ New",
+      "viewAll": "View all {{count}} →",
+      "recentTitle": "Recent sessions",
+      "emptyRecent": "No sessions yet"
+    },
     "chat": {
       "agentPanelTitle": "Agent status",
       "agentDockTitle": "Agent status",

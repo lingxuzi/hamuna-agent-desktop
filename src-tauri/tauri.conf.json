@@ -19,7 +19,7 @@
           "$HOME/.hamuna/**"
         ]
       },
-      "csp": "default-src 'self' ipc: tauri: asset: http://ipc.localhost; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc: tauri: asset: http://ipc.localhost http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://download.hamuna.io; img-src 'self' data: blob: asset: hamuna: http://hamuna.localhost http://asset.localhost https://asset.localhost https://download.hamuna.io https:; media-src 'self' blob: asset: hamuna: http://hamuna.localhost http://asset.localhost https://asset.localhost;",
+      "csp": "default-src 'self' ipc: tauri: asset: http://ipc.localhost; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.font.im; font-src 'self' data: https://fonts.gstatic.com https://fonts.gstatic.font.im; connect-src 'self' ipc: tauri: asset: http://ipc.localhost http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://download.hamuna.io; img-src 'self' data: blob: asset: hamuna: http://hamuna.localhost http://asset.localhost https://asset.localhost https://download.hamuna.io https:; media-src 'self' blob: asset: hamuna: http://hamuna.localhost http://asset.localhost https://asset.localhost;",
       "dangerousDisableAssetCspModification": true
     }
   },

@@ -13,6 +13,7 @@ import OverlayBackdrop from '@/components/OverlayBackdrop';
 import { apiFetch, apiGetJson, apiPostJson } from '@/api/apiFetch';
 import { useToast } from '@/components/Toast';
 import CustomSelect from '@/components/CustomSelect';
+import CustomRadio from '@/components/CustomRadio';
 import { UnifiedLogsPanel } from '@/components/UnifiedLogsPanel';
 import GlobalPluginsPanel from '@/components/GlobalPluginsPanel';
 import CronTaskDebugPanel from '@/components/dev/CronTaskDebugPanel';
@@ -7207,28 +7208,20 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
          </p>
         )}
         <div className={`flex gap-4${customForm.apiProtocol !== 'openai' ? ' mt-1' : ''}`}>
-         <label className="flex items-center gap-2 cursor-pointer">
-          <input
-           type="radio"
-           name="create-apiProtocol"
-           value="anthropic"
-           checked={customForm.apiProtocol !== 'openai'}
-           onChange={() => setCustomForm((p) => ({ ...p, apiProtocol: 'anthropic', authType: 'auth_token' }))}
-           className="accent-[var(--ink)]"
-          />
-          <span className="text-sm text-[var(--ink)]">{tSettings('providers.custom.anthropicProtocol')}</span>
-         </label>
-         <label className="flex items-center gap-2 cursor-pointer">
-          <input
-           type="radio"
-           name="create-apiProtocol"
-           value="openai"
-           checked={customForm.apiProtocol === 'openai'}
-           onChange={() => setCustomForm((p) => ({ ...p, apiProtocol: 'openai', authType: 'api_key' }))}
-           className="accent-[var(--ink)]"
-          />
-          <span className="text-sm text-[var(--ink)]">{tSettings('providers.custom.openaiProtocol')}</span>
-         </label>
+         <CustomRadio
+          name="create-apiProtocol"
+          value="anthropic"
+          checked={customForm.apiProtocol !== 'openai'}
+          onChange={() => setCustomForm((p) => ({ ...p, apiProtocol: 'anthropic', authType: 'auth_token' }))}
+          label={tSettings('providers.custom.anthropicProtocol')}
+         />
+         <CustomRadio
+          name="create-apiProtocol"
+          value="openai"
+          checked={customForm.apiProtocol === 'openai'}
+          onChange={() => setCustomForm((p) => ({ ...p, apiProtocol: 'openai', authType: 'api_key' }))}
+          label={tSettings('providers.custom.openaiProtocol')}
+         />
         </div>
        </div>
 
@@ -7250,28 +7243,20 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
          <div>
           <label className="mb-1.5 block text-sm font-medium text-[var(--ink)]">{tSettings('providers.custom.upstreamFormat')}</label>
           <div className="flex gap-4">
-           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-             type="radio"
-             name="create-upstreamFormat"
-             value="chat_completions"
-             checked={customForm.upstreamFormat === 'chat_completions'}
-             onChange={() => setCustomForm((p) => ({ ...p, upstreamFormat: 'chat_completions', maxOutputTokensParamName: p.maxOutputTokensParamName === 'max_output_tokens' ? 'max_tokens' : p.maxOutputTokensParamName }))}
-             className="accent-[var(--ink)]"
-            />
-            <span className="text-sm text-[var(--ink)]">Chat Completions</span>
-           </label>
-           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-             type="radio"
-             name="create-upstreamFormat"
-             value="responses"
-             checked={customForm.upstreamFormat === 'responses'}
-             onChange={() => setCustomForm((p) => ({ ...p, upstreamFormat: 'responses', maxOutputTokensParamName: 'max_output_tokens' }))}
-             className="accent-[var(--ink)]"
-            />
-            <span className="text-sm text-[var(--ink)]">Responses API</span>
-           </label>
+           <CustomRadio
+            name="create-upstreamFormat"
+            value="chat_completions"
+            checked={customForm.upstreamFormat === 'chat_completions'}
+            onChange={() => setCustomForm((p) => ({ ...p, upstreamFormat: 'chat_completions', maxOutputTokensParamName: p.maxOutputTokensParamName === 'max_output_tokens' ? 'max_tokens' : p.maxOutputTokensParamName }))}
+            label="Chat Completions"
+           />
+           <CustomRadio
+            name="create-upstreamFormat"
+            value="responses"
+            checked={customForm.upstreamFormat === 'responses'}
+            onChange={() => setCustomForm((p) => ({ ...p, upstreamFormat: 'responses', maxOutputTokensParamName: 'max_output_tokens' }))}
+            label="Responses API"
+           />
           </div>
          </div>
          <div>
@@ -7307,28 +7292,20 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           {tSettings('providers.custom.authTypeDescription')}
          </p>
          <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-           <input
-            type="radio"
-            name="create-authType"
-            value="auth_token"
-            checked={customForm.authType === 'auth_token'}
-            onChange={() => setCustomForm((p) => ({ ...p, authType: 'auth_token' }))}
-            className="accent-[var(--ink)]"
-           />
-           <span className="text-sm text-[var(--ink)]">AUTH_TOKEN</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-           <input
-            type="radio"
-            name="create-authType"
-            value="api_key"
-            checked={customForm.authType === 'api_key'}
-            onChange={() => setCustomForm((p) => ({ ...p, authType: 'api_key' }))}
-            className="accent-[var(--ink)]"
-           />
-           <span className="text-sm text-[var(--ink)]">API_KEY</span>
-          </label>
+          <CustomRadio
+           name="create-authType"
+           value="auth_token"
+           checked={customForm.authType === 'auth_token'}
+           onChange={() => setCustomForm((p) => ({ ...p, authType: 'auth_token' }))}
+           label="AUTH_TOKEN"
+          />
+          <CustomRadio
+           name="create-authType"
+           value="api_key"
+           checked={customForm.authType === 'api_key'}
+           onChange={() => setCustomForm((p) => ({ ...p, authType: 'api_key' }))}
+           label="API_KEY"
+          />
          </div>
         </div>
        )}
@@ -7468,28 +7445,20 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           </p>
          )}
          <div className={`flex gap-4${editingProvider.editApiProtocol !== 'openai' ? ' mt-1' : ''}`}>
-          <label className="flex items-center gap-2 cursor-pointer">
-           <input
-            type="radio"
-            name="edit-apiProtocol"
-            value="anthropic"
-            checked={editingProvider.editApiProtocol !== 'openai'}
-            onChange={() => setEditingProvider((p) => p ? { ...p, editApiProtocol: 'anthropic', editAuthType: 'auth_token' } : null)}
-            className="accent-[var(--ink)]"
-           />
-           <span className="text-sm text-[var(--ink)]">{tSettings('providers.custom.anthropicProtocol')}</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-           <input
-            type="radio"
-            name="edit-apiProtocol"
-            value="openai"
-            checked={editingProvider.editApiProtocol === 'openai'}
-            onChange={() => setEditingProvider((p) => p ? { ...p, editApiProtocol: 'openai', editAuthType: 'api_key' } : null)}
-            className="accent-[var(--ink)]"
-           />
-           <span className="text-sm text-[var(--ink)]">{tSettings('providers.custom.openaiProtocol')}</span>
-          </label>
+          <CustomRadio
+           name="edit-apiProtocol"
+           value="anthropic"
+           checked={editingProvider.editApiProtocol !== 'openai'}
+           onChange={() => setEditingProvider((p) => p ? { ...p, editApiProtocol: 'anthropic', editAuthType: 'auth_token' } : null)}
+           label={tSettings('providers.custom.anthropicProtocol')}
+          />
+          <CustomRadio
+           name="edit-apiProtocol"
+           value="openai"
+           checked={editingProvider.editApiProtocol === 'openai'}
+           onChange={() => setEditingProvider((p) => p ? { ...p, editApiProtocol: 'openai', editAuthType: 'api_key' } : null)}
+           label={tSettings('providers.custom.openaiProtocol')}
+          />
          </div>
         </div>
        )}
@@ -7520,28 +7489,20 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
          <div>
           <label className="mb-1.5 block text-sm font-medium text-[var(--ink)]">{tSettings('providers.custom.upstreamFormat')}</label>
           <div className="flex gap-4">
-           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-             type="radio"
-             name="edit-upstreamFormat"
-             value="chat_completions"
-             checked={(editingProvider.editUpstreamFormat || 'chat_completions') === 'chat_completions'}
-             onChange={() => setEditingProvider((p) => p ? { ...p, editUpstreamFormat: 'chat_completions', editMaxOutputTokensParamName: (p.editMaxOutputTokensParamName === 'max_output_tokens' ? 'max_tokens' : p.editMaxOutputTokensParamName) } : null)}
-             className="accent-[var(--ink)]"
-            />
-            <span className="text-sm text-[var(--ink)]">Chat Completions</span>
-           </label>
-           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-             type="radio"
-             name="edit-upstreamFormat"
-             value="responses"
-             checked={editingProvider.editUpstreamFormat === 'responses'}
-             onChange={() => setEditingProvider((p) => p ? { ...p, editUpstreamFormat: 'responses', editMaxOutputTokensParamName: 'max_output_tokens' } : null)}
-             className="accent-[var(--ink)]"
-            />
-            <span className="text-sm text-[var(--ink)]">Responses API</span>
-           </label>
+           <CustomRadio
+            name="edit-upstreamFormat"
+            value="chat_completions"
+            checked={(editingProvider.editUpstreamFormat || 'chat_completions') === 'chat_completions'}
+            onChange={() => setEditingProvider((p) => p ? { ...p, editUpstreamFormat: 'chat_completions', editMaxOutputTokensParamName: (p.editMaxOutputTokensParamName === 'max_output_tokens' ? 'max_tokens' : p.editMaxOutputTokensParamName) } : null)}
+            label="Chat Completions"
+           />
+           <CustomRadio
+            name="edit-upstreamFormat"
+            value="responses"
+            checked={editingProvider.editUpstreamFormat === 'responses'}
+            onChange={() => setEditingProvider((p) => p ? { ...p, editUpstreamFormat: 'responses', editMaxOutputTokensParamName: 'max_output_tokens' } : null)}
+            label="Responses API"
+           />
           </div>
          </div>
          <div>
@@ -7577,28 +7538,20 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           {tSettings('providers.custom.authTypeDescription')}
          </p>
          <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-           <input
-            type="radio"
-            name="edit-authType"
-            value="auth_token"
-            checked={editingProvider.editAuthType === 'auth_token'}
-            onChange={() => setEditingProvider((p) => p ? { ...p, editAuthType: 'auth_token' } : null)}
-            className="accent-[var(--ink)]"
-           />
-           <span className="text-sm text-[var(--ink)]">AUTH_TOKEN</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-           <input
-            type="radio"
-            name="edit-authType"
-            value="api_key"
-            checked={editingProvider.editAuthType === 'api_key'}
-            onChange={() => setEditingProvider((p) => p ? { ...p, editAuthType: 'api_key' } : null)}
-            className="accent-[var(--ink)]"
-           />
-           <span className="text-sm text-[var(--ink)]">API_KEY</span>
-          </label>
+          <CustomRadio
+           name="edit-authType"
+           value="auth_token"
+           checked={editingProvider.editAuthType === 'auth_token'}
+           onChange={() => setEditingProvider((p) => p ? { ...p, editAuthType: 'auth_token' } : null)}
+           label="AUTH_TOKEN"
+          />
+          <CustomRadio
+           name="edit-authType"
+           value="api_key"
+           checked={editingProvider.editAuthType === 'api_key'}
+           onChange={() => setEditingProvider((p) => p ? { ...p, editAuthType: 'api_key' } : null)}
+           label="API_KEY"
+          />
          </div>
         </div>
        )}

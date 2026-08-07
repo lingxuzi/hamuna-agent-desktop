@@ -3,6 +3,16 @@
     "inProgress": "v2 落地中",
     "placeholderBody": "该页面 v2 渲染层正在实现中。改 .env 的 VITE_UI_RENDER_LAYER 切回 v1 查看完整功能。",
     "placeholderBack": "返回工作台",
+    "launcher": {
+      "heroLine1": "把每一个想法，",
+      "heroLine2": "变成真实的工作。",
+      "heroSub": "和你的 AI 一起，在温暖的工作台上动手实现。",
+      "railTitle": "工作区",
+      "railNew": "＋ 新建",
+      "viewAll": "查看全部 {{count}} 个 →",
+      "recentTitle": "最近的会话",
+      "emptyRecent": "暂无会话"
+    },
     "chat": {
       "agentPanelTitle": "Agent 状态",
       "agentDockTitle": "Agent 状态",

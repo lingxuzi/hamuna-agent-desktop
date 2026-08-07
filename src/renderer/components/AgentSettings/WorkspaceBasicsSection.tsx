@@ -23,6 +23,7 @@ import { buildRuntimeChangePatch } from '../../../shared/types/runtime';
 import { agentDefaultsForRuntimeBackedProvider, toProviderExecutionIntent } from '../../../shared/providerExecution';
 import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '@/components/Toast';
+import CustomRadio from '@/components/CustomRadio';
 
 interface WorkspaceBasicsSectionProps {
   project: Project | undefined;
@@ -433,27 +434,24 @@ export default function WorkspaceBasicsSection({ project, agent, agentDir }: Wor
               label: string,
               hint: string,
             ) => (
-              <label
+              <CustomRadio
                 key={value}
-                className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-xs leading-relaxed transition-colors ${
+                name={`proxy-policy-${agent.id}`}
+                value={value}
+                checked={proxyMode === value}
+                onChange={() => onSelect(value)}
+                bubbleAlign="start"
+                className={`rounded-lg border px-3 py-2 transition-colors ${
                   proxyMode === value
                     ? 'border-[var(--accent-warm)] bg-[var(--accent-warm-subtle)]'
                     : 'border-[var(--line)] hover:border-[var(--line-strong)]'
                 }`}
               >
-                <input
-                  type="radio"
-                  name={`proxy-policy-${agent.id}`}
-                  value={value}
-                  checked={proxyMode === value}
-                  onChange={() => onSelect(value)}
-                  className="mt-0.5 shrink-0"
-                />
-                <div className="min-w-0">
+                <div className="min-w-0 text-xs leading-relaxed">
                   <div className="font-medium text-[var(--ink)]">{label}</div>
                   <div className="text-[var(--ink-muted)]">{hint}</div>
                 </div>
-              </label>
+              </CustomRadio>
             );
 
             return (

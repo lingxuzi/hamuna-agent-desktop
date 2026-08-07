@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HamunaAgent</title>
+    <!-- 衬线展示字阶（Noto Serif SC / Playfair Display）经 fonts.font.im 国内镜像加载。
+         DESIGN-TOKENS.md「Typography」新增 `--font-serif` 一档。CSP 需同步放行
+         fonts.font.im（style）与 fonts.gstatic.font.im（font）——tauri.conf.json。 -->
+    <link rel="preconnect" href="https://fonts.font.im" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.font.im" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.font.im/css2?family=Noto+Serif+SC:wght@400;600&family=Playfair+Display:wght@400;600&display=swap"
+    />
     <!-- Theme bootstrap: apply the last non-sensitive Theme selection before
          CSS/React paint. Durable AppConfig corrects this snapshot after load. -->
     <script>

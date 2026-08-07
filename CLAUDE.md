@@ -12,6 +12,11 @@
 | 通信 | Rust HTTP/SSE Proxy (reqwest via `local_http` 模块) |
 | 运行时 | 单一 Node.js v24（Sidecar / Plugin Bridge / MCP Server / CLI），内置于应用包 |
 
+## Pencil design file
+- **Path**: `D:\Coding\hamuna-agent-desktop\design\hamuna-agent.pen`
+- All Pencil MCP `filePath` parameters MUST use the absolute path to this file. Never use `/new`.
+- This file must already exist and be the **active editor** before any write. Pencil MCP cannot create files — `filePath` is advisory and the active editor wins, so a write to a missing/unopened path silently lands in whatever `.pen` is open. Create + open it in the Pencil app first.
+
 ## 项目布局
 
 - `src/renderer/` — React 前端（api/、context/、hooks/、components/、pages/）

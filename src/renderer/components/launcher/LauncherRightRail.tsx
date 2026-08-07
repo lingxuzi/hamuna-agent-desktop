@@ -701,7 +701,7 @@ interface LauncherHistoryRowProps {
     onMenuOpenChange: (sessionId: string, open: boolean) => void;
 }
 
-const LauncherHistoryRow = memo(function LauncherHistoryRow({
+export const LauncherHistoryRow = memo(function LauncherHistoryRow({
     session,
     project,
     tags,

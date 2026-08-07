@@ -85,7 +85,7 @@ export default function CustomSelect({
                 type="button"
                 disabled={disabled}
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex w-full items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] text-left transition-colors hover:border-[var(--ink-subtle)] disabled:cursor-not-allowed disabled:opacity-60 ${
+                className={`flex w-full items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] text-left transition-colors hover:border-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-border)] disabled:cursor-not-allowed disabled:opacity-60 ${
                     compact
                         ? 'px-2 py-1 text-xs'
                         : size === 'md'
@@ -105,7 +105,7 @@ export default function CustomSelect({
                 {!triggerIcon && selectedOption?.icon && (
                     <span className="shrink-0">{selectedOption.icon}</span>
                 )}
-                <span className={`min-w-0 flex-1 ${selectedOption ? 'text-[var(--ink)]' : 'text-[var(--ink-muted)]'}`}>
+                <span className={`min-w-0 flex-1 ${selectedOption ? 'font-medium text-[var(--ink)]' : 'text-[var(--ink-muted)]'}`}>
                     {selectedOption?.content ?? (
                         <span className="block truncate">{selectedOption?.label ?? resolvedPlaceholder}</span>
                     )}
@@ -153,7 +153,7 @@ export default function CustomSelect({
                                     size === 'md' || size === 'toolbar' ? 'text-sm' : 'text-xs'
                                 } ${
                                     option.value === value
-                                        ? 'text-[var(--accent-warm)]'
+                                        ? 'bg-[var(--paper-inset)] font-medium text-[var(--ink)]'
                                         : 'text-[var(--ink)] hover:bg-[var(--paper-inset)]'
                                 }`}
                             >
@@ -164,7 +164,7 @@ export default function CustomSelect({
                                     {option.content ?? <span className="block truncate">{option.label}</span>}
                                 </span>
                                 {option.value === value && (
-                                    <Check data-selected-indicator className="h-3 w-3 shrink-0" />
+                                    <Check data-selected-indicator className="h-3 w-3 shrink-0 text-[var(--accent)]" />
                                 )}
                                 <span className="min-w-0 flex-1" />
                                 {option.suffix && (
