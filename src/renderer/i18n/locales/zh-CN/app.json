@@ -143,6 +143,21 @@
         "inProgress": "进行中",
         "done": "已完成"
       }
+    },
+    "workspaceConfig": {
+      "panelTitle": "工作区配置",
+      "tabGeneral": "通用",
+      "tabSystemPrompts": "系统提示词",
+      "tabIntroduction": "简介",
+      "tabSkills": "技能",
+      "basicsTitle": "基础设置",
+      "nameLabel": "工作区名称",
+      "nameValue": "Hamuna 社区",
+      "pathLabel": "工作区路径",
+      "pathValue": "~/workspaces/hamuna-community",
+      "proactiveTitle": "主动 Agent 模式",
+      "proactiveDesc": "开启后小助理可在工作区主动执行定时任务、维护记忆并处理频道消息。",
+      "footerHint": "按 Esc 关闭 · 配置修改会立即生效"
     }
   },
   "tabs": {

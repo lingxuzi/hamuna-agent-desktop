@@ -143,6 +143,21 @@
         "inProgress": "In progress",
         "done": "Done"
       }
+    },
+    "workspaceConfig": {
+      "panelTitle": "Workspace Config",
+      "tabGeneral": "General",
+      "tabSystemPrompts": "System prompts",
+      "tabIntroduction": "Introduction",
+      "tabSkills": "Skills",
+      "basicsTitle": "Basic settings",
+      "nameLabel": "Workspace name",
+      "nameValue": "Hamuna Community",
+      "pathLabel": "Workspace path",
+      "pathValue": "~/workspaces/hamuna-community",
+      "proactiveTitle": "Proactive Agent mode",
+      "proactiveDesc": "When enabled, the assistant can proactively run scheduled tasks, maintain memory, and handle channel messages in the workspace.",
+      "footerHint": "Press Esc to close · Changes take effect immediately"
     }
   },
   "tabs": {

@@ -12,12 +12,14 @@
 import { useCallback } from 'react';
 
 import { useV2Tabs } from './hooks/useTabs';
+import { useWorkspaceConfigOverlay } from './hooks/useWorkspaceConfigOverlay';
 import Chrome from './components/chrome/Chrome';
 import LauncherV2 from './pages/LauncherV2';
 import ChatV2 from './pages/ChatV2';
 import SettingsV2 from './pages/SettingsV2';
 import TaskCenterV2 from './pages/TaskCenterV2';
 import SpaceV2 from './pages/SpaceV2';
+import WorkspaceConfigV2 from './pages/WorkspaceConfigV2';
 import { useConfig } from '@/hooks/useConfig';
 
 export default function AppV2() {
@@ -33,10 +35,13 @@ export default function AppV2() {
         setView,
     } = useV2Tabs();
 
+    const showWorkspaceConfig = useWorkspaceConfigOverlay();
+
     const handleCloseTab = useCallback((tabId: string) => closeTab(tabId), [closeTab]);
 
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-[var(--paper)] text-[var(--ink)]">
+            {showWorkspaceConfig && <WorkspaceConfigV2 />}
             <Chrome
                 tabs={tabs}
                 activeTabId={activeTabId}
