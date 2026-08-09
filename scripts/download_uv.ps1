@@ -115,7 +115,7 @@ if ($Version -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$') {
     Write-Err "Refusing unsafe version string: $Version"
     exit 1
 }
-if ($Version -notmatch '^v') { $Version = "v$Version" }
+if ($Version -notmatch '^v') { $Version = "$Version" }
 
 Write-Info "Target version: $Version"
 
