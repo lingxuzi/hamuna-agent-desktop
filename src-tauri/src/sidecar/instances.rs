@@ -130,6 +130,19 @@ pub fn start_tab_sidecar<R: Runtime>(
     // Apply proxy policy: user proxy / inherit system / protect localhost (pit-of-success)
     proxy_config::apply_to_subprocess(&mut cmd);
 
+    // Inject Python package mirror env into all child processes (MCP stdio
+    // spawns, external runtime CLI, etc.). Aliyun for pip + Tsinghua for uv
+    // covers both pip (used by Python skills) and uv/uvx (used by
+    // extended_buildin_mcp entries).
+    //
+    // Cross-platform: same env reaches Sidecar on macOS/Linux so Homebrew
+    // / apt pip installs also go through the mirror. Env-level injection
+    // takes priority over pip.ini / uv.toml (process boundary beats user
+    // config), so uninstall = automatic cleanup (no lingering registry /
+    // config writes).
+    cmd.env("PIP_INDEX_URL", "https://mirrors.aliyun.com/pypi/simple");
+    cmd.env("UV_INDEX_URL", "https://pypi.tuna.tsinghua.edu.cn/simple");
+
     // Inject management API port for Bun→Rust IPC (v0.1.21)
     let mgmt_port = crate::management_api::get_management_port();
     if mgmt_port > 0 {
