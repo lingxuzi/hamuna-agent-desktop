@@ -59,7 +59,7 @@ $ErrorActionPreference = 'Stop'
 #     (Get-FileHash .\python-3.12.7-amd64.exe -Algorithm SHA256).Hash.ToLower()
 # and pasting the result into $ExpectedSha256. Do NOT ship a placeholder.
 $PythonVersion  = "3.12.7"
-$ExpectedSha256 = "REPLACE_ME_WITH_REAL_SHA256_FROM_GET_FILEHASH"
+$ExpectedSha256 = "1206721601a62c925d4e4a0dcfc371e88f2ddbe8c0c07962ebb2be9b5bde4570"
 
 $DownloadBaseUrl = "https://www.python.org/ftp/python/$PythonVersion"
 $ArchiveName     = "python-$PythonVersion-amd64.exe"

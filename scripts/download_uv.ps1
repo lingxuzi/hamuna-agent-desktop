@@ -32,7 +32,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ReleaseApiBase = "https://api.github.com/repos/astral-sh/uv/releases"
-$DownloadBase   = "https://github.com/astral-sh/uv/releases/download"
+$DownloadBase   = "https://releases.astral.sh/github/uv/releases/download"
 
 $ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir  = Split-Path -Parent $ScriptDir
@@ -62,6 +62,31 @@ if ($Clean) {
 }
 
 # ── Resolve version ───────────────────────────────────────────────────────
+
+# Short-circuit FIRST if already up-to-date AND binary passes a PE-header
+# smoke check. Doing this before the GitHub API query means: if the dev
+# machine already has uvx.exe staged (the common case), running this
+# script is a pure local operation with **zero** network traffic. Pin
+# -Version <tag> explicitly to force re-resolve from the network; without
+# it, the marker wins and we never touch GitHub. This is the same
+# "downloaded = downloaded, no re-fetch" invariant as download_python.ps1.
+
+if (-not $Force -and -not $Version -and (Test-Path $Marker) -and (Test-Path $TargetBinary)) {
+    $current = (Get-Content $Marker -Raw).Trim()
+    $ok = $false
+    try {
+        $fs = [System.IO.File]::OpenRead($TargetBinary)
+        $buf = New-Object byte[] 2
+        $read = $fs.Read($buf, 0, 2)
+        $fs.Close()
+        if ($read -eq 2 -and $buf[0] -eq 0x4D -and $buf[1] -eq 0x5A) { $ok = $true }
+    } catch { $ok = $false }
+    if ($ok) {
+        Write-Ok "uv $current already staged as $TargetBinary (pass -Version <tag> or -Force to re-resolve)"
+        exit 0
+    }
+    Write-Warn2 "Marker says $current but binary is missing/corrupt - re-downloading"
+}
 
 if (-not $Version) {
     Write-Info "Querying latest uv release from $ReleaseApiBase/latest..."
@@ -94,11 +119,12 @@ if ($Version -notmatch '^v') { $Version = "v$Version" }
 
 Write-Info "Target version: $Version"
 
-# Short-circuit if already up-to-date AND binary passes a PE-header smoke
-# check (same pattern as download_cuse.ps1).
-if (-not $Force -and (Test-Path $Marker)) {
+# If user pinned a -Version that already matches the staged one, also
+# short-circuit (covers the "wanting to verify it really is this tag"
+# case without burning bandwidth).
+if (-not $Force -and (Test-Path $Marker) -and (Test-Path $TargetBinary)) {
     $current = (Get-Content $Marker -Raw).Trim()
-    if ($current -eq $Version -and (Test-Path $TargetBinary)) {
+    if ($current -eq $Version) {
         $ok = $false
         try {
             $fs = [System.IO.File]::OpenRead($TargetBinary)
