@@ -51,6 +51,7 @@
       "../src/shared": "shared",
       "../bundled-skills": "bundled-skills",
       "../bundled-agents": "bundled-agents",
+      "../extended_buildin_mcp": "extended_buildin_mcp",
       "../src-tauri/resources/cli": "cli",
       "../src-tauri/resources/cuse-latest.json": "cuse-latest.json",
       "../src-tauri/resources/assets/feedback_qr_code.png": "assets/feedback_qr_code.png",

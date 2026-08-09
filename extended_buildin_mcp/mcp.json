@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "servers": [
+    {
+        "id": "stock-datasource",
+        "name": "股票数据服务",
+        "type": "stdio",
+        "command": "uvx",
+        "args": ["--from", "eltdx[mcp]", "eltdx-mcp"],
+        "env": {},
+        "description": "通达信股票数据服务",
+        "enabled": true
+      }
+  ]
+}

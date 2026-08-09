@@ -64,6 +64,7 @@ import { getBuiltinMcpInstance } from './tools/builtin-mcp-registry';
 // Side-effect import — registers META (ids + lazy factories) at cold start.
 // Cheap: just function-ref storage, no SDK/zod eval, no tool module loaded.
 import './tools/builtin-mcp-meta';
+import { loadExtendedBuiltinMcpServers } from './utils/extended-builtin-mcp';
 import {
   applyProviderProxyPolicyToEnv,
   getProviderProxyScopeKey,
@@ -3473,9 +3474,13 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
   // [...]= user's enabled MCP servers
   // Never fall back to config file — the frontend's /api/mcp/set is the single source of truth.
   // Global sidecar never receives /api/mcp/set and correctly gets no MCP.
-  // Filter out SDK reserved names to prevent fatal crash:
-  // "Invalid MCP configuration: X is a reserved MCP name." → exit code 1
-  const allServers: McpServerDefinition[] = configState.currentMcpServers ?? [];
+  // Append MCP servers declared in the bundled `extended_buildin_mcp/mcp.json`
+  // config — lets administrators ship extra stdio/sse/http builtins without
+  // rebuilding the JS bundle. Reserved-name + Pattern 3 filtering below
+  // applies uniformly to user + extended servers.
+  const userServers: McpServerDefinition[] = configState.currentMcpServers ?? [];
+  const extendedServers = loadExtendedBuiltinMcpServers();
+  const allServers: McpServerDefinition[] = [...userServers, ...extendedServers];
   const servers = allServers.filter(s => {
     const normalized = s.id.replace(/[^a-zA-Z0-9_-]/g, '_');
     if (SDK_RESERVED_MCP_NAMES.includes(normalized)) {
