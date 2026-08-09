@@ -674,6 +674,60 @@ Section GitForWindows
   git_done:
 SectionEnd
 
+; HamunaAgent: Python 3.12 (per-user) + pip installation section.
+;
+; uvx-driven builtin MCPs (`uvx ddg-search` etc.) need a real Python on
+; PATH (`pip install <wheel>` / venv / dist-info writes). The embeddable
+; distribution rejected earlier (v0.2.x feedback) had none of that, so we
+; run the official Python 3.12 installer at install-time instead of
+; shipping a private python312/ tree.
+;
+; Layout matches Section GitForWindows: registry probe → if installed,
+; skip; otherwise File the bundled installer to $TEMP and ExecWait the
+; silent flags. The .exe is bundled as `python-installer.exe` via
+; tauri.windows.conf.json bundle.resources (see src-tauri/tauri.windows.conf.json).
+Section PythonInstall
+  ; Per-user Python 3.12 install path lives under
+  ; HKCU\Software\Python\PythonCore\3.12\InstallPath (the official
+  ; installer writes it). Probe there first.
+  ReadRegStr $4 HKCU "Software\Python\PythonCore\3.12\InstallPath" ""
+  ${If} $4 != ""
+    DetailPrint "$(pythonAlreadyInstalled)"
+    Goto python_done
+  ${EndIf}
+
+  ; 3.12.7 x64 explicit — no per-machine fallback (per-user avoids UAC).
+  ${If} $UpdateMode <> 1
+    Delete "$TEMP\python-installer.exe"
+    DetailPrint "$(pythonInstalling)"
+    ; Path relative from build dir (target/x86_64-pc-windows-msvc/release/nsis/x64/)
+    ; to staged NSIS resource (src-tauri/resources/python-3.12.7-amd64.exe
+    ; — staged by scripts/download_python.ps1; Tauri NSIS template copies
+    ; bundle.resources files into the same nsis/x64/ tree during build).
+    File "/oname=$TEMP\python-installer.exe" "..\..\..\..\..\resources\python-3.12.7-amd64.exe"
+
+    ; /quiet — silent, no UI
+    ; InstallAllUsers=0 — per-user, lands %LocalAppData%\Programs\Python\Python312 (no UAC)
+    ; PrependPath=1 — add to HKCU\Environment\Path (current user, takes effect on next shell)
+    ; Include_pip=1 — bundle pip
+    ; Include_launcher=1 — install py.exe launcher
+    ; Include_test=0 / Include_doc=0 — drop the bloat
+    ; SimpleInstall=1 — skip install-launcher / dev prompts / shortcuts
+    ExecWait '"$TEMP\python-installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1 Include_test=0 Include_doc=0 SimpleInstall=1' $1
+    Delete "$TEMP\python-installer.exe"
+    ${If} $1 = 0
+      DetailPrint "$(pythonInstallSuccess)"
+    ${Else}
+      DetailPrint "$(pythonInstallError)"
+      ; Don't abort — Python is best-effort. uvx fallback covers MCPs that
+      ; strictly need Python until the user installs it themselves.
+      MessageBox MB_ICONEXCLAMATION|MB_OK "$(pythonAbortError)"
+    ${EndIf}
+  ${EndIf}
+
+  python_done:
+SectionEnd
+
 Section Install
   SetOutPath $INSTDIR
 

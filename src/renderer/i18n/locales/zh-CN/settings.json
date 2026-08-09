@@ -1554,7 +1554,7 @@
         "command": "命令",
         "commandPlaceholder": "例如: npx, uvx, node, python",
         "commandHint": "启动服务器的命令",
-        "mcpRuntimeReadyHint": "Python 3.12 和 uvx 已内置在 HamunaAgent 安装包中，无需额外安装。",
+        "mcpRuntimeReadyHint": "Python 3.12 (含 pip) 和 uvx 已通过安装包静默装为系统环境。pip 默认走阿里云镜像, uv/uvx 默认走清华镜像。",
         "args": "参数",
         "argPlaceholder": "例如: @playwright/mcp@latest",
         "argHint": "一次填写一个参数，按 Enter 或点击添加",

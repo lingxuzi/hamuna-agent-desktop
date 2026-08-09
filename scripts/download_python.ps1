@@ -1,33 +1,44 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Fetch the Python 3.12 embeddable zip from python.org and extract it
-    into src-tauri\resources\python312\ so the Windows installer can bundle
-    it via bundle.resources.
+    Fetch the official Python 3.12.7 amd64 installer (.exe) from python.org
+    and stage it into src-tauri\resources\ so the Windows installer can
+    bundle it via bundle.resources.
 
 .DESCRIPTION
-    HamunaAgent bundles Python on Windows so MCP servers that shell out to
-    `python` / `uvx` work out-of-the-box without asking the user to install
-    Python themselves. We use the official "embeddable" distribution:
-        https://www.python.org/ftp/python/3.12.X/python-3.12.X-embed-amd64.zip
+    HamunaAgent's Windows installer runs the Python 3.12 official installer
+    during installation (see src-tauri/nsis/installer.nsi : Section
+    PythonInstall). That installer must already be staged under
+    src-tauri\resources\python-3.12.7-amd64.exe when the NSIS build runs.
 
-    SHA-256 is pinned in this script (no .sha256 sidecar on python.org). To
-    bump the version: grab the new zip, compute
-        Get-FileHash .\python-3.12.X-embed-amd64.zip -Algorithm SHA256
-    and update both $PythonVersion and $ExpectedSha256 below.
+    This script is a developer-machine bootstrap — it is NOT executed at
+    build time or install time. The downloaded .exe is gitignored. Whoever
+    does the next Windows release re-runs this script (or pins the existing
+    staged copy) to refresh the staged binary.
 
-    Layout after extraction:
-        src-tauri\resources\python312\
-            python.exe
-            python312.dll
-            python312.zip
-            python312._pth
-            ... (DLLs/, Lib/, etc. from the zip)
+    SHA-256 is pinned in this script (python.org does not publish a sidecar
+    .sha256). To bump the version: download the new installer from
+        https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.exe
+    then run
+        Get-FileHash .\python-$PythonVersion-amd64.exe -Algorithm SHA256
+    and update both $PythonVersion and $ExpectedSha256 below. NEVER ship
+    a placeholder hash — build_windows.ps1's pre-flight check will fail
+    loudly if the pinned hash doesn't match the staged file.
+
+    Layout after staging:
+        src-tauri\resources\
+            python-3.12.7-amd64.exe         (~25 MB, single-file NSIS installer)
+            python-3.12.7-amd64.exe.sha256  (optional, written for traceability)
+            .python-installer-version       (plain text, version string)
+
+    We do NOT extract or execute the .exe — the Windows installer itself
+    is the payload (Section PythonInstall File's it to $TEMP at install
+    time and ExecWait's the silent install flags).
 
 .EXAMPLE
-    .\scripts\download_python.ps1              # Install pinned 3.12.X
-    .\scripts\download_python.ps1 -Force       # Re-extract even if up-to-date
-    .\scripts\download_python.ps1 -Clean       # Remove existing python312\ dir
+    .\scripts\download_python.ps1              # Stage pinned 3.12.7 if missing
+    .\scripts\download_python.ps1 -Force       # Re-download even if up-to-date
+    .\scripts\download_python.ps1 -Clean       # Remove staged installer
 #>
 [CmdletBinding()]
 param(
@@ -38,20 +49,27 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # ── Pin ────────────────────────────────────────────────────────────────────
-# Bump both together. SHA-256 of the embeddable zip at this exact version
+# Bump both together. SHA-256 of the official .exe at this exact version
 # (verified by Get-FileHash on the official download).
+#
+# IMPORTANT: the placeholder below is intentionally invalid — running this
+# script with the placeholder will fail SHA-256 verification. Real values
+# must be filled in by running:
+#     Invoke-WebRequest https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe -OutFile python-3.12.7-amd64.exe
+#     (Get-FileHash .\python-3.12.7-amd64.exe -Algorithm SHA256).Hash.ToLower()
+# and pasting the result into $ExpectedSha256. Do NOT ship a placeholder.
 $PythonVersion  = "3.12.7"
-$ExpectedSha256 = "c8ad4d39f3db1e9e8c7e5b15a1f1e8a3b9c7d8e2f4a6b8c0d2e4f6a8b0c2d4e6"
+$ExpectedSha256 = "REPLACE_ME_WITH_REAL_SHA256_FROM_GET_FILEHASH"
 
 $DownloadBaseUrl = "https://www.python.org/ftp/python/$PythonVersion"
-$ArchiveName     = "python-$PythonVersion-embed-amd64.zip"
+$ArchiveName     = "python-$PythonVersion-amd64.exe"
 $ArchiveUrl      = "$DownloadBaseUrl/$ArchiveName"
 
 $ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir  = Split-Path -Parent $ScriptDir
-$TargetDir   = Join-Path $ProjectDir "src-tauri\resources\python312"
-$Marker      = Join-Path $TargetDir ".python-version"
-$PythonExe   = Join-Path $TargetDir "python.exe"
+$ResourcesDir = Join-Path $ProjectDir "src-tauri\resources"
+$StagePath   = Join-Path $ResourcesDir $ArchiveName
+$Marker      = Join-Path $ResourcesDir ".python-installer-version"
 
 function Write-Info  { param($msg) Write-Host "[python] $msg" -ForegroundColor Cyan }
 function Write-Ok    { param($msg) Write-Host "[python] $msg" -ForegroundColor Green }
@@ -63,31 +81,52 @@ function Write-Err   { param($msg) Write-Host "[python] $msg" -ForegroundColor R
 # Force TLS 1.2 on legacy PS 5.1 (python.org/CDN drops older protocols).
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# Sweep stale .tmp.<pid> orphans from prior runs killed mid-install.
-Get-ChildItem $TargetDir -Filter "*.tmp.*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+# Sweep stale .tmp.<pid> orphans from prior runs killed mid-download.
+Get-ChildItem $ResourcesDir -Filter "python-*.tmp.*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
 if ($Clean) {
-    Write-Info "Cleaning existing python312\ directory..."
-    if (Test-Path $TargetDir) {
-        Remove-Item $TargetDir -Recurse -Force
-    }
-    if (Test-Path $Marker) { Remove-Item $Marker -Force }
+    Write-Info "Cleaning staged Python installer..."
+    if (Test-Path $StagePath)  { Remove-Item $StagePath  -Force }
+    if (Test-Path $Marker)     { Remove-Item $Marker     -Force }
+    $sidecarSha = "$StagePath.sha256"
+    if (Test-Path $sidecarSha) { Remove-Item $sidecarSha -Force }
 }
 
-if (-not (Test-Path $TargetDir)) {
-    New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+if (-not (Test-Path $ResourcesDir)) {
+    New-Item -ItemType Directory -Path $ResourcesDir -Force | Out-Null
 }
 
-# Short-circuit if already up-to-date AND python.exe is present AND the
-# pinned SHA-256 still matches (catches a tampered local install). Force
-# bypasses the version check but still validates the archive on re-extract.
-if (-not $Force -and (Test-Path $Marker) -and (Test-Path $PythonExe)) {
+# Short-circuit if already up-to-date AND the pinned SHA-256 still matches
+# (catches a tampered local install). Force bypasses the version check but
+# still validates the file on re-download.
+if (-not $Force -and (Test-Path $Marker) -and (Test-Path $StagePath)) {
     $current = (Get-Content $Marker -Raw).Trim()
     if ($current -eq $PythonVersion) {
-        Write-Ok "Python $PythonVersion already present at $TargetDir (use -Force to re-extract)"
+        Write-Ok "Python $PythonVersion installer already staged at $StagePath (use -Force to re-download)"
         exit 0
     }
-    Write-Warn2 "Marker says $current but pin is $PythonVersion - re-extracting"
+    Write-Warn2 "Marker says $current but pin is $PythonVersion - re-staging"
+}
+
+# ── Validate pin ─────────────────────────────────────────────────────────
+# Catch the placeholder BEFORE we hit the network so we don't burn 25 MB of
+# bandwidth just to fail verification afterwards. A 64-hex-char placeholder
+# is technically valid, but we add a sentinel check: if the hash exactly
+# matches the obvious "REPLACE_ME" sentinel or the historical placeholder,
+# bail early.
+
+if ($ExpectedSha256 -match '^REPLACE_ME' -or $ExpectedSha256 -match '^c8ad4d39f3db1e9e') {
+    Write-Err "Script is unconfigured: \$ExpectedSha256 is still a placeholder."
+    Write-Err "  Download $ArchiveName manually, compute the real SHA-256 with:"
+    Write-Err "      (Get-FileHash .\$ArchiveName -Algorithm SHA256).Hash.ToLower()"
+    Write-Err "  and paste it into \$ExpectedSha256 in this script."
+    exit 1
+}
+
+if ($ExpectedSha256 -notmatch '^[a-f0-9]{64}$') {
+    Write-Err "Script is misconfigured: pinned SHA-256 is not 64 hex chars"
+    Write-Err "  got: $ExpectedSha256"
+    exit 1
 }
 
 # ── Download ──────────────────────────────────────────────────────────────
@@ -96,13 +135,13 @@ $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "hamuna-python-$(Get-Rando
 New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null
 
 try {
-    $ArchivePath = Join-Path $TmpDir $ArchiveName
+    $TmpArchive = Join-Path $TmpDir $ArchiveName
 
     Write-Info "Downloading $ArchiveName from $DownloadBaseUrl ..."
     try {
         $oldProgress = $ProgressPreference
         $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $ArchiveUrl -OutFile $ArchivePath -UseBasicParsing -TimeoutSec 300 -ErrorAction Stop
+        Invoke-WebRequest -Uri $ArchiveUrl -OutFile $TmpArchive -UseBasicParsing -TimeoutSec 600 -ErrorAction Stop
     } catch {
         Write-Err "Download failed: $($_.Exception.Message)"
         Write-Err "  URL: $ArchiveUrl"
@@ -113,45 +152,56 @@ try {
 
     # ── Verify checksum ───────────────────────────────────────────────────
 
-    if ($ExpectedSha256 -notmatch '^[a-f0-9]{64}$') {
-        Write-Err "Script is misconfigured: pinned SHA-256 is not 64 hex chars"
-        Write-Err "  got: $ExpectedSha256"
-        exit 1
-    }
     Write-Info "Verifying SHA-256..."
-    $actual = (Get-FileHash $ArchivePath -Algorithm SHA256).Hash.ToLower()
+    $actual = (Get-FileHash $TmpArchive -Algorithm SHA256).Hash.ToLower()
     if ($ExpectedSha256 -ne $actual) {
         Write-Err "SHA-256 mismatch!"
         Write-Err "  expected: $ExpectedSha256"
         Write-Err "  actual:   $actual"
-        Write-Err "  Re-fetch the official zip and update \$ExpectedSha256 in this script."
+        Write-Err "  Re-fetch the official installer and update \$ExpectedSha256 in this script."
         exit 1
     }
     Write-Ok "SHA-256 verified"
 
-    # ── Extract and install ───────────────────────────────────────────────
-    #
-    # Wipe the install dir's CONTENTS (not the dir itself — we keep .tmp.*
-    # sweep behaviour predictable) and extract fresh. Using a separate
-    # staging dir + Move-Item would also work, but python.org zip layout is
-    # flat (no top-level directory wrapper) so direct extraction into
-    # $TargetDir is safe.
-
-    Write-Info "Extracting to $TargetDir ..."
-    Get-ChildItem $TargetDir -File -ErrorAction SilentlyContinue | Remove-Item -Force
-    Get-ChildItem $TargetDir -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-    Expand-Archive -Path $ArchivePath -DestinationPath $TargetDir -Force
-
-    if (-not (Test-Path $PythonExe)) {
-        Write-Err "Extraction did not produce python.exe at $PythonExe"
-        Write-Err "  Archive layout may have changed; check $ArchiveName contents."
+    # ── PE magic smoke check ─────────────────────────────────────────────
+    # The official installer is a Win32 PE binary — must start with "MZ".
+    # This catches the very rare case where python.org serves an HTML error
+    # page (e.g., 404 with a fallback body) that still matches the URL by
+    # happy coincidence.
+    $fsStream = [System.IO.File]::OpenRead($TmpArchive)
+    try {
+        $mz = New-Object byte[] 2
+        $null = $fsStream.Read($mz, 0, 2)
+    } finally {
+        $fsStream.Close()
+    }
+    if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) {
+        Write-Err "Downloaded file is not a PE binary (missing MZ magic)."
+        Write-Err "  Got bytes: 0x$('{0:X2}{1:X2}' -f $mz[0],$mz[1])"
+        Write-Err "  python.org may be serving an error page. Re-check $ArchiveUrl."
         exit 1
     }
+    Write-Ok "PE magic verified (MZ)"
+
+    # ── Stage ─────────────────────────────────────────────────────────────
+    # Atomic: stage to a sibling .tmp.<pid>, then Move-Item over the final
+    # path. Avoids leaving a half-written file at $StagePath if the script
+    # is killed mid-write.
+
+    $TmpStage = "$StagePath.tmp.$PID"
+    Move-Item -Path $TmpArchive -Destination $TmpStage -Force
+    Move-Item -Path $TmpStage -Destination $StagePath -Force
+
+    # Sidecar .sha256 for traceability (NOT used for verification — that
+    # happens inside this script). Lets `sha256sum` users double-check
+    # without re-running download_python.ps1.
+    Set-Content -Path "$StagePath.sha256" -Value "$ExpectedSha256  $ArchiveName`n" -NoNewline
 
     Set-Content -Path $Marker -Value $PythonVersion -NoNewline
 
-    Write-Ok "Python $PythonVersion installed:"
-    Write-Ok "  $PythonExe"
+    $size = (Get-Item $StagePath).Length
+    Write-Ok "Python $PythonVersion installer staged:"
+    Write-Ok "  $StagePath ($([math]::Round($size / 1MB, 1)) MB)"
 } finally {
     if (Test-Path $TmpDir) {
         Remove-Item $TmpDir -Recurse -Force -ErrorAction SilentlyContinue

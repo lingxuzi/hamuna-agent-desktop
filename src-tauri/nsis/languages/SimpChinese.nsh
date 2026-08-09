@@ -34,3 +34,10 @@ LangString gitInstalling ${LANG_SIMPCHINESE} "正在安装 Git for Windows..."
 LangString gitInstallSuccess ${LANG_SIMPCHINESE} "成功安装 Git"
 LangString gitInstallError ${LANG_SIMPCHINESE} "错误：Git 安装失败，错误代码：$1"
 LangString gitAbortError ${LANG_SIMPCHINESE} "Git 安装失败！应用程序需要 Git 才能正常运行。请手动安装 Git：https://git-scm.com/downloads/win"
+
+; Python 3.12 (per-user) installation — bundled installer runs at install-time
+LangString pythonInstalling ${LANG_SIMPCHINESE} "正在安装 Python 3.12 (仅当前用户, 含 pip)..."
+LangString pythonInstallSuccess ${LANG_SIMPCHINESE} "Python 3.12 安装成功"
+LangString pythonInstallError ${LANG_SIMPCHINESE} "错误：Python 3.12 安装失败, 错误代码: $1"
+LangString pythonAlreadyInstalled ${LANG_SIMPCHINESE} "已检测到 Python 3.12, 跳过安装"
+LangString pythonAbortError ${LANG_SIMPCHINESE} "Python 3.12 安装失败！需要 Python 的 MCP 服务 (如 uvx) 可能无法运行, 请手动安装: https://www.python.org/downloads/"

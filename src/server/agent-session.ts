@@ -3566,21 +3566,22 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
         console.log(`[agent] MCP ${server.id}: resolved to bundled cuse at ${cusePath}`);
       }
 
-      // Bundled Python / uvx fallback (Windows installer ships both under
-      // src-tauri/resources/). When the user hasn't installed them
-      // system-wide, resolve `python` / `python3` / `uvx` to the bundled
-      // absolute path so MCP servers using uvx (e.g. ddg-search,
-      // stock-datasource) work out of the box. If the bundled path is
-      // missing we let SDK proceed with the bare name — system PATH will
-      // resolve if the user has installed Python / uv themselves, otherwise
+      // Bundled uvx fallback. Windows installer ships uvx.exe under
+      // src-tauri/resources/, so when the user hasn't installed uvx
+      // system-wide we resolve `command: 'uvx'` to the bundled absolute
+      // path. Otherwise the SDK spawns `uvx` from PATH and falls through
+      // to `command_not_found` if missing.
+      //
+      // Python (python / python3) does NOT get this fallback — the
+      // installer runs the official Python 3.12 installer which registers
+      // python.exe on PATH. If PATH doesn't have it (very old install),
       // spawn fails with `command_not_found` and the existing
       // runtimeError / runtimeDownloadHint UX kicks in.
-      if (command === 'python' || command === 'python3' || command === 'uvx') {
-        const { getBundledPythonPath, getBundledUvPath } = await import('./utils/runtime');
-        const bundled =
-          command === 'uvx' ? getBundledUvPath() : getBundledPythonPath();
+      if (command === 'uvx') {
+        const { getBundledUvPath } = await import('./utils/runtime');
+        const bundled = getBundledUvPath();
         if (bundled) {
-          console.log(`[agent] MCP ${server.id}: resolved ${command} via bundled fallback → ${bundled}`);
+          console.log(`[agent] MCP ${server.id}: resolved uvx via bundled fallback → ${bundled}`);
           command = bundled;
         }
       }

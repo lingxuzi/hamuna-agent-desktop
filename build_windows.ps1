@@ -247,16 +247,18 @@ try {
         $depOk = $false
     }
 
-    # Python 3.12 embeddable + uvx —— 内置 MCP (`uvx ddg-search` 等) 在 Windows
-    # 上需要。下载脚本自带版本短路 (marker + PE smoke check),重跑 noop。
-    # 与 cuse 不同: 这两个失败是**硬失败** —— Windows 安装包必须在资源里
-    # 带 python312/ 和 uvx.exe,否则 Sidecar 启动时找不到 uvx, ddg-search 等
-    # MCP 直接挂。
-    Write-Host "  拉取 Python 3.12 embeddable..." -ForegroundColor Cyan
+    # Python 3.12 official installer + uvx —— 内置 MCP (`uvx ddg-search` 等)
+    # 在 Windows 上需要 Python 解释器 + uvx runtime。Python 不再以 embeddable
+    # 形式打 bundle,改在 NSIS Section PythonInstall 里静默跑官方 .exe 装到
+    # %LocalAppData%\Programs\Python\Python312 (per-user, 无 UAC);uvx.exe 仍
+    # 走 bundle.resources 单文件。下载脚本自带版本短路 (marker + SHA-256 + PE
+    # smoke check),重跑 noop。失败是**硬失败** —— installer 必须在资源里带
+    # `python-3.12.7-amd64.exe` 和 `uvx.exe`,否则 NSIS 抽不到文件。
+    Write-Host "  拉取 Python 3.12 official installer..." -ForegroundColor Cyan
     try {
         & "$ProjectDir\scripts\download_python.ps1"
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "download_python.ps1 exit $LASTEXITCODE" }
-        if (-not (Test-Path "src-tauri\resources\python312\python.exe")) { throw "python.exe not written" }
+        if (-not (Test-Path "src-tauri\resources\python-3.12.7-amd64.exe")) { throw "python-3.12.7-amd64.exe not staged" }
         Write-Host "  Python OK" -ForegroundColor Green
     } catch {
         Write-Host "  Python 下载失败: $_" -ForegroundColor Red

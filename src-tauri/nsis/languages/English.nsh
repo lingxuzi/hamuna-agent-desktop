@@ -34,3 +34,10 @@ LangString gitInstalling ${LANG_ENGLISH} "Installing Git for Windows..."
 LangString gitInstallSuccess ${LANG_ENGLISH} "Git installed successfully"
 LangString gitInstallError ${LANG_ENGLISH} "Error: Git installation failed with code $1"
 LangString gitAbortError ${LANG_ENGLISH} "Failed to install Git! The app requires Git to run properly. Please install Git manually: https://git-scm.com/downloads/win"
+
+; Python 3.12 (per-user) installation — bundled installer runs at install-time
+LangString pythonInstalling ${LANG_ENGLISH} "Installing Python 3.12 (per-user, with pip)..."
+LangString pythonInstallSuccess ${LANG_ENGLISH} "Python 3.12 installed successfully"
+LangString pythonInstallError ${LANG_ENGLISH} "Error: Python 3.12 installation failed with code $1"
+LangString pythonAlreadyInstalled ${LANG_ENGLISH} "Python 3.12 already installed, skipping"
+LangString pythonAbortError ${LANG_ENGLISH} "Failed to install Python 3.12. Some MCP servers that require Python (uvx, etc.) may not work until you install it manually: https://www.python.org/downloads/"

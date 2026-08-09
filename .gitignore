@@ -69,6 +69,10 @@ src-tauri/resources/nodejs-cache/
 src-tauri/resources/vcruntime140.dll
 src-tauri/resources/vcruntime140_1.dll
 src-tauri/nsis/Git-Installer.exe
+src-tauri/resources/python-3.12.7-amd64.exe
+src-tauri/resources/python-3.12.7-amd64.exe.sha256
+src-tauri/resources/.python-installer-version
+src-tauri/resources/python312/
 
 # Test coverage
 coverage/

@@ -20,20 +20,23 @@ if (Test-Path $log) {
     Write-Host "build.log missing"
 }
 
-# Bundled MCP runtime (Windows-only) — Sidecar falls back to these paths
-# when system `python` / `uvx` is missing. Missing here = ddg-search and
-# other uvx-driven builtin MCPs will fail at startup with command_not_found.
+# Bundled MCP runtime (Windows-only) — `python-installer.exe` is staged for
+# the NSIS installer to run at install-time (per-user, lands at
+# %LocalAppData%\Programs\Python\Python312 with pip + launcher on PATH).
+# `uvx.exe` is bundled as a single-file resource; Sidecar falls back to
+# it when system `uvx` is missing (ddg-search and other uvx-driven builtin
+# MCPs would otherwise fail with command_not_found).
 Write-Host "`n=== Bundled MCP runtime (Windows) ===" -ForegroundColor Cyan
 $projectRoot = "D:\Coding\hamuna-agent-desktop"
-$pythonExe = Join-Path $projectRoot "src-tauri\resources\python312\python.exe"
+$pythonInstaller = Join-Path $projectRoot "src-tauri\resources\python-3.12.7-amd64.exe"
 $uvxExe = Join-Path $projectRoot "src-tauri\resources\uvx.exe"
-if (Test-Path $pythonExe) {
-    Write-Host "  python312/python.exe: OK" -ForegroundColor Green
+if (Test-Path $pythonInstaller) {
+    Write-Host "  python-3.12.7-amd64.exe: OK" -ForegroundColor Green
 } else {
-    Write-Host "  python312/python.exe: MISSING (run .\scripts\download_python.ps1)" -ForegroundColor Yellow
+    Write-Host "  python-3.12.7-amd64.exe: MISSING (run .\scripts\download_python.ps1)" -ForegroundColor Yellow
 }
 if (Test-Path $uvxExe) {
-    Write-Host "  uvx.exe:              OK" -ForegroundColor Green
+    Write-Host "  uvx.exe:                 OK" -ForegroundColor Green
 } else {
-    Write-Host "  uvx.exe:              MISSING (run .\scripts\download_uv.ps1)" -ForegroundColor Yellow
+    Write-Host "  uvx.exe:                 MISSING (run .\scripts\download_uv.ps1)" -ForegroundColor Yellow
 }
