@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.15] - 2026-08-09
+
+> 整合stock-datasource mcp服务
+
+### Added
+- 整合stock-datasource mcp服务
+
+### Changed
+- 整合stock-datasource mcp服务
+
+### Fixed
+- 整合stock-datasource mcp服务
+
 ## [0.3.13] - 2026-08-01
 
 > 用户体系
