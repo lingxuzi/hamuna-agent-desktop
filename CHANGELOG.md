@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- 新增 3 个 RSS 策展新闻工具 (`get_news` / `news_sync_status` / `news_list_sources`)，挂在 `easy-tdx` MCP server 内 (现有 stock-datasource 一并暴露，共 22 个工具)。12 行业 (ai/semi/robot/auto/energy/bio/space/security/tech/consumer/macro/science) / ~108 个 tier-1 一手源；`main()` 启动时 daemon thread 后台 fire-and-forget 同步到 `~/.easy_tdx/news.db`。redline 关键词（赌博/加密/色情 ~26 个）入库前过滤；TTL 7 天滚动。
+
+---
+
+## [0.3.16] - 2026-08-09
+
+> 优化股票数据mcp服务
+
+### Added
+- 优化股票数据mcp服务
+
+### Changed
+- 优化股票数据mcp服务
+
+### Fixed
+- 优化股票数据mcp服务
+
 ## [0.3.15] - 2026-08-09
 
 > 整合stock-datasource mcp服务
@@ -401,8 +421,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **浼氳瘽涓垏鎹?Provider / 妯″瀷涓嶅啀杩囧害鍙楅檺**锛圼#406](https://github.com/hAcKlyc/HamunaAgent/issues/406)锛夛細鏅€氬彲鍏煎鐨?Provider / 妯″瀷鍒囨崲鍙互鐣欏湪褰撳墠浼氳瘽锛涘彧鏈夎法涓嶅吋瀹瑰巻鍙茶竟鐣屾椂鎵嶄細鏂板紑浼氳瘽銆傛棫鐗?`model + configSnapshotAt` 浣嗙己 provider 鐨勪細璇濅篃涓嶄細鍑虹幇鈥滅湅寰楀埌妯″瀷浣嗗彂閫?鍒囨崲涓嶆甯糕€濈殑鐘舵€併€?
-- **鍒犻櫎 custom MCP 鍚庝笉鍐嶅娲绘垨鑷姩閲嶅惎鐢?*锛圼#405](https://github.com/hAcKlyc/HamunaAgent/issues/405)锛夛細Settings / CLI 鍒犻櫎 custom MCP 浼氱骇鑱旀竻鐞嗗叏灞€閰嶇疆銆丄gent/Bot legacy payload銆丳roject銆丼ession銆乀ask 鍜?Cron 寮曠敤锛涙棫 HTTP/SSE MCP 涓嶄細鍐嶄粠 Agent 娈嬬暀閰嶇疆鎻愬崌鍥炲叏灞€鍒楄〃銆?
+- **浼氳瘽涓垏鎹?Provider / 妯″瀷涓嶅啀杩囧害鍙楅檺**锛圼#406](https://github.com/hamuna/HamunaAgent/issues/406)锛夛細鏅€氬彲鍏煎鐨?Provider / 妯″瀷鍒囨崲鍙互鐣欏湪褰撳墠浼氳瘽锛涘彧鏈夎法涓嶅吋瀹瑰巻鍙茶竟鐣屾椂鎵嶄細鏂板紑浼氳瘽銆傛棫鐗?`model + configSnapshotAt` 浣嗙己 provider 鐨勪細璇濅篃涓嶄細鍑虹幇鈥滅湅寰楀埌妯″瀷浣嗗彂閫?鍒囨崲涓嶆甯糕€濈殑鐘舵€併€?
+- **鍒犻櫎 custom MCP 鍚庝笉鍐嶅娲绘垨鑷姩閲嶅惎鐢?*锛圼#405](https://github.com/hamuna/HamunaAgent/issues/405)锛夛細Settings / CLI 鍒犻櫎 custom MCP 浼氱骇鑱旀竻鐞嗗叏灞€閰嶇疆銆丄gent/Bot legacy payload銆丳roject銆丼ession銆乀ask 鍜?Cron 寮曠敤锛涙棫 HTTP/SSE MCP 涓嶄細鍐嶄粠 Agent 娈嬬暀閰嶇疆鎻愬崌鍥炲叏灞€鍒楄〃銆?
 - **閲嶆柊娣诲姞鍚?ID MCP 涓嶅啀缁ф壙鏃т换鍔?浼氳瘽閫夋嫨**锛氬垹闄ゅ悗鍐嶆坊鍔犲悓鍚?MCP 鏃讹紝鍘嗗彶 Session / Task / Cron / Project 涓嶄細鍥犱负鏃у紩鐢ㄨ嚜鍔ㄥ惎鐢ㄨ繖涓柊 identity銆?
 - **鐢ㄩ噺缁熻鎸?Provider 鍒嗗紑**锛氫細璇濈粺璁″拰鐢ㄩ噺闈㈡澘浼氭妸涓嶅悓 Provider 鐨?token / usage 鍒嗗紑璁板綍锛屽噺灏戝渚涘簲鍟嗘贩鐢ㄦ椂鐨勭粺璁′覆绾裤€?
 - **Codex Runtime 鎺ュ彈寮曞鍚庣殑杈撳叆鏇寸ǔ**锛欳odex 鍦ㄦ帴鍙楃敤鎴?steering / 纭鍚庝細鎶婂悗缁緭鍏ユ媶鍒版纭洖鍚堬紝鍑忓皯鎸囦护娣峰叆涓婁竴杞垨琚敊璇秷璐圭殑闂銆?
@@ -433,7 +453,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **绌轰細璇濇敼妯″瀷涓嶅啀璇姤閰嶇疆鏈繚瀛?*锛圼#399](https://github.com/hAcKlyc/HamunaAgent/issues/399)锛夛細鍒氭墦寮€鐨勭┖ session 鍦ㄥ垏鎹㈡ā鍨嬫垨閰嶇疆鏃讹紝浼氬厛瀹屾垚蹇呰鐨勪細璇濈墿鍖栦笌閰嶇疆钀界洏锛屼笉鍐嶆彁绀衡€滈厤缃湭鑳藉畬鍏ㄤ繚瀛樷€濄€?
+- **绌轰細璇濇敼妯″瀷涓嶅啀璇姤閰嶇疆鏈繚瀛?*锛圼#399](https://github.com/hamuna/HamunaAgent/issues/399)锛夛細鍒氭墦寮€鐨勭┖ session 鍦ㄥ垏鎹㈡ā鍨嬫垨閰嶇疆鏃讹紝浼氬厛瀹屾垚蹇呰鐨勪細璇濈墿鍖栦笌閰嶇疆钀界洏锛屼笉鍐嶆彁绀衡€滈厤缃湭鑳藉畬鍏ㄤ繚瀛樷€濄€?
 - **鎭㈠ / 鎳掑姞杞戒細璇濋厤缃笉鍐嶄涪澶?*锛氫粠鍚姩椤点€佸巻鍙叉垨鍐锋仮澶嶈繘鍏ヤ細璇濇椂锛宱wned config snapshot 浼氳淇濈暀锛岄伩鍏?Provider銆佹ā鍨嬨€丮CP 鎴栨彃浠堕厤缃洖閫€鎴愭棫鍊笺€?
 - **閫氶亾浼氳瘽涓嶅啀瑕嗙洊妗岄潰浼氳瘽鐘舵€?*锛欼M銆佸畾鏃朵换鍔″拰鍚庡彴 completion 娴佺▼淇濈暀鍚勮嚜 owner 鐨?session state锛屽噺灏戣法鍏ュ彛鍒囨崲鍚庣殑閰嶇疆涓茬嚎銆?
 - **娲昏穬 sidecar 涓嶅啀琚竻鐞嗚鍒?*锛氫細璇濇竻鐞嗘祦绋嬩細璺宠繃浠嶅湪杩愯鎴栧凡琚叾浠?owner 鎺ョ鐨?sidecar锛岄伩鍏嶈鍒犲悗閲嶅惎銆佸け蹇嗘垨绌鸿浆銆?
@@ -557,7 +577,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **妗岄潰瀹犵墿 / 鎮诞鐞冿紙瀹為獙瀹わ級**锛歁ino 鍙綔涓哄睆骞曡竟缂樺父椹诲叆鍙ｏ紝hover 鍗婇€忔槑棰勮銆佺偣鍑诲浐瀹氳亰澶╋紱灏忕獥鍐呮敮鎸佹甯稿璇濄€佸仠姝€佹煡鐪嬫€濊€?/ 宸ュ叿杩涘害锛屽苟鍙鐞嗘潈闄愮‘璁ゃ€佸悜鐢ㄦ埛鎻愰棶鍜岄€€鍑鸿鍒掔‘璁ゃ€傚彂閫佹椂鍙檮甯﹀墠鍙?App / 绐楀彛鏍囬銆侀€変腑鏂囨湰銆佹埅鍥句笌鍥剧墖闄勪欢锛岄€傚悎蹇€熷熀浜庡綋鍓嶆闈㈠唴瀹瑰彂璧疯姹傘€?
 - **妗屽疇绱犳潗绠＄悊**锛氳缃〉鏂板銆屾闈㈠疇鐗┿€嶏紝鍙紑鍏虫瀹犮€佺粦瀹氬伐浣滃尯銆佸紑鍏虫偓鍋滈瑙堛€佸垏鎹㈠唴缃牱寮忥紝骞舵敮鎸佷粠 Codex Pets銆佹湰鍦?zip 鎴?Petdex 閾炬帴瀵煎叆绱犳潗銆?
 - **CLI 宸ュ叿绠辨敞鍐岃〃锛堝疄楠屽锛?*锛氱敤鎴峰彲浠ヨ AI 鎶婂父鐢ㄥ懡浠ゆ垨鑴氭湰娉ㄥ唽鎴愬彲澶嶇敤宸ュ叿锛涜缃噷鐨勩€屽伐鍏风銆嶅彲鏌ョ湅銆佸惎鍋溿€侀厤缃幆澧冨彉閲?/ API Key 鍜屽垹闄よ繖浜?CLI 宸ュ叿锛屾柊浼氳瘽鍙嚜鍔ㄥ彂鐜板凡鍚敤宸ュ叿銆?
-- **浼氳瘽绾ф帹鐞嗗己搴?*锛圼#324](https://github.com/hAcKlyc/HamunaAgent/issues/324)锛夛細鍚姩椤点€丆hat 杈撳叆鏍忓拰 Agent 榛樿璁剧疆涓柊澧炪€屾帹鐞嗗己搴︺€嶏紝鍙湪鏈嶅姟鍟?/ Runtime 鏀寔鏃堕€夋嫨鏇村揩鎴栨洿娣辩殑鎺ㄧ悊妗ｄ綅銆?
+- **浼氳瘽绾ф帹鐞嗗己搴?*锛圼#324](https://github.com/hamuna/HamunaAgent/issues/324)锛夛細鍚姩椤点€丆hat 杈撳叆鏍忓拰 Agent 榛樿璁剧疆涓柊澧炪€屾帹鐞嗗己搴︺€嶏紝鍙湪鏈嶅姟鍟?/ Runtime 鏀寔鏃堕€夋嫨鏇村揩鎴栨洿娣辩殑鎺ㄧ悊妗ｄ綅銆?
 - **濮嬬粓闃绘鐢佃剳鐫＄湢**锛氳缃腑鏂板鍏ㄥ眬寮€鍏筹紝寮€鍚悗鍗充娇 AI 褰撳墠鏈繍琛岋紝鐢佃剳涔熶笉浼氳嚜鍔ㄨ繘鍏ョ┖闂茬潯鐪狅紱鐣岄潰浼氭槑纭彁绀哄悎鐩栦粛浼氱潯鐪犱笖浼氬鍔犺€楃數銆?
 - **榛樿宸ヤ綔鍖哄彲闅愯棌**锛氬唴缃?Mino 榛樿宸ヤ綔鍖哄彲浠ヤ粠鍚姩椤甸殣钘忥紝涓嶄細鍒犻櫎鏈湴鏂囦欢锛屼篃涓嶄細琚惎鍔ㄨ嚜淇鍙嶅鍔犲洖鏉ャ€?
 - **鏂板鏅鸿氨 GLM 5.2 棰勮**锛氭櫤璋辩浉鍏?Provider 澧炲姞 GLM 5.2锛屽苟鎸夊ぇ涓婁笅鏂囪兘鍔涢厤缃ā鍨嬩俊鎭€?
@@ -586,18 +606,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **宸ヤ綔鍖烘枃浠舵爲鍗囩骇涓哄畬鏁存枃浠剁鐞嗗櫒**锛氬鏍?VS Code 鐨勬枃浠剁鐞嗕綋楠?鈥斺€?鏂瑰悜閿?/ 棣栧瓧姣嶅畾浣嶇瓑閿洏瀵艰埅锛涜鍐呴噸鍛藉悕涓庢柊寤猴紙涓嶅啀寮瑰璇濇锛夛紱鈱楥 / 鈱榅 / 鈱榁 澶嶅埗銆佸壀鍒囥€佺矘璐达紝澶嶅埗鐨勬枃浠惰繕鑳界洿鎺ョ矘璐村埌缁堢鎴栬亰澶╄緭鍏ユ锛涘垹闄ら粯璁よ繘鍏ョ郴缁熷洖鏀剁珯锛團inder銆屾斁鍥炲師澶勩€嶅嵆鍙壘鍥烇級锛屸寴Z 鎴栧彸閿€屾挙閿€涓婁竴姝ユ搷浣溿€嶅彲鎾ら攢绉诲姩 / 閲嶅懡鍚?/ 鏂板缓 / 绮樿创锛涙嫋鏀炬枃浠舵椂鏈夋竻鏅扮殑钀界偣棰勮锛屼笉鍐嶈鏀惧埌鏍圭洰褰曪紱鍙抽敭鑿滃崟鏂板銆屽叏閫夈€嶃€?
-- **AI 宸ュ叿浜у嚭鐨勫浘鐗囩洿鎺ユ樉绀哄湪瀵硅瘽閲?*锛圼#293](https://github.com/hAcKlyc/HamunaAgent/issues/293)锛夛細浠绘剰宸ュ叿锛圡CP / 鍐呯疆锛夎繑鍥炵殑鍥剧墖鍗虫椂鍛堢幇鍦ㄥ伐鍏峰崱鐗囦腑锛屽苟鑷姩淇濆瓨鍒板伐浣滃尯 `hamuna_files/<宸ュ叿鍚?/` 鐩綍渚夸簬鍥炴壘锛涗細璇濇枃浠朵笉鍐嶅唴宓屽浘鐗囨暟鎹紝杈冩棭浼氳瘽鎵撳紑鏇村揩銆?
-- **姣忎釜妯″瀷鍙崟鐙缃?*锛圼#325](https://github.com/hAcKlyc/HamunaAgent/issues/325)锛夛細妯″瀷绠＄悊涓彲涓哄崟涓ā鍨嬭嚜瀹氫箟涓婁笅鏂囩獥鍙ｅぇ灏忋€佽緭鍏ユā鎬侊紙鍥剧墖 / 瑙嗛 / 闊抽锛変笌鏄剧ず鍚嶇О锛屽簲瀵圭涓夋柟渚涘簲鍟嗕俊鎭己澶辨垨涓嶅噯鐨勬儏鍐点€?
+- **AI 宸ュ叿浜у嚭鐨勫浘鐗囩洿鎺ユ樉绀哄湪瀵硅瘽閲?*锛圼#293](https://github.com/hamuna/HamunaAgent/issues/293)锛夛細浠绘剰宸ュ叿锛圡CP / 鍐呯疆锛夎繑鍥炵殑鍥剧墖鍗虫椂鍛堢幇鍦ㄥ伐鍏峰崱鐗囦腑锛屽苟鑷姩淇濆瓨鍒板伐浣滃尯 `hamuna_files/<宸ュ叿鍚?/` 鐩綍渚夸簬鍥炴壘锛涗細璇濇枃浠朵笉鍐嶅唴宓屽浘鐗囨暟鎹紝杈冩棭浼氳瘽鎵撳紑鏇村揩銆?
+- **姣忎釜妯″瀷鍙崟鐙缃?*锛圼#325](https://github.com/hamuna/HamunaAgent/issues/325)锛夛細妯″瀷绠＄悊涓彲涓哄崟涓ā鍨嬭嚜瀹氫箟涓婁笅鏂囩獥鍙ｅぇ灏忋€佽緭鍏ユā鎬侊紙鍥剧墖 / 瑙嗛 / 闊抽锛変笌鏄剧ず鍚嶇О锛屽簲瀵圭涓夋柟渚涘簲鍟嗕俊鎭己澶辨垨涓嶅噯鐨勬儏鍐点€?
 - **鍐呯疆 prompt-writer 鎶€鑳?*锛氳 AI 鎸夌郴缁熷寲鏂规硶璁哄府浣犳挵鍐欍€佷紭鍖栨彁绀鸿瘝銆?
 
 ### Fixed
 
-- **澶т笂涓嬫枃妯″瀷涓嶅啀琚寜 200K 鎴柇**锛圼#335](https://github.com/hAcKlyc/HamunaAgent/issues/335)锛夛細262K鈥?12K 绐楀彛鐨勬ā鍨嬶紙MiniMax / 璞嗗寘 / Kimi 绛夛級鐜板湪鑳界敤婊＄湡瀹炰笂涓嬫枃绐楀彛锛屼笉鍐嶈繃鏃╄嚜鍔ㄥ帇缂┿€侀檮浠朵笉鍐嶈鎸?200K 鎴柇銆?
-- **浼氳瘽缁熻涓庝笂涓嬫枃鍗犵敤鏄剧ず**锛氫慨澶嶄細璇濈粺璁℃樉绀?0 tokens锛圼#331](https://github.com/hAcKlyc/HamunaAgent/issues/331)锛夈€乣/compact` 鍘嬬缉鍚庝笂涓嬫枃鍗犵敤鏄剧ず 100% 鎴栦笉鍙兘鏁板瓧锛圼#323](https://github.com/hAcKlyc/HamunaAgent/issues/323)锛夛紝浠ュ強閲嶆柊娣诲姞宸茬Щ闄ょ殑棰勭疆妯″瀷鏃跺嚭鐜伴噸澶嶆潯鐩殑闂銆?
-- **IM 娓犻亾閰嶇疆涓嶅啀瑕嗙洊妗岄潰浼氳瘽**锛圼#327](https://github.com/hAcKlyc/HamunaAgent/issues/327)锛夛細寮€鍚?IM 鏈哄櫒浜哄悗锛屾闈㈡鍦ㄨ繘琛岀殑浼氳瘽鐨勬ā鍨?/ 鏉冮檺閰嶇疆涓嶅啀琚笭閬撻厤缃悓姝ユ剰澶栬鐩栥€?
-- **鍒犻櫎浼氳瘽褰诲簳鍒犻櫎**锛圼#336](https://github.com/hAcKlyc/HamunaAgent/issues/336)锛夛細鍒犻櫎浼氳瘽鍚庝笉鍐嶅嚭鐜扮湅涓嶈鐨勩€屽菇鐏典細璇濇枃浠躲€嶇户缁崰鐢ㄧ鐩樸€?
+- **澶т笂涓嬫枃妯″瀷涓嶅啀琚寜 200K 鎴柇**锛圼#335](https://github.com/hamuna/HamunaAgent/issues/335)锛夛細262K鈥?12K 绐楀彛鐨勬ā鍨嬶紙MiniMax / 璞嗗寘 / Kimi 绛夛級鐜板湪鑳界敤婊＄湡瀹炰笂涓嬫枃绐楀彛锛屼笉鍐嶈繃鏃╄嚜鍔ㄥ帇缂┿€侀檮浠朵笉鍐嶈鎸?200K 鎴柇銆?
+- **浼氳瘽缁熻涓庝笂涓嬫枃鍗犵敤鏄剧ず**锛氫慨澶嶄細璇濈粺璁℃樉绀?0 tokens锛圼#331](https://github.com/hamuna/HamunaAgent/issues/331)锛夈€乣/compact` 鍘嬬缉鍚庝笂涓嬫枃鍗犵敤鏄剧ず 100% 鎴栦笉鍙兘鏁板瓧锛圼#323](https://github.com/hamuna/HamunaAgent/issues/323)锛夛紝浠ュ強閲嶆柊娣诲姞宸茬Щ闄ょ殑棰勭疆妯″瀷鏃跺嚭鐜伴噸澶嶆潯鐩殑闂銆?
+- **IM 娓犻亾閰嶇疆涓嶅啀瑕嗙洊妗岄潰浼氳瘽**锛圼#327](https://github.com/hamuna/HamunaAgent/issues/327)锛夛細寮€鍚?IM 鏈哄櫒浜哄悗锛屾闈㈡鍦ㄨ繘琛岀殑浼氳瘽鐨勬ā鍨?/ 鏉冮檺閰嶇疆涓嶅啀琚笭閬撻厤缃悓姝ユ剰澶栬鐩栥€?
+- **鍒犻櫎浼氳瘽褰诲簳鍒犻櫎**锛圼#336](https://github.com/hamuna/HamunaAgent/issues/336)锛夛細鍒犻櫎浼氳瘽鍚庝笉鍐嶅嚭鐜扮湅涓嶈鐨勩€屽菇鐏典細璇濇枃浠躲€嶇户缁崰鐢ㄧ鐩樸€?
 - **IM / 瀹氭椂浠诲姟涓嶅啀鍋跺彂鎷垮埌涓婁竴杞洖澶?*锛氬閮?Runtime锛圕odex / Claude Code / Gemini锛変笅锛孖M 鏈哄櫒浜轰笌瀹氭椂浠诲姟鍋跺彂鏀跺埌涓婁竴杞唴瀹规垨绌哄洖澶嶇殑闂淇銆?
-- **鐣岄潰娓愬彉鐏板甫淇**锛圼#333](https://github.com/hAcKlyc/HamunaAgent/issues/333)锛夛細閮ㄥ垎绯荤粺涓婃繁鑹叉笎鍙樺鏄剧ず鐏拌壊姹″甫鐨勯棶棰樹慨澶嶃€?
+- **鐣岄潰娓愬彉鐏板甫淇**锛圼#333](https://github.com/hamuna/HamunaAgent/issues/333)锛夛細閮ㄥ垎绯荤粺涓婃繁鑹叉笎鍙樺鏄剧ず鐏拌壊姹″甫鐨勯棶棰樹慨澶嶃€?
 - **鍒嗘爮缃戦〉棰勮鏇寸ǔ瀹?*锛氱獥鍙?/ 甯冨眬璋冩暣鏃跺垎鏍忕綉椤甸瑙堝伓鍙戦敊浣嶃€侀棯鐑佺殑闂淇銆?
 - **Windows 鍚姩澶辫触鎻愮ず鏇村噯纭?*锛欰I 寮曟搸瀛愯繘绋嬪惎鍔ㄥけ璐ユ椂缁欏嚭鍩轰簬璇佹嵁鐨勮瘖鏂彁绀猴紝涓嶅啀绗肩粺褰掑洜浜?Git for Windows銆?
 - **瀹夊叏涓庡彲闈犳€?*锛氫慨澶嶅伐浣滃尯鏂囦欢瀵煎叆鍙粡绗﹀彿閾炬帴璇诲彇鍙椾繚鎶ょ洰褰曠殑瀹夊叏闅愭偅锛涙嫋鍏ユ枃浠跺け璐ユ椂鐜板湪浼氭槑纭彁绀哄師鍥狅紝涓嶅啀闈欓粯蹇界暐銆?
@@ -620,8 +640,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **浼氳瘽鎭㈠鏇村彲闈?*锛氫慨澶嶄簡鎭㈠浼氳瘽鏃跺伓灏斿彧鏄剧ず鍒拌緝鏃╁巻鍙层€佹渶鏂板嚑鏉℃秷鎭€屾秷澶便€嶇殑闂锛堜綘鐨勬暟鎹缁堝畨鍏級锛屼互鍙婁釜鍒儏鍐典笅鎵撳紑杈冩棭鎴栬涓柇杩囩殑浼氳瘽浼氭暣绐楀彛鎶ャ€岀晫闈㈡覆鏌撳嚭閿欍€嶇殑闂锛涘簲鐢ㄩ噸鍚悗鎭㈠鐨勬爣绛鹃〉涔熸洿绋冲畾銆?
-- **Windows 鍏煎鎬т慨澶?*锛氫慨澶嶄簡 Windows 涓婃棫鐗堝畾鏃朵换鍔″崌绾ф椂銆屾壘涓嶅埌宸ヤ綔鍖恒€嶃€佷换鍔″崱鐗囩己宸ヤ綔鍖哄悕 / 鍥炬爣銆佹渶杩戜細璇濆垪琛ㄧ┖鐧姐€佸伐浣滃尯绛涢€夊叏閮ㄦ樉绀恒€屽凡澶辨晥銆嶇瓑涓€绯诲垪鍥犺矾寰勬牸寮忎笉涓€鑷村鑷寸殑闂锛圼#320](https://github.com/hAcKlyc/HamunaAgent/issues/320)锛夛紱淇浜嗗崌绾у悗鐢ㄦ埛鎶€鑳芥剰澶栨秷澶憋紙[#321](https://github.com/hAcKlyc/HamunaAgent/issues/321)锛夛紱浠ュ強鍒嗘爮鎵撳紑缃戦〉棰勮鏃跺伓鍙戠殑鏄剧ず寮傚父锛圼#322](https://github.com/hAcKlyc/HamunaAgent/issues/322)锛夈€?
-- **鑳藉姏闈㈡澘閲嶅鍒嗛殧绾?*锛氬綋鍓嶄細璇濇湭鍚敤浠讳綍鑳藉姏鏃讹紝闈㈡澘椤堕儴涓嶅啀鍑虹幇涓ゆ潯鍙犲姞鐨勫垎闅旂嚎锛圼#314](https://github.com/hAcKlyc/HamunaAgent/issues/314)锛夈€?
+- **Windows 鍏煎鎬т慨澶?*锛氫慨澶嶄簡 Windows 涓婃棫鐗堝畾鏃朵换鍔″崌绾ф椂銆屾壘涓嶅埌宸ヤ綔鍖恒€嶃€佷换鍔″崱鐗囩己宸ヤ綔鍖哄悕 / 鍥炬爣銆佹渶杩戜細璇濆垪琛ㄧ┖鐧姐€佸伐浣滃尯绛涢€夊叏閮ㄦ樉绀恒€屽凡澶辨晥銆嶇瓑涓€绯诲垪鍥犺矾寰勬牸寮忎笉涓€鑷村鑷寸殑闂锛圼#320](https://github.com/hamuna/HamunaAgent/issues/320)锛夛紱淇浜嗗崌绾у悗鐢ㄦ埛鎶€鑳芥剰澶栨秷澶憋紙[#321](https://github.com/hamuna/HamunaAgent/issues/321)锛夛紱浠ュ強鍒嗘爮鎵撳紑缃戦〉棰勮鏃跺伓鍙戠殑鏄剧ず寮傚父锛圼#322](https://github.com/hamuna/HamunaAgent/issues/322)锛夈€?
+- **鑳藉姏闈㈡澘閲嶅鍒嗛殧绾?*锛氬綋鍓嶄細璇濇湭鍚敤浠讳綍鑳藉姏鏃讹紝闈㈡澘椤堕儴涓嶅啀鍑虹幇涓ゆ潯鍙犲姞鐨勫垎闅旂嚎锛圼#314](https://github.com/hamuna/HamunaAgent/issues/314)锛夈€?
 
 ---
 
@@ -631,7 +651,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **閫€鍑哄師鍥犳劅鐭ョ殑浼氳瘽鎭㈠**锛圼#309](https://github.com/hAcKlyc/HamunaAgent/issues/309)锛夛細鍚姩涓嶅啀鏃犲樊鍒己鍒舵仮澶嶄笂娆＄殑鎵€鏈夋爣绛鹃〉銆備綘涓诲姩閫€鍑猴紙鈱楺 / Dock / 鎵樼洏锛夋椂锛屼笅娆℃槸骞插噣鍚姩锛屼笉鍐嶈涓婃鐨勪細璇濇墦鎵帮紱鍙湁褰撲笂娆℃槸宕╂簝鎴栥€岄噸鍚洿鏂般€嶆椂锛屾墠鍦ㄦ爣棰樻爮鏄剧ず涓€涓彲鐐瑰彲鍙夌殑銆屾仮澶嶄笂娆″璇濄€嶅叆鍙ｏ紝鐢变綘鍐冲畾鏄惁鎭㈠銆?
+- **閫€鍑哄師鍥犳劅鐭ョ殑浼氳瘽鎭㈠**锛圼#309](https://github.com/hamuna/HamunaAgent/issues/309)锛夛細鍚姩涓嶅啀鏃犲樊鍒己鍒舵仮澶嶄笂娆＄殑鎵€鏈夋爣绛鹃〉銆備綘涓诲姩閫€鍑猴紙鈱楺 / Dock / 鎵樼洏锛夋椂锛屼笅娆℃槸骞插噣鍚姩锛屼笉鍐嶈涓婃鐨勪細璇濇墦鎵帮紱鍙湁褰撲笂娆℃槸宕╂簝鎴栥€岄噸鍚洿鏂般€嶆椂锛屾墠鍦ㄦ爣棰樻爮鏄剧ず涓€涓彲鐐瑰彲鍙夌殑銆屾仮澶嶄笂娆″璇濄€嶅叆鍙ｏ紝鐢变綘鍐冲畾鏄惁鎭㈠銆?
 - **榛樿宸ヤ綔鍖哄紑绠卞嵆鐢ㄧ殑涓诲姩 Agent 鑳藉姏**锛氶粯璁ょ殑 Mino 宸ヤ綔鍖猴紙浠ュ強浠庢ā鏉垮簱鏂板缓鐨?Mino 宸ヤ綔鍖猴級鐜板湪榛樿寮€鍚€屼富鍔?Agent 妯″紡銆嶏紝鍐呯疆蹇冭烦涓庤蹇嗘洿鏂?鈥斺€?鏂扮敤鎴风涓€娆℃墦寮€鍗虫槸涓€涓畬鏁寸殑 Agent 宸ヤ綔鍖猴紝鏃犻渶鎵嬪姩寮€鍚紙涓嶄細鑷姩鍒涘缓浠讳綍 IM 娓犻亾锛夈€?
 - **浼氳瘽鍘嗗彶鏂板銆屾洿澶氥€嶈彍鍗曚笌銆屽湪鏂版爣绛鹃〉鎵撳紑銆?*锛氬伐浣滃尯鍘嗗彶閲岀殑浼氳瘽琛屼笉鍐嶅爢鍙犱竴鎺掓偓鍋滄寜閽?鈥斺€?楂橀鐨勩€屽湪鏂版爣绛鹃〉鎵撳紑銆嶇洿鎺ュ彲瑙侊紝鏀惰棌 / 瀵煎嚭 / 缁熻 / 鍒犻櫎鏀惰繘姣忚鐨勩€屾洿澶氥€?鈰? 鑿滃崟锛屽垪琛ㄦ洿娓呯埥銆?
 - **鑱婂ぉ涓彸閿矾寰勫彲銆屽湪鏂囦欢鐩綍涓睍绀恒€?*锛氬湪鑱婂ぉ閲屽彸閿竴涓枃浠惰矾寰勶紝鍙洿鎺ュ湪绯荤粺鏂囦欢绠＄悊鍣ㄤ腑瀹氫綅鍒拌鏂囦欢銆?
@@ -643,7 +663,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **搴旂敤鍚姩涓庢柊寤烘爣绛鹃〉鏇村揩**锛氱簿绠€浜嗛灞忓姞杞戒綋绉€佹敼涓烘寜闇€鍔犺浇鍚勯〉闈紝棣栨鍚姩鍜屾柊寤烘爣绛鹃〉鏄庢樉鏇村揩銆?
 - **宸ヤ綔鍖烘枃浠舵爲涓嶅啀闂儊**锛氬湪鏈夋枃浠舵寔缁啓鍏ワ紙AI / 寮€鍙戞湇鍔?/ git 绛夛級鏃讹紝鏂囦欢鏍戜笉鍐嶉绻侀棯鐑侊紱婊氬姩鍒板簳閮ㄦ椂椤堕儴闈㈠寘灞戜篃涓嶅啀鎶栧姩銆?
 - **Windows 鍏煎鎬т慨澶?*锛氫慨澶嶄簡 Windows 涓?AI 鐢熸垚鍥剧墖涓嶆樉绀恒€侀儴鍒嗗浘琛?widget 绌虹櫧銆佹粴鍔ㄦ潯鍗犵敤甯冨眬瀵艰嚧閿欎綅銆佸垎鏍忛瑙堣繃娓℃挄瑁傜瓑闂銆?
-- **蹇冭烦闂撮殧銆岃嚜瀹氫箟銆嶈緭鍏ヤ慨澶?*锛圼#310](https://github.com/hAcKlyc/HamunaAgent/issues/310)锛夛細鑷畾涔夊績璺抽棿闅旀椂鍙互姝ｅ父杈撳叆鏁板瓧锛屼笉鍐嶈涓€旀竻绌烘垨璇Е鎴愰璁惧€笺€?
+- **蹇冭烦闂撮殧銆岃嚜瀹氫箟銆嶈緭鍏ヤ慨澶?*锛圼#310](https://github.com/hamuna/HamunaAgent/issues/310)锛夛細鑷畾涔夊績璺抽棿闅旀椂鍙互姝ｅ父杈撳叆鏁板瓧锛屼笉鍐嶈涓€旀竻绌烘垨璇Е鎴愰璁惧€笺€?
 - **鐢熸垚鐨勯煶棰戝崱鐗囬噸鏂拌璁′负鎾斁鍣?*锛欰I 鐢熸垚鐨勮闊充互鏇村畬鏁寸殑鎾斁鍣ㄥ崱鐗囧湪瀵硅瘽娴佷腑鍐呰仈鍛堢幇锛屾敮鎸佹殏鍋?/ 缁х画涓庤繘搴︽煡鐪嬨€?
 
 ---
@@ -654,17 +674,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **瀵硅瘽鑷姩鐢熸垚鏍囬**锛圼#296](https://github.com/hAcKlyc/HamunaAgent/issues/296)锛夛細瀵硅瘽杩涜鍒扮 2 杞悗锛屼細鑷姩鐢熸垚涓€涓究浜庢棩鍚庡湪浼氳瘽鍒楄〃閲屼竴鐪艰鍑虹殑鏍囬锛堝敖閲忎繚鐣欓」鐩悕銆佺紪鍙枫€佹枃浠跺悕绛夌嫭鐗归敋鐐癸級銆傛敼鐢卞悗绔粺涓€鐢熸垚锛屽洜姝?Chat銆両M 鏈哄櫒浜恒€佸畾鏃朵换鍔°€佸悗鍙颁换鍔＄殑浼氳瘽閮借兘鎷垮埌鏍囬锛涙鍓嶅彧鏈夋墦寮€鐫€鐨勮亰澶╂爣绛句細鐢熸垚锛屽叧闂垨鍒锋柊鍚庡氨涓簡銆?
+- **瀵硅瘽鑷姩鐢熸垚鏍囬**锛圼#296](https://github.com/hamuna/HamunaAgent/issues/296)锛夛細瀵硅瘽杩涜鍒扮 2 杞悗锛屼細鑷姩鐢熸垚涓€涓究浜庢棩鍚庡湪浼氳瘽鍒楄〃閲屼竴鐪艰鍑虹殑鏍囬锛堝敖閲忎繚鐣欓」鐩悕銆佺紪鍙枫€佹枃浠跺悕绛夌嫭鐗归敋鐐癸級銆傛敼鐢卞悗绔粺涓€鐢熸垚锛屽洜姝?Chat銆両M 鏈哄櫒浜恒€佸畾鏃朵换鍔°€佸悗鍙颁换鍔＄殑浼氳瘽閮借兘鎷垮埌鏍囬锛涙鍓嶅彧鏈夋墦寮€鐫€鐨勮亰澶╂爣绛句細鐢熸垚锛屽叧闂垨鍒锋柊鍚庡氨涓簡銆?
 - **鐢熸垚鐨勮闊?/ 鍥剧墖鐩存帴鎴愪负鑱婂ぉ闄勪欢**锛氱敤璇煶鍚堟垚锛坋dge-tts锛夌敓鎴愮殑闊抽銆佺敤 Gemini 鐢熸垚鎴栫紪杈戠殑鍥剧墖锛岀幇鍦ㄧ洿鎺ヤ綔涓鸿亰澶╅檮浠跺憟鐜?鈥斺€?闊抽鍙唴鑱旀挱鏀俱€佸浘鐗囧彲鏌ョ湅锛屼笉鍐嶅彧鏄竴琛屾枃浠惰矾寰勬枃瀛椼€侰odex 绛夊閮?Runtime 鐨勫畼鏂逛骇鍥惧伐鍏蜂篃璧板悓涓€濂楀憟鐜扮閬撱€?
 
 ### Fixed
 
 - **渚涘簲鍟嗛獙璇佸け璐ユ樉绀虹湡瀹炲師鍥?*锛氱涓夋柟渚涘簲鍟嗙殑 API Key 楠岃瘉澶辫触鏃讹紝涓嶅啀涓€寰嬫彁绀恒€岄獙璇佽秴鏃讹紝璇锋鏌ョ綉缁滆繛鎺ャ€嶃€傜幇鍦ㄤ細鍖哄垎骞舵樉绀虹湡瀹炲師鍥?鈥斺€?妯″瀷涓嶅瓨鍦ㄣ€佷綑棰濅笉瓒?/ 娆犺垂銆並ey 鍙楅檺銆丅ase URL 閿欒銆佹垨渚涘簲鍟嗚繑鍥炵殑鐪熷疄 HTTP 鐘舵€侊紝骞堕檮銆岃鎯呫€嶆寜閽究浜庢帓鏌ャ€?
-- **鍒犻櫎 API Key 鏃朵笉鍐嶅埛灞忔姤閿?*锛圼#306](https://github.com/hAcKlyc/HamunaAgent/issues/306)锛夛細閫€鏍兼垨娓呯┖ API Key 杈撳叆妗嗘椂锛屼笉鍐嶆瘡鍒犱竴涓瓧绗﹀氨瑙﹀彂涓€娆￠獙璇併€佸爢鍙犲嚭涓€涓层€孠ey 鏃犳晥銆嶆彁绀恒€傚彧鏈夌矘璐淬€佹鍚戣緭鍏ャ€佹垨鏇挎崲鎴愬彟涓€涓?Key 鎵嶄細瑙﹀彂楠岃瘉銆?
+- **鍒犻櫎 API Key 鏃朵笉鍐嶅埛灞忔姤閿?*锛圼#306](https://github.com/hamuna/HamunaAgent/issues/306)锛夛細閫€鏍兼垨娓呯┖ API Key 杈撳叆妗嗘椂锛屼笉鍐嶆瘡鍒犱竴涓瓧绗﹀氨瑙﹀彂涓€娆￠獙璇併€佸爢鍙犲嚭涓€涓层€孠ey 鏃犳晥銆嶆彁绀恒€傚彧鏈夌矘璐淬€佹鍚戣緭鍏ャ€佹垨鏇挎崲鎴愬彟涓€涓?Key 鎵嶄細瑙﹀彂楠岃瘉銆?
 - **鏂板缓鏍囩椤典笉鍐嶇煭鏆傞粍灞?*锛氭柊寤烘爣绛鹃〉鐜板湪鍗虫椂鏄剧ず鍐呭锛屼笉鍐嶅嚭鐜?1鈥? 绉掔殑鍏ㄥ睆绌虹櫧锛堜織绉般€岄粍灞忋€嶏級銆?
-- **鐐广€屽仠姝€嶄笉鍐嶅脊鍑哄唴閮ㄨ瘖鏂敊璇?*锛圼#307](https://github.com/hAcKlyc/HamunaAgent/issues/307)锛夛細鎵嬪姩涓 AI 鍥炲悎鏃讹紝涓嶅啀鎶婂唴閮ㄨ瘖鏂俊鎭綋鎴愭姤閿欐í骞呭脊鍑猴紙妗岄潰銆両M 杞彂銆佸閮?Runtime 涓夊涓€鑷达級銆?
-- **鏍囩鍐呭垏鎹㈡ā鍨?/ 鏉冮檺妯″紡鍚庝笉鍐嶄涪澶?*锛圼#305](https://github.com/hAcKlyc/HamunaAgent/issues/305)锛夛細鍦ㄦ煇涓爣绛惧唴涓存椂鍒囨崲鐨勬ā鍨嬫垨鏉冮檺妯″紡锛屽叧闂爣绛惧啀閲嶆柊鎵撳紑鍚庤兘姝ｇ‘淇濈暀銆?
-- **浠呬慨鏀?MCP 鐜鍙橀噺涔熷嵆鏃剁敓鏁?*锛圼#303](https://github.com/hAcKlyc/HamunaAgent/issues/303)锛夛細鍙敼鏌愪釜 MCP 宸ュ叿鐨勭幆澧冨彉閲忥紙娌℃湁澧炲垹宸ュ叿锛夋椂锛屾敼鍔ㄧ幇鍦ㄤ細鍗虫椂鍚屾鍒板綋鍓嶆鍦ㄥ璇濈殑 Chat锛屾棤闇€閲嶅惎浼氳瘽銆?
+- **鐐广€屽仠姝€嶄笉鍐嶅脊鍑哄唴閮ㄨ瘖鏂敊璇?*锛圼#307](https://github.com/hamuna/HamunaAgent/issues/307)锛夛細鎵嬪姩涓 AI 鍥炲悎鏃讹紝涓嶅啀鎶婂唴閮ㄨ瘖鏂俊鎭綋鎴愭姤閿欐í骞呭脊鍑猴紙妗岄潰銆両M 杞彂銆佸閮?Runtime 涓夊涓€鑷达級銆?
+- **鏍囩鍐呭垏鎹㈡ā鍨?/ 鏉冮檺妯″紡鍚庝笉鍐嶄涪澶?*锛圼#305](https://github.com/hamuna/HamunaAgent/issues/305)锛夛細鍦ㄦ煇涓爣绛惧唴涓存椂鍒囨崲鐨勬ā鍨嬫垨鏉冮檺妯″紡锛屽叧闂爣绛惧啀閲嶆柊鎵撳紑鍚庤兘姝ｇ‘淇濈暀銆?
+- **浠呬慨鏀?MCP 鐜鍙橀噺涔熷嵆鏃剁敓鏁?*锛圼#303](https://github.com/hamuna/HamunaAgent/issues/303)锛夛細鍙敼鏌愪釜 MCP 宸ュ叿鐨勭幆澧冨彉閲忥紙娌℃湁澧炲垹宸ュ叿锛夋椂锛屾敼鍔ㄧ幇鍦ㄤ細鍗虫椂鍚屾鍒板綋鍓嶆鍦ㄥ璇濈殑 Chat锛屾棤闇€閲嶅惎浼氳瘽銆?
 - **@ 鎻愬強鏂囦欢鎼滅储甯冨眬浼樺寲**锛氳緭鍏?`@` 鎻愬強鏂囦欢鏃讹紝鎼滅储缁撴灉鐨勬帓鐗堟洿娓呮櫚鏄撹銆?
 - **Windows 渚挎惡鐗堝彲姝ｅ父鍚姩**锛氫慨姝ｄ簡 Windows 渚挎惡鐗堬紙portable锛夊彲鎵ц鏂囦欢鐨勫懡鍚嶏紝渚挎惡鍖呬笉鍐嶅洜姝ゆ棤娉曞惎鍔ㄣ€?
 
@@ -681,10 +701,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **鍒囨崲浼氳瘽涓嶅啀闈欓粯閲嶇疆妯″瀷 / Provider**锛圼#300](https://github.com/hAcKlyc/HamunaAgent/issues/300)锛夛細姝ゅ墠鍒囧洖涓€涓粦瀹氫簡涓嶅彲鐢?Provider锛堢己 API Key / 宸茬鐢級鐨勪細璇濇椂锛屼細闈欓粯鍥為€€鍒扮涓€涓彲鐢?Provider 骞舵妸妯″瀷瑕嗙洊鎴愬畠鐨勯粯璁ゆā鍨嬶紝瀵艰嚧涓嬩竴鏉℃秷鎭璁¤垂鍒伴敊璇殑 Provider锛?02锛夈€傜幇鍦ㄤ細淇濈暀浣?pin 鐨勫悎娉曟ā鍨嬶紱Provider 涓嶅彲鐢ㄦ椂鎷︽埅鍙戦€佸苟鏄庣‘鎻愮ず锛岃€屼笉鏄倓鎮勫垏璧般€侀敊璇璐广€?
-- **Agent 娓犻亾閰嶇疆鏇村仴澹?*锛圼#301](https://github.com/hAcKlyc/HamunaAgent/issues/301)锛夛細淇浜?Agent 鐨?Provider / MCP 閰嶇疆鍦ㄦ煇浜涙儏鍐典笅琚瓨鎴愬璞★紙鑰岄潪瀛楃涓插寲 JSON锛夛紝瀵艰嚧娓犻亾鍚姩鎶?`invalid type: map`銆佺敋鑷冲紑鏈烘椂鍏ㄩ儴 Agent 鑷惎澶辫触鐨勯棶棰樸€傜幇鍦ㄥ姞杞芥椂鑷姩褰掍竴鍖栵紝涓斿崟涓崯鍧忕殑 Agent 涓嶅啀鎷栧灝鍏跺畠 Agent 鐨勮嚜鍚€?
+- **鍒囨崲浼氳瘽涓嶅啀闈欓粯閲嶇疆妯″瀷 / Provider**锛圼#300](https://github.com/hamuna/HamunaAgent/issues/300)锛夛細姝ゅ墠鍒囧洖涓€涓粦瀹氫簡涓嶅彲鐢?Provider锛堢己 API Key / 宸茬鐢級鐨勪細璇濇椂锛屼細闈欓粯鍥為€€鍒扮涓€涓彲鐢?Provider 骞舵妸妯″瀷瑕嗙洊鎴愬畠鐨勯粯璁ゆā鍨嬶紝瀵艰嚧涓嬩竴鏉℃秷鎭璁¤垂鍒伴敊璇殑 Provider锛?02锛夈€傜幇鍦ㄤ細淇濈暀浣?pin 鐨勫悎娉曟ā鍨嬶紱Provider 涓嶅彲鐢ㄦ椂鎷︽埅鍙戦€佸苟鏄庣‘鎻愮ず锛岃€屼笉鏄倓鎮勫垏璧般€侀敊璇璐广€?
+- **Agent 娓犻亾閰嶇疆鏇村仴澹?*锛圼#301](https://github.com/hamuna/HamunaAgent/issues/301)锛夛細淇浜?Agent 鐨?Provider / MCP 閰嶇疆鍦ㄦ煇浜涙儏鍐典笅琚瓨鎴愬璞★紙鑰岄潪瀛楃涓插寲 JSON锛夛紝瀵艰嚧娓犻亾鍚姩鎶?`invalid type: map`銆佺敋鑷冲紑鏈烘椂鍏ㄩ儴 Agent 鑷惎澶辫触鐨勯棶棰樸€傜幇鍦ㄥ姞杞芥椂鑷姩褰掍竴鍖栵紝涓斿崟涓崯鍧忕殑 Agent 涓嶅啀鎷栧灝鍏跺畠 Agent 鐨勮嚜鍚€?
 - **澶栭儴 Runtime 璁板繂鏇存柊淇**锛氫娇鐢?Codex / Claude Code / Gemini 澶栭儴 Runtime 鐨勪細璇濓紝瀹氭椂璁板繂鏇存柊姝ゅ墠浼氶潤榛樼┖杞紙0 杞€佸亣鎴愬姛锛岀暀涓嬪鍎挎皵娉★級銆傜幇鍦ㄦ纭蛋瀵瑰簲 Runtime 鎵ц锛屽苟浠ョ湡瀹炲洖鍚堟垚鍔熶负鍑嗐€?
-- **涓枃杈撳叆娉曡鍙戜慨澶?*锛圼#123](https://github.com/hAcKlyc/HamunaAgent/issues/123)锛夛細AI 灏忓姪鐞嗕笌闂鍙嶉杈撳叆妗嗭紝鍦ㄧ敤涓枃 / 鏃ユ枃杈撳叆娉曢€夎瘝鏃舵寜鍥炶溅涓嶅啀璇彂閫併€?
+- **涓枃杈撳叆娉曡鍙戜慨澶?*锛圼#123](https://github.com/hamuna/HamunaAgent/issues/123)锛夛細AI 灏忓姪鐞嗕笌闂鍙嶉杈撳叆妗嗭紝鍦ㄧ敤涓枃 / 鏃ユ枃杈撳叆娉曢€夎瘝鏃舵寜鍥炶溅涓嶅啀璇彂閫併€?
 - **宓屽瀛?agent 鍥剧墖浜х墿鏄剧ず淇**锛氫娇鐢?Codex 澶栭儴 Runtime 鏃讹紝瀛?agent 鐢熸垚鐨勫浘鐗囩瓑瀵屽獟浣撲骇鐗╂鍓嶄細琚涪寮冦€佸彧鏄剧ず涓€琛屾枃瀛楋紱鐜板湪鑳藉儚涓绘祦绋嬩竴鏍锋纭覆鏌撳浘搴撱€?
 - **鍝嶅簲瓒呮椂鍚庤嚜鍔ㄦ仮澶?*锛欰I 鍥炲悎鍥犻暱鏃堕棿鏃犲搷搴旇涓鍚庯紝鐜板湪浼氳嚜鍔ㄧ画涓婄户缁墽琛岋紝涓嶅啀鍗′綇銆侀渶瑕佹墜鍔ㄩ噸鍙戙€?
 
@@ -696,8 +716,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Plan锛堣鍒掞級妯″紡鐜板湪鐪熸寮哄埗鍙**锛圼#295](https://github.com/hAcKlyc/HamunaAgent/issues/295)锛夛細姝ゅ墠鍦?Plan 妯″紡涓嬶紝閮ㄥ垎绗笁鏂规ā鍨嬩粛鍙兘涓嶇粡瀹℃壒灏辩洿鎺ユ墽琛屽啓鏂囦欢銆佽繍琛屽懡浠ょ瓑鏈夊壇浣滅敤鐨勬搷浣滐紝瀛樺湪璇搷浣滈闄┿€傜幇鍦ㄨ繖绫绘搷浣滀細琚‖鎬ф嫤鎴?鈥斺€?Plan 妯″紡涓?AI 鍙兘鍋氬彧璇昏皟鐮斾笌瑙勫垝锛屽繀椤荤粡浣犲鎵归€€鍑?Plan 妯″紡鍚庢墠鑳芥墽琛屽啓鎿嶄綔锛堝唴缃鍙栥€佹悳绱笌銆屽悜鐢ㄦ埛鎻愰棶 / 鎻愪氦鏂规銆嶄笉鍙楀奖鍝嶏級銆?
-- **銆岄噸鍚洿鏂般€嶅悗鏍囩椤垫仮澶嶆洿鍙潬**锛圼#232](https://github.com/hAcKlyc/HamunaAgent/issues/232) 鍔犲浐锛夛細鏍囩鎭㈠姝ゅ墠鍙啓 localStorage锛岃€?WebView 鎶?localStorage 钀界洏鏄紓姝ョ殑鈥斺€旂偣銆岄噸鍚洿鏂般€嶆椂杩涚▼琚珛鍗冲己鍒堕€€鍑猴紙Windows 璧?NSIS `exit(0)`銆乵acOS 璧?`relaunch()`锛夛紝鏈€鍚庝竴娆″啓鍏ュ彲鑳借繕娌¤惤鐩樺氨涓簡锛屽鑷撮噸鍚悗鏍囩娌℃仮澶嶃€傜幇鍦ㄥ湪閫€鍑哄墠棰濆鎶婃爣绛惧揩鐓?fsync 钀界洏鍒?`~/.hamuna/open-tabs.json`锛堝鐢?config.json 鐨勫師瀛愬啓锛夛紝閲嶅惎鏃惰嫢 localStorage 璇诲埌绌哄氨浠庤繖涓厹搴曞揩鐓ф仮澶嶏紝鐢ㄥ畬鍗冲垹銆?
+- **Plan锛堣鍒掞級妯″紡鐜板湪鐪熸寮哄埗鍙**锛圼#295](https://github.com/hamuna/HamunaAgent/issues/295)锛夛細姝ゅ墠鍦?Plan 妯″紡涓嬶紝閮ㄥ垎绗笁鏂规ā鍨嬩粛鍙兘涓嶇粡瀹℃壒灏辩洿鎺ユ墽琛屽啓鏂囦欢銆佽繍琛屽懡浠ょ瓑鏈夊壇浣滅敤鐨勬搷浣滐紝瀛樺湪璇搷浣滈闄┿€傜幇鍦ㄨ繖绫绘搷浣滀細琚‖鎬ф嫤鎴?鈥斺€?Plan 妯″紡涓?AI 鍙兘鍋氬彧璇昏皟鐮斾笌瑙勫垝锛屽繀椤荤粡浣犲鎵归€€鍑?Plan 妯″紡鍚庢墠鑳芥墽琛屽啓鎿嶄綔锛堝唴缃鍙栥€佹悳绱笌銆屽悜鐢ㄦ埛鎻愰棶 / 鎻愪氦鏂规銆嶄笉鍙楀奖鍝嶏級銆?
+- **銆岄噸鍚洿鏂般€嶅悗鏍囩椤垫仮澶嶆洿鍙潬**锛圼#232](https://github.com/hamuna/HamunaAgent/issues/232) 鍔犲浐锛夛細鏍囩鎭㈠姝ゅ墠鍙啓 localStorage锛岃€?WebView 鎶?localStorage 钀界洏鏄紓姝ョ殑鈥斺€旂偣銆岄噸鍚洿鏂般€嶆椂杩涚▼琚珛鍗冲己鍒堕€€鍑猴紙Windows 璧?NSIS `exit(0)`銆乵acOS 璧?`relaunch()`锛夛紝鏈€鍚庝竴娆″啓鍏ュ彲鑳借繕娌¤惤鐩樺氨涓簡锛屽鑷撮噸鍚悗鏍囩娌℃仮澶嶃€傜幇鍦ㄥ湪閫€鍑哄墠棰濆鎶婃爣绛惧揩鐓?fsync 钀界洏鍒?`~/.hamuna/open-tabs.json`锛堝鐢?config.json 鐨勫師瀛愬啓锛夛紝閲嶅惎鏃惰嫢 localStorage 璇诲埌绌哄氨浠庤繖涓厹搴曞揩鐓ф仮澶嶏紝鐢ㄥ畬鍗冲垹銆?
 
 ---
 
@@ -714,8 +734,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **瓒呴暱浼氳瘽鎭㈠鍚庡唴瀹规埅鏂?*锛氬寘鍚ぇ閲忓伐鍏疯緭鍑虹殑瓒呴暱浼氳瘽锛堝挨鍏?Codex 瀛?agent 鎵归噺浜у嚭鐨勫洖鍚堬級閲嶆柊鎵撳紑鏃讹紝鍘嗗彶涓嶅啀鍗″湪涓棿鏌愭潯娑堟伅銆佸悗缁唴瀹逛笉鏄剧ず锛涚幇鍦ㄤ細瀹屾暣鍔犺浇锛屼釜鍒秴澶х殑鍗曟潯娑堟伅鎶樺彔涓洪瑙堬紝瀹屾暣鍐呭浠嶄繚瀛樺湪鏈湴浼氳瘽鏂囦欢銆?
-- **HTML 棰勮绐楀彛瀹氫綅寮傚父**锛圼#290](https://github.com/hAcKlyc/HamunaAgent/issues/290)锛夛細鐐瑰嚮鏂囦欢鍚嶉瑙?HTML 鏃讹紝鍐呭祵娴忚鍣ㄦ湁鏃朵互 0 瀹藉害鍒涘缓銆佹偓娴鐩栧湪鑱婂ぉ鍖哄煙涓婃柟鑰岄潪鏄剧ず鍦ㄥ彸渚ф祻瑙堝櫒闈㈡澘銆傛牴鍥犳槸鍙充晶鍒嗘爮瀹瑰櫒鍦ㄨ亰澶╁尯 300ms 瀹藉害杩囨浮鍔ㄧ敾鏈熼棿瀹藉害浠嶄负 0锛屽垱寤烘椂璇诲埌鐨勫昂瀵告槸 0銆傜幇宸叉敼涓虹瓑瀹瑰櫒瀹屾垚甯冨眬鍚庡啀鍒涘缓 webview锛屽苟鍦ㄥ墠鍚庣涓や晶閮芥嫤鎴€€鍖栧昂瀵搞€?
-- **寮哄埗鍙戦€佷細娴幇鍦ㄩ€旀帓闃熸秷鎭?*锛圼#289](https://github.com/hAcKlyc/HamunaAgent/issues/289)锛夛細瀵规帓闃熸秷鎭偣銆岀珛鍗冲彂閫併€嶆椂锛屾鍦ㄥ鐞嗕腑鐨勯偅鏉℃秷鎭細姝ｇ‘娴幇涓哄璇濇皵娉★紙鑰岄潪琚涪寮冿級锛屼笌銆屽仠姝€嶈涔夊尯鍒嗗紑銆?
+- **HTML 棰勮绐楀彛瀹氫綅寮傚父**锛圼#290](https://github.com/hamuna/HamunaAgent/issues/290)锛夛細鐐瑰嚮鏂囦欢鍚嶉瑙?HTML 鏃讹紝鍐呭祵娴忚鍣ㄦ湁鏃朵互 0 瀹藉害鍒涘缓銆佹偓娴鐩栧湪鑱婂ぉ鍖哄煙涓婃柟鑰岄潪鏄剧ず鍦ㄥ彸渚ф祻瑙堝櫒闈㈡澘銆傛牴鍥犳槸鍙充晶鍒嗘爮瀹瑰櫒鍦ㄨ亰澶╁尯 300ms 瀹藉害杩囨浮鍔ㄧ敾鏈熼棿瀹藉害浠嶄负 0锛屽垱寤烘椂璇诲埌鐨勫昂瀵告槸 0銆傜幇宸叉敼涓虹瓑瀹瑰櫒瀹屾垚甯冨眬鍚庡啀鍒涘缓 webview锛屽苟鍦ㄥ墠鍚庣涓や晶閮芥嫤鎴€€鍖栧昂瀵搞€?
+- **寮哄埗鍙戦€佷細娴幇鍦ㄩ€旀帓闃熸秷鎭?*锛圼#289](https://github.com/hamuna/HamunaAgent/issues/289)锛夛細瀵规帓闃熸秷鎭偣銆岀珛鍗冲彂閫併€嶆椂锛屾鍦ㄥ鐞嗕腑鐨勯偅鏉℃秷鎭細姝ｇ‘娴幇涓哄璇濇皵娉★紙鑰岄潪琚涪寮冿級锛屼笌銆屽仠姝€嶈涔夊尯鍒嗗紑銆?
 - **澶氶€夐棶绛斿洖绛斾涪澶?*锛氬崌绾?SDK 0.3.158 鍚庯紝鍐呯疆銆屽悜鐢ㄦ埛鎻愰棶銆嶅伐鍏锋敼涓烘寜闂鏂囨湰鍥炲～绛旀锛屾棫鐨勬寜搴忓彿鍥炲～浼氳妯″瀷鏀跺埌銆岀敤鎴锋湭浣滅瓟銆嶃€傜幇宸叉敼涓烘寜闂鏂囨湰浣滅瓟妗堥敭銆?
 - **鎬濊€冨潡鍦ㄦ祦寮忔湡闂翠笉鍐嶆姈鍔?*锛欰I 鍥炲娴佸紡杈撳嚭鏃讹紝鎬濊€冨潡涓嶅啀鑷姩灞曞紑 / 鎶樺彔锛涘睍寮€鏌愪釜宸ュ叿鎵ц琛屽悗涔熶細淇濇寔灞曞紑锛屼笉浼氬洜鎶樺彔鍗歌浇鑰屼涪澶卞凡鍔犺浇鍐呭銆?
 - **OpenClaw 娓犻亾鐘舵€佹寜娓犻亾闅旂**锛氬涓?IM 娓犻亾浣跨敤 OpenClaw 鎻掍欢鏃讹紝鍚勮嚜鐨勬湰鍦扮櫥褰曠姸鎬佺浉浜掗殧绂伙紝涓嶅啀涓插埌鍚屼竴涓?`~/.openclaw` 瀹炰緥銆?
@@ -739,7 +759,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **OpenAI 鍗忚渚涘簲鍟嗙殑 token 浣跨敤缁熻**锛圼#277](https://github.com/hAcKlyc/HamunaAgent/issues/277)锛夛細浣跨敤 OpenAI 鍏煎鍗忚鐨勭涓夋柟渚涘簲鍟嗭紙濡?APIFree锛夋椂锛屼娇鐢ㄧ粺璁′笉鍐嶄竴鐩存樉绀?0锛岃緭鍏?/ 杈撳嚭 token 鑳芥纭粺璁°€?
+- **OpenAI 鍗忚渚涘簲鍟嗙殑 token 浣跨敤缁熻**锛圼#277](https://github.com/hamuna/HamunaAgent/issues/277)锛夛細浣跨敤 OpenAI 鍏煎鍗忚鐨勭涓夋柟渚涘簲鍟嗭紙濡?APIFree锛夋椂锛屼娇鐢ㄧ粺璁′笉鍐嶄竴鐩存樉绀?0锛岃緭鍏?/ 杈撳嚭 token 鑳芥纭粺璁°€?
 
 ---
 
@@ -749,14 +769,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **閲嶅惎鍚庤嚜鍔ㄦ仮澶嶄細璇濇爣绛?*锛圼#232](https://github.com/hAcKlyc/HamunaAgent/issues/232)锛夛細閲嶅惎鎴栨洿鏂板簲鐢ㄥ悗锛屼箣鍓嶆墦寮€鐨勮亰澶╂爣绛句細鑷姩鎭㈠锛屼笉鐢ㄥ啀涓€涓釜閲嶆柊鎵撳紑銆?
+- **閲嶅惎鍚庤嚜鍔ㄦ仮澶嶄細璇濇爣绛?*锛圼#232](https://github.com/hamuna/HamunaAgent/issues/232)锛夛細閲嶅惎鎴栨洿鏂板簲鐢ㄥ悗锛屼箣鍓嶆墦寮€鐨勮亰澶╂爣绛句細鑷姩鎭㈠锛屼笉鐢ㄥ啀涓€涓釜閲嶆柊鎵撳紑銆?
 - **鎬濊€冭繃绋嬩笌鍥炲鏀寔瀵煎嚭**锛氳亰澶╀腑鐨?AI 鎬濊€冨潡鍜屽崟鏉″洖澶嶇幇鍦ㄥ彲浠ュ崟鐙鍒舵垨瀵煎嚭涓?Markdown 鏂囦欢銆?
-- **鍘嗗彶瀵硅瘽鏀寔鎸?ID 璺宠浆**锛圼#260](https://github.com/hAcKlyc/HamunaAgent/issues/260)锛夛細鍦ㄥ巻鍙插璇濇悳绱㈡绮樿创浼氳瘽 ID锛屽嵆鍙洿鎺ュ畾浣嶅埌瀵瑰簲浼氳瘽銆?
-- **鍚庡彴鏅鸿兘浣撴潈闄愮瓥鐣?*锛圼#264](https://github.com/hAcKlyc/HamunaAgent/issues/264)锛夛細鏂板鍚庡彴杩愯瀛愪换鍔＄殑宸ュ叿鏉冮檺绛栫暐锛屽彲閫夋嫨缁ф壙褰撳墠浼氳瘽鐨勬巿鏉冩垨瀹屽叏鑷富鎵ц锛屽悗鍙颁换鍔′笉鍐嶅洜鏃犱汉鏀捐鑰岃闈欓粯鎷掔粷銆?
+- **鍘嗗彶瀵硅瘽鏀寔鎸?ID 璺宠浆**锛圼#260](https://github.com/hamuna/HamunaAgent/issues/260)锛夛細鍦ㄥ巻鍙插璇濇悳绱㈡绮樿创浼氳瘽 ID锛屽嵆鍙洿鎺ュ畾浣嶅埌瀵瑰簲浼氳瘽銆?
+- **鍚庡彴鏅鸿兘浣撴潈闄愮瓥鐣?*锛圼#264](https://github.com/hamuna/HamunaAgent/issues/264)锛夛細鏂板鍚庡彴杩愯瀛愪换鍔＄殑宸ュ叿鏉冮檺绛栫暐锛屽彲閫夋嫨缁ф壙褰撳墠浼氳瘽鐨勬巿鏉冩垨瀹屽叏鑷富鎵ц锛屽悗鍙颁换鍔′笉鍐嶅洜鏃犱汉鏀捐鑰岃闈欓粯鎷掔粷銆?
 
 ### Fixed
 
-- **璁剧疆椤垫樉绀虹湡瀹炰粨搴撳湴鍧€**锛圼#256](https://github.com/hAcKlyc/HamunaAgent/issues/256)锛夛細鍏充簬椤佃剼鐨?GitHub 閾炬帴鐜板湪鎸囧悜鐪熷疄鐨勯」鐩粨搴撱€?
+- **璁剧疆椤垫樉绀虹湡瀹炰粨搴撳湴鍧€**锛圼#256](https://github.com/hamuna/HamunaAgent/issues/256)锛夛細鍏充簬椤佃剼鐨?GitHub 閾炬帴鐜板湪鎸囧悜鐪熷疄鐨勯」鐩粨搴撱€?
 - **浼氳瘽鏍囬鏄剧ず鏇村共鍑€**锛氭爣棰樻埅鏂墠浼氬厛鍓ョ绯荤粺鍖呰鏂囨湰锛屾樉绀烘洿璐磋繎鐪熷疄鍐呭銆?
 - **淇杈撳叆娉曢噸澶嶈緭鍏?*锛氬湪甯︽枃浠跺紩鐢ㄧ殑杈撳叆妗嗕腑浣跨敤涓枃杈撳叆娉曪紝涓嶅啀浜х敓閲嶅瀛楃銆?
 - **瀹氭椂浠诲姟涓庢笭閬撴仮澶嶆洿绋冲畾**锛氬姞鍥轰簡瀹氭椂浠诲姟鍜?IM Agent 娓犻亾鐨勮嚜鍔ㄦ仮澶嶉€昏緫锛屽紓甯稿悗鑳芥洿鍙潬鍦拌嚜琛屾媺璧枫€?
@@ -788,7 +808,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **鐐瑰嚮鍘嗗彶瀵硅瘽鐜板湪浼氱ǔ瀹氭墦寮€琚偣鍑荤殑閭ｄ竴鏉?*锛圼#255](https://github.com/hAcKlyc/HamunaAgent/issues/255)锛夛細鍘嗗彶鍒囨崲鏃朵笉鍐嶈涓婁竴鏉′細璇濋仐鐣欑殑杩愯鐘舵€佹嫤浣忥紝鐣岄潰銆丼idecar 鍜屾秷鎭巻鍙蹭細涓€璧峰垏鍒扮洰鏍囦細璇濄€?
+- **鐐瑰嚮鍘嗗彶瀵硅瘽鐜板湪浼氱ǔ瀹氭墦寮€琚偣鍑荤殑閭ｄ竴鏉?*锛圼#255](https://github.com/hamuna/HamunaAgent/issues/255)锛夛細鍘嗗彶鍒囨崲鏃朵笉鍐嶈涓婁竴鏉′細璇濋仐鐣欑殑杩愯鐘舵€佹嫤浣忥紝鐣岄潰銆丼idecar 鍜屾秷鎭巻鍙蹭細涓€璧峰垏鍒扮洰鏍囦細璇濄€?
 - **鍘嗗彶瀵硅瘽鏍囬鏄剧ず鍙ｅ緞缁熶竴**锛氬彸涓婂巻鍙蹭笅鎷夈€佸惎鍔ㄩ〉 / 鍏ㄩ儴鍘嗗彶闈㈡澘銆佹墦寮€鍚庣殑 Chat 椤堕儴鐜板湪浣跨敤鍚屼竴濂楄鍒欙細浼樺厛鏄剧ず浼氳瘽鏍囬锛屾爣棰樹负绌烘椂 fallback 鍒版渶鍚庝竴鏉＄湡瀹炵敤鎴锋秷鎭紱Codex / Claude Code 绛夊閮?Runtime 涓嶅啀鎶?AI 鍥炲鐗囨褰撲綔鍘嗗彶鍒楄〃鏍囬銆?
 
 ---
@@ -811,7 +831,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **IM / OpenClaw Bridge 娲惧彂鏇寸ǔ**锛氫慨澶嶉儴鍒?IM fallback銆乭istory 娓叉煋鍜?Bridge pending dispatch 澶辫触璺緞锛岄伩鍏嶉潪 @ 缇ゆ秷鎭垨鎻掍欢鍥炶皟澶辫触鏃舵妸娓犻亾鍗″埌闀挎椂闂寸瓑寰呫€?
 - **Agent Channel 浼氳瘽浜ゆ帴鏇村彲闈?*锛氭闈細璇濅氦鎺ュ埌 IM 棰戦亾銆侀閬撻棿鍒囨崲鎴栨柊寤洪閬撲細璇濆悗锛屼笉鍐嶅鏄撴妸鍥炲璺敱鍒版棫浼氳瘽鎴栨棫棰戦亾銆?
 - **TodoWrite 寰呭姙鐘舵€佹樉绀鸿窡闅忓疄闄呯粨鏋?*锛歍odoWrite 瀹屾垚鍚庯紝宸ュ叿鍗＄墖銆佺揣鍑戞爣绛惧拰 Agent 鐘舵€侀潰鏉夸細鏄剧ず鏈€鏂板緟鍔炵姸鎬侊紝涓嶅啀鍋滅暀鍦ㄨ皟鐢ㄨ緭鍏ラ噷鐨勬棫杩涘害銆?
-- **nvm 鐢ㄦ埛涓嶅啀鐪嬪埌 HamunaAgent 娉ㄥ叆鐨?npm prefix 璀﹀憡**锛圼#247](https://github.com/hAcKlyc/HamunaAgent/issues/247)锛夛細HamunaAgent 涓嶅啀鎶?`npm_config_prefix=~/.hamuna/npm-global` 娉勬紡鍒版暣涓?AI shell 鐜锛涢渶瑕佸畨瑁?CLI 鏃舵敼涓哄懡浠ょ骇闅旂瀹夎锛屾棦涓嶆薄鏌撶敤鎴?nvm 鐜锛屼篃淇濈暀 AI 鑷宸ュ叿鐨勫彲鐢ㄦ€с€?
+- **nvm 鐢ㄦ埛涓嶅啀鐪嬪埌 HamunaAgent 娉ㄥ叆鐨?npm prefix 璀﹀憡**锛圼#247](https://github.com/hamuna/HamunaAgent/issues/247)锛夛細HamunaAgent 涓嶅啀鎶?`npm_config_prefix=~/.hamuna/npm-global` 娉勬紡鍒版暣涓?AI shell 鐜锛涢渶瑕佸畨瑁?CLI 鏃舵敼涓哄懡浠ょ骇闅旂瀹夎锛屾棦涓嶆薄鏌撶敤鎴?nvm 鐜锛屼篃淇濈暀 AI 鑷宸ュ叿鐨勫彲鐢ㄦ€с€?
 - **Task / AskUserQuestion 杈撳叆灞曠ず缁嗚妭淇**锛氶€夋嫨棰樺拰鐩稿叧杈撳叆鍖哄煙鐨勫竷灞€銆佹粴鍔ㄥ悓姝ュ湪 resize 鍚庢洿绋冲畾锛屽噺灏戝唴瀹归敊浣嶃€?
 
 ---
@@ -822,12 +842,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Windows 瀵硅瘽杩涜涓绻佹帀绾裤€佸叏灞€ Sidecar 鍙嶅閲嶅惎**锛圼#236](https://github.com/hAcKlyc/HamunaAgent/issues/236)锛夛細鍏ㄥ眬 Sidecar 鐨勫仴搴锋鏌ュ師鏈崟娆℃帰娴嬪け璐ワ紙杩涚▼鍏跺疄杩樻椿鐫€锛屽彧鏄 Defender 鎵弿 / 鐬椂楂樿礋杞藉崱浜嗕竴涓嬶級灏遍噸鍚紝杩炲甫鎵€鏈?Tab 涓€璧锋帀绾裤€傜幇鍦ㄨ姹傝繛缁袱娆℃帰娴嬪け璐ユ墠閲嶅惎锛岃繘绋嬬湡姝讳粛绔嬪嵆閲嶅惎锛屽苟鍦ㄦ棩蹇楅噷鏍囨敞瀛樻椿鐘舵€佷究浜庢帓鏌ャ€傦紙娉細鏃ュ織閲岀殑 `SSE stream error / 10054` 鏄繘绋嬭鍥炴敹鐨勭粨鏋滐紝涓嶆槸鍘熷洜銆傦級
-- **鍘嗗彶璁板綍鍒囨崲鍚庣晫闈㈠崱姝?/ 绌虹櫧**锛圼#235](https://github.com/hAcKlyc/HamunaAgent/issues/235)锛夛細缃戠粶鎶栧姩瀵艰嚧 SSE 杩炴帴涓€鐩磋繛涓嶄笂鏃讹紝浼氳瘽鍔犺浇浼氭棤闄愮瓑寰呫€佺晫闈㈡案涔呯┖鐧姐€傜幇鍦ㄥ姞浜嗚秴鏃跺厹搴曗€斺€旇秴鏃跺悗鐩存帴鐢?HTTP 鍔犺浇浼氳瘽鍐呭璁╀綘鍏堢湅鍒板璇濓紝SSE 鎭㈠鍚庣户缁祦寮忋€?
-- **鏂板缓 Tab 棣栨潯娑堟伅娌℃寜宸ヤ綔鍖烘潈闄愭ā寮忓彂閫?*锛圼#244](https://github.com/hAcKlyc/HamunaAgent/issues/244)锛夛細鏂板缓 Tab 鍚庣珛鍒诲彂鐨勭涓€鏉℃秷鎭細鐢ㄩ粯璁ょ殑 `auto` 鑰屼笉鏄伐浣滃尯閰嶇疆鐨勬潈闄愶紙濡?fullAgency锛夛紝琛ㄧ幇涓恒€屾槑鏄庨厤浜嗘潈闄愬嵈璇村伐鍏蜂笉鍙敤銆嶃€傜幇鍦ㄩ鏉℃秷鎭篃姝ｇ‘閲囩敤閰嶇疆鍊笺€?
-- **鏀?Agent 榛樿 Provider 鍚庡揩鎹峰惎鍔ㄦ爮浠嶇敤鏃?Provider**锛圼#234](https://github.com/hAcKlyc/HamunaAgent/issues/234)锛夛細鍦ㄨ缃噷鎶?Agent 榛樿 Provider 鎹㈡帀鍚庯紝蹇嵎鍚姩鏍忎粛璁扮潃鏃х殑锛屼粠鍚姩鏍忓紑鐨勬柊浼氳瘽浼氳蛋閿?Provider 瀵艰嚧瓒呮椂銆傜幇鍦ㄥ惎鍔ㄦ爮浼氳窡闅?Agent 褰撳墠榛樿 Provider銆?
-- **鏈湴鎻掍欢 `cc-plugin install file://` 鎶ャ€岀洰褰曞凡瀛樺湪銆嶅嵈瑁呬笉涓?*锛圼#239](https://github.com/hAcKlyc/HamunaAgent/issues/239)锛夛細褰撴彃浠剁洰褰曞凡缁忔斁鍦?`~/.hamuna/plugins/<鍚嶅瓧>` 涓嬨€佸啀鐢?`file://` 鎸囧悜瀹冨畨瑁呮椂浼?409 澶辫触銆佷笖 `cc-plugin list` 鐪嬩笉鍒般€傜幇鍦ㄨ兘鍘熷湴姝ｇ‘娉ㄥ唽銆?
-- **瀵硅瘽鑷姩鍛藉悕琚?API 閿欒淇℃伅姹℃煋**锛圼#245](https://github.com/hAcKlyc/HamunaAgent/issues/245)锛夛細涓婃父杩斿洖 4xx/5xx 鏃堕敊璇枃鏈細琚綋鎴愭甯稿洖澶嶏紝瀵艰嚧浼氳瘽琚嚜鍔ㄥ懡鍚嶆垚銆孉PI Error: 400 鈥︺€嶃€傜幇鍦ㄥ甫閿欒鐨勮疆娆′笉鍐嶅弬涓庤嚜鍔ㄨ捣鏍囬銆?
+- **Windows 瀵硅瘽杩涜涓绻佹帀绾裤€佸叏灞€ Sidecar 鍙嶅閲嶅惎**锛圼#236](https://github.com/hamuna/HamunaAgent/issues/236)锛夛細鍏ㄥ眬 Sidecar 鐨勫仴搴锋鏌ュ師鏈崟娆℃帰娴嬪け璐ワ紙杩涚▼鍏跺疄杩樻椿鐫€锛屽彧鏄 Defender 鎵弿 / 鐬椂楂樿礋杞藉崱浜嗕竴涓嬶級灏遍噸鍚紝杩炲甫鎵€鏈?Tab 涓€璧锋帀绾裤€傜幇鍦ㄨ姹傝繛缁袱娆℃帰娴嬪け璐ユ墠閲嶅惎锛岃繘绋嬬湡姝讳粛绔嬪嵆閲嶅惎锛屽苟鍦ㄦ棩蹇楅噷鏍囨敞瀛樻椿鐘舵€佷究浜庢帓鏌ャ€傦紙娉細鏃ュ織閲岀殑 `SSE stream error / 10054` 鏄繘绋嬭鍥炴敹鐨勭粨鏋滐紝涓嶆槸鍘熷洜銆傦級
+- **鍘嗗彶璁板綍鍒囨崲鍚庣晫闈㈠崱姝?/ 绌虹櫧**锛圼#235](https://github.com/hamuna/HamunaAgent/issues/235)锛夛細缃戠粶鎶栧姩瀵艰嚧 SSE 杩炴帴涓€鐩磋繛涓嶄笂鏃讹紝浼氳瘽鍔犺浇浼氭棤闄愮瓑寰呫€佺晫闈㈡案涔呯┖鐧姐€傜幇鍦ㄥ姞浜嗚秴鏃跺厹搴曗€斺€旇秴鏃跺悗鐩存帴鐢?HTTP 鍔犺浇浼氳瘽鍐呭璁╀綘鍏堢湅鍒板璇濓紝SSE 鎭㈠鍚庣户缁祦寮忋€?
+- **鏂板缓 Tab 棣栨潯娑堟伅娌℃寜宸ヤ綔鍖烘潈闄愭ā寮忓彂閫?*锛圼#244](https://github.com/hamuna/HamunaAgent/issues/244)锛夛細鏂板缓 Tab 鍚庣珛鍒诲彂鐨勭涓€鏉℃秷鎭細鐢ㄩ粯璁ょ殑 `auto` 鑰屼笉鏄伐浣滃尯閰嶇疆鐨勬潈闄愶紙濡?fullAgency锛夛紝琛ㄧ幇涓恒€屾槑鏄庨厤浜嗘潈闄愬嵈璇村伐鍏蜂笉鍙敤銆嶃€傜幇鍦ㄩ鏉℃秷鎭篃姝ｇ‘閲囩敤閰嶇疆鍊笺€?
+- **鏀?Agent 榛樿 Provider 鍚庡揩鎹峰惎鍔ㄦ爮浠嶇敤鏃?Provider**锛圼#234](https://github.com/hamuna/HamunaAgent/issues/234)锛夛細鍦ㄨ缃噷鎶?Agent 榛樿 Provider 鎹㈡帀鍚庯紝蹇嵎鍚姩鏍忎粛璁扮潃鏃х殑锛屼粠鍚姩鏍忓紑鐨勬柊浼氳瘽浼氳蛋閿?Provider 瀵艰嚧瓒呮椂銆傜幇鍦ㄥ惎鍔ㄦ爮浼氳窡闅?Agent 褰撳墠榛樿 Provider銆?
+- **鏈湴鎻掍欢 `cc-plugin install file://` 鎶ャ€岀洰褰曞凡瀛樺湪銆嶅嵈瑁呬笉涓?*锛圼#239](https://github.com/hamuna/HamunaAgent/issues/239)锛夛細褰撴彃浠剁洰褰曞凡缁忔斁鍦?`~/.hamuna/plugins/<鍚嶅瓧>` 涓嬨€佸啀鐢?`file://` 鎸囧悜瀹冨畨瑁呮椂浼?409 澶辫触銆佷笖 `cc-plugin list` 鐪嬩笉鍒般€傜幇鍦ㄨ兘鍘熷湴姝ｇ‘娉ㄥ唽銆?
+- **瀵硅瘽鑷姩鍛藉悕琚?API 閿欒淇℃伅姹℃煋**锛圼#245](https://github.com/hamuna/HamunaAgent/issues/245)锛夛細涓婃父杩斿洖 4xx/5xx 鏃堕敊璇枃鏈細琚綋鎴愭甯稿洖澶嶏紝瀵艰嚧浼氳瘽琚嚜鍔ㄥ懡鍚嶆垚銆孉PI Error: 400 鈥︺€嶃€傜幇鍦ㄥ甫閿欒鐨勮疆娆′笉鍐嶅弬涓庤嚜鍔ㄨ捣鏍囬銆?
 - **鐢熸垚寮?UI widget 鍦ㄦ闈㈢绌虹櫧**锛氫粎妗岄潰绔墦寮€鐨勭敓鎴愬紡 UI widget 鍥犲鑸畧鍗鎷﹀唴閮?iframe 鑰屾樉绀虹┖鐧斤紝宸蹭慨銆?
 - **瀹夊叏鍔犲浐**锛氬叧闂?macOS 璺緞瀹夊叏榛戝悕鍗曠己鍙ｂ€斺€擿/etc`銆乣/var` 鍦?macOS 涓婃槸鎸囧悜 `/private/*` 鐨勭鍙烽摼鎺ワ紝鍏惰鑼冨寲褰㈠紡 `/private/etc`銆乣/private/var` 姝ゅ墠鑳界粫杩囬粦鍚嶅崟锛岀幇宸蹭竴骞舵嫤鎴紱鍚屾椂鍔犲浐浜嗗伐鍏蜂笅杞藉浘鐗囨椂瀵瑰唴缃?/ loopback 鍦板潃锛堝惈 IPv6 鏄犲皠褰㈠紡锛夌殑 SSRF 闃叉姢銆?
 
@@ -847,14 +867,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **闀夸换鍔″湪绯荤粺浼戠湢 / App Nap 鍚庤銆岀獊鐒惰嚜鍔ㄤ腑姝€?*锛氬搷搴旇秴鏃惰鏃跺櫒鍘熸湰鐢ㄥ閽熻鏃讹紝杩涚▼琚郴缁熸寕璧锋湡闂村閽熺収璧般€侀啋鏉ュ嵆琚鍒や负銆?0 鍒嗛挓鏃犲搷搴斻€嶈€?kill銆傜幇鍦ㄥ彧缁熻杩涚▼瀹為檯娲昏穬鏃堕棿锛屾寕璧锋湡闂翠笉璁″叆锛涗氦浜掑紡 turn 绛夊緟浣犺緭鍏ユ湡闂翠篃涓嶅啀璇Е鍙戣秴鏃讹紝骞跺鍏舵寔鏈夌郴缁?wake-lock銆?
 - **鍏抽棴 Tab 浼氫腑鏂鍦ㄥ悗鍙拌窇鐨勪换鍔?*锛氫箣鍓嶅叧鎺夎亰澶?Tab 浼氳褰撴垚銆屽彇娑堜换鍔°€嶏紝瀵艰嚧鍚庡彴瀹屾垚 / 瀹氭椂浠诲姟 / IM 娲惧彂鐨?turn 琚腑鏂紝椋炰功绛夋笭閬撴敹鍒?`turn_failed`銆傜幇鍦ㄤ换鍔＄敓鍛藉懆鏈熶笌鍓嶇杩炴帴瑙ｈ€︼紝鍏?Tab 涓嶅啀褰卞搷鍚庡彴鎵ц銆?
-- **鍚庡彴瀛愪换鍔￠€氱煡涓㈠け**锛圼#227](https://github.com/hAcKlyc/HamunaAgent/issues/227)锛夛細鍚庡彴瀛?Agent 瀹屾垚閫氱煡绾?23% 闈欓粯涓㈠け锛屼笖瀵屾枃鏈憳瑕佷細琚涪寮冨彧鍓╀竴琛屻€傜幇宸茬‘淇濋€氱煡蹇呰揪銆佹憳瑕佸畬鏁翠繚鐣欍€?
-- **闈?Claude 妯″瀷涓嬪浘琛ㄥ崱鐗囩┖鐧?*锛圼#221](https://github.com/hAcKlyc/HamunaAgent/issues/221)锛夛細Codex / Gemini 绛夋ā鍨嬬敓鎴愮殑鍥捐〃鍗＄墖鍥犺剼鏈珵鎬佷笌瑙ｆ瀽闂娓叉煋绌虹櫧锛涙鏂囦腑鍚瓧闈㈤噺 `<` 寮€鏍囩鐨勫崱鐗囦篃浼氳鎴柇銆傚潎宸蹭慨姝ｃ€?
-- **鍒囧埌 Codex runtime 妯″瀷鍚嶉敊閰?*锛圼#224](https://github.com/hAcKlyc/HamunaAgent/issues/224)锛夛細Codex 浼氳瘽鐨勫揩鐓т細閿欏瓨鎴?Claude 妯″瀷鍚嶏紝瀵艰嚧璇诲彇鏃舵ā鍨嬩笉绗︺€傛敼涓烘寜 runtime 瀛樺彇骞跺湪璇讳晶绾犳銆?
-- **瀹氭椂浠诲姟鎺ㄩ€佸埌 IM 缂哄皯鏉ユ簮浼氳瘽鏍囪瘑**锛圼#225](https://github.com/hAcKlyc/HamunaAgent/issues/225)锛夛細cron 缁撴灉鎶曢€掑埌椋炰功绛夋笭閬撴椂缂?Source session id 琛岋紝鍙兘钀介敊浼氳瘽锛屽凡琛ュ叏銆?
-- **娓犻亾鍋滅敤鏈法閲嶅惎淇濇寔**锛圼#219](https://github.com/hAcKlyc/HamunaAgent/issues/219)锛夛細鎵嬪姩鍋滅敤鐨?IM 娓犻亾鍦ㄥ簲鐢ㄩ噸鍚悗浼氳嚜宸卞娲汇€傜幇鍦ㄥ仠鐢ㄧ姸鎬佷細鎸佷箙鍖栵紝閲嶅惎鍚庝繚鎸佸仠鐢ㄣ€?
-- **绮樿创瓒呴暱鏂囨湰鍗℃杈撳叆妗?*锛圼#231](https://github.com/hAcKlyc/HamunaAgent/issues/231)锛夛細寰€鑱婂ぉ杈撳叆妗嗙矘璐磋秴闀挎枃鏈細瀵艰嚧鐣岄潰鍐荤粨锛屽凡淇€?
-- **浠ｇ悊璁剧疆姣忔暡涓€閿氨閲嶈繛**锛圼#230](https://github.com/hAcKlyc/HamunaAgent/issues/230)锛夛細璁剧疆椤电紪杈戜唬鐞嗙鍙?/ 涓绘満鏃舵瘡涓瓧绗﹂兘瑙﹀彂閲嶈浇锛岀幇鏀逛负缂栬緫瀹屾垚鍚庡啀鐢熸晥銆?
-- **Windows 涓?CLI 璋冪敤鍐呯疆 Node 澶辫触**锛圼#229](https://github.com/hAcKlyc/HamunaAgent/issues/229)锛夛細`hamuna.cmd` 鎷垮埌鐨勫唴缃?Node 璺緞甯?`\\?\` 闀胯矾寰勫墠缂€瀵艰嚧璋冪敤澶辫触锛屽凡鍓ラ櫎銆?
+- **鍚庡彴瀛愪换鍔￠€氱煡涓㈠け**锛圼#227](https://github.com/hamuna/HamunaAgent/issues/227)锛夛細鍚庡彴瀛?Agent 瀹屾垚閫氱煡绾?23% 闈欓粯涓㈠け锛屼笖瀵屾枃鏈憳瑕佷細琚涪寮冨彧鍓╀竴琛屻€傜幇宸茬‘淇濋€氱煡蹇呰揪銆佹憳瑕佸畬鏁翠繚鐣欍€?
+- **闈?Claude 妯″瀷涓嬪浘琛ㄥ崱鐗囩┖鐧?*锛圼#221](https://github.com/hamuna/HamunaAgent/issues/221)锛夛細Codex / Gemini 绛夋ā鍨嬬敓鎴愮殑鍥捐〃鍗＄墖鍥犺剼鏈珵鎬佷笌瑙ｆ瀽闂娓叉煋绌虹櫧锛涙鏂囦腑鍚瓧闈㈤噺 `<` 寮€鏍囩鐨勫崱鐗囦篃浼氳鎴柇銆傚潎宸蹭慨姝ｃ€?
+- **鍒囧埌 Codex runtime 妯″瀷鍚嶉敊閰?*锛圼#224](https://github.com/hamuna/HamunaAgent/issues/224)锛夛細Codex 浼氳瘽鐨勫揩鐓т細閿欏瓨鎴?Claude 妯″瀷鍚嶏紝瀵艰嚧璇诲彇鏃舵ā鍨嬩笉绗︺€傛敼涓烘寜 runtime 瀛樺彇骞跺湪璇讳晶绾犳銆?
+- **瀹氭椂浠诲姟鎺ㄩ€佸埌 IM 缂哄皯鏉ユ簮浼氳瘽鏍囪瘑**锛圼#225](https://github.com/hamuna/HamunaAgent/issues/225)锛夛細cron 缁撴灉鎶曢€掑埌椋炰功绛夋笭閬撴椂缂?Source session id 琛岋紝鍙兘钀介敊浼氳瘽锛屽凡琛ュ叏銆?
+- **娓犻亾鍋滅敤鏈法閲嶅惎淇濇寔**锛圼#219](https://github.com/hamuna/HamunaAgent/issues/219)锛夛細鎵嬪姩鍋滅敤鐨?IM 娓犻亾鍦ㄥ簲鐢ㄩ噸鍚悗浼氳嚜宸卞娲汇€傜幇鍦ㄥ仠鐢ㄧ姸鎬佷細鎸佷箙鍖栵紝閲嶅惎鍚庝繚鎸佸仠鐢ㄣ€?
+- **绮樿创瓒呴暱鏂囨湰鍗℃杈撳叆妗?*锛圼#231](https://github.com/hamuna/HamunaAgent/issues/231)锛夛細寰€鑱婂ぉ杈撳叆妗嗙矘璐磋秴闀挎枃鏈細瀵艰嚧鐣岄潰鍐荤粨锛屽凡淇€?
+- **浠ｇ悊璁剧疆姣忔暡涓€閿氨閲嶈繛**锛圼#230](https://github.com/hamuna/HamunaAgent/issues/230)锛夛細璁剧疆椤电紪杈戜唬鐞嗙鍙?/ 涓绘満鏃舵瘡涓瓧绗﹂兘瑙﹀彂閲嶈浇锛岀幇鏀逛负缂栬緫瀹屾垚鍚庡啀鐢熸晥銆?
+- **Windows 涓?CLI 璋冪敤鍐呯疆 Node 澶辫触**锛圼#229](https://github.com/hamuna/HamunaAgent/issues/229)锛夛細`hamuna.cmd` 鎷垮埌鐨勫唴缃?Node 璺緞甯?`\\?\` 闀胯矾寰勫墠缂€瀵艰嚧璋冪敤澶辫触锛屽凡鍓ラ櫎銆?
 - **Fork 杩囨湡浼氳瘽鏃犻檺閲嶈瘯**锛氭簮浼氳瘽鐨?SDK session UUID 杩囨湡鍚?Fork 浼氭棤闄愰噸璇曪紝宸蹭慨涓轰紭闆呭鐞嗐€?
 - **闆剁浣撻獙**锛氬彸閿€屽鍒舵枃浠?/ 鏂囦欢澶硅矾寰勩€嶇幇鍦ㄥ鍒跺畬鏁寸粷瀵硅矾寰勮€岄潪宸ヤ綔鍖虹浉瀵硅矾寰勶紱宸ュ叿鍗＄墖鍥炬爣鍦?Windows 11 涓婇敊浣嶅凡瀵归綈锛涚偣鍑昏彍鍗?/ 鑳藉姏 / 杈撳叆鍖烘寜閽椂鐒︾偣涓嶅啀琚姠璧帮紙macOS 瑙︽帶鏉?tap锛夛紱鍒囨崲 Tab 鏇磋窡鎵嬨€?
 
@@ -862,7 +882,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.19] - 2026-05-20
 
-> 涓讳慨銆岄暱璺?cron 浠诲姟琚郴缁熶紤鐪犳潃鎺夈€嶈繖涓€绫婚棶棰橈細cron 鎵ц鏈熼棿涓诲姩鍚戠郴缁熺敵璇枫€岄槻 idle sleep銆嶉攣锛屼笁骞冲彴锛坢acOS / Windows / Linux锛夊叏閮ㄦ敮鎸侊紱涓囦竴閿佷笉浣忥紙鐢ㄦ埛鍚堜笂鐩栧瓙銆丩inux 鏃?systemd锛夛紝AI 涓嬫鍥炲埌杩欎釜 session 鏃朵細鑷姩缁窇涓婃鏈畬鎴愮殑浠诲姟锛屼笉鐢ㄦ墜鍔?"缁х画"銆傚彟澶栦慨浜?Chat Cmd+F 缈婚〉琚祦寮忔洿鏂版墦鏂€丼iliconFlow 涓婄殑 Kimi K2.5 妯″瀷涓€鏃ユ寕姝?43 娆★紙[#216](https://github.com/hAcKlyc/HamunaAgent/issues/216)锛夌瓑绀惧尯鎶ュ憡鐨勯棶棰樸€?
+> 涓讳慨銆岄暱璺?cron 浠诲姟琚郴缁熶紤鐪犳潃鎺夈€嶈繖涓€绫婚棶棰橈細cron 鎵ц鏈熼棿涓诲姩鍚戠郴缁熺敵璇枫€岄槻 idle sleep銆嶉攣锛屼笁骞冲彴锛坢acOS / Windows / Linux锛夊叏閮ㄦ敮鎸侊紱涓囦竴閿佷笉浣忥紙鐢ㄦ埛鍚堜笂鐩栧瓙銆丩inux 鏃?systemd锛夛紝AI 涓嬫鍥炲埌杩欎釜 session 鏃朵細鑷姩缁窇涓婃鏈畬鎴愮殑浠诲姟锛屼笉鐢ㄦ墜鍔?"缁х画"銆傚彟澶栦慨浜?Chat Cmd+F 缈婚〉琚祦寮忔洿鏂版墦鏂€丼iliconFlow 涓婄殑 Kimi K2.5 妯″瀷涓€鏃ユ寕姝?43 娆★紙[#216](https://github.com/hamuna/HamunaAgent/issues/216)锛夌瓑绀惧尯鎶ュ憡鐨勯棶棰樸€?
 
 ### Added
 
@@ -871,8 +891,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Chat Cmd+F 鎼滅储缈婚〉琚祦寮忔洿鏂版墦鏂?*锛圼#214](https://github.com/hAcKlyc/HamunaAgent/issues/214)锛夛細娑堟伅娴佸紡鍒锋柊鎴栫埗缁勪欢 re-render 鏃朵細瑙﹀彂涓€涓?150ms 闃叉姈鐨?reconcile锛屽師鏈細鏃犳潯浠惰鐩栫敤鎴峰垰鐐圭殑 next/prev 璺宠浆浣嶇疆锛岀湅璧锋潵鍍忋€屽崱鍦ㄦ渶鍚庝竴涓尮閰嶃€嶃€傜幇鍦?reconcile 妫€娴嬪埌鐢ㄦ埛鍒氱炕杩囬〉灏变繚鐣欑敤鎴风殑浣嶇疆銆?
-- **SiliconFlow 涓婄殑 Kimi K2.5 绛夋ā鍨嬫寕姝?*锛圼#216](https://github.com/hAcKlyc/HamunaAgent/issues/216)锛夛細SiliconFlow 鐨?Anthropic 鍏煎灞傚杩欑被妯″瀷杩斿洖闈炶鑼冪殑 thinking block锛孲DK 鎶?`Content block is not a text block` 鐩存帴鎸傛浼氳瘽锛堟姤鍛婅€呬竴澶╅亣鍒?43 娆★級銆傞璁炬敼璧板畠鐨?OpenAI 鍏煎灞傦紙`/v1`锛夛紝reasoning_content / tool_calls 閮芥爣鍑嗭紝宸叉湁鐨?OpenAI Bridge 涔熸樉寮忛€傞厤 Kimi K2.5 鐨?reasoning_content銆?
+- **Chat Cmd+F 鎼滅储缈婚〉琚祦寮忔洿鏂版墦鏂?*锛圼#214](https://github.com/hamuna/HamunaAgent/issues/214)锛夛細娑堟伅娴佸紡鍒锋柊鎴栫埗缁勪欢 re-render 鏃朵細瑙﹀彂涓€涓?150ms 闃叉姈鐨?reconcile锛屽師鏈細鏃犳潯浠惰鐩栫敤鎴峰垰鐐圭殑 next/prev 璺宠浆浣嶇疆锛岀湅璧锋潵鍍忋€屽崱鍦ㄦ渶鍚庝竴涓尮閰嶃€嶃€傜幇鍦?reconcile 妫€娴嬪埌鐢ㄦ埛鍒氱炕杩囬〉灏变繚鐣欑敤鎴风殑浣嶇疆銆?
+- **SiliconFlow 涓婄殑 Kimi K2.5 绛夋ā鍨嬫寕姝?*锛圼#216](https://github.com/hamuna/HamunaAgent/issues/216)锛夛細SiliconFlow 鐨?Anthropic 鍏煎灞傚杩欑被妯″瀷杩斿洖闈炶鑼冪殑 thinking block锛孲DK 鎶?`Content block is not a text block` 鐩存帴鎸傛浼氳瘽锛堟姤鍛婅€呬竴澶╅亣鍒?43 娆★級銆傞璁炬敼璧板畠鐨?OpenAI 鍏煎灞傦紙`/v1`锛夛紝reasoning_content / tool_calls 閮芥爣鍑嗭紝宸叉湁鐨?OpenAI Bridge 涔熸樉寮忛€傞厤 Kimi K2.5 鐨?reasoning_content銆?
 - **Chat 杈撳叆妗?Todo 鍗＄墖琚彂閫侀槦鍒楅伄浣?*锛欰gentStatusPanel 涓?QueuedMessagesPanel 閮藉湪杈撳叆妗嗘涓婃柟鍙冲榻?z-20 娓叉煋锛屽彂娑堟伅鍚庢帓闃熷崱浼氱洊浣?Todo銆備袱鑰呭悎骞跺埌鍚屼竴琛?flex 鎺掑竷锛屼笉鍐嶆姠 Z 灞傘€?
 - **WeCom 缇よ亰銆屽叏閮ㄦ秷鎭€嶅紑鍏宠鏄?*锛氫紒寰?AI Bot 骞冲彴 webhook 浠呭湪 @ 鏈哄櫒浜烘椂涓嬪彂浜嬩欢锛屽師鐢熸病鏈夈€屾湭 @ 涔熷搷搴旀墍鏈夌兢娑堟伅銆嶇殑鑳藉姏銆傝缃〉閲岀鐢ㄨ娓犻亾鐨勩€屽叏閮ㄦ秷鎭€嶅紑鍏冲苟缁欏嚭 tooltip 璇存槑锛岄伩鍏嶇敤鎴疯浠ヤ负鍏虫帀灏辫兘璺戙€?
 
@@ -885,17 +905,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Session 闂村紓姝ユ秷鎭€氶亾锛圫ession Inbox锛?*锛欰I 閫氳繃 `hamuna session send <sid> -p "..."` 鎶?prompt 鎶曢€掔粰鍙︿竴涓?session锛宼arget 澶勭悊瀹岃嚜鍔ㄦ妸鍥炲鎺ㄥ洖 caller 鐨勪笅涓€涓?turn銆侳ire-and-forget 涓嶉樆濉烇紝鏀寔 `--no-reply` 鍗曞悜鎶曢€掞紙target 鏀跺埌鍚庝笉鍥炲寘锛夈€傜涔?AI銆佸苟琛岃皟鐮斻€佽法 workspace 鍗忎綔鍦烘櫙鐨勫熀纭€璁炬柦銆?
-- **闀夸細璇?Cmd+F 鎼滅储鎵撻€氳櫄鎷熷寲**锛圼#209](https://github.com/hAcKlyc/HamunaAgent/issues/209)锛夛細涔嬪墠 Chat 鎼滅储鍙湪宸叉覆鏌撶殑娑堟伅閲屾壂锛岄暱浼氳瘽寰€涓婄殑鍏抽敭璇嶆樉绀?"0 matches"锛岃鎵嬪姩婊氬埌閭ｆ潯鎵嶈兘鎼滃埌銆傜幇鍦ㄧ洿鎺ユ壂娑堟伅鏁扮粍锛岃烦杞椂鑷姩婊氬姩瀹氫綅骞堕珮浜懡涓綅缃紝钀界偣杩樻湁 pulse 鎻愮ず銆?
-- **`hamuna task` CLI 鍏?flag 鏀寔**锛圼#205](https://github.com/hAcKlyc/HamunaAgent/issues/205)锛夛細`task create-direct` 鐜板湪鑳芥帴 `--intervalMinutes / --cronExpression / --cronTimezone / --dispatchAt`锛屼互鍙?`--notificationBotChannelId / --notificationBotThread / --notificationDesktop / --notificationEvents` 绛?IM 鎺ㄩ€佸瓧娈碉紝绾懡浠よ灏辫兘鎼捣 recurring Task Center 浠诲姟銆傛柊澧?`task update <id>`锛堜笌 `cron update` 鑳藉姏瀵归綈锛夛紝鍙湪鍒涘缓鍚庢敼 interval / cron / notification / prompt / 鍚?runtime 瑕嗗啓锛涢€氱煡瀛楁鏄鎴风 merge锛屼笉浼氫竴鏀?`--notificationDesktop` 灏辨妸 botChannelId 涓€璧锋姽鎺夈€?
+- **闀夸細璇?Cmd+F 鎼滅储鎵撻€氳櫄鎷熷寲**锛圼#209](https://github.com/hamuna/HamunaAgent/issues/209)锛夛細涔嬪墠 Chat 鎼滅储鍙湪宸叉覆鏌撶殑娑堟伅閲屾壂锛岄暱浼氳瘽寰€涓婄殑鍏抽敭璇嶆樉绀?"0 matches"锛岃鎵嬪姩婊氬埌閭ｆ潯鎵嶈兘鎼滃埌銆傜幇鍦ㄧ洿鎺ユ壂娑堟伅鏁扮粍锛岃烦杞椂鑷姩婊氬姩瀹氫綅骞堕珮浜懡涓綅缃紝钀界偣杩樻湁 pulse 鎻愮ず銆?
+- **`hamuna task` CLI 鍏?flag 鏀寔**锛圼#205](https://github.com/hamuna/HamunaAgent/issues/205)锛夛細`task create-direct` 鐜板湪鑳芥帴 `--intervalMinutes / --cronExpression / --cronTimezone / --dispatchAt`锛屼互鍙?`--notificationBotChannelId / --notificationBotThread / --notificationDesktop / --notificationEvents` 绛?IM 鎺ㄩ€佸瓧娈碉紝绾懡浠よ灏辫兘鎼捣 recurring Task Center 浠诲姟銆傛柊澧?`task update <id>`锛堜笌 `cron update` 鑳藉姏瀵归綈锛夛紝鍙湪鍒涘缓鍚庢敼 interval / cron / notification / prompt / 鍚?runtime 瑕嗗啓锛涢€氱煡瀛楁鏄鎴风 merge锛屼笉浼氫竴鏀?`--notificationDesktop` 灏辨妸 botChannelId 涓€璧锋姽鎺夈€?
 
 ### Fixed
 
-- **`task remove` 涓?`im --help` 鍛戒护琛ラ綈**锛圼#205](https://github.com/hAcKlyc/HamunaAgent/issues/205)锛夛細`task remove` 涓嶅啀 404锛屾槸 `task delete` 鐨勫埆鍚嶏紱`im --help` 涓嶅啀杩斿洖纭紪鐮佺殑杩囨湡缁勫垪琛紝fallback 鐢辩湡瀹?`HELP_TEXTS` 鑷姩娲剧敓锛屽苟琛ヤ笂 `im / thought / widget / skill / diagnose` 浜旂粍 `--help` 鏂囨銆俙task get` 鍦?recurring/scheduled/loop 浠诲姟涓婃樉寮忔爣鍑恒€孖M 鎺ㄩ€侊細鏈厤缃€嶏紝recurring 涓嶅甫 interval 鏃剁洿鎺?warning锛岄伩鍏嶉潤榛樿蛋 60 鍒嗛挓榛樿銆?
-- **Cron `new_session` 鍘嗗彶浼氳瘽涓嶅啀琚换鍔￠潰鏉挎尅浣?*锛圼#206](https://github.com/hAcKlyc/HamunaAgent/issues/206)锛夛細`runMode: new_session` 妯″紡涓嬫瘡娆℃墽琛岄兘鎹㈡柊 sessionId锛屼粠銆屼换鍔¤鎯?鈫?鍏宠仈浼氳瘽銆嶆墦寮€鐨勫巻鍙蹭細璇濇湰灏辨槸鍙鐨勪竴娆℃€ц褰曪紝浣嗕箣鍓嶈繕浼氭樉绀?CronTask Overlay 鎶婅緭鍏ユ鎸′綇銆傜幇鍦?new_session 鍘嗗彶浼氳瘽涓庢櫘閫氫細璇濅竴鑷达紱single_session锛堣繛缁ā寮忥級琛屼负涓嶅彉銆?
-- **WeCom 娓犻亾鍑嵁琚潤榛樿鐩?*锛圼#207](https://github.com/hAcKlyc/HamunaAgent/issues/207)锛夛細閫氳繃 dualConfig 琛ㄥ崟濉殑 botId / secret 鍦ㄤ繚瀛樻椂浼氳绌?customFields 瑕嗙洊锛岄噸寮€娓犻亾鍙戠幇鍑嵁娌′簡銆傜幇宸蹭慨姝ｄ繚瀛橀€昏緫銆?
-- **OpenClaw 绗笁鏂规彃浠堕€傞厤**锛圼#208](https://github.com/hAcKlyc/HamunaAgent/issues/208)锛夛細openclaw-plugin-yuanbao 绛夌涓夋柟鎻掍欢棣栨鏀舵秷鎭椂鎶?`Cannot read properties of undefined (reading 'debouncer')` 鑰屽穿婧冦€傝ˉ鍏?channel-inbound / reply-pipeline 涓や釜 shim 鍚庢甯歌矾鐢便€?
+- **`task remove` 涓?`im --help` 鍛戒护琛ラ綈**锛圼#205](https://github.com/hamuna/HamunaAgent/issues/205)锛夛細`task remove` 涓嶅啀 404锛屾槸 `task delete` 鐨勫埆鍚嶏紱`im --help` 涓嶅啀杩斿洖纭紪鐮佺殑杩囨湡缁勫垪琛紝fallback 鐢辩湡瀹?`HELP_TEXTS` 鑷姩娲剧敓锛屽苟琛ヤ笂 `im / thought / widget / skill / diagnose` 浜旂粍 `--help` 鏂囨銆俙task get` 鍦?recurring/scheduled/loop 浠诲姟涓婃樉寮忔爣鍑恒€孖M 鎺ㄩ€侊細鏈厤缃€嶏紝recurring 涓嶅甫 interval 鏃剁洿鎺?warning锛岄伩鍏嶉潤榛樿蛋 60 鍒嗛挓榛樿銆?
+- **Cron `new_session` 鍘嗗彶浼氳瘽涓嶅啀琚换鍔￠潰鏉挎尅浣?*锛圼#206](https://github.com/hamuna/HamunaAgent/issues/206)锛夛細`runMode: new_session` 妯″紡涓嬫瘡娆℃墽琛岄兘鎹㈡柊 sessionId锛屼粠銆屼换鍔¤鎯?鈫?鍏宠仈浼氳瘽銆嶆墦寮€鐨勫巻鍙蹭細璇濇湰灏辨槸鍙鐨勪竴娆℃€ц褰曪紝浣嗕箣鍓嶈繕浼氭樉绀?CronTask Overlay 鎶婅緭鍏ユ鎸′綇銆傜幇鍦?new_session 鍘嗗彶浼氳瘽涓庢櫘閫氫細璇濅竴鑷达紱single_session锛堣繛缁ā寮忥級琛屼负涓嶅彉銆?
+- **WeCom 娓犻亾鍑嵁琚潤榛樿鐩?*锛圼#207](https://github.com/hamuna/HamunaAgent/issues/207)锛夛細閫氳繃 dualConfig 琛ㄥ崟濉殑 botId / secret 鍦ㄤ繚瀛樻椂浼氳绌?customFields 瑕嗙洊锛岄噸寮€娓犻亾鍙戠幇鍑嵁娌′簡銆傜幇宸蹭慨姝ｄ繚瀛橀€昏緫銆?
+- **OpenClaw 绗笁鏂规彃浠堕€傞厤**锛圼#208](https://github.com/hamuna/HamunaAgent/issues/208)锛夛細openclaw-plugin-yuanbao 绛夌涓夋柟鎻掍欢棣栨鏀舵秷鎭椂鎶?`Cannot read properties of undefined (reading 'debouncer')` 鑰屽穿婧冦€傝ˉ鍏?channel-inbound / reply-pipeline 涓や釜 shim 鍚庢甯歌矾鐢便€?
 - **Markdown 鑷姩淇杩囦簬婵€杩?*锛氫箣鍓嶄細鎶?`#210`锛坕ssue 寮曠敤锛夈€乣#topic`锛坱ag锛夋敼鎴?h1锛屾妸 `0.2.18` `2026.5.18` `192.168.1.1` 鏀规垚 ordered list锛屾妸 `-50%` 鏀规垚 unordered list銆傜幇鍦ㄥ彧鍦ㄦ槑纭槸鍒楄〃鐨勫満鏅紙`1.item` 鈫?`1. item`銆乣-item` 鈫?`- item`锛夋敼鍐欙紝鍏朵綑渚?CommonMark 鍘熸牱娓叉煋銆?
-- **IM Bot Bridge 鍚姩鏃跺簭**锛圼#211](https://github.com/hAcKlyc/HamunaAgent/issues/211)锛夛細Bridge `/status` 鍦?spawn 鍚?~13ms 绗竴娆℃煡璇㈡椂浼氬洜 ECONNREFUSED 鐩存帴閫€鍑猴紝瀵艰嚧娓犻亾鍋跺彂璧蜂笉鏉ャ€傜幇鍦ㄨ繛鎺ュけ璐ユ寜 retry 澶勭悊锛屼粛鍦?15s 閲嶈瘯绐楀彛鍐呫€?
+- **IM Bot Bridge 鍚姩鏃跺簭**锛圼#211](https://github.com/hamuna/HamunaAgent/issues/211)锛夛細Bridge `/status` 鍦?spawn 鍚?~13ms 绗竴娆℃煡璇㈡椂浼氬洜 ECONNREFUSED 鐩存帴閫€鍑猴紝瀵艰嚧娓犻亾鍋跺彂璧蜂笉鏉ャ€傜幇鍦ㄨ繛鎺ュけ璐ユ寜 retry 澶勭悊锛屼粛鍦?15s 閲嶈瘯绐楀彛鍐呫€?
 
 ---
 
@@ -909,13 +929,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **鎵归噺瑁呮彃浠?*锛氫竴涓粨搴撻噷骞抽摵澶氫釜鎻掍欢鏃讹紙濡?`anthropics/claude-for-legal` 鐨?13 涓硶寰嬫彃浠讹級锛屽畨瑁呭脊绐楄嚜鍔ㄥ垪鍑哄叏閮ㄥ€欓€夐粯璁ゅ叏閫夛紝閫愪釜瀹夎锛涘け璐ョ殑涓嶅奖鍝嶅叾瀹冪户缁銆?
 - **鎸夊伐浣滃尯鍚敤鎻掍欢**锛氳缃〉鐨勫紑鍏冲彧鍐冲畾銆岃繖涓彃浠跺湪宸ヤ綔鍖洪噷鏄惁鑳界湅鍒般€嶏紱鏄惁瀵瑰綋鍓嶅伐浣滃尯鐢熸晥锛屽湪 Chat 杈撳叆妗嗐€屽伐鍏?鈫?鎻掍欢銆嶅瓙鑿滃崟鎴?Agent 璁剧疆闈㈡澘銆屾彃浠躲€嶄竴琛屽嬀閫夛紝涓や釜鍏ュ彛鍚屾銆?
 - **Chat 椤堕儴 Agent Status 鎮诞闈㈡澘**锛氬疄鏃舵眹鎬诲綋鍓嶈疆鐨?Todo 杩涘害鍜屾鍦ㄨ窇鐨勫瓙 Agent锛岀偣鍑诲睍寮€鐪嬭鎯咃紱鐐瑰瓙 Agent 鍗＄墖鐩存帴璺冲埌瀵硅瘽閲屽彂璧峰畠鐨勪綅缃紱鍏ㄩ儴瀹屾垚鍚庤嚜鍔ㄦ贰鍑恒€?
-- **渚涘簲鍟嗗惎鐢ㄤ笌鎺掑簭**锛圼#201](https://github.com/hAcKlyc/HamunaAgent/pull/201) by [@Wesegm](https://github.com/Wesegm)锛岀ぞ鍖鸿础鐚?馃檹锛夛細璁剧疆 鈫?渚涘簲鍟嗘柊澧炪€屽惎鐢ㄥ拰鎺掑簭銆嶅璇濇锛屽彲鎷栨嫿鎺掑簭銆佹寜闇€寮€鍏炽€傜鐢ㄧ殑渚涘簲鍟嗕粠妯″瀷閫夋嫨鍣ㄣ€乫allback 閾俱€乧ron 璺敱銆両M Bot 閫夋嫨鍣ㄥ叏闈㈤殣钘忥紝浣?API Key 鍜岄厤缃繚鐣欙紝閲嶆柊鍚敤鍗虫仮澶嶃€?
+- **渚涘簲鍟嗗惎鐢ㄤ笌鎺掑簭**锛圼#201](https://github.com/hamuna/HamunaAgent/pull/201) by [@Wesegm](https://github.com/Wesegm)锛岀ぞ鍖鸿础鐚?馃檹锛夛細璁剧疆 鈫?渚涘簲鍟嗘柊澧炪€屽惎鐢ㄥ拰鎺掑簭銆嶅璇濇锛屽彲鎷栨嫿鎺掑簭銆佹寜闇€寮€鍏炽€傜鐢ㄧ殑渚涘簲鍟嗕粠妯″瀷閫夋嫨鍣ㄣ€乫allback 閾俱€乧ron 璺敱銆両M Bot 閫夋嫨鍣ㄥ叏闈㈤殣钘忥紝浣?API Key 鍜岄厤缃繚鐣欙紝閲嶆柊鍚敤鍗虫仮澶嶃€?
 - **CLI `hamuna cc-plugin` 瀛愬懡浠?*锛歚list / install / uninstall / enable / disable / show`锛屽懡浠よ绠＄悊 Claude 鎻掍欢銆?
 
 ### Fixed
 
-- **璁㈤槄鐧诲綍璇嗗埆**锛圼#203](https://github.com/hAcKlyc/HamunaAgent/issues/203)锛屾劅璋?[@TimCheung-jx](https://github.com/TimCheung-jx) 鍙嶉锛夛細鍦?Claude Code CLI 涓婂彧璺戣繃 `claude auth login`銆丱Auth token 浠呭瓨鍦ㄧ郴缁?Keychain 鐨勭敤鎴凤紝涔嬪墠浼氳璇垽鎴愩€屾湭鐧诲綍銆嶅鑷磋闃呮ā鍨嬩笉鍙敤銆傜幇鍦ㄨ兘姝ｇ‘璇嗗埆銆?
-- **Cron 浠诲姟鐨?`--model` 鍦ㄥ閮?Runtime 鐢熸晥**锛圼#204](https://github.com/hAcKlyc/HamunaAgent/issues/204)锛屾劅璋?[@sundanian1991](https://github.com/sundanian1991) 鍙嶉锛夛細涔嬪墠 `hamuna task create-direct --runtime codex --model X` 閲岀殑 `--model` 浼氳 Agent 榛樿妯″瀷瑕嗙洊锛孋odex 绛夋ā鍨嬪悕涓嶅悓鐨?Runtime 浼氱洿鎺ユ姤 unknown model銆傜幇宸蹭慨姝ｄ紭鍏堢骇銆?
+- **璁㈤槄鐧诲綍璇嗗埆**锛圼#203](https://github.com/hamuna/HamunaAgent/issues/203)锛屾劅璋?[@TimCheung-jx](https://github.com/TimCheung-jx) 鍙嶉锛夛細鍦?Claude Code CLI 涓婂彧璺戣繃 `claude auth login`銆丱Auth token 浠呭瓨鍦ㄧ郴缁?Keychain 鐨勭敤鎴凤紝涔嬪墠浼氳璇垽鎴愩€屾湭鐧诲綍銆嶅鑷磋闃呮ā鍨嬩笉鍙敤銆傜幇鍦ㄨ兘姝ｇ‘璇嗗埆銆?
+- **Cron 浠诲姟鐨?`--model` 鍦ㄥ閮?Runtime 鐢熸晥**锛圼#204](https://github.com/hamuna/HamunaAgent/issues/204)锛屾劅璋?[@sundanian1991](https://github.com/sundanian1991) 鍙嶉锛夛細涔嬪墠 `hamuna task create-direct --runtime codex --model X` 閲岀殑 `--model` 浼氳 Agent 榛樿妯″瀷瑕嗙洊锛孋odex 绛夋ā鍨嬪悕涓嶅悓鐨?Runtime 浼氱洿鎺ユ姤 unknown model銆傜幇宸蹭慨姝ｄ紭鍏堢骇銆?
 
 ---
 

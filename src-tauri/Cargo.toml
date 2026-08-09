@@ -1,10 +1,10 @@
 [package]
 name = "hamuna"
-version = "0.3.15"
+version = "0.3.16"
 description = "HamunaAgent - Desktop Claude Code for everyone"
 authors = ["HamunaAgent Team <hamuna.io@gmail.com>"]
 license = "Apache-2.0"
-repository = "https://github.com/hAcKlyc/HamunaAgent"
+repository = "https://github.com/hamuna/HamunaAgent"
 homepage = "https://hamuna.io"
 edition = "2021"
 # MSRV note: Tauri 2.9 already requires ≥ 1.78. Keep 1.81 explicit so every
