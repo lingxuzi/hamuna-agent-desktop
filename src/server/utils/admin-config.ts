@@ -23,6 +23,7 @@ import { getHomeDirOrNull } from './platform';
 import { stripBom } from '../../shared/utils';
 import { workspacePathsEqual } from '../../shared/workspacePath';
 import { promoteAgentMcpJsonToGlobal } from '../../shared/mcpConfig';
+import { loadExtendedBuiltinMcpServers } from './extended-builtin-mcp';
 import type { AppConfig, ManagedProviderCredential, McpServerDefinition, PermissionMode, Provider, ProviderVerifyStatus, SubscriptionAuthPolicy } from '../../shared/config-types';
 import {
   applyManagedCodexProviderReadiness,
@@ -444,18 +445,29 @@ function getPresetMcpServers(): McpServerDefinition[] {
 }
 
 /**
- * Get all MCP servers (preset + custom), with user env/args overrides applied.
- * Mirrors getAllMcpServers() from mcpService.ts.
+ * Get all MCP servers (preset + extended + custom), with user env/args overrides applied.
+ *
+ * Mirrors getAllMcpServers() from renderer/mcpService.ts. Includes `extended_buildin_mcp/mcp.json`
+ * entries between preset and custom so `hamuna mcp list` and the Sidecar
+ * fallback path (when no /api/mcp/set has fired) both see the bundled
+ * administrator-shipped entries. The loader handles its own dedupe +
+ * reserved-name filtering, so a poisoned mcp.json cannot shadow a
+ * context-injected builtin (issue #148 family).
  */
 export function getAllMcpServers(config?: AdminAppConfig): McpServerDefinition[] {
   const c = config ?? loadConfig();
   const presets = getPresetMcpServers();
   const custom = c.mcpServers ?? [];
+  const extended = loadExtendedBuiltinMcpServers();
 
-  // Custom servers can override presets with same ID
+  // Priority: custom > extended > preset (extended shadows a hardcoded
+  // preset with the same id; custom shadows both). Custom overrides on
+  // user-edited env/args are applied below via applyMcpServerConfigAdditions.
   const customIds = new Set(custom.map(s => s.id));
+  const extendedIds = new Set(extended.map(s => s.id));
   const merged = [
-    ...presets.filter(p => !customIds.has(p.id)),
+    ...presets.filter(p => !customIds.has(p.id) && !extendedIds.has(p.id)),
+    ...extended.filter(s => !customIds.has(s.id)),
     ...custom,
   ];
 
