@@ -19,3 +19,21 @@ if (Test-Path $log) {
 } else {
     Write-Host "build.log missing"
 }
+
+# Bundled MCP runtime (Windows-only) — Sidecar falls back to these paths
+# when system `python` / `uvx` is missing. Missing here = ddg-search and
+# other uvx-driven builtin MCPs will fail at startup with command_not_found.
+Write-Host "`n=== Bundled MCP runtime (Windows) ===" -ForegroundColor Cyan
+$projectRoot = "D:\Coding\hamuna-agent-desktop"
+$pythonExe = Join-Path $projectRoot "src-tauri\resources\python312\python.exe"
+$uvxExe = Join-Path $projectRoot "src-tauri\resources\uvx.exe"
+if (Test-Path $pythonExe) {
+    Write-Host "  python312/python.exe: OK" -ForegroundColor Green
+} else {
+    Write-Host "  python312/python.exe: MISSING (run .\scripts\download_python.ps1)" -ForegroundColor Yellow
+}
+if (Test-Path $uvxExe) {
+    Write-Host "  uvx.exe:              OK" -ForegroundColor Green
+} else {
+    Write-Host "  uvx.exe:              MISSING (run .\scripts\download_uv.ps1)" -ForegroundColor Yellow
+}

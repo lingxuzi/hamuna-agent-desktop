@@ -3566,6 +3566,25 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
         console.log(`[agent] MCP ${server.id}: resolved to bundled cuse at ${cusePath}`);
       }
 
+      // Bundled Python / uvx fallback (Windows installer ships both under
+      // src-tauri/resources/). When the user hasn't installed them
+      // system-wide, resolve `python` / `python3` / `uvx` to the bundled
+      // absolute path so MCP servers using uvx (e.g. ddg-search,
+      // stock-datasource) work out of the box. If the bundled path is
+      // missing we let SDK proceed with the bare name — system PATH will
+      // resolve if the user has installed Python / uv themselves, otherwise
+      // spawn fails with `command_not_found` and the existing
+      // runtimeError / runtimeDownloadHint UX kicks in.
+      if (command === 'python' || command === 'python3' || command === 'uvx') {
+        const { getBundledPythonPath, getBundledUvPath } = await import('./utils/runtime');
+        const bundled =
+          command === 'uvx' ? getBundledUvPath() : getBundledPythonPath();
+        if (bundled) {
+          console.log(`[agent] MCP ${server.id}: resolved ${command} via bundled fallback → ${bundled}`);
+          command = bundled;
+        }
+      }
+
       // For npx commands: prefer system npx → bundled Node.js npx → bun x
       // System Node.js is maintained by the user's package manager, more reliable than our bundled npm.
       // Bundled Node.js serves as fallback for users who don't have Node.js installed.

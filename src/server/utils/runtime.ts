@@ -258,6 +258,69 @@ export function getBundledCusePath(): string | null {
 }
 
 /**
+ * Get the absolute path to the bundled Python 3.12 interpreter (Windows
+ * installer only). Used as a fallback when an MCP server's `command: 'python'`
+ * would otherwise fail because the user has no system Python.
+ *
+ * Layout mirrors `getBundledNodeDir`:
+ *   - Windows prod: <install-dir>/python312/python.exe
+ *   - macOS/Linux: not bundled (returns null)
+ *   - Dev: walk up from scriptDir to find `src-tauri/resources/python312/python.exe`
+ *
+ * Always returns the path to python.exe, or null if not present.
+ */
+export function getBundledPythonPath(): string | null {
+  // Python bundling is Windows-only — macOS/Linux users go through Homebrew
+  // / system packages, which is the convention the user chose.
+  if (!isWindows()) return null;
+
+  const scriptDir = getScriptDir();
+
+  // Production: flat layout, python312/ next to server-dist.js
+  const prodBin = resolve(scriptDir, 'python312', 'python.exe');
+  if (existsSync(prodBin)) return prodBin;
+
+  // Development: walk up from scriptDir to find src-tauri/resources/python312/
+  let dir = scriptDir;
+  for (let i = 0; i < 6; i++) {
+    const devBin = resolve(dir, 'src-tauri', 'resources', 'python312', 'python.exe');
+    if (existsSync(devBin)) return devBin;
+    dir = dirname(dir);
+  }
+
+  return null;
+}
+
+/**
+ * Get the absolute path to the bundled uvx (Astral uv) binary. Same Windows-
+ * only bundling rule as Python. Always returns the path to uvx.exe, or null.
+ *
+ * Note: uv ships a single `uv.exe` that also provides `uvx` as a subcommand.
+ * We rename it to `uvx.exe` on install so MCP servers declared with
+ * `command: 'uvx'` find it via plain PATH lookup, and so the spawn path
+ * doesn't need to think about the uv→uvx trampoline.
+ */
+export function getBundledUvPath(): string | null {
+  if (!isWindows()) return null;
+
+  const scriptDir = getScriptDir();
+
+  // Production: flat layout, uvx.exe next to server-dist.js
+  const prodBin = resolve(scriptDir, 'uvx.exe');
+  if (existsSync(prodBin)) return prodBin;
+
+  // Development: walk up from scriptDir to find src-tauri/resources/uvx.exe
+  let dir = scriptDir;
+  for (let i = 0; i < 6; i++) {
+    const devBin = resolve(dir, 'src-tauri', 'resources', 'uvx.exe');
+    if (existsSync(devBin)) return devBin;
+    dir = dirname(dir);
+  }
+
+  return null;
+}
+
+/**
  * Resolve an arbitrary resource that's bundled under `src-tauri/resources/`
  * (per `tauri.conf.json > bundle.resources`). The Tauri build copies each
  * entry to a path relative to the sidecar's `scriptDir` in production; in

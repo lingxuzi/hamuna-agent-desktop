@@ -1554,6 +1554,7 @@
         "command": "Command",
         "commandPlaceholder": "e.g. npx, uvx, node, python",
         "commandHint": "Command used to start the server",
+        "mcpRuntimeReadyHint": "Python 3.12 and uvx are bundled with HamunaAgent — no separate install required.",
         "args": "Arguments",
         "argPlaceholder": "e.g. @playwright/mcp@latest",
         "argHint": "Add one argument at a time. Press Enter or click Add.",

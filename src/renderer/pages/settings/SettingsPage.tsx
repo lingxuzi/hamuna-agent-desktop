@@ -6624,6 +6624,7 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
               className="w-full rounded-lg border border-[var(--line)] bg-[var(--paper-elevated)] px-3 py-2.5 text-sm font-mono transition-colors focus:border-[var(--focus-border)] focus:outline-none"
              />
              <p className="mt-1 text-xs text-[var(--ink-muted)]">{tSettings('toolbox.dialogs.customMcp.commandHint')}</p>
+             <p className="mt-1 text-xs text-[var(--ink-muted)]">{tSettings('toolbox.dialogs.customMcp.mcpRuntimeReadyHint')}</p>
             </div>
 
             {/* Args - array input */}

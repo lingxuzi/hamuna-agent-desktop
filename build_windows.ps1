@@ -247,6 +247,34 @@ try {
         $depOk = $false
     }
 
+    # Python 3.12 embeddable + uvx —— 内置 MCP (`uvx ddg-search` 等) 在 Windows
+    # 上需要。下载脚本自带版本短路 (marker + PE smoke check),重跑 noop。
+    # 与 cuse 不同: 这两个失败是**硬失败** —— Windows 安装包必须在资源里
+    # 带 python312/ 和 uvx.exe,否则 Sidecar 启动时找不到 uvx, ddg-search 等
+    # MCP 直接挂。
+    Write-Host "  拉取 Python 3.12 embeddable..." -ForegroundColor Cyan
+    try {
+        & "$ProjectDir\scripts\download_python.ps1"
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "download_python.ps1 exit $LASTEXITCODE" }
+        if (-not (Test-Path "src-tauri\resources\python312\python.exe")) { throw "python.exe not written" }
+        Write-Host "  Python OK" -ForegroundColor Green
+    } catch {
+        Write-Host "  Python 下载失败: $_" -ForegroundColor Red
+        Write-Host "    检查网络连通性: curl https://www.python.org/ftp/python/3.12.7/" -ForegroundColor Yellow
+        $depOk = $false
+    }
+    Write-Host "  拉取 uvx (Astral uv)..." -ForegroundColor Cyan
+    try {
+        & "$ProjectDir\scripts\download_uv.ps1"
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "download_uv.ps1 exit $LASTEXITCODE" }
+        if (-not (Test-Path "src-tauri\resources\uvx.exe")) { throw "uvx.exe not written" }
+        Write-Host "  uvx OK" -ForegroundColor Green
+    } catch {
+        Write-Host "  uvx 下载失败: $_" -ForegroundColor Red
+        Write-Host "    检查网络连通性: curl https://github.com/astral-sh/uv/releases/latest" -ForegroundColor Yellow
+        $depOk = $false
+    }
+
     $nodejsPath = "src-tauri\resources\nodejs\node.exe"
     $NodeDir = "src-tauri\resources\nodejs"
     Write-Host "  检查 bundled Node.js... " -NoNewline

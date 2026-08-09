@@ -151,6 +151,12 @@ fn append_app_local_runtime_dirs(parts: &mut Vec<String>) {
     {
         push_path_part(parts, exe_dir.join("resources").join("nodejs"));
         push_path_part(parts, exe_dir.join("nodejs"));
+        // Python 3.12 embeddable bundled by the Windows installer. Lets
+        // child processes (Claude SDK, MCP servers) find `python` without
+        // requiring the user to install Python system-wide. uvx.exe is a
+        // sibling of server-dist.js so it's already on PATH via the
+        // install-dir entry Tauri injects — no extra push needed.
+        push_path_part(parts, exe_dir.join("python312"));
     }
 
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]

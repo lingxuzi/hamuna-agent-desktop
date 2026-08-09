@@ -511,8 +511,35 @@ try {
         Write-Host "OK - cuse ready" -ForegroundColor Green
     } catch {
         Write-Host "  cuse 下载失败: $_" -ForegroundColor Yellow
-        Write-Host "  ⚠ computer-use 功能在 dev 模式下将不可用，网络恢复后可重跑：" -ForegroundColor Yellow
+        Write-Host "  ⚠ computer-use 功能在 dev 模式下将不可用,网络恢复后可重跑:" -ForegroundColor Yellow
         Write-Host "    .\scripts\download_cuse.ps1" -ForegroundColor Yellow
+    }
+
+    # Python 3.12 embeddable + uvx —— 内置 MCP (`uvx ddg-search` 等) 在 Windows
+    # 上需要 Python 才能跑。与 cuse 一样软失败: 缺失时 MCP 启动会沿用裸
+    # `python` / `uvx` 命令 + 现有 runtimeDownloadHint UX, 不应阻断整个 setup。
+    Write-Host "`nStep 3.5/9: 下载 Python 3.12 embeddable + uvx (bundled MCP runtime)" -ForegroundColor Blue
+    try {
+        & "$ProjectDir\scripts\download_python.ps1"
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+            throw "download_python.ps1 exit $LASTEXITCODE"
+        }
+        Write-Host "  Python OK" -ForegroundColor Green
+    } catch {
+        Write-Host "  Python 下载失败: $_" -ForegroundColor Yellow
+        Write-Host "  ⚠ 内置 MCP (ddg-search 等) 在 dev 模式下将无法运行,网络恢复后可重跑:" -ForegroundColor Yellow
+        Write-Host "    .\scripts\download_python.ps1" -ForegroundColor Yellow
+    }
+    try {
+        & "$ProjectDir\scripts\download_uv.ps1"
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+            throw "download_uv.ps1 exit $LASTEXITCODE"
+        }
+        Write-Host "  uvx OK" -ForegroundColor Green
+    } catch {
+        Write-Host "  uvx 下载失败: $_" -ForegroundColor Yellow
+        Write-Host "  ⚠ uvx 驱动的 MCP (ddg-search, stock-datasource) 在 dev 模式下将不可用,网络恢复后可重跑:" -ForegroundColor Yellow
+        Write-Host "    .\scripts\download_uv.ps1" -ForegroundColor Yellow
     }
 
     Write-Host "`nStep 4/9: 下载 Git 安装包 (用于 NSIS 打包)" -ForegroundColor Blue
