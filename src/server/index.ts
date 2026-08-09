@@ -265,6 +265,7 @@ import { setImMediaContext } from './tools/im-media-tool';
 import { ensureImBridgeToolSurface } from './tools/im-bridge-tools';
 import { normalizeHostInteractionCapability } from './host-interaction';
 import { getBuiltinMcpInstance } from './tools/builtin-mcp-registry';
+import { loadExtendedBuiltinMcpServers } from './utils/extended-builtin-mcp';
 // NOTE: builtin MCP META is auto-registered when agent-session.ts side-effect-imports
 // './tools/builtin-mcp-meta'. No duplicate import needed here.
 
@@ -651,6 +652,8 @@ import {
   getCurrentImBridgeTurnContext,
   isCurrentImBridgeToolSurfaceInstalled,
   setBackgroundAgentPermissionMode,
+  SDK_RESERVED_MCP_NAMES,
+  HAMUNA_CONTEXT_INJECTED_MCP_IDS,
   type ProviderEnv,
 } from './agent-session';
 import { getHomeDirOrNull, isSkillBlockedOnPlatform } from './utils/platform';
@@ -4609,6 +4612,27 @@ async function main() {
             { success: false, error: error instanceof Error ? error.message : 'Failed to get MCP servers' },
             500
           );
+        }
+      }
+
+      // GET /api/mcp/extended-presets - Return bundled extended_buildin_mcp/mcp.json
+      // entries as presets so the renderer toolbox can surface them alongside
+      // the hardcoded PRESET_MCP_SERVERS. Loader is total (returns [] on any
+      // error), so the inner try is paranoia against future throw sites.
+      if (pathname === '/api/mcp/extended-presets' && request.method === 'GET') {
+        try {
+          const raw = loadExtendedBuiltinMcpServers();
+          // Defense-in-depth: skip SDK/HamunaAgent reserved ids so a poisoned
+          // mcp.json cannot shadow a context-injected builtin (#148 family).
+          const reserved = new Set([
+            ...SDK_RESERVED_MCP_NAMES,
+            ...HAMUNA_CONTEXT_INJECTED_MCP_IDS,
+          ]);
+          const servers = raw.filter(s => !reserved.has(s.id));
+          return jsonResponse({ success: true, servers });
+        } catch (error) {
+          console.warn('[api/mcp/extended-presets] error:', error);
+          return jsonResponse({ success: true, servers: [] });
         }
       }
 

@@ -98,3 +98,68 @@ describe('getAllMcpServersFromConfig — env merge (issue #303)', () => {
     expect(merged?.args).toEqual(['mineru-mcp', '--debug']);
   });
 });
+
+// `getAllMcpServersFromConfig` second arg is the bundled `extended_buildin_mcp/mcp.json`
+// entries fetched once per page load. Pin the priority order so a future
+// refactor can't silently swap it (custom wins over extended wins over preset).
+
+const extendedMineru: McpServerDefinition = {
+  id: 'mineru',
+  name: 'mineru (extended)',
+  type: 'stdio',
+  command: 'uvx',
+  args: ['mineru-mcp'],
+  isBuiltin: true,
+};
+
+describe('getAllMcpServersFromConfig — extended builtin presets', () => {
+  it('passes empty extended by default (back-compat with existing call sites)', () => {
+    const cfg = baseConfig({
+      mcpServers: [customMineru()],
+    });
+    const merged = findById(getAllMcpServersFromConfig(cfg), 'mineru');
+    expect(merged?.name).toBe('mineru');
+  });
+
+  it('surfaces an extended entry that does not collide with custom or preset', () => {
+    const cfg = baseConfig();
+    const merged = getAllMcpServersFromConfig(cfg, [extendedMineru]);
+    expect(findById(merged, 'mineru')?.isBuiltin).toBe(true);
+    expect(findById(merged, 'mineru')?.name).toBe('mineru (extended)');
+  });
+
+  it('custom entry wins over extended on id collision', () => {
+    const cfg = baseConfig({
+      mcpServers: [customMineru()],
+    });
+    const merged = findById(getAllMcpServersFromConfig(cfg, [extendedMineru]), 'mineru');
+    expect(merged?.name).toBe('mineru');
+    expect(merged?.isBuiltin).toBe(false);
+  });
+
+  it('extended entry suppresses a hardcoded preset with the same id (preset loses)', () => {
+    // playwright is in PRESET_MCP_SERVERS — extended with the same id should
+    // shadow it. (This is the realistic "admin wants to ship a forked
+    // playwright" case.) The merge order is custom > extended > preset, so
+    // the preset is filtered out at the array-spread step when an extended
+    // entry claims the same id.
+    const extendedPlaywright: McpServerDefinition = {
+      id: 'playwright',
+      name: 'playwright (extended)',
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', '@playwright/mcp@experimental'],
+      isBuiltin: true,
+    };
+    const merged = findById(getAllMcpServersFromConfig(baseConfig(), [extendedPlaywright]), 'playwright');
+    expect(merged?.name).toBe('playwright (extended)');
+  });
+
+  it('preserves an unrelated preset when extended entries are present', () => {
+    // Sanity: adding extended entries must not silently drop entries from
+    // PRESET_MCP_SERVERS that don't collide.
+    const cfg = baseConfig();
+    const merged = getAllMcpServersFromConfig(cfg, [extendedMineru]);
+    expect(findById(merged, 'playwright')).toBeDefined();
+  });
+});

@@ -4,7 +4,7 @@ import { PRESET_MCP_SERVERS } from '../types';
 import { withProjectsLock } from './configStore';
 import { loadAppConfig, atomicModifyConfig } from './appConfigService';
 import { loadProjects, saveProjects } from './projectService';
-import { apiPostJson } from '@/api/apiFetch';
+import { apiGetJson, apiPostJson } from '@/api/apiFetch';
 import { applyMcpServerConfigAdditions } from '../../../shared/mcpConfig';
 
 /**
@@ -47,14 +47,26 @@ function getPlatformFilteredPresets(): McpServerDefinition[] {
  * the shared core, components were duplicating preset+custom merge logic
  * (and silently dropping args/env overrides; see TaskAdvancedConfigEditor
  * v0.2.4 review).
+ *
+ * `extended` (optional) is the list of bundled `extended_buildin_mcp/mcp.json`
+ * entries fetched once per page load via `fetchExtendedBuiltinMcpServers`.
+ * They sit between preset and custom in priority — a custom entry with the
+ * same id wins over extended; extended wins over hardcoded preset; the UI
+ * de-duplicates by id when rendering the toggle list.
  */
-export function getAllMcpServersFromConfig(config: AppConfig): McpServerDefinition[] {
+export function getAllMcpServersFromConfig(
+    config: AppConfig,
+    extended: McpServerDefinition[] = [],
+): McpServerDefinition[] {
     const customServers = Array.isArray(config.mcpServers) ? config.mcpServers : [];
-    // Deduplicate: custom servers with the same ID as a preset override the preset
-    // (aligned with server-side getAllMcpServers in admin-config.ts)
     const customIds = new Set(customServers.map(s => s.id));
+    const extendedIds = new Set(extended.map(s => s.id));
     const allServers = [
-        ...getPlatformFilteredPresets().filter(p => !customIds.has(p.id)),
+        ...getPlatformFilteredPresets().filter(p => !customIds.has(p.id) && !extendedIds.has(p.id)),
+        // extended is filtered by customIds too — custom wins on collision
+        // (ToolboxSection renders one row per array entry, so an unfiltered
+        // duplicate would produce two toggles for the same id).
+        ...extended.filter(s => !customIds.has(s.id)),
         ...customServers,
     ];
     return applyMcpServerConfigAdditions(allServers, config);
@@ -70,8 +82,41 @@ export function getAllMcpServersFromConfig(config: AppConfig): McpServerDefiniti
  * before spread, because config.json is a trust boundary.
  */
 export async function getAllMcpServers(): Promise<McpServerDefinition[]> {
-    const config = await loadAppConfig();
-    return getAllMcpServersFromConfig(config);
+    const [config, extended] = await Promise.all([
+        loadAppConfig(),
+        fetchExtendedBuiltinMcpServers(),
+    ]);
+    return getAllMcpServersFromConfig(config, extended);
+}
+
+// Module-level memoised cache of extended builtin presets served from
+// /api/mcp/extended-presets. The underlying resource ships with the bundle,
+// so values are process-lifetime stable — one fetch per page load is correct.
+// `resetExtendedBuiltinMcpCache()` exposes an explicit clear for tests.
+let extendedCache: McpServerDefinition[] | null = null;
+let extendedFetchPromise: Promise<McpServerDefinition[]> | null = null;
+
+export async function fetchExtendedBuiltinMcpServers(): Promise<McpServerDefinition[]> {
+    if (extendedCache) return extendedCache;
+    if (extendedFetchPromise) return extendedFetchPromise;
+    extendedFetchPromise = (async () => {
+        try {
+            const res = await apiGetJson<{ success: boolean; servers: McpServerDefinition[] }>(
+                '/api/mcp/extended-presets',
+            );
+            extendedCache = res?.success && Array.isArray(res.servers) ? res.servers : [];
+        } catch (err) {
+            console.warn('[mcpService] failed to fetch extended presets:', err);
+            extendedCache = [];
+        }
+        return extendedCache;
+    })();
+    return extendedFetchPromise;
+}
+
+export function resetExtendedBuiltinMcpCache(): void {
+    extendedCache = null;
+    extendedFetchPromise = null;
 }
 
 export async function getEnabledMcpServerIds(): Promise<string[]> {
