@@ -542,6 +542,35 @@ try {
         Write-Host "    .\scripts\download_uv.ps1" -ForegroundColor Yellow
     }
 
+    # Install easy_tdx Python package (vendored at stock-sources/easy_tdx).
+    # The easy-tdx MCP entry in extended_buildin_mcp/mcp.json invokes the bare
+    # `easy-tdx-mcp` console script, so this MUST happen before the MCP loader
+    # tries to spawn it. Hard dependency on Step 3.5 (download_python.ps1):
+    # if Python didn't stage, pip is unavailable and install_easy_tdx.ps1 would
+    # soft-fail with a confusing "no pip" message; gate the call here so the
+    # user sees a single root-cause hint instead of two stacked failures.
+    # Soft-fail by design — missing easy_tdx only disables one optional MCP,
+    # never blocks setup. See scripts/install_easy_tdx.ps1.
+    Write-Host "`nStep 3.6/9: 安装 easy_tdx Python 包（提供 easy-tdx-mcp 控制台脚本）" -ForegroundColor Blue
+    $pythonReady = (Get-Command python -ErrorAction SilentlyContinue) -or (Get-Command python3 -ErrorAction SilentlyContinue)
+    if (-not $pythonReady) {
+        Write-Host "  ⛔ Python 未就绪(Step 3.5 失败),跳过 easy_tdx 安装" -ForegroundColor Yellow
+        Write-Host "  ⚠ easy-tdx MCP 在 dev 模式下将不可用" -ForegroundColor Yellow
+        Write-Host "    修复: .\scripts\download_python.ps1 成功后再跑 .\scripts\install_easy_tdx.ps1 -Force" -ForegroundColor Yellow
+    } else {
+        try {
+            & "$ProjectDir\scripts\install_easy_tdx.ps1"
+            if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+                throw "install_easy_tdx.ps1 exit $LASTEXITCODE"
+            }
+            Write-Host "  easy_tdx OK" -ForegroundColor Green
+        } catch {
+            Write-Host "  easy_tdx 安装失败: $_" -ForegroundColor Yellow
+            Write-Host "  ⚠ easy-tdx MCP 在 dev 模式下将不可用,网络/pip 恢复后可重跑:" -ForegroundColor Yellow
+            Write-Host "    .\scripts\install_easy_tdx.ps1 -Force" -ForegroundColor Yellow
+        }
+    }
+
     Write-Host "`nStep 4/9: 下载 Git 安装包 (用于 NSIS 打包)" -ForegroundColor Blue
     Get-GitInstaller
 

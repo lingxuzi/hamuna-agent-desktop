@@ -81,6 +81,25 @@ else
 fi
 echo ""
 
+# Install easy_tdx Python package (vendored at stock-sources/easy_tdx).
+# The easy-tdx MCP entry in extended_buildin_mcp/mcp.json invokes the bare
+# `easy-tdx-mcp` console script, so this MUST happen before the MCP loader
+# tries to spawn it. Hard dependency on Python being on PATH (system Python on
+# dev machines; download_python.ps1 is Windows-only): gate the call so a missing
+# python surfaces a single hint instead of a stacked "no pip" failure.
+# Soft-fail by design — missing easy_tdx only disables one optional MCP, never
+# blocks setup. See scripts/install_easy_tdx.sh.
+echo -e "${BLUE}[3.5/6] 安装 easy_tdx Python 包（提供 easy-tdx-mcp 控制台脚本）${NC}"
+if ! command -v python3 >/dev/null 2>&1; then
+    echo -e "${YELLOW}⛔ python3 未就绪,跳过 easy_tdx 安装${NC}"
+    echo -e "${YELLOW}  ⚠ easy-tdx MCP 在 dev 模式下将不可用${NC}"
+    echo -e "${YELLOW}    修复: 装 python3 + pip 后重跑 ./scripts/install_easy_tdx.sh --force${NC}"
+elif ! "${PROJECT_DIR}/scripts/install_easy_tdx.sh"; then
+    echo -e "${YELLOW}⚠ easy_tdx 安装失败 — easy-tdx MCP 在 dev 模式下将不可用${NC}"
+    echo -e "${YELLOW}  网络/pip 恢复后重跑：./scripts/install_easy_tdx.sh --force${NC}"
+fi
+echo ""
+
 # 安装依赖（使用 npm — v0.2.0 起不再依赖 Bun）
 echo -e "${BLUE}[4/6] 安装依赖${NC}"
 npm install

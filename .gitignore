@@ -110,3 +110,5 @@ hamuna_files/
 
 .tokensave
 .omp
+# Added by code-review-graph
+.code-review-graph/

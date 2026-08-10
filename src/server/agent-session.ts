@@ -5868,7 +5868,7 @@ export function buildClaudeSessionEnv(
   // HamunaAgent manages MCP servers through its own UI (buildSdkMcpServers).
   // SDK auto-loaded servers use "claude.ai <DisplayName>" format (sanitized to "claude_ai_<Name>"),
   // which mismatches our config IDs → checkMcpToolPermission blocks the tools.
-  // See: https://github.com/hAcKlyc/HamunaAgent/issues/73
+  // See: https://github.com/hamuna/HamunaAgent/issues/73
   env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   // SDK 0.2.83+: Emit session_state_changed events (idle/running/requires_action).
   // Currently used for diagnostic logging only (parallel data collection).
@@ -7601,7 +7601,7 @@ export async function resetSession(): Promise<void> {
   // 4b. Keep configState.currentAgentDefinitions — agents are workspace-level config, not session state.
   // Clearing them here causes a race: pre-warm fires before frontend re-syncs agents,
   // so referenced global agents (only available via programmatic injection) are lost.
-  // See: https://github.com/hAcKlyc/HamunaAgent/issues/13
+  // See: https://github.com/hamuna/HamunaAgent/issues/13
 
   // 5. Clear SDK ready signal state (same as switchToSession)
   _sdkReadyResolve = null;

@@ -139,7 +139,7 @@ rg -n "ERROR|WARN|auth error|401|403|429|terminal_reason|AppErrorBoundary|extern
 
 1. 用 `/hamuna-docs` 检查它是否已有能力、正常限制或已知使用路径。
 2. 生成下面的脱敏标题与报告，路径优先写相对路径或 `<HOME>`，先展示给用户。
-3. 取得用户允许向 GitHub 发送脱敏关键词的明确确认后，再搜索 `hAcKlyc/HamunaAgent` 的相似 open Issue；没有能力或用户不授权就明确未搜索。
+3. 取得用户允许向 GitHub 发送脱敏关键词的明确确认后，再搜索 `hamuna/HamunaAgent` 的相似 open Issue；没有能力或用户不授权就明确未搜索。
 4. 根据搜索结果更新报告并再次展示。只有用户明确确认提交后，才使用可用的 GitHub connector、`gh issue create` 或 Issue 页面提交。
 5. 成功后返回链接；不能或不应提交时交付可直接粘贴的 Markdown。
 

@@ -25,7 +25,7 @@ export const VALID_SECTIONS: SettingsSection[] = [
   'about',
 ];
 
-export const HAMUNA_GITHUB_URL = 'https://github.com/hAcKlyc/HamunaAgent';
+export const HAMUNA_GITHUB_URL = 'https://github.com/hamuna/HamunaAgent';
 export const HAMUNA_RELEASES_URL = `${HAMUNA_GITHUB_URL}/releases`;
 
 export const PLAYWRIGHT_DEVICE_PRESETS = [

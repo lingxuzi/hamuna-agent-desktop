@@ -2,14 +2,14 @@
   "version": 1,
   "servers": [
     {
-        "id": "stock-datasource",
-        "name": "股票数据服务",
-        "type": "stdio",
-        "command": "uvx",
-        "args": ["--from", "eltdx[mcp]", "eltdx-mcp"],
-        "env": {},
-        "description": "通达信股票数据服务",
-        "enabled": true
-      }
+      "id": "stock-datasource",
+      "name": "股票数据服务",
+      "type": "stdio",
+      "command": "easy-tdx-mcp",
+      "args": [],
+      "env": {},
+      "description": "回测引擎 + 股票行情 + RSS 策展新闻（22 个工具：行情/复权/板块/分时/财务/公告/指标/因子/回测/缠论 + get_news/news_sync_status/news_list_sources）。",
+      "enabled": true
+    }
   ]
 }

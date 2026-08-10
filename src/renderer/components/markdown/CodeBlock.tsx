@@ -4,7 +4,7 @@
  */
 
 import { Check, Copy } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { useResolvedTheme } from '@/theme';
@@ -15,8 +15,12 @@ interface CodeBlockProps {
     className?: string;
 }
 
-
-export default function CodeBlock({ children, language, className }: CodeBlockProps) {
+// React-markdown recreates a new children string for each reveal tick during
+// streaming. With Prism's tokenizer, that's hundreds of ms of CPU per tick on
+// any visible 500-line block. Skip the rerender when the highlighted text and
+// language/className are unchanged. Default shallow comparator is sufficient
+// (children/language/className are the only props).
+const CodeBlock = memo(function CodeBlock({ children, language, className }: CodeBlockProps) {
     const { t } = useTranslation('app');
     const customTheme = useResolvedTheme().adapters.prism;
     const [copied, setCopied] = useState(false);
@@ -83,4 +87,6 @@ export default function CodeBlock({ children, language, className }: CodeBlockPr
             </SyntaxHighlighter>
         </div>
     );
-}
+});
+
+export default CodeBlock;

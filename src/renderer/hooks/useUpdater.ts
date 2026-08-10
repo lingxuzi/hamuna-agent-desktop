@@ -367,6 +367,34 @@ export function useUpdater(): UseUpdaterResult {
   void checkPending();
  }, []);
 
+ // One-shot startup check. Fires ~2s after mount so it doesn't fight the cold-
+ // start burst (sidecar spawn / config load / ipc handshakes). The 30-min
+ // periodic interval and this startup check share the same ref guards inside
+ // checkForUpdate, so concurrent triggers are no-ops.
+//
+// StrictMode handling: React 18's dev double-mount runs effect → cleanup →
+ // effect on the same fiber. A naive ref gate at the top of the effect would
+ // cause the FIRST cleanup to cancel the first timer and the SECOND effect
+ // to bail — leaving no timer in flight and silently dropping the startup
+// check in dev. To survive that, we DO schedule the timer in both effects,
+// but the timer callback re-checks the ref so only the first scheduled timer
+// actually fires the check. The cleanup clears the locally-scoped timer
+// (so no leaked timer from the second effect survives).
+ const startupCheckFiredRef = useRef(false);
+ useEffect(() => {
+  if (!isTauriEnvironment()) return;
+  if (UPDATER_DISABLED) return;
+  const timer = setTimeout(() => {
+   if (startupCheckFiredRef.current) return;
+   startupCheckFiredRef.current = true;
+   if (isDebugMode()) {
+    console.log('[useUpdater] Startup check firing');
+   }
+   void checkForUpdate();
+  }, 2000);
+  return () => clearTimeout(timer);
+ }, [checkForUpdate]);
+
  // Periodic background check (silent - just triggers Rust to check and download)
  // Uses ref to avoid recreating interval when updateReady changes
  useEffect(() => {

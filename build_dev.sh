@@ -72,6 +72,25 @@ sleep 1  # 等待进程完全退出
 echo -e "${GREEN}✓ 进程已清理${NC}"
 echo ""
 
+# Install easy_tdx (vendored) before any Sidecar/MCP can spawn. The
+# `easy-tdx-mcp` console script is invoked bare by extended_buildin_mcp/mcp.json;
+# install_easy_tdx.sh is idempotent (marker file) so this is a noop after the
+# first build. Hard dependency on Python being on PATH (system Python on dev
+# machines; download_python.ps1 is Windows-only): gate the call so a missing
+# python surfaces a single hint instead of a stacked "no pip" failure.
+# Soft-fail like the other prerequisite steps — missing easy_tdx only disables
+# one optional MCP, never blocks the build.
+echo -e "${BLUE}[准备] 安装 easy_tdx Python 包（提供 easy-tdx-mcp 控制台脚本）${NC}"
+if ! command -v python3 >/dev/null 2>&1; then
+    echo -e "${YELLOW}⛔ python3 未就绪,跳过 easy_tdx 安装${NC}"
+    echo -e "${YELLOW}  ⚠ easy-tdx MCP 将在运行时不可用${NC}"
+    echo -e "${YELLOW}    修复: 装 python3 + pip 后重跑 ./scripts/install_easy_tdx.sh --force${NC}"
+elif ! "${PROJECT_DIR}/scripts/install_easy_tdx.sh"; then
+    echo -e "${YELLOW}⚠ easy_tdx 安装失败 — easy-tdx MCP 将在运行时不可用${NC}"
+    echo -e "${YELLOW}  网络/pip 恢复后重跑：./scripts/install_easy_tdx.sh --force${NC}"
+fi
+echo ""
+
 # 清理旧构建（包括 Rust 缓存的 resources）
 echo -e "${BLUE}[准备] 清理旧构建...${NC}"
 rm -rf "${PROJECT_DIR}/dist"

@@ -1394,6 +1394,10 @@ const SYSTEM_SKILLS: readonly string[] = [
   // v29: prompt-writer promoted from utility → system skill so content
   // improvements reach existing installs (seed-once never updates).
   'prompt-writer',
+  // v39: easy-tdx-backtest — 19 个 MCP 工具 (行情/复权/指数/分时/财务/
+  // 公告/板块/缠论/多策略组合/因子库) 替代 v38 的 6 个工具集合。
+  // Mirror of commands.rs::SYSTEM_SKILLS.
+  'easy-tdx-backtest',
 ];
 
 /**

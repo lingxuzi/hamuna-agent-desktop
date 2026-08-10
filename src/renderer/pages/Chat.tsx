@@ -3102,6 +3102,13 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   const chatScrollModel = useChatScrollModel({
     historyMessages,
     streamingMessage,
+    // `MessageList` already receives `streamingMessage` as a separate prop below
+    // (it flows through `streamingMessageRef` inside `renderItem`). Merging the
+    // streaming row into `data` here allocates a new array on every reveal tick
+    // (~30 fps during streaming) and that fresh identity propagates to
+    // `<MessageList messages={…}>`, defeating its `memo` and forcing every
+    // visible row's `areMessagesEqual` to run per tick. Keep `data` history-only.
+    includeStreamingInData: false,
     firstItemIndex,
     sessionId,
   });

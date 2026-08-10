@@ -8,7 +8,7 @@
 # so both Tauri build targets pick it up without per-arch duplication.
 #
 # Source of truth for cuse releases is GitHub
-# (https://github.com/hAcKlyc/HamunaAgent-Cuse), but that repo is PRIVATE.
+# (https://github.com/hamuna/HamunaAgent-Cuse), but that repo is PRIVATE.
 # The cuse maintainer mirrors each release onto R2 (see
 # HamunaAgent-Cuse/publish_r2.sh) so this script can pull artifacts over plain
 # HTTPS without any auth — fork / contributor / public CI all work.

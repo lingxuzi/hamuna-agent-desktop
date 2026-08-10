@@ -257,10 +257,15 @@ const MessageList = memo(function MessageList({
   const { t } = useTranslation('chat');
   const liveHeightEstimateSeed = heightEstimateSeed?.length === messages.length ? heightEstimateSeed : undefined;
 
+  // Random "苦思冥想中…" line — pick once per streaming turn, not per message.
+  // Deps intentionally `[isLoading, t]`: re-randomize only at the loading
+  // boundary so the line stays stable while characters stream in. Re-randomizing
+  // every message used to flip `streamingStatusMessage`'s identity and cascade
+  // into a FooterComponent rebuild → Virtuoso footer remount → StatusTimer
+  // reset its `setInterval` mid-stream.
   const streamingStatusMessage = useMemo(
     () => getRandomStreamingMessage(t),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messages.length, t]
+    [isLoading, t]
   );
 
   // ExitPlanMode
@@ -526,25 +531,52 @@ const MessageList = memo(function MessageList({
   // ── Stable computeItemKey ──
   const computeItemKey = useMemo(() => (_i: number, m: MessageType) => m.id, []);
 
-  // ── Stable Footer wrapper — useMemo keeps component identity stable for Virtuoso ──
+  // ── Stable Footer wrapper — same ref-mirroring pattern as renderItem ──
+  // Footer identity must stay stable for the lifetime of the MessageList mount;
+  // Virtuoso remounts the footer whenever its component identity flips, which
+  // resets the StatusTimer interval and triggers a remeasure. We mirror all
+  // dynamic values into refs and read them inside the wrapper so the wrapper's
+  // identity is fixed (useMemo([])) regardless of how often statusMessage,
+  // pendingPermission, etc. change.
+  const pendingPermissionRef = useRef(pendingPermission);
+  pendingPermissionRef.current = pendingPermission;
+  const onPermissionDecisionRef = useRef(onPermissionDecision);
+  onPermissionDecisionRef.current = onPermissionDecision;
+  const pendingAskUserQuestionRef = useRef(pendingAskUserQuestion);
+  pendingAskUserQuestionRef.current = pendingAskUserQuestion;
+  const onAskUserQuestionSubmitRef = useRef(onAskUserQuestionSubmit);
+  onAskUserQuestionSubmitRef.current = onAskUserQuestionSubmit;
+  const onAskUserQuestionCancelRef = useRef(onAskUserQuestionCancel);
+  onAskUserQuestionCancelRef.current = onAskUserQuestionCancel;
+  const showStatusRef = useRef(showStatus);
+  showStatusRef.current = showStatus;
+  const statusMessageRef = useRef(statusMessage);
+  statusMessageRef.current = statusMessage;
+  const systemNoticeRef = useRef(systemNotice);
+  systemNoticeRef.current = systemNotice;
+  const onDismissSystemNoticeRef = useRef(onDismissSystemNotice);
+  onDismissSystemNoticeRef.current = onDismissSystemNotice;
+  const bottomSpacerPxRef = useRef(bottomSpacerPx);
+  bottomSpacerPxRef.current = bottomSpacerPx;
+
   const FooterComponent = useMemo(() => {
     return function Footer() {
       return (
         <VirtuosoFooter
-          pendingPermission={pendingPermission}
-          onPermissionDecision={onPermissionDecision}
-          pendingAskUserQuestion={pendingAskUserQuestion}
-          onAskUserQuestionSubmit={onAskUserQuestionSubmit}
-          onAskUserQuestionCancel={onAskUserQuestionCancel}
-          showStatus={showStatus}
-          statusMessage={statusMessage}
-          systemNotice={systemNotice}
-          onDismissSystemNotice={onDismissSystemNotice}
-          bottomSpacerPx={bottomSpacerPx}
+          pendingPermission={pendingPermissionRef.current}
+          onPermissionDecision={onPermissionDecisionRef.current}
+          pendingAskUserQuestion={pendingAskUserQuestionRef.current}
+          onAskUserQuestionSubmit={onAskUserQuestionSubmitRef.current}
+          onAskUserQuestionCancel={onAskUserQuestionCancelRef.current}
+          showStatus={showStatusRef.current}
+          statusMessage={statusMessageRef.current}
+          systemNotice={systemNoticeRef.current}
+          onDismissSystemNotice={onDismissSystemNoticeRef.current}
+          bottomSpacerPx={bottomSpacerPxRef.current}
         />
       );
     };
-  }, [pendingPermission, onPermissionDecision, pendingAskUserQuestion, onAskUserQuestionSubmit, onAskUserQuestionCancel, showStatus, statusMessage, systemNotice, onDismissSystemNotice, bottomSpacerPx]);
+  }, []);
 
   // ── Stable components object ──
   const components = useMemo(() => ({ Footer: FooterComponent }), [FooterComponent]);

@@ -159,7 +159,7 @@ HamunaAgent 是一个桌面端 AI Agent 产品，不是单纯的前端项目。�
 macOS / Linux：
 
 ```bash
-git clone https://github.com/hAcKlyc/HamunaAgent.git
+git clone https://github.com/hamuna/HamunaAgent.git
 cd HamunaAgent
 ./setup.sh
 ./start_dev.sh
@@ -168,7 +168,7 @@ cd HamunaAgent
 Windows：
 
 ```powershell
-git clone https://github.com/hAcKlyc/HamunaAgent.git
+git clone https://github.com/hamuna/HamunaAgent.git
 cd HamunaAgent
 .\setup_windows.ps1
 .\build_windows.ps1
@@ -419,7 +419,7 @@ Developers:
 macOS / Linux:
 
 ```bash
-git clone https://github.com/hAcKlyc/HamunaAgent.git
+git clone https://github.com/hamuna/HamunaAgent.git
 cd HamunaAgent
 ./setup.sh
 ./start_dev.sh
@@ -428,7 +428,7 @@ cd HamunaAgent
 Windows:
 
 ```powershell
-git clone https://github.com/hAcKlyc/HamunaAgent.git
+git clone https://github.com/hamuna/HamunaAgent.git
 cd HamunaAgent
 .\setup_windows.ps1
 .\build_windows.ps1

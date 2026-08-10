@@ -32,6 +32,75 @@
   Delete "$INSTDIR\bun.exe"
 !macroend
 
+; HamunaAgent: After Section Install copies stock-sources/easy_tdx/ into
+; place, run the vendored easy_tdx install via the per-user Python we just staged in
+; Section PythonInstall. Without this, extended_buildin_mcp/mcp.json's bare
+; `easy-tdx-mcp` invocation would ModuleNotFoundError on first Sidecar spawn.
+;
+; Path note: Tauri's NSIS template (installer.nsi L747-749) installs each
+; bundle.resources value verbatim under $INSTDIR, NOT under $INSTDIR\resources.
+; So easy_tdx lands at $INSTDIR\stock-sources\easy_tdx\pyproject.toml.
+; (The Rust runtime resolves the same files at $INSTDIR\resources\ via
+; BaseDirectory::Resource, but that's the API-side lookup; on disk the NSIS
+; installer dropped them at the root.)
+;
+; Why a sub-shell (not in-process pip):
+;   - currentUser install does not elevate; the HKCU\Environment PATH that
+;     python-installer.exe /PrependPath=1 writes is NOT visible to this NSIS
+;     process or its children — only to shells launched after `SendMessage
+;     WM_SETTINGCHANGE`. We can't await that from a single ExecWait.
+;   - So we resolve Python's InstallPath from HKCU\Software\Python\PythonCore\3.12
+;     directly (the official installer writes it), then call
+;     "$PythonPath\python.exe" -m pip install -e <stock-sources\easy_tdx>.
+;     If Python didn't install (best-effort section, see installer.nsi L717-725),
+;     skip with a clear log line — easy_tdx MCP will be unavailable until the
+;     user installs Python manually.
+;
+; Soft-fail by design: a missing pip / network blip only disables one optional MCP.
+!macro NSIS_HOOK_POSTINSTALL
+  DetailPrint "Installing vendored easy_tdx package (provides easy-tdx-mcp console script)..."
+
+  ; Verify easy_tdx source landed under our install dir (NSIS Section Install runs
+  ; BEFORE this macro, so stock-sources/easy_tdx/pyproject.toml exists).
+  IfFileExists "$INSTDIR\stock-sources\easy_tdx\pyproject.toml" easy_tdx_source_present 0
+    ; easy_tdx source missing — bail out cleanly
+    DetailPrint "  ⛔ $INSTDIR\stock-sources\easy_tdx\pyproject.toml not found; skipping easy_tdx install."
+    DetailPrint "     The NSIS bundle missing the easy_tdx resources — check tauri.windows.conf.json bundle.resources."
+    Goto easy_tdx_postinstall_done
+
+  easy_tdx_source_present:
+    ; Resolve Python 3.12 install path from the registry the official installer wrote.
+    ReadRegStr $0 HKCU "Software\Python\PythonCore\3.12\InstallPath" ""
+    ${If} $0 == ""
+      DetailPrint "  ⛔ Python 3.12 not found in registry; skipping easy_tdx install."
+      DetailPrint "     Install Python 3.12 manually then run: pip install -e $INSTDIR\stock-sources\easy_tdx[mcp]"
+      Goto easy_tdx_postinstall_done
+    ${EndIf}
+
+    ; -m pip install with --no-build-isolation: hatchling must be on the system
+    ; site-packages or the PEP 517 build will reach for a temp venv and truncate
+    ; byte streams from PyPI mirrors. Matches the two-step install pattern in
+    ; scripts/install_easy_tdx.ps1 so dev-mode + production install converge.
+    nsExec::ExecToLog '"$0python.exe" -m pip install --quiet --retries 5 --timeout 60 --no-build-isolation -e "$INSTDIR\stock-sources\easy_tdx[mcp]"'
+
+    Pop $1
+    ${If} $1 == "0"
+      DetailPrint "  ✓ easy_tdx installed."
+    ${Else}
+      ; Fallback: retry with build-isolation in case hatchling isn't present.
+      nsExec::ExecToLog '"$0python.exe" -m pip install --quiet --retries 5 --timeout 60 -e "$INSTDIR\stock-sources\easy_tdx[mcp]"'
+      Pop $1
+      ${If} $1 == "0"
+        DetailPrint "  ✓ easy_tdx installed (with build-isolation)."
+      ${Else}
+        DetailPrint "  ⚠ easy_tdx install failed (exit $1). easy-tdx MCP will be unavailable."
+        DetailPrint "     Run manually: $0python.exe -m pip install -e $INSTDIR\stock-sources\easy_tdx[mcp]"
+      ${EndIf}
+    ${EndIf}
+
+  easy_tdx_postinstall_done:
+!macroend
+
 !macro NSIS_HOOK_PREUNINSTALL
   ; Kill all HamunaAgent processes before uninstall (same file-lock issue as update)
   !insertmacro _HAMUNA_KILL_PROCESSES

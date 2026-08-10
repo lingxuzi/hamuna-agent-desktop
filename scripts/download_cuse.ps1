@@ -11,10 +11,10 @@
     and extracts cuse.exe as cuse-x86_64-pc-windows-msvc.exe.
 
     Source of truth for cuse releases is GitHub
-    (https://github.com/hAcKlyc/HamunaAgent-Cuse), but that repo is PRIVATE.
+    (https://github.com/hamuna/HamunaAgent-Cuse), but that repo is PRIVATE.
     The cuse maintainer mirrors each release onto R2 (see
     HamunaAgent-Cuse/publish_r2.sh) so this script can pull artifacts over
-    plain HTTPS without any auth �?fork / contributor / public CI all work.
+    plain HTTPS without any auth �?fork / contributor / public CI all work.
 
 .EXAMPLE
     .\scripts\download_cuse.ps1                 # Latest version (reads R2 latest.json)
@@ -49,7 +49,7 @@ function Write-Err   { param($msg) Write-Host "[cuse] $msg" -ForegroundColor Red
 
 # ── Preflight ─────────────────────────────────────────────────────────────
 
-# Force TLS 1.2 �?Windows PowerShell 5.1 defaults to SSL3/TLS 1.0 which
+# Force TLS 1.2 �?Windows PowerShell 5.1 defaults to SSL3/TLS 1.0 which
 # Cloudflare rejects. PS 7+ already negotiates TLS 1.2/1.3 by default.
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -100,7 +100,7 @@ if ($Version -notmatch '^v') { $Version = "v$Version" }
 Write-Info "Target version: $Version"
 
 # Short-circuit if already up-to-date AND the installed binary passes a
-# PE-header smoke check. A bare version-marker match is insufficient �?a
+# PE-header smoke check. A bare version-marker match is insufficient �?a
 # prior run killed mid-copy can leave the marker from an earlier success
 # next to a truncated file.
 if (-not $Force -and (Test-Path $VersionMarker)) {
@@ -181,7 +181,7 @@ try {
 
     $SrcBin = Join-Path $ExtractDir "cuse.exe"
     if (-not (Test-Path $SrcBin)) {
-        # Some zip layouts nest under a subdir �?find it
+        # Some zip layouts nest under a subdir �?find it
         $SrcBin = Get-ChildItem $ExtractDir -Recurse -Filter "cuse.exe" -File | Select-Object -First 1 -ExpandProperty FullName
         if (-not $SrcBin) {
             Write-Err "Archive does not contain cuse.exe"
@@ -190,7 +190,7 @@ try {
     }
 
     # Sanity check: verify PE magic (MZ) before installing. If the archive
-    # was corrupted or built with the wrong target, fail loudly here �?the
+    # was corrupted or built with the wrong target, fail loudly here �?the
     # short-circuit on the next run uses the same MZ check, so accepting a
     # bad binary now would just produce an infinite re-download loop.
     try {
@@ -210,7 +210,7 @@ try {
     # Install atomically: copy to per-PID tmp next to the target on the
     # same filesystem, then Move-Item -Force into place. A kill between
     # copy and move leaves the old binary intact; a kill after move but
-    # before marker write leaves a fresh binary with a stale marker �?
+    # before marker write leaves a fresh binary with a stale marker �?
     # next run's MZ-header check will either pass (fine) or fail (re-
     # download). Marker is written LAST so we never falsely report
     # up-to-date after an interrupted install.

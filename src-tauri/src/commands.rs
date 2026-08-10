@@ -1206,7 +1206,7 @@ pub fn cmd_sync_cli<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, String
 // matching exclusion list in src/server/index.ts::seedBundledSkills
 // MUST be kept in sync (comment there points back here).
 
-const SYSTEM_SKILLS_VERSION: &str = "37";
+const SYSTEM_SKILLS_VERSION: &str = "39";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -1264,6 +1264,13 @@ const SYSTEM_SKILLS: &[&str] = &[
     // improvements. System status trades user customisation (overwritten on
     // every version bump) for keeping the methodology current.
     "prompt-writer",
+    // v38: easy-tdx-backtest — quantitative-trading workflows using the
+    // vendored easy_tdx library (stock-sources/easy_tdx/) plus its bundled
+    // MCP server (registered in extended_buildin_mcp/mcp.json as
+    // "easy-tdx"). System-skill status lets us track changes to the MCP tool
+    // surface and the 18 bundled strategies in lockstep, instead of relying
+    // on a one-time seed that ages out.
+    "easy-tdx-backtest",
 ];
 
 /// Skills unavailable on certain platforms due to upstream bugs.

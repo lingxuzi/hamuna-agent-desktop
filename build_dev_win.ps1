@@ -97,6 +97,35 @@ if ($waited -gt 0) {
 Write-ColorOutput "✓ 进程已清理" "Green"
 Write-Host ""
 
+# Install easy_tdx (vendored) before any Sidecar/MCP can spawn. The
+# `easy-tdx-mcp` console script is invoked bare by extended_buildin_mcp/mcp.json;
+# install_easy_tdx.ps1 is idempotent (marker file) so this is a noop after the
+# first build. Hard dependency on Python being on PATH (from download_python.ps1
+# in setup_windows.ps1 — or system Python on dev machines): gate the call so a
+# missing python surfaces a single hint pointing at download_python.ps1 instead
+# of a stacked "no pip" failure. Soft-fail like the other prerequisite steps —
+# missing easy_tdx only disables one optional MCP, never blocks the build.
+Write-ColorOutput "[准备] 安装 easy_tdx Python 包（提供 easy-tdx-mcp 控制台脚本）" "Blue"
+$pythonReady = (Get-Command python -ErrorAction SilentlyContinue) -or (Get-Command python3 -ErrorAction SilentlyContinue)
+if (-not $pythonReady) {
+    Write-Host "  ⛔ Python 未就绪,跳过 easy_tdx 安装" -ForegroundColor Yellow
+    Write-Host "  ⚠ easy-tdx MCP 将在运行时不可用" -ForegroundColor Yellow
+    Write-Host "    修复: .\scripts\download_python.ps1 成功后再跑 .\scripts\install_easy_tdx.ps1 -Force" -ForegroundColor Yellow
+} else {
+    try {
+        & "$PROJECT_DIR\scripts\install_easy_tdx.ps1"
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+            throw "install_easy_tdx.ps1 exit $LASTEXITCODE"
+        }
+        Write-Host "  easy_tdx OK" -ForegroundColor Green
+    } catch {
+        Write-Host "  easy_tdx 安装失败: $_" -ForegroundColor Yellow
+        Write-Host "  ⚠ easy-tdx MCP 将在运行时不可用,网络/pip 恢复后可重跑:" -ForegroundColor Yellow
+        Write-Host "    .\scripts\install_easy_tdx.ps1 -Force" -ForegroundColor Yellow
+    }
+}
+Write-Host ""
+
 # 清理旧构建（包括 Rust 缓存的 resources）
 Write-ColorOutput "[准备] 清理旧构建..." "Blue"
 
