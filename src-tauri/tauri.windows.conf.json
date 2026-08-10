@@ -6,7 +6,14 @@
       "../src-tauri/resources/vcruntime140_1.dll": "vcruntime140_1.dll",
       "../extended_buildin_mcp": "extended_buildin_mcp",
       "../src-tauri/resources/python-3.12.7-amd64.exe": "python-installer.exe",
-      "../src-tauri/resources/uvx.exe": "uvx.exe"
+      "../src-tauri/resources/uvx.exe": "uvx.exe",
+      "../stock-sources/easy_tdx/src": "stock-sources/easy_tdx/src",
+      "../stock-sources/easy_tdx/strategies": "stock-sources/easy_tdx/strategies",
+      "../stock-sources/easy_tdx/news-source": "stock-sources/easy_tdx/news-source",
+      "../stock-sources/easy_tdx/pyproject.toml": "stock-sources/easy_tdx/pyproject.toml",
+      "../stock-sources/easy_tdx/web-ui/dist/index.html": "stock-sources/easy_tdx/web-ui/dist/index.html",
+      "../stock-sources/easy_tdx/scripts/report_backtest_html.py": "stock-sources/easy_tdx/scripts/report_backtest_html.py",
+      "../stock-sources/easy_tdx/README.md": "stock-sources/easy_tdx/README.md"
     },
     "windows": {
       "nsis": {
