@@ -60,7 +60,6 @@ export default defineConfig({
           include: [
             'src/shared/**/*.test.ts',
             'src/renderer/**/*.test.ts',
-            'src/render_v2/**/*.test.ts',
             'src/cli/**/*.unit.test.ts',
             'src/server/**/*.unit.test.ts',
           ],

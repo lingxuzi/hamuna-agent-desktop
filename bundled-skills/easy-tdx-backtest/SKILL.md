@@ -1,6 +1,6 @@
 ---
 name: easy-tdx-backtest
-description: Use the `easy_tdx` library (vendored at `stock-sources/easy_tdx/`) to query A-share market data and run quantitative trading backtests via its vectorized `BacktestEngine`. This skill is wired to the bundled `easy-tdx` MCP server (registered in `extended_buildin_mcp/mcp.json`); use those MCP tools when available. v2 exposes 22 MCP tools covering 行情/复权/指数/分时/财务/公告/板块/缠论/多策略组合/因子库/RSS 策展新闻. Trigger whenever the user wants to (a) write a new trading/backtest strategy in Python for `easy_tdx`, (b) run a backtest against A-share K-line data — real `TdxClient` data or synthetic — via `BacktestEngine`, (c) inspect a backtest result (performance metrics, equity curve, trades, positions) and explain or critique it, (d) tune engine parameters (commission / slippage / execution mode / position mode / warmup bars / stop-loss & take-profit), (e) load or debug a strategy file for the `easy-tdx` CLI (`easy-tdx backtest ... --strategy-file ...`), (f) adapt one of the bundled strategies under `stock-sources/easy_tdx/strategies/*.py` into a variant, (g) pull 指数 K 线 / 实时分时 / 除权除息 / 财务摘要 / 板块列表 / 巨潮公告 for a stock, (h) run 缠论分析 on K-line bars (分型/笔/线段/中枢/买卖点), (i) screen N 选 K strategy combinations ranked by total_return, or (j) query curated RSS news across 12 industries via `get_news` / `news_sync_status` / `news_list_sources` (启动时 daemon thread 后台同步 ~108 个 tier-1 源到 `~/.easy_tdx/news.db`). Trigger proactively on phrases like "回测", "写个策略", "跑一下 easy_tdx", "MACD 策略", "缠论策略", "组合回测", "前复权", "除权除息", "easy-tdx backtest", "A 股回测", "通达信回测", "AI 新闻", "半导体快讯", "RSS 聚合", "行业新闻". Do NOT use this skill for non-`easy_tdx` frameworks (backtrader, vectorbt, zipline, quantstats, QStock, AKShare backtests, vn.py, MT5) — for those, recommend the user install the framework separately.
+description: Use the `easy_tdx` library (vendored at `stock-sources/easy_tdx/`) to query A-share market data and run quantitative trading backtests via its vectorized `BacktestEngine`. This skill is wired to the bundled `easy-tdx` MCP server (registered in `extended_buildin_mcp/mcp.json`); use those MCP tools when available. v2 exposes 22 MCP tools covering 行情/复权/指数/分时/财务/公告/板块/缠论/多策略组合/因子库/RSS 策展新闻. Trigger whenever the user wants to (a) write a new trading/backtest strategy in Python for `easy_tdx`, (b) run a backtest against A-share K-line data — real `TdxClient` data or synthetic — via `BacktestEngine`, (c) inspect a backtest result (performance metrics, equity curve, trades, positions) and explain or critique it, (d) tune engine parameters (commission / slippage / execution mode / position mode / warmup bars / stop-loss & take-profit), (e) load or debug a strategy file for the `easy-tdx` CLI (`easy-tdx backtest ... --strategy-file ...`), (f) adapt one of the bundled strategies under `stock-sources/easy_tdx/strategies/*.py` into a variant, (g) pull 指数 K 线 / 实时分时 / 除权除息 / 财务摘要 / 板块列表 / 巨潮公告 for a stock, (h) run 缠论分析 on K-line bars (分型/笔/线段/中枢/买卖点), (i) screen N 选 K strategy combinations ranked by total_return, (j) query curated RSS news across 12 industries via `get_news` / `news_sync_status` / `news_list_sources` (启动时 daemon thread 后台同步 ~108 个 tier-1 源到 `~/.easy_tdx/news.db`), or **(k) translate an `easy_tdx` Strategy class into 迅投 QMT innerApi Python code (init/handlebar/passorder)** for the QMT editor's built-in Python 3.6 runtime. Trigger proactively on phrases like "回测", "写个策略", "跑一下 easy_tdx", "MACD 策略", "缠论策略", "组合回测", "前复权", "除权除息", "easy-tdx backtest", "A 股回测", "通达信回测", "AI 新闻", "半导体快讯", "RSS 聚合", "行业新闻", **"导出 QMT", "翻译成 QMT", "QMT 代码", "在 QMT 跑", "回测转 QMT", "导出到 QMT", "QMT 策略", "迅投 QMT", "大QMT", "miniQMT", "XtQuant"**. Do NOT use this skill for non-`easy_tdx` frameworks (backtrader, vectorbt, zipline, quantstats, QStock, AKShare backtests, vn.py, MT5) — for those, recommend the user install the framework separately.
 author: HamunaAgent
 version: 2
 ---
@@ -555,6 +555,448 @@ CLI 默认 JSON 输出,关键路径：
 | `client.get_security_bars` 返回 `date` 列 | 引擎自动兼容，但若你后处理 df 别 rename 成 `datetime` 又删 `date` —— 引擎会找不到列 | 直接传原 df，引擎自己处理 |
 | `pip install easy-tdx` 装了 pypi 版本 | 跟仓库 vendored 的源码版本可能漂移，行为/接口差异常常发生在这种地方 | 用仓库内 vendored 路径：`sys.path.insert(0, "stock-sources/easy_tdx/src")`；CLI 用 `easy-tdx backtest ...`（仓库 CLI 不存在时再装 pypi） |
 | 把 easy_tdx 跟 eltdx 搞混 | eltdx 是另一个通达信库，接口不同 | 本 skill 只谈 easy_tdx；MCP server 名是 `easy-tdx`，eltdx 是另一个 |
+
+## 导出 QMT 代码（把 easy_tdx Strategy 翻译成 QMT innerApi）
+
+> 适用：用户在 QMT 编辑器里跑策略（迅投大QMT / miniQMT），但回测研发在 `easy_tdx.backtest` 里完成 — 想把已经写好、回测验证过的策略文件直接落地成 QMT 可执行的 Python 3.6 代码。QMT innerApi 的 API 真相见 `docs/QMT_INNERAPI.md`（本仓库内有完整中文版）；workflow / discipline 见 `bundled-skills/qmt-strategy/SKILL.md`。**本节负责把 `Strategy` 子类 → `init/handlebar/passorder` 的翻译规则**，workflow / 11 条 discipline 自检 / 回测参数配置交给 qmt-strategy skill。
+
+### 翻译速查（Strategy → QMT）
+
+| `easy_tdx.backtest` 元素 | QMT innerApi 对应 | 关键差异 |
+|---|---|---|
+| `class XxxStrategy(Strategy)` | 模块顶层 + `def init(C)` + `def handlebar(C)` | 必须**同时**定义两个函数；类容器改函数 |
+| `self.I(MyTT.MA, close, N)` | `C.get_market_data_ex(['close'], [stock], end_time, period, count) → ema/ma 手写` | QMT 不一定有 `talib`，手写 EMA/SMA/RSI（骨架函数见 §模板 A） |
+| `crossover(a, b)` | 手动 `(pre_a <= pre_b) and (cur_a > cur_b)` | QMT Py3.6 无 helper |
+| `self.data.close[0]` | `closes[-1]`（`get_market_data_ex` 返回 DataFrame） | 取数方式不同 |
+| `self._bar_index` / `self.position["size"]` | `C.barpos` / `get_trade_detail_data(..., 'position')` | QMT 通过 `position` 对象查持仓 |
+| `self.buy(size=0)` (全仓) | `account_obj.m_dAvailable → vol=available/price/100*100 → passorder(23, 1101, ..., 5, -1, vol, ..., C)` | opType=23 买, 24 卖; prType=5 最新价; price=-1 |
+| `self.sell(size=0)` (全平) | `holding_vol = 持仓查询 → passorder(24, 1101, ..., 5, -1, holding_vol, ..., C)` | 同上 24 卖 |
+| `stop_loss=N / take_profit=M` | `handlebar` 里手动检测 `last_price <= entry * (1-pct)` → 触发 `passorder(24, ...)` | QMT 没 stop_loss 参数内置；自己写 |
+| `MyTT.MACD(close, 12, 26, 9)` → (dif, dea, macd) | 手写 `ema(close, 12) - ema(close, 26)` + `ema(dif, 9)` | 见 §模板 A 的 `ema()` |
+| `MyTT.RSI(close, 14)` | Wilder 平滑 RSI（`rsi_calc()` 模板） | §模板 A 的 `rsi_calc()` |
+
+### 翻译 5 步（workflow）
+
+1. **先跑回测验证 easy_tdx 策略**：用 `run_backtest` / CLI 拿到 `result.performance`（总收益 / 夏普 / 最大回撤 / `total_trades>0`）。**没有验证过的策略不要翻译** — QMT 调试费时，回测先行最便宜。
+2. **读 §模板 A**（下方）：拿到 `init(C)` + `handlebar(C)` 的骨架、`ema()` / `rsi_calc()` 助手、`MODE toggle` 顶部常量块。把 easy_tdx 策略里的 `init()` 指标逐个手写为 QMT 形式。
+3. **映射信号条件**：金叉/死叉写 `(pre_a <= pre_b) and (cur_a > cur_b)`；全仓买入写 `available → vol → passorder(23, ...)`；硬止损写 `if last_price <= entry * (1 - pct): passorder(24, ...)`。
+4. **填回测参数**：参考 `bundled-skills/qmt-strategy/references/backtest-config.md`。A 股默认：`front_ratio` 复权 / `0.0003` 佣金 / `0.001` 印花税 / `0.3` 最大成交比例 / 基准 `000300.SH`。
+5. **跑 QMT discipline 自检**（11 条）：`bundled-skills/qmt-strategy/references/skeleton.md §11`。**最容易丢的 4 条**：① `#coding:gbk` 首行；② `class A` 状态容器（不放 ContextInfo attrs）；③ `m_strRemark` 每笔 < 24 字符；④ `quickTrade` 跟场景一致（日线回测 = 0；实盘 = 2）。
+
+### 翻译模板 A — 完整 `init/handlebar/EMA/RSI` 骨架
+
+```python
+#coding:gbk
+# type: ignore   # QMT 内置全局 (timetag_to_datetime / get_trade_detail_data / passorder / account) 无静态类型
+
+import numpy as np
+
+
+# === 用户配置 — 改这里 ================================================
+MODE = 'backtest'                  # 'backtest' | 'live'
+ACCOUNT_ID = 'testS'               # 回测: 任意字符串; 实盘: '' 用界面账号
+ACCOUNT_TYPE = 'STOCK'             # 实盘: '' 用界面账号类型
+STOCK_CODE = '000001.SZ'
+START_DATE = "2020-01-01 00:00:00"
+END_DATE   = "2024-12-31 00:00:00"
+INIT_CAPITAL = 1000000
+# =====================================================================
+
+
+class A(object):
+    """Runtime state — never on ContextInfo attrs (those deep-copy per bar)."""
+    is_backtest = (MODE == 'backtest')
+    quick_trade = 0 if is_backtest else 2     # 0=回测, 2=实盘
+    entry_price = 0.0
+    holding_vol = 0
+    # init() 运行时注入
+    stock = ''
+    account = ''
+    accountType = ''
+
+
+def ema(values, period):
+    """EMA 序列 (QMT 内置 Py3.6 不一定有 talib, 手写)."""
+    vals = np.asarray(values, dtype=np.float64)
+    if len(vals) < period:
+        return np.full_like(vals, np.nan)
+    alpha = 2.0 / (period + 1.0)
+    out = np.empty_like(vals)
+    seed = np.mean(vals[:period])
+    out[:period - 1] = np.nan
+    out[period - 1] = seed
+    for k in range(period, len(vals)):
+        out[k] = alpha * vals[k] + (1.0 - alpha) * out[k - 1]
+    return out
+
+
+def rsi_calc(values, period):
+    """Wilder 平滑 RSI."""
+    vals = np.asarray(values, dtype=np.float64)
+    if len(vals) < period + 1:
+        return np.full_like(vals, np.nan)
+    diff = np.diff(vals)
+    gains = np.where(diff > 0, diff, 0.0)
+    losses = np.where(diff < 0, -diff, 0.0)
+    avg_gain = np.empty(len(vals)); avg_gain[:] = np.nan
+    avg_loss = np.empty(len(vals)); avg_loss[:] = np.nan
+    avg_gain[period] = np.mean(gains[:period])
+    avg_loss[period] = np.mean(losses[:period])
+    for k in range(period + 1, len(vals)):
+        avg_gain[k] = (avg_gain[k - 1] * (period - 1) + gains[k - 1]) / period
+        avg_loss[k] = (avg_loss[k - 1] * (period - 1) + losses[k - 1]) / period
+    rs = np.where(avg_loss == 0, np.inf, avg_gain / avg_loss)
+    rsi = np.where(np.isinf(rs), 100.0, 100.0 - 100.0 / (1.0 + rs))
+    return rsi
+
+
+def init(C):
+    A.stock = C.stockcode + '.' + C.market
+    A.account     = ACCOUNT_ID   if ACCOUNT_ID   else account
+    A.accountType = ACCOUNT_TYPE if ACCOUNT_TYPE else accountType
+    A.entry_price = 0.0
+    A.holding_vol = 0
+    if A.is_backtest:
+        C.start, C.end, C.capital = START_DATE, END_DATE, INIT_CAPITAL
+
+
+def handlebar(C):
+    # 日线回测 is_last_bar() 永远 True, 无需闸 (no-op)
+    bar_date = timetag_to_datetime(C.get_bar_timetag(C.barpos), '%Y%m%d')
+    need = 60        # 按策略最大指标周期设
+    data = C.get_market_data_ex(['close'], [A.stock],
+                                end_time=bar_date, period='1d',
+                                subscribe=False, count=need)
+    closes = data[A.stock]['close'].values
+    if len(closes) < need:
+        print(bar_date, '行情不足 跳过')
+        return
+
+    # === 在这里放策略核心: ema/ma/rsi → 信号 → passorder ===
+    # ... 翻译自 easy_tdx Strategy.next() ...
+    # ...
+    # === passorder 调用样板 ===
+    # 金叉全仓买入:
+    #   vol = int(available / last_price / 100) * 100
+    #   remark = f"{bar_date[4:]}_b_G"     # ≤24 字符, 唯一标识意图
+    #   passorder(23, 1101, A.account, A.stock, 5, -1, vol,
+    #             'easy_tdx_to_qmt', A.quick_trade, remark, C)
+    # 死叉 / 止损全平:
+    #   passorder(24, 1101, A.account, A.stock, 5, -1, holding_vol,
+    #             'easy_tdx_to_qmt', A.quick_trade, remark, C)
+```
+
+### 翻译模板 B — `buy(size=0)` / `sell(size=0)` / `stop_loss` / `take_profit` 的标准映射
+
+```python
+# 1) 查持仓 (sell 前必查, 避免重复卖)
+holdings = get_trade_detail_data(A.account, A.accountType, 'position')
+holding_vol = 0
+for h in holdings:
+    if h.m_strInstrumentID + '.' + h.m_strExchangeID == A.stock:
+        holding_vol = int(h.m_nCanUseVolume)
+        break
+
+# 2) 硬止损 / 止盈 (next bar 触发, 等效 easy_tdx 的 stop_loss=)
+last_price = closes[-1]
+if holding_vol > 0 and A.entry_price > 0:
+    if last_price <= A.entry_price * (1 - 0.05):           # -5% 止损
+        remark = f"{bar_date[4:]}_s_SL"
+        passorder(24, 1101, A.account, A.stock, 5, -1, holding_vol,
+                  'strategy_name', A.quick_trade, remark, C)
+        A.entry_price = 0.0; A.holding_vol = 0
+        return
+
+# 3) buy(size=0) → 全仓 (100 股整手)
+account_obj = get_trade_detail_data(A.account, A.accountType, 'account')[0]
+available = int(account_obj.m_dAvailable)
+vol = int(available / last_price / 100) * 100
+remark = f"{bar_date[4:]}_b_G"
+passorder(23, 1101, A.account, A.stock, 5, -1, vol,
+          'strategy_name', A.quick_trade, remark, C)
+A.entry_price = last_price; A.holding_vol = vol
+
+# 4) sell(size=0) → 全平
+remark = f"{bar_date[4:]}_s_D"
+passorder(24, 1101, A.account, A.stock, 5, -1, holding_vol,
+          'strategy_name', A.quick_trade, remark, C)
+A.entry_price = 0.0; A.holding_vol = 0
+```
+
+### easy_tdx 与 QMT 关键差异（翻译时容易踩）
+
+| 差异 | 说明 |
+|---|---|
+| **撮合时点** | easy_tdx 默认 `execution='next_open'`（信号在 bar N，成交在 bar N+1 开盘）→ QMT 回测撮合规则等价（指定价格在 K 线高低点间的按指定价撮合，超过按收盘价；委托量 > 可用量时按可用量部分成交） |
+| **未来函数** | easy_tdx 用 `execution='this_close'` 是已知未来函数；QMT 内置 Py3.6 没这个概念，handlebar 永远是历史 K 线驱动 — 翻译时**不要**把"用当期收盘价成交"等价到 QMT（QMT 没有这模式） |
+| **仓位对象** | easy_tdx `self.position["size"]` → QMT `get_trade_detail_data(..., 'position')` 每次都查一次；不要缓存跨 bar |
+| **价格精度** | easy_tdx 用 numpy float64；QMT `passorder` 价格用 float，需自行 round 到分位 |
+| **手续费 / 印花税** | easy_tdx 在 `BacktestEngine(...)` 构造时配 `commission` / `stamp_tax`；QMT 在「回测参数」面板填（亦可由代码覆盖） |
+| **回测时间范围** | easy_tdx 在 df 里自然给；QMT 在 `init` 里 `C.start/end/capital` 或回测参数面板填 |
+| **整手 / 最小单位** | 两边都 floor 到 100 股（股票）；期货一手 / 期权一张 |
+
+### 落地检查清单（翻译完一行一行过）
+
+1. ☐ 文件首行 `#coding:gbk`
+2. ☐ 模块顶部 `# type: ignore`（QMT 全局无类型）
+3. ☐ 顶部用户配置块（`MODE / ACCOUNT_ID / STOCK_CODE / *_PERIOD / STOP_LOSS_PCT / START_DATE / END_DATE / INIT_CAPITAL`）
+4. ☐ `class A` 字段集中声明（pyright 友好）
+5. ☐ `init(C)` 里 `A.account = ACCOUNT_ID or account`（空串走 QMT 注入）
+6. ☐ `handlebar` 顶部 `if not C.is_last_bar(): return` 仅当「实盘 / 模拟 / 分钟线 / tick」加（**日线回测加注释说 no-op 即可**）
+7. ☐ 每笔 `passorder` 有 `m_strRemark` 且 `<24` 字符
+8. ☐ `opType` = 23 买 / 24 卖（STOCK）
+9. ☐ `prType=5, price=-1` 最新价（最常用）
+10. ☐ `quickTrade = 0 if MODE=='backtest' else 2`
+11. ☐ 在 QMT 编辑器先跑一次「**副图模式**回测」（不要主图 / 主图叠加）
+
+### 完工验证
+
+把翻译出的 `.qmt.py` 粘到 QMT 编辑器 → 主图选目标品种（如 `000001.SZ`）→ 点「回测」→ 看绩效：
+
+- **0 trades**：信号没触发 → 检查 `passorder` 路径是否进了分支 / `is_last_bar()` 闸是否误关 / 数据是否充足
+- **回测结果与 easy_tdx 偏差大**：大概率是手续费 / 滑点 / 印花税配置差异；先把两边 `commission` / `stamp_tax` / `slippage` 对齐再排查
+- **升级 live**：加 `subscribe_quote` / `run_time` / `waiting_dict` 状态机（详见 `bundled-skills/qmt-strategy/SKILL.md` Code gate）
+
+> **不要凭印象写 passorder / opType / prType 常量**——以 `docs/QMT_INNERAPI.md` 的 §八 交易函数 / §enum 常量为准（库内有完整版 11000+ 行中文 API 文档）。
+
+### 多标的组合策略的翻译（`PortfolioBacktestEngine` → QMT）
+
+> 适用：easy_tdx 用 `PortfolioBacktestEngine(strategy, stocks=[...], total_cash=...)` 跑多标的同策略组合回测，翻译到 QMT innerApi。QMT 的多标的方式 = 顶层 `C.stock_list = [...]` + `get_market_data_ex(..., C.stock_list, ...)` 一次拉所有 K 线（见 `docs/QMT_INNERAPI.md` §数据函数 stock_list 用法）。
+
+#### easy_tdx 与 QMT 多标的语义对照
+
+| `PortfolioBacktestEngine` 元素 | QMT innerApi 对应 | 关键差异 |
+|---|---|---|
+| `stocks=[StockData(code, market, df), ...]` | `C.stock_list = ["000001.SZ", "600000.SH", ...]` (字符串列表, `stkcode.market` 格式) | QMT 一个代码字符串 vs easy_tdx `StockData` dataclass; `market` 与代码合并 |
+| `total_cash=200_000` (共享资金池) | 一个资金账号, 全部标的共用 `available`; 需要**自己**按标的数均分预算 | QMT **没有**自动均分 — 策略里用 `vol = int(available / N / price / 100) * 100` |
+| `allocation="equal"` (目前唯一实现) | 同上: 策略循环里对每个候选标的, 算出「预算份额 = available / N_remaining」 | QMT 实现位置在 `handlebar` 内, 需手动管理 `N_remaining` 状态 |
+| `engine.run()` 自动遍历每个标的独立回测 | `handlebar` 顶部遍历 `C.stock_list`, 每个标的分别算信号 → 分别 `passorder` | QMT 是「单根主图 K 线驱动 + 显式循环标的」, 不是"按标的独立 engine" |
+| `result.individual_results` (每标的独立绩效) | ❌ QMT 没有"每标的独立绩效"输出; 总绩效在回测结果表 | 若需标的级绩效, 在 `handlebar` 里维护 per-symbol equity 字典, 自己跑分析 |
+| `result.combined_equity` (按日期对齐求和) | 资金加权总净值, 体现在账户 `total` (回测结果中) | 同上 |
+| `result.total_performance` (只有 total_return / annual_return) | 回测结果表的年化 / 夏普 / 最大回撤 / 胜率 — **更全** | QMT 指标更标准, easy_tdx 的 total_performance 是简化版 |
+| 跨标的再平衡 (卖出 A 加仓 B) | ❌ easy_tdx 也不支持; QMT 同样不支持 (但有 `set_basket` 篮子交易) | 若要真组合调仓, 走 `passorder(35, 2101, ..., basket_name, ...)` |
+| MCP 工具 `run_backtest` (单标的) / `run_combo_backtest` (多策略投票) | ❌ **QMT 客户端内**没有 MCP; 只能粘到 QMT 编辑器跑回测 | 路径完全不一样 |
+
+#### 翻译模板 C — `PortfolioBacktestEngine` → QMT
+
+> 假设 easy_tdx 写了 `PortfolioBacktestEngine(MyStrategy, stocks=[...], total_cash=200000)`。翻译目标: 每个 bar 对每只候选标的独立算信号, 独立 `passorder`, 共用资金。
+
+```python
+#coding:gbk
+# type: ignore
+"""
+easy_tdx PortfolioBacktestEngine 多标的策略 → QMT innerApi
+=====================================================
+
+对应 easy_tdx 模板::
+
+    engine = PortfolioBacktestEngine(
+        strategy=MyMultiStrategy,
+        stocks=[
+            StockData("000001", "SZ", df1),
+            StockData("600000", "SH", df2),
+            StockData("600519", "SH", df3),
+        ],
+        total_cash=300_000,
+    )
+    result = engine.run()
+
+QMT 适配要点:
+  - C.stock_list 列出全部候选标的 (字符串 'stkcode.market' 格式)
+  - get_market_data_ex 一次拉所有标的的 close, 返回 {symbol: DataFrame}
+  - handlebar 顶部遍历 stock_list, 每个标的独立算信号
+  - 资金均分: vol = available / N_剩余标的 / price / 100 * 100
+  - 单根主图 K 线驱动所有标的 (主图选哪个标的无所谓, 策略遍历所有)
+  - 实盘/分钟线升级: 加 m_strRemark waiting_dict 防同一标的超单
+"""
+
+import numpy as np
+
+
+# === 用户配置 — 改这里 ================================================
+MODE = 'backtest'
+ACCOUNT_ID = 'testS'
+ACCOUNT_TYPE = 'STOCK'
+# 多标的 (QMT 格式 'stkcode.market'; 与 easy_tdx StockData(code, market) 等价拼接)
+STOCK_LIST = [
+    '000001.SZ',
+    '600000.SH',
+    '600519.SH',
+]
+# MACD / RSI 参数
+MACD_FAST, MACD_SLOW, MACD_SIGNAL = 12, 26, 9
+RSI_PERIOD, RSI_OVERBOUGHT = 14, 70
+STOP_LOSS_PCT = 0.05
+START_DATE = "2020-01-01 00:00:00"
+END_DATE   = "2024-12-31 00:00:00"
+INIT_CAPITAL = 300000                  # total_cash
+# =====================================================================
+
+
+class A(object):
+    """Runtime state — never on ContextInfo attrs (those deep-copy per bar)."""
+    is_backtest = (MODE == 'backtest')
+    quick_trade = 0 if is_backtest else 2
+    # --- 运行时状态 ---
+    account = ''
+    accountType = ''
+    # per-symbol 状态 (easy_tdx 是 engine 内部维护, QMT 要自己写)
+    entry_price = {}                   # symbol -> last entry price
+    waiting_dict = {}                  # symbol -> remark (防超单, 实盘必用)
+
+
+def ema(values, period):
+    vals = np.asarray(values, dtype=np.float64)
+    if len(vals) < period:
+        return np.full_like(vals, np.nan)
+    alpha = 2.0 / (period + 1.0)
+    out = np.empty_like(vals)
+    seed = np.mean(vals[:period])
+    out[:period - 1] = np.nan
+    out[period - 1] = seed
+    for k in range(period, len(vals)):
+        out[k] = alpha * vals[k] + (1.0 - alpha) * out[k - 1]
+    return out
+
+
+def rsi_calc(values, period):
+    vals = np.asarray(values, dtype=np.float64)
+    if len(vals) < period + 1:
+        return np.full_like(vals, np.nan)
+    diff = np.diff(vals)
+    gains = np.where(diff > 0, diff, 0.0)
+    losses = np.where(diff < 0, -diff, 0.0)
+    avg_gain = np.empty(len(vals)); avg_gain[:] = np.nan
+    avg_loss = np.empty(len(vals)); avg_loss[:] = np.nan
+    avg_gain[period] = np.mean(gains[:period])
+    avg_loss[period] = np.mean(losses[:period])
+    for k in range(period + 1, len(vals)):
+        avg_gain[k] = (avg_gain[k - 1] * (period - 1) + gains[k - 1]) / period
+        avg_loss[k] = (avg_loss[k - 1] * (period - 1) + losses[k - 1]) / period
+    rs = np.where(avg_loss == 0, np.inf, avg_gain / avg_loss)
+    rsi = np.where(np.isinf(rs), 100.0, 100.0 - 100.0 / (1.0 + rs))
+    return rsi
+
+
+def init(C):
+    C.stock_list = STOCK_LIST          # QMT 标准多标的方式
+    A.account     = ACCOUNT_ID   if ACCOUNT_ID   else account
+    A.accountType = ACCOUNT_TYPE if ACCOUNT_TYPE else accountType
+    A.entry_price = {s: 0.0 for s in C.stock_list}
+    A.waiting_dict = {}
+    if A.is_backtest:
+        C.start, C.end, C.capital = START_DATE, END_DATE, INIT_CAPITAL
+
+
+def get_holding_vol(symbol):
+    """查 symbol 当前可用持仓 (QMT 没 self.position, 每次都查)."""
+    holdings = get_trade_detail_data(A.account, A.accountType, 'position')
+    for h in holdings:
+        if h.m_strInstrumentID + '.' + h.m_strExchangeID == symbol:
+            return int(h.m_nCanUseVolume)
+    return 0
+
+
+def handlebar(C):
+    # 日线回测 is_last_bar() 永远 True, 无需闸 (no-op)
+    bar_date = timetag_to_datetime(C.get_bar_timetag(C.barpos), '%Y%m%d')
+    need = MACD_SLOW + MACD_SIGNAL + RSI_PERIOD + 5
+
+    # 1. 一次拉所有标的 close (QMT 多标的标准 API)
+    data = C.get_market_data_ex(
+        ['close'], C.stock_list,
+        end_time=bar_date, period='1d',
+        subscribe=False, count=need,
+    )
+    # data = {symbol: DataFrame[datetime, close]}
+
+    # 2. 共享资金 (QMT 不会自动均分, easy_tdx 也是预分配, 翻译时需对齐)
+    account_obj = get_trade_detail_data(A.account, A.accountType, 'account')[0]
+    available = int(account_obj.m_dAvailable)
+
+    # 3. 遍历每个标的, 独立算信号, 独立下单
+    for symbol in C.stock_list:
+        if symbol not in data or len(data[symbol]) < need:
+            print(bar_date, symbol, '行情不足 跳过')
+            continue
+
+        closes = data[symbol]['close'].values
+        cur_dif = ema(closes, MACD_FAST)[-1] - ema(closes, MACD_SLOW)[-1]
+        dea_series = ema(closes, MACD_SLOW) - ema(closes, MACD_SLOW)
+        dea_val = ema(dea_series[~np.isnan(dea_series)], MACD_SIGNAL)[-1] \
+            if np.any(~np.isnan(dea_series)) else np.nan
+        pre_dif = ema(closes, MACD_FAST)[-2] - ema(closes, MACD_SLOW)[-2]
+        pre_dea = ema(closes, MACD_SLOW)[-2] - ema(closes, MACD_SLOW)[-2]   # 同上, 需 EMA 化
+        # 注: 上面的 dea/pre_dea 是简化示意, 实战请用统一的 ema(dif, MACD_SIGNAL) 序列;
+        #     模板 A 已有完整 ema/rsi 实现, 这里为简洁保留 diff 形式, 翻译时统一替换.
+
+        rsi_val = rsi_calc(closes, RSI_PERIOD)[-1]
+        last_price = closes[-1]
+
+        if np.isnan(cur_dif) or np.isnan(dea_val) or np.isnan(rsi_val):
+            continue
+
+        golden = (pre_dif <= pre_dea) and (cur_dif > dea_val)
+        death  = (pre_dif >= pre_dea) and (cur_dif < dea_val)
+
+        holding_vol = get_holding_vol(symbol)
+
+        # 4. 硬止损
+        if holding_vol > 0 and A.entry_price[symbol] > 0:
+            stop = A.entry_price[symbol] * (1 - STOP_LOSS_PCT)
+            if last_price <= stop:
+                remark = f"{symbol}_{bar_date[4:]}_s_SL"
+                passorder(24, 1101, A.account, symbol, 5, -1, holding_vol,
+                          'multi_stock', A.quick_trade, remark, C)
+                A.entry_price[symbol] = 0.0
+                print(bar_date, symbol, '止损平仓', holding_vol)
+                continue
+
+        # 5. 死叉全平
+        if holding_vol > 0 and death:
+            remark = f"{symbol}_{bar_date[4:]}_s_D"
+            passorder(24, 1101, A.account, symbol, 5, -1, holding_vol,
+                      'multi_stock', A.quick_trade, remark, C)
+            A.entry_price[symbol] = 0.0
+            print(bar_date, symbol, '死叉平仓', holding_vol)
+            continue
+
+        # 6. 金叉 + RSI < 70 → 满仓等额买入 (按剩余候选标的数均分 available)
+        if holding_vol == 0 and golden and rsi_val < RSI_OVERBOUGHT:
+            # N_remaining = 未持仓的候选标的数 (实盘简化: 按 stock_list 总数等分)
+            n_candidates = len(C.stock_list)
+            budget = available / n_candidates
+            vol = int(budget / last_price / 100) * 100     # 整手
+            if vol < 100:
+                print(bar_date, symbol, '可用资金不足 跳过')
+                continue
+            remark = f"{symbol}_{bar_date[4:]}_b_G"
+            passorder(23, 1101, A.account, symbol, 5, -1, vol,
+                      'multi_stock', A.quick_trade, remark, C)
+            A.entry_price[symbol] = last_price
+            print(bar_date, symbol, '开仓', vol, '股')
+```
+
+#### 关键差异与坑（多标的专属）
+
+| 差异 / 坑 | 说明 |
+|---|---|
+| **共享资金 vs 预分配** | easy_tdx `PortfolioBacktestEngine` 是**预分配**子账户给每只标的（独立资金）；QMT **一个账号共用** `m_dAvailable`。**两种语义不一致** → 多标的信号同时满足时, 资金不够分。要么收紧候选标的数, 要么在策略里**手动维护未持仓标的数, 实时均分预算** |
+| **驱动模型** | easy_tdx 是"按标的独立 engine 遍历"; QMT 是"主图单根 K 线驱动 + `handlebar` 内部循环标的"。主图选哪个标的**不影响**策略 — 策略里 `for symbol in C.stock_list` 才是真驱动 |
+| **跨标的调仓** | 都没有。easy_tdx 每标的独立子账户; QMT `passorder` 是单笔单标的。要"卖出 A 加仓 B" 自己用 2 次 `passorder` 串起来 |
+| **回测结果显示** | QMT 回测结果表**没有"标的级绩效"**。要 per-symbol equity, 自己在 `handlebar` 里维护字典 `equity_history[symbol] = [...]`, 回测完写 csv 自己分析 |
+| **代码格式差异** | easy_tdx `StockData("000001", "SZ")` → QMT 必须合并为 `'000001.SZ'` 单字符串 |
+| **`passorder` accountType 限制** | 单账号要支持多品种（股票 + ETF + ...）, accountType 用 `'STOCK'` 可覆盖常见品种; 真要走多账号, 用 `accountID='账号1,账号2'` 逗号分隔（见 `docs/QMT_INNERAPI.md` §八） |
+| **标的级 SL/TP 状态** | 多标的时 `entry_price` / `bars_held` 必须 per-symbol 存字典, 不能单变量 — 否则 A 标的的入场价会覆盖 B 标的 |
+| **实盘升级** | 多标的必须加 `waiting_dict`（per-symbol 状态机）防同一标的超单; 单标的模板的 `waiting_dict` 也要扩到字典形式 |
+
+#### 多标的完工检查清单（在 §翻译完工验证之上再加 5 条）
+
+12. ☐ `STOCK_LIST` 用 QMT 字符串格式 `'stkcode.market'`（不是 `StockData(code, market)`）
+13. ☐ `init(C)` 里 `C.stock_list = STOCK_LIST` 显式赋值（即使 `STOCK_LIST` 是 const, 也得传给 QMT）
+15. ☐ 资金均分逻辑按"剩余候选标的数"算, 而不是简单 `available / N`（否则同时多个金叉会全买爆仓）
+14. ☐ per-symbol 状态用字典 `A.entry_price[symbol]`, **不用单变量**
+16. ☐ 每个标的 `passorder` 的 `m_strRemark` 含 symbol 前缀, 便于按标的回溯委托（避免不同标的的 remark 撞车 → `order_callback` 误判）
 
 ## 生成 HTML 回测报告（Chart.js 单文件，可直接拖浏览器）
 

@@ -1,10 +1,5 @@
 @import 'tailwindcss';
 
-/* render_v2 是 renderer 的 sibling 目录，Tailwind v4 auto-detection 从本文件
-   所在目录出发扫描，不会覆盖 sibling。显式 @source 让 v2 层的 utility class
-   （text-[52px] 等）也参与编译，否则所有 render_v2 的 Tailwind 类静默失效。 */
-@source "../render_v2";
-
 /* @tailwindcss/typography 已于 v2.4 移除：其 prose 字阶（h1=2em/700 等）与产品
    Type Scale 冲突，5 个 markdown 预览面板已统一改用 .ai-message-content + 自家
    <Markdown> 组件（PRD 0.2.34 Part 2 F4）。 */

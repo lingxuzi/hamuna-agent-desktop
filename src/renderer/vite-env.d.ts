@@ -5,8 +5,6 @@ interface ImportMetaEnv {
     readonly VITE_ANALYTICS_ENABLED?: string;
     readonly VITE_ANALYTICS_API_KEY?: string;
     readonly VITE_ANALYTICS_ENDPOINT?: string;
-    // UI render layer: 'v2' mounts src/render_v2/, anything else = classic v1 UI.
-    readonly VITE_UI_RENDER_LAYER?: string;
 }
 
 interface ImportMeta {

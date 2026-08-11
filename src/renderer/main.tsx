@@ -154,13 +154,7 @@ if (tauriWindowLabel === 'fb-ball') {
     </AppErrorBoundary>
   );
 } else {
-  // UI render layer switch (.env VITE_UI_RENDER_LAYER=v2). Compile-time: the
-  // classic v1 App stays the default; setting =v2 mounts the self-contained
-  // v2 renderer (src/render_v2/, a sibling of src/renderer/). fb-* branches
-  // above are untouched.
-  const App = React.lazy(() =>
-    import(import.meta.env.VITE_UI_RENDER_LAYER === 'v2' ? '../render_v2/AppV2' : './App')
-  );
+  const App = React.lazy(() => import('./App'));
   // Note: React.StrictMode removed to prevent double-rendering of SSE effects in development
   // StrictMode causes useEffect to run twice, which duplicates SSE events and thinking blocks
   root.render(
