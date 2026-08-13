@@ -581,6 +581,20 @@ const MessageList = memo(function MessageList({
   // ── Stable components object ──
   const components = useMemo(() => ({ Footer: FooterComponent }), [FooterComponent]);
 
+  // ── Append streamingMessage to Virtuoso data if it's not already in `messages`.
+  // Chat.tsx calls useChatScrollModel with `includeStreamingInData: false` to keep
+  // history's `data` reference stable across reveal ticks (~30fps). But MessageList's
+  // `renderItem` matches streaming by `message === streamingMessageRef.current`, so
+  // without this append the streaming row never reaches `renderItem` and the user
+  // sees no streaming state at all (PRD regression in f5651fe). We only append when
+  // streamingMessage isn't already part of messages (e.g. freshly-materialised rows
+  // before the next history merge) to avoid double-rendering.
+  const dataWithStreaming = useMemo(() => {
+    if (!streamingMessage) return messages;
+    if (messages.includes(streamingMessage)) return messages;
+    return [...messages, streamingMessage];
+  }, [messages, streamingMessage]);
+
   // ── Freeze the data fed to Virtuoso while the tab is inactive ──────────────
   // When isActive=false the host (App.tsx) wraps this subtree in
   // `content-visibility: hidden`, so WebKit skips its layout. Any data/height change
@@ -604,19 +618,19 @@ const MessageList = memo(function MessageList({
   // snapshot under React 19 concurrency, which a later hidden render could then hand
   // to Virtuoso — exactly the post-hide measurement we're preventing. A committed
   // layout effect guarantees the snapshot is always a real, measured-while-visible state.
-  const frozenDataRef = useRef<{ data: readonly MessageType[]; firstItemIndex: number | undefined; heightEstimateSeed?: number[] }>({
-    data: messages,
-    firstItemIndex,
-    heightEstimateSeed: liveHeightEstimateSeed,
-  });
+  const frozenDataRef = useRef<readonly MessageType[]>(dataWithStreaming);
+  const frozenFirstItemIndexRef = useRef<number | undefined>(firstItemIndex);
+  const frozenHeightEstimateSeedRef = useRef<number[] | undefined>(liveHeightEstimateSeed);
   useLayoutEffect(() => {
     if (isActive) {
-      frozenDataRef.current = { data: messages, firstItemIndex, heightEstimateSeed: liveHeightEstimateSeed };
+      frozenDataRef.current = dataWithStreaming;
+      frozenFirstItemIndexRef.current = firstItemIndex;
+      frozenHeightEstimateSeedRef.current = liveHeightEstimateSeed;
     }
-  }, [isActive, messages, firstItemIndex, liveHeightEstimateSeed]);
-  const virtuosoData = isActive ? messages : frozenDataRef.current.data;
-  const virtuosoFirstItemIndex = isActive ? firstItemIndex : frozenDataRef.current.firstItemIndex;
-  const virtuosoHeightEstimateSeed = isActive ? liveHeightEstimateSeed : frozenDataRef.current.heightEstimateSeed;
+  }, [isActive, dataWithStreaming, firstItemIndex, liveHeightEstimateSeed]);
+  const virtuosoData = isActive ? dataWithStreaming : frozenDataRef.current;
+  const virtuosoFirstItemIndex = isActive ? firstItemIndex : frozenFirstItemIndexRef.current;
+  const virtuosoHeightEstimateSeed = isActive ? liveHeightEstimateSeed : frozenHeightEstimateSeedRef.current;
   const debugProbe = useChatScrollDebugProbe({
     sessionId,
     scroller: debugScroller,

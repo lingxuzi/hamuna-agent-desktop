@@ -619,6 +619,18 @@ export async function proxyPostJsonWithRetry<T>(
 
 /** Cache for per-Tab server URLs */
 const tabServerUrls = new Map<string, string>();
+/**
+ * Wall-clock millis when each cache entry was last confirmed live by Rust.
+ * Used to force a single freshness IPC on cache hit — Rust can silently
+ * restart a Sidecar on a new port (e.g. crash recovery), in which case the
+ * cached URL points at a dead port and any mount-time fetch (loadAgents,
+ * loadMcpConfig, …) fails with "Sidecar gone" before dedup has a chance to
+ * repoll. We treat entries older than FRESHNESS_TTL_MS as stale on the next
+ * `getTabServerUrl(tabId)` call, which routes the caller through the same
+ * in-flight dedup poll as a cache miss.
+ */
+const tabServerUrlValidatedAt = new Map<string, number>();
+const TAB_SERVER_URL_FRESHNESS_TTL_MS = 30_000;
 
 /**
  * De-duplication map for in-flight `getTabServerUrl` polls.
@@ -692,6 +704,7 @@ export async function startTabSidecar(
         });
         const url = `http://127.0.0.1:${status.port}`;
         tabServerUrls.set(tabId, url);
+        tabServerUrlValidatedAt.set(tabId, Date.now());
         console.debug(`[tauriClient] Tab ${tabId} sidecar started on port ${status.port}`);
         return status;
     } catch (error) {
@@ -706,6 +719,7 @@ export async function startTabSidecar(
  */
 export async function stopTabSidecar(tabId: string): Promise<void> {
     tabServerUrls.delete(tabId);
+    tabServerUrlValidatedAt.delete(tabId);
     // Don't leak in-flight readiness polls past a tab teardown. The poll
     // itself can't be aborted (IPC is already in flight) but clearing the
     // dedup entry lets the next call for this tabId start fresh rather
@@ -792,7 +806,11 @@ export async function getTabServerUrl(tabId: string): Promise<string> {
     }
 
     const cached = tabServerUrls.get(tabId);
-    if (cached !== undefined) {
+    const cachedValidatedAt = tabServerUrlValidatedAt.get(tabId);
+    const cacheIsFresh = cached !== undefined
+        && cachedValidatedAt !== undefined
+        && (Date.now() - cachedValidatedAt) < TAB_SERVER_URL_FRESHNESS_TTL_MS;
+    if (cacheIsFresh) {
         return cached;
     }
 
@@ -823,6 +841,7 @@ export async function getTabServerUrl(tabId: string): Promise<string> {
                 // poll should decide, not us).
                 if (tabServerUrlPending.get(tabId) === ref.poll) {
                     tabServerUrls.set(tabId, url);
+                    tabServerUrlValidatedAt.set(tabId, Date.now());
                 }
                 if (attempt > 0) {
                     console.debug(`[tauriClient] Sidecar for tab ${tabId} ready after ${attempt} retry(ies)`);
@@ -1080,6 +1099,7 @@ export async function stopAllSidecars(): Promise<void> {
 export function resetTabServerUrlCache(tabId: string): void {
     tabServerUrls.delete(tabId);
     tabServerUrlPending.delete(tabId);
+    tabServerUrlValidatedAt.delete(tabId);
 }
 
 /**
