@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.18] - 2026-08-14
+
+> 一句话总结
+
+### Added
+- 
+
+### Changed
+- 
+
+### Fixed
+- 
+
 ## [0.3.17] - 2026-08-10
 
 > 修复股票数据服务
