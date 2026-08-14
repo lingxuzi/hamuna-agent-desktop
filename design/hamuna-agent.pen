@@ -770,6 +770,94 @@
     "font-sans": {
       "type": "string",
       "value": "Inter"
+    },
+    "bs-ink": {
+      "type": "color",
+      "value": "#1E1D1B"
+    },
+    "bs-ink-secondary": {
+      "type": "color",
+      "value": "#6B6560"
+    },
+    "bs-ink-muted": {
+      "type": "color",
+      "value": "#9B9590"
+    },
+    "bs-paper": {
+      "type": "color",
+      "value": "#FAF8F5"
+    },
+    "bs-paper-elevated": {
+      "type": "color",
+      "value": "#F5F2EE"
+    },
+    "bs-paper-inset": {
+      "type": "color",
+      "value": "#EDEAE5"
+    },
+    "bs-line": {
+      "type": "color",
+      "value": "#D9D5D0"
+    },
+    "bs-line-strong": {
+      "type": "color",
+      "value": "#1E1D1B"
+    },
+    "bs-accent": {
+      "type": "color",
+      "value": "#7B8F6B"
+    },
+    "bs-font-display": {
+      "type": "string",
+      "value": "Newsreader, 'Playfair Display', Georgia, serif"
+    },
+    "bs-font-body": {
+      "type": "string",
+      "value": "Inter, system-ui, -apple-system, sans-serif"
+    },
+    "bs-font-mono": {
+      "type": "string",
+      "value": "'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace"
+    },
+    "bs-column-gap": {
+      "type": "string",
+      "value": "32px"
+    },
+    "bs-rule-weight": {
+      "type": "string",
+      "value": "1px"
+    },
+    "bs-rule-weight-strong": {
+      "type": "string",
+      "value": "2px"
+    },
+    "bs-rule-weight-double": {
+      "type": "string",
+      "value": "4px"
+    },
+    "bs-masthead-height": {
+      "type": "string",
+      "value": "56px"
+    },
+    "bs-edition-height": {
+      "type": "string",
+      "value": "28px"
+    },
+    "bs-measure": {
+      "type": "string",
+      "value": "66ch"
+    },
+    "bs-narrow-measure": {
+      "type": "string",
+      "value": "48ch"
+    },
+    "bs-label-tracking": {
+      "type": "string",
+      "value": "0.18em"
+    },
+    "bs-byline-tracking": {
+      "type": "string",
+      "value": "0.06em"
     }
   },
   "fileToken": "6e1ff359-7771-49ef-9119-53788703e2ce",
