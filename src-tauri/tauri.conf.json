@@ -1,12 +1,12 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HamunaAgent",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "identifier": "com.hamuna.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run install:easy-tdx && npm run dev:web",
+    "beforeDevCommand": "npm run dev:web",
     "beforeBuildCommand": "npm run build:web && npm run build:server && npm run build:bridge && npm run build:cli"
   },
   "app": {
@@ -53,13 +53,6 @@
       "../bundled-agents": "bundled-agents",
       "../extended_buildin_mcp": "extended_buildin_mcp",
       "../src-tauri/resources/cli": "cli",
-      "../stock-sources/easy_tdx/src": "stock-sources/easy_tdx/src",
-      "../stock-sources/easy_tdx/strategies": "stock-sources/easy_tdx/strategies",
-      "../stock-sources/easy_tdx/news-source": "stock-sources/easy_tdx/news-source",
-      "../stock-sources/easy_tdx/pyproject.toml": "stock-sources/easy_tdx/pyproject.toml",
-      "../stock-sources/easy_tdx/web-ui/dist/index.html": "stock-sources/easy_tdx/web-ui/dist/index.html",
-      "../stock-sources/easy_tdx/scripts/report_backtest_html.py": "stock-sources/easy_tdx/scripts/report_backtest_html.py",
-      "../stock-sources/easy_tdx/README.md": "stock-sources/easy_tdx/README.md",
       "../src-tauri/resources/cuse-latest.json": "cuse-latest.json",
       "../src-tauri/resources/assets/feedback_qr_code.png": "assets/feedback_qr_code.png",
       "../mino": "mino",

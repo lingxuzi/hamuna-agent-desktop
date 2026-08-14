@@ -2,7 +2,7 @@
   "name": "hamuna",
   "description": "HamunaAgent - Desktop Claude Code for everyone. AI-powered productivity, not just for developers.",
   "type": "module",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "license": "Apache-2.0",
   "packageManager": "npm@11.13.0",
   "engines": {
@@ -35,7 +35,6 @@
     "build:cli": "node scripts/esbuild-bundle.mjs cli",
     "build:tsx-runtime": "node scripts/setup-tsx-runtime.mjs",
     "server": "node --import tsx/esm src/server/index.ts",
-    "install:easy-tdx": "node scripts/install_easy_tdx.mjs",
     "start": "npm run build:web && npm run server",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
