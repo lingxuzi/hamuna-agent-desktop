@@ -37,7 +37,7 @@
  * folder > flat > nested. The first scan wins; subsequent hits are dropped.
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, realpathSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync, realpathSync } from 'fs';
 import type { Dirent } from 'fs';
 import { join, relative, sep, basename, extname } from 'path';
 import { parseAgentFrontmatter, parseFullAgentContent, toSdkAgentDefinition } from '../../shared/agentCommands';
@@ -77,6 +77,23 @@ export function readAgentMeta(agentFolderPath: string): AgentMeta | undefined {
 }
 
 /**
+ * Atomic JSON write: tmp + rename, with cleanup on rename failure.
+ * Crash-safe variant of `writeFileSync(path, JSON.stringify(...))` that
+ * either lands the full file or leaves the previous one untouched (Pattern
+ * 5 fix #13 mirror — used by `saveProjects` in admin-config.ts).
+ */
+function atomicWriteJsonSync(targetPath: string, content: string): void {
+    const tmpPath = targetPath + '.tmp';
+    writeFileSync(tmpPath, content, 'utf-8');
+    try {
+        renameSync(tmpPath, targetPath);
+    } catch (err) {
+        try { unlinkSync(tmpPath); } catch { /* tmp may not exist */ }
+        throw err;
+    }
+}
+
+/**
  * Write _meta.json for a given agent folder.
  * Only meaningful for the 'folder' layout — flat/nested layouts have no
  * dedicated directory to host the sidecar file.
@@ -86,7 +103,7 @@ export function writeAgentMeta(agentFolderPath: string, meta: AgentMeta): void {
         ensureDirSync(agentFolderPath);
     }
     const metaPath = join(agentFolderPath, '_meta.json');
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+    atomicWriteJsonSync(metaPath, JSON.stringify(meta, null, 2));
 }
 
 /**
@@ -297,7 +314,7 @@ export function writeWorkspaceConfig(agentDir: string, config: AgentWorkspaceCon
         ensureDirSync(agentsDir);
     }
     const configPath = join(agentsDir, '_workspace.json');
-    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    atomicWriteJsonSync(configPath, JSON.stringify(config, null, 2));
 }
 
 /**

@@ -6633,17 +6633,22 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
               {tSettings('toolbox.dialogs.customMcp.args')} <span className="font-mono text-[var(--ink-muted)]">args</span>
              </label>
 
-             {/* Existing args */}
+             {/* Existing args — key by the arg value itself. `key={index}` would
+                 re-bind the X-button's `i` to the wrong chip after a mid-array
+                 remove (the chip at index 2 keeps its DOM, but the click
+                 handler now closes the chip that took its place). Duplicate
+                 args collide on key, but the UI never edits args in-place so
+                 duplicates only appear on user error — React warns but renders. */}
              {mcpForm.args.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
-               {mcpForm.args.map((arg, index) => (
-                <div key={index} className="flex items-center gap-1 rounded-lg bg-[var(--paper-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--ink)]">
+               {mcpForm.args.map((arg) => (
+                <div key={arg} className="flex items-center gap-1 rounded-lg bg-[var(--paper-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--ink)]">
                  <span>{arg}</span>
                  <button
                   onClick={() => {
                    setMcpForm((p) => ({
                     ...p,
-                    args: p.args.filter((_, i) => i !== index)
+                    args: p.args.filter((a) => a !== arg)
                    }));
                   }}
                   className="ml-1 text-[var(--ink-muted)] hover:text-[var(--error)]"

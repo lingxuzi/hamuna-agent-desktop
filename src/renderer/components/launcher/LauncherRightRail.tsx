@@ -777,8 +777,11 @@ export const LauncherHistoryRow = memo(function LauncherHistoryRow({
             <div className="flex w-16 shrink-0 items-center text-xs text-[var(--ink-muted)]/55">
                 <span className="min-w-0 truncate">{getProjectDisplayName(project)}</span>
             </div>
-            {tags.map((tag, index) => (
-                <SessionTagBadge key={index} tag={tag} />
+            {tags.map((tag) => (
+                <SessionTagBadge
+                    key={tag.type === 'im' ? `im:${tag.platform}` : tag.type}
+                    tag={tag}
+                />
             ))}
             <UnreadNotificationIndicator
                 count={unreadNotificationCount}

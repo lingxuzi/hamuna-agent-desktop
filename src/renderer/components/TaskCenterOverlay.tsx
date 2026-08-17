@@ -445,8 +445,11 @@ export default memo(function TaskCenterOverlay({
                                                         <Clock className="h-2.5 w-2.5" />
                                                         <span>{formatTime(session.lastActiveAt)}</span>
                                                     </div>
-                                                    {tags.map((tag, i) => (
-                                                        <SessionTagBadge key={i} tag={tag} />
+                                                    {tags.map((tag) => (
+                                                        <SessionTagBadge
+                                                            key={tag.type === 'im' ? `im:${tag.platform}` : tag.type}
+                                                            tag={tag}
+                                                        />
                                                     ))}
                                                     <span className="min-w-0 flex-1 truncate text-sm text-[var(--ink-secondary)] transition-colors group-hover:text-[var(--ink)]">
                                                         {displayText}

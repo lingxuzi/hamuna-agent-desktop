@@ -38,7 +38,7 @@ check_install() {
     fi
 }
 
-echo -e "${BLUE}[1/6] 检查依赖${NC}"
+echo -e "${BLUE}[1/5] 检查依赖${NC}"
 MISSING=0
 
 check_install "Node.js" "node --version" "https://nodejs.org (≥ v20)" || MISSING=1
@@ -54,13 +54,13 @@ if [ $MISSING -eq 1 ]; then
 fi
 
 # 固定 Rust toolchain/components，避免 rustfmt/clippy 或 IDE 使用系统 Rust 漂移。
-echo -e "${BLUE}[1.5/6] 准备 Rust toolchain / components${NC}"
+echo -e "${BLUE}[1.5/5] 准备 Rust toolchain / components${NC}"
 "${PROJECT_DIR}/scripts/ensure_rust_toolchain.sh"
 echo ""
 
 # 下载 Node.js 二进制（Sidecar + MCP Server + 社区工具 统一 runtime）
 echo ""
-echo -e "${BLUE}[2/6] 下载 Node.js 运行时${NC}"
+echo -e "${BLUE}[2/5] 下载 Node.js 运行时${NC}"
 "${PROJECT_DIR}/scripts/download_nodejs.sh"
 echo ""
 
@@ -70,7 +70,7 @@ echo ""
 # 网络失败 / R2 短暂不可用属软失败：dev 模式 getBundledCusePath() 返
 # null → MCP 优雅 skip + warn，用户事后可手动重跑 download_cuse.sh，
 # 不应阻断整个 setup（其他 99% 的功能跟 cuse 无关）。
-echo -e "${BLUE}[3/6] 下载 cuse computer-use 二进制${NC}"
+echo -e "${BLUE}[3/5] 下载 cuse computer-use 二进制${NC}"
 if [[ "$(uname -s)" == "Darwin" ]]; then
     if ! "${PROJECT_DIR}/scripts/download_cuse.sh"; then
         echo -e "${YELLOW}⚠ cuse 下载失败（网络或 R2 不可用）— computer-use 功能在 dev 模式下将不可用${NC}"
@@ -81,27 +81,8 @@ else
 fi
 echo ""
 
-# Install easy_tdx Python package (vendored at stock-sources/easy_tdx).
-# The easy-tdx MCP entry in extended_buildin_mcp/mcp.json invokes the bare
-# `easy-tdx-mcp` console script, so this MUST happen before the MCP loader
-# tries to spawn it. Hard dependency on Python being on PATH (system Python on
-# dev machines; download_python.ps1 is Windows-only): gate the call so a missing
-# python surfaces a single hint instead of a stacked "no pip" failure.
-# Soft-fail by design — missing easy_tdx only disables one optional MCP, never
-# blocks setup. See scripts/install_easy_tdx.sh.
-echo -e "${BLUE}[3.5/6] 安装 easy_tdx Python 包（提供 easy-tdx-mcp 控制台脚本）${NC}"
-if ! command -v python3 >/dev/null 2>&1; then
-    echo -e "${YELLOW}⛔ python3 未就绪,跳过 easy_tdx 安装${NC}"
-    echo -e "${YELLOW}  ⚠ easy-tdx MCP 在 dev 模式下将不可用${NC}"
-    echo -e "${YELLOW}    修复: 装 python3 + pip 后重跑 ./scripts/install_easy_tdx.sh --force${NC}"
-elif ! "${PROJECT_DIR}/scripts/install_easy_tdx.sh"; then
-    echo -e "${YELLOW}⚠ easy_tdx 安装失败 — easy-tdx MCP 在 dev 模式下将不可用${NC}"
-    echo -e "${YELLOW}  网络/pip 恢复后重跑：./scripts/install_easy_tdx.sh --force${NC}"
-fi
-echo ""
-
 # 安装依赖（使用 npm — v0.2.0 起不再依赖 Bun）
-echo -e "${BLUE}[4/6] 安装依赖${NC}"
+echo -e "${BLUE}[4/5] 安装依赖${NC}"
 npm install
 if [[ "$(uname -s)" == "Darwin" ]]; then
     echo -e "  ${CYAN}Validating Claude Agent SDK native package...${NC}"
@@ -119,7 +100,7 @@ echo -e "${GREEN}✓ 依赖安装完成${NC}"
 echo ""
 
 # 安装 Rust 依赖
-echo -e "${BLUE}[5/6] 检查 Rust 依赖${NC}"
+echo -e "${BLUE}[5/5] 检查 Rust 依赖${NC}"
 cd src-tauri
 cargo check --quiet 2>/dev/null || cargo fetch
 cd ..
@@ -156,7 +137,7 @@ ensure_mino_cache() {
   git clone --depth 1 "$MINO_REPO_URL_HTTPS" "$MINO_CACHE_DIR"
 }
 
-echo -e "${BLUE}[6/6] 准备默认工作区 (mino)${NC}"
+echo -e "${BLUE}[5/5] 准备默认工作区 (mino)${NC}"
 if ! ensure_mino_cache; then
   echo -e "${RED}✗ mino 克隆失败${NC}" >&2
   echo -e "${YELLOW}  提示：可手动把 openmino 放到 ${MINO_DIR} 后重新运行${NC}" >&2

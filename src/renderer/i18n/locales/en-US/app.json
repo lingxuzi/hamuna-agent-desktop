@@ -90,7 +90,16 @@
   "updater": {
     "remoteVersionParseFailed": "Could not parse remote version information",
     "newVersionFound": "New version v{{version}} found, downloading in background",
-    "updateReady": "Update v{{version}} ready — click to restart"
+    "updateReady": "Update v{{version}} ready — click to restart",
+    "force": {
+      "title": "Update Required",
+      "description": "A new version is ready to install. The app must restart to apply it.",
+      "descriptionWithVersion": "Version {{version}} is ready to install. The app must restart to apply it.",
+      "quitApp": "Quit App",
+      "updateNow": "Update Now",
+      "installing": "Installing...",
+      "releaseNotes": "Release Notes"
+    }
   },
   "common": {
     "loading": "Loading...",

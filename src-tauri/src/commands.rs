@@ -348,7 +348,17 @@ pub struct InitBundledWorkspaceResult {
 /// Command: Initialize bundled workspace (mino) on first launch
 /// Copies from app resources to ~/.hamuna/projects/mino/
 #[tauri::command]
-pub fn cmd_initialize_bundled_workspace<R: Runtime>(
+pub async fn cmd_initialize_bundled_workspace<R: Runtime>(
+    app_handle: AppHandle<R>,
+) -> Result<InitBundledWorkspaceResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        initialize_bundled_workspace_blocking(app_handle)
+    })
+    .await
+    .map_err(|e| format!("initialize-bundled-workspace task failed: {}", e))?
+}
+
+fn initialize_bundled_workspace_blocking<R: Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<InitBundledWorkspaceResult, String> {
     let home_dir = dirs::home_dir().ok_or("Failed to get home dir")?;
@@ -406,15 +416,26 @@ pub fn cmd_initialize_bundled_workspace<R: Runtime>(
 /// Falls back to local mino copy if bundled resources are incomplete.
 /// Returns the created workspace path.
 #[tauri::command]
-pub fn cmd_create_bot_workspace<R: Runtime>(
+pub async fn cmd_create_bot_workspace<R: Runtime>(
     app_handle: AppHandle<R>,
     workspace_name: String,
+) -> Result<InitBundledWorkspaceResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        create_bot_workspace_blocking(app_handle, &workspace_name)
+    })
+    .await
+    .map_err(|e| format!("create-bot-workspace task failed: {}", e))?
+}
+
+fn create_bot_workspace_blocking<R: Runtime>(
+    app_handle: AppHandle<R>,
+    workspace_name: &str,
 ) -> Result<InitBundledWorkspaceResult, String> {
     let home_dir = dirs::home_dir().ok_or("Failed to get home dir")?;
     let projects_dir = home_dir.join(".hamuna").join("projects");
 
     // Sanitize name: remove @, replace non-alphanumeric (except CJK) with dash, trim
-    let sanitized = sanitize_workspace_name(&workspace_name);
+    let sanitized = sanitize_workspace_name(workspace_name);
     if sanitized.is_empty() {
         return Err("Workspace name is empty after sanitization".to_string());
     }
@@ -472,11 +493,17 @@ pub fn cmd_create_bot_workspace<R: Runtime>(
 /// Command: Remove a workspace directory created by `cmd_create_bot_workspace`.
 /// Safety: only allows deleting directories under `~/.hamuna/projects/`.
 #[tauri::command]
-pub fn cmd_remove_bot_workspace(workspace_path: String) -> Result<(), String> {
+pub async fn cmd_remove_bot_workspace(workspace_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || remove_bot_workspace_blocking(&workspace_path))
+        .await
+        .map_err(|e| format!("remove-bot-workspace task failed: {}", e))?
+}
+
+fn remove_bot_workspace_blocking(workspace_path: &str) -> Result<(), String> {
     let home_dir = dirs::home_dir().ok_or("Failed to get home dir")?;
     let projects_dir = home_dir.join(".hamuna").join("projects");
 
-    let target = PathBuf::from(&workspace_path);
+    let target = PathBuf::from(workspace_path);
     // Canonicalize both paths to prevent traversal attacks
     let canon_projects = projects_dir
         .canonicalize()
@@ -498,7 +525,13 @@ pub fn cmd_remove_bot_workspace(workspace_path: String) -> Result<(), String> {
 /// Command: Remove a template directory from ~/.hamuna/templates/.
 /// Safety: only allows deleting directories under ~/.hamuna/templates/.
 #[tauri::command]
-pub fn cmd_remove_template_folder(template_path: String) -> Result<(), String> {
+pub async fn cmd_remove_template_folder(template_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || remove_template_folder_blocking(&template_path))
+        .await
+        .map_err(|e| format!("remove-template-folder task failed: {}", e))?
+}
+
+fn remove_template_folder_blocking(template_path: &str) -> Result<(), String> {
     let home_dir = dirs::home_dir().ok_or("Failed to get home dir")?;
     let templates_dir = home_dir.join(".hamuna").join("templates");
 
@@ -506,7 +539,7 @@ pub fn cmd_remove_template_folder(template_path: String) -> Result<(), String> {
         return Err("Templates directory does not exist".to_string());
     }
 
-    let target = PathBuf::from(&template_path);
+    let target = PathBuf::from(template_path);
 
     // If the folder no longer exists, treat as success (already cleaned up)
     if !target.exists() {
@@ -623,12 +656,23 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
 /// Safety: source_path must be under ~/.hamuna/templates/.
 /// The dest_path parent must exist; the dest_path itself must NOT exist.
 #[tauri::command]
-pub fn cmd_create_workspace_from_template(
+pub async fn cmd_create_workspace_from_template(
     source_path: String,
     dest_path: String,
 ) -> Result<(), String> {
-    let src = PathBuf::from(&source_path);
-    let dst = PathBuf::from(&dest_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        create_workspace_from_template_blocking(&source_path, &dest_path)
+    })
+    .await
+    .map_err(|e| format!("create-workspace-from-template task failed: {}", e))?
+}
+
+fn create_workspace_from_template_blocking(
+    source_path: &str,
+    dest_path: &str,
+) -> Result<(), String> {
+    let src = PathBuf::from(source_path);
+    let dst = PathBuf::from(dest_path);
 
     if !src.exists() {
         return Err(format!("Template source not found: {}", source_path));
@@ -670,15 +714,27 @@ pub fn cmd_create_workspace_from_template(
 /// Falls back to local copy at ~/.hamuna/projects/<template_id> if bundled is incomplete.
 /// Safety: template_id is sanitized to prevent path traversal.
 #[tauri::command]
-pub fn cmd_create_workspace_from_bundled_template<R: Runtime>(
+pub async fn cmd_create_workspace_from_bundled_template<R: Runtime>(
     app_handle: AppHandle<R>,
     template_id: String,
     dest_path: String,
 ) -> Result<(), String> {
-    // Sanitize template_id (single source of truth in `validate_template_id`).
-    validate_template_id(&template_id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        create_workspace_from_bundled_template_blocking(app_handle, &template_id, &dest_path)
+    })
+    .await
+    .map_err(|e| format!("create-workspace-from-bundled-template task failed: {}", e))?
+}
 
-    let dst = PathBuf::from(&dest_path);
+fn create_workspace_from_bundled_template_blocking<R: Runtime>(
+    app_handle: AppHandle<R>,
+    template_id: &str,
+    dest_path: &str,
+) -> Result<(), String> {
+    // Sanitize template_id (single source of truth in `validate_template_id`).
+    validate_template_id(template_id)?;
+
+    let dst = PathBuf::from(dest_path);
     if dst.exists() {
         return Err(format!("Destination already exists: {}", dest_path));
     }
@@ -691,7 +747,7 @@ pub fn cmd_create_workspace_from_bundled_template<R: Runtime>(
         .path()
         .resource_dir()
         .map_err(|e| format!("Failed to get resource dir: {}", e))?;
-    let template_src = resource_dir.join(&template_id);
+    let template_src = resource_dir.join(template_id);
 
     if template_src.exists() && template_src.join("CLAUDE.md").exists() {
         ulog_info!(
@@ -707,10 +763,7 @@ pub fn cmd_create_workspace_from_bundled_template<R: Runtime>(
 
     // Fallback: copy from local projects/<template_id>
     let home_dir = dirs::home_dir().ok_or("Failed to get home dir")?;
-    let local_src = home_dir
-        .join(".hamuna")
-        .join("projects")
-        .join(&template_id);
+    let local_src = home_dir.join(".hamuna").join("projects").join(template_id);
     if local_src.exists() && local_src.join("CLAUDE.md").exists() {
         ulog_warn!(
             "[template] Bundled template '{}' incomplete, falling back to local {:?}",
@@ -848,16 +901,29 @@ pub struct TemplateApplyPreview {
 /// existing workspace. Used to drive the confirmation UI before the destructive merge.
 /// Either `template_id` (bundled) or `source_path` (user template) must be provided.
 #[tauri::command]
-pub fn cmd_template_apply_preview<R: Runtime>(
+pub async fn cmd_template_apply_preview<R: Runtime>(
     app_handle: AppHandle<R>,
     template_id: Option<String>,
     source_path: Option<String>,
     dest_path: String,
 ) -> Result<TemplateApplyPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        template_apply_preview_blocking(app_handle, template_id, source_path, &dest_path)
+    })
+    .await
+    .map_err(|e| format!("template-apply-preview task failed: {}", e))?
+}
+
+fn template_apply_preview_blocking<R: Runtime>(
+    app_handle: AppHandle<R>,
+    template_id: Option<String>,
+    source_path: Option<String>,
+    dest_path: &str,
+) -> Result<TemplateApplyPreview, String> {
     // `validate_workspace_dest` forbids system/credential dirs (mirroring the
     // file-read/write commands' blacklist) so a misbehaving renderer can't redirect a
     // template apply at e.g. `~/.ssh` or `/etc`.
-    let dst = validate_workspace_dest(&dest_path)?;
+    let dst = validate_workspace_dest(dest_path)?;
     let src = resolve_template_source(&app_handle, template_id, source_path)?;
     let files =
         list_template_files_rel(&src).map_err(|e| format!("Failed to walk template: {}", e))?;
@@ -881,13 +947,26 @@ pub fn cmd_template_apply_preview<R: Runtime>(
 /// other files preserved). This is the destructive counterpart to `cmd_template_apply_preview`
 /// — callers should always preview + confirm with the user before invoking apply.
 #[tauri::command]
-pub fn cmd_apply_template_to_workspace<R: Runtime>(
+pub async fn cmd_apply_template_to_workspace<R: Runtime>(
     app_handle: AppHandle<R>,
     template_id: Option<String>,
     source_path: Option<String>,
     dest_path: String,
 ) -> Result<(), String> {
-    let dst = validate_workspace_dest(&dest_path)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        apply_template_to_workspace_blocking(app_handle, template_id, source_path, &dest_path)
+    })
+    .await
+    .map_err(|e| format!("apply-template-to-workspace task failed: {}", e))?
+}
+
+fn apply_template_to_workspace_blocking<R: Runtime>(
+    app_handle: AppHandle<R>,
+    template_id: Option<String>,
+    source_path: Option<String>,
+    dest_path: &str,
+) -> Result<(), String> {
+    let dst = validate_workspace_dest(dest_path)?;
     let src = resolve_template_source(&app_handle, template_id, source_path)?;
     ulog_info!(
         "[template] Merging template from {:?} into existing workspace {:?}",
@@ -901,11 +980,22 @@ pub fn cmd_apply_template_to_workspace<R: Runtime>(
 /// Command: Copy a local folder into the templates library (~/.hamuna/templates/<name>/).
 /// Returns the destination path.
 #[tauri::command]
-pub fn cmd_copy_folder_to_templates(
+pub async fn cmd_copy_folder_to_templates(
     source_path: String,
     template_name: String,
 ) -> Result<String, String> {
-    let src = PathBuf::from(&source_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_folder_to_templates_blocking(&source_path, &template_name)
+    })
+    .await
+    .map_err(|e| format!("copy-folder-to-templates task failed: {}", e))?
+}
+
+fn copy_folder_to_templates_blocking(
+    source_path: &str,
+    template_name: &str,
+) -> Result<String, String> {
+    let src = PathBuf::from(source_path);
     if !src.exists() || !src.is_dir() {
         return Err(format!("Source folder not found: {}", source_path));
     }
@@ -916,7 +1006,7 @@ pub fn cmd_copy_folder_to_templates(
         .map_err(|e| format!("Failed to create templates dir: {}", e))?;
 
     // Sanitize name and find available path
-    let sanitized = sanitize_workspace_name(&template_name);
+    let sanitized = sanitize_workspace_name(template_name);
     if sanitized.is_empty() {
         return Err("Template name is empty after sanitization".to_string());
     }
@@ -1051,7 +1141,13 @@ const CLI_VERSION: &str = "40";
 /// Sources `resources/cli/hamuna.js` (esbuild bundle, shebang `#!/usr/bin/env node`)
 /// and copies it to `~/.hamuna/bin/hamuna` with 0755 on Unix.
 #[tauri::command]
-pub fn cmd_sync_cli<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, String> {
+pub async fn cmd_sync_cli<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || sync_cli_blocking(app_handle))
+        .await
+        .map_err(|e| format!("cli sync task failed: {}", e))?
+}
+
+fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, String> {
     let home = dirs::home_dir().ok_or("Home dir not found")?;
     let bin_dir = home.join(".hamuna").join("bin");
 
@@ -1264,13 +1360,6 @@ const SYSTEM_SKILLS: &[&str] = &[
     // improvements. System status trades user customisation (overwritten on
     // every version bump) for keeping the methodology current.
     "prompt-writer",
-    // v38: easy-tdx-backtest — quantitative-trading workflows using the
-    // vendored easy_tdx library (stock-sources/easy_tdx/) plus its bundled
-    // MCP server (registered in extended_buildin_mcp/mcp.json as
-    // "easy-tdx"). System-skill status lets us track changes to the MCP tool
-    // surface and the 18 bundled strategies in lockstep, instead of relying
-    // on a one-time seed that ages out.
-    "easy-tdx-backtest",
 ];
 
 /// Skills unavailable on certain platforms due to upstream bugs.

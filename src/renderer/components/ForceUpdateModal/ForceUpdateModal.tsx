@@ -7,8 +7,11 @@
  * - Cmd/Ctrl+W / Esc / Cmd+T / Cmd+1~9 / Cmd+Y / Cmd+U / Cmd+R / F5 are all
  *   swallowed here in capture-phase so they never reach the global app-shortcut
  *   table (which would otherwise fall through to newTab / closeCurrentTab).
- * - Rust-side `cmd_set_force_update_active` flags the same condition so the
- *   `RunEvent::ExitRequested` interceptor blocks Cmd+Q / Alt+F4 / Dock Quit.
+ * - Cmd+Q / Alt+F4 / Dock Quit are NOT intercepted — the "Quit App" button
+ *   routes through the existing `tray:confirm-exit` channel so the run-loop's
+ *   ExitRequested cleanup still runs, but the user can still quit by OS
+ *   shortcut if they really want to skip the upgrade. (Acceptance: render-
+ *   layer block, not OS-level force.)
  *
  * Two buttons only: "立即更新" and "退出 App". The update button reuses the
  * existing `restartAndUpdate()` install path — Windows NSIS via `install_pending_update`,

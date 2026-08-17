@@ -530,8 +530,11 @@ export default function SessionHistoryDropdown({
                                                         {t('shell.history.current')}
                                                     </span>
                                                 )}
-                                                {tags.map((tag, i) => (
-                                                    <SessionTagBadge key={i} tag={tag} />
+                                                {tags.map((tag) => (
+                                                    <SessionTagBadge
+                                                        key={tag.type === 'im' ? `im:${tag.platform}` : tag.type}
+                                                        tag={tag}
+                                                    />
                                                 ))}
                                                 <UnreadNotificationIndicator
                                                     count={unreadNotificationCount}

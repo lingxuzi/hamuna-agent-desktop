@@ -1,6 +1,557 @@
 {
   "version": "2.17",
-  "children": [],
+  "children": [
+    {
+      "type": "frame",
+      "id": "UIaE6",
+      "x": 0,
+      "y": 0,
+      "name": "[proposal] Force Update Modal — 2026-08-15",
+      "width": 1152,
+      "fill": "#000000",
+      "layout": "vertical",
+      "gap": 48,
+      "padding": 48,
+      "children": [
+        {
+          "type": "frame",
+          "id": "TUbMk",
+          "name": "[final] Force Update Modal — A: Default State",
+          "width": 1152,
+          "height": 720,
+          "fill": "#f5f0e8",
+          "layout": "vertical",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "A7pCn",
+              "width": 448,
+              "fill": "#ffffff",
+              "cornerRadius": 16,
+              "stroke": "#e0d8c8",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "padding": [
+                20,
+                24
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "X3GfS",
+                  "width": "fill_container",
+                  "stroke": "#e0d8c8",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "padding": [
+                    0,
+                    0,
+                    12,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "iCYZC",
+                      "fill": "#2d2a26",
+                      "content": "需要更新",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "oGbxX",
+                  "width": "fill_container",
+                  "stroke": "#00000000",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "z0PQRq",
+                      "fill": "#6f6156",
+                      "content": "检测到版本 v0.4.0，需要重启应用以完成更新。",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "BB29E",
+                  "width": "fill_container",
+                  "stroke": "#e0d8c8",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "gap": 8,
+                  "padding": [
+                    12,
+                    0,
+                    0,
+                    0
+                  ],
+                  "justifyContent": "end",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "HBMyW",
+                      "height": 36,
+                      "fill": "$paper-elevated",
+                      "cornerRadius": 9999,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        8,
+                        16
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "iftcV",
+                          "fill": "$ink",
+                          "content": "退出 App",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "E0IpD",
+                      "height": 36,
+                      "fill": "$accent",
+                      "cornerRadius": 9999,
+                      "stroke": "#00000000",
+                      "padding": [
+                        8,
+                        16
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Kmcne",
+                          "fill": "$on-accent",
+                          "content": "立即更新",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "rEOSh",
+          "name": "[final] Force Update Modal — C: Installing",
+          "width": 1152,
+          "height": 720,
+          "fill": "#f5f0e8",
+          "layout": "vertical",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "SSCqt",
+              "width": 448,
+              "fill": "#ffffff",
+              "cornerRadius": 16,
+              "stroke": "#e0d8c8",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "padding": [
+                20,
+                24
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "a0RxnY",
+                  "width": "fill_container",
+                  "stroke": "#e0d8c8",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "padding": [
+                    0,
+                    0,
+                    12,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Dkh9q",
+                      "fill": "#2d2a26",
+                      "content": "需要更新",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "IOk2v",
+                  "width": "fill_container",
+                  "stroke": "#00000000",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "hSD0V",
+                      "fill": "#6f6156",
+                      "content": "检测到版本 v0.4.0，需要重启应用以完成更新。",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vLW4z",
+                      "fill": "#f0ebe0",
+                      "cornerRadius": 6,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "aEIQC",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "loader-2",
+                          "library": "lucide",
+                          "fill": "#000000"
+                        },
+                        {
+                          "type": "text",
+                          "id": "A3p1Xk",
+                          "fill": "#6f6156",
+                          "content": "正在安装...",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "m4HSr",
+                  "width": "fill_container",
+                  "stroke": "#e0d8c8",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "gap": 8,
+                  "padding": [
+                    12,
+                    0,
+                    0,
+                    0
+                  ],
+                  "justifyContent": "end",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "HHtIh",
+                      "opacity": 0.5,
+                      "height": 36,
+                      "fill": "$paper-elevated",
+                      "cornerRadius": 9999,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        8,
+                        16
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "yZhhX",
+                          "fill": "$ink",
+                          "content": "退出 App",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "J2G9M",
+                      "opacity": 0.5,
+                      "height": 36,
+                      "fill": "$accent",
+                      "cornerRadius": 9999,
+                      "stroke": "#00000000",
+                      "padding": [
+                        8,
+                        16
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "pXO5N",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "loader-2",
+                          "library": "lucide",
+                          "fill": "$on-accent"
+                        },
+                        {
+                          "type": "text",
+                          "id": "I21T7",
+                          "fill": "$on-accent",
+                          "content": "正在安装...",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "M26kkH",
+              "name": "[final] Force Update Modal — B: With Release Notes",
+              "width": 1152,
+              "height": 720,
+              "fill": "#f5f0e8",
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "OjiSr",
+                  "width": 448,
+                  "fill": "#ffffff",
+                  "cornerRadius": 16,
+                  "stroke": "#e0d8c8",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "padding": [
+                    20,
+                    24
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "SkGE2",
+                      "width": "fill_container",
+                      "stroke": "#e0d8c8",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "padding": [
+                        0,
+                        0,
+                        12,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "eodJi",
+                          "fill": "#2d2a26",
+                          "content": "需要更新",
+                          "fontFamily": "Inter",
+                          "fontSize": 18,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vPlBx",
+                      "width": "fill_container",
+                      "stroke": "#00000000",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": [
+                        16,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "PKJlk",
+                          "fill": "#6f6156",
+                          "content": "检测到版本 v0.4.0，需要重启应用以完成更新。",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "QMcU9",
+                          "width": "fill_container",
+                          "fill": "#f0ebe0",
+                          "cornerRadius": 6,
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "fUboG",
+                              "fill": "#6f6156",
+                              "content": "更新说明",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "j71Y3",
+                              "width": "fill_container",
+                              "height": 128,
+                              "fill": "#000000",
+                              "cornerRadius": 6,
+                              "layout": "vertical",
+                              "padding": 10,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "v2bG6h",
+                                  "fill": "#000000",
+                                  "content": "## 新功能\n- 强制升级弹窗\n- 自动更新优化\n\n## 修复\n- 修复首 token 延迟\n- 修复 IM 连接重试",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "St6S8",
+                      "width": "fill_container",
+                      "stroke": "#e0d8c8",
+                      "strokeWidth": {
+                        "top": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "gap": 8,
+                      "padding": [
+                        12,
+                        0,
+                        0,
+                        0
+                      ],
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "sd4rc",
+                          "height": 36,
+                          "fill": "$paper-elevated",
+                          "cornerRadius": 9999,
+                          "stroke": "$line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            8,
+                            16
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Y8em8",
+                              "fill": "$ink",
+                              "content": "退出 App",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mzvdO",
+                          "height": 36,
+                          "fill": "$accent",
+                          "cornerRadius": 9999,
+                          "stroke": "#00000000",
+                          "padding": [
+                            8,
+                            16
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "y7drVU",
+                              "fill": "$on-accent",
+                              "content": "立即更新",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "themes": {
     "mode": [
       "light",

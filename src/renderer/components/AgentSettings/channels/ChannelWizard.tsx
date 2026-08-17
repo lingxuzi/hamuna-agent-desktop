@@ -204,7 +204,13 @@ export default function ChannelWizard({
     const [openclawSchemaValues, setOpenclawSchemaValues] = useState<Record<string, unknown>>(
         () => ({ ...(promoted?.defaultConfig ?? {}) }),
     );
-    const [openclawCustomFields, setOpenclawCustomFields] = useState<Array<{ key: string; value: string }>>([{ key: '', value: '' }]);
+    // Each field carries a stable `id` so React can reconcile a remove-from-
+    // middle correctly: `key={index}` would re-bind the X-button to the wrong
+    // row after the deletion (chip at index 2 stays mounted but its handler
+    // now targets the chip that took its place). `id` is generated once on
+    // creation and never re-used, mirroring how react-hook-form uses its
+    // internal `useId()` per field. Crypto.randomUUID is available in WebView.
+    const [openclawCustomFields, setOpenclawCustomFields] = useState<Array<{ id: string; key: string; value: string }>>([{ id: crypto.randomUUID(), key: '', value: '' }]);
 
     const [verifyStatus, setVerifyStatus] = useState<'idle' | 'verifying' | 'valid' | 'invalid'>('idle');
     const [botUsername, setBotUsername] = useState<string | undefined>();
@@ -414,7 +420,7 @@ export default function ChannelWizard({
                         ? found.requiredFields
                         : promoted?.requiredFields;
                     if (!hasSchema && reqFields?.length) {
-                        setOpenclawCustomFields(reqFields.map(k => ({ key: k, value: '' })));
+                        setOpenclawCustomFields(reqFields.map(k => ({ id: crypto.randomUUID(), key: k, value: '' })));
                     }
                 }
             } catch { /* ignore */ }
@@ -1362,14 +1368,14 @@ export default function ChannelWizard({
                                     <div className="border-t border-[var(--line-subtle)] pt-3">
                                         <p className="mb-2 text-xs text-[var(--ink-muted)]">{t('agentSettings.channelWizard.config.customConfig')}</p>
                                         <div className="space-y-2">
-                                            {openclawCustomFields.map((field, i) => (
-                                                <div key={i} className="flex items-center gap-2">
-                                                    <input type="text" value={field.key} onChange={(e) => { const next = [...openclawCustomFields]; next[i] = { ...next[i], key: e.target.value }; setOpenclawCustomFields(next); }} placeholder={t('agentSettings.channelWizard.config.keyPlaceholder')} className="w-[140px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--line)] bg-transparent px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:border-[var(--button-primary-bg)] focus:outline-none transition-colors" />
-                                                    <input type="text" value={field.value} onChange={(e) => { const next = [...openclawCustomFields]; next[i] = { ...next[i], value: e.target.value }; setOpenclawCustomFields(next); }} placeholder={t('agentSettings.channelWizard.config.valuePlaceholder')} className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--line)] bg-transparent px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:border-[var(--button-primary-bg)] focus:outline-none transition-colors" />
-                                                    <button onClick={() => setOpenclawCustomFields(openclawCustomFields.filter((_, idx) => idx !== i))} className="shrink-0 rounded-lg p-1.5 text-[var(--ink-subtle)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--error)]"><Trash2 className="h-3.5 w-3.5" /></button>
+                                            {openclawCustomFields.map((field) => (
+                                                <div key={field.id} className="flex items-center gap-2">
+                                                    <input type="text" value={field.key} onChange={(e) => { const next = [...openclawCustomFields]; next[next.findIndex(f => f.id === field.id)] = { ...field, key: e.target.value }; setOpenclawCustomFields(next); }} placeholder={t('agentSettings.channelWizard.config.keyPlaceholder')} className="w-[140px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--line)] bg-transparent px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:border-[var(--button-primary-bg)] focus:outline-none transition-colors" />
+                                                    <input type="text" value={field.value} onChange={(e) => { const next = [...openclawCustomFields]; next[next.findIndex(f => f.id === field.id)] = { ...field, value: e.target.value }; setOpenclawCustomFields(next); }} placeholder={t('agentSettings.channelWizard.config.valuePlaceholder')} className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--line)] bg-transparent px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:border-[var(--button-primary-bg)] focus:outline-none transition-colors" />
+                                                    <button onClick={() => setOpenclawCustomFields(openclawCustomFields.filter((f) => f.id !== field.id))} className="shrink-0 rounded-lg p-1.5 text-[var(--ink-subtle)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--error)]"><Trash2 className="h-3.5 w-3.5" /></button>
                                                 </div>
                                             ))}
-                                            <button onClick={() => setOpenclawCustomFields([...openclawCustomFields, { key: '', value: '' }])} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]">
+                                            <button onClick={() => setOpenclawCustomFields([...openclawCustomFields, { id: crypto.randomUUID(), key: '', value: '' }])} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]">
                                                 <Plus className="h-3.5 w-3.5" />
                                                 {t('agentSettings.channelWizard.config.addConfigItem')}
                                             </button>
@@ -1385,7 +1391,7 @@ export default function ChannelWizard({
                                             <button onClick={() => setOpenclawCustomFields(openclawCustomFields.filter((_, idx) => idx !== i))} className="shrink-0 rounded-lg p-1.5 text-[var(--ink-subtle)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--error)]"><Trash2 className="h-3.5 w-3.5" /></button>
                                         </div>
                                     ))}
-                                    <button onClick={() => setOpenclawCustomFields([...openclawCustomFields, { key: '', value: '' }])} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]">
+                                    <button onClick={() => setOpenclawCustomFields([...openclawCustomFields, { id: crypto.randomUUID(), key: '', value: '' }])} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]">
                                         <Plus className="h-3.5 w-3.5" />
                                         {t('agentSettings.channelWizard.config.addConfigItem')}
                                     </button>

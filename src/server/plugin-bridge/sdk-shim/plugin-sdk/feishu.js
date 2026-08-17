@@ -202,9 +202,36 @@ export async function readJsonBodyWithLimit(_req, _options) {
 
 // ===== infra/net/fetch-guard =====
 
+// Default timeout for shim fetch — without it, a stuck upstream would block
+// the entire IM turn until OS TCP timeout (minutes). 30s mirrors the
+// `cancellableFetch` default in `src/server/utils/cancellation.ts` so the
+// shim doesn't widen the blast radius when DOWNSTREAM hasn't applied the
+// proper helper yet.
+const FETCH_GUARD_DEFAULT_TIMEOUT_MS = 30_000;
+
 export async function fetchWithSsrFGuard({ url, init }) {
-  const response = await fetch(url, init || {});
-  return { response, release: async () => {} };
+  const userSignal = init?.signal;
+  const ownController = new AbortController();
+  let timeoutHandle = null;
+  // If caller already provided a signal, forward abort; otherwise own the
+  // timeout. Listen for parent abort without unlisten so the cleanup path
+  // doesn't leak a listener on a long-lived shim.
+  const onParentAbort = () => ownController.abort(userSignal?.reason);
+  if (userSignal) {
+    if (userSignal.aborted) {
+      ownController.abort(userSignal.reason);
+    } else {
+      userSignal.addEventListener('abort', onParentAbort, { once: true });
+    }
+  }
+  timeoutHandle = setTimeout(() => ownController.abort('timeout'), FETCH_GUARD_DEFAULT_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...(init || {}), signal: ownController.signal });
+    return { response, release: async () => {} };
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    if (userSignal) userSignal.removeEventListener('abort', onParentAbort);
+  }
 }
 
 // ===== plugins/config-schema =====

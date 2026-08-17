@@ -57,6 +57,12 @@ interface UseUpdaterResult {
  pendingUpdateOnStartup: string | null;
  /** Dismiss the startup pending update dialog (keeps "Restart to Update" button visible) */
  dismissPendingUpdate: () => void;
+ /** Force-update is active: an update has been downloaded and the user must
+  *  install (or quit) before continuing. Today this is just `updateReady`,
+  *  so every newer remote version blocks. ponytail: when we introduce
+  *  opt-in vs mandatory upgrades, read a manifest `force` flag here instead
+  *  of mirroring `updateReady` 1:1. */
+ forceUpdateActive: boolean;
 }
 
 // Detect Windows platform
@@ -438,5 +444,6 @@ export function useUpdater(): UseUpdaterResult {
   checkForUpdate,
   pendingUpdateOnStartup,
   dismissPendingUpdate,
+  forceUpdateActive: updateReady,
  };
 }

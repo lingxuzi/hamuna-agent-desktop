@@ -1295,7 +1295,18 @@ function writeSkillsConfig(config: SkillsConfig): void {
     config.disabled = withoutRequiredSystemSkills(config.disabled);
     // Auto-increment generation on every write — signals Tab Sidecars to re-sync symlinks
     config.generation = (config.generation || 0) + 1;
-    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    // Atomic write: tmp + rename, with cleanup on rename failure. Mirror of
+    // saveProjects() in admin-config.ts so a crash mid-write can't leave a
+    // half-truncated skills-config.json that breaks every Tab Sidecar's
+    // skill-loader on the next read.
+    const tmpPath = configPath + '.tmp';
+    writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8');
+    try {
+      renameSync(tmpPath, configPath);
+    } catch (err) {
+      try { unlinkSync(tmpPath); } catch { /* tmp may not exist */ }
+      throw err;
+    }
   } catch (err) {
     console.error('[skills-config] Error writing config:', err);
   }
@@ -1394,10 +1405,6 @@ const SYSTEM_SKILLS: readonly string[] = [
   // v29: prompt-writer promoted from utility → system skill so content
   // improvements reach existing installs (seed-once never updates).
   'prompt-writer',
-  // v39: easy-tdx-backtest — 19 个 MCP 工具 (行情/复权/指数/分时/财务/
-  // 公告/板块/缠论/多策略组合/因子库) 替代 v38 的 6 个工具集合。
-  // Mirror of commands.rs::SYSTEM_SKILLS.
-  'easy-tdx-backtest',
 ];
 
 /**

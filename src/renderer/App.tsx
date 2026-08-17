@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef, memo, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { emit as tauriEmit } from '@tauri-apps/api/event';
 import ChatBootOverlay from '@/components/ChatBootOverlay';
 import { arrayMove } from '@dnd-kit/sortable';
 
@@ -19,6 +20,7 @@ import type { AssistantEntry, EntryIntent, HistoryEntrySource, PendingSessionBir
 import { stopTabSidecar, startGlobalSidecar, initGlobalSidecarReadyPromise, markGlobalSidecarReady, getGlobalServerUrl, getSessionActivation, updateSessionTab, ensureSessionSidecar, releaseTabSession, activateSession, upgradeSessionId, getSessionPort, hasSessionSidecar, getSessionGeneration, stopSseProxy, startBackgroundCompletion, cancelBackgroundCompletion, updateGlobalServerUrl, canRestoreSession, getUserSchedulerLifecycleSnapshot, sessionHasPersistentOwners, setAppActiveCorrelation } from '@/api/tauriClient';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import BugReportOverlay from '@/components/BugReportOverlay';
+import ForceUpdateModal from '@/components/ForceUpdateModal/ForceUpdateModal';
 import CustomTitleBar from '@/components/CustomTitleBar';
 import LinkContextMenuProvider from '@/components/LinkContextMenuProvider';
 import TabBar from '@/components/TabBar';
@@ -408,7 +410,7 @@ export const MemoizedTabContent = memo(function TabContent({
 export default function App() {
  const { t } = useTranslation('app');
  // Auto-update state (silent background updates)
- const { updateReady, updateVersion, restartAndUpdate, checking: updateChecking, downloading: updateDownloading, installing: updateInstalling, preparing: updatePreparing, checkForUpdate, pendingUpdateOnStartup, dismissPendingUpdate } = useUpdater();
+ const { updateReady, updateVersion, restartAndUpdate, checking: updateChecking, downloading: updateDownloading, installing: updateInstalling, preparing: updatePreparing, checkForUpdate, pendingUpdateOnStartup, dismissPendingUpdate, forceUpdateActive } = useUpdater();
 
  // Stable callback for Settings prop — ref pattern ensures memo comparator correctness
  const restartAndUpdateRef = useRef(restartAndUpdate);
@@ -3866,7 +3868,7 @@ export default function App() {
           cache/disk state. Comes back into view automatically when the
           download completes (the dialog reads pendingUpdateOnStartup, which
           is unchanged; only the visibility gate is `updatePreparing`). */}
-    {pendingUpdateOnStartup && !updatePreparing && (
+    {pendingUpdateOnStartup && !updatePreparing && !forceUpdateActive && (
      <ConfirmDialog
       title={t('appChrome.newVersionTitle')}
       message={t('appChrome.newVersionMessage', { version: pendingUpdateOnStartup })}
@@ -3880,6 +3882,24 @@ export default function App() {
        void handleRestartAndUpdate();
       }}
       onCancel={dismissPendingUpdate}
+     />
+    )}
+
+    {/* Force-update modal: every newer remote version blocks the UI.
+          Mounts the instant `useUpdater` flips `updateReady=true` — covers
+          both startup (Rust's 60s background check) and mid-session (30-min
+          interval, 2s post-mount check, or manual Settings trigger).
+          Reuses `handleRestartAndUpdate` so install failure toasts (network /
+          version-mismatch / blocked) still fire. Quit uses the existing
+          `tray:confirm-exit` channel — same path the tray "Quit" menu takes,
+          which lets the main run-loop's ExitRequested interceptor run its
+          cleanup (vs. forcing exit(0) from this command). */}
+    {forceUpdateActive && (
+     <ForceUpdateModal
+      updateVersion={updateVersion}
+      updating={updateInstalling}
+      onUpdate={() => void handleRestartAndUpdate()}
+      onQuit={() => void tauriEmit('tray:confirm-exit')}
      />
     )}
 
