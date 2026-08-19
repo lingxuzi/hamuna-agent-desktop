@@ -28,6 +28,12 @@ export interface TerminalReasonInfo {
 
 // Record<TerminalReason, ...> forces exhaustive coverage — SDK adding a new
 // enum value without an entry here breaks the build. That's the intent.
+//
+// SDK 0.3.234 added 6 new literals: `api_error`, `malformed_tool_use_exhausted`,
+// `budget_exhausted`, `structured_output_retry_exhausted`,
+// `tool_deferred_unavailable`, `turn_setup_failed`. The official `sdk.d.ts`
+// has no per-literal JSDoc — entries below are conservative literal translations
+// of the enum identifiers and need a wording review (TODO follow-up).
 const MAP: Record<TerminalReason, TerminalReasonInfo> = {
   completed: {
     label: '已完成',
@@ -92,6 +98,37 @@ const MAP: Record<TerminalReason, TerminalReasonInfo> = {
   model_error: {
     label: '模型返回错误',
     detail: '模型侧返回错误，请查看日志定位具体原因。',
+    severity: 'error',
+  },
+  // SDK 0.3.234 additions — TODO wording review, see TerminalReason follow-up.
+  api_error: {
+    label: '上游 API 报错',
+    detail: '调用 Provider 上游 API 返回错误（非 rate-limit、非额度耗尽）。查看 unified log 定位 provider 原始错误。',
+    severity: 'error',
+  },
+  malformed_tool_use_exhausted: {
+    label: '工具调用格式错误',
+    detail: 'SDK 多次重试仍收到格式错误的工具调用后放弃。可能是模型兼容问题或工具 schema 有歧义。',
+    severity: 'error',
+  },
+  budget_exhausted: {
+    label: '预算已耗尽',
+    detail: '本轮消耗触达预设上限后被 SDK 主动终止。可调整 Agent 的预算配置或新开会话。',
+    severity: 'error',
+  },
+  structured_output_retry_exhausted: {
+    label: '结构化输出重试耗尽',
+    detail: 'SDK 多次重试仍无法产出符合 structured-output schema 的结果后终止。请检查 schema 设计或换更稳的模型。',
+    severity: 'error',
+  },
+  tool_deferred_unavailable: {
+    label: '延迟工具不可用',
+    detail: '被延迟的工具最终确认不可用，本轮工具结果未交付。可重新发送消息让 AI 改用替代方案。',
+    severity: 'notice',
+  },
+  turn_setup_failed: {
+    label: '会话初始化失败',
+    detail: '本轮 setup 阶段失败（环境、工具集、Hook 注册等任一异常）。查看 unified log 定位 setup 错误。',
     severity: 'error',
   },
 };

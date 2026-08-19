@@ -1,11 +1,28 @@
 // Shared environment utilities for external runtime subprocesses (v0.1.60)
 
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { RuntimeEnvPolicy } from '../../shared/types/runtime';
 import { getShellEnv, getShellPath, getDetectedTerminalProxyEnv } from '../utils/shell';
-import claudeCodeEnv from './claude-code-env.json';
+
+// Build-time static env overrides. Loaded at runtime (not static `import`)
+// because the source file is `.gitignore`d — secrets must never enter the
+// repo, so the file is intentionally absent for anyone who hasn't created it
+// locally. esbuild's static import would refuse to bundle a missing module;
+// a runtime read with try/catch makes the missing-file case a no-op exactly
+// as the comment below the merge documents.
+function loadClaudeCodeEnv(): Record<string, string> {
+  try {
+    const jsonPath = fileURLToPath(new URL('./claude-code-env.json', import.meta.url));
+    return JSON.parse(readFileSync(jsonPath, 'utf8')) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+const claudeCodeEnv = loadClaudeCodeEnv();
 
 const PROXY_KEYS_UPPER = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'] as const;
 const PROXY_KEYS_LOWER = ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'] as const;

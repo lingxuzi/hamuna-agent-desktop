@@ -17,6 +17,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { VirtuosoHandle } from 'react-virtuoso';
 
 import type { Message as MessageType } from '@/types/chat';
+import type { AskUserQuestionRequest } from '../../shared/types/askUserQuestion';
 
 // ── Capture the props handed to Virtuoso on every render ──
 type Recorded = { data: MessageType[]; firstItemIndex: number | undefined; heightEstimates: number[] | undefined };
@@ -296,6 +297,75 @@ describe('MessageList — freeze data while inactive (Virtuoso cache-poisoning r
         streamingMessage={null}
         isLoading={false}
         isActive
+      />,
+    );
+
+    expect(scrollToBottom).toHaveBeenCalledWith('auto');
+  });
+
+  it('forces the footer AskUserQuestion card into view when it appears (footer content, not a modal)', () => {
+    // Regression: the AskUserQuestion prompt renders in the Virtuoso FOOTER —
+    // plain scroll content below the last message. While the SDK awaits the
+    // answer the turn is paused, so no streaming autoscroll fires; without the
+    // pin the card sits below the fold and the user never sees the question
+    // (pressing Stop → server-side "Aborted by SDK signal").
+    const scrollToBottom = vi.fn();
+    const history = [msg('h1', 'hello', 'user')];
+    const ask: AskUserQuestionRequest = {
+      requestId: 'ask_1',
+      questions: [{ question: 'Continue?', header: 'Confirm', options: [], multiSelect: false }],
+    };
+    const { rerender } = renderList({ messages: history, scrollToBottom });
+    // Mount-time session pin already scrolled once — clear so only the prompt
+    // transition is measured.
+    scrollToBottom.mockClear();
+
+    rerender(
+      <MessageList
+        messages={history}
+        streamingMessage={null}
+        isLoading={false}
+        isActive
+        firstItemIndex={1_000_000}
+        sessionId="s1"
+        virtuosoRef={{ current: null }}
+        {...createFollowProps()}
+        scrollToBottom={scrollToBottom}
+        handleAtBottomChange={vi.fn()}
+        pendingAskUserQuestion={ask}
+        onAskUserQuestionSubmit={() => {}}
+        onAskUserQuestionCancel={() => {}}
+      />,
+    );
+
+    expect(scrollToBottom).toHaveBeenCalledWith('auto');
+  });
+
+  it('forces the footer permission card into view when a Bash permission request appears (same footer-anchored bug class as AskUserQuestion)', () => {
+    // Regression: in `auto` permission mode a Bash call blocks the turn on the
+    // canUseTool PermissionPrompt. It renders in the Virtuoso FOOTER below the
+    // last message; without the pin the card sat below the fold and the user
+    // never saw it — the turn stayed blocked for 20min–2h until they pressed
+    // Stop ("Bash: aborted by SDK signal").
+    const scrollToBottom = vi.fn();
+    const history = [msg('h1', 'hello', 'user')];
+    const { rerender } = renderList({ messages: history, scrollToBottom });
+    scrollToBottom.mockClear(); // mount-time session pin, not the prompt
+
+    rerender(
+      <MessageList
+        messages={history}
+        streamingMessage={null}
+        isLoading={false}
+        isActive
+        firstItemIndex={1_000_000}
+        sessionId="s1"
+        virtuosoRef={{ current: null }}
+        {...createFollowProps()}
+        scrollToBottom={scrollToBottom}
+        handleAtBottomChange={vi.fn()}
+        pendingPermission={{ requestId: 'perm_1', toolName: 'Bash', input: '{}' }}
+        onPermissionDecision={() => {}}
       />,
     );
 

@@ -184,7 +184,7 @@ try {
     }
 
     function Get-NodeJSBinary {
-        $NodeVersion = "24.14.0"
+        $NodeVersion = "24.19.0"
         $NodeDir = Join-Path $ProjectDir "src-tauri\resources\nodejs"
         if (-not (Test-Path $NodeDir)) {
             New-Item -ItemType Directory -Path $NodeDir -Force | Out-Null

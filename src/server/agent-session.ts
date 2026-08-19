@@ -9,6 +9,7 @@ import {
   backgroundAgentDenyMessage,
   type BackgroundAgentPermissionMode,
 } from './utils/background-agent-permission';
+import { decidePlaywrightBashTransform, decideScriptFileBashTransform } from './utils/playwright-bash-redirect';
 import { registerBridge as registerBridgeInRegistry, unregisterBridge as unregisterBridgeInRegistry, type UpstreamBridgeConfig } from './openai-bridge/bridge-registry';
 import { getScriptDir, getBundledNodeDir, getSystemNodeDirs } from './utils/runtime';
 import { resolveNpxMcpInvocation } from './utils/mcp-command';
@@ -11220,6 +11221,60 @@ async function startStreamingSession(preWarm = false): Promise<void> {
                   hookEventName: 'PreToolUse' as const,
                   permissionDecision: 'deny' as const,
                   permissionDecisionReason: planModeDenyMessage(pre.tool_name),
+                },
+              };
+            },
+            // Playwright-via-Bash auto-background gate: SDK 0.3.234 supports
+            // PreToolUse `updatedInput` + `additionalContext`. For shell-level
+            // Playwright / Chromium invocations we re-shape the BashInput into
+            // `run_in_background: true` + a short `timeout`, instead of denying
+            // (deny would just bounce the model into re-emitting the same sync
+            // command). The renderer already renders BashOutput.backgroundTaskId,
+            // so the user sees the background state immediately instead of
+            // hanging on a never-returning headed chromium in detached console.
+            // See playwright-bash-redirect.ts "FIX EVOLUTION" for the
+            // deny → transform rationale.
+            async (input: HookInput): Promise<HookJSONOutput> => {
+              const pre = input as PreToolUseHookInput;
+              const toolInput = pre.tool_input;
+              const originalInput =
+                typeof toolInput === 'object' && toolInput !== null
+                  ? (toolInput as Record<string, unknown>)
+                  : {};
+              const decision = decidePlaywrightBashTransform({
+                toolName: pre.tool_name,
+                originalInput,
+              });
+              if (!decision.shouldTransform) {
+                // Shell-level miss → scan the referenced `node <script>` file
+                // (playwright-bash-redirect.ts LIMITATION case: the command
+                // string shows no playwright token; the browser launch lives
+                // inside the .cjs source). Fail-open — unreadable / non-browser
+                // scripts fall through untouched.
+                const fileDecision = await decideScriptFileBashTransform({
+                  toolName: pre.tool_name,
+                  originalInput,
+                });
+                if (!fileDecision.shouldTransform) return {};
+                console.log(
+                  `[playwright-bash-redirect] auto-backgrounded (script-file scan): ${pre.tool_name} reason=${fileDecision.reason} timeoutMs=30000`,
+                );
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    updatedInput: fileDecision.updatedInput ?? undefined,
+                    additionalContext: fileDecision.additionalContext ?? undefined,
+                  },
+                };
+              }
+              console.log(
+                `[playwright-bash-redirect] auto-backgrounded: ${pre.tool_name} reason=${decision.reason ?? 'n/a'} timeoutMs=30000`,
+              );
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  updatedInput: decision.updatedInput ?? undefined,
+                  additionalContext: decision.additionalContext ?? undefined,
                 },
               };
             },

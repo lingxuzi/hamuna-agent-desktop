@@ -436,24 +436,71 @@ const MessageList = memo(function MessageList({
     }
   }, [isLoading, isActive, followEnabledRef, scrollToBottom]);
 
+  // ── Interactive prompt cards are footer content — force them into view ──
+  // AskUserQuestion / permission / ExitPlanMode cards render in the Virtuoso
+  // FOOTER (plain scroll content below the last message), not a modal. When one
+  // appears the SDK turn is PAUSED awaiting the human, so the streaming
+  // autoscroll above never fires; with the view anywhere but the true bottom
+  // the card sits below the fold and the user never sees the question — they
+  // end up pressing Stop, which aborts the ask server-side ("Aborted by SDK
+  // signal" + the `ask-user-question:expired` clear). Pin the footer into view
+  // on a NEW prompt id, and again when the tab re-activates with one pending.
+  // The card's height is measured by Virtuoso's ResizeObserver only AFTER the
+  // commit, so the first pre-paint scroll can land short; re-pin once the
+  // measurement settles (same belt-and-suspenders as scrollToBottomInstant).
+  const promptRequestIdRef = useRef<string | null>(null);
+  const pendingPromptId = pendingPermission?.requestId
+    ?? pendingAskUserQuestion?.requestId
+    ?? pendingExitPlanMode?.requestId
+    ?? null;
+  useLayoutEffect(() => {
+    if (!isActive) return;
+    if (!pendingPromptId || pendingPromptId === promptRequestIdRef.current) return;
+    promptRequestIdRef.current = pendingPromptId;
+    const scroll = () => scrollToBottom('auto');
+    scroll();
+    const raf = requestAnimationFrame(scroll);
+    const t = setTimeout(scroll, 200);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  }, [isActive, pendingPromptId, scrollToBottom]);
+
   // ── Refs for stable callbacks — avoid recreating itemContent/Footer on every render ──
+  // The render-phase writes below are flagged by `react-hooks/refs`, but they are
+  // deliberate: `renderItem` / `Footer` are memoized once ([] deps) and read these
+  // mirrors inside their closures — they must observe THIS commit's values
+  // synchronously (same convention as useChatSearch.ts mirrors). Reassigning a pure
+  // prop value is idempotent under StrictMode double-invoke. Never move these
+  // writes into an effect: the callback would read the previous render's value for
+  // one commit (the streaming-churn bugs these mirrors fixed would return).
   const streamingMessageRef = useRef(streamingMessage);
+  // eslint-disable-next-line react-hooks/refs
   streamingMessageRef.current = streamingMessage;
   const isLoadingRef = useRef(isLoading);
+  // eslint-disable-next-line react-hooks/refs
   isLoadingRef.current = isLoading;
   const exitPlanModeAnchorIdRef = useRef(exitPlanModeAnchorId);
+  // eslint-disable-next-line react-hooks/refs
   exitPlanModeAnchorIdRef.current = exitPlanModeAnchorId;
   const exitPlanModeSlotRef = useRef(exitPlanModeSlot);
+  // eslint-disable-next-line react-hooks/refs
   exitPlanModeSlotRef.current = exitPlanModeSlot;
   const onRewindRef = useRef(onRewind);
+  // eslint-disable-next-line react-hooks/refs
   onRewindRef.current = onRewind;
   const onRetryRef = useRef(onRetry);
+  // eslint-disable-next-line react-hooks/refs
   onRetryRef.current = onRetry;
   const onForkRef = useRef(onFork);
+  // eslint-disable-next-line react-hooks/refs
   onForkRef.current = onFork;
   const layoutByMessageIdRef = useRef(layoutByMessageId);
+  // eslint-disable-next-line react-hooks/refs
   layoutByMessageIdRef.current = layoutByMessageId;
   const onRowLayoutChangedRef = useRef(onRowLayoutChanged ?? noopRowLayoutChanged);
+  // eslint-disable-next-line react-hooks/refs
   onRowLayoutChangedRef.current = onRowLayoutChanged ?? noopRowLayoutChanged;
   // followOutput / startReached capture `isActive` DIRECTLY (not via a ref). Under
   // React 19's child-before-parent layout-effect ordering, a ref updated in our parent
@@ -539,24 +586,34 @@ const MessageList = memo(function MessageList({
   // identity is fixed (useMemo([])) regardless of how often statusMessage,
   // pendingPermission, etc. change.
   const pendingPermissionRef = useRef(pendingPermission);
+  // eslint-disable-next-line react-hooks/refs -- same mirror rationale as the renderItem refs above
   pendingPermissionRef.current = pendingPermission;
   const onPermissionDecisionRef = useRef(onPermissionDecision);
+  // eslint-disable-next-line react-hooks/refs
   onPermissionDecisionRef.current = onPermissionDecision;
   const pendingAskUserQuestionRef = useRef(pendingAskUserQuestion);
+  // eslint-disable-next-line react-hooks/refs
   pendingAskUserQuestionRef.current = pendingAskUserQuestion;
   const onAskUserQuestionSubmitRef = useRef(onAskUserQuestionSubmit);
+  // eslint-disable-next-line react-hooks/refs
   onAskUserQuestionSubmitRef.current = onAskUserQuestionSubmit;
   const onAskUserQuestionCancelRef = useRef(onAskUserQuestionCancel);
+  // eslint-disable-next-line react-hooks/refs
   onAskUserQuestionCancelRef.current = onAskUserQuestionCancel;
   const showStatusRef = useRef(showStatus);
+  // eslint-disable-next-line react-hooks/refs
   showStatusRef.current = showStatus;
   const statusMessageRef = useRef(statusMessage);
+  // eslint-disable-next-line react-hooks/refs
   statusMessageRef.current = statusMessage;
   const systemNoticeRef = useRef(systemNotice);
+  // eslint-disable-next-line react-hooks/refs
   systemNoticeRef.current = systemNotice;
   const onDismissSystemNoticeRef = useRef(onDismissSystemNotice);
+  // eslint-disable-next-line react-hooks/refs
   onDismissSystemNoticeRef.current = onDismissSystemNotice;
   const bottomSpacerPxRef = useRef(bottomSpacerPx);
+  // eslint-disable-next-line react-hooks/refs
   bottomSpacerPxRef.current = bottomSpacerPx;
 
   const FooterComponent = useMemo(() => {
@@ -628,9 +685,19 @@ const MessageList = memo(function MessageList({
       frozenHeightEstimateSeedRef.current = liveHeightEstimateSeed;
     }
   }, [isActive, dataWithStreaming, firstItemIndex, liveHeightEstimateSeed]);
+  // The snapshot READS below are flagged by `react-hooks/refs`; they are the
+  // deliberate freeze semantics documented above: while hidden, Virtuoso must see
+  // the last committed active snapshot. Render-phase WRITES were rejected (they'd
+  // race React 19 concurrency), but reads of a layout-effect-committed snapshot are
+  // safe — the snapshot is real by the time any render that uses it commits. Same
+  // sanctioned read pattern as SeekBar.tsx.
+  // eslint-disable-next-line react-hooks/refs
   const virtuosoData = isActive ? dataWithStreaming : frozenDataRef.current;
+  // eslint-disable-next-line react-hooks/refs
   const virtuosoFirstItemIndex = isActive ? firstItemIndex : frozenFirstItemIndexRef.current;
+  // eslint-disable-next-line react-hooks/refs
   const virtuosoHeightEstimateSeed = isActive ? liveHeightEstimateSeed : frozenHeightEstimateSeedRef.current;
+  // eslint-disable-next-line react-hooks/refs
   const debugProbe = useChatScrollDebugProbe({
     sessionId,
     scroller: debugScroller,
