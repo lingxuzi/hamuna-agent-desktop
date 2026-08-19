@@ -28,6 +28,7 @@ use crate::{ulog_error, ulog_info};
 pub use searcher::{
     FileMatchLine, FileSearchHit, FileSearchResult, SessionSearchHit, SessionSearchResult,
 };
+pub use tokenizer::{build_chinese_tokenizer, TOKENIZER_NAME};
 
 /// The main search engine singleton.
 ///

@@ -25,6 +25,7 @@ pub mod logger;
 mod macos_arrow_filter;
 #[cfg(target_os = "macos")]
 mod macos_traffic_light;
+pub mod kb;
 pub mod managed_codex;
 pub mod management_api;
 pub mod memory_auto_update;
@@ -633,6 +634,16 @@ pub fn run() {
             search::cmd_refresh_workspace_index,
             search::cmd_search_thoughts,
             search::cmd_search_tasks,
+            // Knowledge base (资料库) commands
+            kb::cmd_kb_list,
+            kb::cmd_kb_create,
+            kb::cmd_kb_rename,
+            kb::cmd_kb_delete,
+            kb::cmd_kb_add_text,
+            kb::cmd_kb_graph,
+            kb::cmd_kb_query,
+            kb::cmd_kb_mount_list,
+            kb::cmd_kb_mount_set,
             // Task Center — Thought commands (v0.1.69)
             thought::cmd_thought_create,
             thought::cmd_thought_list,
@@ -1202,7 +1213,7 @@ pub fn run() {
 
             // Initialize SearchEngine (full-text search)
             if let Some(data_dir) = app_dirs::hamuna_data_dir() {
-                match search::SearchEngine::new(data_dir) {
+                match search::SearchEngine::new(data_dir.clone()) {
                     Ok(engine) => {
                         engine.start_background_indexing();
                         app.manage(Arc::new(engine));
@@ -1210,6 +1221,19 @@ pub fn run() {
                     }
                     Err(e) => {
                         ulog_error!("[App] Failed to create SearchEngine: {}", e);
+                    }
+                }
+
+                // Initialize Knowledge base engine (资料库).
+                match kb::KbEngine::new(data_dir) {
+                    Ok(engine) => {
+                        let engine = Arc::new(engine);
+                        kb::set_kb_engine(engine.clone());
+                        app.manage(engine);
+                        ulog_info!("[App] KbEngine initialized");
+                    }
+                    Err(e) => {
+                        ulog_error!("[App] Failed to create KbEngine: {}", e);
                     }
                 }
             }

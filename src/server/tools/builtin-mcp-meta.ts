@@ -55,3 +55,15 @@ registerBuiltinMcpMeta({
     };
   },
 });
+
+registerBuiltinMcpMeta({
+  id: 'kb',
+  load: async () => {
+    const m = await import('./kb-tool');
+    return {
+      server: await m.createKbServer(),
+      configure: m.configureKb,
+      // No validate — no external credential; query path resolves mounts at call time.
+    };
+  },
+});

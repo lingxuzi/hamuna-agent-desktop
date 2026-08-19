@@ -151,6 +151,8 @@ junction = "1.0"
 # the callback ourselves while still sharing the version locked in the dep
 # graph (notify-rust pulls 0.7.x transitively).
 tauri-winrt-notification = "0.7"
+
+[build]
 jobs = 8
 
 [dev-dependencies]
