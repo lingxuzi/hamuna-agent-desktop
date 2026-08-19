@@ -151,6 +151,7 @@ junction = "1.0"
 # the callback ourselves while still sharing the version locked in the dep
 # graph (notify-rust pulls 0.7.x transitively).
 tauri-winrt-notification = "0.7"
+jobs = 8
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -161,6 +162,7 @@ incremental = true # Compile your binary in smaller steps.
 [profile.release]
 codegen-units = 1 # Allows LLVM to perform better optimization.
 lto = true # Enables link-time-optimizations.
-opt-level = "s" # Prioritizes small binary size. Use `3` if you prefer speed.
+incremental = true
+opt-level = 1 # Prioritizes small binary size. Use `3` if you prefer speed.
 panic = "abort" # Higher performance by disabling panic handlers.
 strip = true # Ensures debug symbols are removed.

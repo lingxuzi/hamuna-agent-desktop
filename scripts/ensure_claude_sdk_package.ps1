@@ -154,6 +154,39 @@ function Test-PeBinary {
     return $true
 }
 
+function Test-SdkVersionRange {
+    param(
+        [string]$Installed,
+        [string]$Required
+    )
+    if (-not $Installed -or -not $Required) { return $false }
+
+    if ($Required.StartsWith('^')) { $op = 'caret' }
+    elseif ($Required.StartsWith('~')) { $op = 'tilde' }
+    else { return $Installed -eq $Required }
+
+    $reqParts = ($Required -replace '^[\^~]', '').Split('.')
+    $insParts = $Installed.Split('.')
+    if ($reqParts.Count -lt 3 -or $insParts.Count -lt 3) { return $false }
+    try {
+        $rm = [int]$reqParts[0]; $rn = [int]$reqParts[1]; $rp = [int]$reqParts[2]
+        $im = [int]$insParts[0]; $in = [int]$insParts[1]; $ip = [int]$insParts[2]
+    }
+    catch { return $false }
+
+    switch ($op) {
+        'caret' {
+            # ^0.3.234 → >=0.3.234 <0.4.0
+            return ($im -eq $rm) -and (($in -gt $rn) -or (($in -eq $rn) -and ($ip -ge $rp)))
+        }
+        'tilde' {
+            # ~0.3.234 → >=0.3.234 <0.4.0
+            return ($im -eq $rm) -and ($in -eq $rn) -and ($ip -ge $rp)
+        }
+    }
+    return $false
+}
+
 function Test-SdkPackage {
     param(
         [string]$PackageArch,
@@ -172,8 +205,8 @@ function Test-SdkPackage {
 
     try {
         $pkg = Get-Content $pkgJson -Raw | ConvertFrom-Json
-        if ($pkg.name -ne $pkgName -or $pkg.version -ne $SdkVersion) {
-            Write-Host "  $pkgName package.json does not match $SdkVersion" -ForegroundColor Yellow
+        if ($pkg.name -ne $pkgName -or -not (Test-SdkVersionRange -Installed ([string]$pkg.version) -Required $SdkVersion)) {
+            Write-Host "  $pkgName package.json does not match $SdkVersion (installed=$($pkg.version))" -ForegroundColor Yellow
             return $false
         }
     }
@@ -200,10 +233,15 @@ function Repair-SdkPackage {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
     try {
+        # npm registry re-resolves caret/tilde ranges to the latest matching version,
+        # so strip the range operator before passing to npm. Otherwise a patch bump
+        # on npm (e.g. 0.3.234 → 0.3.235) would leave the install still "invalid"
+        # against the original range, and the post-repair check would loop-throw.
+        $exactSdkVersion = $SdkVersion -replace '^[\^~]', ''
         & npm install --prefix "$tmpDir" --force --prefer-online --no-save --package-lock=false `
             --no-audit --no-fund --ignore-scripts `
             --os=win32 --cpu="$PackageArch" `
-            "$pkgName@$SdkVersion"
+            "$pkgName@$exactSdkVersion"
         if ($LASTEXITCODE -ne 0) {
             throw "npm install exited with $LASTEXITCODE"
         }

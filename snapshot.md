@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-19（修复 cuse stub `command -v` shell 内建陷阱后）
+最后更新：2026-08-19（修复 `ensure_claude_sdk_package.ps1` caret range vs `-ne` 严格比较 bug 后）
 
 ---
 
@@ -89,7 +89,7 @@
 | `hamuna` CLI | `src/cli/hamuna.ts` (+ `.cmd`) | 稳定；改 MUST bump `CLI_VERSION` + 同步 skill |
 | 内置 MA 小助理 | `bundled-agents/hamuna_helper/` | 稳定；改 MUST bump `ADMIN_AGENT_VERSION` |
 | 内置 Skills | `bundled-skills/` | 稳定；`SYSTEM_SKILLS` 清单内改 MUST bump `SYSTEM_SKILLS_VERSION` |
-| `scripts/ensure_claude_sdk_package.ps1` | — | 稳定；PE header + Authenticode 校验 |
+| `scripts/ensure_claude_sdk_package.ps1` | — | 已修；**`Test-SdkPackage` 第 175 行 `-ne` 严格比较 → `Test-SdkVersionRange` semver range 兼容（`^`/`~`/`exact` 三态）**；`Repair-SdkPackage` 传给 npm 前去掉 caret（否则 npm 会再次漂到 latest patch，repair 闭环失败）；PE header + Authenticode 校验不变 |
 | `scripts/ensure_rust_toolchain.ps1` | — | 稳定 |
 | `scripts/download_{cuse,python,uv}.ps1` | — | 稳定；软失败（dev 模式下缺失不阻断） |
 | `scripts/esbuild-bundle.mjs` | — | 稳定 |
@@ -237,6 +237,7 @@ v2 transform 用 `updatedInput` 把 BashInput 重写成 `{ run_in_background: tr
 
 ## 4. 已完成任务
 
+- **`ensure_claude_sdk_package.ps1` caret range vs `-ne` 严格比较 bug 修复**（2026-08-19） — 详见下文
 - **Linux cuse externalBin 缺失修复**（2026-08-19） — 详见下文
 - **Playwright-via-Bash auto-background gate (root fix)**（2026-08-18） — 详见下文
 - **SDK `@anthropic-ai/claude-agent-sdk` 0.3.201 → 0.3.234 升级**（2026-08-18） — 详见下文
@@ -325,6 +326,51 @@ stub 永远不被 runtime 引用 —— `getBundledCusePath()` 已在 Linux 早�
 | trap 行为 | `set -e` + exit 1 模拟 | stub 被清理（实测） |
 
 **未 commit**：1 文件改动（`build_linux.sh` 仅 +19 行）等待用户决策单独 PR 或并入其他变更。
+
+### `ensure_claude_sdk_package.ps1` caret range vs `-ne` 严格比较 bug 修复细节
+
+**症状**
+
+用户报 Windows 构建失败：
+
+```
+=========================================
+  构建失败!
+=========================================
+错误: @anthropic-ai/claude-agent-sdk-win32-x64@^0.3.234 is still invalid after repair
+```
+
+**根因（双层矛盾）**
+
+1. **`package.json` 的 `^0.3.234` 是 npm caret range** — 语义为 `>=0.3.234 <0.4.0`，允许 npm 自动跟随 patch 升级。当前 `node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/package.json::version = 0.3.235`（在 caret 范围内，合法）。
+2. **脚本第 175 行用 PowerShell `-ne` 严格字符串比较**：`if ($pkg.version -ne $SdkVersion)` → `"0.3.235" -ne "0.3.234"` → 永远 true。PE binary 完整（326MB，machine 0x8664），Authenticode 签名 Valid（CN="Anthropic, PBC" / DigiCert Trusted G4 Code Signing）—— **唯一失败的就是这一行字符串比较**。
+3. **`Repair-SdkPackage` 把 `^0.3.234` 整串丢给 `npm install`**：npm registry 再次按 range 解析 → 仍然拉 latest patch（0.3.235）→ 修复后再校验还是失败 → `throw "$pkgName@$SdkVersion is still invalid after repair"`。
+
+**矛盾点（这是 root fix 要解决的）**：`package.json` 表达"接受 patch 自动升级"，脚本表达"必须精确匹配"——两者语义不兼容。任何一次 npm 发布新 patch（0.3.235、0.3.236 ...）都会触发这个 build 故障。
+
+**修复（2 处，治本）**
+
+`scripts/ensure_claude_sdk_package.ps1`：
+
+1. **新增 `Test-SdkVersionRange -Installed X -Required Y`**：解析 Y 的首字符（`^`/`~`/none），按 semver 范围语义比较 X 是否在 Y 范围内。`^0.3.234 → >=0.3.234 <0.4.0`、`~0.3.234 → >=0.3.234 <0.4.0`、精确匹配走 `-eq`。
+2. **`Test-SdkPackage` 用 helper 替代 `-ne`**：错误信息增加 `installed=0.3.235` 字段方便后续排查。
+3. **`Repair-SdkPackage` 传给 npm 前 strip caret**：`$exactSdkVersion = $SdkVersion -replace '^[\^~]', ''`。否则 npm 还是会 range-resolve 到 latest patch，repair 闭环失败。
+
+**为何不动 `package.json` 的 `^0.3.234`**：
+- `^` 表达的是"接受安全 patch 升级"的产品意图（与 `^0.3.201` 历史一致，snapshot 旧记录里 0.3.201 → 0.3.234 升级也走 caret）
+- 把 9 处 `^0.3.234` 改成 `0.3.234`（精确）会让后续 patch 升级需要人工改 manifest + 重新生成 lockfile，违反产品意图
+- 脚本侧兼容 range 才是 root fix；脚本侧锁精确反而是 band-aid
+
+**验证（2 层全过）**：
+
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| Test 路径（0.3.235 in ^0.3.234） | `powershell -File scripts/ensure_claude_sdk_package.ps1 -Arch x64` | exit 0，输出 `Claude SDK win32-x64@^0.3.234 is valid` |
+| 静态语义 | `Test-SdkVersionRange -Installed 1.0.0 -Required ^0.3.234` → `false`（caret 上界拒绝 major bump）；`-Installed 0.3.234 -Required ^0.3.234` → `true`（下界接受）；`-Installed 0.3.233 -Required ^0.3.234` → `false`（下界拒绝） | 行为符合 semver 规范 |
+
+**Repair 路径未做 live test**（避免污染用户真实安装）：`strip caret` 一行 + 末尾再调 `Test-SdkPackage` 已测路径，逻辑闭环完整。如果未来 npm 真把 0.3.234 从 registry 撤回，repair 会在 `npm install` 阶段抛 `npm install exited with N` —— 比"永远 invalid"更早、错误更明确。
+
+**未 commit**：1 文件改动（`ensure_claude_sdk_package.ps1` +47 行 / -3 行）等待用户决策单独 PR 或并入其他变更。
 
 ### Playwright-via-Bash auto-background gate (root fix) 细节
 
@@ -497,3 +543,4 @@ function widgetUmdSourceResolver(): Plugin {
 - ✅ `npx tauri dev` 启动失败根因 — **已找到并修复**（见上文 §4）
 - ✅ Vite dev `?raw` 资源 "optimized info should be defined" — **已找到并修复**（见上文 §4）
 - ✅ Linux cuse externalBin 缺失 — **已找到并修复**（见上文 §4）
+- ✅ Windows 构建 `ensure_claude_sdk_package.ps1` "still invalid after repair" — **已找到并修复**（caret range vs `-ne` 矛盾，见上文 §4）
