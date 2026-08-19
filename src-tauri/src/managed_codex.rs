@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::process::{ChildStderr, ChildStdout, Output, Stdio};
+use std::process::{ChildStderr, ChildStdout, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -976,7 +976,7 @@ fn truncate_command_output(bytes: &[u8]) -> String {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn command_failure(label: &str, output: &Output) -> String {
+fn command_failure(label: &str, output: &std::process::Output) -> String {
     let stdout = truncate_command_output(&output.stdout);
     let stderr = truncate_command_output(&output.stderr);
     let detail = if !stderr.is_empty() {

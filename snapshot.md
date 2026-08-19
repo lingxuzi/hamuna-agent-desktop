@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-18（修复 `npx tauri dev` 启动失败后）
+最后更新：2026-08-19（修复 cuse stub `command -v` shell 内建陷阱后）
 
 ---
 
@@ -226,10 +226,18 @@ v2 transform 用 `updatedInput` 把 BashInput 重写成 `{ run_in_background: tr
 
 **未 commit**：3 文件改动（纯重构）待拍板。
 
+### TODO #7: 本次 Linux cuse stub 改动未 commit
+
+- `M build_linux.sh`（**三轮迭代**：① +11 行 stub touch + trap；② `touch` → `cp "$(command -v true)"` —— linuxdeploy 拒绝非 ELF；③ `command -v` → 绝对路径候选列表 —— bash 把 `true` 当内建，`command -v` 只返 `"true"` 字面量不带路径，`cp true ...` 直接 stat 失败）
+- **状态**: ⏳ 等待用户决策，单独 PR 或并入其他变更
+- **影响**: 仅 Linux 构建路径，无 macOS/Windows 影响
+- **关联**: §4 「Linux cuse externalBin 缺失修复细节」
+
 ---
 
 ## 4. 已完成任务
 
+- **Linux cuse externalBin 缺失修复**（2026-08-19） — 详见下文
 - **Playwright-via-Bash auto-background gate (root fix)**（2026-08-18） — 详见下文
 - **SDK `@anthropic-ai/claude-agent-sdk` 0.3.201 → 0.3.234 升级**（2026-08-18） — 详见下文
 - **`npx tauri dev` 启动失败修复**（2026-08-18） — 详见下文
@@ -239,6 +247,84 @@ v2 transform 用 `updatedInput` 把 BashInput 重写成 `{ run_in_background: tr
 - v0.3.18 发布 (`7cd2d4e`)
 - `latest stable` (`05ac25c`)
 - `123` (`7c83ddc`)
+
+### Linux cuse externalBin 缺失修复细节
+
+**症状**
+
+`./build_linux.sh` 在 `npm run tauri:build` 阶段抛：
+
+```
+resource path `binaries/cuse-x86_64-unknown-linux-gnu` doesn't exist
+```
+
+→ 第一次修：空 `touch` stub 满足文件存在性，但下游 `linuxdeploy` 仍失败：
+
+```
+failed to bundle project: `failed to run linuxdeploy`
+```
+
+**根因（两层）**
+
+**Layer 1 — 配置/运行时不对称**
+
+`tauri.conf.json::bundle.externalBin: ["binaries/cuse"]` 是**全局**配置 —— Tauri v2 schema 不支持 per-platform 条件（见 `node_modules/@tauri-apps/cli/config.schema.json` 注释）。打包时 Tauri 必查 `${name}-${target-triple}` 文件存在：
+
+| 平台 | Tauri 期望 | cuse 是否发布 |
+|------|-----------|-------------|
+| darwin (arm64/x86_64) | `cuse-aarch64-apple-darwin` / `cuse-x86_64-apple-darwin` | ✅ macOS universal |
+| win32 (x86_64) | `cuse-x86_64-pc-windows-msvc.exe` | ✅ |
+| **linux (x86_64/aarch64)** | **`cuse-x86_64-unknown-linux-gnu` / `cuse-aarch64-unknown-linux-gnu`** | ❌ 不发 |
+
+而 runtime 层 `src/server/utils/runtime.ts::getBundledCusePath()` 已硬 gate `process.platform !== 'darwin' && process.platform !== 'win32'`（line 224）→ Linux 永远拿 null。`setup.sh` 也跳过非 macOS 的 cuse 下载。
+
+**Layer 2 — linuxdeploy ELF 校验**
+
+第一次修用 `touch`（0 字节空文件）只骗过 Tauri 的存在性检查。Tauri AppImage bundler 调 linuxdeploy 时，linuxdeploy 把 stub 当 ELF 解析 → 0 字节不是有效 ELF → 直接抛 "failed to run linuxdeploy"。
+
+**修复（最小，build script 内闭环）**
+
+不动 `tauri.conf.json`（macOS/Windows 仍正确需要 externalBin）。在 `build_linux.sh::[5/6]` 段（`npm run tauri:build` 前）自动生成 stub：
+
+```bash
+CUSE_STUB="${PROJECT_DIR}/src-tauri/binaries/cuse-${TARGET}"
+trap 'rm -f "$CUSE_STUB"' EXIT        # 失败也清理，不污染 git status
+mkdir -p "$(dirname "$CUSE_STUB")"
+TRUE_BIN=""
+for candidate in /usr/bin/true /bin/true; do
+    if [ -x "$candidate" ]; then
+        TRUE_BIN="$candidate"
+        break
+    fi
+done
+[ -z "$TRUE_BIN" ] && { echo "..."; exit 1; }
+cp "$TRUE_BIN" "$CUSE_STUB"
+chmod +x "$CUSE_STUB"
+```
+
+stub 永远不被 runtime 引用 —— `getBundledCusePath()` 已在 Linux 早返 null。
+
+**避坑**：不能用 `command -v true` —— bash 把 `true` 当 shell 内建，`command -v` 只返回字面量 `"true"` 不带路径，`cp true ...` 直接 stat 失败 (`没有那个文件或目录`)。改用绝对路径候选列表 + `-x` 校验（merged-/usr 系统优先 `/usr/bin/true`，传统系统回退 `/bin/true`）。
+
+**为何不用 `printf` 写内联 84-byte ELF**：x86_64 / aarch64 各要不同字节序；维护成本 vs /bin/true 的 ~30KB 不划算。
+
+**为何不"删 tauri.conf.json::externalBin"**：macOS/Windows 仍依赖 externalBin 把 cuse 打入 bundle 正确路径（`Contents/MacOS/cuse` / install-dir `cuse.exe`）。删了这两个平台的 build 会断。
+
+**为何不"在 conf 里加 per-platform filter"**：Tauri v2 schema 不支持，强行加会被 schema validation 拒。
+
+**验证**：
+
+| 验证 | 命令 | 结果 |
+|------|------|------|
+| 语法 | `bash -n build_linux.sh` | OK |
+| 路径候选解析 | 模拟 for-loop + `-x` 校验 | 解析到 `/usr/bin/true`（本机） |
+| stub ELF | `cp /usr/bin/true $TMP_STUB && file $TMP_STUB` | `ELF 64-bit LSB pie executable, x86-64, ...` |
+| stub 可执行 | `$TMP_STUB && echo $?` | exit 0 |
+| path 解析 | `TARGET=x86_64-unknown-linux-gnu` → `binaries/cuse-x86_64-unknown-linux-gnu` | OK |
+| runtime 不引用 stub | `getBundledCusePath()` Linux 返 null | gate 已存在 |
+| trap 行为 | `set -e` + exit 1 模拟 | stub 被清理（实测） |
+
+**未 commit**：1 文件改动（`build_linux.sh` 仅 +19 行）等待用户决策单独 PR 或并入其他变更。
 
 ### Playwright-via-Bash auto-background gate (root fix) 细节
 
@@ -410,3 +496,4 @@ function widgetUmdSourceResolver(): Plugin {
 - ✅ 用户最初错命令"resource path '..\src-tauri\resources\claude-agent-sdk' doesn't exist"实际触发命令 `npx tauri dev` — **已找到**
 - ✅ `npx tauri dev` 启动失败根因 — **已找到并修复**（见上文 §4）
 - ✅ Vite dev `?raw` 资源 "optimized info should be defined" — **已找到并修复**（见上文 §4）
+- ✅ Linux cuse externalBin 缺失 — **已找到并修复**（见上文 §4）

@@ -585,51 +585,42 @@ const MessageList = memo(function MessageList({
   // dynamic values into refs and read them inside the wrapper so the wrapper's
   // identity is fixed (useMemo([])) regardless of how often statusMessage,
   // pendingPermission, etc. change.
-  const pendingPermissionRef = useRef(pendingPermission);
-  // eslint-disable-next-line react-hooks/refs -- same mirror rationale as the renderItem refs above
-  pendingPermissionRef.current = pendingPermission;
-  const onPermissionDecisionRef = useRef(onPermissionDecision);
-  // eslint-disable-next-line react-hooks/refs
-  onPermissionDecisionRef.current = onPermissionDecision;
-  const pendingAskUserQuestionRef = useRef(pendingAskUserQuestion);
-  // eslint-disable-next-line react-hooks/refs
-  pendingAskUserQuestionRef.current = pendingAskUserQuestion;
-  const onAskUserQuestionSubmitRef = useRef(onAskUserQuestionSubmit);
-  // eslint-disable-next-line react-hooks/refs
-  onAskUserQuestionSubmitRef.current = onAskUserQuestionSubmit;
-  const onAskUserQuestionCancelRef = useRef(onAskUserQuestionCancel);
-  // eslint-disable-next-line react-hooks/refs
-  onAskUserQuestionCancelRef.current = onAskUserQuestionCancel;
-  const showStatusRef = useRef(showStatus);
-  // eslint-disable-next-line react-hooks/refs
-  showStatusRef.current = showStatus;
-  const statusMessageRef = useRef(statusMessage);
-  // eslint-disable-next-line react-hooks/refs
-  statusMessageRef.current = statusMessage;
-  const systemNoticeRef = useRef(systemNotice);
-  // eslint-disable-next-line react-hooks/refs
-  systemNoticeRef.current = systemNotice;
-  const onDismissSystemNoticeRef = useRef(onDismissSystemNotice);
-  // eslint-disable-next-line react-hooks/refs
-  onDismissSystemNoticeRef.current = onDismissSystemNotice;
-  const bottomSpacerPxRef = useRef(bottomSpacerPx);
-  // eslint-disable-next-line react-hooks/refs
-  bottomSpacerPxRef.current = bottomSpacerPx;
+  // Footer values ride Virtuoso's `context` prop, NOT ref mirrors. The Footer's
+  // identity stays stable (useMemo []) so Virtuoso never remounts it (a remount
+  // resets StatusTimer and re-measures), but `context` is a real prop: when a
+  // permission / ask-question card arrives the SDK turn is PAUSED, so `data` is
+  // referentially stable and Virtuoso otherwise skips re-rendering — the old ref
+  // mirror was updated but never read, so the card never mounted and the turn
+  // hung until Stop ("aborted by SDK signal"). A context object whose identity
+  // changes with these values forces the Footer to re-render exactly when its
+  // inputs change.
+  const footerContext = useMemo(() => ({
+    pendingPermission,
+    onPermissionDecision,
+    pendingAskUserQuestion,
+    onAskUserQuestionSubmit,
+    onAskUserQuestionCancel,
+    showStatus,
+    statusMessage,
+    systemNotice,
+    onDismissSystemNotice,
+    bottomSpacerPx,
+  }), [pendingPermission, onPermissionDecision, pendingAskUserQuestion, onAskUserQuestionSubmit, onAskUserQuestionCancel, showStatus, statusMessage, systemNotice, onDismissSystemNotice, bottomSpacerPx]);
 
   const FooterComponent = useMemo(() => {
-    return function Footer() {
+    return function Footer({ context }: { context: typeof footerContext }) {
       return (
         <VirtuosoFooter
-          pendingPermission={pendingPermissionRef.current}
-          onPermissionDecision={onPermissionDecisionRef.current}
-          pendingAskUserQuestion={pendingAskUserQuestionRef.current}
-          onAskUserQuestionSubmit={onAskUserQuestionSubmitRef.current}
-          onAskUserQuestionCancel={onAskUserQuestionCancelRef.current}
-          showStatus={showStatusRef.current}
-          statusMessage={statusMessageRef.current}
-          systemNotice={systemNoticeRef.current}
-          onDismissSystemNotice={onDismissSystemNoticeRef.current}
-          bottomSpacerPx={bottomSpacerPxRef.current}
+          pendingPermission={context.pendingPermission}
+          onPermissionDecision={context.onPermissionDecision}
+          pendingAskUserQuestion={context.pendingAskUserQuestion}
+          onAskUserQuestionSubmit={context.onAskUserQuestionSubmit}
+          onAskUserQuestionCancel={context.onAskUserQuestionCancel}
+          showStatus={context.showStatus}
+          statusMessage={context.statusMessage}
+          systemNotice={context.systemNotice}
+          onDismissSystemNotice={context.onDismissSystemNotice}
+          bottomSpacerPx={context.bottomSpacerPx}
         />
       );
     };
@@ -768,6 +759,7 @@ const MessageList = memo(function MessageList({
         style={{ overscrollBehavior: 'none', scrollbarGutter: 'stable', overflowAnchor: 'none' }}
         components={components}
         itemContent={renderItem}
+        context={footerContext}
       />
     </div>
   );

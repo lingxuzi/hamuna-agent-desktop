@@ -8,6 +8,7 @@ type VirtuosoMockProps = {
   components?: {
     Footer?: React.ComponentType<{ context?: unknown }>;
   };
+  context?: unknown;
 };
 
 vi.mock('react-virtuoso', () => ({
@@ -15,7 +16,7 @@ vi.mock('react-virtuoso', () => ({
     const Footer = props.components?.Footer;
     return (
       <div data-testid="virtuoso">
-        {Footer ? <Footer context={undefined} /> : null}
+        {Footer ? <Footer context={props.context} /> : null}
       </div>
     );
   },

@@ -159,17 +159,13 @@ if [ $? -ne 0 ]; then
     echo -e "${RED}✗ sharp 主包预装失败${NC}"
     exit 1
 fi
-# 按 host 架构显式补齐 Linux 变体（glibc + musl 都装，让 sharp 自己按运行时 libc 选择）
-# AppImage 可能运行在 Alpine (musl) 或 Debian/Ubuntu (glibc) 宿主上 —— sharp 的 loader
-# 通过 detect-libc 运行时判断 libc family，对应加载 @img/sharp-linux 或 sharp-linuxmusl。
-# 删掉 musl 变体（像之前版本那样）会让 Alpine 用户永久坏掉：loadSharp() throw，sharpLoadError 缓存，
-# 每次上传图片都同样报错。多装一份 ~20MB 换来的是"所有 Linux 发行版都能用"。
+# 只装 glibc 变体。AppImage 主程序/webkit 均链接 glibc，musl 宿主跑不了；
+# 且 linuxdeploy 会扫描 AppDir 内所有 ELF，musl libvips 会因找不到
+# libc.musl-x86_64.so.1 直接打包失败。
 LINUX_ARCH_SUFFIX=$([[ "$(uname -m)" == "aarch64" || "$(uname -m)" == "arm64" ]] && echo "arm64" || echo "x64")
 (cd "${SHARP_DIR}" && npm install --no-save --force --no-audit --no-fund --ignore-scripts \
     "@img/sharp-linux-${LINUX_ARCH_SUFFIX}@0.34.5" \
-    "@img/sharp-libvips-linux-${LINUX_ARCH_SUFFIX}@1.2.4" \
-    "@img/sharp-linuxmusl-${LINUX_ARCH_SUFFIX}@0.34.5" \
-    "@img/sharp-libvips-linuxmusl-${LINUX_ARCH_SUFFIX}@1.2.4")
+    "@img/sharp-libvips-linux-${LINUX_ARCH_SUFFIX}@1.2.4")
 if [ $? -ne 0 ]; then
     echo -e "${RED}✗ sharp Linux 平台包安装失败${NC}"
     exit 1
@@ -180,17 +176,16 @@ if [ ! -f "$SHARP_NODE" ]; then
     echo -e "${RED}✗ sharp-linux-${LINUX_ARCH_SUFFIX}.node 缺失${NC}"
     exit 1
 fi
-# 验证 musl 原生二进制存在（Alpine/Void 用户）
-SHARP_MUSL_NODE="${SHARP_DIR}/node_modules/@img/sharp-linuxmusl-${LINUX_ARCH_SUFFIX}/lib/sharp-linuxmusl-${LINUX_ARCH_SUFFIX}.node"
-if [ ! -f "$SHARP_MUSL_NODE" ]; then
-    echo -e "${YELLOW}⚠ sharp-linuxmusl-${LINUX_ARCH_SUFFIX}.node 缺失，musl 系统（Alpine 等）将无法处理图片${NC}"
-    # 不 exit — Debian/Ubuntu 是主流场景，musl 是少数，缺了降级为警告而不是阻断构建
-fi
-# 删除其它平台的 @img/sharp-* 包（节省空间，避免 AppImage 膨胀）
+# 删除 musl/其它平台包。musl 包里的 ELF 会触发 linuxdeploy 报
+# "Could not find dependency: libc.musl-x86_64.so.1"；即使能打包，AppImage
+# 的 glibc webkit 在 Alpine 上也跑不起来。
 find "${SHARP_DIR}/node_modules/@img" -maxdepth 1 -type d \
-    \( -name "sharp-darwin*" -o -name "sharp-win32*" -o -name "sharp-libvips-darwin*" -o -name "sharp-libvips-win32*" -o -name "sharp-wasm32" \) \
+    \( -name "sharp-linuxmusl*" -o -name "sharp-libvips-linuxmusl*" \
+    -o -name "sharp-darwin*" -o -name "sharp-win32*" \
+    -o -name "sharp-libvips-darwin*" -o -name "sharp-libvips-win32*" \
+    -o -name "sharp-wasm32" \) \
     -exec rm -rf {} + 2>/dev/null || true
-echo -e "${GREEN}✓ sharp 预装完成 (linux-${LINUX_ARCH_SUFFIX} glibc+musl)${NC}"
+echo -e "${GREEN}✓ sharp 预装完成 (linux-${LINUX_ARCH_SUFFIX} glibc)${NC}"
 echo ""
 
 # 前端
@@ -218,6 +213,37 @@ cp "$CLAUDE_SRC" "$CLAUDE_DEST"
 chmod +x "$CLAUDE_DEST"
 echo -e "  ${GREEN}✓ Claude native binary (${SDK_TRIPLE}) 就绪${NC}"
 
+# cuse externalBin stub —— Tauri v2 的 externalBin 是全局配置，不支持 per-platform 条件；
+# cuse 不发 Linux 包，但 tauri.conf.json 仍声明 "binaries/cuse"。Runtime 层
+# runtime.ts::getBundledCusePath()` 已硬 gate platform != linux，stub 永远不会被执行，
+# 只为满足 Tauri 打包阶段的 "${name}-${target-triple}" 文件存在性 + linuxdeploy 的 ELF
+# 校验（不能用空文件，linuxdeploy 会拒绝非 ELF 的 externalBin）。
+# 用系统 `true` 二进制作 stub —— 有效 ELF、~30KB、host 架构匹配（script 默认 TARGET = host）。
+# 不能用 `command -v true`：bash 把 `true` 当 shell 内建命令，`command -v` 只返 `"true"` 不带路径，
+# `cp true ...` 直接 stat 失败。改用常见绝对路径 + -x 校验（merged-/usr 优先 /usr/bin/true，回退 /bin/true）。
+CUSE_STUB="${PROJECT_DIR}/src-tauri/binaries/cuse-${TARGET}"
+# trap 确保 build 失败时 stub 也不污染 git status；set -e 下任何非零退出都会触发
+trap 'rm -f "$CUSE_STUB"' EXIT
+mkdir -p "$(dirname "$CUSE_STUB")"
+TRUE_BIN=""
+for candidate in /usr/bin/true /bin/true; do
+    if [ -x "$candidate" ]; then
+        TRUE_BIN="$candidate"
+        break
+    fi
+done
+if [ -z "$TRUE_BIN" ]; then
+    echo -e "${RED}✗ 找不到 \`true\` 二进制（/usr/bin/true 或 /bin/true），无法生成 cuse stub${NC}"
+    exit 1
+fi
+cp "$TRUE_BIN" "$CUSE_STUB"
+chmod +x "$CUSE_STUB"
+echo -e "  ${GREEN}✓ cuse externalBin stub (from $TRUE_BIN): ${CUSE_STUB}${NC}"
+
+# Tauri 的打包暂存目录不会清理已删除文件：上次失败构建残留的 musl sharp 包
+# 会从 appimage_deb/data 再次进入 AppDir，导致 linuxdeploy 失败。
+rm -rf "${PROJECT_DIR}/src-tauri/target/${TARGET}/release/bundle/appimage_deb"
+rm -rf "${PROJECT_DIR}/src-tauri/target/${TARGET}/release/bundle/appimage/HamunaAgent.AppDir"
 npm run tauri:build -- --target "$TARGET" --bundles appimage,deb
 
 echo ""
