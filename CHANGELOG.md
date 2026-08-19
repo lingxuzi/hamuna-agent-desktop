@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.20] - 2026-08-19
+
+> 修复对话bug
+
+### Added
+- 修复对话bug
+
+### Changed
+- 修复对话bug
+
+### Fixed
+- 修复对话bug
+
 ## [0.3.19] - 2026-08-15
 
 > 强制更新，加入浏览器自动化
