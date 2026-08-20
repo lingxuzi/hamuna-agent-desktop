@@ -38,8 +38,18 @@ const MOUNTS_FILE: &str = "mounts.json";
 const GRAPH_FILE: &str = "graph.json";
 /// Max chunk characters fed to one skeleton pass (MVP ceiling).
 const MAX_CHUNK_CHARS: usize = 12_000;
+/// LLM extraction chunk size (chars). Fine granularity: small chunks let the
+/// LLM extract a precise knowledge structure per piece, and the FULL text is
+/// preserved across chunks (no truncation).
+const CHUNK_CHARS: usize = 4_000;
 /// Top-N frequent tokens kept as entities per chunk.
-const TOP_ENTITIES_PER_CHUNK: usize = 40;
+const TOP_ENTITIES_PER_CHUNK: usize = 20;
+/// A token must appear this many times to become a skeleton entity
+/// (keeps rare single mentions from polluting the graph).
+const MIN_ENTITY_FREQ: u32 = 2;
+/// A co-occurrence pair must co-occur this many times (across windows) to
+/// become a skeleton edge — cuts the dense noise ball of single mentions.
+const MIN_COOCCUR_COUNT: u32 = 2;
 /// Co-occurrence window (tokens) for skeleton edges.
 const COOCCUR_WINDOW: usize = 6;
 /// Max relations returned by a query's 1-hop expansion.
@@ -51,6 +61,16 @@ const WRITER_HEAP_BYTES: usize = 50_000_000;
 /// `with_file_lock` mutators whose `?` operators must produce `FileLockError`).
 fn lock_io(msg: impl Into<String>) -> FileLockError {
     FileLockError::Io(std::io::Error::new(std::io::ErrorKind::Other, msg.into()))
+}
+
+/// Lock-directory path for a data file. `with_file_lock` creates a lock
+/// DIRECTORY at this path, so it must never point at the data file itself —
+/// otherwise the first acquisition would create a directory at the data path
+/// and every read/write of the file would fail ("Is a directory").
+fn lock_path_for(data_path: &Path) -> PathBuf {
+    let mut os = data_path.as_os_str().to_owned();
+    os.push(".lock");
+    PathBuf::from(os)
 }
 
 // ── Persistent types ────────────────────────────────────────────────────
@@ -68,7 +88,15 @@ pub struct KbInfo {
 pub struct KbEntity {
     pub id: String,
     pub label: String,
-    /// Source doc/chunk ids this entity was extracted from.
+    /// Entity kind from the LLM (e.g. "ORG", "PERSON", "PLACE", "PRODUCT",
+    /// "DATE", "CODE"). Enables type-filtered knowledge queries. Optional so
+    /// older graphs / the LLM write-back (entities may carry only id/label)
+    /// deserialize.
+    #[serde(default)]
+    pub entity_type: Option<String>,
+    /// Source doc/chunk ids this entity was extracted from. Optional so the
+    /// LLM-extraction write-back (entities carry only id/label) deserializes.
+    #[serde(default)]
     pub sources: Vec<String>,
 }
 
@@ -91,6 +119,30 @@ pub struct KbRelation {
 pub struct KbGraph {
     pub entities: Vec<KbEntity>,
     pub relations: Vec<KbRelation>,
+    /// LLM extraction tasks still queued for this KB — 0 means extraction is
+    /// done. Lets the UI show live progress and stop polling.
+    #[serde(default)]
+    pub pending_count: usize,
+}
+
+/// A raw uploaded document stored per KB, so the graph can be rebuilt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KbDoc {
+    pub id: String,
+    pub title: String,
+    pub text: String,
+    pub added_at_ms: u64,
+}
+
+/// Lightweight doc metadata for the frontend list (no full text).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KbDocMeta {
+    pub id: String,
+    pub title: String,
+    pub added_at_ms: u64,
+    pub text_length: usize,
 }
 
 /// Pending LLM relation-typing task for one chunk's candidate pairs.
@@ -192,6 +244,9 @@ impl KbEngine {
     fn pending_path(&self, kb_id: &str) -> PathBuf {
         self.kb_dir.join(kb_id).join("pending.json")
     }
+    fn docs_path(&self, kb_id: &str) -> PathBuf {
+        self.kb_dir.join(kb_id).join("docs.json")
+    }
     fn kb_dir_path(&self, kb_id: &str) -> PathBuf {
         self.kb_dir.join(kb_id)
     }
@@ -215,7 +270,7 @@ impl KbEngine {
 
     pub async fn list_kbs(&self) -> Result<Vec<KbInfo>, String> {
         let path = self.index_path();
-        let lock = path.clone();
+        let lock = lock_path_for(&path);
         with_file_lock(&lock, FileLockOptions::default(), move || {
             if !path.exists() {
                 return Ok(vec![]);
@@ -232,7 +287,7 @@ impl KbEngine {
             return Err("KB name must not be empty".into());
         }
         let path = self.index_path();
-        let lock = path.clone();
+        let lock = lock_path_for(&path);
         with_file_lock(&lock, FileLockOptions::default(), move || {
             let mut kbs: Vec<KbInfo> = if path.exists() {
                 Self::read_json(&path)?
@@ -266,7 +321,7 @@ impl KbEngine {
             return Err("KB name must not be empty".into());
         }
         let path = self.index_path();
-        let lock = path.clone();
+        let lock = lock_path_for(&path);
         with_file_lock(&lock, FileLockOptions::default(), move || {
             let mut kbs: Vec<KbInfo> = Self::read_json(&path)?;
             let kb = kbs
@@ -282,7 +337,7 @@ impl KbEngine {
 
     pub async fn delete_kb(&self, kb_id: String) -> Result<(), String> {
         let index_path = self.index_path();
-        let lock = index_path.clone();
+        let lock = lock_path_for(&index_path);
         let kb_id_for_closure = kb_id.clone();
         with_file_lock(&lock, FileLockOptions::default(), move || {
             let mut kbs: Vec<KbInfo> = Self::read_json(&index_path)?;
@@ -311,7 +366,7 @@ impl KbEngine {
 
     pub async fn list_mounts(&self) -> Result<HashMap<String, Vec<String>>, String> {
         let path = self.mounts_path();
-        let lock = path.clone();
+        let lock = lock_path_for(&path);
         with_file_lock(&lock, FileLockOptions::default(), move || {
             if !path.exists() {
                 return Ok(HashMap::new());
@@ -324,7 +379,7 @@ impl KbEngine {
 
     pub async fn set_mounts(&self, workspace: String, kb_ids: Vec<String>) -> Result<(), String> {
         let path = self.mounts_path();
-        let lock = path.clone();
+        let lock = lock_path_for(&path);
         with_file_lock(&lock, FileLockOptions::default(), move || {
             let mut map: HashMap<String, Vec<String>> = if path.exists() {
                 Self::read_json(&path)?
@@ -347,7 +402,7 @@ impl KbEngine {
 
     pub async fn mounts_for_workspace(&self, workspace: &str) -> Result<Vec<String>, String> {
         let path = self.mounts_path();
-        let lock = path.clone();
+        let lock = lock_path_for(&path);
         let workspace = workspace.to_string();
         with_file_lock(&lock, FileLockOptions::default(), move || {
             if !path.exists() {
@@ -371,40 +426,53 @@ impl KbEngine {
             return Err("入库内容不能为空".into());
         }
         let idx = self.ensure_index(&kb_id)?;
-        let chunk_id = uuid_simple();
 
-        // Build skeleton.
-        let (entities, relations, pairs) = build_skeleton(&chunk_id, &text);
+        // LLM-only extraction: split the raw text into meaning-preserving
+        // chunks (NO truncation — every character belongs to some chunk),
+        // emit one pending task per chunk, and let the poller's LLM call
+        // extract the knowledge. The skeleton (jieba entities + cooccurrence)
+        // is deliberately NOT wired here anymore — the user wants the graph to
+        // contain only real LLM-extracted knowledge.
+        let chunks = chunk_text(&text, CHUNK_CHARS);
 
-        // Persist graph (merge).
-        let graph_path = self.graph_path(&kb_id);
-        let lock = graph_path.clone();
-        let graph = with_file_lock(&lock, FileLockOptions::default(), move || {
-            let mut graph: KbGraph = if graph_path.exists() {
-                Self::read_json(&graph_path)?
+        // Persist the raw document so the graph can be rebuilt later.
+        let docs_path = self.docs_path(&kb_id);
+        let lock = lock_path_for(&docs_path);
+        let doc_id = uuid_simple();
+        let added_at_ms = now_ms();
+        let doc_text = text.clone();
+        let doc_title = title.clone();
+        let doc_id_for_closure = doc_id.clone();
+        with_file_lock(&lock, FileLockOptions::default(), move || {
+            let mut docs: Vec<KbDoc> = if docs_path.exists() {
+                Self::read_json(&docs_path)?
             } else {
-                KbGraph::default()
+                vec![]
             };
-            merge_entities(&mut graph, entities);
-            merge_relations(&mut graph, relations);
-            Self::write_json(&graph_path, &graph)?;
-            Ok(graph)
+            docs.push(KbDoc {
+                id: doc_id_for_closure,
+                title: doc_title,
+                text: doc_text,
+                added_at_ms,
+            });
+            Self::write_json(&docs_path, &docs)
         })
         .await
-        .map_err(|e| format!("kb graph write error: {}", e))?;
+        .map_err(|e| format!("kb docs write error: {}", e))?;
 
-        // Index the chunk text (title + content) in Tantivy for full-text recall.
-        index_chunk(&idx, &kb_id, &chunk_id, &title, &text)?;
+        // Index each chunk in Tantivy (fine-grained full-text recall) and
+        // queue an LLM extraction task for it.
+        for (i, chunk) in chunks.iter().enumerate() {
+            let chunk_id = format!("{}-{}", doc_id, i);
+            index_chunk(&idx, &kb_id, &chunk_id, &title, chunk)?;
 
-        // Emit pending relation tasks.
-        if !pairs.is_empty() {
             let pending_path = self.pending_path(&kb_id);
-            let lock = pending_path.clone();
+            let lock = lock_path_for(&pending_path);
             let task = PendingRelationTask {
                 kb_id: kb_id.clone(),
-                chunk_id: chunk_id.clone(),
-                text: text.chars().take(MAX_CHUNK_CHARS).collect(),
-                pairs,
+                chunk_id,
+                text: chunk.clone(),
+                pairs: vec![],
             };
             with_file_lock(&lock, FileLockOptions::default(), move || {
                 let mut tasks: Vec<PendingRelationTask> = if pending_path.exists() {
@@ -419,6 +487,20 @@ impl KbEngine {
             .map_err(|e| format!("kb pending write error: {}", e))?;
         }
 
+        // The graph is populated asynchronously by the LLM poller; report
+        // current (probably empty until extraction lands) stats.
+        let graph_path = self.graph_path(&kb_id);
+        let lock = lock_path_for(&graph_path);
+        let graph = with_file_lock(&lock, FileLockOptions::default(), move || {
+            if graph_path.exists() {
+                Self::read_json(&graph_path)
+            } else {
+                Ok(KbGraph::default())
+            }
+        })
+        .await
+        .map_err(|e| format!("kb graph read error: {}", e))?;
+
         Ok(KbGraphSummary {
             entity_count: graph.entities.len(),
             relation_count: graph.relations.len(),
@@ -426,39 +508,199 @@ impl KbEngine {
         })
     }
 
+    // ── docs ─────────────────────────────────────────────────────────────
+
+    /// List the raw documents stored in a KB (metadata only, newest first).
+    pub async fn list_docs(&self, kb_id: String) -> Result<Vec<KbDocMeta>, String> {
+        let path = self.docs_path(&kb_id);
+        let lock = lock_path_for(&path);
+        with_file_lock(&lock, FileLockOptions::default(), move || {
+            let docs: Vec<KbDoc> = if path.exists() {
+                Self::read_json(&path)?
+            } else {
+                vec![]
+            };
+            let mut meta: Vec<KbDocMeta> = docs
+                .into_iter()
+                .map(|d| KbDocMeta {
+                    id: d.id,
+                    title: d.title,
+                    added_at_ms: d.added_at_ms,
+                    text_length: d.text.chars().count(),
+                })
+                .collect();
+            meta.sort_by(|a, b| b.added_at_ms.cmp(&a.added_at_ms));
+            Ok(meta)
+        })
+        .await
+        .map_err(|e| format!("kb docs list error: {}", e))
+    }
+
+    /// Rebuild a KB's graph + index from its stored raw documents. Clears the
+    /// existing graph, pending queue and index, then re-ingests every doc.
+    pub async fn rebuild(&self, kb_id: String) -> Result<KbGraphSummary, String> {
+        // 1. Read the raw docs.
+        let docs_path = self.docs_path(&kb_id);
+        let lock = lock_path_for(&docs_path);
+        let docs: Vec<KbDoc> = with_file_lock(&lock, FileLockOptions::default(), move || {
+            if docs_path.exists() {
+                Self::read_json(&docs_path)
+            } else {
+                Ok(vec![])
+            }
+        })
+        .await
+        .map_err(|e| format!("kb docs read error: {}", e))?;
+
+        // 2. Clear graph + pending.
+        let graph_path = self.graph_path(&kb_id);
+        let lock = lock_path_for(&graph_path);
+        with_file_lock(&lock, FileLockOptions::default(), move || {
+            if graph_path.exists() {
+                std::fs::remove_file(&graph_path).map_err(|e| lock_io(e.to_string()))?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("kb graph clear error: {}", e))?;
+
+        let pending_path = self.pending_path(&kb_id);
+        let lock = lock_path_for(&pending_path);
+        with_file_lock(&lock, FileLockOptions::default(), move || {
+            if pending_path.exists() {
+                std::fs::remove_file(&pending_path).map_err(|e| lock_io(e.to_string()))?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("kb pending clear error: {}", e))?;
+
+        // 3. Drop + rebuild the Tantivy index (fresh schema).
+        let kb_dir = self.kb_dir_path(&kb_id);
+        let index_dir = kb_dir.join("index");
+        if index_dir.exists() {
+            std::fs::remove_dir_all(&index_dir)
+                .map_err(|e| format!("clear index: {}", e))?;
+        }
+        let idx = self.ensure_index(&kb_id)?;
+
+        // 4. Re-ingest every doc (LLM-only: chunk → index + pending; the graph
+        // is repopulated by the poller as extractions land).
+        let mut summary = KbGraphSummary {
+            entity_count: 0,
+            relation_count: 0,
+            typed_relation_count: 0,
+        };
+        for doc in &docs {
+            for (i, chunk) in chunk_text(&doc.text, CHUNK_CHARS).iter().enumerate() {
+                let chunk_id = format!("{}-{}", doc.id, i);
+                index_chunk(&idx, &kb_id, &chunk_id, &doc.title, chunk)?;
+
+                let pending_path = self.pending_path(&kb_id);
+                let lock = lock_path_for(&pending_path);
+                let task = PendingRelationTask {
+                    kb_id: kb_id.clone(),
+                    chunk_id,
+                    text: chunk.clone(),
+                    pairs: vec![],
+                };
+                with_file_lock(&lock, FileLockOptions::default(), move || {
+                    let mut tasks: Vec<PendingRelationTask> = if pending_path.exists() {
+                        Self::read_json(&pending_path)?
+                    } else {
+                        vec![]
+                    };
+                    tasks.push(task);
+                    Self::write_json(&pending_path, &tasks)
+                })
+                .await
+                .map_err(|e| format!("kb pending write error: {}", e))?;
+            }
+        }
+
+        Ok(summary)
+    }
+
     // ── relations ────────────────────────────────────────────────────────
 
     /// Pop (and clear) the pending relation-typing queue for a KB.
-    pub async fn take_pending_relations(&self, kb_id: String, limit: usize) -> Result<Vec<PendingRelationTask>, String> {
+    /// PEEK pending relation-typing tasks for a KB (does NOT consume them).
+    /// The poller processes the peeked tasks and calls
+    /// `remove_pending_relations` for the ones that succeeded — so a failed
+    /// extraction stays queued and retries next poll, and `pending_count`
+    /// (graph progress) reflects real remaining work instead of dropping to 0
+    /// the moment tasks are picked up.
+    pub async fn peek_pending_relations(&self, kb_id: String, limit: usize) -> Result<Vec<PendingRelationTask>, String> {
         let path = self.pending_path(&kb_id);
-        let lock = path.clone();
+        let lock = lock_path_for(&path);
         with_file_lock(&lock, FileLockOptions::default(), move || {
             if !path.exists() {
                 return Ok(vec![]);
             }
-            let mut tasks: Vec<PendingRelationTask> = Self::read_json(&path)?;
-            let taken: Vec<PendingRelationTask> = tasks.drain(..tasks.len().min(limit)).collect();
-            if tasks.is_empty() {
-                let _ = std::fs::remove_file(&path);
-            } else {
-                Self::write_json(&path, &tasks)?;
-            }
-            Ok(taken)
+            let tasks: Vec<PendingRelationTask> = Self::read_json(&path)?;
+            Ok(tasks.into_iter().take(limit).collect())
         })
         .await
-        .map_err(|e| format!("kb pending read error: {}", e))
+        .map_err(|e| format!("kb pending peek error: {}", e))
     }
 
-    /// Merge LLM-typed relations into the graph.
-    pub async fn save_relations(&self, kb_id: String, relations: Vec<KbRelation>) -> Result<(), String> {
+    /// Remove successfully-processed pending tasks (by chunk id) from the queue.
+    pub async fn remove_pending_relations(&self, kb_id: String, chunk_ids: Vec<String>) -> Result<(), String> {
+        if chunk_ids.is_empty() {
+            return Ok(());
+        }
+        let path = self.pending_path(&kb_id);
+        let lock = lock_path_for(&path);
+        with_file_lock(&lock, FileLockOptions::default(), move || {
+            if !path.exists() {
+                return Ok(());
+            }
+            let mut tasks: Vec<PendingRelationTask> = Self::read_json(&path)?;
+            let before = tasks.len();
+            tasks.retain(|t| !chunk_ids.contains(&t.chunk_id));
+            if tasks.is_empty() {
+                let _ = std::fs::remove_file(&path);
+            } else if tasks.len() != before {
+                Self::write_json(&path, &tasks)?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("kb pending remove error: {}", e))
+    }
+
+    /// PEEK pending tasks across all KBs (for the Node poller).
+    pub async fn take_pending_relations_all(&self, limit: usize) -> Result<Vec<PendingRelationTask>, String> {
+        let kbs = self.list_kbs().await?;
+        let mut out: Vec<PendingRelationTask> = vec![];
+        for kb in kbs {
+            if out.len() >= limit {
+                break;
+            }
+            let mut tasks = self.peek_pending_relations(kb.id, limit - out.len()).await?;
+            out.append(&mut tasks);
+        }
+        Ok(out)
+    }
+
+    /// Merge LLM-extracted entities + typed relations into the graph.
+    /// The LLM reads the chunk text and produces REAL named entities
+    /// (company names, people, products…) plus typed relations between them.
+    pub async fn save_relations(
+        &self,
+        kb_id: String,
+        entities: Vec<KbEntity>,
+        relations: Vec<KbRelation>,
+    ) -> Result<(), String> {
         let graph_path = self.graph_path(&kb_id);
-        let lock = graph_path.clone();
+        let lock = lock_path_for(&graph_path);
         with_file_lock(&lock, FileLockOptions::default(), move || {
             let mut graph: KbGraph = if graph_path.exists() {
                 Self::read_json(&graph_path)?
             } else {
                 KbGraph::default()
             };
+            merge_entities(&mut graph, entities);
             merge_relations(&mut graph, relations);
             Self::write_json(&graph_path, &graph)
         })
@@ -509,7 +751,25 @@ impl KbEngine {
         entities.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
         // 1-hop neighborhood from matched entities across the mounted KBs.
-        let matched_ids: HashSet<String> = entities.iter().map(|e| e.id.clone()).collect();
+        let mut matched_ids: HashSet<String> = entities.iter().map(|e| e.id.clone()).collect();
+        // Also match graph entities by label (global id == label): the query's
+        // tokens hit real nodes, not just the search-surface doc ids.
+        let query_tokens: Vec<String> = tokenize(query);
+        if !query_tokens.is_empty() {
+            for kb_id in &kb_ids {
+                let graph_path = self.graph_path(kb_id).clone();
+                let graph: KbGraph = if graph_path.exists() {
+                    Self::read_json(&graph_path).unwrap_or_default()
+                } else {
+                    KbGraph::default()
+                };
+                for e in graph.entities {
+                    if query_tokens.iter().any(|t| e.label.to_lowercase().contains(t)) {
+                        matched_ids.insert(e.id.clone());
+                    }
+                }
+            }
+        }
         let mut relations: Vec<KbQueryRelation> = vec![];
         for kb_id in &kb_ids {
             let graph_path = self.graph_path(kb_id).clone();
@@ -561,7 +821,64 @@ impl KbEngine {
 
 // ── skeleton + indexing helpers ─────────────────────────────────────────
 
-/// Tokenize text with the shared jieba tokenizer into lowercased tokens.
+/// Common Chinese/English stopwords — frequent function words that are noise
+/// as knowledge-graph entities. Short list keeps the graph meaningful without
+/// bloating; extend as needed.
+const STOPWORDS: &[&str] = &[
+    "的", "了", "是", "在", "和", "与", "及", "或", "也", "都", "而", "但", "并", "且", "等",
+    "一", "不", "这", "那", "之", "其", "被", "把", "对", "从", "向", "为", "以", "于",
+    "我们", "你们", "他们", "它们", "这个", "那个", "这些", "那些", "可以", "能够", "因为",
+    "所以", "但是", "如果", "没有", "不是", "就是", "什么", "怎么", "一个", "进行", "通过",
+    "the", "a", "an", "of", "to", "in", "and", "is", "are", "was", "were", "for", "with",
+    "on", "at", "by", "from", "as", "it", "this", "that", "these", "those", "we", "you",
+    "they", "he", "she", "i", "be", "not", "or", "but", "if", "so", "can", "will",
+];
+
+/// Split text into meaning-preserving chunks of at most `max_chars` chars.
+/// Every character lands in exactly one chunk (NO truncation). Breaks prefer
+/// sentence/clause boundaries (。！？；\n) so each chunk keeps readable meaning
+/// for the LLM; falls back to a hard character break when no boundary exists
+/// within the window.
+fn chunk_text(text: &str, max_chars: usize) -> Vec<String> {
+    let mut chunks = vec![];
+    let mut start = 0;
+    let chars: Vec<char> = text.chars().collect();
+    while start < chars.len() {
+        let end = (start + max_chars).min(chars.len());
+        if end == chars.len() {
+            chunks.push(chars[start..end].iter().collect());
+            break;
+        }
+        // Look back for the last sentence boundary within the window.
+        let mut break_at = None;
+        for i in (start..end).rev() {
+            if matches!(chars[i], '。' | '！' | '？' | '；' | '\n' | '\r') {
+                break_at = Some(i + 1);
+                break;
+            }
+        }
+        match break_at {
+            // Found a boundary: end the chunk there.
+            Some(pos) if pos > start => {
+                chunks.push(chars[start..pos].iter().collect());
+                start = pos;
+            }
+            // No boundary in this window: hard-break at the window edge, but
+            // don't strand a single trailing char (keep at least one).
+            _ => {
+                chunks.push(chars[start..end].iter().collect());
+                start = end;
+            }
+        }
+    }
+    if chunks.is_empty() {
+        chunks.push(text.to_string());
+    }
+    chunks
+}
+
+/// Tokenize text with the shared jieba tokenizer into meaningful tokens.
+/// Filters stopwords, single-char tokens (Chinese or ASCII), and punctuation.
 fn tokenize(text: &str) -> Vec<String> {
     use tantivy::tokenizer::{TokenStream, Tokenizer};
     let mut tokenizer = tantivy_jieba::JiebaTokenizer {};
@@ -569,11 +886,16 @@ fn tokenize(text: &str) -> Vec<String> {
     let mut out = vec![];
     while let Some(t) = stream.next() {
         let s = t.text.trim().to_lowercase();
-        if s.is_empty() || s.len() < 2 {
+        // Require >= 2 chars (a single Chinese char is 3 bytes — byte-length
+        // checks would let single-char noise through).
+        if s.chars().count() < 2 {
             continue;
         }
         // Skip pure punctuation / whitespace.
         if s.chars().all(|c| c.is_ascii_punctuation() || c.is_whitespace()) {
+            continue;
+        }
+        if STOPWORDS.contains(&s.as_str()) {
             continue;
         }
         out.push(s);
@@ -596,16 +918,24 @@ fn build_skeleton(
         *freq.entry(t.as_str()).or_insert(0) += 1;
     }
 
-    // Top-N by frequency.
-    let mut ranked: Vec<(&str, u32)> = freq.into_iter().collect();
+    // Top-N by frequency, but only tokens that appear enough to be
+    // meaningful (a single mention is usually a spurious token).
+    let mut ranked: Vec<(&str, u32)> = freq
+        .into_iter()
+        .filter(|(_, count)| *count >= MIN_ENTITY_FREQ)
+        .collect();
     ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
     ranked.truncate(TOP_ENTITIES_PER_CHUNK);
 
+    // GLOBAL entity identity: id == the (normalized) label. The same label in
+    // different chunks must resolve to ONE node, so merge_entities can unify
+    // them and the graph stays connected across documents.
     let entities: Vec<KbEntity> = ranked
         .iter()
         .map(|(label, _)| KbEntity {
-            id: entity_id(chunk_id, label),
+            id: entity_id(label),
             label: label.to_string(),
+            entity_type: None,
             sources: vec![chunk_id.to_string()],
         })
         .collect();
@@ -632,8 +962,13 @@ fn build_skeleton(
     let mut relations: Vec<KbRelation> = vec![];
     let mut pairs: Vec<(String, String)> = vec![];
     for ((ai, bi), count) in cooccur {
-        let subj = entity_id(chunk_id, &ranked[ai].0);
-        let obj = entity_id(chunk_id, &ranked[bi].0);
+        // Skip weak edges (single co-occurrence) — they are the bulk of the
+        // dense noise ball and carry little signal.
+        if count < MIN_COOCCUR_COUNT {
+            continue;
+        }
+        let subj = entity_id(&ranked[ai].0);
+        let obj = entity_id(&ranked[bi].0);
         relations.push(KbRelation {
             subject: subj.clone(),
             object: obj.clone(),
@@ -647,44 +982,59 @@ fn build_skeleton(
     (entities, relations, pairs)
 }
 
-fn entity_id(chunk_id: &str, label: &str) -> String {
-    // Stable, chunk-scoped entity id: label prefixed with the chunk id.
-    format!("{}:{}", chunk_id, label)
+/// Global entity id — the normalized label itself. Chunk-scoped prefixes would
+/// duplicate the same concept across documents.
+fn entity_id(label: &str) -> String {
+    label.trim().to_lowercase()
 }
 
 fn merge_entities(graph: &mut KbGraph, entities: Vec<KbEntity>) {
-    let existing: HashSet<String> = graph.entities.iter().map(|e| e.id.clone()).collect();
     for e in entities {
-        if existing.contains(&e.id) {
-            continue;
+        match graph.entities.iter_mut().find(|existing| existing.id == e.id) {
+            Some(existing) => {
+                // Unify: merge new sources (dedup), keep first label casing.
+                for s in e.sources {
+                    if !existing.sources.contains(&s) {
+                        existing.sources.push(s);
+                    }
+                }
+                // Keep the first non-null entity type (LLM-labeled entities
+                // may arrive before/after skeleton ones).
+                if existing.entity_type.is_none() {
+                    existing.entity_type = e.entity_type;
+                }
+            }
+            None => graph.entities.push(e),
         }
-        graph.entities.push(e);
     }
 }
 
 fn merge_relations(graph: &mut KbGraph, relations: Vec<KbRelation>) {
-    let existing: HashSet<(String, String, String)> = graph
-        .relations
-        .iter()
-        .map(|r| (r.subject.clone(), r.object.clone(), r.relation_type.clone()))
-        .collect();
     for mut r in relations {
-        // A typed relation upgrades/overrides a cooccur edge between the same
-        // subject/object pair.
-        if let Some(prev) = graph.relations.iter_mut().find(|p| {
-            p.subject == r.subject && p.object == r.object && !p.typed && r.typed
+        // Typed relation upgrades/overrides a cooccur edge between the same pair.
+        if r.typed {
+            if let Some(prev) = graph.relations.iter_mut().find(|p| {
+                p.subject == r.subject && p.object == r.object && !p.typed
+            }) {
+                prev.relation_type = r.relation_type.clone();
+                prev.typed = true;
+                prev.weight = r.weight.max(prev.weight);
+                continue;
+            }
+        }
+        // Same-direction cooccur edge seen again (same pair across chunks):
+        // accumulate weight so stronger co-occurrence stands out.
+        match graph.relations.iter_mut().find(|p| {
+            p.subject == r.subject && p.object == r.object && p.relation_type == r.relation_type
         }) {
-            prev.relation_type = r.relation_type.clone();
-            prev.typed = true;
-            prev.weight = r.weight;
-            continue;
+            Some(prev) => {
+                prev.weight += r.weight;
+            }
+            None => {
+                r.typed = r.typed || r.relation_type != "cooccur";
+                graph.relations.push(r);
+            }
         }
-        let key = (r.subject.clone(), r.object.clone(), r.relation_type.clone());
-        if existing.contains(&key) {
-            continue;
-        }
-        r.typed = r.typed || r.relation_type != "cooccur";
-        graph.relations.push(r);
     }
 }
 
@@ -812,6 +1162,15 @@ fn trim_snippet(text: &str) -> String {
     }
 }
 
+/// Milliseconds since UNIX epoch (for doc added-at timestamps).
+fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn uuid_simple() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -867,12 +1226,28 @@ pub async fn cmd_kb_add_text(
 }
 
 #[tauri::command]
+pub async fn cmd_kb_list_docs(
+    state: tauri::State<'_, Arc<KbEngine>>,
+    kb_id: String,
+) -> Result<Vec<KbDocMeta>, String> {
+    state.list_docs(kb_id).await
+}
+
+#[tauri::command]
+pub async fn cmd_kb_rebuild(
+    state: tauri::State<'_, Arc<KbEngine>>,
+    kb_id: String,
+) -> Result<KbGraphSummary, String> {
+    state.rebuild(kb_id).await
+}
+
+#[tauri::command]
 pub async fn cmd_kb_graph(
     state: tauri::State<'_, Arc<KbEngine>>,
     kb_id: String,
 ) -> Result<KbGraphSummary, String> {
     let path = state.graph_path(&kb_id);
-    let lock = path.clone();
+    let lock = lock_path_for(&path);
     with_file_lock(&lock, FileLockOptions::default(), move || {
         if !path.exists() {
             return Ok(KbGraphSummary {
@@ -890,6 +1265,43 @@ pub async fn cmd_kb_graph(
     })
     .await
     .map_err(|e| format!("kb graph read error: {}", e))
+}
+
+/// Full knowledge graph (entities + relations) for a KB — used by the
+/// renderer's graph visualization. Also reports how many LLM extraction tasks
+/// are still queued (pendingCount) so the UI can show live progress.
+#[tauri::command]
+pub async fn cmd_kb_graph_data(
+    state: tauri::State<'_, Arc<KbEngine>>,
+    kb_id: String,
+) -> Result<KbGraph, String> {
+    let path = state.graph_path(&kb_id);
+    let lock = lock_path_for(&path);
+    let mut graph: KbGraph = with_file_lock(&lock, FileLockOptions::default(), move || {
+        if !path.exists() {
+            return Ok(KbGraph::default());
+        }
+        KbEngine::read_json(&path)
+    })
+    .await
+    .map_err(|e| format!("kb graph data read error: {}", e))?;
+
+    // Live extraction progress: count queued pending tasks (pending.json is
+    // drained as the poller consumes it, so this shrinks to 0 when done).
+    let pending_path = state.pending_path(&kb_id);
+    let plock = lock_path_for(&pending_path);
+    let pending = with_file_lock(&plock, FileLockOptions::default(), move || {
+        if !pending_path.exists() {
+            return Ok(0usize);
+        }
+        let tasks: Vec<PendingRelationTask> = KbEngine::read_json(&pending_path)?;
+        Ok(tasks.len())
+    })
+    .await
+    .map_err(|e| format!("kb pending count error: {}", e))?;
+    graph.pending_count = pending;
+
+    Ok(graph)
 }
 
 #[tauri::command]
@@ -930,22 +1342,44 @@ pub async fn mgmt_kb_query(
     engine.query(kb_ids, query, limit).await
 }
 
-/// Take pending relation-typing tasks for a KB.
+/// PEEK pending relation-typing tasks for a KB (does not consume — the
+/// poller removes them via remove_pending_relations after success).
 pub async fn mgmt_kb_take_pending(
     engine: &Arc<KbEngine>,
     kb_id: String,
     limit: usize,
 ) -> Result<Vec<PendingRelationTask>, String> {
-    engine.take_pending_relations(kb_id, limit).await
+    engine.peek_pending_relations(kb_id, limit).await
 }
 
-/// Save LLM-typed relations.
+/// Take pending relation-typing tasks across all KBs.
+pub async fn mgmt_kb_take_pending_all(
+    engine: &Arc<KbEngine>,
+    limit: usize,
+) -> Result<Vec<PendingRelationTask>, String> {
+    engine.take_pending_relations_all(limit).await
+}
+
+/// Save LLM-extracted entities + typed relations.
 pub async fn mgmt_kb_save_relations(
     engine: &Arc<KbEngine>,
     kb_id: String,
+    entities: Vec<KbEntity>,
     relations: Vec<KbRelation>,
 ) -> Result<(), String> {
-    engine.save_relations(kb_id, relations).await
+    engine.save_relations(kb_id, entities, relations).await
+}
+
+/// Add a text document (used by the Node sidecar after URL/PDF/docx/xlsx
+/// parsing — the sidecar cannot invoke Tauri IPC, so it writes back over the
+/// management API).
+pub async fn mgmt_kb_add_text(
+    engine: &Arc<KbEngine>,
+    kb_id: String,
+    title: String,
+    text: String,
+) -> Result<KbGraphSummary, String> {
+    engine.add_text(kb_id, title, text).await
 }
 
 // ── tests ───────────────────────────────────────────────────────────────
@@ -957,13 +1391,18 @@ mod tests {
     #[test]
     fn skeleton_extracts_entities_and_cooccurrence_edges() {
         // Repeated Chinese words should surface as entities with a cooccur edge.
+        // Note: jieba tokenizes "知识图谱" as "知识" + "图谱", so the entity
+        // labels are the split words (pre-existing jieba behavior, not a
+        // regression of the skeleton builder).
         let text = "知识图谱 知识图谱 实体 实体 关系 关系 知识图谱 实体";
         let (entities, relations, pairs) = build_skeleton("c1", text);
 
         assert!(!entities.is_empty(), "should extract entities");
         let labels: HashSet<&str> = entities.iter().map(|e| e.label.as_str()).collect();
-        assert!(labels.contains("知识图谱"));
+        assert!(labels.contains("知识"));
+        assert!(labels.contains("图谱"));
         assert!(labels.contains("实体"));
+        assert!(labels.contains("关系"));
 
         // Every relation's pair should also appear in the candidate pairs for LLM.
         assert_eq!(relations.len(), pairs.len());
@@ -979,6 +1418,7 @@ mod tests {
             entities: vec![KbEntity {
                 id: "c1:a".into(),
                 label: "a".into(),
+                entity_type: None,
                 sources: vec!["c1".into()],
             }],
             relations: vec![KbRelation {
@@ -988,6 +1428,7 @@ mod tests {
                 weight: 2.0,
                 typed: false,
             }],
+            pending_count: 0,
         };
 
         merge_relations(
@@ -1006,5 +1447,19 @@ mod tests {
         assert!(r.typed);
         assert_eq!(r.relation_type, "depends_on");
         assert_eq!(r.weight, 5.0);
+    }
+
+    #[test]
+    fn chunk_text_preserves_every_character() {
+        // No truncation: concatenating all chunks must equal the input.
+        let text = "第一句。第二句话！第三句？\n换行后的第四句。最后一句没有句号";
+        let chunks = chunk_text(&text, 6);
+        assert!(chunks.len() >= 2, "long text should split into multiple chunks");
+        let joined: String = chunks.iter().flat_map(|c| c.chars()).collect();
+        assert_eq!(joined, text, "every char must survive chunking exactly once");
+        assert!(
+            chunks.iter().all(|c| c.chars().count() <= 8),
+            "chunks may slightly exceed the window to keep a sentence boundary"
+        );
     }
 }

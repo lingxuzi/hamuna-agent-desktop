@@ -16,6 +16,7 @@ import CustomSelect from '@/components/CustomSelect';
 import CustomRadio from '@/components/CustomRadio';
 import { UnifiedLogsPanel } from '@/components/UnifiedLogsPanel';
 import GlobalPluginsPanel from '@/components/GlobalPluginsPanel';
+import GlobalKbPanel from '@/components/GlobalKbPanel';
 import CronTaskDebugPanel from '@/components/dev/CronTaskDebugPanel';
 import { BotPlatformRegistry } from '@/components/ImSettings';
 import { WorkspaceSelectDialog } from '@/components/AgentSettings';
@@ -3966,6 +3967,13 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
     {activeSection === 'plugins' && (
      <div className="mx-auto max-w-4xl px-8 py-8">
       <GlobalPluginsPanel />
+     </div>
+    )}
+
+    {/* Knowledge base (资料库) — app-level KBs + workspace mounts. */}
+    {activeSection === 'kb' && (
+     <div className="mx-auto max-w-3xl px-8 py-8">
+      <GlobalKbPanel />
      </div>
     )}
 

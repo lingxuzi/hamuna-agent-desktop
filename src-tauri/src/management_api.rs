@@ -235,7 +235,10 @@ pub async fn start_management_api() -> Result<u16, String> {
         .route("/api/kb/mounts", get(kb_mounts_handler))
         .route("/api/kb/query", post(kb_query_handler))
         .route("/api/kb/pending-relations", get(kb_pending_relations_handler))
+        .route("/api/kb/pending-relations/all", get(kb_pending_relations_all_handler))
+        .route("/api/kb/pending-relations/done", post(kb_pending_relations_done_handler))
         .route("/api/kb/relations", post(kb_relations_handler))
+        .route("/api/kb/add-text", post(kb_add_text_handler))
         // Bridge messages carry base64-encoded media attachments (images/files).
         // Default axum 2MB limit is too small — raise to 50MB for this API.
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024));
@@ -286,6 +289,9 @@ struct KbPendingRelationsQuery {
 #[serde(rename_all = "camelCase")]
 struct KbRelationsRequest {
     kb_id: String,
+    #[serde(default)]
+    entities: Vec<crate::kb::KbEntity>,
+    #[serde(default)]
     relations: Vec<crate::kb::KbRelation>,
 }
 
@@ -328,10 +334,71 @@ async fn kb_pending_relations_handler(
         return Json(serde_json::json!({ "ok": false, "error": "kb engine not ready" }));
     };
     match engine
-        .take_pending_relations(query.kb_id, query.limit.unwrap_or(10))
+        .peek_pending_relations(query.kb_id, query.limit.unwrap_or(10))
         .await
     {
         Ok(tasks) => Json(serde_json::json!({ "ok": true, "tasks": tasks })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+#[derive(Deserialize)]
+struct KbPendingAllQuery {
+    limit: Option<usize>,
+}
+
+async fn kb_pending_relations_all_handler(
+    Query(query): Query<KbPendingAllQuery>,
+) -> Json<serde_json::Value> {
+    let Some(engine) = crate::kb::get_kb_engine() else {
+        return Json(serde_json::json!({ "ok": false, "error": "kb engine not ready" }));
+    };
+    match engine
+        .take_pending_relations_all(query.limit.unwrap_or(10))
+        .await
+    {
+        Ok(tasks) => Json(serde_json::json!({ "ok": true, "tasks": tasks })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+/// Mark pending tasks as successfully extracted so they leave the queue
+/// (kept until then so failed extractions retry and progress is accurate).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KbPendingDoneRequest {
+    kb_id: String,
+    chunk_ids: Vec<String>,
+}
+
+async fn kb_pending_relations_done_handler(
+    Json(req): Json<KbPendingDoneRequest>,
+) -> Json<serde_json::Value> {
+    let Some(engine) = crate::kb::get_kb_engine() else {
+        return Json(serde_json::json!({ "ok": false, "error": "kb engine not ready" }));
+    };
+    match engine.remove_pending_relations(req.kb_id, req.chunk_ids).await {
+        Ok(()) => Json(serde_json::json!({ "ok": true })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KbAddTextRequest {
+    kb_id: String,
+    title: String,
+    text: String,
+}
+
+async fn kb_add_text_handler(
+    Json(req): Json<KbAddTextRequest>,
+) -> Json<serde_json::Value> {
+    let Some(engine) = crate::kb::get_kb_engine() else {
+        return Json(serde_json::json!({ "ok": false, "error": "kb engine not ready" }));
+    };
+    match engine.add_text(req.kb_id, req.title, req.text).await {
+        Ok(summary) => Json(serde_json::json!({ "ok": true, "summary": summary })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
     }
 }
@@ -342,7 +409,7 @@ async fn kb_relations_handler(
     let Some(engine) = crate::kb::get_kb_engine() else {
         return Json(serde_json::json!({ "ok": false, "error": "kb engine not ready" }));
     };
-    match engine.save_relations(req.kb_id, req.relations).await {
+    match engine.save_relations(req.kb_id, req.entities, req.relations).await {
         Ok(()) => Json(serde_json::json!({ "ok": true })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
     }

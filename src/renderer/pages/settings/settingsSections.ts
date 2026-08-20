@@ -3,6 +3,7 @@ export type SettingsSection =
   | 'shortcuts'
   | 'providers'
   | 'mcp'
+  | 'kb'
   | 'skills'
   | 'sub-agents'
   | 'plugins'
@@ -16,6 +17,7 @@ export const VALID_SECTIONS: SettingsSection[] = [
   'shortcuts',
   'providers',
   'mcp',
+  'kb',
   'skills',
   'sub-agents',
   'plugins',

@@ -5,11 +5,20 @@
       "id": "stock-datasource",
       "name": "股票数据服务",
       "type": "http",
-      "command": "http://116.62.181.59:8080/mcp",
+      "url": "http://116.62.181.59:8080/mcp",
       "args": [],
       "env": {},
       "description": "股票行情 + 新闻",
       "enabled": true
+    },
+    {
+      "id": "mobile-control",
+      "name": "手机运营控制",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mobilenext/mobile-mcp@latest"],
+      "description": "手机运营控制, 控制你的手机完成自动化任务",
+      "enable": true
     }
   ]
 }

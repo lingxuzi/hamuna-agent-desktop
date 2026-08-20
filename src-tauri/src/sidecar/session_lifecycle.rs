@@ -749,6 +749,27 @@ fn create_new_session_sidecar<R: Runtime>(
     {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
+
+        // Detach the controlling terminal (TIOCNOTTY): the child is now a
+        // BACKGROUND process group yet keeps the terminal as its controlling
+        // tty, so any descendant tty read (interactive-shell PATH detection,
+        // SDK CLI auth prompt) would SIGTTIN-freeze the whole sidecar as
+        // "alive but not listening". Detaching turns those /dev/tty opens into
+        // ENXIO errors instead of stopping the group. Sidecar is headless
+        // (stdin null) — it never legitimately needs the terminal. Mirrors the
+        // same fix in instances.rs (global/IM sidecars).
+        unsafe {
+            use std::ffi::CString;
+            let tty_path = CString::new("/dev/tty").unwrap();
+            cmd.pre_exec(move || {
+                let fd = libc::open(tty_path.as_ptr(), libc::O_RDWR);
+                if fd >= 0 {
+                    libc::ioctl(fd, libc::TIOCNOTTY);
+                    libc::close(fd);
+                }
+                Ok(())
+            });
+        }
     }
 
     // Spawn

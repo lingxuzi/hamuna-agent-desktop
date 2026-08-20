@@ -14,6 +14,7 @@ interface SettingsSidebarProps {
 const NAV_ITEMS: Array<{ section: SettingsSection; labelKey: string; activeSections?: SettingsSection[] }> = [
   { section: 'providers', labelKey: 'sidebar.nav.providers' },
   { section: 'skills', labelKey: 'sidebar.nav.skills', activeSections: ['skills', 'sub-agents'] },
+  { section: 'kb', labelKey: 'sidebar.nav.kb' },
   { section: 'plugins', labelKey: 'sidebar.nav.plugins' },
   { section: 'mcp', labelKey: 'sidebar.nav.tools' },
   { section: 'agent', labelKey: 'sidebar.nav.bots' },

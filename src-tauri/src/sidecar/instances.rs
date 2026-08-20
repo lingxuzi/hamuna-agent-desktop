@@ -173,6 +173,29 @@ pub fn start_tab_sidecar<R: Runtime>(
     {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
+
+        // Detach the controlling terminal (TIOCNOTTY). The child keeps the
+        // terminal as its controlling tty after process_group(0) even though it
+        // is now a BACKGROUND process group — so any descendant that reads the
+        // tty (e.g. the sidecar's interactive-shell PATH detection, or an SDK
+        // CLI auth prompt) triggers SIGTTIN and freezes the whole sidecar as
+        // "alive but not listening". Detaching makes those /dev/tty opens fail
+        // with ENXIO instead of stopping the process group. The sidecar is a
+        // headless server (stdin is null), so it never legitimately needs the
+        // terminal. See pit_of_success "apply_to_subprocess" for the companion
+        // rule that keeps proxy env from being inherited.
+        unsafe {
+            use std::ffi::CString;
+            let tty_path = CString::new("/dev/tty").unwrap();
+            cmd.pre_exec(move || {
+                let fd = libc::open(tty_path.as_ptr(), libc::O_RDWR);
+                if fd >= 0 {
+                    libc::ioctl(fd, libc::TIOCNOTTY);
+                    libc::close(fd);
+                }
+                Ok(())
+            });
+        }
     }
 
     // 关键诊断日志：打印当前可执行文件路径，确认运行的是正确版本

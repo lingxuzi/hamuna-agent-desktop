@@ -740,6 +740,7 @@ import { handleChatStreamRoute } from './routes/chat-stream';
 import { handleSessionConfigRoute } from './routes/session-config';
 import { handleSessionOperationRoute } from './routes/session-operations';
 import { installAutoTitleHook } from './session-title-service';
+import { startKbRelationProcessor } from './kb-relations';
 import type { ImagePayload } from './runtimes/types';
 import { rehomeImagePayloadsForSession } from './runtimes/image-payload';
 import {
@@ -2054,6 +2055,15 @@ async function routeAdminApi(pathname: string, payload: Record<string, unknown>)
           error: result.response.error?.message ?? 'watch failed',
           code: result.response.error?.code,
         };
+  }
+
+  // Knowledge base (资料库) ingestion — URL / PDF / Word / Excel parsed in the
+  // sidecar, written back to Rust via the management API. Lazy import keeps
+  // the heavy parsing libs (pdfjs-dist / xlsx / adm-zip) out of cold start.
+  if (route === 'kb/ingest') {
+    const { ingestKbMaterial } = await import('./kb-ingest');
+    const result = await ingestKbMaterial(payload as unknown as Parameters<typeof ingestKbMaterial>[0]);
+    return { success: result.ok === true, ...result };
   }
 
   // System commands
@@ -9611,6 +9621,10 @@ description: >
       // #296 — install the backend auto-title trigger into the turn-hooks slot
       // BEFORE any turn can complete (initializeAgent / pre-warm run below).
       installAutoTitleHook();
+
+      // Knowledge base (资料库) — periodic LLM relation typing for ingested
+      // material. Best-effort: no-op until a session model is available.
+      startKbRelationProcessor();
 
       ensurePluginsDirs();
       emitDeferredPhaseDone('skill-seed');

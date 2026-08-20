@@ -253,6 +253,30 @@ pub(super) fn node_path_in_resources(resources: &std::path::Path) -> PathBuf {
 }
 
 pub(super) fn find_node_executable_inner<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
+    // In dev (debug_assertions) prefer the SOURCE node binary
+    // (src-tauri/resources/nodejs/bin/node) over the resource_dir copy
+    // (target/debug/nodejs/bin/node). tauri_build re-copies the nodejs
+    // resource into target/ on EVERY build, and a sidecar running from the
+    // target copy makes that copy fail with "Text file busy (os error 26)".
+    // Running from the source path keeps the target copy free so builds
+    // never collide with a live sidecar.
+    #[cfg(debug_assertions)]
+    {
+        let dev_node = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("nodejs")
+            .join("bin")
+            .join("node");
+        if dev_node.exists() && !is_node_crashed(&dev_node) {
+            ulog_info!("[sidecar] Using dev source node: {:?}", dev_node);
+            return Some(dev_node);
+        }
+        ulog_info!(
+            "[sidecar] Dev source node not found at {:?}, falling back to resource_dir",
+            dev_node
+        );
+    }
+
     // Bundled Node.js lives under resource_dir/nodejs/ (shipped by build_*.sh
     // via scripts/download_nodejs.sh). Unlike the prior Bun externalBin
     // flow, Node.js is a binary + lib directory combo that can't ride
