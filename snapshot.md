@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-19（修复 `ensure_claude_sdk_package.ps1` caret range vs `-ne` 严格比较 bug 后）
+最后更新：2026-08-24（xueqiu skill 重设计为「投资方向分析」+ skill-creator 评测，见 TODO #9）
 
 ---
 
@@ -89,6 +89,7 @@
 | `hamuna` CLI | `src/cli/hamuna.ts` (+ `.cmd`) | 稳定；改 MUST bump `CLI_VERSION` + 同步 skill |
 | 内置 MA 小助理 | `bundled-agents/hamuna_helper/` | 稳定；改 MUST bump `ADMIN_AGENT_VERSION` |
 | 内置 Skills | `bundled-skills/` | 稳定；`SYSTEM_SKILLS` 清单内改 MUST bump `SYSTEM_SKILLS_VERSION` |
+| 雪球时间线 Skill | `skills/crawl-xueqiu-my-timeline/` | **重设计为投资方向分析（TODO #9）**；含 `stock_datasource_call.sh` 行情直连；实验 skill，未入 `bundled-skills/`，未注册 `SYSTEM_SKILLS` |
 | `scripts/ensure_claude_sdk_package.ps1` | — | 已修；**`Test-SdkPackage` 第 175 行 `-ne` 严格比较 → `Test-SdkVersionRange` semver range 兼容（`^`/`~`/`exact` 三态）**；`Repair-SdkPackage` 传给 npm 前去掉 caret（否则 npm 会再次漂到 latest patch，repair 闭环失败）；PE header + Authenticode 校验不变 |
 | `scripts/ensure_rust_toolchain.ps1` | — | 稳定 |
 | `scripts/download_{cuse,python,uv}.ps1` | — | 稳定；软失败（dev 模式下缺失不阻断） |
@@ -232,6 +233,132 @@ v2 transform 用 `updatedInput` 把 BashInput 重写成 `{ run_in_background: tr
 - **状态**: ⏳ 等待用户决策，单独 PR 或并入其他变更
 - **影响**: 仅 Linux 构建路径，无 macOS/Windows 影响
 - **关联**: §4 「Linux cuse externalBin 缺失修复细节」
+
+### TODO #9: ✅ 已定稿 — xueqiu skill 重设计（七轮迭代）+ skill-creator 评测
+
+用户需求："重新设计输出，生成从真实数据深度分析得到的未来可能投资方向报告"。
+
+**关键事实核实**：
+- **stock-datasource MCP 是内置的（HTTP 端点 `http://116.62.181.59:8080/mcp`），之前只是 disabled**。已用 `hamuna mcp enable stock-datasource` 启用。
+- **实测确认**：stock-datasource 提供 33 个工具，**仅覆盖 A 股**（容维数据源）。港股/美股（阿里 09988、富途、亚盛医药、招金矿业等）lookup 返回空。已实测士兰微 600460 实时行情与帖子完全吻合（35.89 涨停）。
+- **雪球发布格式实测**：雪球正文是富文本 HTML，支持段落/加粗/图片/`$代码$` 标的，**不支持 Markdown 表格、代码块、`#` 标题**。
+
+**重设计内容**（`skills/crawl-xueqiu-my-timeline/`）：
+- **迭代1**：SKILL.md 从"描述性报告"改为"投资方向分析"：帖子信号 → A 股行情/财务交叉验证 → 方向推演 → 风险边界
+- **迭代4（本次）**：用户反馈"没有深度分析"→ 从"整理观点"升级为**深度研究**：
+  - **根因**：前三轮本质是把帖子观点消化/整理成好看文字，没有产出帖子之外的新认知
+  - **核心变化**：帖子只是"研究线索"，选 3-5 个方向做**独立研究**，挖"数据发现"（帖子没提的信息）
+  - **深度工具实测可用**（前几轮没用）：`get_cninfo_announcement` 业绩预告全文（验证涨价→业绩兑现度）、`get_shareholders` 十大股东（国家队华芯投资3.72%）、`get_chip_distribution` 筹码分布、`get_stock_industry_compare` 同业分位（士兰微总市值 rank38/165）
+  - subagent 调度从"按发言人分组"改为"按研究方向独立研究"
+  - 写作自检加"数据发现"标准：删掉数据发现后若只剩观点罗列 → 深度不够重写
+- **迭代3**：用户反馈"想要像人类一样的叙述式语言，不需要如此规整的分析格式"→ 升级为**投资长文风**：
+  - 报告 = 连贯散文，像深度投资者在雪球写的长文（彻底去标题/去列表/去分节）
+  - 保留前两轮内核（零署名/对撞分析/数据验证/完整逻辑）但全部用叙述表达
+  - 数据融入叙述（"士兰微涨停收35.89，可隔天主力净流出5.6亿"）而非列表
+  - 有开头破题/方向间过渡/个人判断/收尾+风险
+- **迭代2**：用户反馈"不要罗列观点、要综合分析"→ 升级为**观点对撞 + 逻辑链综合**：
+  - **正文零署名铁律**：不出现"@某大V说..."，所有观点消化为分析语言，信息出处只在文末"信号依据"清单
+  - **逻辑链结构**：现状事实 → 观点对撞 → 对撞裁决（用数据裁决）→ 关键变量 → 逻辑延伸 → 证伪条件
+  - **少而深**：聚焦 3-5 个有证据方向写透，低确信度一句话带过
+  - **港美股不罗列**：并入逻辑链作"跨市场变量"，不单列章节
+  - 输出文件名改为 `深度分析_YYYYMMDD_YYYYMMDD.md`（原 `投资方向_` 废弃）
+- 新增 `scripts/stock_datasource_call.sh`：**stock-datasource MCP HTTP 直连工具**（自动 initialize → 任意工具调用）。解决 subagent 无 MCP 客户端时的行情验证兜底。修复了 `${2:-{}}` 导致参数多 `}` 的 bash 解析 bug
+- evals.json 更新 #11（深度综合分析，6断言）、#13（深度分析发帖格式，5断言）
+
+**skill-creator 评测结果**（iteration-1，2 个 eval × with-skill/baseline 对比，输入 34 条真实帖子）：
+
+| 指标 | baseline（旧版） | with-skill（新版） | Delta |
+|------|------|------|------|
+| 断言通过率 | 48% | **100%** | **+52%** |
+| 耗时 | 212.6s | 239.3s | +26.8s（行情验证成本） |
+
+- **eval-direction-analysis**（5 断言）：with-skill 5/5（四段结构/A股验证/港美股标注/确信度/推演逻辑）；baseline 1/5（无可验证分层、无行情验证）
+- **eval-post-format**（4 断言）：with-skill 4/4（无表格/无代码块/$格式/结构完整）；baseline 3/4（排版合规但无可验证分层）
+- viewer 已生成：`workspace/crawl-xueqiu-workspace/iteration-1/review.html`
+
+**iteration-2（综合分析重设计，用户反馈"不要罗列观点"）**：
+- with-skill 测试：5 个逻辑链全部达成，**5/5 断言通过（100%）**
+- 产出验证：正文零署名、观点对撞用数据裁决（士兰微涨停+主力净流出5.64亿、扬杰PE40 vs 士兰微132、平安PB0.96+净利-7.4%）、逻辑链六段完整、5方向写透
+- 关键逻辑突破：第5逻辑链"卖铲子优于买铲子"统一全部逻辑链（阿里配股摊薄 vs 军备竞赛）
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-2/review.html`
+- **数据核实**：士兰微 8/21 涨停 35.89（K线确认）、8/24 收 37.2——报告数据准确
+
+**iteration-3（投资长文风，用户反馈"要像人一样叙述"）**：
+- with-skill 测试：**6/6 断言通过（100%）**
+- 产出验证：15 段纯散文、grep 校验 0 个 ##标题/0 列表/0 @署名/0 章节标签/0 确信度标签
+- 亮点：破题 AI 资本开支 → 光模块/液冷/功率半导体/低估值反转四方向写透 → "卖铲子优于买铲子"收尾 + 脉冲行情风险
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-3/review.html`
+- **数据核实**：士兰微涨停 35.89、主力净流出 5.44 亿、扬杰 PE40/毛利36.8%、中际旭创成交 174 亿——均验证准确
+
+**iteration-4（深度研究，用户反馈"没有深度分析"）**：
+- with-skill 测试：**6/6 断言通过（100%）**
+- 产出验证：真正的深度研究——每段有帖子之外的数据发现：
+  - 士兰微半年报净利 5.19 亿但**扣非仅 2.76 亿**（近半利润非经常损益）；上方 56-57 元**38.5% 套牢盘**；大基金一期二期持股>5%
+  - 中际旭创营收+192%/利润+262%（业绩已兑现）、PEG<0.5、主力净流入 15.6 亿全特大单
+  - 新易盛外资个人股东 + 港资第一大流通股东 6.3%
+  - 平安归母净利-7.4% → 裁决"最坏已过≠已反转"；豪威获利盘仅 0.8%/上方套牢 79% → **证伪 V 型反转**；牧原无信号诚实跳过
+- 点题：**"帖子里喊得最响的方向，数据往往只兑现了一半；数据最硬的方向，情绪最纠结"**
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-4/review.html`
+- 数据边界诚实标注：液冷无 A 股覆盖列观察、年报文本接口报错标注
+
+**iteration-5（完全独立分析，用户反馈"不要说帖子，只是根据参考帖子的观点进行深度分析"）**：
+- with-skill 测试：**✅ 6/6 断言通过（100%）**，3488字 9段纯散文
+- grep 校验：正文 0 次"帖子/雪球/发帖/热帖/大V/@"——完全独立的市场分析，不是在"回应帖子"
+- 数据发现 5 处：士兰微毛利率同业分位（185家排倒数50/低于均值30%）、扬杰PE同业第8低分位/净利排13、平安主力净流入1.34亿+股东结构、中际旭创特大单净流入15.4亿、豪威85元筹码平台
+- 亮点裁决："逻辑在，但兑现的只有扬杰一半的腰包"；平安"这是估值反转，不是业绩反转"；"周期股最贵的就是我觉得到底了这六个字"
+- 边界诚实：K线接口仅返回2026-03历史数据（周期受限）；港股/美股无法用 stock_datasource 验证，仅作跨市场背景
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-5/review.html`
+
+**iteration-6（去 AI 味，用户反馈"去除生成文章中的AI味"）**：
+- with-skill 测试：**✅ 7/7 断言通过（100%）**，2069字 10段，新增"去AI味"断言
+- 量化校验全达标：0 个"X两个字"式破题（用具体动作开场）、排比对仗 2 处均自然、高频转场词 0 次、"我"字全文 0 次、金句仅收尾 1 处、详略失衡（功率半导体 4 段 vs 其他各 1 段）
+- **真正的新数据发现 11 处**（比 iteration-5 更深）：①士兰微净利+96% 全靠 1.94 亿炒股收益、扣非 2.76 亿原地踏步 → 证伪"主营反转"②扬杰新能源车/SiC 近翻倍+睿郡连续三季加仓 ③**平安长期服务计划 Q2 停止增持**（50.49→47.03 亿股）→ 证伪"反转在即"④豪威港股通 9.9→7.4 亿股持续减、虞仁荣 15.4%→8.35%⑤英维克净利-82%/PE1353"故事先行报表迟到"⑥牧原 1.7% 短融扛现金流
+- SKILL.md 新增"⚠️ 去 AI 味"区块（7 条量化铁律表格 + 讲的语气/允许不完美/详略失衡）+ 写作自检 2 条；evals.json #11 加"去AI味"断言
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-6/review.html`
+
+**iteration-7（未来投资方向，用户反馈"最终希望分析出未来的投资方向"）**：
+- with-skill 测试：**✅ 8/8 断言通过（100%）**，3980字 12段纯散文
+- **从"分析现状"升级为"收束出未来投资方向"**（最初需求落点）：每个方向三步走（现状落脚→判断依据→未来收敛含信号表/作废条件），末段把方向串成整体排序
+- **末段整体判断**：平安（确定性最高，营运利润+8.3%拐点+主力连续流入）> 牧原（周期底部确认，1.70%短融信用信号，节奏要等）> 中际旭创/扬杰（等回调，生意真价格贵筹码消化中）> 豪威/种业（看不清，等Q3/等政策）
+- **三个前提+两条证伪重排**：AI订单兑现/平安顶住利率/猪去化持续；两条同时证伪→全面防守
+- 核心现状证据：8/24板块高低切换（光模块-4.1% vs 农业+1.9%）、中际旭创主力+9.18亿 vs 86%套牢背离、士兰微缩量涨停+放量出货
+- SKILL.md 新增"第三步：收束未来投资方向"+"未来方向收束"区块+三条纪律；evals.json #11 加"未来投资方向"断言（共8条）
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-7/review.html`
+
+**定稿确认**：用户 2026-08-24 确认 iteration-7 输出（"这个可以"），skill 重设计完成。整个 `skills/` 目录仍 untracked，跟随用户决策 commit。
+
+### TODO #8: ✅ 已修复 — 雪球时间线 Skill 修复（实验 skill，未 commit）
+
+`skills/crawl-xueqiu-my-timeline/`（原 `skills/xueqiu/`）—— 雪球关注时间线爬取 + AI 观点分析 + PDF 报告 skill。原代码**跑不起来**，本次修复：
+
+| 问题 | 修复 |
+|------|------|
+| 🔴 `crawl_xueqiu_home_timeline_api.py:84` Python 2 语法 `except ValueError, OSError:` | → `except (ValueError, OSError):`，`ast.parse` 通过 |
+| 🔴 目录名 `xueqiu` ≠ frontmatter name `crawl-xueqiu-my-timeline`，SKILL.md 路径对不上 | 目录重命名为 `crawl-xueqiu-my-timeline`，SKILL.md 路径统一为 `skills/crawl-xueqiu-my-timeline/` |
+| 🟠 `check-cdp.sh` 硬编码 `CHROME_PATH="chromium"`（本机只有 google-chrome） | 改为自动探测 `google-chrome-stable`/`google-chrome`/`chromium`/`chromium-browser` |
+| 🟠 `check-agent-browser.sh` 用 `brew install node@22`（macOS 专用） | 改为跨平台检测，缺 node 时提示按平台安装 |
+| 🟡 登录步骤模糊（"需要先登录雪球账号"） | 新增「一次性登录」小节，写清 check-cdp → agent-browser open → 手动登录 3 步；标注 `10022 用户未登录` 错误码 |
+| 🟡 `is_official_account` 的 `user_id in [-1,0,""]` 对字符串 `"-1"` 失效（实测 bug） | 加字符串形态 `"-1"`/`"0"` |
+| 🟡 无自检手段 | 新增 `scripts/selfcheck.py`（纯单元级，不依赖网络/登录） |
+
+**扩展（双源综合分析）**：
+- 新增 `--hot`（仅热帖）/ `--follow-only`（仅关注）参数，默认**关注+热帖双源**合并去重
+- 热帖接口 `https://xueqiu.com/statuses/hot/listV2.json`（`items[].original_status` 结构与 home_timeline status 完全兼容，复用 `parse_status`）
+- 输出文件改名 `xueqiu_YYYYMMDD_YYYYMMDD.md`（原 `home_timeline_*.md` 废弃）
+- profile 路径从 `./browser_profiles/xueqiu_profile`（相对 cwd，会随提交入 git）改为 skill 目录外的 `../.profile_xueqiu`
+- evals.json 新增 2 个用例（热帖爬取、双源分析）
+
+**验证**：
+- `ast.parse` + `bash -n` 全过
+- `scripts/selfcheck.py` 全过（timestamp/官方账号过滤/HTML清理/评论链解析/分组输出端到端）
+- 端到端实测：`check-cdp.sh` 成功启动 google-chrome Debug 模式（9222）
+- **热帖实测**：`--hot --hours 48` 成功爬取 18 条真实热帖（@没听说过的股神/@阿企笔记/@周期王国/@但斌 等），生成 `xueqiu_20260822_20260824.md` 内容完整
+- **登录态**：用户已手动登录雪球，`home_timeline.json` 正常响应（不再 10022），但**该账号关注数为 0** → 关注时间线为空属正常；热帖源不依赖关注，已能产出数据
+- **✅ 端到端实测（2026-08-24）**：默认双源模式 `--hours 24` 成功爬取 **34 条真实动态 / 24 位发言人**（关注 16 + 热帖 18，去重）→ `/tmp/xueqiu_20260823_20260824.md`；AI 生成投资分析报告 `/tmp/雪球时间线_20260823_20260824.md`（含发言人统计、热帖榜、24 位发言观点总结、市场热点 TOP3）；`bunx mdpdf` 转 PDF（1.4MB，中文渲染验证通过）。Chrome Debug 已清理。**真实输出链路全通**。
+
+**依赖**：Chrome Debug 模式 + agent-browser + bun（`bunx mdpdf`）。登录态靠 Chrome profile 持久化（`../.profile_xueqiu`），首次需手动登录。
+
+**未 commit**：整个 `skills/` 目录是 untracked 新目录，跟随用户决策（是否入 bundled-skills / 单独 PR）。
 
 ---
 

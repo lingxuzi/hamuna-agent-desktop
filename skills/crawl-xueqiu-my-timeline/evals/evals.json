@@ -1,0 +1,165 @@
+{
+  "skill_name": "crawl-xueqiu-my-timeline",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "默认 24 小时爬取",
+      "prompt": "帮我爬取雪球最近 24 小时的关注时间线，生成投资分析报告 PDF",
+      "expected_output": "生成 home_timeline_YYYYMMDD_YYYYMMDD.md 文件，AI 分析后生成雪球时间线_YYYYMMDD_YYYYMMDD.pdf 报告"
+    },
+    {
+      "id": 2,
+      "eval_name": "指定日期范围",
+      "prompt": "爬取 2026-03-01 到 2026-03-06 的雪球时间线，整理成投资报告",
+      "expected_output": "使用 --start-date 和 --end-date 参数爬取指定范围，生成对应的 PDF 报告"
+    },
+    {
+      "id": 3,
+      "eval_name": "最近 7 天动态",
+      "prompt": "我想看看最近一周雪球上关注的大 V 都在讨论什么，帮我分析一下",
+      "expected_output": "使用 --days 7 参数爬取，AI 逐一总结所有发言人观点并生成 PDF"
+    },
+    {
+      "id": 4,
+      "eval_name": "市场热点分析",
+      "prompt": "今天市场有什么热点？帮我从雪球时间线整理一份分析报告",
+      "expected_output": "爬取最近 24 小时，AI 识别市场热点 TOP3 并生成投资建议"
+    },
+    {
+      "id": 5,
+      "eval_name": "短时爬取",
+      "prompt": "帮我看看雪球最近 2 小时有什么新动态",
+      "expected_output": "使用 --hours 2 参数爬取，生成对应的分析报告"
+    },
+    {
+      "id": 6,
+      "eval_name": "多用户 Subagent 调度测试",
+      "prompt": "爬取雪球最近 24 小时时间线，使用 subagent 分析所有发言人的观点并生成 PDF 报告",
+      "expected_output": "根据发言用户数量创建 TODO 列表，启动 subagent 分析（并发≤3），整合结果生成报告"
+    },
+    {
+      "id": 7,
+      "eval_name": "大量发言人场景",
+      "prompt": "帮我分析雪球上最近 3 天所有关注用户的发言，生成完整的投资分析报告",
+      "expected_output": "如果发言人>10 个，每个用户单独分配 TODO；3-10 个则每 3-5 个用户一个 TODO；<3 个则合并为 1 个 TODO"
+    },
+    {
+      "id": 8,
+      "eval_name": "Subagent 失败重试测试",
+      "prompt": "爬取雪球时间线并使用 subagent 分析，如果有 subagent 失败要重试",
+      "expected_output": "subagent 失败时自动重试最多 2 次，持续失败的在报告中标注'⚠️ 分析失败'"
+    },
+    {
+      "id": 9,
+      "eval_name": "热帖爬取",
+      "prompt": "帮我看看雪球最近有什么热帖，整理成分析报告",
+      "expected_output": "使用 --hot 或默认双源爬取热帖（hot/listV2.json），生成 xueqiu_*.md 并分析"
+    },
+    {
+      "id": 10,
+      "eval_name": "双源综合分析",
+      "prompt": "结合我的关注和雪球热帖，做个今天的市场综合分析",
+      "expected_output": "默认双源合并，同一帖子去重，报告含热帖榜 + 关注观点 + 投资建议"
+    },
+    {
+      "id": 11,
+      "eval_name": "深度研究（不提帖子）",
+      "prompt": "帮我爬取雪球最近24小时关注+热帖，对值得关注的方向做深度研究，写一篇独立的投资长文。不要提帖子/雪球，是完全独立的市场分析",
+      "expected_output": "独立深度分析长文：不提帖子、数据发现、零署名、投资长文风",
+      "assertions": [
+        {
+          "name": "不提帖子",
+          "text": "正文不出现'帖子''雪球''有人发帖'等措辞，是完全独立的市场分析",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "投资长文风",
+          "text": "连贯散文，无##标题、无列表、数据融入叙述",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "正文零署名",
+          "text": "不出现'@某大V说...'",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "深度数据发现",
+          "text": "至少 2-3 处独立研究的数据发现（财报/股东/筹码/同业）",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "逻辑兑现度",
+          "text": "对'涨价→业绩'等逻辑用财报数据判断兑现度",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "独立判断",
+          "text": "基于研究下独立判断，敢证伪",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "去AI味",
+          "text": "无AI味：无'压在X两个字上'式破题、排比对仗≤2处、转场词每种≤1次、收尾金句≤2处、数据不为凑数、详略有失衡",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "未来投资方向",
+          "text": "每个方向落到'未来1-3个月往哪看'（含信号表/作废条件），末段把方向串成整体判断",
+          "passed": null,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "eval_name": "A股行情交叉验证",
+      "prompt": "从雪球帖子整理投资方向，重点用行情数据验证帖子提到的 A 股标的",
+      "expected_output": "对候选 A 股标调用 get_realtime/get_kline/get_stock_financial 验证，标注吻合/背离/无法验证"
+    },
+    {
+      "id": 13,
+      "eval_name": "独立长文发帖格式",
+      "prompt": "生成一篇独立深度投资长文，能直接粘贴雪球发帖，不提帖子来源",
+      "expected_output": "投资长文：叙述式、无表格/代码块、雪球发帖兼容",
+      "assertions": [
+        {
+          "name": "不提帖子",
+          "text": "正文不出现'帖子/雪球/有人发帖'等措辞",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "无表格代码块",
+          "text": "无 Markdown 表格、无代码块",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "A股$格式",
+          "text": "A 股标的使用 $名称(代码)$ 格式",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "叙述式长文",
+          "text": "连贯散文，无分节标题无列表",
+          "passed": null,
+          "evidence": ""
+        },
+        {
+          "name": "零署名",
+          "text": "正文不出现'@某大V说...'",
+          "passed": null,
+          "evidence": ""
+        }
+      ]
+    }
+  ]
+}
