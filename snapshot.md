@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-24（xueqiu skill 重设计为「投资方向分析」+ skill-creator 评测，见 TODO #9）
+最后更新：2026-08-29（修复 desktop cron 执行报 "sidecar 找不到" — Sidecar generation header 名不匹配，见 TODO #10）
 
 ---
 
@@ -234,7 +234,37 @@ v2 transform 用 `updatedInput` 把 BashInput 重写成 `{ run_in_background: tr
 - **影响**: 仅 Linux 构建路径，无 macOS/Windows 影响
 - **关联**: §4 「Linux cuse externalBin 缺失修复细节」
 
-### TODO #9: ✅ 已定稿 — xueqiu skill 重设计（七轮迭代）+ skill-creator 评测
+### TODO #10: ✅ 已修复 — desktop cron 执行报 "sidecar 找不到"（Sidecar generation header 名不匹配）
+
+**症状**：desktop 应用定时任务（cron）配置后执行不正确，提示 sidecar 找不到 / 任务失败。日志 `unified-2026-08-26.log:16997` 证实：
+```
+[NODE ] [cron] execute-sync taskId=... failed via builtin: A valid Sidecar generation is required
+[RUST ] [sidecar] Background turn ... response: status=409 Conflict, body={"success":false,"error":"A valid Sidecar generation is required"}
+```
+
+**根因（自 Init commit 就存在的 header 名不匹配）**：
+- Node 侧 `src/server/utils/management-api-client.ts:31` 发送 `X-HamunaAgent-Sidecar-Generation`
+- Rust 侧 `src-tauri/src/management_api.rs:76` 读取 `x-hamuna-sidecar-generation`
+- HTTP header 名区分大小写折叠，但连字符位置不同就是**不同 header**（`x-hamunaagent-` vs `x-hamuna-sidecar-`）→ Rust 永远读不到 → 返回 409
+
+**触发链**：cron 定时触发 → Rust `execute_cron_task` → Node `/cron/execute-sync` → `createTaskDispatchGuard`（`src/server/index.ts:1101`）→ `managementApi('/api/task/turn/authorize')` → 带错 header → Rust 409 → dispatch guard 拒绝 → cron turn 失败。`/api/task/turn/authorize`、goal 端点、`/api/grok/bearer` 都强制校验此 header（共 6 处 `request_sidecar_generation` 调用）。
+
+**修复**：`management-api-client.ts` 的 header 名对齐 Rust 读的名字。Rust 是唯一权威读取方，改 Node 发名。
+
+- **改动**：`src/server/utils/management-api-client.ts:31` — `'X-HamunaAgent-Sidecar-Generation'` → `'X-Hamuna-Sidecar-Generation'`（1 行）
+- **新增**：`src/server/utils/management-api-client.unit.test.ts` — 回归测试断言发出的 header 名精确匹配 Rust 读名（`x-hamuna-sidecar-generation`）。注意：env var 在模块加载时读入 top-level const，测试必须用动态 `await import()` + 前置 `process.env` 设置
+- **重建**：`npm run build:server`（`src-tauri/resources/server-dist.js` 是 gitignored 构建产物，已重打）
+- **验证**：
+  | 验证 | 结果 |
+  |---|---|
+  | `npx vitest run --project unit -- src/server/utils/management-api-client.unit.test.ts` | ✅ 1/1 |
+  | `npx tsc --noEmit` | exit 0 |
+  | `npx eslint src/server/utils/management-api-client.{ts,unit.test.ts}` | exit 0 |
+  | `npm run test:classification` | ok |
+  | `grep X-Hamuna-Sidecar-Generation dist` | 1（正确名）/ 0（错误名） |
+- **未 commit**：2 文件改动 + 1 新测试文件 + rebuilt dist（gitignored），待用户拍板提交
+
+### TODO #9: 🔄 进行中 — xueqiu skill 重设计（九轮迭代）+ skill-creator 评测
 
 用户需求："重新设计输出，生成从真实数据深度分析得到的未来可能投资方向报告"。
 
@@ -325,7 +355,37 @@ v2 transform 用 `updatedInput` 把 BashInput 重写成 `{ run_in_background: tr
 - SKILL.md 新增"第三步：收束未来投资方向"+"未来方向收束"区块+三条纪律；evals.json #11 加"未来投资方向"断言（共8条）
 - viewer：`workspace/crawl-xueqiu-workspace/iteration-7/review.html`
 
-**定稿确认**：用户 2026-08-24 确认 iteration-7 输出（"这个可以"），skill 重设计完成。整个 `skills/` 目录仍 untracked，跟随用户决策 commit。
+**定稿确认**：用户 2026-08-24 确认 iteration-7 输出（"这个可以"），skill 重设计完成。已 commit（7d33651）。
+
+**iteration-8（选题打分收敛，用户要求"爬帖子→出3个选题→打分→取最高分选题进行剩余步骤"）**：
+- with-skill 测试：**待运行**
+- 核心变化：从"选 3-5 个方向平行研究"→"**出 3 个候选选题 → 4 维打分 → 取最高分 1 个 → 剩余步骤全围绕它**"
+- 打分维度：数据可挖深度 40% / 逻辑可验证度 25% / 未来可推演性 20% / 关注热度 15%
+- 成文从"多方向各写一段"→"**1 个主选题写透**（含对比标的/子链），其他选题一句背景带过"
+- SKILL.md：第一步改为选题打分、第二步只研究主选题、Subagent 调度加"选题打分 TODO"、写作自检加"单主选题"、风格/结构规则从"3-5方向"改"一主一深"
+- evals.json #11 加"选题打分收敛"断言（共 9 条）
+- 评测目录：`workspace/crawl-xueqiu-workspace/iteration-8/`
+
+**iteration-8 结果**：
+- with-skill 测试：**✅ 9/9 断言通过（100%）**，1431字 11段纯散文，聚焦单主选题
+- 选题打分执行规范：功率半导体涨价 7.4 > AI电力基础设施 6.9 > 光模块FCC 6.8，选中功率半导体（数据可挖/逻辑可验证/未来可推演三维最高）；打分未进正文，其余选题仅末段一句背景
+- 单主选题写透：主线（士兰微涨停打开/主力-7.7亿）+ 对比（扬杰 vs 士兰微 vs 新洁能）+ 筹码信号（35.69成本区上沿 vs 现价35.89）
+- 未来方向：'买质地不买名气'，信号表三看+作废条件三条+前提/推翻
+- 数据发现 5 处：士兰微扣非仅占53%、毛利率19.79% vs 均值30.07%、扬杰净利13/185+PE最低档8/118、筹码成本区位置、新洁能情绪票
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-8/review.html`
+
+**iteration-9（加厚度，用户反馈"太短了，字数不够"）**：
+- with-skill 测试：**待运行**
+- 问题：iteration-8 聚焦单选题导致文章缩到 1431 字，用户嫌短
+- 改法：聚焦单选题不变，但**把主选题写到足够厚**（2500-4000字）——通过 4 个"加厚维度"：①多标的展开（龙头+二线+新秀分层）②产业链拆解（上游供给/中游传导/下游需求）③历史复盘（同款行情相似案例）④未来情景推演（乐观/基准/悲观三情景+触发条件）
+- 其他选题仍作背景，主线份量不变
+
+**iteration-9 结果 + 标题铁律修订**：
+- ✅ **字数 4093 达标**（目标 2500-4000），4 个加厚维度全落地：多标的五档对比（士兰微/扬杰/新洁能/华润微/斯达）、产业链三环拆解、2021-22 缺货行情历史复盘、乐观/基准/悲观三情景
+- 数据发现 9 处：士兰微扣非仅+2.78%（净利+96%）、扬杰PE35 vs 士兰微70、斯达净利-74%/PE213、士兰微主力-7.73亿出货、筹码成本区、大基金持股、华润微业绩说明会、扬杰三业务翻倍
+- ⚠️ 发现 agent 用了 5 个 `##` 章节标题（违反原铁律），且 agent 报告谎称"无标题"
+- **用户拍板：保留标题**——4000 字长文用章节标题可读性更好，skill 铁律从"彻底无标题"改为"用加粗段标题替代 Markdown #"（雪球富文本支持加粗）
+- viewer：`workspace/crawl-xueqiu-workspace/iteration-9/review.html`
 
 ### TODO #8: ✅ 已修复 — 雪球时间线 Skill 修复（实验 skill，未 commit）
 

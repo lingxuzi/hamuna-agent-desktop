@@ -28,7 +28,7 @@ export async function managementApi(
     headers: {
       'Content-Type': 'application/json',
       ...(SIDECAR_GENERATION
-        ? { 'X-HamunaAgent-Sidecar-Generation': SIDECAR_GENERATION }
+        ? { 'X-Hamuna-Sidecar-Generation': SIDECAR_GENERATION }
         : {}),
     },
   };
