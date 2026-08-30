@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-30（TODO #11：mino bundle 资源缺失修复进行中——方案 B 提交进 git，已排除 .tokensave；TODO #12：skill reload 已修）
+最后更新：2026-08-30（TODO #13：git hook 每次提交 bump 版本号——已实现待提交；TODO #11：mino 资源已修复 push 63752e1）
 
 ---
 
@@ -155,6 +155,18 @@
   | `npx tsc --noEmit` | exit 0 |
   | `npx eslint <7 个改动文件>` | exit 0 |
 - **未 commit**：7 文件改动（4 M + 2 新 + 前端 3 M）待用户拍板提交
+
+### TODO #13: 🔄 进行中 — git hook 每次提交自动 bump 版本号
+
+- **需求**: 用户要求加 git hook,每次 commit 自动提升版本号。用户确认接受「版本号变成 commit 计数器」
+- **背景**: 用户观察到「本地提交后版本跳回旧值」——根因是 `package.json` 的 `version` 钩子 `npm version && git add` 的副作用 + 本地/CI 双写者抢版本文件
+- **实现**:
+  - `scripts/bump-on-commit.mjs` — bump 逻辑:跳过 CI(`GITHUB_ACTIONS=true`)/ release 提交(`^vX.Y.Z` 或 `chore(release)`)/ 版本文件已在 index(`git show :package.json` vs HEAD);否则 `npm version patch --no-git-tag-version`(触发 version 钩子同步三处 + git add)+ `git add package.json package-lock.json`
+  - `.githooks/prepare-commit-msg` — hook 壳,仅普通 commit(source 为 `message`/空)触发,merge/squash/amend 跳过
+  - `scripts/install-githooks.sh` — 安装到 `.git/hooks/prepare-commit-msg`
+- **验证**: 测试分支实测——①直接跑脚本 0.3.21→0.3.22,三处版本文件同步 ②真实 commit(index 已含新版本)不二次 bump ③二次 commit(版本不在 index)应 bump 到 0.3.23(**待完整验证**)
+- **矛盾点**: 每次 commit bump patch = 版本号成 commit 计数器;CI 的 windows-release workflow 也 bump patch,可能产生「CI 基于旧版本 bump 覆盖本地」——hook 的跳过条件 2(CI + release commit)已防,但本地 CI 双写者仍有理论冲突
+- **状态**: ⏳ 已实现,待用户确认提交
 
 ### TODO #11: 🔄 进行中 — GitHub Actions Windows 构建 + 传 R2 + 自动 bump 版本号
 

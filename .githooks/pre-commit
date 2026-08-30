@@ -1,0 +1,15 @@
+#!/bin/sh
+# 每次 commit 自动 bump patch 版本号（由 scripts/bump-on-commit.mjs 实现）。
+# 由 install-githooks.sh 安装到 .git/hooks/pre-commit。
+# 通过全局 chain-repo-hook（tokensave 约定）被调用。
+# pre-commit 阶段 git add 的版本文件会进当前 commit（git 在 pre-commit 后才生成 tree）。
+# 脚本失败不阻塞提交（bump-on-commit.mjs 内部 catch 并 exit 0）。
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -z "$REPO_ROOT" ] && exit 0
+
+BUMP_SCRIPT="$REPO_ROOT/scripts/bump-on-commit.mjs"
+if [ -f "$BUMP_SCRIPT" ]; then
+  node "$BUMP_SCRIPT"
+fi
+exit 0
