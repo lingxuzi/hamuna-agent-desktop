@@ -115,8 +115,6 @@ import {
  setNativeFloatingBallEnabled,
 } from '@/floating-ball/nativeFloatingBall';
 import {
- HAMUNA_GITHUB_URL,
- HAMUNA_RELEASES_URL,
  PLAYWRIGHT_DEVICE_PRESETS,
 } from './settingsSections';
 import {
