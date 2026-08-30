@@ -101,8 +101,7 @@ specs/assets/avatar-candidates/**/*-v*/
 specs/assets/avatar-candidates/**/r2/
 specs/assets/avatar-candidates/**/manifest.json
 
-# Default workspace (cloned by setup.sh)
-/mino/
+# mino workspace is now a bundled resource, tracked in git (was cloned by setup.sh)
 
 # Dev
 .claude/plans/hamuna/

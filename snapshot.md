@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-30（TODO #12：skill 安装后显式调用报 unknown command 已修；TODO #11：windows-release.yml 已写完待验证）
+最后更新：2026-08-30（TODO #11：mino bundle 资源缺失修复进行中——方案 B 提交进 git，已排除 .tokensave；TODO #12：skill reload 已修）
 
 ---
 
@@ -163,7 +163,13 @@
 - **方案**: 新增 `.github/workflows/windows-release.yml`(单 job, windows-latest),内联 `build_windows.ps1` / `publish_windows.ps1` 核心步骤(两者带 `Read-Host` 交互,不能直接 CI 调用),复用无交互的 `download_*.ps1` / npm scripts
 - **要点**: tauri build 前 MUST `Remove-Item Env:CI`(clap --ci 崩);版本号单一数据源 `package.json`, `npm version` 钩子同步 tauri.conf.json + Cargo.toml(实测也自动更新 package-lock.json);R2 走 rclone + `releases/v$Version/` + `update/` 清单
 - **所需 secrets**: `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `TAURI_SIGNING_PRIVATE_KEY`(+PASSWORD)
-- **状态**: ⏳ workflow 已写完(`.github/workflows/windows-release.yml`, 22 步),YAML 语法校验通过,逻辑已逐步骤核对;**待用户设置 secrets + 首跑验证**
+- **状态**: ⏳ workflow 已写完(`.github/workflows/windows-release.yml`, 22 步);**首跑失败 `resource path ..\mino doesn't exist`** — 修复中(见下)
+- **mino bundle 资源缺失修复（方案 B，用户拍板）**：
+  - **根因**: `mino/`(首启初始 workspace, `commands.rs` `cmd_initialize_bundled_workspace` 从 `resource_dir/mino` 复制到 `~/.hamuna/projects/mino/`)是产品 bundle 资源(`tauri.conf.json:58` `"../mino": "mino"`),但根 `.gitignore:105` `/mino/` 忽略 → CI checkout 后无 mino → tauri-build 资源校验失败
+  - **决策**: 方案 B = 提交 mino 进本仓库 git(CI 自包含 + 版本可控),弃方案 A(CI clone openmino,版本不可控)与方案 C(submodule,后续更新麻烦)
+  - **安全过滤**: `mino/.gitignore` 新增 `.tokensave/` 排除——内含 `config.json`(机器特定绝对路径 `root_dir: /home/hmcz/.hamuna/setup-cache/mino`)与 `tokensave.db`(主仓库历史曾因同名 .db 超 100MB 被 filter-repo 清理)。`.config/`(凭据)原本已排除
+  - **落地**: 根 `.gitignore` 移除 `/mino/` → `git add mino/` → 284 文件 / 4.6MB,`git add -n` 验证 `.tokensave` / `.db` / `.config` 零跟踪
+  - **⚠️ 待办**: `commands.rs:368` 注释提及 `~/.hamuna/projects/mino link returns false`——首启后用户可能已建过 `~/.hamuna/projects/mino`,与 bundle 复制逻辑的交互需验证(下轮验证)
 
 
 
