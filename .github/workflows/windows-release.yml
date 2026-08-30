@@ -26,8 +26,8 @@ jobs:
 
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"
-      # R2 默认值；可用 secrets.R2_BUCKET 覆盖
-      R2_BUCKET: ${{ secrets.R2_BUCKET || 'hamuna-releases' }}
+      # R2 默认值；可用 secrets.R2_BUCKET 覆盖（真实 bucket 是 hamuna-agent）
+      R2_BUCKET: ${{ secrets.R2_BUCKET || 'hamuna-agent' }}
       DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL || 'https://download.hamuna.io' }}
 
     steps:
@@ -252,21 +252,21 @@ jobs:
           if (-not $nsisExe) { throw "NSIS installer not found — build failed" }
           if (-not $updateZip) { throw "updater .nsis.zip not found" }
 
-          & $rclone --config=$cfg copy $nsisExe.FullName "r2:$bucket/releases/v$version/"
+          & $rclone --config=$cfg copy $nsisExe.FullName "r2:$bucket/releases/v$version/" --s3-no-check-bucket
           if ($LASTEXITCODE -ne 0) { throw "upload NSIS failed" }
 
           if ($portableZip) {
-            & $rclone --config=$cfg copy $portableZip.FullName "r2:$bucket/releases/v$version/"
+            & $rclone --config=$cfg copy $portableZip.FullName "r2:$bucket/releases/v$version/" --s3-no-check-bucket
             if ($LASTEXITCODE -ne 0) { throw "upload portable failed" }
           }
 
           $updateUploadName = "HamunaAgent_${version}_x86_64.nsis.zip"
-          & $rclone --config=$cfg copyto $updateZip.FullName "r2:$bucket/releases/v$version/$updateUploadName"
+          & $rclone --config=$cfg copyto $updateZip.FullName "r2:$bucket/releases/v$version/$updateUploadName" --s3-no-check-bucket
           if ($LASTEXITCODE -ne 0) { throw "upload updater zip failed" }
 
           $signature = ""
           if ($sigFile) {
-            & $rclone --config=$cfg copyto $sigFile.FullName "r2:$bucket/releases/v$version/$updateUploadName.sig"
+            & $rclone --config=$cfg copyto $sigFile.FullName "r2:$bucket/releases/v$version/$updateUploadName.sig" --s3-no-check-bucket
             if ($LASTEXITCODE -ne 0) { throw "upload sig failed" }
             $signature = (Get-Content $sigFile.FullName -Raw).Trim()
           } else {
@@ -309,7 +309,7 @@ jobs:
           $latestWinJson = $latestWin | ConvertTo-Json -Depth 5
           [System.IO.File]::WriteAllText("$manifestDir/latest_win.json", $latestWinJson, [System.Text.UTF8Encoding]::new($false))
 
-          & $rclone --config=$cfg copy "$manifestDir/" "r2:$bucket/update/"
+          & $rclone --config=$cfg copy "$manifestDir/" "r2:$bucket/update/" --s3-no-check-bucket
           if ($LASTEXITCODE -ne 0) { throw "upload manifests failed" }
 
           Write-Host "R2 upload complete: v$version"

@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-30（TODO #13：git hook 每次提交 bump 版本号——已完成 ffd4b83 未 push；TODO #11：mino 资源已修复 push 63752e1）
+最后更新：2026-08-30（TODO #11：R2 上传 AccessDenied 修复——rclone 缺 --s3-no-check-bucket + 默认 bucket 错；TODO #13：git hook 每次提交 bump 版本号已完成 push 521aba3）
 
 ---
 
