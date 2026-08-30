@@ -1,0 +1,326 @@
+name: Windows Release
+
+# 手动触发：编译 Windows x64 版本 → 上传 Cloudflare R2 → 自动 bump 版本号并回写仓库。
+# 不自动写 CHANGELOG（与本地 pre_release.ps1 的人工流程分开），发版后人工补。
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: '版本号提升类型（bump 后会自动 commit + tag + push）'
+        required: true
+        type: choice
+        default: 'patch'
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows x64 → R2
+    runs-on: windows-latest
+
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      # R2 默认值；可用 secrets.R2_BUCKET 覆盖
+      R2_BUCKET: ${{ secrets.R2_BUCKET || 'hamuna-releases' }}
+      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL || 'https://download.hamuna.io' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ============================================================
+      # 1. Bump 版本号（package.json 单一数据源；version 钩子同步
+      #    tauri.conf.json + Cargo.toml）。.npmrc 已设 git-tag-version=false，
+      #    此步只改文件、不 commit/tag。
+      # ============================================================
+      - name: Bump version
+        id: bump
+        shell: pwsh
+        run: |
+          npm version ${{ github.event.inputs.bump }} --no-git-tag-version
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Bumped to $ver"
+
+      # ============================================================
+      # 2. 下载 gitignored 构建资源（复用仓库内无交互脚本）
+      # ============================================================
+      - name: Download Node.js runtime (bundled)
+        shell: bash
+        run: bash scripts/download_nodejs.sh --windows x64
+
+      - name: Download cuse binary
+        shell: pwsh
+        run: |
+          & ./scripts/download_cuse.ps1
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "download_cuse.ps1 failed" }
+
+      - name: Download Python installer
+        shell: pwsh
+        run: |
+          & ./scripts/download_python.ps1
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "download_python.ps1 failed" }
+
+      - name: Download uvx
+        shell: pwsh
+        run: |
+          & ./scripts/download_uv.ps1
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "download_uv.ps1 failed" }
+
+      - name: Download Git installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path src-tauri/nsis -Force | Out-Null
+          $url = "https://github.com/git-for-windows/git/releases/download/v2.52.0.windows.1/Git-2.52.0-64-bit.exe"
+          Invoke-WebRequest -Uri $url -OutFile "src-tauri/nsis/Git-Installer.exe" -UseBasicParsing
+          if (-not (Test-Path "src-tauri/nsis/Git-Installer.exe")) { throw "Git installer download failed" }
+
+      - name: Stage VC++ Runtime DLLs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path src-tauri/resources -Force | Out-Null
+          Copy-Item "$env:SystemRoot\System32\vcruntime140.dll" "src-tauri/resources/" -Force
+          Copy-Item "$env:SystemRoot\System32\vcruntime140_1.dll" "src-tauri/resources/" -Force
+
+      # ============================================================
+      # 3. 构建前端 / 后端产物
+      # ============================================================
+      - name: Build server / bridge / cli
+        run: |
+          npm run build:server
+          npm run build:bridge
+          npm run build:cli
+
+      - name: Build tsx-runtime (win32-x64)
+        run: npm run build:tsx-runtime -- win32 x64
+
+      - name: Stage Claude SDK native binary
+        shell: pwsh
+        run: |
+          & ./scripts/ensure_claude_sdk_package.ps1 -Arch x64
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "ensure_claude_sdk_package.ps1 failed" }
+          $src = "node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe"
+          if (-not (Test-Path $src)) { throw "claude.exe not found: $src" }
+          $dest = "src-tauri/resources/claude-agent-sdk"
+          if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item $src "$dest/claude.exe" -Force
+
+      - name: Pre-install sharp (win32-x64)
+        shell: pwsh
+        run: |
+          $sharpDir = "src-tauri/resources/sharp-runtime"
+          if (Test-Path $sharpDir) { Remove-Item -Recurse -Force $sharpDir }
+          New-Item -ItemType Directory -Path $sharpDir -Force | Out-Null
+          Set-Content -Path "$sharpDir/package.json" -Value '{"name":"sharp-runtime","private":true,"version":"1.0.0","dependencies":{"sharp":"0.34.5"}}' -Encoding utf8
+          Push-Location $sharpDir
+          npm install --no-audit --no-fund --no-save --ignore-scripts
+          npm install --no-save --force --no-audit --no-fund --ignore-scripts "@img/sharp-win32-x64@0.34.5"
+          if ($LASTEXITCODE -ne 0) { throw "sharp install failed" }
+          Pop-Location
+
+      - name: Build frontend
+        run: npm run build:web
+
+      # ============================================================
+      # 4. Tauri release build
+      # ============================================================
+      - name: Build Tauri app (NSIS)
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # 关键：GH runner 的 CI=1 会被 clap 当成 --ci 的值（只接受 true/false）→ 构建崩。必须移除。
+          Remove-Item Env:CI -ErrorAction SilentlyContinue
+          npx tauri build --target x86_64-pc-windows-msvc --config src-tauri\tauri.windows.conf.json
+          if ($LASTEXITCODE -ne 0) { throw "tauri build failed" }
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $targetDir = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $nsisDir = "$targetDir/bundle/nsis"
+          $exePath = "$targetDir/hamuna.exe"
+          if (-not (Test-Path $exePath)) { Write-Host "hamuna.exe not found, skipping portable"; exit 0 }
+          $portableDir = Join-Path $targetDir "portable"
+          if (Test-Path $portableDir) { Remove-Item -Recurse -Force $portableDir }
+          New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
+          Copy-Item $exePath $portableDir -Force
+          foreach ($dll in @("vcruntime140.dll", "vcruntime140_1.dll")) {
+            $dllSrc = Join-Path "src-tauri/resources" $dll
+            if (Test-Path $dllSrc) { Copy-Item $dllSrc $portableDir -Force }
+          }
+          $resourcesSource = Join-Path $targetDir "resources"
+          if (Test-Path $resourcesSource) { Copy-Item $resourcesSource $portableDir -Recurse -Force }
+          $zipName = "HamunaAgent_${env:VERSION}_x86_64-portable.zip"
+          $zipPath = Join-Path $nsisDir $zipName
+          if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+          Compress-Archive -Path "$portableDir/*" -DestinationPath $zipPath -Force
+          Remove-Item -Recurse -Force $portableDir
+          Write-Host "Created $zipName"
+
+      # ============================================================
+      # 5. 上传到 Cloudflare R2（rclone；复用 publish_windows.ps1 模式）
+      # ============================================================
+      - name: Install rclone
+        shell: pwsh
+        run: |
+          $zip = "$env:TEMP\rclone.zip"
+          Invoke-WebRequest -Uri "https://downloads.rclone.org/rclone-current-windows-amd64.zip" -OutFile $zip -UseBasicParsing
+          $dir = "$env:TEMP\rclone"
+          if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $exe = Get-ChildItem -Path $dir -Recurse -Filter "rclone.exe" | Select-Object -First 1
+          if (-not $exe) { throw "rclone.exe not found" }
+          New-Item -ItemType Directory -Path .ci -Force | Out-Null
+          Copy-Item $exe.FullName ".ci/rclone.exe" -Force
+          # 写入 rclone 配置：无 BOM（rclone 拒收 BOM），凭证走 env var 不落盘。
+          # 不用 PowerShell here-string（结束符 "@ 必须顶格，与 YAML 块缩进冲突），改用逐行写。
+          $cfg = ".ci/rclone.conf"
+          $lines = @(
+            '[r2]',
+            'type = s3',
+            'provider = Cloudflare',
+            'env_auth = true',
+            "endpoint = https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com",
+            'acl = private'
+          )
+          [System.IO.File]::WriteAllLines((Join-Path (Get-Location) $cfg), $lines, [System.Text.UTF8Encoding]::new($false))
+          Write-Host "rclone ready"
+
+      - name: Upload to R2
+        shell: pwsh
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          $ErrorActionPreference = "Continue"
+          $rclone = ".ci/rclone.exe"
+          $cfg = ".ci/rclone.conf"
+          $nsisDir = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          $version = $env:VERSION
+          $bucket = $env:R2_BUCKET
+          $baseUrl = $env:DOWNLOAD_BASE_URL
+
+          $nsisExe = Get-ChildItem -Path $nsisDir -Filter "*.exe" | Where-Object { $_.Name -notmatch "portable" } | Select-Object -First 1
+          $portableZip = Get-ChildItem -Path $nsisDir -Filter "*portable*.zip" | Select-Object -First 1
+          $updateZip = Get-ChildItem -Path $nsisDir -Filter "*.nsis.zip" | Select-Object -First 1
+          $sigFile = Get-ChildItem -Path $nsisDir -Filter "*.nsis.zip.sig" | Select-Object -First 1
+
+          if (-not $nsisExe) { throw "NSIS installer not found — build failed" }
+          if (-not $updateZip) { throw "updater .nsis.zip not found" }
+
+          & $rclone --config=$cfg copy $nsisExe.FullName "r2:$bucket/releases/v$version/"
+          if ($LASTEXITCODE -ne 0) { throw "upload NSIS failed" }
+
+          if ($portableZip) {
+            & $rclone --config=$cfg copy $portableZip.FullName "r2:$bucket/releases/v$version/"
+            if ($LASTEXITCODE -ne 0) { throw "upload portable failed" }
+          }
+
+          $updateUploadName = "HamunaAgent_${version}_x86_64.nsis.zip"
+          & $rclone --config=$cfg copyto $updateZip.FullName "r2:$bucket/releases/v$version/$updateUploadName"
+          if ($LASTEXITCODE -ne 0) { throw "upload updater zip failed" }
+
+          $signature = ""
+          if ($sigFile) {
+            & $rclone --config=$cfg copyto $sigFile.FullName "r2:$bucket/releases/v$version/$updateUploadName.sig"
+            if ($LASTEXITCODE -ne 0) { throw "upload sig failed" }
+            $signature = (Get-Content $sigFile.FullName -Raw).Trim()
+          } else {
+            Write-Host "WARNING: no .sig file — TAURI_SIGNING_PRIVATE_KEY likely unset, auto-update will fail"
+          }
+
+          # ---- 生成更新清单（无 BOM UTF-8）----
+          $manifestDir = Join-Path $env:TEMP "hamuna-manifest"
+          if (Test-Path $manifestDir) { Remove-Item -Recurse -Force $manifestDir }
+          New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
+          $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+          $manifest = [ordered]@{
+            version   = $version
+            notes     = "HamunaAgent v$version"
+            pub_date  = $pubDate
+            signature = $signature
+            url       = "$baseUrl/releases/v$version/$updateUploadName"
+            downloads = @{
+              installer = "$baseUrl/releases/v$version/$($nsisExe.Name)"
+            }
+          }
+          if ($portableZip) {
+            $manifest.downloads["portable"] = "$baseUrl/releases/v$version/$($portableZip.Name)"
+          }
+          $manifestJson = $manifest | ConvertTo-Json -Depth 5
+          [System.IO.File]::WriteAllText("$manifestDir/windows-x86_64.json", $manifestJson, [System.Text.UTF8Encoding]::new($false))
+
+          $latestWin = [ordered]@{
+            version       = $version
+            pub_date      = $pubDate
+            release_notes = "HamunaAgent v$version"
+            downloads     = @{
+              win_x64 = @{
+                name = "Windows x64"
+                url  = "$baseUrl/releases/v$version/$($nsisExe.Name)"
+              }
+            }
+          }
+          $latestWinJson = $latestWin | ConvertTo-Json -Depth 5
+          [System.IO.File]::WriteAllText("$manifestDir/latest_win.json", $latestWinJson, [System.Text.UTF8Encoding]::new($false))
+
+          & $rclone --config=$cfg copy "$manifestDir/" "r2:$bucket/update/"
+          if ($LASTEXITCODE -ne 0) { throw "upload manifests failed" }
+
+          Write-Host "R2 upload complete: v$version"
+          Write-Host "  updater: $baseUrl/update/windows-x86_64.json"
+          Write-Host "  website: $baseUrl/update/latest_win.json"
+
+      # ============================================================
+      # 6. 回写仓库：commit + tag + push（workflow_dispatch 不会循环触发）
+      # ============================================================
+      - name: Commit and push version bump
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Pushing v$VERSION tag + version-bump commit"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          # 若构建意外改了其他文件（如 bundled dist），一并纳入避免污染
+          git status --short
+          if git diff --cached --quiet; then
+            echo "No version changes to commit — version bump may have already been committed"
+          else
+            git commit -m "v${VERSION}" -m "chore(release): bump to v${VERSION} via windows-release workflow"
+            git tag "v${VERSION}"
+            git push origin HEAD --tags
+          fi

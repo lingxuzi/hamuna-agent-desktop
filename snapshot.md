@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-29（修复 desktop cron 执行报 "sidecar 找不到" — Sidecar generation header 名不匹配，见 TODO #10）
+最后更新：2026-08-30（TODO #11：windows-release.yml 已写完待验证）
 
 ---
 
@@ -130,7 +130,16 @@
 
 ## 3. 当前 TODO（待完成）
 
-### TODO #2: 观察现有 pending 改动
+### TODO #11: 🔄 进行中 — GitHub Actions Windows 构建 + 传 R2 + 自动 bump 版本号
+
+- **需求**: GitHub 上加一个 action,编译 Windows 版本并提交到 Cloudflare R2,自动提升版本号
+- **决策（用户已确认）**: bump 后回写仓库(commit + tag + push) / `workflow_dispatch` 手动触发 / 只传 R2 不发 GitHub Release
+- **方案**: 新增 `.github/workflows/windows-release.yml`(单 job, windows-latest),内联 `build_windows.ps1` / `publish_windows.ps1` 核心步骤(两者带 `Read-Host` 交互,不能直接 CI 调用),复用无交互的 `download_*.ps1` / npm scripts
+- **要点**: tauri build 前 MUST `Remove-Item Env:CI`(clap --ci 崩);版本号单一数据源 `package.json`, `npm version` 钩子同步 tauri.conf.json + Cargo.toml(实测也自动更新 package-lock.json);R2 走 rclone + `releases/v$Version/` + `update/` 清单
+- **所需 secrets**: `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `TAURI_SIGNING_PRIVATE_KEY`(+PASSWORD)
+- **状态**: ⏳ workflow 已写完(`.github/workflows/windows-release.yml`, 22 步),YAML 语法校验通过,逻辑已逐步骤核对;**待用户设置 secrets + 首跑验证**
+
+
 
 - `M .mcp.json`
 - `M package-lock.json`
