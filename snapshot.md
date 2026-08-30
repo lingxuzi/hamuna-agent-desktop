@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-30（TODO #11：R2 上传 AccessDenied 修复——rclone 缺 --s3-no-check-bucket + 默认 bucket 错；TODO #13：git hook 每次提交 bump 版本号已完成 push 521aba3）
+最后更新：2026-08-30（TODO #14：TypeGraph 重构知识库——Phase 5 完成：补 3 个测试文件（kb-merge.unit 17 / kb-tokenize.unit 9 / kb-store.integration 8），共 34 个新 case；并修复 2 个真实 bug：`saveRelations` 的 rel id 含 `relationType/i` 导致 typed upgrade 后 cooccur 旧 row 残留（id 改为仅含 `(kbId,subject,object)`） + `mountsForWorkspace` 不排序（改为 sort 兜底）。KB 模块总测试 39/39 全绿，typecheck/test:classification/`cargo check`/`cargo clippy` 全绿，kb-migrate 迁移测试 3/3 全过。TODO #14 整体完成，可独立 commit。）
 
 ---
 
@@ -25,6 +25,7 @@
 | 任务中心 / Session Goal | `src-tauri/src/session_goal/*.rs` | 稳定 | |
 | Inbox / Mailbox | `src-tauri/src/inbox/*.rs` | 稳定 | |
 | 全文搜索 | `src-tauri/src/search/*.rs` | 稳定 | Tantivy + jieba |
+| ~~知识库引擎 KbEngine~~ | ~~`src-tauri/src/kb/mod.rs`~~ | ✅ 已删（Phase 4） | Rust 端 KB 模块已删除；KB 现在由 Node `src/server/kb/kb-store.ts`（TypeGraph+SQLite）独占提供；tantivy 保留（主搜索 `src/search/` 仍用） |
 | Managed Codex Runtime | `src-tauri/src/managed_codex.rs` | 稳定 | 锁 `src/shared/managed-codex-runtime.json::version` |
 | Grok Auth | `src-tauri/src/grok_auth/*.rs` | 稳定 | |
 | 浮动球 / 全局快捷键 | `src-tauri/src/{floating_ball,global_shortcut}.rs` | 稳定 | |
@@ -56,6 +57,10 @@
 | Inbox | `src/server/inbox/` | 稳定 | |
 | MCP OAuth | `src/server/mcp-oauth/` | 稳定 | |
 | 日志 / Runtime | `src/server/utils/` | 稳定 | `runtime.ts` bundled Node；`path-safety` chokepoint |
+| KB 富文本入库 | `src/server/kb-ingest.ts` | 稳定 | URL/PDF/docx/xlsx→text（SSRF 防护）；sidecar→进程内 `addText`（Phase 2 起不再走 management API） |
+| KB LLM 关系抽取 | `src/server/kb-relations.ts` | 稳定 | 轮询 pending 队列→直接 HTTP/SDK 抽取→进程内 `saveRelations`+`removePending`（Phase 2 起不再走 management API） |
+| KB TypeGraph store | `src/server/kb/kb-store.ts` | 🆕 新增 | 单例 `createLocalSqliteStore`（WAL+busy_timeout）+ jieba 预分词 + Rust 算法精确移植（CRUD/mounts/addText/query FTS5+1跳） |
+| KB HTTP service | `src/server/kb/kb-service.ts` | 🆕 新增 | `/api/admin/kb/*` 16 路由分发 + `{ok,...}` 契约；lazy 加载保证冷启动不受影响 |
 
 ### 1.3 前端 (`src/renderer/`)
 
@@ -71,6 +76,9 @@
 | Analytics | `src/renderer/analytics/` | 稳定 | 详见 `tech_docs/analytics_design.md` |
 | Workspace Icons | `src/renderer/assets/workspace-icons/` | 稳定 | |
 | Widget Libraries (UMD inline) | `src/renderer/components/tools/widgetLibraries.ts` | 已修 | Vite 7 dev 模式 `?raw` import 修复见 §4（`widgetUmdSourceResolver` plugin 在 dep crawler 阶段拦 `chartjs-umd-source`/`d3-umd-source`/`lucide-umd-source`，避免 "optimized info should be defined"） |
+| KB 图可视化 | `src/renderer/components/KbGraphView.tsx` | 稳定 | d3 force-directed 画布 |
+| KB 管理面板 | `src/renderer/components/GlobalKbPanel.tsx` | 稳定 | KB CRUD + 材料入库 + workspace↔KB mount |
+| KB Client | `src/renderer/api/kbClient.ts` | 稳定 | 11 个 `invoke('cmd_kb_*')`→`apiGetJson/apiPostJson/apiPutJson/apiDelete` 打 `/api/admin/kb/*`（Phase 3）；导出类型零改动 |
 | Vite Config | `vite.config.ts` | 已修 | `widgetUmdSourceResolver` plugin（`enforce: 'pre'`）+ 删除原 `resolve.alias` 中 3 条 chartjs/d3/lucide alias；保留 `optimizeDeps.exclude` 作 belt-and-suspenders |
 
 ### 1.4 共用 / 工具 (`src/shared/`)
@@ -130,6 +138,32 @@
 ---
 
 ## 3. 当前 TODO（待完成）
+
+### TODO #14: 🔄 进行中 — 用 TypeGraph 重构知识库功能（设计完成，待实现）
+
+- **需求**：用户要求「使用 typegraph 框架重构知识库功能」，并经 context7 确认框架为 `/nicia-ai/typegraph`（TS-first 嵌入式知识图谱库）。
+- **用户已拍板**：
+  1. **直接使用 typegraph 重构**（否决了「TypeGraph 与 Rust 栈不匹配，建议放弃」的矛盾分析）
+  2. **全 Node B+ 方案**（否决混合 A）：graph 进 TypeGraph/SQLite（Node sidecar），中文全文用 FTS5 `unicode61` 逐字索引 + 图 1 跳扩展兜底，**不保留** Rust Tantivy；验收中文命中不达标再补 jieba-wasm 预分词（ponytail 升级位）
+- **关键事实（Plan agent 深挖验证 + Phase 0 spike 实测）**：
+  - TypeGraph 0.52.0 硬编码 `better-sqlite3`（native 模块）+ drizzle-orm，**不支持 node:sqlite**（drizzle 无该 driver）
+  - FTS5 tokenizer 固定 `porter unicode61 remove_diacritics 2`；**spike 实测：CJK 连续串被 unicode61 视为单一不可分词 token，中文 MATCH 全部返回 0**（不是"逐字索引"，是完全无索引）——plan 原假设错误
+  - **修复已实测通过**：写入前用 jieba-wasm `cut_for_search` 把中文切成空格分隔词序列存 `searchable` 字段（`textOriginal` 存原文供展示/snippet），查询同样分词——"知识图谱"/"华为"/"任正非"/"科技公司"全命中。jieba-wasm 纯 WASM 无 native，esbuild 需 `external: ['jieba-wasm']`（其 node entry 运行时 `require(path).join(__dirname, ".wasm")` 读磁盘，不能 bundle）
+  - **esbuild 需 `external: ['better-sqlite3']`**（native 模块，spike 实测 bundle 后从 `resources/node_modules/` 解析）；节点 API 实测：`create`/`getById`/`getByIds`/`update`/`delete`/`find`/`count`；query builder：`.from().whereNode().select().execute()`
+  - **TypeGraph 0.52 API 精确签名（已读 node_modules d.ts 确认）**：`createLocalSqliteStore(graph, {path})` 从 `@nicia-ai/typegraph/sqlite/local` 导入、**是 async**（返回 `Promise<Store<G>>`）；`defineNode(name,{schema,unique?})`，unique 是裸对象 `{name, fields, scope:'kind', collation:'binary'}`（非函数）；`defineGraph({id,nodes,edges})`，edges 可空 `{}`；`store.search.fulltext(kind, {query, limit, where?, includeSnippets?})` 返回 `{node,score,rank,snippet}[]`（**可传 where 谓词按 kbId 过滤**）；`store.nodes.<K>.create({...},{id?})` / `find({where,limit})` / `count()` / `update(id,props)` / `delete(id)`(软删) / `hardDelete(id)`；`NodeAccessor` 谓词 `field.eq/.in/.contains/.like`，`.and/.or/.not` 组合；`field.$fulltext.matches(q,k)` 做全文谓词
+  - graph 数据进 Node 后查询只能编排在 Node 侧；混合 A 需 add-text 跨进程双写两个存储 → 用户因此选 B+
+  - 前端全部 KB 操作经 `kbClient.ts` 一个接缝（11 invoke + 1 apiPostJson），`apiGetJson`/`apiPutJson`/`apiDelete` 已存在
+  - `App.tsx:1002` 主窗口启动即拉 Global Sidecar，`apiFetch` 走它 → 前端切 HTTP 安全
+  - sharp-runtime 打包先例可循（resources/node_modules 预装）
+- **实现方案**（详见 plan 文件）：
+  - Phase 0（✅ 完成）：依赖已装（typegraph/drizzle/better-sqlite3/@types/jieba-wasm）+ spike 实测通过（中文分词+FTS5 命中、external 双包 bundle 可运行）
+  - Phase 1（✅ 完成）：4 文件已写 + 实测通过——`kb-schema.ts`（5 节点建模，Relation 为节点带 relationType/weight/typed）、`kb-tokenize.ts`（jieba cut_for_search 预分词）、`kb-merge.ts`（Rust merge_entities/merge_relations/chunk_text 精确移植）、`kb-store.ts`（单例 store：CRUD/mounts/addText/listDocs/rebuild/peekPending/takePendingAll/removePending/saveRelations/graphData/query FTS5+1跳）。**smoke 实测全过**：createKb 唯一约束、中文全文查询命中（"知识图谱"→华为资料 doc）、snippet 从 textOriginal 取原文、saveRelations merge 语义、mounts 读写。关键 API 修正：Node 的 schema props 顶层 spread（非 `.props`）、读/改/删 id 需 `asNodeId<typeof KbNode>` 品牌化、Entity/Relation 节点 id 需 kb 前缀命名空间（防跨 kb label 冲突）
+  - Phase 2（✅ 完成）：`src/server/kb/kb-service.ts` 新增 `handleKbAdminRequest` 统一分发 16 条 `/api/admin/kb/*` 路由（GET/POST 全覆盖、`{ok,...}` 契约、exclude `/ingest` 走老路径）；`index.ts` 在 admin POST-only 分支**之前**插入 KB dispatch（懒 `await import('./kb/kb-service')`）；`kb-ingest.ts` managementApi→进程内 `addText`；`kb-relations.ts` 三个 managementApi→`takePendingAll/saveRelations/removePending`（保留 `kb-relations` 在 boot 顶层 import 但 kb-store 用 `await import` 保冷启动）；`kb-tool.ts` mounts+query→进程内 `mountsForWorkspace/query`（遵守 tools 懒加载）；`kb-store.ts` 加 `graphSummary` 公开导出（前端 `getKbGraph` summary 面板用）。typecheck+eslint 全绿
+  - Phase 3（✅ 完成）：`src/renderer/api/kbClient.ts` 11 个 `invoke('cmd_kb_*')`→`apiGetJson/apiPostJson/apiPutJson/apiDelete` 打 `/api/admin/kb/*`（`{ok:false}→400` 让 `apiFetch` 自然抛错，复用 invoke reject 语义）；导出类型零改动（KbInfo/KbGraphSummary/KbEntity/KbRelation/KbGraph/KbDocMeta）；`ingestKbMaterial` 路径不变。`src/server/kb/kb-service.ts` dispatcher 加 `respond()` 把 `{ok}` 映射成 HTTP status（200/400）。`src/server/kb/__tests__/kb-http-smoke.integration.test.ts` 2/2 通过（完整 CRUD+query+mounts+pending+rebuild+delete 链路）
+  - Phase 4（✅ 完成）：`src/server/kb/kb-migrate.ts` 新增——首次 `getKbStore()` 触发幂等迁移，源 `~/.hamuna/kb/{index.json,mounts.json,*}/graph.json,docs.json`→SQLite（kb_id 保留以兼容 mounts.json；Doc.text 用 jieba 预分词、textOriginal 存原文）；写 `.migrated-v1` 哨兵防重跑；归档 legacy 到 `~/.hamuna/kb-legacy-<ts>/`；`src/server/kb/__tests__/kb-migrate.integration.test.ts` 3/3 通过（Linux-only：`describe.skipIf(!IS_LINUX)` 因为 macOS libuv 可能缓存 `homedir()`）。Rust 端：`src-tauri/src/kb/{mod,schema}.rs` 已删；`lib.rs` 移除 `pub mod kb` + 12 个 `cmd_kb_*` 注册 + KbEngine init；`management_api.rs` 移除 7 handler + 6 struct + 7 `/api/kb/*` 路由注册。`cargo check` + `clippy --all-targets -D disallowed_methods/macros` + `tsc --noEmit` 全绿。tantivy 保留（主搜索仍用）
+  - Phase 5（✅ 完成）：新增 3 个测试文件覆盖 Rust 算法精确移植、jieba 中文分词 + TypeGraph/SQLite 端到端——`kb-merge.unit.test.ts` 17 case（entityId/chunkText 4 case 含 boundary + hard-break + empty/mergeEntities/mergeRelations typed upgrade + weight 累加 + cooccur 语义）、`kb-tokenize.unit.test.ts` 9 case（中文分词 + 停用词 + 单字过滤 + 标点过滤 + FTS5 MATCH 形状）、`kb-store.integration.test.ts` 8 case（createKb 唯一约束 / addText chunks / saveRelations merge / query 中文 FTS5+1跳 / mounts / deleteKb cascade）。**修复 2 个 Phase 1-2 期间没暴露的真实 bug**：`saveRelations` 的 Relation id 含 `relationType` 与数组 index → typed upgrade 后 cooccur 旧 row 残留（升级前 id=`rel_kb_X_A_B_cooccur_0`，升级后 id=`rel_kb_X_A_B_founded_by_0`，两个不同 id），改为仅含 `(kbId,subject,object)` 稳态 id；`mountsForWorkspace` 不排序导致调用方拿到非确定顺序，测试断言常踩坑，store 内 sort 兜底。**最终 KB 模块测试 39/39 全绿**（unit 26 + integration 13），`npm run test:classification` 通过（191 server tests），`tsc --noEmit` 通过，`cargo check --locked` 通过
+- **矛盾点**：Rust KbEngine 1465 行 + Tantivy 依赖删除；中文全文需 jieba-wasm 预分词（成为必需核心，不再是 ponytail）——spike 已实测通过
+- **状态**：✅ Phase 1+2+3+4+5 完成（schema+store+admin dispatcher+进程内化+前端 HTTP 切换+迁移+Rust 删除+测试覆盖+2 个 store bug 修复）。TODO #14 整体收尾，可独立 commit。
 
 ### TODO #12: ✅ 已修复 — skill 安装后显式调用报 "unknown command"（reload 链路由错）
 
