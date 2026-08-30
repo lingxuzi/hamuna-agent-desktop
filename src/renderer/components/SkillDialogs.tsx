@@ -340,6 +340,10 @@ export interface InstallFromUrlResponse {
     error?: string;
     sourceUrl?: string;
     effectiveRef?: string;
+    /** Non-empty when the skill is installed but needs a session restart to be usable by the AI. */
+    warning?: string;
+    /** True when the installed skill was verified as immediately usable in the live session. */
+    ready?: boolean;
 }
 
 interface InstallFromUrlDialogProps {
@@ -353,7 +357,7 @@ interface InstallFromUrlDialogProps {
         },
     ) => Promise<InstallFromUrlResponse>;
     onCancel: () => void;
-    onInstalled?: (folderNames: string[]) => void;
+    onInstalled?: (folderNames: string[], result?: { warning?: string; ready?: boolean }) => void;
 }
 
 export function InstallFromUrlDialog({ onInstall, onCancel, onInstalled }: InstallFromUrlDialogProps) {
@@ -410,7 +414,7 @@ export function InstallFromUrlDialog({ onInstall, onCancel, onInstalled }: Insta
             }
             if (result.mode === 'installed') {
                 const folders = (result.installed ?? []).map(i => i.folderName);
-                onInstalled?.(folders);
+                onInstalled?.(folders, { warning: result.warning, ready: result.ready });
                 return;
             }
             if (result.preview) {
@@ -496,7 +500,7 @@ export function InstallFromUrlDialog({ onInstall, onCancel, onInstalled }: Insta
             }
             if (result.mode === 'installed') {
                 const folders = (result.installed ?? []).map(i => i.folderName);
-                onInstalled?.(folders);
+                onInstalled?.(folders, { warning: result.warning, ready: result.ready });
             }
         } catch (err) {
             if (isMountedRef.current) setError(err instanceof Error ? err.message : t('agentSettings.skillDialogs.installFailed'));

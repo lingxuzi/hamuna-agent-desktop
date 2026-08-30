@@ -502,7 +502,7 @@ export default function GlobalSkillsPanel({
                 <InstallFromUrlDialog
                     onInstall={handleInstallFromUrl}
                     onCancel={() => setShowInstallFromUrlDialog(false)}
-                    onInstalled={(folderNames) => {
+                    onInstalled={(folderNames, result) => {
                         setShowInstallFromUrlDialog(false);
                         setRefreshKey(k => k + 1);
                         if (folderNames.length === 1) {
@@ -510,6 +510,9 @@ export default function GlobalSkillsPanel({
                             setViewState({ type: 'skill-detail', name: folderNames[0] });
                         } else {
                             toastRef.current.success(tRef.current('agentSettings.skillCommandList.installedMultiple', { count: folderNames.length }));
+                        }
+                        if (result?.warning) {
+                            toastRef.current.warning(result.warning);
                         }
                     }}
                 />

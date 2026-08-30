@@ -432,7 +432,7 @@ export default function SkillsCommandsList({
                 <InstallFromUrlDialog
                     onInstall={handleInstallFromUrl}
                     onCancel={() => setShowInstallFromUrlDialog(false)}
-                    onInstalled={(folderNames) => {
+                    onInstalled={(folderNames, result) => {
                         setShowInstallFromUrlDialog(false);
                         loadData();
                         if (folderNames.length === 1) {
@@ -440,6 +440,9 @@ export default function SkillsCommandsList({
                             onSelectSkill(folderNames[0], scope, true);
                         } else {
                             toastRef.current.success(tRef.current('agentSettings.skillCommandList.installedMultiple', { count: folderNames.length }));
+                        }
+                        if (result?.warning) {
+                            toastRef.current.warning(result.warning);
                         }
                         window.dispatchEvent(
                             new CustomEvent(CUSTOM_EVENTS.SKILL_COPIED_TO_PROJECT, {

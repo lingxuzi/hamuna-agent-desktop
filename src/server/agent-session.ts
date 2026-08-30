@@ -12,6 +12,12 @@ import {
 import { decidePlaywrightBashTransform, decideScriptFileBashTransform } from './utils/playwright-bash-redirect';
 import { registerBridge as registerBridgeInRegistry, unregisterBridge as unregisterBridgeInRegistry, type UpstreamBridgeConfig } from './openai-bridge/bridge-registry';
 import { getScriptDir, getBundledNodeDir, getSystemNodeDirs } from './utils/runtime';
+import { evaluateSkillReload, type SkillReloadResult } from './utils/skill-reload';
+
+// Re-exported for sidecar API callers (index.ts) that want the pure result
+// type without importing the utils module directly.
+export type { SkillReloadResult } from './utils/skill-reload';
+export { evaluateSkillReload } from './utils/skill-reload';
 import { resolveNpxMcpInvocation } from './utils/mcp-command';
 import { getCrossPlatformEnv } from './utils/platform';
 import { ensureDirSync } from './utils/fs-utils';
@@ -557,12 +563,14 @@ export function syncProjectUserConfig(
   // The symlinks above just changed what's on disk, but the live SDK session
   // only scans skills at startup — without a reload, a skill installed
   // mid-session is visible in the UI (Rust scans disk) yet unusable by the AI
-  // until the next session restart. Putting the reload HERE (not at each CRUD
+  // until the next session restart. Reloading here (rather than at each CRUD
   // call site) makes every present and future "refresh project config" path
   // pick it up automatically, with the order guaranteed correct: symlinks
   // first, SDK rescan second. No-ops when no SDK session is alive (session
   // startup path) or when the synced dir isn't this session's workspace.
-  reloadSessionSkillsAfterSync(projectDir);
+  // Fire-and-forget: CRUD responses don't need to await the SDK rescan; the
+  // install-from-url path uses reloadLiveSessionSkills directly for a result.
+  void reloadLiveSessionSkills(projectDir);
 }
 
 /**
@@ -582,27 +590,45 @@ export async function requireCurrentBuiltinSkill(skillName: string): Promise<voi
 }
 
 /**
- * Fire-and-forget mid-session skill rescan (SDK 0.3.169+ reloadSkills control
- * request). Failure degrades to the pre-0.2.34 behavior — skills refresh on
- * the next session — so it never blocks the CRUD response that triggered the
- * sync. External runtimes (Claude Code / Codex / Gemini CLI) have no such
- * control channel; they rescan on their next session naturally.
+ * Rescan the live builtin SDK skill registry after a skill/command write that
+ * changed the project's `.claude/skills/` on disk (SDK 0.3.169+ reloadSkills
+ * control request).
+ *
+ * Awaitable variant of the old fire-and-forget `reloadSessionSkillsAfterSync`
+ * so callers can know whether a just-installed skill is usable in THIS session
+ * or whether the user must restart. Returns `needsRestart` when:
+ * - no live SDK session exists yet (its next startup will rescan anyway);
+ * - the synced dir isn't this session's workspace; or
+ * - `reloadSkills` failed / didn't include the expected skill.
+ *
+ * External runtimes (Claude Code / Codex / Gemini CLI) have no such control
+ * channel — they rescan on their next session naturally, so this reports
+ * `needsRestart` for them too.
  */
-function reloadSessionSkillsAfterSync(syncedDir: string): void {
-  if (!lifecycleState.query) return;
+export async function reloadLiveSessionSkills(
+  syncedDir: string,
+  expectedSkill?: string,
+): Promise<SkillReloadResult> {
+  const query = lifecycleState.query;
   // External runtimes never populate lifecycleState.query, so this guard is
   // belt-and-suspenders — kept explicit per the external-routing red line.
-  if (isExternalRuntime(getCurrentRuntimeType())) return;
+  if (!query || isExternalRuntime(getCurrentRuntimeType())) {
+    return { reloaded: false, loaded: [], needsRestart: evaluateSkillReload(expectedSkill, false, []).needsRestart };
+  }
   // Another workspace's dir was synced — this session's skill view is unaffected.
-  if (!agentDir || !workspacePathsEqual(syncedDir, agentDir)) return;
-  lifecycleState.query.reloadSkills()
-    .then(res => {
-      console.log(`[agent] skills reloaded mid-session (${res.skills.length} skill commands)`);
-    })
-    .catch(err => {
-      console.warn('[agent] reloadSkills failed — skills will refresh on next session:',
-        err instanceof Error ? err.message : err);
-    });
+  if (!agentDir || !workspacePathsEqual(syncedDir, agentDir)) {
+    return { reloaded: false, loaded: [], needsRestart: evaluateSkillReload(expectedSkill, false, []).needsRestart };
+  }
+  try {
+    const res = await query.reloadSkills();
+    const loaded = res.skills.map(skill => skill.name);
+    console.log(`[agent] skills reloaded mid-session (${loaded.length} skill commands)`);
+    return { reloaded: true, loaded, needsRestart: evaluateSkillReload(expectedSkill, true, loaded).needsRestart };
+  } catch (err) {
+    console.warn('[agent] reloadSkills failed — skills will refresh on next session:',
+      err instanceof Error ? err.message : err);
+    return { reloaded: false, loaded: [], needsRestart: evaluateSkillReload(expectedSkill, false, []).needsRestart };
+  }
 }
 
 // (issue #174) `starting` separates "subprocess launched, awaiting system_init"

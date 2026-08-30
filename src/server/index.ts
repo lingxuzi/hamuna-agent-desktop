@@ -645,6 +645,7 @@ import {
   getSessionModel,
   getSessionProviderEnv,
   syncProjectUserConfig,
+  reloadLiveSessionSkills,
   requireCurrentBuiltinSkill,
   initSocksBridgeFromEnv,
   getHistoricalSessionMessages,
@@ -6882,10 +6883,23 @@ async function main() {
               return jsonResponse({ success: false, error: '没有任何 skill 被安装' }, 500);
             }
 
+            // Reconcile the live SDK session's skill registry so a skill
+            // installed mid-session is immediately invocable by the AI
+            // (fixes "unknown command" right after install). User scope
+            // bumps the generation + resyncs project symlinks first; project
+            // scope writes directly into <agentDir>/.claude/skills/ so it
+            // only needs the live reload. reloaded/needsRestart let the
+            // frontend tell the user "restart the session for it to take
+            // effect" when the reload didn't land.
             if (scope === 'user') {
               bumpSkillsGeneration();
               if (agentDir) { syncProjectUserConfig(agentDir); }
             }
+
+            const expectedSkill = installed.length === 1 ? installed[0].folderName : undefined;
+            const reloadResult = agentDir
+              ? await reloadLiveSessionSkills(agentDir, expectedSkill)
+              : undefined;
 
             return jsonResponse({
               success: true,
@@ -6893,6 +6907,12 @@ async function main() {
               installed,
               sourceUrl: tree.sourceUrl,
               effectiveRef: tree.effectiveRef,
+              ...(reloadResult?.needsRestart
+                ? { warning: '技能已安装，但需要重启当前会话（或新建会话）后 AI 才能使用。' }
+                : {}),
+              ...(reloadResult && expectedSkill && !reloadResult.needsRestart
+                ? { ready: true }
+                : {}),
             });
           }
 

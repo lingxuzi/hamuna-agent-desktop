@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-30（TODO #11：windows-release.yml 已写完待验证）
+最后更新：2026-08-30（TODO #12：skill 安装后显式调用报 unknown command 已修；TODO #11：windows-release.yml 已写完待验证）
 
 ---
 
@@ -42,7 +42,8 @@
 | Session Engine | `src/server/session-engine/` | 稳定 | `selector.ts` 统一 adapter 分流 |
 | Builtin Session | `src/server/builtin-session/` | 稳定 | `lifecycle / turn-lifecycle / config / types` |
 | External Runtime | `src/server/runtimes/external-session/` | 稳定 | Claude Code / Codex / Gemini |
-| Agent Session | `src/server/agent-session.ts` | 稳定 | public facade |
+| Agent Session | `src/server/agent-session.ts` | 稳定 | public facade；`reloadLiveSessionSkills`（builtin SDK reloadSkills，可等待 + needsRestart 结果） |
+| Skill Reload | `src/server/utils/skill-reload.ts` | 已修 | **新模块（TODO #12）**；纯函数 `evaluateSkillReload`，避免拉起 agent-session import 图 |
 | External Runtime Env | `src/server/runtimes/env-utils.ts` | 已修 | **静态 `import './claude-code-env.json'` 改运行时 `fs.readFile + try/catch`**；missing file → `{}`（对齐源码注释"missing file = no-op"语义，`.gitignore` secrets 不入 git） |
 | Builtin MCP | `src/server/tools/{builtin-mcp-meta,builtin-mcp-registry}.ts` | 稳定 | `src/server/tools/*.ts` 禁顶层 import SDK/zod |
 | Gemini Image Tool | `src/server/tools/gemini-image-tool.ts` | 稳定 | 懒加载 |
@@ -129,6 +130,31 @@
 ---
 
 ## 3. 当前 TODO（待完成）
+
+### TODO #12: ✅ 已修复 — skill 安装后显式调用报 "unknown command"（reload 链路由错）
+
+**症状**：skill 安装后，用户在当前 session 显式输入 `/skillname`，AI 回 "unknown command"（Claude Code CLI 原生命令解析，非本仓库字符串）。"有时候"出现是因为 user-scope 安装会触发 reload、project-scope 安装不触发。
+
+**根因（安装 → 运行时 skill 命令表不同步）**：
+- SDK 用 `settingSources: ['project']`（`agent-session.ts`），**只在进程启动时**从 `<cwd>/.claude/skills/` 快照 slash command 表
+- 旧 `reloadSessionSkillsAfterSync` 是 fire-and-forget、private，且 **reload 挂在 `syncProjectUserConfig` 成功分支**，而 sync 只处理 user 级 skill
+- `/api/skill/install-from-url` 的 **project scope 分支不调 sync 也不 reload** → 新装 skill 写进 `<agentDir>/.claude/skills/`，但运行中 SDK 命令表还是启动快照 → `/skillname` → unknown command
+- reload 失败会静默降级为"下次会话才生效"，无任何可感知提示
+
+**修复（A+B）**：
+- **A — project scope 触发 reload**：`install-from-url` 结尾无论 scope 都调 `reloadLiveSessionSkills(agentDir, expectedSkill)`，reload 结果（`needsRestart`/`ready`）拼进 response
+- **B — reload 可等待、可感知结果**：
+  - 新增 `src/server/utils/skill-reload.ts`：纯函数 `evaluateSkillReload(expectedSkill, reloaded, loaded)` → `{ needsRestart }`（独立模块便于单测，避免拉起 agent-session import 图）
+  - `agent-session.ts`：private `reloadSessionSkillsAfterSync` → export `reloadLiveSessionSkills(syncedDir, expectedSkill?)`，返回 `{ reloaded, loaded, needsRestart }`；`syncProjectUserConfig` 改为 fire-and-forget 调它；re-export 类型
+  - 前端：`InstallFromUrlResponse` 加 `warning`/`ready` 字段；`onInstalled` 回调带结果参数；两个面板（GlobalSkillsPanel / SkillsCommandsList）在 `warning` 非空时 toast 提示"需重启会话"
+- **改动文件**：`agent-session.ts`（重构+re-export）、`index.ts`（import + install-from-url 结尾）、`skill-reload.ts`（新）、`skill-reload.unit.test.ts`（新，4 测试）、`SkillDialogs.tsx`、`GlobalSkillsPanel.tsx`、`SkillsCommandsList.tsx`
+- **验证**：
+  | 验证 | 结果 |
+  |---|---|
+  | `npx vitest run --project unit -- src/server/utils/skill-reload.unit.test.ts` | ✅ 4/4（其余 6 失败为 TODO #3 预存在，stash 验证干净树一致） |
+  | `npx tsc --noEmit` | exit 0 |
+  | `npx eslint <7 个改动文件>` | exit 0 |
+- **未 commit**：7 文件改动（4 M + 2 新 + 前端 3 M）待用户拍板提交
 
 ### TODO #11: 🔄 进行中 — GitHub Actions Windows 构建 + 传 R2 + 自动 bump 版本号
 
