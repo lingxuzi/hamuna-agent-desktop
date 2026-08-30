@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-30（TODO #14：TypeGraph 重构知识库——Phase 5 完成：补 3 个测试文件（kb-merge.unit 17 / kb-tokenize.unit 9 / kb-store.integration 8），共 34 个新 case；并修复 2 个真实 bug：`saveRelations` 的 rel id 含 `relationType/i` 导致 typed upgrade 后 cooccur 旧 row 残留（id 改为仅含 `(kbId,subject,object)`） + `mountsForWorkspace` 不排序（改为 sort 兜底）。KB 模块总测试 39/39 全绿，typecheck/test:classification/`cargo check`/`cargo clippy` 全绿，kb-migrate 迁移测试 3/3 全过。TODO #14 整体完成，可独立 commit。）
+最后更新：2026-08-31（TODO #15：i18n 补齐 SDK 0.3.234 新增 6 个 terminal_reason 条目（`api_error` / `malformed_tool_use_exhausted` / `budget_exhausted` / `structured_output_retry_exhausted` / `tool_deferred_unavailable` / `turn_setup_failed`）— zh-CN + en-US 双语。`terminalReason.ts` MAP 早已齐全，但 TerminalReasonBanner.tsx:81 i18n lookup miss 走 defaultValue 兜底文案"未知原因 (api_error)"。今日 master 已含 TODO #14 KB 重构（4d109bd → d01eab1）并 push 到 origin(github) + gitee(force, 覆盖 442d4c3 divergent 分支）。）
 
 ---
 
