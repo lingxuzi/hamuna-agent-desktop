@@ -31,6 +31,18 @@ jobs:
       DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL || 'https://download.hamuna.io' }}
 
     steps:
+      # Windows runner 无开发者模式 → 无法创建 symlink（仓库根有 AGENTS.md -> CLAUDE.md），
+      # 且默认关闭 longpaths（长路径报 "Filename too long"）。
+      # 前置开启 longpaths；symlink 用 core.symlinks=false 检出为普通文件（内容为指向路径），
+      # 对构建无影响（构建不需要 AGENTS.md 的 symlink 语义）。
+      - name: Enable git longpaths (Windows)
+        run: |
+          git config --global core.longpaths true
+          # 无开发者模式的 Windows 不能创建 symlink；core.symlinks=false 让 git 把
+          # AGENTS.md（-> CLAUDE.md）当作普通文本文件检出（内容为链接目标字符串）。
+          # 构建/测试都不需要 AGENTS.md 的 symlink 语义，检出为普通文件安全。
+          git config --global core.symlinks false
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
