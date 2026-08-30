@@ -5357,6 +5357,27 @@ async function main() {
 
       // ============= END MCP API =============
 
+      // ============= KB ADMIN API (knowledge base — TypeGraph backend) =============
+      // KB dispatch MUST sit BEFORE the POST-only admin branch (which only
+      // accepts POST) and EXCLUDE `/api/admin/kb/ingest` (that one keeps
+      // flowing through routeAdminApi's kb/ingest branch, which wraps the
+      // heavy parsing libs in lazy imports). Every other KB route returns
+      // the Rust-era `{ ok, ... }` contract — callers can keep checking
+      // `result.ok !== true` exactly as before.
+      if (pathname.startsWith('/api/admin/kb/') && !pathname.endsWith('/ingest')) {
+        try {
+          const { handleKbAdminRequest } = await import('./kb/kb-service');
+          return await handleKbAdminRequest(request, pathname);
+        } catch (error) {
+          console.error(`[kb-api] ${pathname} error:`, error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'KB API error' },
+            500
+          );
+        }
+      }
+      // ============= END KB ADMIN API =============
+
       // ============= ADMIN API (Self-Config CLI) =============
       if (pathname.startsWith('/api/admin/') && request.method === 'POST') {
         try {

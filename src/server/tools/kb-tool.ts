@@ -1,17 +1,12 @@
 // Knowledge base (资料库) query tool — in-process MCP server.
 //
 // The model queries the workspace's mounted knowledge bases via `kb_query`.
-// Query execution lives in the Rust KbEngine (Tantivy + jieba + graph) and is
-// reached through the management API (Node -> Rust loopback), so the heavy
-// index/search work stays out of the sidecar. The session's workspace is
-// captured by `configure()` during buildSdkMcpServers() (same pattern as
-// gemini-image / edge-tts) — never imported from agent-session.ts, which is a
-// forbidden dependency for tools.
+// Query execution lives in the TypeGraph store (SQLite + FTS5) in the same
+// sidecar process, lazy-loaded on first call — never imported from
+// agent-session.ts, which is a forbidden dependency for tools.
 
 // SDK + zod are loaded lazily inside createKbServer() via dynamic import, per
 // the builtin-MCP lazy-loading rule.
-
-import { managementApi } from '../utils/management-api-client';
 
 interface KbConfig {
   workspace?: string;
@@ -51,24 +46,18 @@ async function kbQueryHandler(args: { query: string }): Promise<CallToolResult> 
     };
   }
 
-  // Resolve the mounted KB ids for this workspace.
-  const mounts = await managementApi(`/api/kb/mounts?workspace=${encodeURIComponent(workspace)}`, 'GET');
-  const kbIds: string[] = Array.isArray(mounts.kbIds) ? (mounts.kbIds as string[]) : [];
+  // Resolve the mounted KB ids + query in-process (lazy store import — the kb
+  // modules stay out of cold start, matching the tools lazy-loading rule).
+  const { mountsForWorkspace, query: kbQuery } = await import('../kb/kb-store');
+  const kbIds = await mountsForWorkspace(workspace);
   if (kbIds.length === 0) {
     return {
       content: [{ type: 'text', text: '当前工作区未挂载任何知识库。请先在设置中挂载知识库。' }],
     };
   }
 
-  const result = await managementApi('/api/kb/query', 'POST', { kbIds, query });
-  if (result.ok !== true) {
-    return {
-      content: [{ type: 'text', text: `知识库查询失败：${String(result.error ?? 'unknown')}` }],
-      isError: true,
-    };
-  }
-
-  return { content: [{ type: 'text', text: formatKbResult(result) }] };
+  const result = await kbQuery(kbIds, query);
+  return { content: [{ type: 'text', text: formatKbResult(result as unknown as Record<string, unknown>) }] };
 }
 
 function formatKbResult(result: Record<string, unknown>): string {

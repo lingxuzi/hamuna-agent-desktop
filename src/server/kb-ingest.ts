@@ -16,7 +16,6 @@ import { lookup } from 'dns/promises';
 
 import { isUrlSchemeSafe } from './runtimes/tool-attachments';
 import { cancellableFetch } from './utils/cancellation';
-import { managementApi } from './utils/management-api-client';
 
 export interface KbIngestRequest {
   kbId: string;
@@ -229,10 +228,12 @@ export async function ingestKbMaterial(
   }
 
   const title = req.title.trim() || defaultTitle(req.kind, req.data);
-  const result = await managementApi('/api/kb/add-text', 'POST', {
-    kbId: req.kbId,
-    title,
-    text,
-  });
-  return result;
+  // In-process TypeGraph store (lazy — kb modules stay out of cold start).
+  const { addText } = await import('./kb/kb-store');
+  try {
+    const summary = await addText(req.kbId, title, text);
+    return { ok: true, summary };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

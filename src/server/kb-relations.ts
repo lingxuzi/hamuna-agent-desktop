@@ -22,7 +22,6 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { buildClaudeSessionEnv, resolveClaudeCodeCli, getSessionModel, type ProviderEnv } from './agent-session';
 import { findEffectiveProvider, loadConfig, resolveProviderEnv } from './utils/admin-config';
-import { managementApi } from './utils/management-api-client';
 import { cancellableFetch } from './utils/cancellation';
 import { applyProviderContextWindowSuffix } from './utils/model-capabilities';
 import { SUBSCRIPTION_PROVIDER_ID } from '../shared/config-types';
@@ -339,11 +338,10 @@ async function processPendingOnce(): Promise<void> {
 
   inFlight = true;
   try {
-    const result = await managementApi(
-      `/api/kb/pending-relations/all?limit=${MAX_TASKS_PER_POLL}`,
-      'GET',
-    );
-    const tasks: PendingRelationTask[] = Array.isArray(result.tasks) ? (result.tasks as PendingRelationTask[]) : [];
+    // In-process TypeGraph store (lazy — the kb modules stay out of the
+    // top-level import chain so cold start is unaffected).
+    const { takePendingAll, saveRelations, removePending } = await import('./kb/kb-store');
+    const tasks = await takePendingAll(MAX_TASKS_PER_POLL);
     if (tasks.length === 0) {
       console.debug('[kb-relations] no pending tasks');
       return;
@@ -367,34 +365,27 @@ async function processPendingOnce(): Promise<void> {
             entityIds.add(r.object);
           }
         }
-        const writeResult = await managementApi('/api/kb/relations', 'POST', {
-          kbId: task.kbId,
-          // Rust KbEntity uses camelCase ("entityType"); entityType optional.
-          entities: result.entities.map((e) => ({
+        await saveRelations(
+          task.kbId,
+          result.entities.map((e) => ({
             id: e.id,
             label: e.label,
             ...(e.entityType ? { entityType: e.entityType } : {}),
+            sources: [],
           })),
-          // Rust KbRelation uses #[serde(rename_all = "camelCase")] — the
-          // field must be "relationType", not the internal snake_case name.
-          relations: result.relations.map((r) => ({
+          result.relations.map((r) => ({
             subject: r.subject,
             object: r.object,
             relationType: r.relation_type,
             weight: r.weight,
             typed: r.typed,
           })),
-        });
-        if (writeResult.ok) {
-          // Only a SUCCESSFUL write-back leaves the queue — failed extractions
-          // stay pending so they retry and the UI progress stays accurate.
-          await managementApi('/api/kb/pending-relations/done', 'POST', {
-            kbId: task.kbId,
-            chunkIds: [task.chunkId],
-          });
-        }
+        );
+        // Only a SUCCESSFUL write-back leaves the queue — failed extractions
+        // stay pending so they retry and the UI progress stays accurate.
+        await removePending(task.kbId, [task.chunkId]);
         console.warn(
-          `[kb-relations] write-back result: ${JSON.stringify(writeResult).slice(0, 200)} (entities=${result.entities.length}, relations=${result.relations.length})`,
+          `[kb-relations] write-back ok (entities=${result.entities.length}, relations=${result.relations.length})`,
         );
       } catch (err) {
         console.warn('[kb-relations] relation extraction failed:', err);

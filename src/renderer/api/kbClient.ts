@@ -1,12 +1,12 @@
 // kbClient.ts — Knowledge base (资料库) API abstraction.
 //
-// Knowledge bases live in the Rust `KbEngine` and are reached directly via
-// Tauri IPC (`cmd_kb_*`), exactly like `searchClient.ts` reaches SearchEngine.
-// There is no Node Sidecar path for KB management.
+// The KB backend moved from Rust (KbEngine over management API) to a Node
+// sidecar TypeGraph store. The renderer still talks to it through this
+// single seam, but now over HTTP via the sidecar's `/api/admin/kb/*` routes
+// (instead of Tauri `cmd_kb_*` IPC). Response shapes are unchanged — types
+// below are the ones the UI already depends on.
 
-import { invoke } from '@tauri-apps/api/core';
-
-import { apiPostJson } from '@/api/apiFetch';
+import { apiGetJson, apiPostJson } from '@/api/apiFetch';
 
 export interface KbInfo {
   id: string;
@@ -42,44 +42,6 @@ export interface KbGraph {
   pendingCount?: number;
 }
 
-export async function listKbs(): Promise<KbInfo[]> {
-  return invoke<KbInfo[]>('cmd_kb_list');
-}
-
-export async function createKb(name: string): Promise<KbInfo> {
-  return invoke<KbInfo>('cmd_kb_create', { name });
-}
-
-export async function renameKb(kbId: string, name: string): Promise<void> {
-  return invoke('cmd_kb_rename', { kbId, name });
-}
-
-export async function deleteKb(kbId: string): Promise<void> {
-  return invoke('cmd_kb_delete', { kbId });
-}
-
-export async function addKbText(kbId: string, title: string, text: string): Promise<KbGraphSummary> {
-  return invoke<KbGraphSummary>('cmd_kb_add_text', { kbId, title, text });
-}
-
-export async function getKbGraph(kbId: string): Promise<KbGraphSummary> {
-  return invoke<KbGraphSummary>('cmd_kb_graph', { kbId });
-}
-
-/** Full knowledge graph (entities + relations) for the visualization panel. */
-export async function getKbGraphData(kbId: string): Promise<KbGraph> {
-  return invoke<KbGraph>('cmd_kb_graph_data', { kbId });
-}
-
-/** workspace path -> mounted kb ids */
-export async function listKbMounts(): Promise<Record<string, string[]>> {
-  return invoke<Record<string, string[]>>('cmd_kb_mount_list');
-}
-
-export async function setKbMounts(workspace: string, kbIds: string[]): Promise<void> {
-  return invoke('cmd_kb_mount_set', { workspace, kbIds });
-}
-
 export type KbIngestKind = 'url' | 'pdf' | 'docx' | 'xlsx' | 'text';
 
 /** Raw uploaded document metadata (no full text). */
@@ -90,20 +52,67 @@ export interface KbDocMeta {
   textLength: number;
 }
 
-/** List the raw documents stored in a KB (newest first). */
-export async function listKbDocs(kbId: string): Promise<KbDocMeta[]> {
-  return invoke<KbDocMeta[]>('cmd_kb_list_docs', { kbId });
+// ── HTTP helpers ──────────────────────────────────────────────────────────
+// The sidecar's KB dispatcher returns `{ ok, ... }` and maps `ok:false` to
+// HTTP 400, so `apiFetch` throws on logical failure — these wrappers stay
+// as plain fetch+cast with no per-call error handling.
+
+export async function listKbs(): Promise<KbInfo[]> {
+  const r = await apiGetJson<{ ok: true; kbs: KbInfo[] }>('/api/admin/kb/list');
+  return r.kbs;
 }
 
-/** Rebuild a KB's graph + index from its stored raw documents. */
+export async function createKb(name: string): Promise<KbInfo> {
+  const r = await apiPostJson<{ ok: true; kb: KbInfo }>('/api/admin/kb/create', { name });
+  return r.kb;
+}
+
+export async function renameKb(kbId: string, name: string): Promise<void> {
+  await apiPostJson<{ ok: true }>('/api/admin/kb/rename', { kbId, name });
+}
+
+export async function deleteKb(kbId: string): Promise<void> {
+  await apiPostJson<{ ok: true }>('/api/admin/kb/delete', { kbId });
+}
+
+export async function addKbText(kbId: string, title: string, text: string): Promise<KbGraphSummary> {
+  const r = await apiPostJson<{ ok: true; summary: KbGraphSummary }>('/api/admin/kb/add-text', { kbId, title, text });
+  return r.summary;
+}
+
+export async function getKbGraph(kbId: string): Promise<KbGraphSummary> {
+  const r = await apiGetJson<KbGraphSummary & { ok: true }>(`/api/admin/kb/graph-summary?kbId=${encodeURIComponent(kbId)}`);
+  return r;
+}
+
+export async function getKbGraphData(kbId: string): Promise<KbGraph> {
+  const r = await apiGetJson<KbGraph & { ok: true }>(`/api/admin/kb/graph-data?kbId=${encodeURIComponent(kbId)}`);
+  return r;
+}
+
+export async function listKbMounts(): Promise<Record<string, string[]>> {
+  const r = await apiGetJson<{ ok: true; mounts: Record<string, string[]> }>('/api/admin/kb/mounts');
+  return r.mounts;
+}
+
+export async function setKbMounts(workspace: string, kbIds: string[]): Promise<void> {
+  await apiPostJson<{ ok: true }>('/api/admin/kb/mounts', { workspace, kbIds });
+}
+
+export async function listKbDocs(kbId: string): Promise<KbDocMeta[]> {
+  const r = await apiGetJson<{ ok: true; docs: KbDocMeta[] }>(`/api/admin/kb/docs?kbId=${encodeURIComponent(kbId)}`);
+  return r.docs;
+}
+
 export async function rebuildKb(kbId: string): Promise<KbGraphSummary> {
-  return invoke<KbGraphSummary>('cmd_kb_rebuild', { kbId });
+  const r = await apiPostJson<{ ok: true; summary: KbGraphSummary }>('/api/admin/kb/rebuild', { kbId });
+  return r.summary;
 }
 
 /**
- * Ingest richer material (web URL / PDF / Word / Excel) into a KB. The sidecar
- * parses it to text and writes back to Rust via the management API.
- * Returns { ok, summary?, error? }.
+ * Ingest richer material (web URL / PDF / Word / Excel) into a KB. Parsing
+ * happens on the sidecar; the response keeps its `{ ok, summary?, error? }`
+ * shape so the UI can render the partial-error path directly (no throw).
  */
 export async function ingestKbMaterial(
   kbId: string,
