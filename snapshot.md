@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。TODO #17：Windows OpenClaw plugin 安装报 "system npm not found" — PATH-independent 修复（用户红线：绝不写系统 PATH）。修复 = 翻转 bundled-first + 扩展 Windows exe-relative 候选 + InstallerSource 抽 pure helper + 3-mode 错误信息 + 5 unit tests。`cargo check/clippy/build --release` ✅ + 5/5 测试通过。TODO #18：6 处过时的 bun.exe 引用清理（v0.2.0 已迁 node.js），5 文件 user-visible diagnostic 同步到 node.exe + SDK-embedded bun.exe（SDK 内部仍嵌 bun）。`cargo check/clippy/build --release` ✅。TODO #19：bash -i -l 在无 TTY 进程（Tauri GUI）下会向 stderr 写 "无法设定终端进程群/无任务控制"，泄漏到 sidecar stderr pipe 变成 ERROR 级噪音（`[bun-err][__global__]`）。根因 = 两侧 chokepoint 不一致（Rust `system_binary.rs:238` 已 `Stdio::null()`，Node `shell.ts:305` 仍默认 `['pipe','pipe','pipe']`）。修：shell.ts execFile 包一层 `exec ... 2>/dev/null` wrapper + classifier 加 `[shell]` 前缀 demote + TODO #18 漏改的 `[bun-err/out]` tag → `[sidecar-err/out]`（3 文件）。`tsc --noEmit` exit 0 + cargo clippy ✅ + stdio.rs 测试 8/8 + shell.unit.test 3/3。**未 commit** —— 4 文件 + 本 snapshot。TODO #20：Tab/Global sidecar Err 路径在 race 后误杀被替换的实例——错误信息误指 antivirus，根因 `instances.rs::start_tab_sidecar` Err 路径缺 `port_matches` 守卫（`session_lifecycle.rs:947/998` 已有）。修：抽 pure helper `check_instance_not_replaced(manager, tab_id, expected_port) -> Result<(), InstanceReplacedReason>`，Err 路径端口不匹配 → `ulog_warn` + `return Err(diag)` 跳过诊断+remove（防 restart cascade）。`cargo check` clean + `cargo test --lib sidecar::` 50/50 + 新 helper 单测 3/3。**未 commit** —— 1 文件 + 本 snapshot。）
+最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。TODO #17：Windows OpenClaw plugin 安装报 "system npm not found" — PATH-independent 修复（用户红线：绝不写系统 PATH）。修复 = 翻转 bundled-first + 扩展 Windows exe-relative 候选 + InstallerSource 抽 pure helper + 3-mode 错误信息 + 5 unit tests。`cargo check/clippy/build --release` ✅ + 5/5 测试通过。TODO #18：6 处过时的 bun.exe 引用清理（v0.2.0 已迁 node.js），5 文件 user-visible diagnostic 同步到 node.exe + SDK-embedded bun.exe（SDK 内部仍嵌 bun）。`cargo check/clippy/build --release` ✅。TODO #19：bash -i -l 在无 TTY 进程（Tauri GUI）下会向 stderr 写 "无法设定终端进程群/无任务控制"，泄漏到 sidecar stderr pipe 变成 ERROR 级噪音（`[bun-err][__global__]`）。根因 = 两侧 chokepoint 不一致（Rust `system_binary.rs:238` 已 `Stdio::null()`，Node `shell.ts:305` 仍默认 `['pipe','pipe','pipe']`）。修：shell.ts execFile 包一层 `exec ... 2>/dev/null` wrapper + classifier 加 `[shell]` 前缀 demote + TODO #18 漏改的 `[bun-err/out]` tag → `[sidecar-err/out]`（3 文件）。`tsc --noEmit` exit 0 + cargo clippy ✅ + stdio.rs 测试 8/8 + shell.unit.test 3/3。**未 commit** —— 4 文件 + 本 snapshot。TODO #20：Tab/Global sidecar Err 路径在 race 后误杀被替换的实例——错误信息误指 antivirus，根因 `instances.rs::start_tab_sidecar` Err 路径缺 `port_matches` 守卫（`session_lifecycle.rs:947/998` 已有）。修：抽 pure helper `check_instance_not_replaced(manager, tab_id, expected_port) -> Result<(), InstanceReplacedReason>`，Err 路径端口不匹配 → `ulog_warn` + `return Err(diag)` 跳过诊断+remove（防 restart cascade）。`cargo check` clean + `cargo test --lib sidecar::` 50/50 + 新 helper 单测 3/3。**未 commit** —— 1 文件 + 本 snapshot。TODO #21：`[kb-relations]` 13 条 stderr 噪音迁移到 stdout——8 条 progress/boot/success 从 `console.warn` → `console.log`（走 stdout，不再触发 stderr classifier），4 条真警告/错误保留为 `console.warn`（走 stderr，classifier 默认 ERROR 是正确分类）。`tsc --noEmit` + eslint + `npm run test:classification` (191) + `npm run test:unit` (2865/2871，6 失败为 pre-existing `widgetSandboxHtml.test.ts`，master `5c92cd8` 同样失败，与本修复**无关**) 全绿。**未 commit** —— 1 文件 + 本 snapshot。）
 
 ---
 
@@ -458,6 +458,42 @@ bash: 此 shell 中无任务控制
 | Cargo clippy lib | `cargo clippy --manifest-path src-tauri/Cargo.toml --lib` | ✅ 无新增 warning |
 | 新 helper 单测 | `cargo test --lib sidecar::instances::check_instance_not_replaced_tests` | ✅ 3/3 |
 | 全部 sidecar 测试 | `cargo test --lib sidecar::` | ✅ 50/50（含 #19 classifier + #236 decision + 新 helper + lifecycle contract） |
+
+**未 commit**：1 文件 + 本 snapshot 待用户拍板提交。
+
+### TODO #21: ✅ 已修复 — `[kb-relations]` 13 条 stderr 噪音迁移到 stdout（progress/boot/success）
+
+**症状**：用户报告 sidecar stderr 出现大量 `[ERROR] [sidecar-err][__global__] [kb-relations] ...`，全是进度/启动/成功信息（boot 状态 / `processing N pending task(s)` / `write-back ok (entities=N)` / `parsed N entities` 等），被 stderr 分类器默认归为 ERROR 噪音。
+
+**根因**：
+1. **`kb-relations.ts` 用 `console.warn` 打进度日志**（13 处）—— 但 Node `console.warn` 走 stderr，`unified_logger.initLogger` 把所有 `console.*` 都接走 → `safeOriginal('warn', args)` 仍然写进程 stderr → sidecar stderr pipe → Rust classifier → 默认 ERROR。
+2. **不能加 `[kb-relations]` 到 classifier demote 白名单**——kb-relations **确实有真错误**（`extraction failed` / `poll failed` / `boot model resolution failed`），demote 会吞掉真信号（违反 `src-tauri/src/sidecar/stdio.rs` 的 "only demote unconditionally non-actionable" 注释约定）。
+
+**修复（1 文件，13 处 console 方法重路由）**：
+
+按"console.warn = 真警告；console.log = 进度/成功/boot 诊断"切：
+
+| 行 | 原 | 改后 | 语义 |
+|---|---|---|---|
+| 301, 307, 309, 313 | `console.warn` | `console.log` | `extractKnowledge` 进度 + direct-http / sdk-fallback 返回结果 |
+| 335 | `console.warn` | `console.log` | "no resolvable model — skipping poll"（常态跳过） |
+| 349 | `console.warn` | `console.log` | "processing N pending task(s)"（常规轮询） |
+| 387 | `console.warn` | `console.log` | "write-back ok"（成功） |
+| 412 | `console.warn` | `console.log` | boot diagnostic（model/providerEnv/hasKey） |
+| 316 | `console.warn` | `console.warn`（保留） | "extraction failed, retrying with SDK"（真警告，要 stderr） |
+| 391 | `console.warn` | `console.warn`（保留） | "relation extraction failed"（真错误） |
+| 395 | `console.warn` | `console.warn`（保留） | "poll failed"（真错误） |
+| 416 | `console.warn` | `console.warn`（保留） | "boot model resolution failed"（真错误） |
+
+最终分布：8 `console.log`（→ stdout → sidecar stdout drain → unified log INFO 级）+ 4 `console.warn`（→ stderr → classifier 默认 ERROR，仅真错误触发）+ 1 `console.debug`（保留）。
+
+**验证**：
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| TypeScript | `npx tsc --noEmit` | ✅ exit 0 |
+| ESLint | `npx eslint src/server/kb-relations.ts` | ✅ exit 0 |
+| Test classification | `npm run test:classification` | ✅ 191 server tests（42 integration + 4 credentialed） |
+| Unit pool | `npm run test:unit` | ✅ 2865/2871 通过；6 失败**与本修复无关**（pre-existing `widgetSandboxHtml.test.ts` 在 master `5c92cd8` 同样失败） |
 
 **未 commit**：1 文件 + 本 snapshot 待用户拍板提交。
 

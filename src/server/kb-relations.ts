@@ -298,19 +298,19 @@ async function extractKnowledge(
   providerEnv?: ProviderEnv,
 ): Promise<ExtractionResult> {
   const useDirect = Boolean(providerEnv?.baseUrl && providerEnv.apiKey);
-  console.warn(
+  console.log(
     `[kb-relations] extractKnowledge model=${model} path=${useDirect ? 'direct-http' : 'sdk-fallback'} baseUrl=${providerEnv?.baseUrl ?? 'none'}`,
   );
   try {
     if (useDirect) {
       const text = await providerMessagesText(providerEnv as ProviderEnv, model, SYSTEM_PROMPT, buildUserPrompt(task));
-      console.warn(`[kb-relations] direct-http returned ${text.length} chars: ${text.slice(0, 150)}`);
+      console.log(`[kb-relations] direct-http returned ${text.length} chars: ${text.slice(0, 150)}`);
       const result = parseExtraction(text);
-      console.warn(`[kb-relations] parsed ${result.entities.length} entities, ${result.relations.length} relations`);
+      console.log(`[kb-relations] parsed ${result.entities.length} entities, ${result.relations.length} relations`);
       return result;
     }
     const result = await sdkExtract(task, model);
-    console.warn(`[kb-relations] sdk-fallback parsed ${result.entities.length} entities, ${result.relations.length} relations`);
+    console.log(`[kb-relations] sdk-fallback parsed ${result.entities.length} entities, ${result.relations.length} relations`);
     return result;
   } catch (err) {
     console.warn('[kb-relations] extraction failed, retrying with SDK:', err instanceof Error ? err.message : err);
@@ -332,7 +332,7 @@ async function processPendingOnce(): Promise<void> {
   // the first enabled agent's model so KB relations get typed regardless.
   const resolved = resolveRelationModel();
   if (!resolved) {
-    console.warn('[kb-relations] no resolvable model — skipping poll');
+    console.log('[kb-relations] no resolvable model — skipping poll');
     return;
   }
 
@@ -346,7 +346,7 @@ async function processPendingOnce(): Promise<void> {
       console.debug('[kb-relations] no pending tasks');
       return;
     }
-    console.warn(`[kb-relations] processing ${tasks.length} pending task(s)`);
+    console.log(`[kb-relations] processing ${tasks.length} pending task(s)`);
 
     for (const task of tasks) {
       try {
@@ -384,7 +384,7 @@ async function processPendingOnce(): Promise<void> {
         // Only a SUCCESSFUL write-back leaves the queue — failed extractions
         // stay pending so they retry and the UI progress stays accurate.
         await removePending(task.kbId, [task.chunkId]);
-        console.warn(
+        console.log(
           `[kb-relations] write-back ok (entities=${result.entities.length}, relations=${result.relations.length})`,
         );
       } catch (err) {
@@ -409,7 +409,7 @@ export function startKbRelationProcessor(): void {
   // Boot-time diagnostic: what model + provider does the poller resolve here?
   try {
     const resolved = resolveRelationModel();
-    console.warn(
+    console.log(
       `[kb-relations] boot: model=${resolved?.model ?? 'NONE'} providerEnv=${resolved?.providerEnv?.baseUrl ?? 'none'} hasKey=${resolved?.providerEnv ? Boolean(resolved.providerEnv.apiKey) : false}`,
     );
   } catch (err) {
