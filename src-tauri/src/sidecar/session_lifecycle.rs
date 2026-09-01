@@ -810,19 +810,20 @@ fn create_new_session_sidecar<R: Runtime>(
         let session_id_for_log = session_id_clone.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stdout);
-            let mut bun_logger_active = false;
+            let mut unified_logging_active = false;
             for line in reader.lines().flatten() {
-                // Once Bun's unified logger is initialized, ALL console.log output is
-                // written directly to the unified log file by Bun's logger interceptor.
-                // Capturing stdout after this point causes 100% duplication ([BUN] + [bun-out]).
-                // Only pre-logger startup lines need to go through bun-out.
-                if !bun_logger_active {
+                // Once the sidecar's unified logger is initialized, ALL
+                // console.log output is written directly to the unified log
+                // file by its interceptor. Capturing stdout after this point
+                // causes 100% duplication ([LOG] + [sidecar-out]). Only
+                // pre-logger startup lines need to go through sidecar-out.
+                if !unified_logging_active {
                     if line.contains("[Logger] Unified logging initialized") {
-                        bun_logger_active = true;
+                        unified_logging_active = true;
                     }
-                    ulog_info!("[bun-out][session:{}] {}", session_id_for_log, line);
+                    ulog_info!("[sidecar-out][session:{}] {}", session_id_for_log, line);
                 }
-                // After logger init: silently drop stdout (Bun logger handles it)
+                // After logger init: silently drop stdout (logger handles it)
             }
         });
     }
@@ -834,13 +835,13 @@ fn create_new_session_sidecar<R: Runtime>(
             for line in reader.lines().flatten() {
                 match classify_sidecar_stderr(&line) {
                     SidecarStderrLevel::Info => {
-                        ulog_info!("[bun-err][session:{}] {}", session_id_for_log, line)
+                        ulog_info!("[sidecar-err][session:{}] {}", session_id_for_log, line)
                     }
                     SidecarStderrLevel::Warn => {
-                        ulog_warn!("[bun-err][session:{}] {}", session_id_for_log, line)
+                        ulog_warn!("[sidecar-err][session:{}] {}", session_id_for_log, line)
                     }
                     SidecarStderrLevel::Error => {
-                        ulog_error!("[bun-err][session:{}] {}", session_id_for_log, line)
+                        ulog_error!("[sidecar-err][session:{}] {}", session_id_for_log, line)
                     }
                 }
             }

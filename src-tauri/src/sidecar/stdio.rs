@@ -35,7 +35,15 @@ pub(crate) fn classify_sidecar_stderr(line: &str) -> SidecarStderrLevel {
     //   - `[startup]` startupBeacon, fired before stdout drain is hooked.
     //   - `[log-retention]` daily / on-demand sweep audit (deleted N old
     //     files, etc.) — see `src/server/log-retention.ts::safeStderr`.
-    if head.starts_with("[startup]") || head.starts_with("[log-retention]") {
+    //   - `[shell]` PATH-detection status from `src/server/utils/shell.ts`
+    //     (NVM nodes found, Windows fallback note, interactive-shell PATH
+    //     success/fail). Every line under this prefix is non-actionable:
+    //     the function always falls back to `getFallbackPaths()` on
+    //     failure, so a "failed" log is informational, not an error.
+    if head.starts_with("[startup]")
+        || head.starts_with("[log-retention]")
+        || head.starts_with("[shell]")
+    {
         return SidecarStderrLevel::Info;
     }
     // WARN: real warnings the sidecar emits via `console.warn`. The
@@ -256,12 +264,24 @@ mod stderr_classifier_tests {
             SidecarStderrLevel::Info
         ));
         assert!(matches!(
+            classify_sidecar_stderr("[shell] Detected user PATH via interactive shell"),
+            SidecarStderrLevel::Info
+        ));
+        assert!(matches!(
+            classify_sidecar_stderr("[shell] Interactive PATH detection failed, staying on fallback: ..."),
+            SidecarStderrLevel::Info
+        ));
+        assert!(matches!(
             classify_sidecar_stderr("[sdk-shim] foo() not implemented"),
             SidecarStderrLevel::Warn
         ));
         // Leading whitespace OK.
         assert!(matches!(
             classify_sidecar_stderr("  [startup] foo"),
+            SidecarStderrLevel::Info
+        ));
+        assert!(matches!(
+            classify_sidecar_stderr("  [shell] No terminal-shell proxy env detected"),
             SidecarStderrLevel::Info
         ));
         // Embedded prefix in a real error MUST stay ERROR.

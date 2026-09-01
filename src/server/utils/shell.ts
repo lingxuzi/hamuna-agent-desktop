@@ -302,9 +302,21 @@ export function warmupShellPath(): Promise<void> {
         // -i interactive + -l login → sources both .zprofile and .zshrc (where
         // NVM/fnm/pnpm typically live). Marker isolates $PATH from noisy output
         // (MOTD, p10k banners, conda activation msgs).
+        //
+        // We wrap the inner interactive invocation in an outer non-interactive
+        // bash with `exec ... 2>/dev/null` so the inner bash's job-control
+        // setup stderr (e.g., "bash: 无法设定终端进程群 ... 对设备不适当的
+        // ioctl 操作" / "bash: 此 shell 中无任务控制") gets redirected to
+        // /dev/null instead of leaking into the sidecar stderr pipe and
+        // surfacing in the unified log as ERROR. The Tauri sidecar has no
+        // controlling TTY, so bash -i always emits these lines; this is a
+        // mirror of the Rust equivalent (src-tauri/src/system_binary.rs:238
+        // uses `Stdio::null()` for the same reason). Detection has its own
+        // fallback (getFallbackPaths) so we aren't losing actionable signal.
+        const wrappedCmd = `exec ${shell} -i -l -c ${JSON.stringify(cmd)} 2>/dev/null`;
         execFile(
             shell,
-            ['-i', '-l', '-c', cmd],
+            ['-c', wrappedCmd],
             {
                 encoding: 'utf-8',
                 timeout: 5000,

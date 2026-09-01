@@ -217,18 +217,18 @@ pub fn start_tab_sidecar<R: Runtime>(
 
     ulog_info!("[sidecar] Process spawned with pid: {:?}", child.id());
 
-    // 启动线程捕获 stdout → 写入统一日志（确保 Bun 输出在 unified log 可见）
+    // 启动线程捕获 stdout → 写入统一日志（确保 sidecar 输出在 unified log 可见）
     if let Some(stdout) = child.stdout.take() {
         let tab_id_clone = tab_id.to_string();
         thread::spawn(move || {
             let reader = BufReader::new(stdout);
-            let mut bun_logger_active = false;
+            let mut unified_logging_active = false;
             for line in reader.lines().flatten() {
-                if !bun_logger_active {
+                if !unified_logging_active {
                     if line.contains("[Logger] Unified logging initialized") {
-                        bun_logger_active = true;
+                        unified_logging_active = true;
                     }
-                    ulog_info!("[bun-out][{}] {}", tab_id_clone, line);
+                    ulog_info!("[sidecar-out][{}] {}", tab_id_clone, line);
                 }
             }
         });
@@ -246,10 +246,10 @@ pub fn start_tab_sidecar<R: Runtime>(
             let reader = BufReader::new(stderr);
             for line in reader.lines().flatten() {
                 match classify_sidecar_stderr(&line) {
-                    SidecarStderrLevel::Info => ulog_info!("[bun-err][{}] {}", tab_id_clone, line),
-                    SidecarStderrLevel::Warn => ulog_warn!("[bun-err][{}] {}", tab_id_clone, line),
+                    SidecarStderrLevel::Info => ulog_info!("[sidecar-err][{}] {}", tab_id_clone, line),
+                    SidecarStderrLevel::Warn => ulog_warn!("[sidecar-err][{}] {}", tab_id_clone, line),
                     SidecarStderrLevel::Error => {
-                        ulog_error!("[bun-err][{}] {}", tab_id_clone, line)
+                        ulog_error!("[sidecar-err][{}] {}", tab_id_clone, line)
                     }
                 }
             }

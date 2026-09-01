@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。TODO #17：Windows OpenClaw plugin 安装报 "system npm not found" — PATH-independent 修复（用户红线：绝不写系统 PATH）。修复 = 翻转 bundled-first + 扩展 Windows exe-relative 候选 + InstallerSource 抽 pure helper + 3-mode 错误信息 + 5 unit tests。`cargo check/clippy/build --release` ✅ + 5/5 测试通过。TODO #18：6 处过时的 bun.exe 引用清理（v0.2.0 已迁 node.js），5 文件 user-visible diagnostic 同步到 node.exe + SDK-embedded bun.exe（SDK 内部仍嵌 bun）。`cargo check/clippy/build --release` ✅。）
+最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。TODO #17：Windows OpenClaw plugin 安装报 "system npm not found" — PATH-independent 修复（用户红线：绝不写系统 PATH）。修复 = 翻转 bundled-first + 扩展 Windows exe-relative 候选 + InstallerSource 抽 pure helper + 3-mode 错误信息 + 5 unit tests。`cargo check/clippy/build --release` ✅ + 5/5 测试通过。TODO #18：6 处过时的 bun.exe 引用清理（v0.2.0 已迁 node.js），5 文件 user-visible diagnostic 同步到 node.exe + SDK-embedded bun.exe（SDK 内部仍嵌 bun）。`cargo check/clippy/build --release` ✅。TODO #19：bash -i -l 在无 TTY 进程（Tauri GUI）下会向 stderr 写 "无法设定终端进程群/无任务控制"，泄漏到 sidecar stderr pipe 变成 ERROR 级噪音（`[bun-err][__global__]`）。根因 = 两侧 chokepoint 不一致（Rust `system_binary.rs:238` 已 `Stdio::null()`，Node `shell.ts:305` 仍默认 `['pipe','pipe','pipe']`）。修：shell.ts execFile 包一层 `exec ... 2>/dev/null` wrapper + classifier 加 `[shell]` 前缀 demote + TODO #18 漏改的 `[bun-err/out]` tag → `[sidecar-err/out]`（3 文件）。`tsc --noEmit` exit 0 + cargo clippy ✅ + stdio.rs 测试 8/8 + shell.unit.test 3/3。**未 commit** —— 4 文件 + 本 snapshot。）
 
 ---
 
@@ -377,6 +377,54 @@
 | `cd src-tauri && cargo clippy --no-deps` | ✅ |
 | `cd src-tauri && cargo build --release` | ✅ |
 | `grep -ri "bun" src-tauri/src/{sidecar,terminal,process_cmd}.rs \| grep -v "SDK-embedded bun\|embedded bun"` | 仅剩 SDK-embedded bun 相关（合规） |
+
+### TODO #19: ✅ 已修复 — bash `-i -l` job-control 噪音泄漏到 sidecar stderr（两侧 chokepoint 不一致）
+
+**症状**：用户报告 unified log 每个 sidecar startup 出现 3 条 `[ERROR] [bun-err][__global__]`：
+```
+[shell] Interactive PATH detection failed, staying on fallback: Command failed: /bin/bash -i -l -c ...
+bash: 无法设定终端进程群 (2431046): 对设备不适当的 ioctl 操作
+bash: 此 shell 中无任务控制
+```
+
+**根因（两侧 chokepoint 不一致）**：
+1. **bash `-i` 在无 TTY 进程下必然写 stderr 抱怨 job-control setup 失败**。Tauri GUI 进程（`pnmna-agent` / `pnmna-helper`）从 Finder/launchctl 启动，**没有 controlling TTY**——bash 一上来 `tcsetpgrp` 就 ioctl fail，写 `bash: 无法设定终端进程群` / `bash: 此 shell 中无任务控制` 到 bash 的 stderr；接着因 setup 失败 exit 1 → Node `execFile` callback 拿到 "Command failed" → `console.warn('[shell] Interactive PATH detection failed', error.message)`。
+2. **但 bash 的 stderr 怎么到 Node 的 stderr**（execFile 默认 `['pipe','pipe','pipe']` 应该 pipe 捕获）— 实测确认 bash 的 stderr 文本**会出现在 Node 进程 stdout 行间**（不是 error.stderr，那是另一回事）。可能 Node 24+ 在某些 stdio 组合下把 child stderr 转发到 parent stderr，或 bash `-i` 早期 startup 写 stderr 时 stdio 接管尚未完成。
+3. **两侧 chokepoint 不一致**：`src-tauri/src/system_binary.rs:238` 已经 `stderr(Stdio::null())` 把 bash stderr 静音；`src/server/utils/shell.ts:305` 仍走 execFile 默认 stdio——所以**只有 Node 侧噪声**。
+4. **classifier 默认 ERROR**：`src-tauri/src/sidecar/stdio.rs` 只 demote `[start]/[log-retention]` → Info 和 `[sdk-shim]` → Warn，其它一律 ERROR——`[shell]` 前缀不在白名单。
+5. **TODO #18 漏改**：`[bun-err]` / `[bun-out]` / `Bun 输出` 注释在 TODO #18 commit 时只改了 user-facing diagnostic，没改 stderr classifier 的内部 tag——内部 tag 误导。
+
+**修复（4 文件）**：
+
+1. **`src/server/utils/shell.ts:300-308`** —— execFile 包一层 `exec ... 2>/dev/null` wrapper：
+   ```ts
+   const wrappedCmd = `exec ${shell} -i -l -c ${JSON.stringify(cmd)} 2>/dev/null`;
+   execFile(shell, ['-c', wrappedCmd], {...});
+   ```
+   外层 non-interactive bash 不做 job-control setup → 没 ioctl 噪音；`exec` 把内层 bash 的 fd 全部继承（包括 stderr → /dev/null）。**保留 `-i -l`** —— 不动 `.bashrc`/`.zshrc` source 行为，对 NVM/fnm/etc. 用户无感知（shell.ts 已经手动枚举这些路径）。
+
+   试过 `stdio:['pipe','pipe','ignore']`——**TS 类型错误**：`ExecFileOptionsWithStringEncoding` 不允许 stdio 字段（Node execFile 把 stdio 固定为 pipe）。要自定义 stdio 必须改用 `spawn()`，代价是手动实现 timeout/maxBuffer。**wrapper 路线 TS-clean + 等价语义**。
+
+2. **`src-tauri/src/sidecar/stdio.rs:38-49`** —— classifier 加 `[shell]` 前缀 → Info（defense in depth，即使 wrapper 万一漏掉某条 line 也不会变 ERROR）。`[shell]` 前缀在 shell.ts 仅用于 PATH-detection status（NVM found / fallback / detect success/fail / proxy env state），全部 non-actionable——加注释说"why"。
+3. **`src-tauri/src/sidecar/instances.rs:225,231,249-252`** —— TODO #18 漏改：`[bun-out]` → `[sidecar-out]`、`[bun-err]` → `[sidecar-err]`、注释 "Bun 输出" → "sidecar 输出"、变量 `bun_logger_active` → `unified_logging_active`。
+4. **`src-tauri/src/sidecar/session_lifecycle.rs:813-823,837-843`** —— 同上 + 把 "Once Bun's unified logger is initialized..." 这段过期注释同步改成 "Once the sidecar's unified logger is initialized..."。
+
+**改动文件（4）**：
+- `src/server/utils/shell.ts`
+- `src-tauri/src/sidecar/stdio.rs`
+- `src-tauri/src/sidecar/instances.rs`
+- `src-tauri/src/sidecar/session_lifecycle.rs`
+
+**验证**：
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| TypeScript | `npx tsc --noEmit` | ✅ exit 0 |
+| Cargo clippy | `cd src-tauri && cargo clippy --no-deps` | ✅ 无新增 warning |
+| Stdout classifier 测试 | `cd src-tauri && cargo test --lib sidecar::stdio` | ✅ 8/8（含 4 个新 `[shell]` case） |
+| Shell unit | `npx vitest run --project unit src/server/utils/shell.unit.test.ts` | ✅ 3/3 |
+| 实测 stderr 静音 | `node` 内嵌 execFile 模拟 wrapper | ✅ 无 `bash: 无法设定...` 输出 |
+
+**未 commit**：4 文件 + 本 snapshot 待用户拍板提交。
 
 ### TODO #5: desktop Bash 工具在 detached console 下 spawn headed chromium 永远 hang
 
