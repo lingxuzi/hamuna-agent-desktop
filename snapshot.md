@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-08-31（TODO #15：i18n 补齐 SDK 0.3.234 新增 6 个 terminal_reason 条目（`api_error` / `malformed_tool_use_exhausted` / `budget_exhausted` / `structured_output_retry_exhausted` / `tool_deferred_unavailable` / `turn_setup_failed`）— zh-CN + en-US 双语。`terminalReason.ts` MAP 早已齐全，但 TerminalReasonBanner.tsx:81 i18n lookup miss 走 defaultValue 兜底文案"未知原因 (api_error)"。今日 master 已含 TODO #14 KB 重构（4d109bd → d01eab1）并 push 到 origin(github) + gitee(force, 覆盖 442d4c3 divergent 分支）。）
+最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。）
 
 ---
 
@@ -164,6 +164,33 @@
   - Phase 5（✅ 完成）：新增 3 个测试文件覆盖 Rust 算法精确移植、jieba 中文分词 + TypeGraph/SQLite 端到端——`kb-merge.unit.test.ts` 17 case（entityId/chunkText 4 case 含 boundary + hard-break + empty/mergeEntities/mergeRelations typed upgrade + weight 累加 + cooccur 语义）、`kb-tokenize.unit.test.ts` 9 case（中文分词 + 停用词 + 单字过滤 + 标点过滤 + FTS5 MATCH 形状）、`kb-store.integration.test.ts` 8 case（createKb 唯一约束 / addText chunks / saveRelations merge / query 中文 FTS5+1跳 / mounts / deleteKb cascade）。**修复 2 个 Phase 1-2 期间没暴露的真实 bug**：`saveRelations` 的 Relation id 含 `relationType` 与数组 index → typed upgrade 后 cooccur 旧 row 残留（升级前 id=`rel_kb_X_A_B_cooccur_0`，升级后 id=`rel_kb_X_A_B_founded_by_0`，两个不同 id），改为仅含 `(kbId,subject,object)` 稳态 id；`mountsForWorkspace` 不排序导致调用方拿到非确定顺序，测试断言常踩坑，store 内 sort 兜底。**最终 KB 模块测试 39/39 全绿**（unit 26 + integration 13），`npm run test:classification` 通过（191 server tests），`tsc --noEmit` 通过，`cargo check --locked` 通过
 - **矛盾点**：Rust KbEngine 1465 行 + Tantivy 依赖删除；中文全文需 jieba-wasm 预分词（成为必需核心，不再是 ponytail）——spike 已实测通过
 - **状态**：✅ Phase 1+2+3+4+5 完成（schema+store+admin dispatcher+进程内化+前端 HTTP 切换+迁移+Rust 删除+测试覆盖+2 个 store bug 修复）。TODO #14 整体收尾，可独立 commit。
+
+### TODO #16: ✅ 已修复 — fresh install 下 `kb-relations` poller 每 15s 报 "directory does not exist"
+
+**症状**：sidecar 启动后日志雪崩（每 15s 一条）：
+```
+[kb-relations] poll failed: TypeError: Cannot open database because the directory does not exist
+    at async <anonymous> (src/server/kb/kb-store.ts:116:21)
+    at async takePendingAll (src/server/kb/kb-store.ts:298:17)
+    at async processPendingOnce (src/server/kb-relations.ts:344:19)
+```
+**根因**：`kb-store.ts::getKbStore()` 在 `createLocalSqliteStore(kbGraph, { path: getDbPath() })` 前未 `mkdirSync` 父目录。`getDbPath()` 默认 `~/.hamuna/kb/kb.sqlite` —— fresh install（`~/.hamuna/kb/` 不存在）下 better-sqlite3 抛 "directory does not exist"。错误被 `kb-relations.ts:395` 的 `console.warn` 吞掉，每 15s 一次永不恢复。**为何现有 8 个 kb-store integration test 没捕获**：所有 test 都用 `mkdtempSync` 创建**已存在的**父目录，再用 `join(tmpDir, 'kb.sqlite')`，所以父目录必然存在——无法测到 fresh install 路径。
+
+**修复（治本，单点）**：
+- `src/server/kb/kb-store.ts` — `getKbStore()` 在 `createLocalSqliteStore` 前加 `mkdirSync(dirname(getDbPath()), { recursive: true })`。`recursive: true` 幂等（已存在不抛错），且**故意不**先 `existsSync` 探再 mkdir（断链 symlink 会让 `existsSync` 返 false，详见 Pit-of-Success §fs-utils）。
+- `src/server/kb/__tests__/kb-store.integration.test.ts` — 新增 `auto-creates parent directory when missing (fresh install)` 回归测试：`mkdtempSync` 一个 fresh home + 故意**不**创建子目录 `kb/`，setKbStorePath 到其下 `kb.sqlite`，调 `createKb` 断言不抛错 + `existsSync(kbDir) === true`。
+
+**为何不修 kb-relations.ts 的吞错**：根因不在吞错（吞 warn 本身合理——best-effort 设计），而是 store 创建失败。修根因后 poller 不再触发 error path。
+
+**验证**：
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| Type | `npx tsc --noEmit` | exit 0 |
+| Lint | `npx eslint src/server/kb/kb-store.ts src/server/kb/__tests__/kb-store.integration.test.ts` | exit 0 |
+| Integration | `npx vitest run --project integration src/server/kb/__tests__/kb-store.integration.test.ts` | **9/9**（含新增回归） |
+| 集成池全量 | 41 files passed / 1 failed（`agent-session-env` 1M unlock —— TODO #3 预存在，与本修复无关） | — |
+
+**未 commit**：2 文件改动（`kb-store.ts` +14 行含注释 + `kb-store.integration.test.ts` +18 行回归测试）待用户拍板提交。
 
 ### TODO #12: ✅ 已修复 — skill 安装后显式调用报 "unknown command"（reload 链路由错）
 

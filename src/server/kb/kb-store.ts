@@ -7,8 +7,9 @@
 // is created lazily on first access (kb modules are lazy-imported by design) and
 // the path is injectable for tests.
 
+import { mkdirSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 import { createLocalSqliteStore } from '@nicia-ai/typegraph/sqlite/local';
 import type { NodeId, Store } from '@nicia-ai/typegraph';
@@ -113,6 +114,13 @@ export function setKbStorePath(path: string): void {
 export function getKbStore(): Promise<Store<typeof kbGraph>> {
   if (!storePromise) {
     storePromise = (async () => {
+      // better-sqlite3 won't create the parent directory on its own — fresh
+      // installs (no ~/.hamuna/kb/ yet) would otherwise fail every poll with
+      // "Cannot open database because the directory does not exist". recursive:
+      // true is idempotent (no throw if the dir already exists), so this is
+      // safe on warm paths too — we deliberately do NOT existsSync-then-mkdir
+      // (that pattern mishandles broken symlinks, see pit_of_success §fs-utils).
+      mkdirSync(dirname(getDbPath()), { recursive: true });
       const store = await createLocalSqliteStore(kbGraph, {
         path: getDbPath(),
         pragmas: { journalMode: 'wal', busyTimeoutMs: 5000 },

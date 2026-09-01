@@ -12,7 +12,7 @@
 //
 // Integration pool — real TypeGraph store + real better-sqlite3 binary.
 
-import { mkdtempSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -163,5 +163,25 @@ describe('kb-store', () => {
     const summary = await graphSummary(kb.id);
     expect(summary.entityCount).toBe(0);
     expect(summary.relationCount).toBe(0);
+  });
+
+  // Regression: fresh install where the parent dir does not exist (e.g.
+  // ~/.hamuna/kb/ was never created). Before the fix, createKb threw
+  // "Cannot open database because the directory does not exist" and the
+  // kb-relations poller logged it every 15s forever.
+  it('auto-creates parent directory when missing (fresh install)', async () => {
+    const freshHome = mkdtempSync(join(tmpdir(), 'kb-fresh-home-'));
+    const kbDir = join(freshHome, 'kb'); // intentionally does NOT exist yet
+    const dbPath = join(kbDir, 'kb.sqlite');
+    try {
+      setKbStorePath(dbPath);
+      await resetKbStore();
+      const kb = await createKb('Fresh Install KB');
+      expect(kb.name).toBe('Fresh Install KB');
+      expect(existsSync(kbDir)).toBe(true);
+    } finally {
+      await resetKbStore();
+      rmSync(freshHome, { recursive: true, force: true });
+    }
   });
 });
