@@ -107,7 +107,7 @@ const MAP: Record<TerminalReason, TerminalReasonInfo> = {
     severity: 'error',
   },
   malformed_tool_use_exhausted: {
-    label: '工具调用格式错误',
+    label: '工具调用格式错误（重试耗尽）',
     detail: 'SDK 多次重试仍收到格式错误的工具调用后放弃。可能是模型兼容问题或工具 schema 有歧义。',
     severity: 'error',
   },
@@ -122,12 +122,12 @@ const MAP: Record<TerminalReason, TerminalReasonInfo> = {
     severity: 'error',
   },
   tool_deferred_unavailable: {
-    label: '延迟工具不可用',
+    label: '延迟工具最终不可用',
     detail: '被延迟的工具最终确认不可用，本轮工具结果未交付。可重新发送消息让 AI 改用替代方案。',
     severity: 'notice',
   },
   turn_setup_failed: {
-    label: '会话初始化失败',
+    label: '本轮启动失败',
     detail: '本轮 setup 阶段失败（环境、工具集、Hook 注册等任一异常）。查看 unified log 定位 setup 错误。',
     severity: 'error',
   },

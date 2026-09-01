@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。）
+最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。）
 
 ---
 
@@ -277,18 +277,30 @@
 - **状态**: ⏳ 用户已确认本次只修 dev 启动失败；其它失败**不**在本修复 scope 内
 - **UPGRADE**: 用户后续决策——独立 PR 修；或跟主题/能力表改动一起走
 
-### TODO #4: SDK 0.3.234 升级引发的 6 个新 TerminalReason entry 文案 review
+### TODO #4: ✅ 已完成文案 review — SDK 0.3.234 升级引发的 6 个新 TerminalReason entry
 
-`@anthropic-ai/claude-agent-sdk` 从 0.3.201 升到 0.3.234（33 个 minor 跳）。SDK 新增 6 个 TerminalReason 字面量：
-- `api_error` / `malformed_tool_use_exhausted` / `budget_exhausted` / `structured_output_retry_exhausted` / `tool_deferred_unavailable` / `turn_setup_failed`
+`@anthropic-ai/claude-agent-sdk` 0.3.234 新增 6 个 TerminalReason 字面量：`api_error` / `malformed_tool_use_exhausted` / `budget_exhausted` / `structured_output_retry_exhausted` / `tool_deferred_unavailable` / `turn_setup_failed`。`src/shared/terminalReason.ts` `Record<TerminalReason, TerminalReasonInfo>` exhaustive mapping 已补全（typecheck 通过），但 label/detail 是字面直译 + 占位描述，**SDK 官方 sdk.d.ts 没给这 6 个字面量写 JSDoc**——需要人工润色 3 处。
 
-应用 `src/shared/terminalReason.ts:31` `Record<TerminalReason, TerminalReasonInfo>` 是 exhaustive mapping，为通过 typecheck 已**补全** 6 个新 entry。但是：
+**Review 后改动（3 条 label 润色，en-US + zh-CN + terminalReason.ts MAP 三处同步）**：
 
-- SDK 0.3.234 `sdk.d.ts` 没有给这 6 个字面量写 JSDoc 注释
-- 现有 label/detail 是**字面直译 + 占位描述**，severity 是按字面意思推测
-- 必须人工 review 这些文案是否符合中文用户预期、severity 是否分级合理
+| entry | 问题 | 改动 |
+|---|---|---|
+| `malformed_tool_use_exhausted` | label "Malformed tool use" / "工具调用格式错误" 漏了 **exhausted** 字样——用户看到的是平铺的"工具调用格式错误"，不知道 SDK 已经重试过 | zh-CN 加"（重试耗尽）" / en-US 加 "— retries exhausted" |
+| `turn_setup_failed` | 中文 label "**会话**初始化失败" 会跟"新建会话"这种 session-level 操作混淆；`turn` 是 Claude SDK 单轮术语不是会话 | zh-CN 改"**本轮**启动失败"（明确是 turn 不是 session）；en-US 保留 "Turn setup failed"（turn 是 Claude community 通用术语） |
+| `tool_deferred_unavailable` | 跟 `tool_deferred`（"延迟处理，本轮已返回"）容易混淆，用户看不出来"unavailable" 是 *最终* 不可用 | zh-CN 加"**最终**" / en-US 加 "ultimately" |
 
-- **状态**: 🟡 待文案 review（不影响 SDK 兼容运行）
+其余 3 条（`api_error` / `budget_exhausted` / `structured_output_retry_exhausted`）字面 + 上下文化已足够清晰，**未改动**。Severity 分级（5 个 error + 1 个 notice `tool_deferred_unavailable`）保留——前者用户必须处理，后者只是 SDK 自动决策后用户感知，notice 合理。
+
+**关于 terminalReason.ts 内联 MAP label/detail**：实际显示路径是 `TerminalReasonBanner.tsx:79-82` `t('shell.terminalReason.reasons.${reason}.label', { defaultValue: unknownLabel })`——**i18n locale 是 source of truth**，MAP.label/detail 是 fallback defaultValue（即使 i18n miss 也不会显示）。MAP 仍必须保持 exhaustive（TypeScript 强制），所以**3 处 label 也同步更新**（保持一致，避免日后有人误以为 MAP 是真实显示源）。
+
+**验证**：
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| JSON syntax | `node -e "JSON.parse(...)"` zh-CN + en-US | OK |
+| Type | `npx tsc --noEmit` | exit 0 |
+| Unit | `npx vitest run --project unit src/shared/terminalReason.test.ts` | **24/24** |
+
+**未 commit**：3 文件改动（`zh-CN/chat.json` + `en-US/chat.json` + `terminalReason.ts`——每文件 3 条 label 润色，6 处 total）待用户拍板提交。
 
 ### TODO #5: desktop Bash 工具在 detached console 下 spawn headed chromium 永远 hang
 

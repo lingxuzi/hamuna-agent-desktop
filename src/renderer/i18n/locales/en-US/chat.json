@@ -1021,7 +1021,7 @@
           "detail": "The provider returned an upstream API error (neither rate-limit nor quota-exhausted). Check the unified log for the raw provider error."
         },
         "malformed_tool_use_exhausted": {
-          "label": "Malformed tool use",
+          "label": "Malformed tool use — retries exhausted",
           "detail": "The SDK exhausted retries on malformed tool calls. This may indicate a model compatibility issue or an ambiguous tool schema."
         },
         "budget_exhausted": {
@@ -1033,7 +1033,7 @@
           "detail": "The SDK ended the turn after failing to produce a result matching the structured-output schema. Review the schema or try a more capable model."
         },
         "tool_deferred_unavailable": {
-          "label": "Deferred tool unavailable",
+          "label": "Deferred tool ultimately unavailable",
           "detail": "A deferred tool was confirmed unavailable and its result was not delivered. Resend the message so the AI can try an alternative."
         },
         "turn_setup_failed": {
