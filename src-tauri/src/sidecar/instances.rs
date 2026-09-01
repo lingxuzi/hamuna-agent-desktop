@@ -27,6 +27,47 @@ fn resolve_sidecar_process_role(
     }
 }
 
+/// Decide whether the tab-scoped instance under `tab_id` is still the one we
+/// originally spawned (expected `expected_port`). Returns:
+/// - `Ok(())` — the same instance, proceed with diagnostic + remove
+/// - `Err(InstanceReplacedReason::DifferentPort)` — replaced by another
+///   `start_tab_sidecar` call while we were waiting; skip cleanup
+/// - `Err(InstanceReplacedReason::Missing)` — removed entirely (rare;
+///   `remove_instance` from elsewhere). Skip cleanup.
+///
+/// Extracted from the inline `match current_port { ... }` block in
+/// `start_tab_sidecar`'s Err path so the race-window decision is unit-testable
+/// without standing up a Tauri runtime. See #236 follow-up.
+pub(super) enum InstanceReplacedReason {
+    DifferentPort(u16),
+    Missing,
+}
+
+impl std::fmt::Debug for InstanceReplacedReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DifferentPort(p) => write!(f, "DifferentPort({})", p),
+            Self::Missing => write!(f, "Missing"),
+        }
+    }
+}
+
+pub(super) fn check_instance_not_replaced(
+    manager: &ManagedSidecarManager,
+    tab_id: &str,
+    expected_port: u16,
+) -> Result<(), InstanceReplacedReason> {
+    let guard = match manager.lock() {
+        Ok(g) => g,
+        Err(_) => return Ok(()), // lock poisoned — assume not replaced, let caller log
+    };
+    match guard.get_instance(tab_id).map(|i| i.port) {
+        Some(p) if p == expected_port => Ok(()),
+        Some(p) => Err(InstanceReplacedReason::DifferentPort(p)),
+        None => Err(InstanceReplacedReason::Missing),
+    }
+}
+
 /// Start a Sidecar for a specific Tab
 /// Each Tab gets its own dedicated Sidecar (1:1 relationship)
 pub fn start_tab_sidecar<R: Runtime>(
@@ -333,6 +374,38 @@ pub fn start_tab_sidecar<R: Runtime>(
             let mut diag = e.clone();
 
             let mut manager_guard = manager.lock().map_err(|_| e.clone())?;
+
+            // #236 follow-up: the instance under `tab_id` may have been replaced
+            // by a concurrent caller while we were waiting. Typical paths are
+            // `monitor_global_sidecar`'s auto-restart, or `App.tsx`'s
+            // `startGlobalSidecarSilent` retry chain (each retry calls
+            // `cmd_start_global_sidecar` -> `start_tab_sidecar` which removes
+            // the stale instance and inserts a fresh one on a different port).
+            //
+            // Without this guard the Err path would mis-diagnose the NEW
+            // (just-spawned, not-yet-listening) instance as "process alive
+            // but not listening" and then `remove_instance(tab_id)` would
+            // KILL the replacement, producing a self-perpetuating restart
+            // cascade. Mirrors the `ensure_session_sidecar` pattern in
+            // session_lifecycle.rs:947/998.
+            match check_instance_not_replaced(manager, tab_id, port) {
+                Ok(()) => {}
+                Err(InstanceReplacedReason::DifferentPort(found)) => {
+                    ulog_warn!(
+                        "[sidecar] Tab {} sidecar replaced during wait_for_health (expected port {}, found {}), skipping removal",
+                        tab_id, port, found,
+                    );
+                    return Err(diag);
+                }
+                Err(InstanceReplacedReason::Missing) => {
+                    ulog_warn!(
+                        "[sidecar] Tab {} sidecar removed during wait_for_health (expected port {}), skipping removal",
+                        tab_id, port,
+                    );
+                    return Err(diag);
+                }
+            }
+
             if let Some(instance) = manager_guard.get_instance_mut(tab_id) {
                 match instance.process.try_wait() {
                     Ok(Some(status)) => {
@@ -863,6 +936,77 @@ mod global_restart_decision_tests {
             global_restart_decision(true, false, after_recover, T),
             (false, 1)
         );
+    }
+}
+
+#[cfg(test)]
+mod check_instance_not_replaced_tests {
+    //! #236 follow-up: the Err path of `start_tab_sidecar` MUST NOT kill the
+    //! replacement sidecar when an auto-restart / retry wins the race. These
+    //! tests pin the helper that makes that decision.
+
+    use super::{check_instance_not_replaced, InstanceReplacedReason};
+    use crate::sidecar::manager::SidecarManager;
+    use std::process::Command;
+    use std::sync::{Arc, Mutex};
+
+    /// Build a manager holding one fake instance at `port` under `tab_id`.
+    /// `true` (POSIX) / `cmd /c exit 0` (Windows) gives us a real `Child`
+    /// handle without any actual sidecar work — the helper only reads `.port`.
+    fn manager_with_instance(tab_id: &str, port: u16) -> Arc<Mutex<SidecarManager>> {
+        let mut mgr = SidecarManager::new();
+        #[cfg(unix)]
+        let child = Command::new("true").spawn().expect("spawn `true`");
+        #[cfg(windows)]
+        let child = Command::new("cmd")
+            .args(["/c", "exit", "0"])
+            .spawn()
+            .expect("spawn `cmd /c exit 0`");
+        mgr.insert_instance(
+            tab_id.to_string(),
+            crate::sidecar::types::SidecarInstance {
+                process: child,
+                port,
+                agent_dir: None,
+                healthy: false,
+                is_global: false,
+                created_at: std::time::Instant::now(),
+            },
+        );
+        Arc::new(Mutex::new(mgr))
+    }
+
+    #[test]
+    fn returns_ok_when_current_port_matches_expected() {
+        // Common path: original spawn's wait_for_health finally fails, but
+        // nobody replaced the instance in the meantime.
+        let mgr = manager_with_instance("global", 31415);
+        assert!(check_instance_not_replaced(&mgr, "global", 31415).is_ok());
+    }
+
+    #[test]
+    fn returns_different_port_when_replacement_won_the_race() {
+        // Race lost: monitor / retry replaced us. We MUST skip removal —
+        // cleaning up here would kill the just-spawned replacement and
+        // create a self-perpetuating restart cascade.
+        let mgr = manager_with_instance("global", 31416);
+        let result = check_instance_not_replaced(&mgr, "global", 31415);
+        match result {
+            Err(InstanceReplacedReason::DifferentPort(p)) => assert_eq!(p, 31416),
+            other => panic!("expected DifferentPort(31416), got {:?}", other.map(|_| "Ok")),
+        }
+    }
+
+    #[test]
+    fn returns_missing_when_instance_was_removed() {
+        // Edge: another caller hit `remove_instance(tab_id)` while we were
+        // waiting. Same skip-cleanup conclusion — there's nothing to
+        // diagnose or remove.
+        let mgr: Arc<Mutex<SidecarManager>> = Arc::new(Mutex::new(SidecarManager::new()));
+        assert!(matches!(
+            check_instance_not_replaced(&mgr, "global", 31415),
+            Err(InstanceReplacedReason::Missing)
+        ));
     }
 }
 

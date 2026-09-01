@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。TODO #17：Windows OpenClaw plugin 安装报 "system npm not found" — PATH-independent 修复（用户红线：绝不写系统 PATH）。修复 = 翻转 bundled-first + 扩展 Windows exe-relative 候选 + InstallerSource 抽 pure helper + 3-mode 错误信息 + 5 unit tests。`cargo check/clippy/build --release` ✅ + 5/5 测试通过。TODO #18：6 处过时的 bun.exe 引用清理（v0.2.0 已迁 node.js），5 文件 user-visible diagnostic 同步到 node.exe + SDK-embedded bun.exe（SDK 内部仍嵌 bun）。`cargo check/clippy/build --release` ✅。TODO #19：bash -i -l 在无 TTY 进程（Tauri GUI）下会向 stderr 写 "无法设定终端进程群/无任务控制"，泄漏到 sidecar stderr pipe 变成 ERROR 级噪音（`[bun-err][__global__]`）。根因 = 两侧 chokepoint 不一致（Rust `system_binary.rs:238` 已 `Stdio::null()`，Node `shell.ts:305` 仍默认 `['pipe','pipe','pipe']`）。修：shell.ts execFile 包一层 `exec ... 2>/dev/null` wrapper + classifier 加 `[shell]` 前缀 demote + TODO #18 漏改的 `[bun-err/out]` tag → `[sidecar-err/out]`（3 文件）。`tsc --noEmit` exit 0 + cargo clippy ✅ + stdio.rs 测试 8/8 + shell.unit.test 3/3。**未 commit** —— 4 文件 + 本 snapshot。）
+最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。TODO #17：Windows OpenClaw plugin 安装报 "system npm not found" — PATH-independent 修复（用户红线：绝不写系统 PATH）。修复 = 翻转 bundled-first + 扩展 Windows exe-relative 候选 + InstallerSource 抽 pure helper + 3-mode 错误信息 + 5 unit tests。`cargo check/clippy/build --release` ✅ + 5/5 测试通过。TODO #18：6 处过时的 bun.exe 引用清理（v0.2.0 已迁 node.js），5 文件 user-visible diagnostic 同步到 node.exe + SDK-embedded bun.exe（SDK 内部仍嵌 bun）。`cargo check/clippy/build --release` ✅。TODO #19：bash -i -l 在无 TTY 进程（Tauri GUI）下会向 stderr 写 "无法设定终端进程群/无任务控制"，泄漏到 sidecar stderr pipe 变成 ERROR 级噪音（`[bun-err][__global__]`）。根因 = 两侧 chokepoint 不一致（Rust `system_binary.rs:238` 已 `Stdio::null()`，Node `shell.ts:305` 仍默认 `['pipe','pipe','pipe']`）。修：shell.ts execFile 包一层 `exec ... 2>/dev/null` wrapper + classifier 加 `[shell]` 前缀 demote + TODO #18 漏改的 `[bun-err/out]` tag → `[sidecar-err/out]`（3 文件）。`tsc --noEmit` exit 0 + cargo clippy ✅ + stdio.rs 测试 8/8 + shell.unit.test 3/3。**未 commit** —— 4 文件 + 本 snapshot。TODO #20：Tab/Global sidecar Err 路径在 race 后误杀被替换的实例——错误信息误指 antivirus，根因 `instances.rs::start_tab_sidecar` Err 路径缺 `port_matches` 守卫（`session_lifecycle.rs:947/998` 已有）。修：抽 pure helper `check_instance_not_replaced(manager, tab_id, expected_port) -> Result<(), InstanceReplacedReason>`，Err 路径端口不匹配 → `ulog_warn` + `return Err(diag)` 跳过诊断+remove（防 restart cascade）。`cargo check` clean + `cargo test --lib sidecar::` 50/50 + 新 helper 单测 3/3。**未 commit** —— 1 文件 + 本 snapshot。）
 
 ---
 
@@ -425,6 +425,41 @@ bash: 此 shell 中无任务控制
 | 实测 stderr 静音 | `node` 内嵌 execFile 模拟 wrapper | ✅ 无 `bash: 无法设定...` 输出 |
 
 **未 commit**：4 文件 + 本 snapshot 待用户拍板提交。
+
+### TODO #20: ✅ 已修复 — Tab/Global sidecar Err 路径在 race 后误杀被替换的实例（cascade 循环重启）
+
+**症状**：用户报告 unified log 出现误导性 ERROR：
+```
+[sidecar-err][__global__] [sidecar] Health check failed: Sidecar process exited
+  during health check on port 31415 (detected at attempt 20)
+[sidecar] process alive but not listening. Possible causes: antivirus ...
+[sidecar] Failed to auto-restart global sidecar
+```
+错误信息把锅甩给 antivirus / port conflict，实际是 race condition——且 `remove_instance` 会杀掉刚启动的 replacement 实例，形成自维持的 restart cascade。
+
+**根因（架构漏洞）**：
+1. **session-scoped 已经正确**：`session_lifecycle.rs::ensure_session_sidecar:947/998` 已经有 `port_matches` 守卫——Err 路径在操作 instance 前验证 `instance.port == expected_port`，否则 `return Err(diag)` 跳过诊断+remove。
+3. **tab-scoped / global 路径漏了**：同模块 `instances.rs::start_tab_sidecar` 的 Err 路径直接 `manager_guard.get_instance_mut(tab_id)` 然后无脑 `remove_instance(tab_id)`——没有 port 验证。
+5. **触发 race 的两条路径**：
+   - `monitor_global_sidecar` auto-restart：~45s startup grace 后 HTTP health miss 累积到 `GLOBAL_HEALTH_FAIL_THRESHOLD=2` → restart，spawn 新进程 on 新 port，替代原 instance。
+   - `App.tsx:907 startGlobalSidecarSilent` retry chain：首次失败后指数退避 2s/4s/8s/16s/32s，每次重试都 `cmd_start_global_sidecar` → `start_tab_sidecar` → `remove_instance` 旧实例 + spawn 新实例 on 新 port。
+   - 任何一条路径都会替换 `instances[GLOBAL_SIDECAR_ID]`，而旧 `wait_for_health` 的 `alive_check` closure 在 attempt 20 (~8.5s) 检测到 `instance.port != expected_port` → 返回 false → Err。
+6. **Err 路径误诊**：`try_wait` 操作的是 NEW 实例（刚 spawn、还没 listen），返回 `Ok(None)` → 打印误导性的 "process alive but not listening. Possible causes: antivirus ..."；紧接着 `remove_instance(tab_id)` 把刚启动的 replacement 杀掉——再触发 monitor 重启或 renderer retry，永远循环。
+
+**修复（1 文件 + 3 unit test）**：
+
+1. **`src-tauri/src/sidecar/instances.rs`** —— 抽出 pure helper `check_instance_not_replaced(manager, tab_id, expected_port) -> Result<(), InstanceReplacedReason>`（带 `DifferentPort(u16)` / `Missing` 两个变体，`#[derive(Debug)]`）。`start_tab_sidecar` 的 Err 路径在 `try_wait` 诊断 + 删除前先调 helper：端口不匹配 → `ulog_warn!("...replaced during wait_for_health..., skipping removal")` + `return Err(diag)`；instance 不存在 → 类似处理。**完全对齐 `session_lifecycle.rs:947/998`** 的端口匹配守卫。
+2. **`src-tauri/src/sidecar/instances.rs`** —— 加 3 个 `cargo test --lib` 单测 `check_instance_not_replaced_tests`：port 匹配返 Ok / port 不匹配返 DifferentPort / instance 缺失返 Missing。用 `Command::new("true").spawn()`（POSIX）/ `cmd /c exit 0`（Windows）拿 real `Child` handle（helper 只读 `.port`，不依赖进程状态）。
+
+**验证**：
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| Cargo check | `cargo check --manifest-path src-tauri/Cargo.toml` | ✅ clean（除 pre-existing `unused manifest key: build` warning）|
+| Cargo clippy lib | `cargo clippy --manifest-path src-tauri/Cargo.toml --lib` | ✅ 无新增 warning |
+| 新 helper 单测 | `cargo test --lib sidecar::instances::check_instance_not_replaced_tests` | ✅ 3/3 |
+| 全部 sidecar 测试 | `cargo test --lib sidecar::` | ✅ 50/50（含 #19 classifier + #236 decision + 新 helper + lifecycle contract） |
+
+**未 commit**：1 文件 + 本 snapshot 待用户拍板提交。
 
 ### TODO #5: desktop Bash 工具在 detached console 下 spawn headed chromium 永远 hang
 
