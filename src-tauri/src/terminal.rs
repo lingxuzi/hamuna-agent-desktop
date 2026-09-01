@@ -389,10 +389,10 @@ fn default_shell() -> String {
 /// 3. ~/.hamuna/bin (CLI tools)
 fn inject_terminal_env(cmd: &mut CommandBuilder, app: &AppHandle, sidecar_port: Option<u16>) {
     // 1. Build PATH with bundled runtimes
-    //    Priority: bundled bun dir → bundled node dir → ~/.hamuna/bin → system PATH
+    //    Priority: bundled node dir → external binaries dir (cuse etc.) → ~/.hamuna/bin → system PATH
     let mut extra_paths: Vec<String> = Vec::new();
 
-    // Bundled Bun directory
+    // External binaries directory (cuse sidecar etc.; tauri.conf.json::externalBin)
     if let Ok(resource_dir) = app.path().resource_dir() {
         // #229 (same bug class): on Windows resource_dir() may carry the `\\?\`
         // extended-length prefix. cmd.exe / PowerShell don't honor `\\?\` entries

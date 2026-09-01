@@ -289,8 +289,9 @@ pub fn start_tab_sidecar<R: Runtime>(
     drop(manager_guard);
 
     // Build liveness check closure — detects process death during health check.
-    // Critical for Windows VMs where Defender delays bun.exe execution by 20-30s,
-    // causing the crash to happen well after the 50ms early exit check above.
+    // Critical for Windows VMs where Defender delays node.exe (and the SDK's
+    // embedded bun.exe) execution by 20-30s, causing the crash to happen well
+    // after the 50ms early exit check above.
     //
     // Also detects instance replacement: if the health monitor restarts the sidecar
     // while we're waiting, the old port is dead and a new instance sits at a different
@@ -342,8 +343,13 @@ pub fn start_tab_sidecar<R: Runtime>(
                         diag.push_str(&detail);
                     }
                     Ok(None) => {
+                        // v0.2.0+ sidecar spawns node.exe (see `crate::process_cmd::new(&node_path)`
+                        // above). SDK may also internally invoke its embedded bun for the
+                        // Claude Agent SDK native binary. Defender slow-scan symptom
+                        // applies to either binary.
                         let detail = " | process alive but not listening. \
-                            Possible causes: antivirus slow-scanning bun.exe, or port conflict";
+                            Possible causes: antivirus slow-scanning the sidecar binary \
+                            (node.exe / SDK-embedded bun.exe), or port conflict";
                         ulog_error!("[sidecar]{}", detail);
                         diag.push_str(detail);
                     }

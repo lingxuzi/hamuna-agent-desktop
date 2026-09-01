@@ -184,14 +184,21 @@ pub(super) fn diagnose_immediate_exit(
                  https://aka.ms/vs/17/release/vc_redist.x64.exe"
             }
             0xc0000005 => {
-                "STATUS_ACCESS_VIOLATION — bundled bun.exe may require AVX2 instructions \
-                 (unsupported in many virtual machines and older CPUs). \
-                 Install bun globally via: powershell -c \"irm bun.sh/install.ps1 | iex\" \
-                 (or: npm install -g bun). Both auto-select a compatible baseline build. \
-                 The app will fall back to the system-installed bun on the next attempt."
+                // v0.2.0+ sidecar spawns node.exe (the bundled Node.js). The
+                // SDK internally invokes its embedded bun binary for the
+                // native Claude Agent SDK runtime — that bun build can still
+                // require AVX2. Suggest the broadest fallback: install
+                // system Node.js, which lets the sidecar skip the bundled
+                // node.exe entirely.
+                "STATUS_ACCESS_VIOLATION during sidecar init. The SDK's embedded \
+                 bun runtime often requires AVX2 instructions (unsupported in \
+                 older CPUs and many VMs). Install Node.js v18+ LTS from \
+                 https://nodejs.org — the next launch will fall back to the \
+                 system-installed Node.js runtime."
             }
             0xc0000022 => {
-                "Access denied — antivirus may be blocking bun.exe. \
+                "Access denied — antivirus may be blocking the sidecar binary \
+                 (node.exe or the SDK-embedded bun.exe). \
                  Check Windows Security > Protection History, or add the install directory to exclusions."
             }
             1 => {

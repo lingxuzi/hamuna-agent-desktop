@@ -151,9 +151,10 @@ fn shutdown_for_update_inner(
     let mut residual_pids: Vec<u32> = Vec::new();
     loop {
         // Update path MUST verify our own sidecars (SIDECAR_MARKER) too —
-        // NSIS can't overwrite `bun.exe` while it's in use, so we need
-        // confirmation that every HamunaAgent-related process is gone. Uses
-        // STARTUP patterns (superset that includes the sidecar marker).
+        // NSIS can't overwrite `node.exe` (the v0.2.0+ bundled sidecar runtime)
+        // while it's in use, so we need confirmation that every
+        // HamunaAgent-related process is gone. Uses STARTUP patterns (superset
+        // that includes the sidecar marker).
         let matches = crate::process_cleanup::find_matching_processes_with_roots(
             STARTUP_CLEANUP_PATTERNS,
             protected_roots,
@@ -239,9 +240,10 @@ fn shutdown_for_update_inner(
 /// Clean up SDK and MCP child processes at app shutdown.
 ///
 /// On Windows, SDK-spawned node/bun processes often survive a direct
-/// parent kill because `cmd.exe` intermediates (npx.cmd / bun.exe wrapper)
-/// break the process-tree linkage that `taskkill /T /F` relies on. This
-/// shutdown cleanup walks descendants by PPID via sysinfo and kills
+/// parent kill because `cmd.exe` intermediates (npx.cmd wrapper / SDK's
+/// embedded bun.exe) break the process-tree linkage that `taskkill /T /F`
+/// relies on. This shutdown cleanup walks descendants by PPID via sysinfo
+/// and kills
 /// them all — orphans included — in one pass.
 ///
 /// Uses [`CHILD_CLEANUP_PATTERNS`] (no `SIDECAR_MARKER`) because our own

@@ -3,8 +3,9 @@
 //! **All** child processes spawned from the app MUST use `process_cmd::new()`
 //! instead of raw `std::process::Command::new()`. This guarantees
 //! `CREATE_NO_WINDOW` (0x08000000) is set on Windows, preventing console
-//! windows from flashing when spawning background processes (e.g., bun.exe
-//! Sidecars, Plugin Bridge, `bun init`/`bun add`).
+//! windows from flashing when spawning background processes (e.g., the
+//! bundled Node.js sidecar, the SDK-embedded bun runtime invoked from
+//! Node.js, or the Plugin Bridge).
 //!
 //! This follows the same "pit of success" pattern as [`crate::local_http`]:
 //! the correct platform behavior is the default — callers don't need to
