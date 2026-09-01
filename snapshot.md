@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。
 
-最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。）
+最后更新：2026-09-01（TODO #16：KB relations poller 在 fresh install 下每 15s 报 `Cannot open database because the directory does not exist` —— `kb-store.ts` `getKbStore()` 调 `createLocalSqliteStore` 前缺 `mkdirSync(parent, recursive:true)`，被 `kb-relations.ts:395` 静默吞掉永不恢复。修：单点 `mkdirSync(dirname(getDbPath()), { recursive: true })` + 1 个回归测试（`auto-creates parent directory when missing`，注入不存在的父目录路径）。`tsc --noEmit` exit 0 + `kb-store.integration.test.ts` 9/9 + eslint exit 0；TODO #3 预存在 `agent-session-env.integration.test.ts` 1M unlock 失败**与本修复无关**。TODO #4：review SDK 0.3.234 新增 6 个 TerminalReason 文案——3 条 label 润色（malformed_tool_use_exhausted 加"重试耗尽"/turn_setup_failed "会话→本轮"/tool_deferred_unavailable 加"最终"），en-US + zh-CN + MAP 三处对齐。`tsc --noEmit` exit 0 + terminalReason.unit.test 24/24 + JSON syntax OK。**未 commit** —— 3 文件 + 本 snapshot。TODO #17：Windows OpenClaw plugin 安装报 "system npm not found" — PATH-independent 修复（用户红线：绝不写系统 PATH）。修复 = 翻转 bundled-first + 扩展 Windows exe-relative 候选 + InstallerSource 抽 pure helper + 3-mode 错误信息 + 5 unit tests。`cargo check/clippy/build --release` ✅ + 5/5 测试通过。TODO #18：6 处过时的 bun.exe 引用清理（v0.2.0 已迁 node.js），5 文件 user-visible diagnostic 同步到 node.exe + SDK-embedded bun.exe（SDK 内部仍嵌 bun）。`cargo check/clippy/build --release` ✅。）
 
 ---
 
@@ -301,6 +301,82 @@
 | Unit | `npx vitest run --project unit src/shared/terminalReason.test.ts` | **24/24** |
 
 **未 commit**：3 文件改动（`zh-CN/chat.json` + `en-US/chat.json` + `terminalReason.ts`——每文件 3 条 label 润色，6 处 total）待用户拍板提交。
+
+### TODO #17: ✅ 已修复 — Windows OpenClaw plugin 安装因找不到 npm 失败（与系统 PATH 无关）
+
+**症状**：Windows 用户从 IM channel 安装 OpenClaw chat-bot 插件时，bridge 进程报错 "未找到 node, 没有在 PATH 中"（原始 Rust 串：`Plugin install failed for {}: bundled npm unavailable and system npm not found in PATH`）。
+
+**根因（两个 bug 叠在一起）**：
+
+**(a) 优先级倒置。** `install_openclaw_plugin`（`src-tauri/src/im/bridge.rs`）原 cascade 是**先 system npm（依赖 PATH）再 bundled npm fallback**——和 codebase 其余地方（`find_node_executable_inner` / `cli::find_node_binary` / `terminal.rs`）的 bundled-first 反着。fresh Windows 上系统 PATH 为空 → 第一次探测就 fail → 用户看不到 fallback。
+
+**(b) `find_bundled_node_npm` 候选目录比 `find_node_executable_inner` 少。** 后者（`src-tauri/src/sidecar/spawn.rs:255-371`）枚举 4 个 layout（dev source → resource_dir → exe-relative → system PATH），前者只有 3 个（缺 exe-relative）。Windows 安装包布局下 `nodejs/` 坐在 `.exe` 旁边 + `resource_dir()` 返回 `Resources` 子目录 → bridge 常驻走 system 路径能 work，install 走 bundled 路径找不到 → 故障路径恰是 bundled 路径。
+
+**修复**：
+
+1. **扩展候选目录**（`bridge.rs`）：在 `find_bundled_node_npm` 中加 Windows exe-relative layouts（`exe_dir/resources/nodejs/` + `exe_dir/nodejs/`，`#[cfg(target_os = "windows")]`）—— 镜像 `find_node_executable_inner` 的 4 layout 排列。
+2. **抽 pure helper + 翻转 cascade**：
+   - `bundled_node_npm_from_dirs<I: IntoIterator<Item=PathBuf>>` —— 接收目录列表，返回 `(node, npm)` pair，便于测试
+   - `bundled_node_npm_in_dir` —— 单目录检查
+   - `bundled_nodejs_candidate_dirs<R>` —— 枚举所有 layout（Windows 含 exe-relative）
+   - `InstallerSource` enum（`Bundled` | `System`） + `choose_install_source(bundled, system) -> Vec<InstallerSource>` —— 优先级唯一裁决者
+   - `install_openclaw_plugin` cascade 改为 `for source in choose_install_source(...)` —— 单源、可测
+3. **3-mode 错误信息**（actionable error）：
+   - bundled 完全缺失 → "Please reinstall HamunaAgent"
+   - bundled present + 拿到 stderr → "npm install error — {stderr}"
+   - bundled present + spawn fail → "bundled npm install could not start. Check logs"
+4. **捕获 `last_stderr`**：bundled 失败分支把 stderr 留出来给 mode 2 用。
+5. **依赖修复注释澄清**（bridge.rs:1909-1911）—— 行为不变。
+6. **5 unit tests**（`#[cfg(test)] mod tests`）：
+   - `bundled_node_npm_resolves_when_node_and_npm_cli_exist`
+   - `bundled_node_npm_returns_none_when_empty`
+   - `install_priority_is_bundled_first`
+   - `install_priority_falls_back_to_system_when_bundled_missing`
+   - `install_priority_returns_empty_when_neither_available`
+
+**用户红线（MUST 拒绝）**：用户明确说"**绝不写系统 PATH**"——**禁止**任何"register nodejs 到环境变量"式的方案；本次修复是 PATH-independent 的（bundled 走绝对路径）。
+
+**改动文件**：`src-tauri/src/im/bridge.rs`（一处）
+
+**验证**：
+| 验证 | 结果 |
+|---|---|
+| `cd src-tauri && cargo check` | ✅ |
+| `cd src-tauri && cargo clippy --no-deps` | ✅ |
+| `cd src-tauri && cargo test --lib im::bridge::tests` | ✅ 5/5 new + existing pass |
+| `cd src-tauri && cargo build --release` | ✅ |
+
+### TODO #18: ✅ 已修复 — 6 处过时的 bun.exe 引用清理（v0.2.0 已迁到 node.js）
+
+**症状**：sidecar health check 失败时，user-visible diagnostics 仍在显示 "antivirus slow-scanning bun.exe" / "Install bun globally via irm bun.sh/install.ps1" 等过时指引——v0.2.0 已把 sidecar runtime 从 Bun 迁到 Node.js（详见 `src-tauri/src/runtime.ts:36-46` 注释），但 6 处 stale 引用没清理。用户被错误指引去装 Bun，但 HamunaAgent 不再使用 Bun。
+
+**根因**：v0.2.0 切换 runtime 时改的是 spawn 命令（`node.exe` 替代 `bun.exe`）+ `runtime.ts` 文档，但散落的 user-facing diagnostic 文本、注释、PATH priority 注释没同步改。SDK 0.3.x 仍内嵌 bun 用于内部 subprocess，但 app 自己已经不走 bun 了。
+
+**修复（6 处 across 5 文件）**：
+
+| 文件 | 上下文 | 旧 → 新 |
+|---|---|---|
+| `src-tauri/src/sidecar/instances.rs:292-294` | Defender delay hint 注释 | "Defender delays bun.exe execution" → "Defender delays node.exe (and the SDK's embedded bun.exe) execution" |
+| `src-tauri/src/sidecar/instances.rs:346` | user-visible diagnostic | "antivirus slow-scanning bun.exe, or port conflict" → "antivirus slow-scanning the sidecar binary (node.exe / SDK-embedded bun.exe), or port conflict" |
+| `src-tauri/src/sidecar/spawn.rs:186-195` | AVX2 hint (0xc0000005) | "Install bun globally via irm bun.sh/install.ps1" → "Install Node.js v18+ LTS from https://nodejs.org" |
+| `src-tauri/src/sidecar/spawn.rs:200-202` | AV-block hint (0xc0000022) | "blocking bun.exe" → "blocking the sidecar binary (node.exe or the SDK-embedded bun.exe)" |
+| `src-tauri/src/sidecar/shutdown.rs:154` | NSIS upgrade blocker | "NSIS can't overwrite bun.exe while it's in use" → "NSIS can't overwrite node.exe (the v0.2.0+ bundled sidecar runtime)" |
+| `src-tauri/src/sidecar/shutdown.rs:241-245` | residual process hint | "SDK-spawned node/bun processes...npx.cmd / bun.exe wrapper" → "npx.cmd wrapper / SDK's embedded bun.exe" |
+| `src-tauri/src/process_cmd.rs:6-8` | module doc | "(e.g., bun.exe Sidecars, Plugin Bridge, bun init/bun add)" → "(e.g., the bundled Node.js sidecar, the SDK-embedded bun runtime invoked from Node.js, or the Plugin Bridge)" |
+| `src-tauri/src/terminal.rs:392` | PATH priority comment | "bundled bun dir → bundled node dir" → "bundled node dir → external binaries dir (cuse etc.)" |
+| `src-tauri/src/terminal.rs:395` | var name + comment | "Bundled Bun directory" → "External binaries directory (cuse sidecar etc.; tauri.conf.json::externalBin)" |
+
+**关键判断**：SDK 0.3.x 仍内嵌 bun runtime 作为内部 subprocess（用于 spawn `npx.cmd` 等）—— 这是 SDK 内部的，我们不能改。但 app 自己 spawn sidecar 已经走 node.exe，所以 user-facing 指引必须更新到 node.exe。Diagnostic 文本同时提到 node.exe（app spawn 的）和 SDK-embedded bun.exe（SDK 内部 subprocess）—— 完整覆盖。
+
+**改动文件（5）**：`src-tauri/src/process_cmd.rs` / `src-tauri/src/sidecar/instances.rs` / `src-tauri/src/sidecar/shutdown.rs` / `src-tauri/src/sidecar/spawn.rs` / `src-tauri/src/terminal.rs`
+
+**验证**：
+| 验证 | 结果 |
+|---|---|
+| `cd src-tauri && cargo check` | ✅ |
+| `cd src-tauri && cargo clippy --no-deps` | ✅ |
+| `cd src-tauri && cargo build --release` | ✅ |
+| `grep -ri "bun" src-tauri/src/{sidecar,terminal,process_cmd}.rs \| grep -v "SDK-embedded bun\|embedded bun"` | 仅剩 SDK-embedded bun 相关（合规） |
 
 ### TODO #5: desktop Bash 工具在 detached console 下 spawn headed chromium 永远 hang
 

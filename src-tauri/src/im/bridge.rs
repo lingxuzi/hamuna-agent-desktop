@@ -1150,6 +1150,128 @@ mod tests {
         assert_eq!(env.oauth_dir, env.state_dir.join("credentials"));
         assert!(!path_env_value(&env.state_dir).contains(".openclaw"));
     }
+
+    // ── TODO #17 regression tests (PATH-independent plugin install) ─────────
+
+    /// Build a fake bundled nodejs layout inside `dir`. Returns true on success.
+    /// Mirrors the platform-specific layout that `bundled_node_npm_in_dir`
+    /// looks up: Windows is flat (`node.exe` + `node_modules/npm/bin/npm-cli.js`),
+    /// macOS/Linux use `bin/node` + `lib/node_modules/npm/bin/npm-cli.js`.
+    fn lay_out_fake_bundled_nodejs(dir: &Path) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            if std::fs::write(dir.join("node.exe"), b"").is_err() {
+                return false;
+            }
+            let npm_cli_path = dir
+                .join("node_modules")
+                .join("npm")
+                .join("bin")
+                .join("npm-cli.js");
+            if std::fs::create_dir_all(
+                npm_cli_path.parent().unwrap(),
+            )
+            .is_err()
+            {
+                return false;
+            }
+            std::fs::write(&npm_cli_path, b"").is_ok()
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let bin = dir.join("bin");
+            if std::fs::create_dir_all(&bin).is_err() {
+                return false;
+            }
+            if std::fs::write(bin.join("node"), b"").is_err() {
+                return false;
+            }
+            let npm_cli_path = dir
+                .join("lib")
+                .join("node_modules")
+                .join("npm")
+                .join("bin")
+                .join("npm-cli.js");
+            if std::fs::create_dir_all(npm_cli_path.parent().unwrap()).is_err() {
+                return false;
+            }
+            std::fs::write(&npm_cli_path, b"").is_ok()
+        }
+    }
+
+    #[test]
+    fn bundled_node_npm_resolves_when_node_and_npm_cli_exist() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        assert!(
+            lay_out_fake_bundled_nodejs(tmp.path()),
+            "fake layout should be creatable"
+        );
+        let result = bundled_node_npm_from_dirs(vec![tmp.path().to_path_buf()]);
+        let (node, npm_cli) = result.expect("expected Some when layout is complete");
+        #[cfg(target_os = "windows")]
+        assert!(
+            node.ends_with("node.exe"),
+            "Windows node binary should end in node.exe, got {:?}",
+            node
+        );
+        #[cfg(not(target_os = "windows"))]
+        assert!(
+            node.ends_with("node"),
+            "Unix node binary should end in node, got {:?}",
+            node
+        );
+        assert!(
+            npm_cli.ends_with("npm-cli.js"),
+            "npm-cli.js path should end in npm-cli.js, got {:?}",
+            npm_cli
+        );
+    }
+
+    #[test]
+    fn bundled_node_npm_returns_none_when_empty() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // Empty tempdir — no node binary, no npm-cli.
+        let result = bundled_node_npm_from_dirs(vec![tmp.path().to_path_buf()]);
+        assert!(
+            result.is_none(),
+            "expected None when layout is empty, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn install_priority_is_bundled_first() {
+        // Both available → Bundled first (PATH-independent), System as fallback.
+        let order = choose_install_source(true, true);
+        assert_eq!(
+            order,
+            vec![InstallerSource::Bundled, InstallerSource::System],
+            "bundled MUST come before system — fresh Windows machines have no PATH Node"
+        );
+    }
+
+    #[test]
+    fn install_priority_falls_back_to_system_when_bundled_missing() {
+        // Bundled missing (broken install / uninstalled) → System npm only.
+        let order = choose_install_source(false, true);
+        assert_eq!(
+            order,
+            vec![InstallerSource::System],
+            "with bundled unavailable, system is the sole fallback"
+        );
+    }
+
+    #[test]
+    fn install_priority_returns_empty_when_neither_available() {
+        // No installer → cascade loop is a no-op, error handler emits
+        // "HamunaAgent bundled runtime missing" message.
+        let order = choose_install_source(false, false);
+        assert!(
+            order.is_empty(),
+            "neither source available should produce empty priority list, got {:?}",
+            order
+        );
+    }
 }
 
 /// Spawn a plugin bridge Bun process
@@ -1453,74 +1575,125 @@ fn apply_proxy_env(cmd: &mut std::process::Command) {
 fn find_bundled_node_npm<R: tauri::Runtime>(
     app_handle: &tauri::AppHandle<R>,
 ) -> Option<(PathBuf, PathBuf)> {
-    use crate::sidecar::normalize_external_path;
+    bundled_node_npm_from_dirs(bundled_nodejs_candidate_dirs(app_handle))
+}
 
-    let check = |nodejs_dir: &Path| -> Option<(PathBuf, PathBuf)> {
-        #[cfg(target_os = "windows")]
-        let node_bin = nodejs_dir.join("node.exe");
-        #[cfg(not(target_os = "windows"))]
-        let node_bin = nodejs_dir.join("bin").join("node");
-
-        // Windows npm layout: nodejs/node_modules/npm/... (flat, no lib/)
-        // macOS/Linux npm layout: nodejs/lib/node_modules/npm/... (standard Unix)
-        #[cfg(target_os = "windows")]
-        let npm_cli = nodejs_dir
-            .join("node_modules")
-            .join("npm")
-            .join("bin")
-            .join("npm-cli.js");
-        #[cfg(not(target_os = "windows"))]
-        let npm_cli = nodejs_dir
-            .join("lib")
-            .join("node_modules")
-            .join("npm")
-            .join("bin")
-            .join("npm-cli.js");
-
-        if node_bin.exists() && npm_cli.exists() {
-            // On Windows, strip \\?\ extended-length prefix that Tauri's resource_dir() produces.
-            // Node.js/npm cannot handle it (causes "EISDIR: lstat 'C:'" error).
-            let node_bin = normalize_external_path(node_bin);
-            let npm_cli = normalize_external_path(npm_cli);
-            ulog_info!(
-                "[bridge] Bundled Node.js found: node={:?}, npm-cli={:?}",
-                node_bin,
-                npm_cli
-            );
-            Some((node_bin, npm_cli))
-        } else {
-            None
-        }
-    };
-
-    // Production: nodejs/ inside resource_dir
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let resource_dir: PathBuf = resource_dir;
-        let prod_dir = resource_dir.join("nodejs");
-        if let Some(result) = check(&prod_dir) {
+/// Pure layout check used by `find_bundled_node_npm` — hoisted out so the
+/// candidate-enumeration logic can be unit-tested without a Tauri runtime.
+fn bundled_node_npm_from_dirs<I>(dirs: I) -> Option<(PathBuf, PathBuf)>
+where
+    I: IntoIterator<Item = PathBuf>,
+{
+    let mut last_seen = None;
+    for dir in dirs {
+        last_seen = Some(dir.clone());
+        if let Some(result) = bundled_node_npm_in_dir(&dir) {
             return Some(result);
         }
-        // Windows: resource_dir parent might be the install dir
+    }
+    if let Some(dir) = last_seen {
+        ulog_warn!(
+            "[bridge] Bundled Node.js not found in any candidate dir (last tried: {:?})",
+            dir
+        );
+    }
+    None
+}
+
+/// Check a single candidate directory for the (node_bin, npm-cli) pair.
+/// Mirrors the original `check` closure: each platform has a different layout
+/// for the npm CLI script — Windows is flat (`node_modules/npm/bin/npm-cli.js`),
+/// macOS/Linux use `lib/node_modules/npm/bin/npm-cli.js` (standard Unix).
+fn bundled_node_npm_in_dir(nodejs_dir: &Path) -> Option<(PathBuf, PathBuf)> {
+    use crate::sidecar::normalize_external_path;
+
+    #[cfg(target_os = "windows")]
+    let node_bin = nodejs_dir.join("node.exe");
+    #[cfg(not(target_os = "windows"))]
+    let node_bin = nodejs_dir.join("bin").join("node");
+
+    // Windows npm layout: nodejs/node_modules/npm/... (flat, no lib/)
+    // macOS/Linux npm layout: nodejs/lib/node_modules/npm/... (standard Unix)
+    #[cfg(target_os = "windows")]
+    let npm_cli = nodejs_dir
+        .join("node_modules")
+        .join("npm")
+        .join("bin")
+        .join("npm-cli.js");
+    #[cfg(not(target_os = "windows"))]
+    let npm_cli = nodejs_dir
+        .join("lib")
+        .join("node_modules")
+        .join("npm")
+        .join("bin")
+        .join("npm-cli.js");
+
+    if node_bin.exists() && npm_cli.exists() {
+        // On Windows, strip \\?\ extended-length prefix that Tauri's resource_dir() produces.
+        // Node.js/npm cannot handle it (causes "EISDIR: lstat 'C:'" error).
+        let node_bin = normalize_external_path(node_bin);
+        let npm_cli = normalize_external_path(npm_cli);
+        ulog_info!(
+            "[bridge] Bundled Node.js found: node={:?}, npm-cli={:?}",
+            node_bin,
+            npm_cli
+        );
+        Some((node_bin, npm_cli))
+    } else {
+        None
+    }
+}
+
+/// Enumerate the candidate `nodejs/` directories we should look for the
+/// bundled Node.js in. Ordered from most-likely to least-likely; the first
+/// hit wins. Mirrors `crate::sidecar::spawn::find_node_executable_inner`
+/// (sidecar/spawn.rs:255-371), which already enumerates the same layouts
+/// for the node binary alone.
+///
+/// `ponytail:` if a third call site for the bundled nodejs lookup appears,
+/// factor this into a shared `bundled_nodejs_candidate_dirs()` helper in
+/// the `sidecar` module. For now, keep duplicated — sharing requires
+/// widening `find_node_executable_inner`'s `pub(super)` visibility and
+/// conflicts with the sidecar-specific dev-source-first ordering.
+fn bundled_nodejs_candidate_dirs<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+
+    // Production: resource_dir/nodejs/  (standard layout)
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        dirs.push(resource_dir.join("nodejs"));
+
+        // Windows extra: resource_dir.parent/nodejs/ (NSIS-style layouts
+        // where Tauri nests resources/ under the install dir).
         #[cfg(target_os = "windows")]
         if let Some(parent) = resource_dir.parent() {
-            let parent_dir = parent.join("nodejs");
-            if let Some(result) = check(&parent_dir) {
-                return Some(result);
+            dirs.push(parent.join("nodejs"));
+        }
+    }
+
+    // Windows installer-layout fallback: nodejs/ sits next to the .exe
+    // (e.g. MSI-style layouts where resource_dir() returns the install dir
+    // directly, OR where nodejs/ is unpacked into resources/ during install).
+    // Mirrors sidecar/spawn.rs:326-330. Windows-only — keep non-Windows
+    // builds byte-identical apart from this guard.
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                dirs.push(exe_dir.join("resources").join("nodejs"));
+                dirs.push(exe_dir.join("nodejs"));
             }
         }
     }
 
-    // Development: walk up to find src-tauri/resources/nodejs/
+    // Development: src-tauri/resources/nodejs/ (cargo run from project root)
     if cfg!(debug_assertions) {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let dev_dir = manifest_dir.join("resources").join("nodejs");
-        if let Some(result) = check(&dev_dir) {
-            return Some(result);
-        }
+        dirs.push(manifest_dir.join("resources").join("nodejs"));
     }
 
-    ulog_warn!("[bridge] Bundled Node.js not found, falling back to Bun for plugin install");
-    None
+    dirs
 }
 
 /// Write a minimal package.json if it doesn't exist.
@@ -1590,10 +1763,44 @@ fn sanitize_npm_spec(raw: &str) -> String {
     String::new()
 }
 
+/// Order in which `install_openclaw_plugin` tries to resolve `npm`.
+/// `Bundled` is the bundled Node.js/npm we ship inside `resources/nodejs/`
+/// (PATH-independent — works on a fresh Windows machine with no Node installed).
+/// `System` is whatever `system_binary::find("npm")` returns (depends on PATH).
+/// Bundled MUST come first: the system path may be missing/empty on a fresh
+/// Windows install, and Bun (formerly the last-resort fallback) was removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallerSource {
+    Bundled,
+    System,
+}
+
+/// Build the priority-ordered list of installers to try.
+///
+/// `bundled_available` — true iff `find_bundled_node_npm` returned Some.
+/// `system_available`  — true iff `crate::system_binary::find("npm")` returned Some.
+///
+/// **Always** Bundled-first. The previous implementation tried System first,
+/// which silently failed on fresh Windows machines with no Node in PATH and
+/// left the user waiting for a Bundled fallback that never ran (see TODO #17).
+fn choose_install_source(
+    bundled_available: bool,
+    system_available: bool,
+) -> Vec<InstallerSource> {
+    let mut order = Vec::new();
+    if bundled_available {
+        order.push(InstallerSource::Bundled);
+    }
+    if system_available {
+        order.push(InstallerSource::System);
+    }
+    order
+}
+
 /// Install an OpenClaw plugin from npm.
-/// Priority: system npm → bundled npm → bun add.
-/// System npm is preferred (user-maintained, most reliable); bundled npm is fallback
-/// for users without Node.js; bun add is last resort.
+/// Priority: bundled npm → system npm. Bundled-first means fresh Windows
+/// installs (no Node in PATH) still work — the bundled Node.js/npm lives
+/// inside `resources/nodejs/` and is reachable by absolute path.
 pub async fn install_openclaw_plugin<R: tauri::Runtime>(
     app_handle: &tauri::AppHandle<R>,
     npm_spec: &str,
@@ -1699,163 +1906,199 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
     // Write package.json upfront (shared by both npm and bun paths).
     ensure_package_json(&base_dir, &plugin_id).await?;
 
-    // --- Try system npm first (user-maintained, most reliable) ---
+    // --- Resolve both installer sources up-front; choose_install_source
+    // returns them in priority order. Bundled MUST come first: a fresh
+    // Windows machine has no Node in PATH, and Bun (formerly the last-resort
+    // fallback) was removed in 0.2.0. See TODO #17.
+    let bundled = find_bundled_node_npm(app_handle);
+    let system = crate::system_binary::find("npm");
+    let order = choose_install_source(bundled.is_some(), system.is_some());
+
     let mut npm_succeeded = false;
+    let mut last_stderr: Option<String> = None;
 
-    if let Some(system_npm) = crate::system_binary::find("npm") {
-        ulog_info!("[bridge] Using system npm: {:?}", system_npm);
-        let sys_npm = system_npm;
-        let base_for_sys = base_dir.clone();
-        let spec_for_sys = install_spec.clone();
-        let sys_result = tokio::task::spawn_blocking(move || {
-            let mut cmd = crate::process_cmd::new(&sys_npm);
-            // --omit=peer: openclaw 插件声明 peerDependencies: { openclaw: '*' }，
-            // npm 会自动安装原始 openclaw 包的 400+ 传递依赖（larksuite、playwright-core、aws-sdk 等）。
-            // --omit=peer 阻止这一行为，节省安装时间/体积/安全攻击面。
-            //
-            // --no-experimental-require-module fixes Node.js v24 CJS/ESM crash on Windows.
-            cmd.args(["install", spec_for_sys.as_str(), "--omit=peer"])
-                .current_dir(&base_for_sys)
-                .env("NODE_OPTIONS", "--no-experimental-require-module");
-            apply_proxy_env(&mut cmd);
-            cmd.output()
-        })
-        .await;
+    for source in order {
+        if npm_succeeded {
+            break;
+        }
 
-        match sys_result {
-            Ok(Ok(output)) if output.status.success() => {
-                ulog_info!("[bridge] System npm install {} succeeded", npm_spec);
-                npm_succeeded = true;
-            }
-            Ok(Ok(output)) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                ulog_error!(
-                    "[bridge] System npm install {} failed: {}",
-                    npm_spec,
-                    stderr.trim()
+        match source {
+            InstallerSource::Bundled => {
+                // choose_install_source guarantees Bundled ⇒ bundled.is_some().
+                let (node_bin, npm_cli) = bundled
+                    .clone()
+                    .expect("Bundled in priority order implies bundled.is_some()");
+
+                // Diagnostic: log node + npm version for troubleshooting
+                let node_ver = crate::process_cmd::new(&node_bin)
+                    .args(["--version"])
+                    .output()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    .unwrap_or_else(|e| format!("error: {}", e));
+                let npm_ver = crate::process_cmd::new(&node_bin)
+                    .args([npm_cli.to_str().unwrap_or(""), "--version"])
+                    .output()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    .unwrap_or_else(|e| format!("error: {}", e));
+                ulog_info!(
+                    "[bridge] Bundled npm install: node={}, npm={}, cli={:?}",
+                    node_ver,
+                    npm_ver,
+                    npm_cli
                 );
+
+                let npm_cli_str = npm_cli
+                    .to_str()
+                    .ok_or_else(|| format!("npm-cli.js path contains invalid UTF-8: {:?}", npm_cli))?
+                    .to_string();
+
+                // Prepend node binary's directory to PATH so postinstall scripts can find `node`.
+                let node_dir_for_path = node_bin
+                    .parent()
+                    .map(|d| d.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let augmented_path = {
+                    let system_path = std::env::var("PATH").unwrap_or_default();
+                    #[cfg(target_os = "windows")]
+                    {
+                        format!("{};{}", node_dir_for_path, system_path)
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        format!("{}:{}", node_dir_for_path, system_path)
+                    }
+                };
+
+                let node_for_add = node_bin;
+                let cli_str_add = npm_cli_str;
+                let base_for_add = base_dir.clone();
+                let npm_spec_owned = install_spec.clone();
+                let path_for_add = augmented_path;
+                let add_result = tokio::task::spawn_blocking(move || {
+                    let mut cmd = crate::process_cmd::new(&node_for_add);
+                    // --omit=peer: same rationale as system npm below.
+                    // --no-experimental-require-module: Node.js v24 CJS/ESM crash fix.
+                    cmd.args([
+                        cli_str_add.as_str(),
+                        "install",
+                        npm_spec_owned.as_str(),
+                        "--omit=peer",
+                    ])
+                    .current_dir(&base_for_add)
+                    .env("PATH", &path_for_add)
+                    .env("NODE_OPTIONS", "--no-experimental-require-module");
+                    apply_proxy_env(&mut cmd);
+                    cmd.output()
+                })
+                .await;
+
+                match add_result {
+                    Ok(Ok(output)) if output.status.success() => {
+                        ulog_info!("[bridge] Bundled npm install {} succeeded", npm_spec);
+                        npm_succeeded = true;
+                    }
+                    Ok(Ok(output)) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                        ulog_error!(
+                            "[bridge] Bundled npm install {} failed (exit {}): {}",
+                            npm_spec,
+                            output.status,
+                            stderr
+                        );
+                        if !stderr.is_empty() {
+                            last_stderr = Some(stderr);
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        ulog_error!(
+                            "[bridge] Bundled npm install {} — process spawn failed: {}",
+                            npm_spec,
+                            e
+                        );
+                    }
+                    Err(e) => {
+                        ulog_error!(
+                            "[bridge] Bundled npm install {} — spawn_blocking failed: {}",
+                            npm_spec,
+                            e
+                        );
+                    }
+                }
             }
-            Ok(Err(e)) => {
-                ulog_error!("[bridge] System npm spawn failed: {}", e);
-            }
-            Err(e) => {
-                ulog_error!("[bridge] System npm spawn_blocking failed: {}", e);
+
+            InstallerSource::System => {
+                let system_npm = system
+                    .clone()
+                    .expect("System in priority order implies system.is_some()");
+                ulog_info!("[bridge] Using system npm: {:?}", system_npm);
+                let sys_npm = system_npm;
+                let base_for_sys = base_dir.clone();
+                let spec_for_sys = install_spec.clone();
+                let sys_result = tokio::task::spawn_blocking(move || {
+                    let mut cmd = crate::process_cmd::new(&sys_npm);
+                    // --omit=peer: openclaw 插件声明 peerDependencies: { openclaw: '*' }，
+                    // npm 会自动安装原始 openclaw 包的 400+ 传递依赖（larksuite、playwright-core、aws-sdk 等）。
+                    // --omit=peer 阻止这一行为，节省安装时间/体积/安全攻击面。
+                    //
+                    // --no-experimental-require-module fixes Node.js v24 CJS/ESM crash on Windows.
+                    cmd.args(["install", spec_for_sys.as_str(), "--omit=peer"])
+                        .current_dir(&base_for_sys)
+                        .env("NODE_OPTIONS", "--no-experimental-require-module");
+                    apply_proxy_env(&mut cmd);
+                    cmd.output()
+                })
+                .await;
+
+                match sys_result {
+                    Ok(Ok(output)) if output.status.success() => {
+                        ulog_info!("[bridge] System npm install {} succeeded", npm_spec);
+                        npm_succeeded = true;
+                    }
+                    Ok(Ok(output)) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                        ulog_error!(
+                            "[bridge] System npm install {} failed: {}",
+                            npm_spec,
+                            stderr
+                        );
+                        // System stderr is secondary — we only surface it in the
+                        // final error if Bundled was also missing (see below).
+                    }
+                    Ok(Err(e)) => {
+                        ulog_error!("[bridge] System npm spawn failed: {}", e);
+                    }
+                    Err(e) => {
+                        ulog_error!("[bridge] System npm spawn_blocking failed: {}", e);
+                    }
+                }
             }
         }
-    } else {
-        ulog_info!("[bridge] System npm not found in PATH, skipping");
     }
 
-    // --- Bundled npm fallback: if system npm failed or unavailable ---
+    // Both Bundled and System failed (or both missing). Three actionable modes:
+    //   1. bundled.is_none() — runtime missing entirely → reinstall
+    //   2. bundled was tried and produced stderr → real install error
+    //   3. bundled was tried but spawn failed → environment problem
     if !npm_succeeded {
-        if let Some((node_bin, npm_cli)) = find_bundled_node_npm(app_handle) {
-            // Diagnostic: log node + npm version for troubleshooting
-            let node_ver = crate::process_cmd::new(&node_bin)
-                .args(["--version"])
-                .output()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                .unwrap_or_else(|e| format!("error: {}", e));
-            let npm_ver = crate::process_cmd::new(&node_bin)
-                .args([npm_cli.to_str().unwrap_or(""), "--version"])
-                .output()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                .unwrap_or_else(|e| format!("error: {}", e));
-            ulog_info!(
-                "[bridge] Bundled npm install: node={}, npm={}, cli={:?}",
-                node_ver,
-                npm_ver,
-                npm_cli
-            );
-
-            let npm_cli_str = npm_cli
-                .to_str()
-                .ok_or_else(|| format!("npm-cli.js path contains invalid UTF-8: {:?}", npm_cli))?
-                .to_string();
-
-            // Prepend node binary's directory to PATH so postinstall scripts can find `node`.
-            let node_dir_for_path = node_bin
-                .parent()
-                .map(|d| d.to_string_lossy().to_string())
-                .unwrap_or_default();
-            let augmented_path = {
-                let system_path = std::env::var("PATH").unwrap_or_default();
-                #[cfg(target_os = "windows")]
-                {
-                    format!("{};{}", node_dir_for_path, system_path)
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    format!("{}:{}", node_dir_for_path, system_path)
-                }
-            };
-
-            let node_for_add = node_bin;
-            let cli_str_add = npm_cli_str;
-            let base_for_add = base_dir.clone();
-            let npm_spec_owned = install_spec.clone();
-            let path_for_add = augmented_path;
-            let add_result = tokio::task::spawn_blocking(move || {
-                let mut cmd = crate::process_cmd::new(&node_for_add);
-                // --omit=peer: same rationale as system npm above.
-                // --no-experimental-require-module: Node.js v24 CJS/ESM crash fix.
-                cmd.args([
-                    cli_str_add.as_str(),
-                    "install",
-                    npm_spec_owned.as_str(),
-                    "--omit=peer",
-                ])
-                .current_dir(&base_for_add)
-                .env("PATH", &path_for_add)
-                .env("NODE_OPTIONS", "--no-experimental-require-module");
-                apply_proxy_env(&mut cmd);
-                cmd.output()
-            })
-            .await;
-
-            match add_result {
-                Ok(Ok(output)) if output.status.success() => {
-                    ulog_info!("[bridge] Bundled npm install {} succeeded", npm_spec);
-                    npm_succeeded = true;
-                }
-                Ok(Ok(output)) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    ulog_error!(
-                        "[bridge] Bundled npm install {} failed (exit {}): {}",
-                        npm_spec,
-                        output.status,
-                        stderr.trim()
-                    );
-                }
-                Ok(Err(e)) => {
-                    ulog_error!(
-                        "[bridge] Bundled npm install {} — process spawn failed: {}",
-                        npm_spec,
-                        e
-                    );
-                }
-                Err(e) => {
-                    ulog_error!(
-                        "[bridge] Bundled npm install {} — spawn_blocking failed: {}",
-                        npm_spec,
-                        e
-                    );
-                }
-            }
+        let msg = if bundled.is_none() {
+            format!(
+                "Plugin install failed for {}: HamunaAgent bundled runtime missing. \
+                 Please reinstall HamunaAgent.",
+                npm_spec
+            )
+        } else if let Some(ref stderr) = last_stderr {
+            format!(
+                "Plugin install failed for {}: npm install error — {}",
+                npm_spec, stderr
+            )
         } else {
-            ulog_warn!("[bridge] Bundled Node.js/npm not found, skipping bundled npm install");
-        }
-    }
-
-    // Both system npm and bundled npm failed — there is no further fallback.
-    // (The pre-0.2.0 "Bun fallback" branch ran `node add` / `node install`,
-    // which are not valid Node subcommands; with Bun removed it could never
-    // succeed.)
-    if !npm_succeeded {
-        return Err(format!(
-            "Plugin install failed for {}: bundled npm unavailable and system npm not found in PATH. \
-             Install Node.js, or reinstall HamunaAgent to restore the bundled runtime.",
-            npm_spec
-        ));
+            format!(
+                "Plugin install failed for {}: bundled npm install could not start. \
+                 Check logs for details.",
+                npm_spec
+            )
+        };
+        return Err(msg);
     }
 
     // Dependency repair + shim install (order matters: repair FIRST, shim LAST).
@@ -1906,8 +2149,10 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
                 }
             }
         } else {
-            // No bundled npm — initial plugin install above must have used system
-            // npm; rely on that path's transitive dep resolution. No fallback runner.
+            // No bundled npm — initial plugin install above used system npm
+            // (bundled-first cascade falls back to system only when bundled is
+            // unavailable). Trust the installer's transitive dep resolution;
+            // no bundled runner means we can't run repair either.
             ulog_warn!("[bridge] Skipping dependency repair: bundled npm unavailable");
         }
     }
