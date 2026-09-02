@@ -153,6 +153,39 @@ function isUnsupportedPromptCacheKeyDescriptor(value: string): boolean {
     || /\b(?:additional|extra)\b.*\b(?:parameter|field|argument|property)\b.*\bprompt_cache_key\b/i.test(value);
 }
 
+/**
+ * Some "responses"-format upstreams ship an incomplete Responses schema
+ * (missing `function_call` / `function_call_output` input variants) and
+ * reject multi-turn tool-using requests with 400. The OpenAI Responses spec
+ * includes those variants, so the request shape we emit is valid — the
+ * upstream just doesn't parse it. Detect the failure pattern so we can
+ * remember the provider and silently switch to chat_completions for future
+ * requests instead of paying a 400 on every turn.
+ */
+export function isResponsesFormatIncompatible(status: number, body: string): boolean {
+  if (status !== 400) return false;
+  // Rust serde untagged-enum rejections (agnes, etc.) and the OpenAI-spec
+  // "data did not match any variant of untagged enum ResponseInput" shape.
+  return (
+    /untagged enum ResponseInput/i.test(body)
+    || (/ResponseInput/i.test(body) && /json_parse_error|invalid_request_error/i.test(body))
+  );
+}
+
+/**
+ * Process-local set of provider IDs whose `responses` upstream has been
+ * observed to be incompatible. Cleared on bridge handler creation; the
+ * bridge is recreated per token, so a fresh upstream config starts clean.
+ */
+const responsesFallbackProviders = new Set<string>();
+
+export function getResponsesFallbackProviders(): readonly string[] {
+  return [...responsesFallbackProviders];
+}
+export function clearResponsesFallbackCache(): void {
+  responsesFallbackProviders.clear();
+}
+
 function extractUpstreamErrorFields(body: string): { message?: string; param?: string; code?: string; type?: string } | undefined {
   let parsed: unknown;
   try {
@@ -332,7 +365,13 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
     let effectiveApiKey = upstream.apiKey || apiKey;
     let activeCredentialVersion = upstream.credentialVersion;
     const baseUrl = upstream.baseUrl.replace(/\/+$/, ''); // trim trailing slashes
-    const isResponses = upstream.upstreamFormat === 'responses';
+    // Honor a previously-observed responses-format incompatibility for this
+    // provider so subsequent requests skip the broken format silently.
+    // `let` because the in-flight retry loop may flip to chat_completions
+    // when the upstream's Responses API is incompatible with the request.
+    const configuredFormat = upstream.upstreamFormat ?? 'chat_completions';
+    let isResponses =
+      configuredFormat === 'responses' && !responsesFallbackProviders.has(upstream.providerId);
 
     // 4. Translate request (choose format based on upstream config)
     // PRD #124: per-request model mapping (carried on UpstreamConfig, set by
@@ -588,6 +627,43 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           }
         }
 
+        const canRetryWithChatCompletions =
+          isResponses
+          && configuredFormat === 'responses'
+          && isResponsesFormatIncompatible(status, errBody);
+        if (canRetryWithChatCompletions) {
+          responsesFallbackProviders.add(upstream.providerId);
+          isResponses = false;
+          // Re-translate with the chat_completions translator (also re-runs
+          // the max_output_tokens / thought_signature / promptCacheKey logic
+          // for the new format on the next iteration's translatedReq).
+          const newReq = translateRequest(anthropicReq, {
+            modelMapping: effectiveModelMapping,
+            modelOverride: upstream.model,
+            imageSaver,
+            reasoningEffort: upstream.reasoningEffort,
+            promptCacheKey: resolvePromptCacheKey(upstream, anthropicReq.model, 'chat_completions'),
+          });
+          if (upstream.reasoningEffort
+              && !shouldSendProviderReasoningEffort(upstream.providerId, newReq.model, upstream.reasoningEffort)) {
+            delete (newReq as OpenAIRequest & { reasoning_effort?: string }).reasoning_effort;
+          }
+          const fallbackTokenCap = upstream.maxOutputTokens ?? config.maxOutputTokens;
+          if (fallbackTokenCap) {
+            const paramName = upstream.maxOutputTokensParamName ?? 'max_tokens';
+            (newReq as OpenAIRequest & { [key: string]: unknown })[paramName] = fallbackTokenCap;
+          }
+          // Mutate the in-scope translatedReq so subsequent code paths (and
+          // any subsequent retries in this loop) see the chat_completions
+          // shape. requestBody is rebuilt from it.
+          (translatedReq as { model: string }).model = newReq.model;
+          // Replace the inner shape — keep the same outer reference.
+          Object.assign(translatedReq as object, newReq as object);
+          requestBody = JSON.stringify(translatedReq);
+          log(`[bridge] responses format incompatible for provider=${upstream.providerId} (status=${status}); falling back to chat_completions`);
+          continue;
+        }
+
         const canRetryWithoutPromptCacheKey =
           !promptCacheRetryAttempted
           && Boolean((translatedReq as { prompt_cache_key?: string }).prompt_cache_key)
@@ -610,6 +686,54 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           }
         }
         log(`[bridge] Upstream error ${status}: ${safeErrBody.slice(0, 300)}`);
+        // [DIAG #325/#328] temporary body dump — identify still-mis-shapen field after fix.
+        {
+          const colMatch = safeErrBody.match(/line \d+ column (\d+)/);
+          if (colMatch) {
+            const col = parseInt(colMatch[1], 10);
+            const start = Math.max(0, col - 200);
+            const end = Math.min(requestBody.length, col + 200);
+            console.log(`[bridge][DIAG] requestBody.length=${requestBody.length} column=${col}`);
+            console.log(`[bridge][DIAG] @${col} = ${JSON.stringify(requestBody.slice(start, end))}`);
+            for (const key of ['"model"', '"input"', '"instructions"', '"tools"', '"stream"', '"prompt_cache_key"']) {
+              console.log(`[bridge][DIAG] offset of ${key} = ${requestBody.indexOf(key)}`);
+            }
+            // Find every `"description"` and `"parameters"` offset around the failing column.
+            // Agnes's strict serde column is "where it gave up", not the real failing field —
+            // dumping all sibling positions reveals the actual boundary the parser choked at.
+            for (const key of ['"description"', '"parameters"', '"type"', '"input_schema"']) {
+              const positions: number[] = [];
+              let idx = requestBody.indexOf(key, 0);
+              while (idx !== -1 && positions.length < 200) {
+                positions.push(idx);
+                idx = requestBody.indexOf(key, idx + key.length);
+              }
+              const near = positions.filter(p => Math.abs(p - col) < 400);
+              if (near.length > 0) {
+                console.log(`[bridge][DIAG] ${key} positions near col: ${near.map(p => `${p}(${p < col ? '-' : '+'}${Math.abs(p - col)})`).join(', ')}`);
+              }
+            }
+            // Identify which tool entry the failing column falls into.
+            // Each tool entry opens with `{"type":"function","name":"X","description":...`.
+            const namePositions: Array<{ idx: number; name: string }> = [];
+            const nameRegex = /"name":"([^"]{1,60})"/g;
+            let m: RegExpExecArray | null;
+            while ((m = nameRegex.exec(requestBody)) !== null && namePositions.length < 200) {
+              namePositions.push({ idx: m.index, name: m[1] });
+            }
+            // Find the last tool name BEFORE `col` and the next AFTER — the column sits between them.
+            const before = namePositions.filter(p => p.idx < col).pop();
+            const after = namePositions.find(p => p.idx > col);
+            console.log(`[bridge][DIAG] tool @col: before=${before ? `${before.name}@${before.idx}(+${col - before.idx})` : 'none'} after=${after ? `${after.name}@${after.idx}(-${after.idx - col})` : 'none'}`);
+            // Also dump the failing tool's full entry (from its `"name"` to next `"name"`).
+            if (before) {
+              const next = namePositions.find(p => p.idx > before!.idx);
+              const toolStart = before.idx;
+              const toolEnd = next ? next.idx : requestBody.length;
+              console.log(`[bridge][DIAG] tool[${before.name}] full entry (${toolEnd - toolStart}b): ${requestBody.slice(toolStart, Math.min(toolEnd, toolStart + 1200))}`);
+            }
+          }
+        }
         const translated = translateError(status, safeErrBody);
         if (translated.status !== status) {
           log(`[bridge] Remapped ${status} → ${translated.status} (${translated.body.error.type})`);

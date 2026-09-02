@@ -40,13 +40,35 @@ export function translateRequestToResponses(
   // modelOverride / modelMapping can carry a stored suffix the upstream rejects.
   model = stripModelSuffix(model) ?? model;
 
-  // 2. Instructions (system prompt)
-  let instructions: string | undefined;
-  if (req.system) {
-    instructions = typeof req.system === 'string'
-      ? req.system
-      : (req.system as AnthropicSystemBlock[]).map(b => b.text).join('\n\n');
-  }
+  // 2. System prompt — folded into input[0] instead of `instructions`
+  //
+  // #325 — strict proxies (Rust serde untagged enum — agnes, etc.) reject the
+  // `instructions` field in EVERY form we tried:
+  //   - bare string `instructions: "<text>"`  → untagged enum ResponseInput at line 1 col N (mid-string)
+  //   - array       `instructions: [{type:'message',role:'system',content:'<text>'}]` → same error, +30 bytes shift
+  // agnes's ResponsesRequest schema appears to have `instructions: Never` (or
+  // a narrower type we can't satisfy). Workaround: prepend the Anthropic
+  // `system` block to the input array as a role:'system' message. OpenAI
+  // Responses API accepts this — `input[0]` can be any ResponseInputItem,
+  // and role:'system' is valid per EasyInputMessageParam. Lenient providers
+  // (OpenAI official) treat the system role identically to instructions.
+  //
+  // ponytail: if a strict proxy later accepts `instructions: str` exactly,
+  // revert this and emit a bare string. If `instructions: ResponseInput[]`
+  // ever starts working (fix #6 shape), revert. Until then, input prepend is
+  // the only known-good shape across both lenient and strict providers.
+  const systemMessage: ResponsesInputItem[] = req.system
+    ? [
+        {
+          type: 'message',
+          role: 'system',
+          content:
+            typeof req.system === 'string'
+              ? req.system
+              : (req.system as AnthropicSystemBlock[]).map((b) => b.text).join('\n\n'),
+        },
+      ]
+    : [];
 
   // 3. Input messages
   const input = translateMessagesToResponses(req.messages, options?.imageSaver);
@@ -57,19 +79,47 @@ export function translateRequestToResponses(
   // - temperature, top_p: SDK values may not be compatible with target model. Let upstream use defaults.
   const responsesReq: ResponsesRequest = {
     model,
-    input,
+    input: [...systemMessage, ...input],
   };
 
-  if (instructions) responsesReq.instructions = instructions;
   if (options?.promptCacheKey) responsesReq.prompt_cache_key = options.promptCacheKey;
 
   // 5. Tools
+  // ponytail: OpenAI FunctionToolParam marks `strict: Required[Optional[bool]]`
+  // — strictly optional value but REQUIRED to be present on the wire. The
+  // OpenAI official schema lets providers omit it (lenient clients send
+  // `{type, name, description, parameters}` and are accepted), but strict
+  // proxies (Rust serde untagged enum — agnes) refuse to dispatch to the
+  // FunctionToolParam variant when `strict` is missing. Regression surfaced
+  // as `untagged enum ResponseInput at line 1 column 30555` — column falls
+  // inside the tools array, not input, because that is where serde gave up.
+  // Fix: emit `strict: false` (the historical default; newer OpenAI tools
+  // prefer `strict: true` with strict JSON-schema subsets, but flipping
+  // every Anthropic tool to strict mode is a separate, larger conversation
+  // — see `Models` providers' "JSON-schema subset compliance" docs).
+  //
+  // #325 — agnes's strict deserializer also chokes on long `description`
+  // strings inside tool `parameters` JSON-schema (column 45371 fell inside
+  // the AskUserQuestion option.preview.description text). Symptom is the
+  // same `untagged enum ResponseInput at line 1 column N` — agnes appears
+  // to walk every long string in the body looking for ResponseInput
+  // variants and reports the offset where it gives up. Stripping
+  // property-level `description` fields from tool schemas is harmless
+  // (the LLM still gets the tool's top-level `description` and `name` and
+  // the property `type` — enough to understand the tool). Kept the
+  // tool's top-level `description` (function description, not schema
+  // description) because that's how the LLM learns what the tool does.
   if (req.tools && req.tools.length > 0) {
     responsesReq.tools = req.tools.map(t => ({
       type: 'function' as const,
       name: t.name,
       description: t.description,
-      parameters: t.input_schema,
+      // JSON Schema tool parameters are always an object at the top level;
+      // the array branch of `stripSchemaDescriptions` only fires for nested
+      // positions (properties[].items / oneOf / anyOf / allOf), so the cast
+      // is sound.
+      parameters: stripSchemaDescriptions(t.input_schema) as Record<string, unknown> | undefined,
+      strict: false,
     }));
   }
 
@@ -84,9 +134,26 @@ export function translateRequestToResponses(
   }
 
   // 8. Reasoning effort (#324): forwarded ONLY when the user explicitly
-  // selected a non-default effort — same omit-by-default rationale as the
-  // Chat Completions translator (unknown args → 400 on strict providers).
-  if (options?.reasoningEffort) {
+  // selected a non-default effort AND the value is in the Responses-safe
+  // vocabulary. Same omit-by-default rationale as the Chat Completions
+  // translator (unknown args → 400 on strict providers). Responses API's
+  // documented effort enum is the strict 4-value set below; Claude-only
+  // tiers (`max`) and OpenAI extensions outside it (`xhigh`) are silently
+  // omitted rather than remapped, because remapping can mask the user's
+  // intent (`max` thinking ≠ `high` thinking) and stricter proxies
+  // (Rust serde with untagged enum — agnes, etc.) reject unknown
+  // variants at deserialization time with 400 json_parse_error.
+  // Regression: agnes-2.5-flash chat surfaced `effort: unknown variant
+  // max, expected one of minimal, low, medium, high` after the previous
+  // output_text fix unblocked earlier parsing. The xai-sub Grok whitelist
+  // in `shouldSendProviderReasoningEffort` runs in the handler gate
+  // BEFORE this translator, but its allowed set is a subset of the
+  // Responses-safe set so the gate remains a no-op for Grok here.
+  // ponytail: extend with `xhigh` once an OpenAI-compatible provider
+  // surfaced in production accepts it (Responses spec lists it but
+  // every strict proxy we've seen rejects it).
+  const RESPONSES_EFFORT_VALUES = new Set(['minimal', 'low', 'medium', 'high']);
+  if (options?.reasoningEffort && RESPONSES_EFFORT_VALUES.has(options.reasoningEffort)) {
     responsesReq.reasoning = { effort: options.reasoningEffort };
   }
 
@@ -122,6 +189,17 @@ function translateMessagesToResponses(messages: AnthropicMessage[], imageSaver?:
       translateUserMessageToResponses(msg, result, knownToolUseIds, imageSaver);
     } else if (msg.role === 'assistant') {
       translateAssistantMessageToResponses(msg, result);
+    }
+  }
+
+  // ponytail: this discriminator is unconditional, but if we ever need to
+  // forward provider-specific Responses shapes (MCP tool calls, reasoning
+  // replay items, file-search outputs, etc.) we will branch here rather than
+  // add a sibling type without discriminator — strict proxies would still
+  // reject those variants for the same reason.
+  for (const item of result) {
+    if ('role' in item) {
+      item.type = 'message';
     }
   }
 
@@ -200,7 +278,14 @@ function translateAssistantMessageToResponses(msg: AnthropicMessage, result: Res
 
   for (const block of msg.content) {
     if (block.type === 'text') {
-      contentParts.push({ type: 'output_text', text: block.text });
+      // Assistant text replay MUST use `input_text` — Responses API's
+      // `EasyInputMessage::content` rejects `output_text` (which belongs to
+      // `ResponsesOutputContent`). Hard failure mode is upstream 400
+      // "data did not match any variant of untagged enum ResponseInput"
+      // (agnes / Rust serde) once the request body crosses the proxy's
+      // lenient-fallthrough threshold. See request-responses.unit.test.ts
+      // for the invariant this preserves.
+      contentParts.push({ type: 'input_text', text: block.text });
     } else if (block.type === 'tool_use') {
       // In Responses API input replay, function calls are separate items
       functionCalls.push({
@@ -258,4 +343,54 @@ function extractToolResultText(tr: AnthropicToolResultBlock, imageSaver?: ToolIm
   }
 
   return isError ? `<error>${text}</error>` : text;
+}
+
+/**
+ * Recursively strip `description` fields from a JSON Schema for tool
+ * parameters. Keeps `type`, `properties`, `required`, `items`, `enum`,
+ * `additionalProperties`, `oneOf`/`anyOf`/`allOf`, etc. — everything the
+ * LLM needs to understand the tool's argument shape. Drops STRING-valued
+ * `description` fields because some strict Responses-API proxies (Rust
+ * serde untagged-enum — agnes) walk long description strings looking for
+ * ResponseInput variants and report `untagged enum ResponseInput at line
+ * 1 column N` mid-string (regression column 45371 inside AskUserQuestion
+ * .preview.description).
+ *
+ * Important: only strip `description` keys whose VALUE is a string. When
+ * value is an object/array (e.g. `description: { type: 'string',
+ * description: '…' }` where `description` is itself the *property name*
+ * being defined as a string-typed argument — AskUserQuestion's `options
+ * [].description`), the value is a legitimate property schema and MUST
+ * be preserved. Stripping it drops the argument definition entirely
+ * (regression surfaced as agnes 400 at column 45371 — body length 115 KB,
+ * 26 tools, the dropped `description` property is the one whose stripped
+ * sub-schema sat at that byte offset).
+ *
+ * ponytail: if a strict proxy later accepts descriptions verbatim, revert
+ * this and the caller to pass `t.input_schema` directly. The function
+ * remains exported (`stripSchemaDescriptions`) for unit testing only —
+ * the translator inlines the call so the JSON tree is walked once.
+ */
+export function stripSchemaDescriptions(schema: unknown): Record<string, unknown> | unknown[] | undefined {
+  if (schema === undefined || schema === null) return undefined;
+  if (Array.isArray(schema)) {
+    return schema.map(stripSchemaDescriptions);
+  }
+  if (typeof schema === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(schema as Record<string, unknown>)) {
+      // Drop only string-valued `description` (schema annotation). Object-
+      // valued `description` is a property definition; keep and recurse so
+      // any nested string `description`s inside it still get stripped.
+      if (k === 'description' && typeof v === 'string') continue;
+      const stripped = stripSchemaDescriptions(v);
+      if (stripped !== undefined) out[k] = stripped;
+    }
+    return out;
+  }
+  // Scalars pass through unchanged — JSON Schema tool params never have
+  // bare scalars at the top level, but a nested `default: 42` / `default: 'x'`
+  // / `default: true` value can reach here via the recursive walk. Cast
+  // narrows `unknown` to the declared return type without runtime cost.
+  return schema as Record<string, unknown> | unknown[];
 }

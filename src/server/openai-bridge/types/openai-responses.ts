@@ -5,6 +5,13 @@
 export interface ResponsesRequest {
   model: string;
   input: ResponsesInputItem[];
+  // #325 — strict proxies (Rust serde — agnes) reject the `instructions`
+  // field in every form we tried (bare string AND array of ResponseInput).
+  // We therefore DO NOT emit `instructions`; the Anthropic `system` prompt
+  // is folded into `input[0]` as a role:'system' message instead. The
+  // OpenAI-spec string form is preserved on the type for callers that
+  // construct requests against providers known to accept it (e.g. OpenAI
+  // direct), but the Responses translator never writes it.
   instructions?: string;
   tools?: ResponsesTool[];
   tool_choice?: ResponsesToolChoice;
@@ -29,6 +36,14 @@ export type ResponsesInputItem =
   | ResponsesInputFunctionCallOutput;
 
 export interface ResponsesInputMessage {
+  /** #325 — strict proxies (Rust serde untagged enum — agnes, etc.) require
+   *  `type:'message'` as a discriminator on every EasyInputMessage; without it
+   *  they cannot dispatch this item from sibling variants
+   *  (FunctionCallOutput, etc.) and reject the whole input with
+   *  `data did not match any variant of untagged enum ResponseInput`. OpenAI's
+   *  official schema marks it as Optional but Lenient clients silently omit it,
+   *  so we always emit it. */
+  type?: 'message';
   role: 'system' | 'user' | 'assistant' | 'developer';
   content: string | ResponsesInputContentPart[];
 }
@@ -42,11 +57,18 @@ export interface ResponsesInputFunctionCall {
   status?: string;
 }
 
+// OpenAI Responses API input side: only `input_text` / `input_image` are valid.
+// `output_text` / `refusal` belong to `ResponsesOutputContent` — including them
+// here would let TS approve `{ type: 'output_text' }` inside `EasyInputMessage`,
+// which the upstream `untagged enum ResponseInput` rejects with
+// "data did not match any variant ... at line 1 column N". Regression caused
+// by the previous union shape: see `translateAssistantMessageToResponses`
+// and the corresponding unit test for the assistant-text-must-be-input_text
+// invariant. If we ever need a refusal block on the input side, that goes
+// through `ResponsesInputFunctionCallOutput` instead — not this type.
 export type ResponsesInputContentPart =
   | { type: 'input_text'; text: string }
-  | { type: 'input_image'; image_url: string; detail?: string }
-  | { type: 'output_text'; text: string }
-  | { type: 'refusal'; refusal: string };
+  | { type: 'input_image'; image_url: string; detail?: string };
 
 export interface ResponsesInputFunctionCallOutput {
   type: 'function_call_output';
@@ -59,6 +81,10 @@ export interface ResponsesTool {
   name: string;
   description?: string;
   parameters?: Record<string, unknown>;
+  // #325 — `strict` is `Required[Optional[bool]]` per OpenAI spec; strict
+  // proxies reject the FunctionToolParam variant when this field is absent.
+  // Lenient clients accept omission; we always emit `false` (the historical
+  // default) for maximum interop with non-strict and strict providers.
   strict?: boolean;
 }
 

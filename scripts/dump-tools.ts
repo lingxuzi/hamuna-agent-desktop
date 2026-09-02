@@ -1,0 +1,2 @@
+import * as sdk from '@anthropic-ai/claude-agent-sdk';
+console.log('SDK exports:', Object.keys(sdk).filter(k => /[Tt]ool/.test(k)));

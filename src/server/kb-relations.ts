@@ -90,12 +90,41 @@ interface TypedRelation {
   relation_type: string;
   weight: number;
   typed: boolean;
+  /**
+   * Verbatim text span from the input chunk that supports this relation. Used
+   * for source-grounding: a relation whose source_quote cannot be located in
+   * the original text is treated as hallucinated and dropped.
+   */
+  sourceQuote?: string;
+  /**
+   * Character interval in the input chunk that supports this relation.
+   * [charStart, charEnd) half-open. When present, the post-parse grounding
+   * pass cross-checks `chunk.text.slice(charStart, charEnd) === sourceQuote`
+   * for byte-for-byte consistency — a stricter check than substring search.
+   */
+  charStart?: number;
+  charEnd?: number;
 }
 
 interface ExtractedEntity {
   id: string;
   label: string;
   entityType?: string;
+  /**
+   * Verbatim text span from the input chunk where this entity appears. The
+   * post-parse grounding pass drops any entity whose source_quote cannot be
+   * located in the original text (substring match, no normalization).
+   */
+  sourceQuote?: string;
+  /**
+   * Character interval in the input chunk where this entity appears.
+   * [charStart, charEnd) half-open. When present, the grounding pass
+   * cross-checks `chunk.text.slice(charStart, charEnd) === sourceQuote`
+   * for byte-for-byte consistency — a stricter, position-anchored check
+   * (LangExtract-style) that is not fooled by LLM quote transcription errors.
+   */
+  charStart?: number;
+  charEnd?: number;
 }
 
 interface ExtractionResult {
@@ -105,14 +134,27 @@ interface ExtractionResult {
 
 const SYSTEM_PROMPT = `You extract a COMPLETE knowledge graph from a text chunk: every real named entity (companies, people, products, places, dates, codes, documents, concepts) with its TYPE, and every confident TYPED relation between them.
 
+For EACH entity AND EACH relation, you MUST also output BOTH:
+  (a) a \`source_quote\` field — the EXACT VERBATIM contiguous text span from the input chunk where that entity appears or that supports the relation, AND
+  (b) a \`char_start\` + \`char_end\` pair — the [start, end) half-open character offsets of the same span in the input text (count code units; first character is 0, end is exclusive).
+Self-verify before output: (i) the source_quote MUST be a byte-for-byte substring of the input, AND (ii) \`input.slice(char_start, char_end)\` MUST equal source_quote exactly. If you cannot find an entity's verbatim text, DO NOT output the entity.
+
 Output: a single JSON object (NO markdown fences, NO prose):
-{"entities":[{"id":"<canonical name>","label":"<canonical name>","type":"<ORG|PERSON|PLACE|PRODUCT|DATE|CODE|DOCUMENT|CONCEPT|..."}],"relations":[{"subject":"<entity id>","object":"<entity id>","relation_type":"<snake_case verb phrase>","weight":<0..1 confidence>}]}
+{"entities":[{"id":"<canonical name>","label":"<canonical name>","type":"<ORG|PERSON|PLACE|PRODUCT|DATE|CODE|DOCUMENT|CONCEPT|...>","source_quote":"<verbatim text span, exact match>","char_start":<int>,"char_end":<int>}],"relations":[{"subject":"<entity id>","object":"<entity id>","relation_type":"<snake_case verb phrase>","weight":<0..1 confidence>","source_quote":"<verbatim text span supporting this relation>","char_start":<int>,"char_end":<int>}]}
 
 Rules:
 - Entities: EXHAUSTIVE — extract ALL proper nouns and key concepts in the chunk, no matter how many. The "id" MUST be the full canonical name itself (e.g. "江苏索普化工股份有限公司", "600746", "任正非"), never "e1" or an index. "label" equals "id". "type" is the entity kind (ORG/PERSON/PLACE/PRODUCT/DATE/CODE/DOCUMENT/CONCEPT).
 - Relations: extract EVERY confident relation between entities (e.g. "founded_by", "listed_as", "part_of", "located_in", "acquired_by", "produces", "publishes", "employs", "succeeded_by"). subject and object MUST be entity ids from your entities list.
 - Granularity: be fine-grained — capture the full knowledge structure. Do NOT cap counts; extract everything meaningful in the chunk.
-- Output nothing but the JSON object.`;
+- Output nothing but the JSON object.
+
+EXAMPLE INPUT:
+"""
+江苏索普化工股份有限公司（股票代码600746）成立于1996年，总部位于江苏省镇江市。任正非先生曾在公开场合提到该公司是国内醋酸行业的领军企业。
+"""
+
+EXAMPLE OUTPUT:
+{"entities":[{"id":"江苏索普化工股份有限公司","label":"江苏索普化工股份有限公司","type":"ORG","source_quote":"江苏索普化工股份有限公司","char_start":0,"char_end":12},{"id":"600746","label":"600746","type":"CODE","source_quote":"股票代码600746","char_start":13,"char_end":23},{"id":"1996年","label":"1996年","type":"DATE","source_quote":"成立于1996年","char_start":24,"char_end":32},{"id":"江苏省镇江市","label":"江苏省镇江市","type":"PLACE","source_quote":"江苏省镇江市","char_start":37,"char_end":43},{"id":"任正非","label":"任正非","type":"PERSON","source_quote":"任正非先生","char_start":44,"char_end":49},{"id":"醋酸行业","label":"醋酸行业","type":"CONCEPT","source_quote":"醋酸行业","char_start":63,"char_end":67}],"relations":[{"subject":"江苏索普化工股份有限公司","object":"600746","relation_type":"listed_as","weight":0.99,"source_quote":"股票代码600746","char_start":13,"char_end":23},{"subject":"江苏索普化工股份有限公司","object":"1996年","relation_type":"founded_in","weight":0.95,"source_quote":"成立于1996年","char_start":24,"char_end":32},{"subject":"江苏索普化工股份有限公司","object":"江苏省镇江市","relation_type":"located_in","weight":0.95,"source_quote":"总部位于江苏省镇江市","char_start":28,"char_end":40},{"subject":"江苏索普化工股份有限公司","object":"醋酸行业","relation_type":"operates_in","weight":0.9,"source_quote":"国内醋酸行业的领军企业","char_start":61,"char_end":72},{"subject":"任正非","object":"江苏索普化工股份有限公司","relation_type":"mentions","weight":0.7,"source_quote":"提到该公司","char_start":55,"char_end":60}]}`;
 
 function buildUserPrompt(task: PendingRelationTask): string {
   // task.text is already a bounded, meaning-preserving chunk from the Rust
@@ -121,23 +163,81 @@ function buildUserPrompt(task: PendingRelationTask): string {
   return `Text chunk:\n"""\n${task.text}\n"""\n\nExtract the complete knowledge graph from this text.`;
 }
 
+/**
+ * Strip a leading/trailing markdown code fence from model output. Models
+ * regularly wrap JSON in ```json ... ``` or ``` ... ``` even when the system
+ * prompt forbids it; pre-stripping lets `extractBalancedJson` see the bare
+ * object instead of fighting fence characters (the fence's `{`/`}` would
+ * otherwise break brace counting — though our counter is string-aware, the
+ * fence's trailing ``` is harmless; the issue is the model's prose BETWEEN
+ * the fence opener and the JSON, which we want gone).
+ */
+export function stripMarkdownFence(text: string): string {
+  const trimmed = text.trim();
+  // Match ``` optional-language (json, JSON, or empty) on its own line, then
+  // capture everything up to the closing ``` on its own line.
+  const m = trimmed.match(/^```(?:json|JSON)?\s*\n([\s\S]*?)\n```\s*$/);
+  return m ? m[1] : trimmed;
+}
+
+/**
+ * Extract the first balanced `{...}` JSON object from arbitrary model output.
+ * String-aware (counts braces inside `"..."` as data) and backslash-escape
+ * aware (so `\"` inside a string does not toggle the string state).
+ *
+ * This replaces the old `indexOf('{')` + `lastIndexOf('}')` heuristic, which
+ * broke whenever the model emitted explanatory prose containing a `}` (e.g.
+ * "Example: {a: 1}.") — JSON.parse would then see a slice that runs past the
+ * real object boundary.
+ */
+export function extractBalancedJson(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\') { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 /** Parse the LLM's JSON object {entities, relations}. */
 function parseExtraction(text: string): ExtractionResult {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return { entities: [], relations: [] };
+  const jsonText = extractBalancedJson(stripMarkdownFence(text));
+  if (!jsonText) return { entities: [], relations: [] };
   try {
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    const parsed = JSON.parse(jsonText);
     const entities: ExtractedEntity[] = Array.isArray(parsed.entities)
       ? parsed.entities
           .filter((e: unknown) => e && typeof (e as { id?: unknown }).id === 'string')
-          .map((e: { id?: string; label?: unknown; name?: unknown; type?: unknown; entity_type?: unknown }) => {
+          .map((e: { id?: string; label?: unknown; name?: unknown; type?: unknown; entity_type?: unknown; source_quote?: unknown; sourceQuote?: unknown; char_start?: unknown; charStart?: unknown; char_end?: unknown; charEnd?: unknown }) => {
             // Prefer the canonical name field; fall back to id when the model
             // emitted a bare index like "e1".
             const raw = (typeof e.label === 'string' && e.label.trim()) || (typeof e.name === 'string' && e.name.trim()) || String(e.id ?? '');
             const id = raw.trim();
             const t = typeof e.type === 'string' && e.type.trim() ? String(e.type).trim() : typeof e.entity_type === 'string' && e.entity_type.trim() ? String(e.entity_type).trim() : undefined;
-            return { id, label: id, ...(t ? { entityType: t } : {}) };
+            const sq = typeof e.source_quote === 'string' ? e.source_quote : typeof e.sourceQuote === 'string' ? e.sourceQuote : undefined;
+            const csRaw = e.char_start ?? e.charStart;
+            const ceRaw = e.char_end ?? e.charEnd;
+            const cs = typeof csRaw === 'number' && Number.isInteger(csRaw) && csRaw >= 0 ? csRaw : undefined;
+            const ce = typeof ceRaw === 'number' && Number.isInteger(ceRaw) && ceRaw >= 0 ? ceRaw : undefined;
+            return {
+              id,
+              label: id,
+              ...(t ? { entityType: t } : {}),
+              ...(sq ? { sourceQuote: sq } : {}),
+              ...(cs !== undefined && ce !== undefined ? { charStart: cs, charEnd: ce } : {}),
+            };
           })
           .filter((e: { id: string }) => e.id.length > 0)
       : [];
@@ -147,20 +247,88 @@ function parseExtraction(text: string): ExtractionResult {
             (r: unknown) =>
               r && typeof (r as { subject?: unknown }).subject === 'string' && typeof (r as { object?: unknown }).object === 'string',
           )
-          .map((r: { subject: string; object: string; relation_type?: unknown; weight?: unknown }) => ({
-            subject: String(r.subject).trim(),
-            object: String(r.object).trim(),
-            relation_type:
-              typeof r.relation_type === 'string' && r.relation_type.trim() ? String(r.relation_type).trim() : 'related_to',
-            weight: typeof r.weight === 'number' ? r.weight : 1,
-            typed: true,
-          }))
+          .map((r: { subject: string; object: string; relation_type?: unknown; weight?: unknown; source_quote?: unknown; sourceQuote?: unknown; char_start?: unknown; charStart?: unknown; char_end?: unknown; charEnd?: unknown }) => {
+            const sq = typeof r.source_quote === 'string' ? r.source_quote : typeof r.sourceQuote === 'string' ? r.sourceQuote : undefined;
+            const csRaw = r.char_start ?? r.charStart;
+            const ceRaw = r.char_end ?? r.charEnd;
+            const cs = typeof csRaw === 'number' && Number.isInteger(csRaw) && csRaw >= 0 ? csRaw : undefined;
+            const ce = typeof ceRaw === 'number' && Number.isInteger(ceRaw) && ceRaw >= 0 ? ceRaw : undefined;
+            return {
+              subject: String(r.subject).trim(),
+              object: String(r.object).trim(),
+              relation_type:
+                typeof r.relation_type === 'string' && r.relation_type.trim() ? String(r.relation_type).trim() : 'related_to',
+              weight: typeof r.weight === 'number' ? r.weight : 1,
+              typed: true,
+              ...(sq ? { sourceQuote: sq } : {}),
+              ...(cs !== undefined && ce !== undefined ? { charStart: cs, charEnd: ce } : {}),
+            };
+          })
           .filter((r: { subject: string; object: string }) => r.subject.length > 0 && r.object.length > 0 && r.subject !== r.object)
       : [];
     return { entities, relations };
   } catch {
     return { entities: [], relations: [] };
   }
+}
+
+/**
+ * Source-grounding with two-tier verification:
+ *
+ *   1. **char_interval (preferred)** — when the model emitted `char_start` and
+ *      `char_end`, we require `originalText.slice(charStart, charEnd)` to equal
+ *      `sourceQuote` BYTE-FOR-BYTE. This is a position-anchored check that
+ *      cannot be fooled by LLM quote transcription errors (the most common
+ *      source_quote fabrication mode).
+ *
+ *   2. **substring search (fallback)** — when no char_interval is present, fall
+ *      back to the old `originalText.includes(sourceQuote)` check. Weaker but
+ *      still useful when the prompt is followed but positions are skipped.
+ *
+ * Items WITHOUT source_quote entirely are kept (defensive: better to retain a
+ * possibly-correct entity than to drop it). The caller logs the drop count so
+ * the operator can tell whether the prompt's grounding rule is taking effect.
+ */
+export function validateGrounding(
+  originalText: string,
+  result: ExtractionResult,
+): { cleaned: ExtractionResult; droppedEntities: number; droppedRelations: number; charIntervalUsed: number } {
+  const substringLocates = (q: string | undefined): boolean =>
+    typeof q === 'string' && q.length > 0 && originalText.includes(q);
+
+  const intervalLocates = (
+    q: string | undefined,
+    cs: number | undefined,
+    ce: number | undefined,
+  ): boolean => {
+    if (cs === undefined || ce === undefined) return false;
+    if (typeof q !== 'string' || q.length === 0) return false;
+    if (cs >= ce || cs < 0 || ce > originalText.length) return false;
+    return originalText.slice(cs, ce) === q;
+  };
+
+  const isLocated = (
+    q: string | undefined,
+    cs: number | undefined,
+    ce: number | undefined,
+  ): boolean => intervalLocates(q, cs, ce) || (!q ? true : substringLocates(q));
+
+  let charIntervalUsed = 0;
+  const keptEntities = result.entities.filter((e) => {
+    if (e.charStart !== undefined && e.charEnd !== undefined && e.sourceQuote) charIntervalUsed++;
+    return isLocated(e.sourceQuote, e.charStart, e.charEnd) || !e.sourceQuote;
+  });
+  const droppedEntities = result.entities.length - keptEntities.length;
+  const entityIds = new Set(keptEntities.map((e) => e.id));
+
+  const keptRelations = result.relations.filter((r) => {
+    // Drop immediately if quote present but unlocated.
+    if (r.sourceQuote && !isLocated(r.sourceQuote, r.charStart, r.charEnd)) return false;
+    // Drop if endpoints were dropped from entities (orphan relation).
+    return entityIds.has(r.subject) && entityIds.has(r.object);
+  });
+  const droppedRelations = result.relations.length - keptRelations.length;
+  return { cleaned: { entities: keptEntities, relations: keptRelations }, droppedEntities, droppedRelations, charIntervalUsed };
 }
 
 /**
@@ -231,8 +399,175 @@ async function providerMessagesText(
   return text;
 }
 
-/** SDK fallback for the subscription path (no providerEnv). */
-async function sdkExtract(task: PendingRelationTask, model: string): Promise<ExtractionResult> {
+const VERIFY_SYSTEM_PROMPT = `You are a strict auditor of an extraction. Given the original text and a list of extracted entities, verify each entity: its source_quote MUST appear verbatim in the original text, and the entity id MUST be a name that actually appears in (or is canonicalized from) the source_quote.
+
+Note: you may be reviewing an extraction produced by your own prior turn. Do not trust your own output — re-locate every source_quote by direct substring match against the original text. Treat any source_quote that does not appear verbatim as fabricated.
+
+Output: a single JSON object (NO markdown fences, NO prose):
+{"keep":["<id1>","<id2>",...],"drop":["<id3>",...]}
+
+Rules:
+- For each entity: locate its source_quote in the original text by character-by-character search. If absent, add its id to "drop".
+- If the id is not present in the source_quote (e.g. id="苹果公司" but quote="苹果"), still keep it (full canonical form is acceptable).
+- Be conservative: only drop entries where you are confident the source_quote is fabricated.
+- Output nothing but the JSON object.`;
+
+function buildVerifyPrompt(task: PendingRelationTask, result: ExtractionResult): string {
+  const slim = {
+    text: task.text,
+    entities: result.entities.map((e) => ({ id: e.id, source_quote: e.sourceQuote ?? '' })),
+  };
+  return `Original text:\n"""\n${task.text}\n"""\n\nExtraction to audit:\n${JSON.stringify(slim, null, 2)}\n\nReturn the JSON verdict.`;
+}
+
+/**
+ * Self-verification pass: ask the LLM to audit which entities have fabricated
+ * source_quotes. Costs one extra LLM call; opt-in via `verifyWithLlm`.
+ *
+ * On any failure (LLM error, unparseable response, timeout) returns the
+ * input unchanged — the caller falls back to the mechanically-validated
+ * result. We never let the verifier *delete* valid entities just because it
+ * itself failed.
+ */
+async function verifyExtraction(
+  task: PendingRelationTask,
+  preliminary: ExtractionResult,
+  model: string,
+  providerEnv?: ProviderEnv,
+): Promise<ExtractionResult> {
+  if (preliminary.entities.length === 0) return preliminary;
+  const useDirect = Boolean(providerEnv?.baseUrl && providerEnv.apiKey);
+  try {
+    const user = buildVerifyPrompt(task, preliminary);
+    const text = useDirect
+      ? await providerMessagesText(providerEnv as ProviderEnv, model, VERIFY_SYSTEM_PROMPT, user)
+      : await sdkExtractText(model, VERIFY_SYSTEM_PROMPT, user);
+    const jsonText = extractBalancedJson(text);
+    if (!jsonText) return preliminary;
+    const verdict = JSON.parse(jsonText) as { keep?: unknown; drop?: unknown };
+    const dropSet = new Set(
+      Array.isArray(verdict.drop) ? verdict.drop.filter((x): x is string => typeof x === 'string') : [],
+    );
+    if (dropSet.size === 0) return preliminary;
+    const filtered = preliminary.entities.filter((e) => !dropSet.has(e.id));
+    const entityIds = new Set(filtered.map((e) => e.id));
+    return {
+      entities: filtered,
+      relations: preliminary.relations.filter((r) => entityIds.has(r.subject) && entityIds.has(r.object)),
+    };
+  } catch {
+    return preliminary;
+  }
+}
+
+/**
+ * SDK-path raw text extractor used by verifyExtraction (sdkExtract above is
+ * shaped around the kb-relations flow and strips to typed ExtractionResult).
+ */
+async function sdkExtractText(model: string, system: string, user: string): Promise<string> {
+  const { randomUUID } = await import('crypto');
+  const sessionId = randomUUID();
+  const cliPath = resolveClaudeCodeCli();
+  const cwd = join(homedir(), '.hamuna', 'projects');
+  const env = buildClaudeSessionEnv(undefined, model, { providerId: SUBSCRIPTION_PROVIDER_ID });
+
+  async function* promptStream() {
+    yield {
+      type: 'user' as const,
+      message: { role: 'user' as const, content: user },
+      parent_tool_use_id: null,
+      session_id: sessionId,
+    };
+  }
+
+  const q = query({
+    prompt: promptStream(),
+    options: {
+      maxTurns: 1,
+      sessionId,
+      cwd,
+      settingSources: ['project'],
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      pathToClaudeCodeExecutable: cliPath,
+      env,
+      systemPrompt: system,
+      thinking: { type: 'disabled' },
+      effort: 'low',
+      includePartialMessages: false,
+      persistSession: false,
+      mcpServers: {},
+      tools: [],
+      ...(model ? { model: applyProviderContextWindowSuffix(model, SUBSCRIPTION_PROVIDER_ID) } : {}),
+    },
+  });
+
+  let text = '';
+  const timeout = new Promise<string>((r) => setTimeout(() => r(text), EXTRACTION_TIMEOUT_MS));
+  const run = (async (): Promise<string> => {
+    for await (const message of q) {
+      const blocks = (message as { content?: unknown }).content;
+      if (Array.isArray(blocks)) {
+        for (const block of blocks) {
+          if (block && typeof block === 'object' && (block as { type?: string }).type === 'text') {
+            text += String((block as { text?: string }).text ?? '');
+          }
+        }
+      }
+    }
+    return text;
+  })();
+  return Promise.race([run, timeout]);
+}
+
+async function extractKnowledge(
+  task: PendingRelationTask,
+  model: string,
+  providerEnv?: ProviderEnv,
+  options: { verifyWithLlm?: boolean } = {},
+): Promise<ExtractionResult> {
+  const useDirect = Boolean(providerEnv?.baseUrl && providerEnv.apiKey);
+  console.log(
+    `[kb-relations] extractKnowledge model=${model} path=${useDirect ? 'direct-http' : 'sdk-fallback'} baseUrl=${providerEnv?.baseUrl ?? 'none'} verify=${options.verifyWithLlm ? 'on' : 'off'}`,
+  );
+  const parseAndGround = (text: string, label: string): ExtractionResult => {
+    const parsed = parseExtraction(text);
+    const { cleaned, droppedEntities, droppedRelations, charIntervalUsed } = validateGrounding(task.text, parsed);
+    console.log(
+      `[kb-relations] ${label} parsed=${parsed.entities.length}e/${parsed.relations.length}r grounded=${cleaned.entities.length}e/${cleaned.relations.length}r dropped=${droppedEntities}e/${droppedRelations}r charIntervalUsed=${charIntervalUsed}`,
+    );
+    return cleaned;
+  };
+  try {
+    let preliminary: ExtractionResult;
+    if (useDirect) {
+      const text = await providerMessagesText(providerEnv as ProviderEnv, model, SYSTEM_PROMPT, buildUserPrompt(task));
+      console.log(`[kb-relations] direct-http returned ${text.length} chars: ${text.slice(0, 150)}`);
+      preliminary = parseAndGround(text, 'direct-http');
+    } else {
+      preliminary = parseAndGround(await sdkExtractRawText(task, model), 'sdk-fallback');
+    }
+    if (!options.verifyWithLlm) return preliminary;
+    const verified = await verifyExtraction(task, preliminary, model, providerEnv);
+    const removedByVerify = preliminary.entities.length - verified.entities.length;
+    if (removedByVerify > 0) {
+      console.log(`[kb-relations] self-verify dropped ${removedByVerify} additional entities`);
+    }
+    return verified;
+  } catch (err) {
+    console.warn('[kb-relations] extraction failed, retrying with SDK:', err instanceof Error ? err.message : err);
+    // Fall back to the SDK path on any provider-API error.
+    try {
+      const fallbackText = await sdkExtractRawText(task, model);
+      return parseAndGround(fallbackText, 'sdk-retry');
+    } catch {
+      return { entities: [], relations: [] };
+    }
+  }
+}
+
+/** Like sdkExtract but returns raw text (parseExtraction is applied later). */
+async function sdkExtractRawText(task: PendingRelationTask, model: string): Promise<string> {
   const { randomUUID } = await import('crypto');
   const sessionId = randomUUID();
   const cliPath = resolveClaudeCodeCli();
@@ -248,7 +583,7 @@ async function sdkExtract(task: PendingRelationTask, model: string): Promise<Ext
     };
   }
 
-  const relationQuery = query({
+  const q = query({
     prompt: promptStream(),
     options: {
       maxTurns: 1,
@@ -270,13 +605,10 @@ async function sdkExtract(task: PendingRelationTask, model: string): Promise<Ext
     },
   });
 
-  const timeout = new Promise<ExtractionResult>((resolve) => {
-    setTimeout(() => resolve({ entities: [], relations: [] }), EXTRACTION_TIMEOUT_MS);
-  });
-
-  const run = (async (): Promise<ExtractionResult> => {
-    let text = '';
-    for await (const message of relationQuery) {
+  let text = '';
+  const timeout = new Promise<string>((r) => setTimeout(() => r(text), EXTRACTION_TIMEOUT_MS));
+  const run = (async (): Promise<string> => {
+    for await (const message of q) {
       const blocks = (message as { content?: unknown }).content;
       if (Array.isArray(blocks)) {
         for (const block of blocks) {
@@ -286,41 +618,9 @@ async function sdkExtract(task: PendingRelationTask, model: string): Promise<Ext
         }
       }
     }
-    return parseExtraction(text);
+    return text;
   })();
-
   return Promise.race([run, timeout]);
-}
-
-async function extractKnowledge(
-  task: PendingRelationTask,
-  model: string,
-  providerEnv?: ProviderEnv,
-): Promise<ExtractionResult> {
-  const useDirect = Boolean(providerEnv?.baseUrl && providerEnv.apiKey);
-  console.log(
-    `[kb-relations] extractKnowledge model=${model} path=${useDirect ? 'direct-http' : 'sdk-fallback'} baseUrl=${providerEnv?.baseUrl ?? 'none'}`,
-  );
-  try {
-    if (useDirect) {
-      const text = await providerMessagesText(providerEnv as ProviderEnv, model, SYSTEM_PROMPT, buildUserPrompt(task));
-      console.log(`[kb-relations] direct-http returned ${text.length} chars: ${text.slice(0, 150)}`);
-      const result = parseExtraction(text);
-      console.log(`[kb-relations] parsed ${result.entities.length} entities, ${result.relations.length} relations`);
-      return result;
-    }
-    const result = await sdkExtract(task, model);
-    console.log(`[kb-relations] sdk-fallback parsed ${result.entities.length} entities, ${result.relations.length} relations`);
-    return result;
-  } catch (err) {
-    console.warn('[kb-relations] extraction failed, retrying with SDK:', err instanceof Error ? err.message : err);
-    // Fall back to the SDK path on any provider-API error.
-    try {
-      return await sdkExtract(task, model);
-    } catch {
-      return { entities: [], relations: [] };
-    }
-  }
 }
 
 let inFlight = false;
@@ -350,7 +650,7 @@ async function processPendingOnce(): Promise<void> {
 
     for (const task of tasks) {
       try {
-        const result = await extractKnowledge(task, resolved.model, resolved.providerEnv);
+        const result = await extractKnowledge(task, resolved.model, resolved.providerEnv, { verifyWithLlm: true });
         if (result.entities.length === 0 && result.relations.length === 0) continue;
         // The LLM may not return every entity it references — make sure any
         // subject/object used by a relation is present as an entity too.
@@ -410,7 +710,7 @@ export function startKbRelationProcessor(): void {
   try {
     const resolved = resolveRelationModel();
     console.log(
-      `[kb-relations] boot: model=${resolved?.model ?? 'NONE'} providerEnv=${resolved?.providerEnv?.baseUrl ?? 'none'} hasKey=${resolved?.providerEnv ? Boolean(resolved.providerEnv.apiKey) : false}`,
+      `[kb-relations] boot: model=${resolved?.model ?? 'NONE'} providerEnv=${resolved?.providerEnv?.baseUrl ?? 'none'} hasKey=${resolved?.providerEnv ? Boolean(resolved.providerEnv.apiKey) : false} verifyMode=on (self-verification LLM call per chunk — may double LLM cost)`,
     );
   } catch (err) {
     console.warn('[kb-relations] boot model resolution failed:', err instanceof Error ? err.message : err);
