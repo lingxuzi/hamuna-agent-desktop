@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from 'fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync } from 'fs';
 import type { Stats } from 'fs';
 import { isAbsolute, join, relative, resolve } from 'path';
 
@@ -32,7 +32,36 @@ function lstatIfPresent(path: string): Stats | null {
 }
 
 function removeSymlinkPath(path: string): void {
-  rmSync(path, { recursive: true, force: true });
+  // unlinkSync, NOT rmSync(recursive): rmSync treats a directory-symlink as a
+  // directory and its recursive remove leaves the on-disk entry in a state
+  // where recreating the same path in the same process fails with EEXIST
+  // (verified on Linux; Windows junctions surface the same race as EBUSY).
+  // A symlink has no children — unlink is the correct, atomic removal.
+  unlinkSync(path);
+}
+
+/**
+ * Create a symlink with bounded retry for delete-settle races. Windows
+ * junction/antivirus can hold a path a moment after unlink (EBUSY/EPERM), and
+ * some filesystems linger the stale entry (EEXIST). Retrying keeps the sync
+ * contract (link exists when the caller returns) without hanging on a stale
+ * handle; the failed syscalls pace the loop, so this is not a CPU spin.
+ */
+function createSymlinkWithRetry(
+  target: string,
+  linkPath: string,
+  isJunction: boolean,
+): void {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try {
+      symlinkSync(target, linkPath, isJunction ? 'junction' : undefined);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'EBUSY' && code !== 'EPERM' && code !== 'EEXIST') throw err;
+    }
+  }
+  throw new Error(`symlink ${linkPath} stayed busy after 50 retries`);
 }
 
 function isInside(parent: string, child: string): boolean {
@@ -128,7 +157,7 @@ export function syncProjectUserConfigFiles(
       }
 
       try {
-        symlinkSync(target, linkPath, isWin ? 'junction' : undefined);
+        createSymlinkWithRetry(target, linkPath, isWin);
       } catch (err) {
         console.warn(`[skill-sync] Failed to symlink skill ${entry.name}:`, err);
       }
@@ -179,7 +208,7 @@ export function syncProjectUserConfigFiles(
       }
 
       try {
-        symlinkSync(target, linkPath);
+        createSymlinkWithRetry(target, linkPath, false);
       } catch (err) {
         console.warn(`[command-sync] Failed to symlink command ${entry.name}:`, err);
       }
