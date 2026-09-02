@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { extractBalancedJson, stripMarkdownFence, validateGrounding } from './kb-relations';
+import { apiRoot, extractBalancedJson, stripMarkdownFence, validateGrounding } from './kb-relations';
 
 describe('kb-relations pure helpers', () => {
   describe('extractBalancedJson', () => {
@@ -200,5 +200,21 @@ describe('kb-relations pure helpers', () => {
         expect(result.charIntervalUsed).toBe(0);
       });
     });
+  });
+});
+describe('apiRoot (endpoint base normalization)', () => {
+  it('strips a trailing /v1', () => {
+    expect(apiRoot('https://api.agnes-ai.cn/v1')).toBe('https://api.agnes-ai.cn');
+    expect(apiRoot('http://localhost:20128/v1')).toBe('http://localhost:20128');
+    expect(apiRoot('http://localhost:20128/v1/')).toBe('http://localhost:20128');
+  });
+
+  it('leaves bare hosts untouched', () => {
+    expect(apiRoot('https://api.example.com')).toBe('https://api.example.com');
+    expect(apiRoot('https://api.example.com/')).toBe('https://api.example.com');
+  });
+
+  it('preserves non-/v1 path prefixes', () => {
+    expect(apiRoot('https://gateway.example.com/proxy')).toBe('https://gateway.example.com/proxy');
   });
 });

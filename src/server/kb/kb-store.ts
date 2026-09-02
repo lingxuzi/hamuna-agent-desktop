@@ -95,6 +95,37 @@ const CHUNK_CHARS = 4_000;
 const MAX_HOP_RELATIONS = 200;
 const DEFAULT_QUERY_LIMIT = 20;
 
+/**
+ * Build a readable snippet from raw doc text centered on the first occurrence
+ * of any query token (case-insensitive). Falls back to the opening 240 chars
+ * when no token appears verbatim (e.g. only a jieba re-split matched).
+ * All indices are UTF-16 code-unit based (string.indexOf units) so slicing is
+ * exact; CJK is BMP so code units == chars for the common case.
+ */
+export function buildSnippet(raw: string, tokens: string[]): string {
+  const lower = raw.toLowerCase();
+  // Longest token first: "江苏索普" anchors better than its parts.
+  const ordered = [...tokens].sort((a, b) => b.length - a.length);
+  let anchor = -1;
+  for (const tok of ordered) {
+    const at = lower.indexOf(tok);
+    if (at >= 0) {
+      anchor = at;
+      break;
+    }
+  }
+  if (anchor < 0) {
+    const head = raw.slice(0, 240);
+    return head.length < raw.length ? `${head}…` : head;
+  }
+  const start = Math.max(0, anchor - 90);
+  const end = Math.min(raw.length, anchor + 150);
+  const out = raw.slice(start, end);
+  const prefix = start > 0 ? '…' : '';
+  const suffix = end < raw.length ? '…' : '';
+  return `${prefix}${out}${suffix}`;
+}
+
 // ── Store instance ─────────────────────────────────────────────────────────
 
 let storePromise: Promise<Store<typeof kbGraph>> | null = null;
@@ -324,27 +355,51 @@ export async function saveRelations(kbId: string, entities: KbEntity[], relation
   const existingEntities = await store.nodes.Entity.find({ where: (e) => e.kbId.eq(kbId) });
   const existingRelations = await store.nodes.Relation.find({ where: (r) => r.kbId.eq(kbId) });
   const graph: KbGraphData = {
-    entities: existingEntities.map((e) => ({ id: e.id, label: e.label, entityType: e.entityType, sources: e.sources })),
+    entities: existingEntities.map((e) => ({ id: entityId(e.label), label: e.label, entityType: e.entityType, sources: e.sources })),
     relations: existingRelations.map((r) => ({ subject: r.subject, object: r.object, relationType: r.relationType, weight: r.weight, typed: r.typed })),
   };
+
+  // Snapshot the pre-merge props (keyed by the stable row id we write —
+  // entityId(label), matching the upsert rows below) so we only write rows
+  // that actually changed. On a KB with thousands of nodes, rewriting every
+  // row per chunk is O(graph) per poll — diffing keeps it O(delta).
+  const propsOf = (v: Record<string, unknown>): string => JSON.stringify(v);
+  const entityBefore = new Map(existingEntities.map((e) => [entityId(e.label), propsOf({ kbId, label: e.label, entityType: e.entityType, sources: e.sources })]));
+  const relationBefore = new Map(
+    existingRelations.map((r) => [
+      `rel_${kbId}_${entityId(r.subject)}_${entityId(r.object)}`,
+      propsOf({ kbId, subject: r.subject, object: r.object, relationType: r.relationType, weight: r.weight, typed: r.typed }),
+    ]),
+  );
+
   mergeEntities(graph, entities);
   mergeRelations(graph, relations);
   await store.transaction(async (tx) => {
-    const entityRows = graph.entities.map((e) => ({
-      id: entityId(e.label),
-      props: { kbId, label: e.label, entityType: e.entityType, sources: e.sources },
-    }));
-    await tx.nodes.Entity.bulkUpsertById(entityRows);
+    const entityRows = graph.entities
+      .map((e) => ({
+        id: entityId(e.label),
+        props: { kbId, label: e.label, entityType: e.entityType, sources: e.sources } as const,
+      }))
+      .filter((row) => {
+        const before = entityBefore.get(row.id);
+        return before === undefined || before !== propsOf(row.props as Record<string, unknown>);
+      });
+    if (entityRows.length > 0) await tx.nodes.Entity.bulkUpsertById(entityRows);
     // Relation id is derived ONLY from (kbId, subject, object) so a typed
     // upgrade reuses the existing row (mergeRelations already merged in
     // memory; stable ids let bulkUpsertById overwrite in place). Including
     // relationType or an index in the id would leave the old cooccur row
     // behind when a typed relation later upgrades the same pair.
-    const relRows = graph.relations.map((r) => ({
-      id: `rel_${kbId}_${entityId(r.subject)}_${entityId(r.object)}`,
-      props: { kbId, subject: r.subject, object: r.object, relationType: r.relationType, weight: r.weight, typed: r.typed },
-    }));
-    await tx.nodes.Relation.bulkUpsertById(relRows);
+    const relRows = graph.relations
+      .map((r) => ({
+        id: `rel_${kbId}_${entityId(r.subject)}_${entityId(r.object)}`,
+        props: { kbId, subject: r.subject, object: r.object, relationType: r.relationType, weight: r.weight, typed: r.typed } as const,
+      }))
+      .filter((row) => {
+        const before = relationBefore.get(row.id);
+        return before === undefined || before !== propsOf(row.props as Record<string, unknown>);
+      });
+    if (relRows.length > 0) await tx.nodes.Relation.bulkUpsertById(relRows);
   });
 }
 
@@ -425,11 +480,11 @@ export async function query(kbIds: string[], queryStr: string, limit?: number): 
       const title = hit.node.title;
       if (title) allEntities.push({ id: `doc:${title}`, label: title, score: hit.score });
       // The FTS5 snippet() runs over the tokenized `text` field — for Chinese
-      // that's a jieba token stream, not readable prose. Slice the raw doc
-      // text instead (mirrors Rust `trim_snippet`: first 240 chars + …).
-      const raw = hit.node.textOriginal;
-      const bounded = [...raw].slice(0, 240).join('');
-      snippets.push(bounded.length < raw.length ? `${bounded}…` : bounded);
+      // that's a jieba token stream, not readable prose. Locate the first
+      // query-token occurrence in the RAW text and slice around it, so the
+      // snippet shows the actual hit context (a 240-char window near the
+      // match), not the document opening.
+      snippets.push(buildSnippet(hit.node.textOriginal, tokens));
     }
   }
 
@@ -442,27 +497,47 @@ export async function query(kbIds: string[], queryStr: string, limit?: number): 
   const entities = [...seen.values()].sort((a, b) => b.score - a.score);
 
   // 2. Seed matched ids: search entities + graph entities whose label contains
-  //    a query token.
+  //    a query token. Pushdown: the label-contains filter runs in SQL (ilike
+  //    is case-insensitive, matching the old lowercased `.includes` check)
+  //    instead of pulling every Entity row into JS per kb.
   const matchedIds = new Set(entities.map((e) => e.id));
   if (tokens.length > 0) {
     for (const kbId of kbIds) {
-      const graphEnts = await store.nodes.Entity.find({ where: (e) => e.kbId.eq(kbId) });
-      for (const e of graphEnts) {
-        if (tokens.some((t) => e.label.toLowerCase().includes(t))) matchedIds.add(e.id);
+      const kbMatches = await store.nodes.Entity.find({
+        where: (e) => {
+          let pred = e.kbId.eq(kbId);
+          // Cap tokens per kb — pathological multi-term queries.
+          for (const tok of tokens.slice(0, 8)) pred = pred.or(e.label.ilike(`%${tok}%`));
+          return pred;
+        },
+        limit: 200,
+      });
+      for (const ent of kbMatches) {
+        matchedIds.add(ent.id);
       }
     }
   }
 
-  // 3. 1-hop relations across the mounted KBs, capped.
+  // 3. 1-hop relations across the mounted KBs, capped. Pushdown: restrict the
+  //    scan to rows whose subject/object is in the matched set (`in`) instead
+  //    of loading every Relation row and filtering in JS.
   const relations: KbRelationView[] = [];
+  const matchedArr = [...matchedIds];
   for (const kbId of kbIds) {
     if (relations.length >= MAX_HOP_RELATIONS) break;
-    const rels = await store.nodes.Relation.find({ where: (r) => r.kbId.eq(kbId) });
+    if (matchedArr.length === 0) break;
+    let rels;
+    try {
+      rels = await store.nodes.Relation.find({
+        where: (r) => r.kbId.eq(kbId).and(r.subject.in(matchedArr).or(r.object.in(matchedArr))),
+        limit: MAX_HOP_RELATIONS - relations.length,
+      });
+    } catch {
+      continue; // in-list too large for SQLite var limits — treat as no rows
+    }
     for (const r of rels) {
-      if (matchedIds.has(r.subject) || matchedIds.has(r.object)) {
-        relations.push({ subject: r.subject, object: r.object, relationType: r.relationType, weight: r.weight, typed: r.typed });
-        if (relations.length >= MAX_HOP_RELATIONS) break;
-      }
+      relations.push({ subject: r.subject, object: r.object, relationType: r.relationType, weight: r.weight, typed: r.typed });
+      if (relations.length >= MAX_HOP_RELATIONS) break;
     }
   }
 

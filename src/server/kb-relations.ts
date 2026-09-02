@@ -337,59 +337,98 @@ export function validateGrounding(
  * `thinking` blocks first; we collect `text_delta` events only. This works
  * where the SDK wrapper surfaces an empty assistant message.
  */
+/** Strip a trailing `/v1` (or anything after the host) so we can append the
+ * protocol's own path segment without doubling it. Exported for unit tests. */
+export function apiRoot(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '');
+  // Drop a trailing "/v1" (common in provider configs: ".../api/v1").
+  return trimmed.replace(/\/v1$/, '');
+}
+
+/**
+ * Call the provider and return the assistant text, speaking the provider's
+ * own protocol:
+ * - anthropic (or unlabelled): POST /v1/messages, collect anthropic SSE
+ *   `text_delta` events.
+ * - openai: POST /v1/chat/completions, collect OpenAI SSE `delta.content`.
+ * A single-turn, tool-less request needs no bridge translation — both formats
+ * carry the same system+user prompt.
+ */
 async function providerMessagesText(
   providerEnv: ProviderEnv,
   model: string,
   system: string,
   user: string,
 ): Promise<string> {
-  const baseUrl = (providerEnv.baseUrl ?? '').replace(/\/+$/, '');
-  const endpoint = `${baseUrl}/v1/messages`;
-  const resp = await cancellableFetch(
-    endpoint,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': providerEnv.apiKey ?? '',
-        'anthropic-version': '2023-06-01',
-        ...(providerEnv.apiKey ? { Authorization: `Bearer ${providerEnv.apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        // DeepSeek-style providers burn the whole token budget on `thinking`
-        // blocks and hit `stop_reason: max_tokens` before emitting the JSON
-        // answer. Disable extended thinking so the model answers directly.
-        thinking: { type: 'disabled' },
-        system,
-        messages: [{ role: 'user', content: user }],
-      }),
-    },
-    { timeoutMs: EXTRACTION_TIMEOUT_MS },
-  );
+  const root = apiRoot(providerEnv.baseUrl ?? '');
+  const isOpenai = providerEnv.apiProtocol === 'openai';
+  const endpoint = isOpenai ? `${root}/v1/chat/completions` : `${root}/v1/messages`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(providerEnv.apiKey ? { Authorization: `Bearer ${providerEnv.apiKey}` } : {}),
+  };
+  let body: string;
+  if (isOpenai) {
+    body = JSON.stringify({
+      model,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      stream: true,
+      messages: [
+        ...(system ? [{ role: 'system', content: system }] : []),
+        { role: 'user', content: user },
+      ],
+    });
+  } else {
+    headers['x-api-key'] = providerEnv.apiKey ?? '';
+    headers['anthropic-version'] = '2023-06-01';
+    body = JSON.stringify({
+      model,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      // DeepSeek-style providers burn the whole token budget on `thinking`
+      // blocks and hit `stop_reason: max_tokens` before emitting the JSON
+      // answer. Disable extended thinking so the model answers directly.
+      thinking: { type: 'disabled' },
+      system,
+      messages: [{ role: 'user', content: user }],
+    });
+  }
+
+  const resp = await cancellableFetch(endpoint, { method: 'POST', headers, body }, { timeoutMs: EXTRACTION_TIMEOUT_MS });
   if (!resp.ok) {
-    const body = await resp.text().catch(() => '');
-    throw new Error(`provider ${resp.status}: ${body.slice(0, 200)}`);
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`provider ${resp.status}: ${errBody.slice(0, 200)}`);
   }
   const raw = await resp.text();
-  // SSE stream: collect text_delta payloads from `data:` lines. Also handles
-  // non-streaming JSON responses (plain {"content":[...]}) as a fallback.
+  // Non-streaming JSON responses (plain body) — parse by protocol.
   if (raw.trimStart().startsWith('{')) {
+    if (isOpenai) {
+      const data = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown } }> };
+      const c = data.choices?.[0]?.message?.content;
+      return typeof c === 'string' ? c : '';
+    }
     const data = JSON.parse(raw) as { content?: Array<{ type?: string; text?: string }> };
     return (data.content ?? [])
       .filter((b) => b.type === 'text' && b.text)
       .map((b) => b.text as string)
       .join('\n');
   }
+  // SSE stream.
   let text = '';
   for (const line of raw.split('\n')) {
     if (!line.startsWith('data: ')) continue;
     const payload = line.slice(6).trim();
     if (!payload || payload === '[DONE]') continue;
     try {
-      const evt = JSON.parse(payload) as { type?: string; delta?: { type?: string; text?: string } };
-      if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+      const evt = JSON.parse(payload) as {
+        type?: string;
+        delta?: { type?: string; text?: string };
+        choices?: Array<{ delta?: { content?: unknown } }>;
+      };
+      if (isOpenai) {
+        const c = evt.choices?.[0]?.delta?.content;
+        if (typeof c === 'string') text += c;
+      } else if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
         text += evt.delta.text ?? '';
       }
     } catch {
@@ -520,50 +559,73 @@ async function sdkExtractText(model: string, system: string, user: string): Prom
   return Promise.race([run, timeout]);
 }
 
+/**
+ * Extract + ground knowledge from raw model text. Throws when the model
+ * returned NO parseable JSON at all (blank / prose-only reply) — that is a
+ * FAILURE and must retry, NOT a genuine "nothing found" result. A balanced
+ * JSON object that simply has empty entities/relations IS a genuine empty
+ * result and returns `[]`/`[]` (the poller dequeues it instead of burning an
+ * LLM call every poll forever).
+ */
+function parseAndGroundOrThrow(task: PendingRelationTask, text: string, label: string): ExtractionResult {
+  const json = extractBalancedJson(stripMarkdownFence(text));
+  if (!json) {
+    throw new Error(`${label} returned no parseable JSON (${text.length} chars)`);
+  }
+  const parsed = parseExtraction(text);
+  const { cleaned, droppedEntities, droppedRelations, charIntervalUsed } = validateGrounding(task.text, parsed);
+  console.log(
+    `[kb-relations] ${label} parsed=${parsed.entities.length}e/${parsed.relations.length}r grounded=${cleaned.entities.length}e/${cleaned.relations.length}r dropped=${droppedEntities}e/${droppedRelations}r charIntervalUsed=${charIntervalUsed}`,
+  );
+  return cleaned;
+}
+
 async function extractKnowledge(
   task: PendingRelationTask,
   model: string,
   providerEnv?: ProviderEnv,
-  options: { verifyWithLlm?: boolean } = {},
 ): Promise<ExtractionResult> {
   const useDirect = Boolean(providerEnv?.baseUrl && providerEnv.apiKey);
   console.log(
-    `[kb-relations] extractKnowledge model=${model} path=${useDirect ? 'direct-http' : 'sdk-fallback'} baseUrl=${providerEnv?.baseUrl ?? 'none'} verify=${options.verifyWithLlm ? 'on' : 'off'}`,
+    `[kb-relations] extractKnowledge model=${model} path=${useDirect ? 'direct-http' : 'sdk-fallback'} baseUrl=${providerEnv?.baseUrl ?? 'none'}`,
   );
-  const parseAndGround = (text: string, label: string): ExtractionResult => {
-    const parsed = parseExtraction(text);
-    const { cleaned, droppedEntities, droppedRelations, charIntervalUsed } = validateGrounding(task.text, parsed);
-    console.log(
-      `[kb-relations] ${label} parsed=${parsed.entities.length}e/${parsed.relations.length}r grounded=${cleaned.entities.length}e/${cleaned.relations.length}r dropped=${droppedEntities}e/${droppedRelations}r charIntervalUsed=${charIntervalUsed}`,
-    );
-    return cleaned;
+  // First successful parse wins; genuine empty (balanced JSON, nothing found)
+  // returns [] — only a NO-JSON failure throws through to retry.
+  const attemptDirect = async (): Promise<ExtractionResult> => {
+    if (!useDirect) throw new Error('no direct provider env');
+    const text = await providerMessagesText(providerEnv as ProviderEnv, model, SYSTEM_PROMPT, buildUserPrompt(task));
+    console.log(`[kb-relations] direct-http returned ${text.length} chars: ${text.slice(0, 150)}`);
+    return parseAndGroundOrThrow(task, text, 'direct-http');
   };
+  const attemptSdk = async (label: string): Promise<ExtractionResult> =>
+    parseAndGroundOrThrow(task, await sdkExtractRawText(task, model), label);
+
+  let preliminary: ExtractionResult;
   try {
-    let preliminary: ExtractionResult;
-    if (useDirect) {
-      const text = await providerMessagesText(providerEnv as ProviderEnv, model, SYSTEM_PROMPT, buildUserPrompt(task));
-      console.log(`[kb-relations] direct-http returned ${text.length} chars: ${text.slice(0, 150)}`);
-      preliminary = parseAndGround(text, 'direct-http');
-    } else {
-      preliminary = parseAndGround(await sdkExtractRawText(task, model), 'sdk-fallback');
-    }
-    if (!options.verifyWithLlm) return preliminary;
-    const verified = await verifyExtraction(task, preliminary, model, providerEnv);
-    const removedByVerify = preliminary.entities.length - verified.entities.length;
-    if (removedByVerify > 0) {
-      console.log(`[kb-relations] self-verify dropped ${removedByVerify} additional entities`);
-    }
-    return verified;
+    preliminary = await attemptDirect();
   } catch (err) {
-    console.warn('[kb-relations] extraction failed, retrying with SDK:', err instanceof Error ? err.message : err);
-    // Fall back to the SDK path on any provider-API error.
-    try {
-      const fallbackText = await sdkExtractRawText(task, model);
-      return parseAndGround(fallbackText, 'sdk-retry');
-    } catch {
-      return { entities: [], relations: [] };
-    }
+    console.warn('[kb-relations] direct-http failed, retrying with SDK:', err instanceof Error ? err.message : err);
+    preliminary = await attemptSdk('sdk-fallback');
   }
+  if (preliminary.entities.length === 0 && preliminary.relations.length === 0) return preliminary;
+
+  // Self-verification is an EXTRA LLM call per chunk — gate it to the cases
+  // where it pays: big extractions (wide hallucination surface) or any kept
+  // entity WITHOUT a located quote (grounding let it through on the lenient
+  // no-quote path, so an LLM audit is the only guard). Most chunks skip it.
+  const needsVerify =
+    preliminary.entities.length >= 25
+    || preliminary.entities.some((e) => !e.sourceQuote && e.charStart === undefined);
+  if (!needsVerify) {
+    console.log('[kb-relations] verify skipped (small + fully grounded result)');
+    return preliminary;
+  }
+  const verified = await verifyExtraction(task, preliminary, model, providerEnv);
+  const removedByVerify = preliminary.entities.length - verified.entities.length;
+  if (removedByVerify > 0) {
+    console.log(`[kb-relations] self-verify dropped ${removedByVerify} additional entities`);
+  }
+  return verified;
 }
 
 /** Like sdkExtract but returns raw text (parseExtraction is applied later). */
@@ -650,8 +712,16 @@ async function processPendingOnce(): Promise<void> {
 
     for (const task of tasks) {
       try {
-        const result = await extractKnowledge(task, resolved.model, resolved.providerEnv, { verifyWithLlm: true });
-        if (result.entities.length === 0 && result.relations.length === 0) continue;
+        const result = await extractKnowledge(task, resolved.model, resolved.providerEnv);
+        if (result.entities.length === 0 && result.relations.length === 0) {
+          // Genuine empty extraction (balanced JSON, nothing found): dequeue
+          // so this chunk isn't re-LLM'd every poll forever. extractKnowledge
+          // throws on no-JSON failures, so reaching here means the model DID
+          // answer — there is simply nothing to save.
+          await removePending(task.kbId, [task.chunkId]);
+          console.log('[kb-relations] empty extraction — dequeued chunk');
+          continue;
+        }
         // The LLM may not return every entity it references — make sure any
         // subject/object used by a relation is present as an entity too.
         const entityIds = new Set(result.entities.map((e) => e.id));
@@ -710,7 +780,7 @@ export function startKbRelationProcessor(): void {
   try {
     const resolved = resolveRelationModel();
     console.log(
-      `[kb-relations] boot: model=${resolved?.model ?? 'NONE'} providerEnv=${resolved?.providerEnv?.baseUrl ?? 'none'} hasKey=${resolved?.providerEnv ? Boolean(resolved.providerEnv.apiKey) : false} verifyMode=on (self-verification LLM call per chunk — may double LLM cost)`,
+      `[kb-relations] boot: model=${resolved?.model ?? 'NONE'} providerEnv=${resolved?.providerEnv?.baseUrl ?? 'none'} hasKey=${resolved?.providerEnv ? Boolean(resolved.providerEnv.apiKey) : false} verify=conditional (only large / ungrounded extractions get the audit LLM call)`,
     );
   } catch (err) {
     console.warn('[kb-relations] boot model resolution failed:', err instanceof Error ? err.message : err);

@@ -741,7 +741,10 @@ import { handleChatStreamRoute } from './routes/chat-stream';
 import { handleSessionConfigRoute } from './routes/session-config';
 import { handleSessionOperationRoute } from './routes/session-operations';
 import { installAutoTitleHook } from './session-title-service';
-import { startKbRelationProcessor } from './kb-relations';
+// kb-relations is deliberately NOT top-level imported: its import chain pulls
+// the Claude Agent SDK + agent-session (~4.6s cold) — paying that at every
+// sidecar boot even when the KB queue is empty is the #1 cold-start tax.
+// Load it lazily right where the poller starts (global sidecar only).
 import type { ImagePayload } from './runtimes/types';
 import { rehomeImagePayloadsForSession } from './runtimes/image-payload';
 import {
@@ -9665,7 +9668,22 @@ description: >
 
       // Knowledge base (资料库) — periodic LLM relation typing for ingested
       // material. Best-effort: no-op until a session model is available.
-      startKbRelationProcessor();
+      // The poller must run exactly ONCE: only in the global sidecar (or a
+      // lone un-role'd process such as browser dev). Session sidecars share
+      // the same SQLite queue — if each ran the poller they would all peek
+      // the same pending chunks, double-spend LLM calls, and race
+      // removePending. Gate on the explicit role flag, not the parsed value:
+      // parseSidecarRole(null) already normalizes "no flag" to 'session', so
+      // checking argv preserves browser-dev's single-process polling.
+      const roleFlagExplicit = process.argv.includes('--sidecar-role');
+      if (!roleFlagExplicit || process.env.HAMUNA_SIDECAR_ROLE === 'global') {
+        // Lazy-load: kb-relations drags in the SDK + agent-session chain
+        // (~4.6s cold). Starting the poller is best-effort and can wait a few
+        // beats past ready — never block skill-seed completion on it.
+        void import('./kb-relations').then(({ startKbRelationProcessor }) => {
+          startKbRelationProcessor();
+        });
+      }
 
       ensurePluginsDirs();
       emitDeferredPhaseDone('skill-seed');
@@ -9758,6 +9776,25 @@ description: >
       console.log('[server] Startup PATH:', getShellPath());
     });
   });
+
+  // ── KB store warm-up (background, post-ready) ──────────────────────────
+  // The TypeGraph/SQLite store takes ~2.5s to first open (module eval + WAL
+  // recovery + migration). The poller and every /api/admin/kb/* handler
+  // lazily import it, so a user's FIRST ingest/query would otherwise stall on
+  // that open. Warm it once, after ready and a short settle delay, only where
+  // KB work can happen (global sidecar / lone dev process — same gate as the
+  // poller). Pure side-effect: getKbStore() is a cached singleton, so this
+  // just moves the open cost off the user's first KB action.
+  if (!process.argv.includes('--sidecar-role') || sidecarRole === 'global') {
+    setTimeout(() => {
+      import('./kb/kb-store')
+        .then(({ getKbStore }) => getKbStore())
+        .then(() => console.log('[kb] store warmed in background'))
+        .catch((err) => {
+          console.warn('[kb] background store warm-up failed (non-fatal):', err instanceof Error ? err.message : String(err));
+        });
+    }, 5_000);
+  }
 }
 
 main().catch((error) => {

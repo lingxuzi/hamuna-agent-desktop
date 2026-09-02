@@ -75,7 +75,9 @@ function formatKbResult(result: Record<string, unknown>): string {
   if (relations.length > 0) {
     lines.push('\n相关关系：');
     for (const r of relations.slice(0, 20)) {
-      lines.push(`- ${String(r.subject ?? '')} ${String(r.relation_type ?? '→')} ${String(r.object ?? '')}`);
+      // kb-store.query returns camelCase `relationType` (KbRelationView).
+      const relType = String((r.relationType as string | undefined) ?? (r.relation_type as string | undefined) ?? '→');
+      lines.push(`- ${String(r.subject ?? '')} ${relType} ${String(r.object ?? '')}`);
     }
   }
   if (snippets.length > 0) {
