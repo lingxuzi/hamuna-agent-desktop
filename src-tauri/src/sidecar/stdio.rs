@@ -54,6 +54,29 @@ pub(crate) fn classify_sidecar_stderr(line: &str) -> SidecarStderrLevel {
     if head.starts_with("[sdk-shim]") {
         return SidecarStderrLevel::Warn;
     }
+    // `[sdk-stderr]` lines are the SDK subprocess stderr echoed by
+    // agent-session.ts (`console.error('[sdk-stderr]', message)`). The real
+    // signal lives in the NODE unified-log channel (still ERROR there, and
+    // the "already in use" detector keys off the raw callback, not this
+    // echo). Here on the Rust stderr pipe it is a SECOND copy of the same
+    // line — surfacing it again as ERROR doubles every SDK stderr line.
+    // Downgrade so genuine ERRORs stay single-counted. `unrecognized_model`
+    // (custom providers like agnes the CLI doesn't know) is expected noise.
+    if head.starts_with("[sdk-stderr]") {
+        return SidecarStderrLevel::Warn;
+    }
+    // Node-process advisory warnings the SDK/runtime prints to stderr:
+    //   (node:13924) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Warning: ...
+    //   (Use `node --trace-warnings ...` to show where the warning was created)
+    // The first is the SDK telling us canUseTool won't fire under
+    // bypassPermissions — by design (PreToolUse hook is the hard gate), so
+    // non-actionable; the second is its continuation line. Both otherwise
+    // flood the unified log as ERROR on every bypass-mode turn.
+    if (head.starts_with("(node:") && head.contains("] Warning:"))
+        || head.starts_with("(Use `node --trace-warnings")
+    {
+        return SidecarStderrLevel::Warn;
+    }
     SidecarStderrLevel::Error
 }
 
@@ -296,6 +319,39 @@ mod stderr_classifier_tests {
         // Default = ERROR.
         assert!(matches!(
             classify_sidecar_stderr("ReferenceError: x is not defined"),
+            SidecarStderrLevel::Error
+        ));
+    }
+
+    #[test]
+    fn sdk_advisory_stderr_downgraded_but_genuine_errors_stay() {
+        // SDK canUseTool-shadowed advisory (expected under bypassPermissions).
+        assert!(matches!(
+            classify_sidecar_stderr("(node:13924) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Warning: canUseTool will not be invoked: permissionMode 'bypassPermissions' auto-approves every tool call"),
+            SidecarStderrLevel::Warn
+        ));
+        // Continuation line of the same advisory.
+        assert!(matches!(
+            classify_sidecar_stderr("(Use `node --trace-warnings ...` to show where the warning was created)"),
+            SidecarStderrLevel::Warn
+        ));
+        // sdk-stderr echo — real signal lives on the NODE channel.
+        assert!(matches!(
+            classify_sidecar_stderr("[sdk-stderr] [claude-code:unrecognized_model] {\"model\":\"agnes-2.5-flash\"}"),
+            SidecarStderrLevel::Warn
+        ));
+        // Genuine Node crash still ERROR.
+        assert!(matches!(
+            classify_sidecar_stderr("(node:1) Error: uncaught exception"),
+            SidecarStderrLevel::Error
+        ));
+        assert!(matches!(
+            classify_sidecar_stderr("(node:1) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Fatality: something real broke"),
+            SidecarStderrLevel::Error
+        ));
+        // Embedded pattern mid-line must stay ERROR (anchor rule).
+        assert!(matches!(
+            classify_sidecar_stderr("Failed to read '(node:5) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Warning: x' from user content"),
             SidecarStderrLevel::Error
         ));
     }
