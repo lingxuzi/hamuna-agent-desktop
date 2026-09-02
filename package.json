@@ -30,7 +30,7 @@
     "dev": "./start_dev.sh",
     "dev:web": "vite",
     "build:web": "vite build && npm run verify:theme-css && npm run verify:theme-presets",
-    "build:server": "node scripts/esbuild-bundle.mjs server",
+    "build:server": "node scripts/esbuild-bundle.mjs server && node scripts/setup-kb-runtime.mjs",
     "build:bridge": "node scripts/esbuild-bundle.mjs bridge",
     "build:cli": "node scripts/esbuild-bundle.mjs cli",
     "build:tsx-runtime": "node scripts/setup-tsx-runtime.mjs",
@@ -61,7 +61,8 @@
     "publish:managed-codex": "./publish_managed_codex_runtime.sh",
     "publish:managed-codex:win": "powershell -ExecutionPolicy Bypass -File ./publish_managed_codex_runtime.ps1",
     "clean": "rm -rf node_modules dist .turbo .eslintcache *.tsbuildinfo src-tauri/target",
-    "version": "node scripts/sync-version.js && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml"
+    "version": "node scripts/sync-version.js && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml",
+    "build:kb-runtime": "node scripts/setup-kb-runtime.mjs"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "^1.0.2",

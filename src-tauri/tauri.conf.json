@@ -47,6 +47,7 @@
       "../src-tauri/resources/claude-agent-sdk": "claude-agent-sdk",
       "../src-tauri/resources/sharp-runtime": "sharp-runtime",
       "../src-tauri/resources/tsx-runtime": "tsx-runtime",
+      "../src-tauri/resources/kb-runtime": "node_modules",
       "../src-tauri/resources/nodejs": "nodejs",
       "../src/shared": "shared",
       "../bundled-skills": "bundled-skills",

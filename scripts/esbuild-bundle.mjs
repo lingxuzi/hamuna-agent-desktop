@@ -55,6 +55,14 @@ const TARGETS = {
     format: 'esm',
     sourcemap: true,
     banner: { js: ESM_INTEROP_BANNER },
+    // NEVER inline these into the ESM bundle. Both are CJS and resolve native
+    // files relative to `__dirname` (better-sqlite3 → prebuilds/*.node,
+    // jieba-wasm → jieba_rs_wasm_bg.wasm); inlined into ESM, `__dirname`
+    // doesn't exist (ReferenceError) AND the .node/.wasm files aren't beside
+    // the bundle anyway. Ship them as a real node_modules root instead:
+    // setup-kb-runtime.mjs + tauri.conf `"kb-runtime": "node_modules"`.
+    // Keep this list in sync with KB_RUNTIME_PACKAGES in that script.
+    external: ['better-sqlite3', 'jieba-wasm'],
     /** Post-build: catch hardcoded `__dirname = "<dev-machine path>"` leaks.
      *  esbuild treats a top-level `__dirname` as a compile-time constant; the
      *  source must use `import.meta.url` / `getScriptDir()` instead. If anyone
