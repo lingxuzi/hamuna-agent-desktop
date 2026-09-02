@@ -1977,16 +1977,19 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
                 let add_result = tokio::task::spawn_blocking(move || {
                     let mut cmd = crate::process_cmd::new(&node_for_add);
                     // --omit=peer: same rationale as system npm below.
-                    // --no-experimental-require-module: Node.js v24 CJS/ESM crash fix.
                     cmd.args([
                         cli_str_add.as_str(),
                         "install",
                         npm_spec_owned.as_str(),
                         "--omit=peer",
+                        // npm 11+ refuses git-hosted deps by default (EALLOWGIT
+                        // — e.g. @sliverp/qqbot needs libsignal from GitHub).
+                        // The user explicitly asked to install this plugin, so
+                        // allow git deps for it.
+                        "--allow-git=all",
                     ])
                     .current_dir(&base_for_add)
-                    .env("PATH", &path_for_add)
-                    .env("NODE_OPTIONS", "--no-experimental-require-module");
+                    .env("PATH", &path_for_add);
                     apply_proxy_env(&mut cmd);
                     cmd.output()
                 })
@@ -2039,11 +2042,19 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
                     // --omit=peer: openclaw 插件声明 peerDependencies: { openclaw: '*' }，
                     // npm 会自动安装原始 openclaw 包的 400+ 传递依赖（larksuite、playwright-core、aws-sdk 等）。
                     // --omit=peer 阻止这一行为，节省安装时间/体积/安全攻击面。
-                    //
-                    // --no-experimental-require-module fixes Node.js v24 CJS/ESM crash on Windows.
-                    cmd.args(["install", spec_for_sys.as_str(), "--omit=peer"])
-                        .current_dir(&base_for_sys)
-                        .env("NODE_OPTIONS", "--no-experimental-require-module");
+                    // NOTE: must NOT set NODE_OPTIONS=--no-experimental-require-module here.
+                    // npm >= 11's @npmcli/agent requires http-proxy-agent, which is a pure
+                    // ESM package ("type":"module"); Node 22.12+/24 supports require(ESM) by
+                    // default, and disabling it makes npm itself crash with ERR_REQUIRE_ESM
+                    // (real user report: @sliverp/qqbot install failed the same way).
+                    cmd.args([
+                        "install",
+                        spec_for_sys.as_str(),
+                        "--omit=peer",
+                        // Same npm 11+ git-dep refusal as the bundled branch.
+                        "--allow-git=all",
+                    ])
+                        .current_dir(&base_for_sys);
                     apply_proxy_env(&mut cmd);
                     cmd.output()
                 })
@@ -2120,8 +2131,10 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
                     "--ignore-scripts",
                     "--omit=peer",
                 ])
-                .current_dir(&repair_dir)
-                .env("NODE_OPTIONS", "--no-experimental-require-module");
+                .current_dir(&repair_dir);
+                // No NODE_OPTIONS=--no-experimental-require-module here — npm
+                // 11+ needs require(ESM) for @npmcli/agent (see system-npm
+                // branch above for the full rationale).
                 if let Some(ref nd) = node_dir {
                     if let Some(path) = std::env::var_os("PATH") {
                         let mut paths = std::env::split_paths(&path).collect::<Vec<_>>();

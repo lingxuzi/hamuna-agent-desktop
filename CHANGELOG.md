@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Windows 会话启动 `skill-sync` EBUSY/EEXIST：删除项目 symlink 用 `rmSync(recursive)` 会留下残留目录项导致同进程重建失败（Windows junction 报 EBUSY，Linux 报 EEXIST）——改用 `unlinkSync` 原子删除 + 有界重试，技能/命令 symlink 不再整会话缺失。
 - SDK 已知警告（`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` / `[sdk-stderr]` / `node --trace-warnings`）经 sidecar stderr 被 Rust classifier 误标 ERROR 刷屏——降级为 Warn，真错误保持 ERROR。
+- 插件安装 `ERR_REQUIRE_ESM`：bundled npm 12 的 `@npmcli/agent` 顶层 `require()` ESM 包 `http-proxy-agent@9`，而安装器设的 `NODE_OPTIONS=--no-experimental-require-module` 禁用了 Node 24 的 require(ESM) → npm 自身崩溃（用户报 @sliverp/qqbot 失败）。移除该 flag（Node 24 已稳定支持 require(ESM)）；并加 `--allow-git=all` 放行 npm 11+ 默认拒绝的 git 依赖（qqbot 的 libsignal 来自 GitHub）。
 
 ### Added
 - 新增 3 个 RSS 策展新闻工具 (`get_news` / `news_sync_status` / `news_list_sources`)，挂在 `easy-tdx` MCP server 内 (现有 stock-datasource 一并暴露，共 22 个工具)。12 行业 (ai/semi/robot/auto/energy/bio/space/security/tech/consumer/macro/science) / ~108 个 tier-1 一手源；`main()` 启动时 daemon thread 后台 fire-and-forget 同步到 `~/.easy_tdx/news.db`。redline 关键词（赌博/加密/色情 ~26 个）入库前过滤；TTL 7 天滚动。
