@@ -52,6 +52,77 @@ fn plugin_install_lock(plugin_dir: &std::path::Path) -> std::sync::Arc<Mutex<()>
     Arc::clone(guard.entry(key).or_insert_with(|| Arc::new(Mutex::new(()))))
 }
 
+// ===== npm registry mirror (mainland-China users) =====
+//
+// The bundled npm talks to registry.npmjs.org by default; from mainland
+// China that is slow / flaky. npmmirror (Alibaba's official npm mirror,
+// successor to registry.npm.taobao.org) is fast there and keeps a global
+// CDN, so defaulting the BUNDLED npm to it speeds up plugin installs for
+// the majority CN user base.
+//
+// We only default it — never override an explicit user choice:
+//   - `npm_config_registry` env var set → respect it (CI / company mirror)
+//   - user-level .npmrc (`$NPM_CONFIG_USERCONFIG` or ~/.npmrc) pins a
+//     `registry=` line → respect it (company intranet mirror, etc.)
+// The system-npm install branch is deliberately untouched: that npm belongs
+// to the user's own environment and already carries its own config.
+const CN_NPM_MIRROR: &str = "https://registry.npmmirror.com";
+
+/// Does an .npmrc body explicitly pin a registry? Ignores blank lines and
+/// `#` comments. Mirrors npm's own INI parsing for this one key.
+fn npmrc_pins_registry(content: &str) -> bool {
+    content.lines().any(|line| {
+        let line = line.trim();
+        !line.is_empty()
+            && !line.starts_with('#')
+            && !line.starts_with(';')
+            && line
+                .split_once('=')
+                .map(|(k, v)| k.trim().eq_ignore_ascii_case("registry") && !v.trim().is_empty())
+                .unwrap_or(false)
+    })
+}
+
+/// Resolve the user-level .npmrc path npm would use: `$NPM_CONFIG_USERCONFIG`
+/// if set (npm's own override), else `~/.npmrc`. `home` is injectable for
+/// tests; production passes `dirs::home_dir()`.
+fn user_npmrc_path(home: Option<&std::path::Path>) -> Option<PathBuf> {
+    std::env::var_os("NPM_CONFIG_USERCONFIG")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| home.map(|h| h.join(".npmrc")))
+}
+
+/// True when the user has an explicit npm registry pin we must not override:
+/// the `npm_config_registry` env var (CI / corporate), or a `registry=` line
+/// in their user-level .npmrc.
+fn user_pinned_npm_registry(home: Option<&std::path::Path>) -> bool {
+    if std::env::var_os("npm_config_registry").is_some_and(|v| !v.is_empty()) {
+        return true;
+    }
+    let Some(path) = user_npmrc_path(home) else {
+        return false;
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(content) => npmrc_pins_registry(&content),
+        Err(_) => false,
+    }
+}
+
+/// `--registry=<mirror>` override for the bundled npm, or None when the user
+/// already pinned a registry. Cheap sync read — call before spawn_blocking.
+fn bundled_npm_registry_arg() -> Option<String> {
+    bundled_npm_registry_arg_for_home(dirs::home_dir().as_deref())
+}
+
+/// Test seam: same decision with an injectable home dir.
+fn bundled_npm_registry_arg_for_home(home: Option<&std::path::Path>) -> Option<String> {
+    if user_pinned_npm_registry(home) {
+        return None;
+    }
+    Some(format!("--registry={CN_NPM_MIRROR}"))
+}
+
 // ===== Bridge Sender Registry =====
 // Lets management API route inbound messages from Bridge → processing loop.
 
@@ -1272,6 +1343,78 @@ mod tests {
             order
         );
     }
+
+    // ── npm registry mirror (mainland-China default) ─────────────────────
+
+    #[test]
+    fn npmrc_pins_registry_detects_explicit_registry_lines() {
+        assert!(npmrc_pins_registry("registry=https://corp.example.com/"));
+        assert!(npmrc_pins_registry("  registry = https://corp.example.com/  "));
+        assert!(npmrc_pins_registry("proxy=http://x\nregistry=https://corp/"));
+        // Case-insensitive key.
+        assert!(npmrc_pins_registry("REGISTRY=https://corp/"));
+    }
+
+    #[test]
+    fn npmrc_pins_registry_ignores_blank_comments_and_other_keys() {
+        assert!(!npmrc_pins_registry(""));
+        assert!(!npmrc_pins_registry("# registry=https://commented-out/"));
+        assert!(!npmrc_pins_registry("; registry=https://commented-out/"));
+        assert!(!npmrc_pins_registry("proxy=http://proxy:8080"));
+        assert!(!npmrc_pins_registry("registry=")); // empty value = not pinned
+        assert!(!npmrc_pins_registry("//registry.npmjs.org/:_authToken=abc"));
+    }
+
+    #[test]
+    fn user_pinned_npm_registry_detects_home_npmrc() {
+        // Empty home → no .npmrc → not pinned.
+        let empty = tempfile::tempdir().expect("tempdir");
+        assert!(!user_pinned_npm_registry(Some(empty.path())));
+
+        // Home with a registry-pinning .npmrc → pinned.
+        let pinned = tempfile::tempdir().expect("tempdir");
+        std::fs::write(pinned.path().join(".npmrc"), "registry=https://corp.example.com/\n")
+            .expect("write npmrc");
+        assert!(user_pinned_npm_registry(Some(pinned.path())));
+
+        // Home with an .npmrc that does NOT pin registry → not pinned.
+        let other = tempfile::tempdir().expect("tempdir");
+        std::fs::write(other.path().join(".npmrc"), "proxy=http://proxy:8080\n").expect("write npmrc");
+        assert!(!user_pinned_npm_registry(Some(other.path())));
+    }
+
+    #[test]
+    fn bundled_npm_registry_arg_returns_mirror_when_unpinned() {
+        // Isolate from the dev machine's real ~/.npmrc via a temp home.
+        let empty = tempfile::tempdir().expect("tempdir");
+        // Remove env pin so the home .npmrc (empty) decides.
+        unsafe {
+            std::env::remove_var("npm_config_registry");
+            std::env::remove_var("NPM_CONFIG_USERCONFIG");
+        }
+        let arg = bundled_npm_registry_arg_for_home(Some(empty.path()));
+        assert_eq!(arg, Some(format!("--registry={CN_NPM_MIRROR}")));
+        assert!(arg.unwrap().contains("npmmirror.com"));
+    }
+
+    #[test]
+    fn bundled_npm_registry_arg_respects_pinned_home_npmrc() {
+        let pinned = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            pinned.path().join(".npmrc"),
+            "registry=https://company.intranet/registry\n",
+        )
+        .expect("write npmrc");
+        unsafe {
+            std::env::remove_var("npm_config_registry");
+            std::env::remove_var("NPM_CONFIG_USERCONFIG");
+        }
+        assert_eq!(
+            bundled_npm_registry_arg_for_home(Some(pinned.path())),
+            None,
+            "user .npmrc pin must suppress the mirror"
+        );
+    }
 }
 
 /// Spawn a plugin bridge Bun process
@@ -1974,10 +2117,13 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
                 let base_for_add = base_dir.clone();
                 let npm_spec_owned = install_spec.clone();
                 let path_for_add = augmented_path;
+                // Mainland-China default: point the bundled npm at npmmirror
+                // unless the user pinned a registry themselves (env or .npmrc).
+                let registry_arg = bundled_npm_registry_arg();
                 let add_result = tokio::task::spawn_blocking(move || {
                     let mut cmd = crate::process_cmd::new(&node_for_add);
                     // --omit=peer: same rationale as system npm below.
-                    cmd.args([
+                    let mut args = vec![
                         cli_str_add.as_str(),
                         "install",
                         npm_spec_owned.as_str(),
@@ -1987,9 +2133,15 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
                         // The user explicitly asked to install this plugin, so
                         // allow git deps for it.
                         "--allow-git=all",
-                    ])
-                    .current_dir(&base_for_add)
-                    .env("PATH", &path_for_add);
+                    ];
+                    // Mainland-China default: point the bundled npm at
+                    // npmmirror unless the user pinned a registry themselves.
+                    if let Some(reg) = registry_arg.as_deref() {
+                        args.push(reg);
+                    }
+                    cmd.args(args)
+                        .current_dir(&base_for_add)
+                        .env("PATH", &path_for_add);
                     apply_proxy_env(&mut cmd);
                     cmd.output()
                 })
@@ -2123,15 +2275,19 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
         let repair_dir = base_dir.clone();
         if let Some((node_path, npm_cli)) = find_bundled_node_npm(app_handle) {
             let node_dir = node_path.parent().map(|p| p.to_path_buf());
+            let registry_arg = bundled_npm_registry_arg();
             match tokio::task::spawn_blocking(move || {
                 let mut cmd = crate::process_cmd::new(&node_path);
-                cmd.args([
+                let mut args = vec![
                     npm_cli.to_str().unwrap_or(""),
                     "install",
                     "--ignore-scripts",
                     "--omit=peer",
-                ])
-                .current_dir(&repair_dir);
+                ];
+                if let Some(reg) = registry_arg.as_deref() {
+                    args.push(reg);
+                }
+                cmd.args(args).current_dir(&repair_dir);
                 // No NODE_OPTIONS=--no-experimental-require-module here — npm
                 // 11+ needs require(ESM) for @npmcli/agent (see system-npm
                 // branch above for the full rationale).
