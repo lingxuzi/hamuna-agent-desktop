@@ -12123,7 +12123,11 @@ async function startStreamingSession(preWarm = false): Promise<void> {
         const sysSubtype = retryMsg.subtype;
         if (sysSubtype && !KNOWN_SYSTEM_SUBTYPES.has(sysSubtype) && !warnedUnknownSystemSubtypes.has(sysSubtype)) {
           warnedUnknownSystemSubtypes.add(sysSubtype);
-          console.warn(`[agent][sdk] unknown system message subtype '${sysSubtype}' (new SDK message kind?) — ignored. Check sdk.d.ts for its contract.`);
+          // Informational: a newer SDK emits a message kind this loop doesn't
+          // handle — safely ignored by design (checked against sdk.d.ts). log
+          // (stdout → INFO) so it doesn't masquerade as an ERROR via the
+          // sidecar-stderr classifier.
+          console.log(`[agent][sdk] unknown system message subtype '${sysSubtype}' (new SDK message kind?) — ignored. Check sdk.d.ts for its contract.`);
         }
       }
 
@@ -12836,7 +12840,8 @@ async function startStreamingSession(preWarm = false): Promise<void> {
         // union means a NEWER SDK started emitting a message kind this loop
         // has never seen — log once instead of letting it vanish silently.
         warnedUnknownMessageTypes.add(sdkMessage.type);
-        console.warn(`[agent][sdk] unknown SDK message type '${sdkMessage.type}' (new SDK message kind?) — ignored. Check sdk.d.ts for its contract.`);
+        // Informational (see subtype branch above) — log, not warn.
+        console.log(`[agent][sdk] unknown SDK message type '${sdkMessage.type}' (new SDK message kind?) — ignored. Check sdk.d.ts for its contract.`);
       }
     }
   } catch (error) {

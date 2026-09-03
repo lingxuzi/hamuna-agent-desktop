@@ -29,6 +29,13 @@ pub(crate) fn classify_sidecar_stderr(line: &str) -> SidecarStderrLevel {
     // only natural variation, so trim before matching. Cross-review of
     // dev/0.2.9 flagged the substring-match risk.
     let head = line.trim_start();
+    // Blank / whitespace-only lines from the SDK subprocess (e.g. trailing
+    // newline of a multi-line stderr block) carry no signal — surfacing them
+    // as ERROR just adds noise (observed as a bare `[sidecar-err]` ERROR row
+    // after every `[agent][sdk] unknown ...` line in Windows prod logs).
+    if head.is_empty() {
+        return SidecarStderrLevel::Info;
+    }
     // INFO: pure progress / audit output that just happens to land on
     // stderr because the sidecar logger writes there before unified
     // logging is wired up.
@@ -325,6 +332,15 @@ mod stderr_classifier_tests {
 
     #[test]
     fn sdk_advisory_stderr_downgraded_but_genuine_errors_stay() {
+        // Blank line carries no signal.
+        assert!(matches!(
+            classify_sidecar_stderr(""),
+            SidecarStderrLevel::Info
+        ));
+        assert!(matches!(
+            classify_sidecar_stderr("   "),
+            SidecarStderrLevel::Info
+        ));
         // SDK canUseTool-shadowed advisory (expected under bypassPermissions).
         assert!(matches!(
             classify_sidecar_stderr("(node:13924) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Warning: canUseTool will not be invoked: permissionMode 'bypassPermissions' auto-approves every tool call"),
