@@ -17,6 +17,8 @@ import { buildWidgetCssVars } from './widgetCssVars';
 import { buildSandboxHtml } from './widgetSandboxHtml';
 import { detectWidgetLibraries, loadLibrarySources, inlineWidgetLibraries } from './widgetLibraries';
 import { useResolvedTheme } from '@/theme';
+import { useWorkspaceFileService } from '@/hooks/useWorkspaceFileService';
+import { resolveLocalImgSrcs } from './widgetLocalImg';
 
 // ===== Module-level height cache (survives component lifecycle) =====
 // Key: first 300 chars of widget_code (past the common <style> prefix).
@@ -78,6 +80,9 @@ export default function WidgetRenderer({ widgetCode, isStreaming, title }: Widge
   const [initialThemeCss] = useState(themeCss);
   const scriptErrorPrefix = t('shell.toolChrome.widget.scriptErrorPrefix');
   const [initialScriptErrorPrefix] = useState(() => scriptErrorPrefix);
+  // Workspace-free instance: readPathsAsBase64 accepts absolute paths and needs
+  // no workspace, so widgets render local images regardless of the tab's project.
+  const fileService = useWorkspaceFileService(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const iframeReady = useRef(false);
   const lastSentHtml = useRef('');
@@ -128,20 +133,26 @@ export default function WidgetRenderer({ widgetCode, isStreaming, title }: Widge
     // setting this stops the finalize-effect / any other entry point from
     // queuing a second (now async) finalize for the same widget.
     hasFinalized.current = true;
-    const libs = detectWidgetLibraries(code);
-    if (libs.length === 0) {
-      sendToIframe({ type: 'widget:finalize', html: code });
-      lastSentHtml.current = code;
-      return;
-    }
-    void loadLibrarySources(libs)
-      .then((sources) => inlineWidgetLibraries(code, sources))
-      .catch(() => code) // bundling failed → original code (CDN where allowed + visible error)
-      .then((html) => {
-        sendToIframe({ type: 'widget:finalize', html });
-        lastSentHtml.current = html;
-      });
-  }, [sendToIframe]);
+    void (async () => {
+      // Rewrite local-path <img src> to data: URLs BEFORE sending — the
+      // sandbox CSP only allows data:/https:, and its opaque origin can't read
+      // local files (see resolveLocalImgSrcs). Then run the CDN-library swap on
+      // the resolved HTML (a widget referencing Chart.js AND local images needs
+      // both rewrites; order doesn't matter since they touch different attrs).
+      const resolved = await resolveLocalImgSrcs(code, fileService);
+      const libs = detectWidgetLibraries(resolved);
+      if (libs.length === 0) {
+        sendToIframe({ type: 'widget:finalize', html: resolved });
+        lastSentHtml.current = resolved;
+        return;
+      }
+      const html = await loadLibrarySources(libs)
+        .then((sources) => inlineWidgetLibraries(resolved, sources))
+        .catch(() => resolved); // bundling failed → original (CDN where allowed + visible error)
+      sendToIframe({ type: 'widget:finalize', html });
+      lastSentHtml.current = html;
+    })();
+  }, [sendToIframe, fileService]);
 
   // Preload bundled library sources as soon as a widget references one (even
   // mid-stream), so the cache is warm by the time it finalizes.
