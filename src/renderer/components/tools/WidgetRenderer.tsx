@@ -18,7 +18,7 @@ import { buildSandboxHtml } from './widgetSandboxHtml';
 import { detectWidgetLibraries, loadLibrarySources, inlineWidgetLibraries } from './widgetLibraries';
 import { useResolvedTheme } from '@/theme';
 import { useWorkspaceFileService } from '@/hooks/useWorkspaceFileService';
-import { resolveLocalImgSrcs } from './widgetLocalImg';
+import { resolveLocalMediaSrcs } from './widgetLocalImg';
 
 // ===== Module-level height cache (survives component lifecycle) =====
 // Key: first 300 chars of widget_code (past the common <style> prefix).
@@ -134,12 +134,13 @@ export default function WidgetRenderer({ widgetCode, isStreaming, title }: Widge
     // queuing a second (now async) finalize for the same widget.
     hasFinalized.current = true;
     void (async () => {
-      // Rewrite local-path <img src> to data: URLs BEFORE sending — the
-      // sandbox CSP only allows data:/https:, and its opaque origin can't read
-      // local files (see resolveLocalImgSrcs). Then run the CDN-library swap on
-      // the resolved HTML (a widget referencing Chart.js AND local images needs
-      // both rewrites; order doesn't matter since they touch different attrs).
-      const resolved = await resolveLocalImgSrcs(code, fileService);
+      // Rewrite local-path <img>/<video> src to data: URLs BEFORE sending —
+      // the sandbox CSP only allows data:/https:, and its opaque origin can't
+      // read local files (see resolveLocalMediaSrcs). Then run the CDN-library
+      // swap on the resolved HTML (a widget referencing Chart.js AND local
+      // media needs both rewrites; order doesn't matter since they touch
+      // different attrs).
+      const resolved = await resolveLocalMediaSrcs(code, fileService);
       const libs = detectWidgetLibraries(resolved);
       if (libs.length === 0) {
         sendToIframe({ type: 'widget:finalize', html: resolved });

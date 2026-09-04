@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 插件安装 `ERR_REQUIRE_ESM`：bundled npm 12 的 `@npmcli/agent` 顶层 `require()` ESM 包 `http-proxy-agent@9`，而安装器设的 `NODE_OPTIONS=--no-experimental-require-module` 禁用了 Node 24 的 require(ESM) → npm 自身崩溃（用户报 @sliverp/qqbot 失败）。移除该 flag（Node 24 已稳定支持 require(ESM)）；并加 `--allow-git=all` 放行 npm 11+ 默认拒绝的 git 依赖（qqbot 的 libsignal 来自 GitHub）。
 - `[agent][sdk] unknown SDK message type/subtype`（如 `command_lifecycle`）：新版 SDK CLI 发出的、本循环不认识的消息类型——安全忽略，属 informational，从 `console.warn` 降为 `console.log`（走 stdout → INFO），不再经 sidecar-stderr classifier 刷成 ERROR。
 - Sidecar stderr 空行（SDK 多行输出尾部换行）被 classifier 默认标 ERROR——空行/纯空白行降级为 Info。
-- Generative UI widget 内嵌本地图片路径（如 multimedia-creator / agnes-image 返回的 `local_paths` 绝对路径）渲染裂图：widget 沙箱 CSP 只放行 `img-src data: https:` 且 opaque origin 读不了本地文件——finalize 前把 `<img src="/本地路径">` 重写为 base64 `data:` URL（经 Rust `cmd_workspace_read_files_b64`），图片在沙箱内正常显示（故事板类 widget 复现）。
+- Generative UI widget 内嵌本地图片/视频路径（如 multimedia-creator / agnes-image / agnes-video 返回的 `local_paths` 绝对路径）渲染裂图：widget 沙箱 CSP 只放行 `img-src data: https:` 且 opaque origin 读不了本地文件——finalize 前把 `<img src>` / `<video src>` 的本地路径重写为 base64 `data:` URL（经 Rust `cmd_workspace_read_files_b64`），沙箱 CSP 同步补 `media-src data: https:` 放行视频（故事板 / 短视频 widget 复现）。
+- 消息文本里裸 `.mp4` 远程 URL（如 "1. 开场：https://…/video_xxx.mp4"）被预处理转成 `![url](url)` 后按图片渲染成裂图——`MarkdownImg` 改为按扩展名分类，视频 URL 渲染 `<video controls>`（本地视频路径已支持，远程补上）。
 
 ### Changed
 - 内置 npm 插件安装默认走国内镜像 `registry.npmmirror.com`（阿里官方 npm 镜像），加速大陆 Windows/macOS 用户下载；用户已通过 `npm_config_registry` 环境变量或 `~/.npmrc` 显式指定 registry（如公司内网源）时尊重用户配置不覆盖。系统 npm 安装分支不动（归属用户自身环境）。

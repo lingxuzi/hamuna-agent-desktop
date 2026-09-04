@@ -710,19 +710,36 @@ const MarkdownLocalMedia = memo(MarkdownLocalMediaInner, (prev, next) =>
 );
 
 /**
- * Chat-mode image handler (basePath == null): absolute URLs render directly
- * (browser default); local/relative paths go through MarkdownLocalMedia so a
- * `![x](/Users/…/a.png)` in a chat message shows the actual image instead of a
- * broken <img>. workspacePath comes from FileActionProvider (Chat wraps the
- * message list in it with workspacePath={agentDir}); null → local paths fall
- * back to links inside MarkdownLocalMedia.
+ * Chat-mode image handler (basePath == null): classifies the src by media
+ * extension and routes accordingly —
+ * - absolute image URL → `<img>` (browser default)
+ * - absolute VIDEO URL → `<video controls>` (bare `.mp4` links are rewritten
+ *   to `![url](url)` by preprocess 2f, so they land here as an img node)
+ * - local/relative paths → MarkdownLocalMedia (blob via Rust workspace_files)
+ * workspacePath comes from FileActionProvider (Chat wraps the message list in
+ * it with workspacePath={agentDir}); null → local paths fall back to links.
  */
 const MarkdownImg: Components['img'] = ({ node: _node, src, alt, ...props }) => {
   const fileAction = useFileAction();
-  if (!src || isAbsoluteUrl(src)) {
+  if (!src) {
     return <img src={src} alt={alt ?? ''} {...props} />;
   }
   const kind = mediaKindOf(src);
+  if (isAbsoluteUrl(src)) {
+    if (kind === 'video') {
+      return (
+        <video
+          src={src}
+          controls
+          preload="metadata"
+          className="max-w-full rounded-lg"
+        >
+          {alt ?? ''}
+        </video>
+      );
+    }
+    return <img src={src} alt={alt ?? ''} {...props} />;
+  }
   if (!kind) {
     return <img src={src} alt={alt ?? ''} {...props} />;
   }

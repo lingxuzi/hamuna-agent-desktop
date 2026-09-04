@@ -139,6 +139,17 @@ describe('Markdown media rendering', () => {
     expect(document.querySelector('a')).toBeNull();
   });
 
+  it('renders a bare remote video URL (preprocess img syntax) as <video controls>', () => {
+    // Preprocess 2f rewrites a bare .mp4 URL to ![url](url) — that lands here
+    // as an img node, which must render <video>, not a broken <img>.
+    renderMarkdown('1. 开场：https://cos-platform-outputs.agnes-ai.cn/videos/agnes-video-v2.0/video_a.mp4');
+    const video = document.querySelector('video');
+    expect(video).not.toBeNull();
+    expect(video!.getAttribute('src')).toBe('https://cos-platform-outputs.agnes-ai.cn/videos/agnes-video-v2.0/video_a.mp4');
+    expect(video!.hasAttribute('controls')).toBe(true);
+    expect(document.querySelector('img')).toBeNull();
+  });
+
   it('renders multimedia-creator plain-text output lines as images (local + remote)', async () => {
     // The exact shape the user reported: the MCP emits the output paths as
     // PLAIN TEXT ("本地：<abs path> 远程：<url>") — preprocess converts them
