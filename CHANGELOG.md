@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sidecar stderr 空行（SDK 多行输出尾部换行）被 classifier 默认标 ERROR——空行/纯空白行降级为 Info。
 - Generative UI widget 内嵌本地图片/视频路径（如 multimedia-creator / agnes-image / agnes-video 返回的 `local_paths` 绝对路径）渲染裂图：widget 沙箱 CSP 只放行 `img-src data: https:` 且 opaque origin 读不了本地文件——finalize 前把 `<img src>` / `<video src>` 的本地路径重写为 base64 `data:` URL（经 Rust `cmd_workspace_read_files_b64`），沙箱 CSP 同步补 `media-src data: https:` 放行视频（故事板 / 短视频 widget 复现）。
 - 消息文本里裸 `.mp4` 远程 URL（如 "1. 开场：https://…/video_xxx.mp4"）被预处理转成 `![url](url)` 后按图片渲染成裂图——`MarkdownImg` 改为按扩展名分类，视频 URL 渲染 `<video controls>`（本地视频路径已支持，远程补上）。
+- Windows/WebView2 下 widget 视频不能播放：沙箱 iframe 的 meta CSP 会与**父页面 CSP 取交集**，而父 CSP `media-src` 缺 `data:` 和 `https:` 通配（`img-src` 有）——本地 data: 视频和远程 https 视频全被交集拦掉（macOS WebKit 只认 meta CSP 所以正常）。父 CSP `media-src` 对齐 `img-src` 补上两个源。
 
 ### Changed
 - 内置 npm 插件安装默认走国内镜像 `registry.npmmirror.com`（阿里官方 npm 镜像），加速大陆 Windows/macOS 用户下载；用户已通过 `npm_config_registry` 环境变量或 `~/.npmrc` 显式指定 registry（如公司内网源）时尊重用户配置不覆盖。系统 npm 安装分支不动（归属用户自身环境）。
