@@ -3,13 +3,20 @@
 // Regular user attachments are served directly from the app data directory.
 // Tool attachments are proxied to the session sidecar because the sidecar owns
 // the external-attachment registry and path validation logic.
+// Widget media (local images/videos embedded in generative-ui-widget HTML) is
+// served directly from the workspace filesystem with HTTP Range support so
+// <video> can stream progressively instead of pushing base64 through postMessage.
 //
 // URL forms:
 //   macOS / Linux: hamuna://attachment/<sessionId>/<filename.ext>
 //   Windows:       http://hamuna.localhost/attachment/<sessionId>/<filename.ext>
 //   macOS / Linux: hamuna://tool-attachment/<sessionId>/<turnId>/<filename.ext>
 //   Windows:       http://hamuna.localhost/tool-attachment/<sessionId>/<turnId>/<filename.ext>
+//   macOS / Linux: hamuna://widget-media/<percent-encoded absolute path>
+//   Windows:       http://hamuna.localhost/widget-media/<percent-encoded absolute path>
 
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -136,6 +143,132 @@ fn hex(b: u8) -> Option<u8> {
     }
 }
 
+fn extract_widget_media_path(uri: &str) -> Option<String> {
+    // Marker: `://widget-media/` (macOS/Linux `hamuna://widget-media/…`) or
+    // `/widget-media/` (Windows `http://hamuna.localhost/widget-media/…`).
+    extract_path_after_marker(uri, "://widget-media/")
+        .or_else(|| extract_path_after_marker(uri, "/widget-media/"))
+}
+
+/// Media types the widget pipeline is allowed to stream. The widget HTML is
+/// AI-generated, so `widget-media` must NOT be an arbitrary file-read
+/// primitive — only image/audio/video extensions, validated via the same
+/// canonicalize + home/tmp/workspace prefix chokepoint that
+/// `cmd_download_local_file` uses.
+fn is_widget_media_ext(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|s| s.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some(
+            "png"
+                | "jpg"
+                | "jpeg"
+                | "gif"
+                | "webp"
+                | "svg"
+                | "avif"
+                | "bmp"
+                | "mp4"
+                | "webm"
+                | "ogg"
+                | "ogv"
+                | "mov"
+                | "m4v"
+                | "mp3"
+                | "wav"
+        )
+    )
+}
+
+/// Parse an HTTP Range header value (after the `bytes=` prefix) against the
+/// total length. Returns (start, end) inclusive; None for malformed / not
+/// satisfiable. Supports `start-end`, `start-` (open-ended) and `-suffix`.
+fn parse_byte_range(spec: &str, total: u64) -> Option<(u64, u64)> {
+    let (start_s, end_s) = spec.split_once('-')?;
+    let start: u64 = start_s.trim().parse().ok()?;
+    let end: u64 = if end_s.trim().is_empty() {
+        total.saturating_sub(1)
+    } else {
+        let parsed: u64 = end_s.trim().parse().ok()?;
+        parsed.min(total.saturating_sub(1))
+    };
+    if start > end || start >= total {
+        return None;
+    }
+    Some((start, end))
+}
+
+/// Serve a local media file referenced by widget HTML as a streamable HTTP
+/// response. Range requests (bytes=start-end) get 206 Partial Content so the
+/// WebView's `<video>` can seek / buffer progressively instead of the whole
+/// file being base64'd into the widget HTML (the old path pegged the renderer
+/// thread on every large video — user: "对话区域太卡了").
+fn build_widget_media_response(request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
+    let uri_str = request.uri().to_string();
+    let Some(encoded) = extract_widget_media_path(&uri_str) else {
+        return empty(StatusCode::NOT_FOUND);
+    };
+
+    let resolved =
+        match crate::workspace_files::system_open::validate_external_open_path(&encoded, None) {
+            Ok(p) => p,
+            Err(_) => return empty(StatusCode::FORBIDDEN),
+        };
+    if !is_widget_media_ext(&resolved) {
+        return empty(StatusCode::FORBIDDEN);
+    }
+
+    let metadata = match std::fs::metadata(&resolved) {
+        Ok(m) => m,
+        Err(_) => return empty(StatusCode::NOT_FOUND),
+    };
+    let total = metadata.len();
+    if total == 0 {
+        return empty(StatusCode::NOT_FOUND);
+    }
+
+    // Parse Range: bytes=start-end | bytes=start- | bytes=-suffix
+    let range = request
+        .headers()
+        .get("range")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("bytes="))
+        .and_then(|spec| parse_byte_range(spec, total));
+
+    let (status, start, end) = match range {
+        Some((s, e)) => (StatusCode::PARTIAL_CONTENT, s, e),
+        None => (StatusCode::OK, 0, total.saturating_sub(1)),
+    };
+    let len = (end - start + 1) as usize;
+
+    let mut file = match File::open(&resolved) {
+        Ok(f) => f,
+        Err(_) => return empty(StatusCode::NOT_FOUND),
+    };
+    if file.seek(SeekFrom::Start(start)).is_err() {
+        return empty(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    let mut buf = vec![0u8; len];
+    if file.read_exact(&mut buf).is_err() {
+        return empty(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let mime = mime_from_ext(&resolved);
+    let mut builder = Response::builder()
+        .status(status)
+        .header("Content-Type", mime)
+        .header("Content-Length", len.to_string())
+        .header("Accept-Ranges", "bytes")
+        .header("Cache-Control", "no-cache")
+        .header("Access-Control-Allow-Origin", "*");
+    if let Some((s, e)) = range {
+        builder = builder.header("Content-Range", format!("bytes {s}-{e}/{total}"));
+    }
+    builder.body(buf).unwrap()
+}
+
 fn build_attachment_response(request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
     let uri_str = request.uri().to_string();
     let Some(rel) = extract_relative_path(&uri_str) else {
@@ -249,6 +382,16 @@ pub fn handle<R: Runtime>(
     responder: UriSchemeResponder,
 ) {
     let uri_str = request.uri().to_string();
+    // widget-media: local files embedded in generative-ui-widget HTML. Must be
+    // checked BEFORE tool-attachment (whose segment extractor also matches
+    // arbitrary 3-segment paths) — the widget-media marker is more specific.
+    if uri_str.contains("widget-media") {
+        tauri::async_runtime::spawn_blocking(move || {
+            let response = build_widget_media_response(&request);
+            responder.respond(response);
+        });
+        return;
+    }
     if let Some((session_id, turn_id, filename)) = extract_tool_attachment_segments(&uri_str) {
         let port = session_sidecar_port(&ctx, &session_id);
         tauri::async_runtime::spawn_blocking(move || {
@@ -308,8 +451,7 @@ mod tests {
 
     #[test]
     fn extracts_tool_macos_form() {
-        let r =
-            extract_tool_attachment_segments("hamuna://tool-attachment/s/t/file.png").unwrap();
+        let r = extract_tool_attachment_segments("hamuna://tool-attachment/s/t/file.png").unwrap();
         assert_eq!(
             r,
             ("s".to_string(), "t".to_string(), "file.png".to_string())
@@ -344,5 +486,49 @@ mod tests {
     fn percent_encodes_path_segment() {
         assert_eq!(percent_encode_path_segment("a b.png"), "a%20b.png");
         assert_eq!(percent_encode_path_segment("a+b.png"), "a%2Bb.png");
+    }
+
+    #[test]
+    fn extracts_widget_media_macos_form() {
+        let r = extract_widget_media_path("hamuna://widget-media/%2Fhome%2Fu%2Fv.mp4").unwrap();
+        assert_eq!(r, "/home/u/v.mp4");
+    }
+
+    #[test]
+    fn extracts_widget_media_windows_form() {
+        let r = extract_widget_media_path("http://hamuna.localhost/widget-media/C%3A%5Cv%5Ca.mp4")
+            .unwrap();
+        assert_eq!(r, "C:\\v\\a.mp4");
+    }
+
+    #[test]
+    fn widget_media_rejects_non_media_uri() {
+        assert!(extract_widget_media_path("hamuna://attachment/a.png").is_none());
+        assert!(extract_widget_media_path("hamuna://tool-attachment/s/t/a.png").is_none());
+    }
+
+    #[test]
+    fn widget_media_ext_allowlist() {
+        assert!(is_widget_media_ext(Path::new("/a/b.mp4")));
+        assert!(is_widget_media_ext(Path::new("/a/b.PNG"))); // case-insensitive
+        assert!(is_widget_media_ext(Path::new("/a/b.webm")));
+        assert!(!is_widget_media_ext(Path::new("/a/b.txt")));
+        assert!(!is_widget_media_ext(Path::new("/a/b.png.exe")));
+    }
+
+    #[test]
+    fn parse_byte_range_supported_forms() {
+        assert_eq!(parse_byte_range("0-99", 1000), Some((0, 99)));
+        assert_eq!(parse_byte_range("500-", 1000), Some((500, 999)));
+        assert_eq!(parse_byte_range("900-1500", 1000), Some((900, 999))); // end clamped
+        assert_eq!(parse_byte_range("-100", 1000), None); // suffix form not supported → start parse fails? no: "-100" split_once('-') → ("", "100") → start parse fails → None
+    }
+
+    #[test]
+    fn parse_byte_range_rejects_malformed_or_unsatisfiable() {
+        assert_eq!(parse_byte_range("abc", 1000), None); // no '-'
+        assert_eq!(parse_byte_range("1000-", 1000), None); // start >= total
+        assert_eq!(parse_byte_range("99-50", 1000), None); // start > end
+        assert_eq!(parse_byte_range("x-5", 1000), None); // non-numeric start
     }
 }

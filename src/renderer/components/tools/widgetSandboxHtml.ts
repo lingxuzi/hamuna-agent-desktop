@@ -27,7 +27,7 @@ export function buildSandboxHtml(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh; img-src data: https:; media-src data: https:; font-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh; img-src data: https: hamuna: http://hamuna.localhost; media-src data: https: hamuna: http://hamuna.localhost; font-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com;">
 <style>
 ${cssVarsBlock}
 *, *::before, *::after { box-sizing: border-box; }

@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generative UI widget 内嵌本地图片/视频路径（如 multimedia-creator / agnes-image / agnes-video 返回的 `local_paths` 绝对路径）渲染裂图：widget 沙箱 CSP 只放行 `img-src data: https:` 且 opaque origin 读不了本地文件——finalize 前把 `<img src>` / `<video src>` 的本地路径重写为 base64 `data:` URL（经 Rust `cmd_workspace_read_files_b64`），沙箱 CSP 同步补 `media-src data: https:` 放行视频（故事板 / 短视频 widget 复现）。
 - 消息文本里裸 `.mp4` 远程 URL（如 "1. 开场：https://…/video_xxx.mp4"）被预处理转成 `![url](url)` 后按图片渲染成裂图——`MarkdownImg` 改为按扩展名分类，视频 URL 渲染 `<video controls>`（本地视频路径已支持，远程补上）。
 - Windows/WebView2 下 widget 视频不能播放：沙箱 iframe 的 meta CSP 会与**父页面 CSP 取交集**，而父 CSP `media-src` 缺 `data:` 和 `https:` 通配（`img-src` 有）——本地 data: 视频和远程 https 视频全被交集拦掉（macOS WebKit 只认 meta CSP 所以正常）。父 CSP `media-src` 对齐 `img-src` 补上两个源。
+- Widget 本地视频从 base64 data: URL 改为**流式播放**（用户报"对话区域太卡"）：大视频 base64 膨胀 ~33% 且整段塞进 postMessage 会卡渲染线程——改为 finalize 时把本地 `<img>`/`<video>` src 重写为 `hamuna://widget-media/<绝对路径>`（Windows 为 `http://hamuna.localhost/...`），Rust `attachment_protocol` 新增 `widget-media` 路由**支持 HTTP Range 请求（206 Partial Content）**，WebView 渐进缓冲/可拖动进度条，HTML 里不再有巨型 base64。路径经 `validate_external_open_path`（canonicalize + home/tmp 前缀）校验 + 媒体扩展名白名单（防 AI 生成 HTML 任意读文件）；浏览器 dev 模式无 `hamuna://` 协议，保留 base64 fallback。沙箱 CSP `img-src`/`media-src` 补 `hamuna:` + `http://hamuna.localhost`。
 
 ### Changed
 - 内置 npm 插件安装默认走国内镜像 `registry.npmmirror.com`（阿里官方 npm 镜像），加速大陆 Windows/macOS 用户下载；用户已通过 `npm_config_registry` 环境变量或 `~/.npmrc` 显式指定 registry（如公司内网源）时尊重用户配置不覆盖。系统 npm 安装分支不动（归属用户自身环境）。
