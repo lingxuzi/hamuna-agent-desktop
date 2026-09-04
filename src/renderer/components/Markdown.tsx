@@ -11,7 +11,7 @@
 
 import 'katex/dist/katex.min.css';
 
-import { memo, useContext, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { Children, isValidElement, memo, useContext, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
@@ -97,6 +97,33 @@ const MarkdownLink = memo(function MarkdownLink({
 }: React.ComponentProps<'a'> & { node?: unknown }) {
   const browserPanel = useContext(BrowserPanelContext);
   const fileLinkAction = useFileLinkAction();
+
+  // Media links: an absolute URL pointing at an image/video file renders the
+  // media inline (grid-wrapped by ParagraphComponent) instead of a hyperlink.
+  const mediaKind = href ? absoluteMediaKind(href) : null;
+  if (mediaKind) {
+    const label = linkText(children);
+    if (mediaKind === 'image') {
+      return (
+        <img
+          src={href}
+          alt={label || undefined}
+          loading="lazy"
+          className="max-w-full rounded-lg"
+        />
+      );
+    }
+    return (
+      <video
+        src={href}
+        controls
+        preload="metadata"
+        className="max-w-full rounded-lg"
+      >
+        {label}
+      </video>
+    );
+  }
 
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -290,13 +317,59 @@ const LiComponent: Components['li'] = ({ children }) => (
 // 不用继承（~20 个 Markdown 调用点的容器行高不齐，继承会让无显式行高的容器
 // 退到 UA normal），也不用 leading-relaxed（1.625 与 prose 档 1.7 分叉，
 // PRD 0.2.34 Part 2 实测该分叉正是"宣称 1.7 从未上屏"的根源）。
-const ParagraphComponent: Components['p'] = ({ children }) => (
-  <p className="my-4 leading-[1.7]">{children}</p>
-);
+/**
+ * Paragraph with media-grid support: when EVERY child is an image/video
+ * (markdown `![a](x) ![b](y)` on one line, or media links rendered inline by
+ * MarkdownLink), wrap them in a responsive grid instead of a text paragraph.
+ * Whitespace text nodes between inline media (remark keeps `![a](x) ![b](y)`
+ * as img-text-img) are ignored; any real text falls back to a normal <p>.
+ */
+const ParagraphComponent: Components['p'] = ({ children }) => {
+  const kids = Children.toArray(children);
+  const isMedia = (child: React.ReactNode): boolean => {
+    if (!isValidElement(child)) return false;
+    const t = child.type;
+    // Default/native images + raw-HTML media from rehype-raw.
+    if (t === 'img' || t === 'video') return true;
+    // Custom image resolver (file-preview mode with basePath).
+    if (t === MarkdownImage) return true;
+    // Media links are <MarkdownLink href=…> elements whose href is media —
+    // MarkdownLink renders them as inline img/video, so treat as media here.
+    if (t === MarkdownLink) {
+      const href = (child.props as { href?: string }).href;
+      return typeof href === 'string' && absoluteMediaKind(href) !== null;
+    }
+    return false;
+  };
+  const isIgnorable = (child: React.ReactNode): boolean =>
+    typeof child === 'string' && child.trim() === '';
+  // Grid only when there is at least one media AND every non-whitespace
+  // child is media (whitespace between inline media is layout-only).
+  const mediaCount = kids.filter(isMedia).length;
+  const allMedia = mediaCount > 0 && kids.every((c) => isMedia(c) || isIgnorable(c));
+  if (allMedia) {
+    // 2+ media → grid; a single media keeps normal width.
+    const className = mediaCount >= 2
+      ? 'my-4 grid grid-cols-2 gap-2 sm:grid-cols-3'
+      : 'my-4';
+    return <div className={className}>{children}</div>;
+  }
+  return <p className="my-4 leading-[1.7]">{children}</p>;
+};
 
 // Horizontal rule
 const HrComponent: Components['hr'] = () => (
   <hr className="my-6 border-[var(--line)]" />
+);
+
+/** Raw-HTML <video> (from rehype-raw) — styled like media-link videos. */
+const VideoElement: Components['video'] = ({ node: _node, ...props }) => (
+  <video {...props} controls className="max-w-full rounded-lg" />
+);
+
+/** Raw-HTML <audio> (from rehype-raw). */
+const AudioElement: Components['audio'] = ({ node: _node, ...props }) => (
+  <audio {...props} controls className="w-full" />
 );
 
 // Combine all custom components
@@ -312,6 +385,8 @@ const markdownComponents: Components = {
   blockquote: BlockquoteComponent,
   p: ParagraphComponent,
   hr: HrComponent,
+  video: VideoElement,
+  audio: AudioElement,
   h1: H1Component,
   h2: H2Component,
   h3: H3Component,
@@ -370,6 +445,32 @@ function resolveRelativePath(baseDir: string, src: string): string {
 /** Whether a URL is absolute (http/https/data/blob) */
 function isAbsoluteUrl(src: string): boolean {
   return /^(https?:|data:|blob:)/i.test(src);
+}
+
+// Media URL detection: if a plain link points at an image/video file, render
+// the media inline instead of a hyperlink (AI often emits `[x](…/img.png)`
+// or a bare media URL; the user wants the actual image/video in the message).
+const MEDIA_IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)(?:[?#].*)?$/i;
+const MEDIA_VIDEO_RE = /\.(mp4|webm|ogg|ogv|mov|m4v)(?:[?#].*)?$/i;
+
+/** Classify an absolute URL by media kind; relative/unknown URLs return null
+ *  (relative paths stay links — workspace-file links have their own handler). */
+function absoluteMediaKind(href: string): 'image' | 'video' | null {
+  if (!isAbsoluteUrl(href)) return null;
+  if (MEDIA_IMAGE_RE.test(href)) return 'image';
+  if (MEDIA_VIDEO_RE.test(href)) return 'video';
+  return null;
+}
+
+/** Extract plain text from link children for use as img alt / video fallback. */
+function linkText(children: React.ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(linkText).join('');
+  if (isValidElement(children)) {
+    const props = children.props as { children?: React.ReactNode };
+    if (props.children !== undefined) return linkText(props.children);
+  }
+  return '';
 }
 
 /** Safely decode URI component, returning original on malformed input */

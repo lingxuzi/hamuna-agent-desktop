@@ -17,6 +17,7 @@ export const MARKDOWN_SANITIZE_SCHEMA = {
     'mark', 'ins', 'del',  // text highlighting
     'sub', 'sup',           // subscript/superscript
     'kbd', 'var', 'samp',  // technical inline elements
+    'video', 'audio', 'source', // media — src/controls via attributes below
   ],
   attributes: {
     ...defaultSchema.attributes,
@@ -25,6 +26,9 @@ export const MARKDOWN_SANITIZE_SCHEMA = {
     // otherwise render Tailwind or fixed-position overlay markup as live DOM.
     // KaTeX runs after this sanitizer, so its generated classes are unaffected.
     code: defaultSchema.attributes?.code ?? [],
+    video: ['src', 'controls', 'poster', 'muted', 'loop', 'playsInline', 'preload'],
+    audio: ['src', 'controls', 'muted', 'loop', 'preload'],
+    source: ['src', 'type'],
   },
 };
 
