@@ -123,4 +123,51 @@ describe('preprocessMarkdownContent', () => {
       expect(preprocessMarkdownContent('[mail](mailto:hi@example.com)')).toBe('[mail](mailto:hi@example.com)');
     });
   });
+
+  describe('bare media paths / URLs in plain text (multimedia-creator output)', () => {
+    test('converts the user-observed plain-text output lines to markdown images', () => {
+      const input = '本地：/home/hmcz/.hamuna/projects/mino/outputs/images/agnes-media-1788486645-e0740721.png 远程：https://cos-platform-outputs.agnes-ai.cn/images/x.png';
+      expect(preprocessMarkdownContent(input)).toBe(
+        '本地：![/home/hmcz/.hamuna/projects/mino/outputs/images/agnes-media-1788486645-e0740721.png](/home/hmcz/.hamuna/projects/mino/outputs/images/agnes-media-1788486645-e0740721.png) 远程：![https://cos-platform-outputs.agnes-ai.cn/images/x.png](https://cos-platform-outputs.agnes-ai.cn/images/x.png)',
+      );
+    });
+
+    test('converts a bare image URL on its own line', () => {
+      expect(preprocessMarkdownContent('远程：https://cos-platform-outputs.agnes-ai.cn/images/agnes-1.png')).toBe(
+        '远程：![https://cos-platform-outputs.agnes-ai.cn/images/agnes-1.png](https://cos-platform-outputs.agnes-ai.cn/images/agnes-1.png)',
+      );
+    });
+
+    test('does not double-wrap existing markdown links or images', () => {
+      expect(preprocessMarkdownContent('[看](https://example.com/a.png)')).toBe('[看](https://example.com/a.png)');
+      expect(preprocessMarkdownContent('![图](/abs/b.png)')).toBe('![图](/abs/b.png)');
+      // Drive link already handled by the drive-colon step, not double-wrapped.
+      expect(preprocessMarkdownContent('[x](C:\\a\\b.png)')).toBe('[x](C%3A\\a\\b.png)');
+    });
+
+    test('leaves relative paths and mid-word paths as plain text', () => {
+      expect(preprocessMarkdownContent('文件在 outputs/images/c.png 目录')).toBe('文件在 outputs/images/c.png 目录');
+      expect(preprocessMarkdownContent('path/home/d.png')).toBe('path/home/d.png');
+    });
+
+    test('converts a bare drive path and encodes its colon (2f then 2g)', () => {
+      expect(preprocessMarkdownContent('本地：C:\\Users\\a\\b.png 结束')).toBe('本地：![C:\\Users\\a\\b.png](C%3A\\Users\\a\\b.png) 结束');
+    });
+
+    test('respects trailing CJK punctuation so prose is not swallowed', () => {
+      expect(preprocessMarkdownContent('图：/tmp/e.png。后面还有')).toBe('图：![/tmp/e.png](/tmp/e.png)。后面还有');
+    });
+
+    test('leaves extensionless URLs as plain text', () => {
+      expect(preprocessMarkdownContent('远程：https://cos-platform-outputs.agnes-ai.cn/images/agnes-1')).toBe(
+        '远程：https://cos-platform-outputs.agnes-ai.cn/images/agnes-1',
+      );
+    });
+
+    test('converts a bare URL inside prose parens', () => {
+      expect(preprocessMarkdownContent('见 (https://example.com/b.png) 括号内')).toBe(
+        '见 (![https://example.com/b.png](https://example.com/b.png)) 括号内',
+      );
+    });
+  });
 });

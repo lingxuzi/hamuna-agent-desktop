@@ -85,13 +85,45 @@ export function preprocessMarkdownContent(content: string): string {
   // rewritten into an ordered list (which then swallows the rest of the line).
   processed = processed.replace(/^(\d+\.)([^\s\n\d])/gm, '$1 $2');
 
-  // 2f. Protect Windows drive-letter paths inside link/image destinations.
+  // 2f. Render BARE absolute local media paths and bare http(s) media URLs
+  // inline. AI tools (multimedia-creator, etc.) frequently emit the output
+  // path as PLAIN TEXT — e.g. "本地：/home/…/out.png" / "远程：https://…/a.png"
+  // — rather than markdown image syntax. Nothing renders; the message just
+  // shows a path string. Convert to `![path](path)` so the existing media
+  // pipeline (MarkdownLocalMedia / URL img) displays it.
+  //
+  // Matching rules (conservative):
+  // - ONLY absolute local paths (`/…`, drive `C:\…`/`C:/…`, `~/…`) and
+  //   http(s) URLs with an image/video extension — relative paths are too
+  //   ambiguous in prose to auto-render.
+  // - Negative lookbehinds: `(?<![\w:~\/])` — not preceded by a word char (so
+  //   "path/a.png" mid-word stays text), ASCII `:` or `/` (so the `//` after
+  //   `https:` inside an already-linked URL can't leak a partial re-match
+  //   starting at the second slash), or `~` (so the `/` right after `~/` in an
+  //   existing `](~/…)` destination can't leak either — the match must start
+  //   AT the `~`/scheme/drive, not inside it. `(?<!\]\()` — not preceded by
+  //   `](` (the markdown link/image destination boundary), so
+  //   `[x](/abs/a.png)` is not double-wrapped — MarkdownLink already renders
+  //   that. Plain prose parens like `见 (https://…/a.png)` ARE converted (the
+  //   `(` alone is allowed).
+  // - Trailing boundary: end-of-string or whitespace / CJK / ASCII
+  //   punctuation, so "…/a.png。后面" and "…/a.png) 结束" don't swallow the
+  //   next sentence.
+  // Alt text is the full token — if the read later fails, the fallback link
+  // still shows the complete path instead of a bare basename.
+  processed = processed.replace(
+    /(?<![\w:~/])(?<!\]\()((?:https?:\/\/|~\/|\/|[A-Za-z]:[\\/])[^\s<>()（），。；、]*?\.(?:png|jpe?g|gif|webp|svg|avif|bmp|mp4|webm|ogg|ogv|mov|m4v)(?:[?#][^\s<>()（），。；、]*)?)(?=$|[\s，。；、)）])/g,
+    (_match, token) => `![${token}](${token})`,
+  );
+
+  // 2g. Protect Windows drive-letter paths inside link/image destinations.
   // micromark treats `C:` as a malformed URI scheme and drops the WHOLE
   // destination → `[x](C:\Users\a\b.png)` parses to `href=""` (verified).
   // Percent-encoding the colon keeps the destination intact; MarkdownLocalMedia
   // decodes it back before reading the file. Backslashes are kept as-is
   // (micromark percent-encodes them to %5C, which decodes back identically).
-  // Only match inside `](`/`![](` so plain-text "C: 盘" is untouched.
+  // Only match inside `](`/`![](` so plain-text "C: 盘" is untouched. Runs
+  // AFTER 2f because 2f's generated `![..](C:\..)` destinations need encoding.
   processed = processed.replace(/(\]\()([A-Za-z]):(?=[\\/])/g, '$1$2%3A');
 
   // Step 3: Restore protected code blocks and inline code

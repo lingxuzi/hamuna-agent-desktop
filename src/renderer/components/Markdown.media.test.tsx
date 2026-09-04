@@ -139,6 +139,28 @@ describe('Markdown media rendering', () => {
     expect(document.querySelector('a')).toBeNull();
   });
 
+  it('renders multimedia-creator plain-text output lines as images (local + remote)', async () => {
+    // The exact shape the user reported: the MCP emits the output paths as
+    // PLAIN TEXT ("本地：<abs path> 远程：<url>") — preprocess converts them
+    // to markdown image syntax, then local → blob img, remote → direct img.
+    mocks.readLocalFileAsBlobUrl.mockResolvedValue(blobHandle('blob:local-media'));
+    const localPath = '/home/hmcz/.hamuna/projects/mino/outputs/images/agnes-media-1788486645-e0740721.png';
+    const remoteUrl = 'https://cos-platform-outputs.agnes-ai.cn/images/agnes-media-1788486645-e0740721.png';
+    renderMarkdown(`本地：${localPath} 远程：${remoteUrl}`);
+    // Local image loads async via readLocalFileAsBlobUrl → blob URL.
+    let imgs: HTMLImageElement[] = [];
+    await waitFor(() => {
+      imgs = Array.from(document.querySelectorAll('img'));
+      expect(imgs.length).toBe(2);
+    });
+    expect(imgs.some((i) => i.getAttribute('src') === 'blob:local-media')).toBe(true);
+    expect(imgs.some((i) => i.getAttribute('src') === remoteUrl)).toBe(true);
+    expect(mocks.readLocalFileAsBlobUrl).toHaveBeenCalledWith({
+      fullPath: localPath,
+      workspace: WORKSPACE,
+    });
+  });
+
   it('wraps multiple same-line images in a grid container', () => {
     renderMarkdown('![a](https://example.com/a.png) ![b](https://example.com/b.png) ![c](https://example.com/c.png)');
     const grid = document.querySelector('.grid');
