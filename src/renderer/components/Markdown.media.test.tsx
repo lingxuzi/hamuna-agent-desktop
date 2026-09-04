@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   openExternal: vi.fn(),
   readFileAsBlobUrl: vi.fn(),
+  readLocalFileAsBlobUrl: vi.fn(),
 }));
 
 vi.mock('@/utils/openExternal', async () => {
@@ -21,12 +22,18 @@ vi.mock('@/hooks/useWorkspaceFileService', () => ({
     readPreview: vi.fn(),
     readLocalPreview: vi.fn(),
     readFileAsBlobUrl: mocks.readFileAsBlobUrl,
+    readLocalFileAsBlobUrl: mocks.readLocalFileAsBlobUrl,
     checkPaths: vi.fn(),
     checkLocalPaths: vi.fn(),
     openWithDefault: vi.fn(),
     openPathWithDefault: vi.fn(),
     openPathExternal: vi.fn(),
   }),
+}));
+
+vi.mock('@tauri-apps/api/path', () => ({
+  homeDir: () => Promise.resolve('/Users/zhihu'),
+  join: (...parts: string[]) => Promise.resolve(parts.join('/')),
 }));
 
 import { FileActionProvider } from '@/context/FileActionContext';
@@ -43,6 +50,10 @@ function renderMarkdown(markdown: string) {
   );
 }
 
+function blobHandle(url: string) {
+  return { blobUrl: url, mimeType: 'image/png', name: 'file', revoke: vi.fn() };
+}
+
 describe('Markdown media rendering', () => {
   it('renders an image markdown as <img>, not a link', () => {
     renderMarkdown('![cat](https://example.com/cat.png)');
@@ -50,6 +61,65 @@ describe('Markdown media rendering', () => {
     expect(img.getAttribute('src')).toBe('https://example.com/cat.png');
     expect(img.getAttribute('alt')).toBe('cat');
     expect(document.querySelector('a')).toBeNull();
+  });
+
+  it('renders an absolute local image path in a link via local blob', async () => {
+    mocks.readLocalFileAsBlobUrl.mockResolvedValue(blobHandle('blob:local-img'));
+    renderMarkdown('[photo](/Users/zhihu/Pictures/photo.png)');
+    const img = await screen.findByRole('img');
+    expect(mocks.readLocalFileAsBlobUrl).toHaveBeenCalledWith({
+      fullPath: '/Users/zhihu/Pictures/photo.png',
+      workspace: WORKSPACE,
+    });
+    expect(img.getAttribute('src')).toBe('blob:local-img');
+    expect(document.querySelector('a')).toBeNull();
+  });
+
+  it('renders a workspace-relative image path via workspace blob', async () => {
+    mocks.readFileAsBlobUrl.mockResolvedValue(blobHandle('blob:ws-img'));
+    renderMarkdown('[diagram](docs/flow.png)');
+    const img = await screen.findByRole('img');
+    expect(mocks.readFileAsBlobUrl).toHaveBeenCalledWith({ path: 'docs/flow.png' });
+    expect(img.getAttribute('src')).toBe('blob:ws-img');
+  });
+
+  it('renders a local video path as <video controls>', async () => {
+    mocks.readLocalFileAsBlobUrl.mockResolvedValue({
+      blobUrl: 'blob:local-video', mimeType: 'video/mp4', name: 'clip.mp4', revoke: vi.fn(),
+    });
+    renderMarkdown('[clip](C:\\Videos\\clip.mp4)');
+    let video: HTMLVideoElement | null = null;
+    await waitFor(() => {
+      video = document.querySelector('video');
+      expect(video).not.toBeNull();
+    });
+    expect(video!.getAttribute('src')).toBe('blob:local-video');
+    expect(video!.hasAttribute('controls')).toBe(true);
+    expect(document.querySelector('a')).toBeNull();
+    // Preprocess percent-encodes the drive colon so micromark keeps the
+    // destination; MarkdownLocalMedia decodes it back to the real path.
+    expect(mocks.readLocalFileAsBlobUrl).toHaveBeenCalledWith({
+      fullPath: 'C:\\Videos\\clip.mp4',
+      workspace: WORKSPACE,
+    });
+  });
+
+  it('expands ~/ to the home dir for local media paths', async () => {
+    mocks.readLocalFileAsBlobUrl.mockResolvedValue(blobHandle('blob:tilda'));
+    renderMarkdown('![wallpaper](~/Pictures/wall.png)');
+    await screen.findByRole('img');
+    expect(mocks.readLocalFileAsBlobUrl).toHaveBeenCalledWith({
+      fullPath: '/Users/zhihu/Pictures/wall.png',
+      workspace: WORKSPACE,
+    });
+  });
+
+  it('falls back to a link when local file read fails', async () => {
+    mocks.readLocalFileAsBlobUrl.mockRejectedValue(new Error('File not found'));
+    renderMarkdown('[missing](/tmp/nope.png)');
+    const link = await screen.findByRole('link');
+    expect(link.getAttribute('href')).toBe('/tmp/nope.png');
+    expect(document.querySelector('img')).toBeNull();
   });
 
   it('renders an absolute image URL wrapped in a link as <img> inline', () => {

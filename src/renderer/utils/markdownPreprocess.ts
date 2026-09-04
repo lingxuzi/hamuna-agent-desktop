@@ -85,6 +85,15 @@ export function preprocessMarkdownContent(content: string): string {
   // rewritten into an ordered list (which then swallows the rest of the line).
   processed = processed.replace(/^(\d+\.)([^\s\n\d])/gm, '$1 $2');
 
+  // 2f. Protect Windows drive-letter paths inside link/image destinations.
+  // micromark treats `C:` as a malformed URI scheme and drops the WHOLE
+  // destination → `[x](C:\Users\a\b.png)` parses to `href=""` (verified).
+  // Percent-encoding the colon keeps the destination intact; MarkdownLocalMedia
+  // decodes it back before reading the file. Backslashes are kept as-is
+  // (micromark percent-encodes them to %5C, which decodes back identically).
+  // Only match inside `](`/`![](` so plain-text "C: 盘" is untouched.
+  processed = processed.replace(/(\]\()([A-Za-z]):(?=[\\/])/g, '$1$2%3A');
+
   // Step 3: Restore protected code blocks and inline code
   // Multiple passes needed: table blocks may contain inline code placeholders,
   // so restoring the table in one pass leaves inner placeholders unresolved.

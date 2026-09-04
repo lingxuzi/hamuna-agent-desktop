@@ -21,8 +21,9 @@ import InlineCode from './markdown/InlineCode';
 import MermaidDiagram from './markdown/MermaidDiagram';
 import { openExternal, isExternalUrl } from '@/utils/openExternal';
 import { BrowserPanelContext } from '@/context/BrowserPanelContext';
-import { useFileLinkAction } from '@/context/FileActionContext';
+import { useFileAction, useFileLinkAction } from '@/context/FileActionContext';
 import { useWorkspaceFileService } from '@/hooks/useWorkspaceFileService';
+import { homeDir, join } from '@tauri-apps/api/path';
 import { preprocessMarkdownContent } from '@/utils/markdownPreprocess';
 import {
   MARKDOWN_REHYPE_PLUGINS,
@@ -97,12 +98,25 @@ const MarkdownLink = memo(function MarkdownLink({
 }: React.ComponentProps<'a'> & { node?: unknown }) {
   const browserPanel = useContext(BrowserPanelContext);
   const fileLinkAction = useFileLinkAction();
+  const fileAction = useFileAction();
 
-  // Media links: an absolute URL pointing at an image/video file renders the
-  // media inline (grid-wrapped by ParagraphComponent) instead of a hyperlink.
-  const mediaKind = href ? absoluteMediaKind(href) : null;
-  if (mediaKind) {
+  // Media links: a link pointing at an image/video file renders the media
+  // inline (grid-wrapped by ParagraphComponent) instead of a hyperlink.
+  // Absolute URLs render directly; LOCAL paths (absolute or workspace-
+  // relative) load via Rust workspace_files blob (see MarkdownLocalMedia).
+  const mediaKind = href ? mediaKindOf(href) : null;
+  if (mediaKind && href) {
     const label = linkText(children);
+    if (!isAbsoluteUrl(href)) {
+      return (
+        <MarkdownLocalMedia
+          href={href}
+          kind={mediaKind}
+          label={label}
+          workspacePath={fileAction?.workspacePath ?? null}
+        />
+      );
+    }
     if (mediaKind === 'image') {
       return (
         <img
@@ -331,13 +345,13 @@ const ParagraphComponent: Components['p'] = ({ children }) => {
     const t = child.type;
     // Default/native images + raw-HTML media from rehype-raw.
     if (t === 'img' || t === 'video') return true;
-    // Custom image resolver (file-preview mode with basePath).
-    if (t === MarkdownImage) return true;
+    // Custom image resolvers (file-preview basePath mode; chat local-media mode).
+    if (t === MarkdownImage || t === MarkdownImg || t === MarkdownLocalMedia) return true;
     // Media links are <MarkdownLink href=…> elements whose href is media —
     // MarkdownLink renders them as inline img/video, so treat as media here.
     if (t === MarkdownLink) {
       const href = (child.props as { href?: string }).href;
-      return typeof href === 'string' && absoluteMediaKind(href) !== null;
+      return typeof href === 'string' && mediaKindOf(href) !== null;
     }
     return false;
   };
@@ -447,16 +461,24 @@ function isAbsoluteUrl(src: string): boolean {
   return /^(https?:|data:|blob:)/i.test(src);
 }
 
+/**
+ * Whether a path is a LOCAL absolute path: POSIX `/…`, Windows drive
+ * `C:\…`/`C:/…`, or home shorthand `~/…`. Used to distinguish local files
+ * from absolute URLs (both carry media extensions but only the former need
+ * Rust workspace_files blob loading).
+ */
+function isLocalAbsolutePath(p: string): boolean {
+  return /^(?:[a-zA-Z]:[\\/]|~\/|\/)/.test(p);
+}
+
 // Media URL detection: if a plain link points at an image/video file, render
 // the media inline instead of a hyperlink (AI often emits `[x](…/img.png)`
 // or a bare media URL; the user wants the actual image/video in the message).
 const MEDIA_IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)(?:[?#].*)?$/i;
 const MEDIA_VIDEO_RE = /\.(mp4|webm|ogg|ogv|mov|m4v)(?:[?#].*)?$/i;
 
-/** Classify an absolute URL by media kind; relative/unknown URLs return null
- *  (relative paths stay links — workspace-file links have their own handler). */
-function absoluteMediaKind(href: string): 'image' | 'video' | null {
-  if (!isAbsoluteUrl(href)) return null;
+/** Classify ANY href (absolute URL or local path) by media extension. */
+function mediaKindOf(href: string): 'image' | 'video' | null {
   if (MEDIA_IMAGE_RE.test(href)) return 'image';
   if (MEDIA_VIDEO_RE.test(href)) return 'video';
   return null;
@@ -583,6 +605,137 @@ const MarkdownImage = memo(MarkdownImageInner, (prev, next) =>
   && prev.alt === next.alt,
 );
 
+/**
+ * Local media renderer for LOCAL FILE PATHS in markdown — both link form
+ * `[x](/abs/a.png)` / `[x](docs/a.png)` and image syntax `![x](/abs/a.png)`.
+ *
+ * Resolution rules (user-confirmed scope: absolute paths + workspace-relative
+ * paths, images AND videos):
+ * - Absolute local path (`/…`, `C:\…`, `~/…`) → `readLocalFileAsBlobUrl`
+ *   (workspace-free; Rust `cmd_download_local_file` canonicalizes + validates).
+ * - Workspace-relative path (`docs/a.png`) → `readFileAsBlobUrl` resolved
+ *   against the workspace root (`cmd_workspace_download_file`). Requires a
+ *   workspace context (FileActionProvider.workspacePath); without one the
+ *   path falls back to a plain link.
+ * - `~/` is expanded via Tauri `homeDir()` — Rust `validate_external_open_path`
+ *   requires a real absolute path and does NOT expand `~`.
+ *
+ * Mirrors MarkdownImageInner's blob lifecycle: revoke the object URL on
+ * unmount; memo comparator keys on the props that affect the fetch so
+ * streaming re-renders don't re-fetch.
+ */
+function MarkdownLocalMediaInner({ href, kind, label, workspacePath }: {
+  href: string;
+  kind: 'image' | 'video';
+  label: string;
+  workspacePath: string | null;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  // Preprocess percent-encodes Windows drive colons (`C:` → `C%3A`) so
+  // micromark keeps the destination; decode back before path classification
+  // and file reads. Backslashes arrive as %5C and decode to `\` identically.
+  const decoded = safeDecodeURIComponent(href);
+  const isLocalAbs = isLocalAbsolutePath(decoded);
+  const fileService = useWorkspaceFileService(workspacePath);
+
+  useEffect(() => {
+    let cancelled = false;
+    let handle: { blobUrl: string; revoke: () => void } | null = null;
+
+    (async () => {
+      try {
+        if (isLocalAbs) {
+          let fullPath = decoded;
+          if (decoded.startsWith('~/')) {
+            const home = await homeDir();
+            fullPath = await join(home, decoded.slice(2));
+          }
+          handle = await fileService.readLocalFileAsBlobUrl({
+            fullPath,
+            workspace: workspacePath ?? undefined,
+          });
+        } else if (workspacePath) {
+          handle = await fileService.readFileAsBlobUrl({ path: decoded });
+        } else {
+          // Workspace-relative but no workspace context → keep it a link.
+          if (!cancelled) setFailed(true);
+          return;
+        }
+        if (cancelled) {
+          handle.revoke();
+          return;
+        }
+        setBlobUrl(handle.blobUrl);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (handle) handle.revoke();
+      setBlobUrl(null);
+      setFailed(false);
+    };
+  }, [decoded, isLocalAbs, workspacePath, fileService]);
+
+  // Failed / unresolvable → fall back to a plain link so the user can still
+  // open the file manually (never silently drop the reference).
+  if (failed) {
+    return (
+      <a href={href} className="text-[var(--accent-warm)] underline underline-offset-2">{label || href}</a>
+    );
+  }
+
+  if (!blobUrl) {
+    return <span className="inline-block h-4 w-16 animate-pulse rounded bg-[var(--paper-inset)]" />;
+  }
+
+  if (kind === 'image') {
+    return <img src={blobUrl} alt={label || undefined} loading="lazy" className="max-w-full rounded-lg" />;
+  }
+  return (
+    <video src={blobUrl} controls preload="metadata" className="max-w-full rounded-lg">
+      {label}
+    </video>
+  );
+}
+
+const MarkdownLocalMedia = memo(MarkdownLocalMediaInner, (prev, next) =>
+  prev.href === next.href
+  && prev.kind === next.kind
+  && prev.label === next.label
+  && prev.workspacePath === next.workspacePath,
+);
+
+/**
+ * Chat-mode image handler (basePath == null): absolute URLs render directly
+ * (browser default); local/relative paths go through MarkdownLocalMedia so a
+ * `![x](/Users/…/a.png)` in a chat message shows the actual image instead of a
+ * broken <img>. workspacePath comes from FileActionProvider (Chat wraps the
+ * message list in it with workspacePath={agentDir}); null → local paths fall
+ * back to links inside MarkdownLocalMedia.
+ */
+const MarkdownImg: Components['img'] = ({ node: _node, src, alt, ...props }) => {
+  const fileAction = useFileAction();
+  if (!src || isAbsoluteUrl(src)) {
+    return <img src={src} alt={alt ?? ''} {...props} />;
+  }
+  const kind = mediaKindOf(src);
+  if (!kind) {
+    return <img src={src} alt={alt ?? ''} {...props} />;
+  }
+  return (
+    <MarkdownLocalMedia
+      href={src}
+      kind={kind}
+      label={alt ?? ''}
+      workspacePath={fileAction?.workspacePath ?? null}
+    />
+  );
+};
+
 const Markdown = memo(function Markdown({ children, compact = false, preserveNewlines = false, raw = false, basePath, workspacePath = null, streaming = false }: MarkdownProps) {
   // Skip preprocessing for raw mode (file preview) - preprocessing is for streaming chat messages.
   // In raw mode, convert YAML frontmatter to a fenced code block for proper rendering.
@@ -603,10 +756,15 @@ const Markdown = memo(function Markdown({ children, compact = false, preserveNew
   // while basePath is only used to resolve relative `<img src>` against the
   // doc's own location.
 
-  // Merge img handler when basePath is provided (for resolving relative image paths)
-  // Use == null to allow empty string basePath (root-level files)
+  // Merge img handler: file-preview mode (basePath set) resolves relative
+  // `<img src>` against the doc's dir via MarkdownImage; chat mode (basePath
+  // null) routes local/relative paths through MarkdownLocalMedia (absolute
+  // local + workspace-relative), absolute URLs stay browser-default.
+  // Use == null to allow empty string basePath (root-level files).
   const components = useMemo(() => {
-    if (basePath == null) return markdownComponents;
+    if (basePath == null) {
+      return { ...markdownComponents, img: MarkdownImg };
+    }
     return {
       ...markdownComponents,
       img: (props: React.ImgHTMLAttributes<HTMLImageElement>) => (

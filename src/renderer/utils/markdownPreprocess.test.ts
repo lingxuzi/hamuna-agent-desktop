@@ -99,4 +99,28 @@ describe('preprocessMarkdownContent', () => {
       expect(preprocessMarkdownContent(input)).toBe(input);
     });
   });
+
+  describe('Windows drive-letter paths in link destinations', () => {
+    test('percent-encodes the drive colon in a backslash path', () => {
+      expect(preprocessMarkdownContent('[x](C:\\Users\\a\\b.png)')).toBe('[x](C%3A\\Users\\a\\b.png)');
+    });
+
+    test('percent-encodes the drive colon in a forward-slash path', () => {
+      expect(preprocessMarkdownContent('[x](C:/Users/a/b.png)')).toBe('[x](C%3A/Users/a/b.png)');
+    });
+
+    test('encodes inside markdown image syntax too', () => {
+      expect(preprocessMarkdownContent('![pic](D:\\shot.png)')).toBe('![pic](D%3A\\shot.png)');
+    });
+
+    test('leaves plain-text drive mentions alone (not a link destination)', () => {
+      const input = '把文件放 C: 盘根目录';
+      expect(preprocessMarkdownContent(input)).toBe(input);
+    });
+
+    test('does not touch http(s) URLs or mailto links', () => {
+      expect(preprocessMarkdownContent('[site](https://example.com/a.png)')).toBe('[site](https://example.com/a.png)');
+      expect(preprocessMarkdownContent('[mail](mailto:hi@example.com)')).toBe('[mail](mailto:hi@example.com)');
+    });
+  });
 });

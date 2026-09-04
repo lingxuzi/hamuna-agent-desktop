@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - 内置 npm 插件安装默认走国内镜像 `registry.npmmirror.com`（阿里官方 npm 镜像），加速大陆 Windows/macOS 用户下载；用户已通过 `npm_config_registry` 环境变量或 `~/.npmrc` 显式指定 registry（如公司内网源）时尊重用户配置不覆盖。系统 npm 安装分支不动（归属用户自身环境）。
+- 消息页 Markdown 媒体渲染：指向图片（png/jpg/gif/webp/svg/avif/bmp）或视频（mp4/webm/ogg/mov/m4v）的链接直接渲染为 `<img>` / `<video controls>`，不再只是超链接；同一行 2 个以上媒体用响应式 grid 排列（`grid-cols-2 sm:grid-cols-3`）。raw HTML `<video>`/`<audio>`（rehype-raw）也放行并带控件。
+- 本地图片/视频路径渲染：绝对本地路径（`/…`、`C:\…`、`~/…` 自动展开家目录）与工作区相对路径（`docs/a.png`）在消息 Markdown 中直接渲染为图片/视频（经 Rust `cmd_workspace_*` 读取 blob，符合工作区文件 IO 红线）；读取失败回退为可点击链接。Windows 盘符路径的冒号在预处理层做百分号编码（micromark 会把 `C:` 当非法 URI scheme 而把整个 destination 解析为空 href）。
 
 ### Added
 - 新增 3 个 RSS 策展新闻工具 (`get_news` / `news_sync_status` / `news_list_sources`)，挂在 `easy-tdx` MCP server 内 (现有 stock-datasource 一并暴露，共 22 个工具)。12 行业 (ai/semi/robot/auto/energy/bio/space/security/tech/consumer/macro/science) / ~108 个 tier-1 一手源；`main()` 启动时 daemon thread 后台 fire-and-forget 同步到 `~/.easy_tdx/news.db`。redline 关键词（赌博/加密/色情 ~26 个）入库前过滤；TTL 7 天滚动。
