@@ -145,6 +145,17 @@
 
 ## 3. 当前 TODO（待完成）
 
+### TODO #24: 🔄 进行中 — 创建 agent 时 seed 空 `.claude/settings.json` 占位（用户拍板：仅空白占位，验证管线）
+
+- **需求**（Q&A：desktop 的 Claude Code / Agent SDK 全局配置在哪）：内置 Sidecar 用 `buildSettingSources()` 只返回 `['project']`（`agent-session.ts:3468`），**刻意不读 `~/.claude/settings.json`**（会破坏 Anthropic OAuth Keychain）；SDK 唯一读取的项目级配置源 = `<workspace>/.claude/settings.json`。全仓库**没有任何运行时自动生成它**——`projectSettingsService.ts` 的 `saveProjectSettings` 无调用方（且用 `@tauri-apps/plugin-fs`，scope 只覆盖 `~/.hamuna/**`，工作区路径本就会失败——可能是它从未接线的真因）。
+- **用户已拍板**：创建 agent 时 seed 空 `{}` 占位（不填 permissions/env/hooks，那些归产品 config pipeline），验证写入管线可用。
+- **落点**：
+  - Rust `src-tauri/src/workspace_files/memory_rules.rs` 新增 `ensure_claude_settings(workspace_path) -> Result<bool>` + tauri command `cmd_ensure_claude_settings`——复用 `validate_workspace_root` / `resolve_inside_workspace` / `ensure_plain_dir`（path_safety 单 chokepoint + symlink 拒写）。文件已存在（含 symlink）→ 不动返 `false`；不存在 → `create_new` 写 `{}\n` 返 `true`。
+  - `lib.rs` 注册 command（memory_rules 命令组旁边）。
+  - 渲染端 `ConfigProvider.addProject` 的 agent 创建分支 fire-and-forget `invoke('cmd_ensure_claude_settings', { workspacePath: project.path })`（工作区可能未 materialize，失败静默）。
+- **测试**：Rust 2 单测（创建空占位 / 保留已存在内容），风格对齐 `make_test_workspace`。
+- **状态**：⏳ 待实现。**未 commit**。
+
 ### TODO #14: 🔄 进行中 — 用 TypeGraph 重构知识库功能（设计完成，待实现）
 
 - **需求**：用户要求「使用 typegraph 框架重构知识库功能」，并经 context7 确认框架为 `/nicia-ai/typegraph`（TS-first 嵌入式知识图谱库）。
@@ -1134,3 +1145,259 @@ Naive 删除会把整个 `{type:"string", description:"…"}` object 一起删�
 4. 现有 37 个 stripSchemaDescriptions 单元测试全绿（覆盖 #325 原 fix 不退化）
 
 **变更**：src/server/openai-bridge/translate/request-responses.ts（1 行逻辑修改 + 注释更新），src/server/openai-bridge/translate/request-responses.unit.test.ts（+2 回归测试）。**handler.ts [DIAG #325] 块**未删——保留用于将来相同症状出现时再次定位。
+
+---
+
+### TODO #11: ✅ 已完成 — `tvc-director` skill 多 agent 拆分（参考 AdCraft 协作模式）
+
+`bundled-skills/tvc-director/` 原是单文件 556 行 SKILL.md，承担 13 个 Phase 的完整执行细节（brief / strategy / shot-planning / asset-storyboard / voiceover / product-action / food-flavor / packshot / video-prompt / qc）。问题：(a) 单 SKILL.md 上下文太重，每次进入都要重读所有阶段；(b) 触发粒度粗，"只想做 brief 提案"也要拉全流程；(c) 风格库（brand-manifesto / cinematic-food / one-take 等 6 类）只是平铺文档，无统一入口。**目标**：参考 `/home/hmcz/Projects/AdCraft/apps/api/agent/skills/` 模式，拆成"编排入口 + 10 协作 agent + 6 风格库"三层架构，单一契约权威 `agent-capabilities.json`。
+
+**架构决策**：
+1. **拆分粒度** —— 10 个 agent 贴近 AdCraft 的密度，每个 agent 负责一个 Phase 输出域
+2. **tvc-director 角色** —— 瘦身为 orchestrator，只保留调度顺序 + 全局铁律 + Agnes 工具决策树 + 目录规范；所有执行细节下沉到 agent
+3. **风格库** —— 新建 `tvc-style-*/` 子目录统一 6 类风格（brand-manifesto / industrial-product / cinematic-food / product-promo / one-take / beat-synced），按 `Use X as creative grammar` 8 行 SKILL.md 模板
+4. **references 归属** —— `references/` 23 个文件**全留** `tvc-director/references/`（方案 A），agent 通过 Inputs 引用，避免拆出去导致 15+ 跨引用路径漂移
+5. **契约权威** —— 引入 3 项 AdCraft 风格机制：(a) `agent-capabilities.json` 机器读契约（contract_version + 10 agents + 6 styles + 10-step workflow + global_redlines）；(b) `scripts/verify-tvc-bundle.sh` 自动校验（74 项检查：JSON 合法 / agent 目录存在 / SKILL.md frontmatter 完整 / Purpose+Inputs+Do Not 三段必备 / references_on_demand 全部可达 / workflow step 与 agent 一致）；(c) `agent-capabilities.md` 人读速查表
+
+**10 协作 agent（按 Phase 顺序）**：
+- `tvc-agent-brief` (Step 1, 强门)
+- `tvc-agent-strategy` (Step 2, 强门)
+- `tvc-agent-shot-planning` (Step 3, 弱门)
+- `tvc-agent-asset-storyboard` (Step 4, 强门)
+- `tvc-agent-voiceover` (Step 5, 强门)
+- `tvc-agent-product-action` (Step 6, 弱门)
+- `tvc-agent-food-flavor` (Step 7, 弱门, 仅食品)
+- `tvc-agent-packshot` (Step 8, 弱门)
+- `tvc-agent-video-prompt` (Step 9, 弱门)
+- `tvc-agent-qc` (Step 10, 自检)
+
+每个 agent SKILL.md 遵循 5 段式：Purpose / Inputs / Output Guidance / Prompt Rules / Do Not + 前置 frontmatter（skill_id + name + description）。
+
+**验证结果**：`bash scripts/verify-tvc-bundle.sh` → **75 PASS / 0 FAIL / 0 WARN**。
+
+**变更清单**（未 commit）：
+- `bundled-skills/tvc-director/agent-capabilities.json`（新增，约 140 行契约）
+- `bundled-skills/tvc-director/agent-capabilities.md`（新增，人读速查）
+- `bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh`（新增，bash + jq 校验脚本）
+- `bundled-skills/tvc-director/SKILL.md`（重写为 orchestrator，556 行 → 226 行）
+- `bundled-skills/tvc-director/README.md`（重写，反映多 agent 架构）
+- `bundled-skills/tvc-agent-brief/SKILL.md` ... `tvc-agent-qc/SKILL.md`（新增 10 个协作 agent）
+- `bundled-skills/tvc-style-brand-manifesto/SKILL.md` ... `tvc-style-beat-synced/SKILL.md`（新增 6 个风格库）
+
+**scope 备注**：
+- `tvc-director/references/` 23 个文件**全部保留**未改动；agent 通过 `references_on_demand` 字段按需引用
+- `tvc-director/evals/` 保留未改动（评估脚本独立目录）
+- AdCraft 的 4 项 Python 服务能力（orchestrator runtime / context byte budget / required_skill binding / provider-specific tool whitelist）**未引入**——sidecar 是 Node + TS，无 Python runtime；context byte budget 由 SDK 自身管理；required_skill 由 `references_on_demand` 替代
+- `verify-tvc-bundle.sh` 是软约束（exit 0/1 + log），CI gate 由后续 PR 接入（add when：CI lint 阶段需要 bundle 一致性门时）
+
+**未 commit** —— 19 文件改动 + 本 snapshot。
+
+### TODO #12: ✅ 已完成 — 引入 AdCraft propose/revise + materialize 模式到 tvc-agent-strategy / tvc-agent-asset-storyboard
+
+延续 #11 的多 agent 拆分，进一步吸收 AdCraft `OperationDescriptor` 中的两个高频模式：
+
+1. **`propose_*_options` → `revise_*_options` 双 op**（AdCraft 9 个 capability 都各有一对，registry.ts:85-97）
+2. **`materialize_*` 物化节点**（`materialize_quick_media` / `materialize_storyboard_segment`，registry.ts:107-120）
+
+### 改动 1：`tvc-agent-strategy` 拆分 Phase 1 (propose) + Phase 2 (revise)
+
+原 SKILL.md 把"3 route + hook + 用户确认"塞在单一 Output Guidance 一段里，没有显式建模两步的 handoff。改后：
+
+- **Phase 1 · Propose** —— 输出 `routes: [...]` YAML + `recommendation: route_X`，**显式 stop and wait for user selection**
+- **Phase 2 · Revise** —— 用户选定后，重写选定 route 为 shippable（含具体 shot 锚点）+ 0-3s hook 设计
+- 新增 Do Not：**Phase 2 不允许与 Phase 1 同一回复内执行**（强制等用户回复）
+- 新增 Prompt Rule：**Phase 2 revise 必须加 concrete shot anchors**（Phase 1 的 prose-only proposals 不可直接 ship）
+
+### 改动 2：`tvc-agent-asset-storyboard` 拆分 Phase 1/2 (propose) + Phase 3 (materialize)
+
+原 SKILL.md 把"asset 生成 + 故事板 + final.png"压在单一 Output Guidance，没有显式 materialize 节点。改后三段：
+
+- **Phase 1 · Asset Generation** —— 输出 assets YAML（product / character / scene_no_product / scene_with_product），缺 product 参考图**硬阻塞**
+- **Phase 2 · Storyboard Compilation** —— 3×3 clay-maquette + video vein 在 panel 描述**之前**
+- **Phase 3 · Materialization（强门）** —— 把 `storyboard-composite.png` 复制到 `outputs/<项目标识>/images/storyboard-final.png`，**生成 manifest + .lock 文件**，等 `storyboard_final_confirmed` 才放手
+- 新增 Do Not：禁止写 `outputs/images/` bundle 根；禁止 tvc-agent-video-prompt 在 Phase 3 强门前启动
+
+### 验证
+
+`bash scripts/verify-tvc-bundle.sh` → **75 PASS / 0 FAIL / 0 WARN**（与拆分前一致，frontmatter / Purpose+Inputs+Do Not / references_on_demand 全部仍然 reachable）。
+
+### scope 备注
+
+- AdCraft 的 `max_skill_context_bytes: 8192` / `decide_next_action` LLM 路由 / `RunBudget` deadline 表 / `submit_structured_result` 单工具 4 项**未引入**——本项目是固定 orchestrator 调度（不是 LLM 自路由），且 Claude SDK 自身管上下文，无需 byte budget
+- `tvc-director/SKILL.md` 未改动（orchestrator 视角不变）
+- `agent-capabilities.json` / `agent-capabilities.md` / `README.md` 未改动（契约层稳定）
+
+**未 commit** —— 2 文件改动（`tvc-agent-strategy/SKILL.md` +30 行、`tvc-agent-asset-storyboard/SKILL.md` +45 行）+ 本 snapshot。
+
+### TODO #13: ✅ 已完成 — 规范完整 workflow（orchestrator + 10 agent 对齐 6 维度）
+
+把 orchestrator 视角的 workflow 规范（gate / skip_when / block_until / confirmation block）下沉到 10 个 agent SKILL.md，让每个 agent 独立可读时也具备完整 workflow 上下文。
+
+**6 维度对齐**：
+1. **触发语义** —— orchestrator workflow table 7 列（Step / Agent / Gate / Block until / Skip when / Phase count / State envelope）
+2. **阶段拆解** —— 多 phase agent（strategy 2 phases、asset-storyboard 3 phases）显式建模 phase name；其他 8 个 phase count=1
+3. **门控** —— strong / weak / self_check 三档，每个 agent 在 Workflow Context 声明自己的 gate
+4. **状态交接** —— §12 新增统一信封 schema（envelope_type + status + artifact + next_step + gate + skip_reason + failure + produced_at）
+5. **失败停机** —— §13 新增 failure_report schema（failed_step/agent/phase/code/message/completed_artifacts/recoverable/remediation_hint）+ recovery 策略（recoverable=true 续跑 vs false 回退到上一个 strong gate）
+6. **输出信封** —— 每个 agent 的 `## Workflow Context` 末尾声明 envelope_type 名称 + artifact keys
+
+### 矛盾发现 + 修复
+
+`tvc-agent-food-flavor/SKILL.md` 原 Do Not 写「Do not skip this agent for non-food products」与 orchestrator 的 `skip_when: non_food_product` **直接矛盾**。修复：Do Not 改为「Do not run this agent for non-food products — orchestrator handles the skip via `workflow.skip_when`」，与 orchestrator 对齐；同步在 Workflow Context 声明 skip 行为（`skipped: true + skip_reason: 'product_category_non_food'`）。
+
+### 改动清单
+
+**Orchestrator（1 文件）**：
+- `bundled-skills/tvc-director/SKILL.md` —— workflow table 升级为 7 列；新增 §12 状态交接信封 schema；新增 §13 失败停机 schema；frontmatter 加 `skill_id: tvc-director`
+
+**10 agent SKILL.md**：
+- 每个文件新增 `## Workflow Context` section（6 子条目：Step / Gate / Block until / Skip when / Phase count / State envelope / On failure / Confirmation block 引用）
+- `tvc-agent-food-flavor` 同步修复 Do Not 矛盾
+
+**校验脚本（1 文件）**：
+- `bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh` —— 新增检查项 5（每个 agent 有 `## Workflow Context`）+ 检查项 5b（Workflow Context 含 Step / Gate / State envelope / On failure 4 个必填子键）
+
+**文档（1 文件）**：
+- `bundled-skills/tvc-director/README.md` —— 10 步调度表升级为 7 列 + 引用 SKILL.md §12-§13
+
+### 验证
+
+`bash scripts/verify-tvc-bundle.sh` → **85 PASS / 0 FAIL / 0 WARN**（相比上版 +10 检查项，全部为新加的 Workflow Context 校验）。
+
+### scope 备注
+
+- 状态信封的 YAML schema **未** 抽出为独立 `state-envelope.schema.json`（留作后续 PR；当前 SKILL.md 内联已能让 AI 严格按格式输出）
+- `agent-capabilities.json` **未**改（契约字段稳定；agent 的 Workflow Context 是文档层扩展，不进入 JSON）
+- 6 个 tvc-style-* SKILL.md **未**改（它们是 Inputs 而非 workflow 节点）
+- `references/` 23 文件 **未**改
+
+**未 commit** —— 13 文件改动（1 orchestrator + 10 agent + 1 verify + 1 README）+ 本 snapshot。
+
+---
+
+### TODO #14: 🚧 进行中 — tvc-director 彻底合并 + 资产生成硬约束（cheatsheet + pre-gen confirmation）
+
+延续 #11-#13，把 `tvc-agent-*`（10 个）和 `tvc-style-*`（6 个）从独立 skill 目录**彻底合并**进 `tvc-director/`，同时引入**资产提示词速查表**（cheatsheet）+ **生成前确认门**（pre-gen confirmation）。
+
+**两项核心改动**：
+1. **方案 B 物理合并**：16 个独立 skill 目录 → `tvc-director/agents/<short>.md` + `tvc-director/styles/<short>.md`（扁平文件，无 frontmatter）。AI 不再能独立触发 `tvc-agent-brief` 等子 skill；只能通过 `tvc-director` 编排入口进入。
+2. **Pre-Generation Confirmation Gate**：每次 MCP 生成调用（`agnes_image_*` / `agnes_video_*` / `edge-tts.text_to_speech`）前**必须**先向用户展示 prompt + reference images，等用户确认后才执行。失败必 grilling，无降级。
+
+### 路径映射表（git mv 保险）
+
+| # | 原路径 | 新路径 | 改动 |
+|---|--------|--------|------|
+| 1 | `bundled-skills/tvc-agent-brief/SKILL.md` | `bundled-skills/tvc-director/agents/brief.md` | 删 frontmatter |
+| 2 | `bundled-skills/tvc-agent-strategy/SKILL.md` | `bundled-skills/tvc-director/agents/strategy.md` | 删 frontmatter |
+| 3 | `bundled-skills/tvc-agent-shot-planning/SKILL.md` | `bundled-skills/tvc-director/agents/shot-planning.md` | 删 frontmatter |
+| 4 | `bundled-skills/tvc-agent-asset-storyboard/SKILL.md` | `bundled-skills/tvc-director/agents/asset-storyboard.md` | 删 frontmatter + Phase 2 接入段落拆分 + pre-gen |
+| 5 | `bundled-skills/tvc-agent-voiceover/SKILL.md` | `bundled-skills/tvc-director/agents/voiceover.md` | 删 frontmatter + pre-gen edge-tts |
+| 6 | `bundled-skills/tvc-agent-product-action/SKILL.md` | `bundled-skills/tvc-director/agents/product-action.md` | 删 frontmatter |
+| 7 | `bundled-skills/tvc-agent-food-flavor/SKILL.md` | `bundled-skills/tvc-director/agents/food-flavor.md` | 删 frontmatter |
+| 8 | `bundled-skills/tvc-agent-packshot/SKILL.md` | `bundled-skills/tvc-director/agents/packshot.md` | 删 frontmatter |
+| 9 | `bundled-skills/tvc-agent-video-prompt/SKILL.md` | `bundled-skills/tvc-director/agents/video-prompt.md` | 删 frontmatter + pre-gen per segment |
+| 10 | `bundled-skills/tvc-agent-qc/SKILL.md` | `bundled-skills/tvc-director/agents/qc.md` | 删 frontmatter |
+| 11 | `bundled-skills/tvc-style-brand-manifesto/SKILL.md` | `bundled-skills/tvc-director/styles/brand-manifesto.md` | 删 frontmatter + Asset Prompt Adapt |
+| 12 | `bundled-skills/tvc-style-industrial-product/SKILL.md` | `bundled-skills/tvc-director/styles/industrial-product.md` | 删 frontmatter + Asset Prompt Adapt |
+| 13 | `bundled-skills/tvc-style-cinematic-food/SKILL.md` | `bundled-skills/tvc-director/styles/cinematic-food.md` | 删 frontmatter + Asset Prompt Adapt |
+| 14 | `bundled-skills/tvc-style-product-promo/SKILL.md` | `bundled-skills/tvc-director/styles/product-promo.md` | 删 frontmatter + Asset Prompt Adapt |
+| 15 | `bundled-skills/tvc-style-one-take/SKILL.md` | `bundled-skills/tvc-director/styles/one-take.md` | 删 frontmatter + Asset Prompt Adapt |
+| 16 | `bundled-skills/tvc-style-beat-synced/SKILL.md` | `bundled-skills/tvc-director/styles/beat-synced.md` | 删 frontmatter + Asset Prompt Adapt |
+
+**映射规则**：`<skill_id_without_prefix>` 即原 `tvc-agent-X` 或 `tvc-style-X` 去掉前缀后的部分。
+
+### Q1-Q27 决策清单
+
+| Q# | 决策 | 落地位置 |
+|----|------|---------|
+| Q1 | 抽 cheatsheet | `references/asset-prompting-cheatsheet.md` |
+| Q2 | 4 类 mandatory（产品/角色/场景/故事板） | cheatsheet §1-4 |
+| Q3 | 版本号 + reference 互链 | cheatsheet frontmatter + 4 reference 文件 |
+| Q4 | 6 个 tvc-style-* 加 Asset Prompt Adapt | styles/*.md |
+| Q5 | 失败停 + 问用户 | cheatsheet §5 |
+| Q6 | cheatsheet 4×6 结构（H3 子段） | cheatsheet 各章节 |
+| Q7 | 4 类主体差异化（人物/动物/物品/抽象） | cheatsheet §2 |
+| Q8/Q12/Q12b/Q19 | 段落分镜自适应网格 + 拆分算法 | asset-storyboard.md Phase 2 + cheatsheet §4 + orchestrator §16 |
+| Q9 | 图片 base64 / 视频 URL | cheatsheet 各章 Mandatory + img-upload-utility.md |
+| Q10 | 任意节点失败 grilling，无降级 | orchestrator §15.2 |
+| Q11 | cheatsheet §1-3 → asset_generation, §4 → storyboard_compilation | cheatsheet 章节序 + orchestrator §3 |
+| Q13 + Q26 | partial 保留 + 4 选项 grilling (retry_same/revise_prompt/retry_revised/abort_step) | cheatsheet §5 |
+| Q14 | base64 不落盘，成品 PNG 落 workspace | cheatsheet Mandatory |
+| Q16 | cheatsheet 每章 6 段 schema | cheatsheet |
+| Q17 | tvc-style-* transform schema (replace/append/remove) | styles/*.md Asset Prompt Adapt |
+| Q18 | verify 36 项检查（4×6 + 6 styles） | verify §11 |
+| Q20-23 | 方案 B 合并：删 frontmatter + 扁平 .md + JSON 删 skill_id 加 internal_path | agents/styles + agent-capabilities.json |
+| Q24-27 | Pre-Gen Confirmation YAML block + Step 9 gate strong + 4 选项 + 2 failure code | cheatsheet + 4 agents + orchestrator |
+
+### 预期 verify 结果
+
+**113 PASS / 0 FAIL / 0 WARN**（85 现有 - 8 旧路径检查删除 + 36 cheatsheet 新增 = 113）
+
+### scope 备注
+
+- 本次未 commit 任何文件 —— 30 文件改动（含 mv + 删 frontmatter）+ 16 空目录 `git rm` 待拍板提交
+- 段落分镜拆分算法（Q19）的具体边界：默认 `ceil(T/10)` 段、每段向上取整到 5s 倍数；用户可在 Step 4 Phase 2 手动覆盖
+- Pre-Gen Confirmation 按 Q24 推荐「Phase + 调用单元聚合」（10-15 次 per TVC），不按每次 MCP 调用问
+- 失败 4 选项的默认行为：retry_same（60%）/ revise_prompt（25%）/ retry_revised（10%）/ abort_step（5%），AI 默认 retry_same
+- agent-capabilities.json 的 contract_version 保持 1（向下兼容），agent 字段结构调整（删 skill_id, 加 internal_path, Step 9 gate 升 strong）
+
+**进行中** —— 30 文件改动待落盘 + 16 空目录 `git rm` + 本 snapshot。
+
+---
+
+## ✅ TODO #14 已完成 — tvc-director 彻底合并 + 资产生成硬约束落地
+
+**实际完成时间**：2026-09-06
+**verify 结果**：113 PASS / 0 FAIL / 0 WARN（85 现有基线 - 8 旧路径检查删除 + 36 cheatsheet 新增 = 113 ✓）
+
+### 完成清单
+
+| # | 任务 | 文件数 | 状态 |
+|---|------|-------|------|
+| 1 | snapshot.md 路径映射表 | 1 | ✓ |
+| 2 | 创建 cheatsheet（4 H2 × 6 H3 + Failure Recovery） | 1 | ✓ |
+| 3 | mv + 去 frontmatter 16 文件（10 agents + 6 styles）| 16 | ✓ |
+| 4 | 4 references 加 cheatsheet 互链 | 4 | ✓ |
+| 5 | 4 agents 加 Pre-Generation Confirmation Gate | 4 | ✓ |
+| 6 | orchestrator 加 §14 + §15 + Step 9 gate strong | 1 | ✓ |
+| 7 | agent-capabilities.json/.md 加 internal_path + 修 food-flavor do_not 矛盾 | 2 | ✓ |
+| 8 | 重写 verify §11（36 项 cheatsheet 完整性）| 1 | ✓ |
+| 9 | README v0.3 schema 更新 | 1 | ✓ |
+| 10 | 删 16 空源目录 + 跑 verify | 16 + 0 | ✓ |
+
+**总文件改动**：31 个文件（创建 1 + 修改 14 + 移动 16）
+**空目录清理**：17 个（16 tvc-agent/tvc-style + 1 tvc-director/evals）
+
+### 关键架构变更
+
+1. **物理合并**：`bundled-skills/tvc-{agent,style}-*/` 16 个独立 skill 目录 → `tvc-director/{agents,styles}/<short>.md` 扁平文件（无 frontmatter）。AI 不再能独立触发子 skill；只能通过 `tvc-director` 编排入口进入。
+2. **Step 9 gate 升级**：`weak` → `strong`（block_until: `video_prompts_confirmed`）
+4. **Pre-Generation Confirmation Gate（§14）**：每次 MCP 生成调用（Step 4/5/6/9）必先向用户展示 prompt + reference images + 预期输出，等用户确认后才执行。禁止降级 / 禁止跳过 / 禁止用旧资产。
+5. **Adaptive Storyboard Grid（§15）**：故事板按 segment 时长自适应选择网格（≥10s → 3×3；5s~<10s → 2×2；<5s → 首尾帧）。
+6. **Cheatsheet（24 references）**：`asset-prompting-cheatsheet.md` 成为资产生成提示词权威来源（4 类资产 / 6 段 schema / Failure Recovery 4 选项）。
+7. **修矛盾**：`food-flavor` do_not 从「Do not skip」改为「Do not run for non-food」（与 workflow.skip_when 一致）。
+
+### 未 commit 提示
+
+本批改动（31 文件 + 17 目录清理）尚未 commit。建议执行：
+
+```bash
+git add bundled-skills/tvc-director/
+git rm -r --cached bundled-skills/tvc-agent-* bundled-skills/tvc-style-*
+git commit -m "refactor(tvc-director): merge 16 sub-skills + cheatsheet + pre-gen gate
+
+彻底合并 16 个独立 tvc-agent-*/tvc-style-* 目录到 tvc-director/{agents,styles}/。
+扁平 .md 文件、无 frontmatter；agent-capabilities.json 新增 internal_path 字段。
+
+新增 / 变更：
+- references/asset-prompting-cheatsheet.md (4 H2 × 6 H3 + Failure Recovery)
+- SKILL.md §14 Pre-Generation Confirmation Gate（每次 MCP 生成前必用户确认）
+- SKILL.md §15 Adaptive Storyboard Grid（按 segment 时长自适应网格）
+- Step 9 (tvc-agent-video-prompt) gate weak → strong
+- 4 agents (asset-storyboard/voiceover/video-prompt/product-action) 加 Pre-Generation Confirmation Gate
+- 4 references (asset-standards/agnes-prompting/product-image-anchor/storyboard-style) 加 cheatsheet 互链
+
+verify: 113 PASS / 0 FAIL（85 旧基线 - 8 旧路径检查 + 36 cheatsheet 36 项新增）"
+```
+
+⚠️ 建议先用 `git status` 检查工作区没有混入他人未提交改动（仓库并发 writer 常态），再分批提交。

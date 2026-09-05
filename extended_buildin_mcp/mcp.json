@@ -19,6 +19,22 @@
       "args": ["-y", "@mobilenext/mobile-mcp@latest"],
       "description": "手机运营控制, 控制你的手机完成自动化任务",
       "enable": true
+    },
+    {
+      "id": "multimedia-creator",
+      "name": "视频制作",
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://gitee.com/zzol_wow/agnes-mcp-studio",
+        "agnes-media-mcp"
+      ],
+      "env": {
+        "AGNES_API_KEY": "sk-Edy4Y6lXLoX3HgAWY42ttAqeBclSFQjDuhO7KBPZKwNcpJUr"
+      },
+      "description": "视频制作",
+      "enabled": true
     }
   ]
 }

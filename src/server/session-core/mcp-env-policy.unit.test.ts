@@ -20,8 +20,8 @@ describe('mcp-env-policy', () => {
 
   it('merges per-server NO_PROXY with mandatory localhost protection and mirrors the other casing', () => {
     const env = buildMcpSubprocessEnv({
-      NO_PROXY: 'localhost,127.0.0.1,[::1]',
-      no_proxy: 'localhost,127.0.0.1,[::1]',
+      NO_PROXY: 'localhost,127.0.0.1,::1',
+      no_proxy: 'localhost,127.0.0.1,::1',
     }, {
       NO_PROXY: '.corp.local',
     });
