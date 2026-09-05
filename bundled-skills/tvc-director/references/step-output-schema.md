@@ -19,7 +19,7 @@
 
 ---
 
-## §0. 统一 Envelope Schema（所有 10 步共用）
+## §0. 统一 Envelope Schema（所有 11 步共用）
 
 每一步完成时输出**一个** envelope（JSON object）。schema：
 
@@ -223,8 +223,12 @@
     {
       "block_id": "block_01",
       "range": "0-10s",
-      "grid": "3x3",
+      "layout_type": "grid",
+      "visual_style_anchor": "tvc-style-cinematic-food",
+      "character_setup": "[Character Lock: 28-34 female, East Asian, slim build, shoulder-length black hair, white shirt + dark jeans; face anchor: small mole on left cheek]",
+      "vein": "Opens with product micro-rotation, continues with character interaction, closes with emotional peak.",
       "grid_path": "workspace/tvc-pet-airpurifier-0905/storyboard/block-01-grid.png",
+      "references": ["product-hero", "scene-kitchen"],  // v0.7：每 block 精挑的 ref 子集，引用 envelope 顶层 references[].name（不重复 base64）
       "panels": [
         {
           "panel_id": "01",
@@ -234,7 +238,33 @@
           "core_action": "product spinning micro-rotation",
           "color_light": "studio white 5600K + rim amber",
           "mood_keyword": "premium",
+          "shot_type": "extreme-close-up",
+          "character_emotion": "focused",
+          "sound_effect": "ambient",
           "preview_svg_inline": "<svg>...</svg>"    // optional：renderer 直接渲染
+        }
+      ]
+    },
+    {
+      "block_id": "block_02",
+      "range": "10-20s",
+      "layout_type": "action-keyframes",
+      "visual_style_anchor": "tvc-style-cinematic-food",
+      "character_setup": "[Character Lock: 28-34 female, ...]",
+      "vein": "Action climax sequence.",
+      "grid_path": "workspace/tvc-pet-airpurifier-0905/storyboard/block-02-grid.png",
+      "panels": [
+        {
+          "panel_id": "01",
+          "time_range": "10.0-11.5s",
+          "shot_type": "medium",
+          "character_emotion": "determined",
+          "sound_effect": "whoosh",
+          "framing": "character mid-action",
+          "camera": "tracking follow",
+          "core_action": "character lifts lid",
+          "color_light": "warm 3200K",
+          "mood_keyword": "climax"
         }
       ]
     }
@@ -245,8 +275,34 @@
 }
 ```
 
-**必填字段**：`blocks[]`、`blocks[].grid` ∈ {`3x3`, `2x2`, `2up`}、`composite_path`
-**renderer 提示**：每个 block 自适应渲染对应 grid；current block 高亮 caution amber 边框
+**必填字段**：
+- `blocks[]` — 1+ 个 block
+- `blocks[].block_id` — `block_01` / `block_02` / ...（与 cheatsheet §4.4 段数对齐）
+- `blocks[].layout_type` ∈ {`grid`, `fixed-camera`, `scene-planning`, `top-down-staging`, `action-keyframes`, `narrative-comic`}（v0.5 新增；6 类枚举）
+- `blocks[].visual_style_anchor` — string，引用 `selected_style`（如 `tvc-style-cinematic-food`）
+- `blocks[].character_setup` — string；以 `[Character Lock: ...]` 开头或 `none`（无主角场景）
+- `blocks[].vein` — string，video vein 一段话，先于 panel 描述
+- `blocks[].references[]` — v0.7 新增必填；按 panel 顺序排列的精挑子集，每项是 envelope 顶层 `references[]` 的 `name` 字符串引用（**不**重复 base64）；空数组 `[]` 表示该 block 不消费参考图（纯文字描述）；详见 SKILL §15.7 per-block reference decision
+- `blocks[].panels[]` — 每个 panel 必含 4 项 v0.8 键：
+  - `shot_type` ∈ {`extreme-wide`, `wide`, `medium`, `medium-close-up`, `close-up`, `extreme-close-up`, `over-the-shoulder`, `top-down`, `dutch-angle`}
+  - `character_emotion` ∈ {`calm`, `tense`, `joyful`, `melancholy`, `determined`, `surprised`, `focused`, `anxious`, `exhausted`, `hopeful`, `""`}（product-only 可空字符串）
+  - `sound_effect` ∈ {`dialogue`, `ambient`, `music-beat`, `sfx-impact`, `silence`, `vo-over`, `whoosh`, `crunch`, `sizzle`, `heartbeat`, `breath`, `city-noise`}
+  - `reference_tags[]` — v0.8 新增必填；panel 级精挑子集，每项是 envelope 顶层 `references[].name` 字符串引用；空数组 `[]` 表示该 panel 不消费参考图；缺省 = 继承 block 级 `references[]`（向后兼容，老 envelope 不破）；详见 SKILL §15.7 panel 级精挑
+- `composite_path`
+
+**v0.4 → v0.5 字段迁移**：
+- `blocks[].grid` ∈ {`3x3`, `2x2`, `2up`} **已废弃** → 由 `blocks[].layout_type` 取代（`grid` 类型再按 block 时长自适应选 4×3 / 3×3 / 2×2）
+- `blocks[].grid_path` 保留（仍指向生成的故事板图）
+- 旧字段 `camera` 重命名为 `camera_move`（语义更清晰，与 cheatsheet §4.2 模板对齐）—— v0.5 兼容期同时接受 `camera` / `camera_move`，renderer 优先读 `camera_move`
+
+**renderer 提示**：
+- 每个 block 按 `layout_type` 自适应渲染（CSS class 区分）：`layout-grid` / `layout-fixed-camera` / `layout-scene-planning` / `layout-top-down-staging` / `layout-action-keyframes` / `layout-narrative-comic`
+- block 顶部 chip：`character_setup` 折叠面板（无主角 block 显示 `none`）
+- block 顶部 chip：`visual_style_anchor` + 摄影要点 token（caution amber）
+- block 顶部 chip：`references[]` 引用名（如 `product-hero · scene-kitchen`，hover 显示 envelope 顶层 references[] 中对应条目的 base64 preview）；空数组显示 `none`
+- 每 panel 显示 3 项标注（`shot_type` / `character_emotion` / `sound_effect`）作为 panel footer
+- 每 panel 显示 `reference_tags[]` chip（hover 显示对应 envelope 顶层 references[] 条目 base64 preview）；空数组显示 `inherit: block` 表示继承 block 级 references
+- current block 高亮 caution amber 边框
 
 ---
 
@@ -427,7 +483,21 @@
 ```
 
 **必填字段**：`segments[]`、`segments[].prompt`（自包含，零段间引用）、`storyboard_to_clip_mapping[]`
-**renderer 提示**：segment-queue 列表，每个 segment 卡显示 prompt 折叠预览 + first_frame + 4 选项
+
+**字段来源（与 `agents/video-prompt.md` v0.5 翻译表双向一致）**：
+
+| 字段 | 来源 |
+|------|------|
+| `segments[].prompt` 内的全局风格声明 | `artifact.blocks[].visual_style_anchor`（v0.5 视觉锚点，禁止重新从 `selected_style` 推算） |
+| `segments[].prompt` 内的人设描述 | `artifact.blocks[].character_setup`（v0.5 人设锚点，直接 copy `[Character Lock: ...]`） |
+| `segments[].prompt` 内的 framing / 表演 / 音效 | `artifact.blocks[].panels[].{shot_type, character_emotion, sound_effect}` |
+| `segments[].first_frame_path` 首选 | `artifact.blocks[某 block].grid_path`（v0.5 故事板图，与评审稿同源）；不可用退化 `artifact.composite_path` |
+| `segments[].reference_images[]` | **v0.8 升级**：按本 segment 覆盖 panel 范围精挑 = 合并 panel 级 `panels[].reference_tags[]`（缺省继承 block 级 `blocks[].references[]`）+ 上游 `all_upstream_decisions` 资源 |
+| `storyboard_to_clip_mapping[].panel_ids[]` | `artifact.blocks[某 block].panels[].panel_id` 连续区间 |
+| `storyboard_to_clip_mapping[].segment_id` | `model-and-segmentation-routing.md` 拆段结果 |
+| `storyboard_to_clip_mapping[].time_range` | `artifact.blocks[某 block].panels[].time_range` 合并（min start → max end） |
+
+**renderer 提示**：segment-queue 列表，每个 segment 卡显示 prompt 折叠预览 + first_frame + 4 选项 + **"storyboard source" 小 chip 区**（`block_id` + 覆盖 `panel_ids[]` + `grid_path` basename + `panel_reference_tags[]` 合并列表，让用户一眼看出"segment ↔ panel ↔ ref"对应关系）
 
 ---
 
@@ -454,20 +524,96 @@
     "no_three_consecutive_without_product": true,
     "storyboard_final_confirmed": true,
     "no_banned_soft_words": false,
-    "product_drives_cause": true
+    "product_drives_cause": true,
+    "character_setup_consistency": true,
+    "visual_style_anchor_consistency": true,
+    "panel_id_unique": true
   }
 }
 ```
 
 **必填字段**：`dimensions[8]`（允许 `score: null` 表示跳过）、`verdict` ∈ {`pass`, `pass-with-remarks`, `block`}、`global_redlines_status`
-**renderer 提示**：8 个 dimension 横向 8 列 + verdict 大字 + global_redlines 5 项 ✓/✗ chip
+**renderer 提示**：8 个 dimension 横向 8 列 + verdict 大字 + global_redlines 8 项 ✓/✗ chip
+
+**`global_redlines_status` 8 项定义**（v0.8 新增 3 项）：
+
+| Key | Check | 来源 |
+|-----|-------|------|
+| `product_screen_share_gte_70` | 产品出镜率 ≥ 70% | 老 |
+| `no_three_consecutive_without_product` | 连续 3 个 panel 不无产品 | 老 |
+| `storyboard_final_confirmed` | `storyboard-final.png` 用户已确认 | 老 |
+| `no_banned_soft_words` | prompt 不含 cinematic / 电影感 等违禁词 | 老 |
+| `product_drives_cause` | 产品是因果驱动（不是纯气氛）| 老 |
+| `character_setup_consistency` | 跨 segment 同主角的 `character_setup` 字面值完全一致（v0.8 自动反漂移校验，详 SKILL §15.8）| v0.8 |
+| `visual_style_anchor_consistency` | 跨 segment `visual_style_anchor` 字面值完全一致（v0.8）| v0.8 |
+| `panel_id_unique` | 同一 `panel_id` 在 `storyboard_to_clip_mapping[]` 不重复出现（v0.8）| v0.8 |
 
 ---
 
-## §11. Widget Routing Table（renderer 用）
+## §11. `script` artifact (Step 0 · tvc-agent-script)
+
+**Widget 变体**: `script-card`
+
+```json
+{
+  "selected_duration": 30,
+  "story_arc": "An ordinary office worker, weighed down by her evening commute, discovers a portable air purifier that transforms her tiny apartment into a clean-air sanctuary — and her posture, breath, and routine follow.",
+  "protagonist": {
+    "archetype": "Everyday urban professional",
+    "hook": "Female, age 28-35, post-work commute, shares a small apartment with a partner"
+  },
+  "conflict": "City air pollution + cramped indoor space leaves her without a true rest environment at home.",
+  "scene_outline": [
+    { "scene_id": "s1", "location": "Subway platform, evening", "situation": "Commuter shoulders slump under fluorescent light; close-up on tired eyes.", "duration_seconds": 8 },
+    { "scene_id": "s2", "location": "Apartment doorway, evening", "situation": "Hero opens door, places purifier on shelf, presses power.", "duration_seconds": 7 },
+    { "scene_id": "s3", "location": "Living room, transformed", "situation": "Air visibly clears; protagonist stretches, exhales, looks out the window with hope.", "duration_seconds": 10 },
+    { "scene_id": "s4", "location": "Packshot", "situation": "Product close-up + tagline overlay.", "duration_seconds": 5 }
+  ],
+  "key_beats": [
+    { "beat_id": "kb1", "label": "commute fatigue", "scene_ref": "s1" },
+    { "beat_id": "kb2", "label": "product reveal", "scene_ref": "s2" },
+    { "beat_id": "kb3", "label": "transformation / emotional peak", "scene_ref": "s3" },
+    { "beat_id": "kb4", "label": "call-to-action", "scene_ref": "s4" }
+  ],
+  "duration_invariant_check": {
+    "sum_scene_duration_seconds": 30,
+    "selected_duration": 30,
+    "drift": 0,
+    "passed": true
+  }
+}
+```
+
+**必填字段**：
+- `selected_duration` ∈ {`15`, `30`, `45`, `60`, `90`, `120`}（整数，单位秒）
+- `story_arc`：1-2 句叙事脊柱，使用 formula `让[受众]在[具体情境]中经历[单一核心冲突]，最终[目标感受]。`
+- `protagonist`：必须含 `archetype`（原型）+ `hook`（具体抓手：年龄/职业/场景）
+- `conflict`：1 句核心张力
+- `scene_outline[]`：至少 2 个 scene，每 scene 必填 `scene_id` / `location` / `situation` / `duration_seconds`；`sum(duration_seconds) == selected_duration`
+- `key_beats[]`：3-6 个 beat；product reveal 与 emotional peak 必须分属不同 beat
+- `duration_invariant_check`：由 agent 在输出前自动计算，`drift == 0 && passed == true` 才能输出 `status: pending_user_confirmation`
+
+**scene 数随时长比例**：15s → 2 场 / 30s → 3 场 / 45s → 4 场 / 60s → 4-5 场 / 90s → 6 场 / 120s → 7-8 场；每场 ≥5s 且 ≤30s。
+
+**强约束（硬约束，下游 agent 禁止漂移）**：`selected_duration` 是总片长上限 + 下限。任何下游 agent（brief / strategy / shot-planning / video-prompt）若提议偏离，必须先 grilling 用户。
+
+**renderer 提示**：
+- Top: 时长 chip（`30s`）+ 状态 chip（pending_user_confirmation）
+- Body: story_arc 大字 + protagonist/conflict 两栏
+- 折叠区：scene_outline 列表（每行 scene_id + location + 时长 progress bar）+ key_beats timeline
+- 底部：duration_invariant_check ✓ 行（自动校验展示）
+
+**校验失败 → failure**：
+- `duration_drift`：`sum(duration_seconds) != selected_duration` → `recoverable: true`，agent 自动重 pack scene
+- `invalid_duration`：用户给了 6 档之外的时长 → `recoverable: true`，orchestrator 重提问
+
+---
+
+## §12. Widget Routing Table（renderer 用）
 
 | artifact_kind | widget 变体 | 数据形状入口 | renderer 路径 |
 |---------------|------------|------------|-------------|
+| `script` | script-card | `artifact.{selected_duration,story_arc,scene_outline,key_beats}` | `widgets/ScriptCard.tsx` |
 | `brief` | brief-card | `artifact.product_summary` | `widgets/BriefCard.tsx` |
 | `routes` | routes-comparison | `artifact.routes` | `widgets/RoutesComparison.tsx` |
 | `shot_plan` | shot-table | `artifact.shot_handoff_table` | `widgets/ShotTable.tsx` |
@@ -483,14 +629,14 @@
 
 ---
 
-## §12. 与既有 §12 State Envelope 的关系
+## §13. 与既有 §12 State Envelope 的关系
 
 - §12 YAML envelope 已**废弃**，由本文件 JSON envelope 取代
 - 兼容层：renderer 在解析失败时可 fallback 到 YAML（warn 但不阻断）
 - **transition 计划**：v0.3 同时支持 JSON + YAML，v0.4 仅 JSON
 - agent-capabilities.json 新增 `artifact_kind` 字段，与 envelope_type 一一对应
 
-## §13. Pre-Gen Confirmation 复用
+## §14. Pre-Gen Confirmation 复用
 
 每个 envelope 的 `prompts[]` 数组是 §14 Pre-Gen Confirmation Gate 的数据源：
 - `prompts[].text` = 要展示给用户的完整 prompt
@@ -498,7 +644,7 @@
 - `prompts[].call_unit` = cheatsheet §5.2 的 4 选项触发单元
 - `prompts[].reference_images` = 参考图列表（与 envelope 顶层 `references[]` 共享 schema）
 
-## §14. 必读互链
+## §15. 必读互链
 
 - 资产提示词规范：[asset-prompting-cheatsheet.md](asset-prompting-cheatsheet.md)
 - 编排规则总览：[../SKILL.md §16](../SKILL.md)

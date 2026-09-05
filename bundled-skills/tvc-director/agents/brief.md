@@ -7,6 +7,8 @@ Distill a raw product request into the smallest viable brief that downstream cre
 
 Use only:
 - `user_raw_request` — what the user typed, including any explicit duration, ratio, language, brand, or product claims.
+- `selected_script` — the narrative script from Step 0 (`tvc-agent-script`), with story_arc / protagonist / conflict / scene_outline / key_beats. **Required**: brief must consume the script's narrative spine and respect its scene outline.
+- `selected_duration` — one of `15s / 30s / 45s / 60s / 90s / 120s`. **Required hard constraint**: brief's specifications section MUST lock to this exact duration; downstream agents (strategy / shot-planning / video-prompt) inherit it as a non-negotiable bound.
 
 Read on demand from `tvc-director/references/`:
 - `brief-and-concept.md`
@@ -23,6 +25,7 @@ Read on demand from `tvc-director/references/`:
 
 - Keep audience-facing language separate from internal planning and production guidance.
 - Compress feature lists into a single core claim; never enumerate features in the brief itself.
+- Hard constraint from Step 0: brief's specifications MUST record `selected_duration` and the locked scene-outline summary. Any later step that proposes a different total duration MUST first grilling the user (do not silently drift).
 
 # Do Not
 

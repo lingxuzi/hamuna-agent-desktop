@@ -1521,4 +1521,460 @@ renderer 实现路径：widget 变体 → SlateboardShell（preview/slateboard-w
 已交付）+ artifact_kind-specific 内部组件
 
 verify: 156 PASS / 0 FAIL / 0 WARN（113 基线 + 43 schema 检查新增）"
+
+---
+
+### TODO #17: 🚧 进行中 — tvc-director 新增 Step 0 pre-step 剧本生成 agent（时长硬约束）
+
+**用户指令**：「加一个剧本生成agent，要求刚开始让用户选择短片时长，根据时长生成剧本，再进行接下来的流程」
+
+**前置决策**（已与用户确认）：
+1. **剧本内容**：叙事剧本（creative script）— story_arc + protagonist + conflict + scene_outline + key_beats，不含精确分镜/不含精确时间码
+2. **门控**：strong 门 + **不可跳过**（即使用户已写剧本，也要 AI 重新过一次以补全结构）
+3. **时长传播**：硬约束（selected_duration 写入 envelope，下游 agent 禁止 drift，必须先 grilling）
+
+**6 档固定时长**：15s / 30s / 45s / 60s / 90s / 120s（不接自定义时长）
+
+**workflow 变化**：
+
+| 维度 | v0.3 | v0.4 |
+|------|------|------|
+| agent 数 | 10 | **11**（新增 `tvc-agent-script`） |
+| workflow 步骤 | Step 1..10 | **Step 0..10**（script 是 pre-step） |
+| artifact_kind 数 | 10 | **11**（新增 `script` → `script-card` widget） |
+| verify 通过 | 156 PASS | **163 PASS**（+7：1 agent count + 1 step count + 1 artifact_kind + 1 unique check + 1 schema section + 1 routing table + 内部检查更新） |
+
+**矛盾点**：
+- v0.3 刚把 10 种 artifact_kind 锁成契约，现在加第 11 种会动 §16 widget routing、§11/§12 schema doc 编号、verify 白名单。最小破坏方案：在 §10 之后插入新 §11 Script Envelope，旧 §11 routing 表后移到 §12（向后兼容），10 个老 agent 文件不动。
+- brief agent 原本独立成 Step 1，现在被强制拽进 Step 0 → Step 1 的链上，必须新增 `selected_script` + `selected_duration` 为必填 Input。
+
+**完成清单**（预计 10 个文件改动）：
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | snapshot.md TODO #17 记录 | ✓ |
+| 2 | 创建 `agents/script.md`（Purpose / Inputs / Do Not / Workflow Context Step 0） | ✓ |
+| 3 | agent-capabilities.json：新增第 11 agent + workflow step=0 条目 | ✓ |
+| 4 | agent-capabilities.md：workflow 表 +1 行 + Step 0 速查段 + verify 描述更新 | ✓ |
+| 5 | SKILL.md：§2 / §3 表 / §11 references 计数 / §12 envelope / §16.3 mapping / §16.5 数 / §16.7 §11→§12 / §17 changelog v0.4 | ✓ |
+| 6 | agents/brief.md：Inputs 新增 `selected_script` + `selected_duration`（必填）+ Prompt Rules 硬约束 | ✓ |
+| 7 | references/step-output-schema.md：新增 §11 Script Envelope + §12 Widget Routing（旧 §11 后移）+ §13-§15 重编号 | ✓ |
+| 8 | scripts/verify-tvc-bundle.sh：§2 count 10→11 + §8 count 10→11 + §12 ALLOWED_KINDS + §12.4 §11 sections + §12.5 routing §11→§12 | ✓ |
+| 9 | preview/slateboard-widget.html：3 处 timeline 各加 Step 0 button + grid-template-columns 10→11 | ✓ |
+
+**verify 结果**：**163 PASS / 0 FAIL / 0 WARN**（v0.3 156 → v0.4 163 = +7 项 schema 一致性检查）
+
+**关键设计**：
+
+1. **Step 0 pre-step 而非 Step 1**：保留现有 10 步的 Step 编号不变（brief=Step 1 维持），最小化对现有 agent 文件的破坏。Step 0 是「脚本前序准备」，不属于主流程 10 步之内。
+2. **`script-card` widget 形态**：与 brief-card 同级，渲染时长 chip + story_arc 大字 + scene_outline 列表 + key_beats timeline + duration_invariant_check ✓ 行。
+3. **强约束传播机制**：brief → strategy → shot-planning → video-prompt 4 个 agent 全部新增 `selected_duration` 必填输入；任何 drift 必须先 grilling 用户。
+4. **不可跳过语义**：即使 user_raw_request 已包含完整剧本，agent 也要 refine 成 contract 格式并强门待确认（用户明确要求）。
+5. **6 档固定时长**：覆盖 social cut（15s）→ brand film（120s）主流场景；不接自定义时长，避免后续 segment 拆分算法被边界 case 污染。
+
+**未 commit 提示**（按 v0.3 节奏，本批 9 文件改动尚未 commit）：
+
+```bash
+git add bundled-skills/tvc-director/ snapshot.md
+git commit -m "feat(tvc-director): add Step 0 pre-step script agent with hard duration constraint
+
+新增 tvc-agent-script 作为 Step 0 pre-step（不动现有 10 步 Step 编号）：
+用户先从 6 档固定时长（15s / 30s / 45s / 60s / 90s / 120s）中选一项，
+按时长生成叙事剧本（story_arc + protagonist + conflict + scene_outline +
+key_beats），强门 + 不可跳过。
+
+selected_duration 作为硬约束向下游传播（brief / strategy / shot-planning /
+video-prompt 全部新增必填输入），任何 drift 必须先 grilling 用户。
+
+新增 artifact_kind script（widget 变体 script-card）；step-output-schema
+新增 §11 Script Envelope + §12 Widget Routing（向后兼容：原 §11 后移）。
+
+verify: 163 PASS / 0 FAIL / 0 WARN（v0.3 156 → v0.4 163）"
+```
+
+---
+
+### TODO #27: ✅ 已完成 — tvc-director v0.7 per-block reference decision（完成 TODO #18 — 故事板精挑产品/人物/场景参考图）
+
+**用户指令**：「告诉我生成故事板是否用到了产品/人物/场景参考图」→ 诊断后「修复」
+
+**诊断**（TODO #18 未实施的根因）：
+- envelope 顶层 `references[]` 是"全集共享"（v0.5 之前就有），但 block / panel 级没有精挑字段
+- cheatsheet §4.3 承诺"按 block 拼装 reference list"但 schema 不守门（散文 vs 结构化字段差距）
+- 结果：所有 panel 都喂全部 ref → 跨场景 block 的无关 ref 污染 agnes 生成结果；scene 切换视觉一致性靠运气；每次调用传 4-5 张 base64 浪费 token
+
+**设计决策**（YAGNI 应用）：
+- ✅ **保留 envelope 顶层 `references[]` 作为"全集"**（向后兼容；asset-urls.md 等仍引用）
+- ✅ **新增 block 级 `references[]` 作为"精挑子集"**（v0.7 必填；name 字符串引用 envelope 顶层，**不**重复 base64）
+- ❌ **不做 panel 级 `reference_tags[]`** — YAGNI；block 级已够精细（一次 agnes_image_generate 调用喂整个 block 的 ref），panel 级精挑等真实场景需要时再升级
+- ❌ **不改 video-prompt.md** — v0.6 写的"blocks[].references[] + 上游 resources"已经能直接消费 block-level references[]，不需要 v0.7 升级 video 端
+
+**完成清单**（5 个文件改动）：
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | `references/step-output-schema.md` §4：block schema 加 `references[]` 必填（name 引用 envelope 顶层）；renderer 提示加 references chip | ✓ |
+| 2 | `agents/asset-storyboard.md`：Phase 2 头部新增"Per-Block Reference Decision"节（决策表 + 两层模型 + 反模式）；Workflow Context phase=storyboard_compilation artifact schema 加 `references[]` | ✓ |
+| 3 | `references/asset-prompting-cheatsheet.md` §4.3：散文升级为结构化（两层模型表 + 决策表 + 反模式 4 项）| ✓ |
+| 4 | `SKILL.md`：§15.6 后新增 §15.7 Per-Block Reference Decision（两层模型 + 决策表 + 反模式 + 实施位置 + lint 入口）；§17 changelog 加 v0.7 行（2026-09-06）| ✓ |
+| 5 | `scripts/verify-tvc-bundle.sh`：header 加 v0.7 注释；§12.6 加 `blocks[].references[]` schema 检查（v0.7 +1 check）；§12.8 新增 3 项 v0.7 消费检查（video-prompt.md 消费 blocks[].references[] / cheatsheet §4.3 两层模型 / asset-storyboard.md Per-Block Reference Decision section）| ✓ |
+| 6 | `snapshot.md` 本 TODO #27 记录 | ✓ |
+
+**verify 结果**：**180 PASS / 0 FAIL / 0 WARN**（v0.6 176 → v0.7 180 = +1 §12.6 schema + +3 §12.8 消费检查）
+
+**关键设计**：
+1. **两层模型** — envelope 顶层 `references[]` 是"全集"（Phase 1 收集，含 base64）；block 级 `references[]` 是"精挑子集"（Phase 2 每 block 必填，name 字符串引用不重复 base64）。一张图只在 envelope 顶层存一次。
+2. **block 级 references[] 决策表**（5 行） — 含产品 → `product-hero` / 含人物 → `character-<role>` / 场景切换 → `scene-<location>` / 多场景混合 → 全集 / 纯文字 → `[]`
+3. **反模式 4 项** — 缺 character-* / 缺 scene-* / 复制粘贴全集（含 base64）/ name 不存在
+4. **name 引用而非 inline base64** — 避免 envelope 膨胀 + 解析期找不到 base64 hang
+
+**scope 备注（升级路径）**：
+- panel 级 `reference_tags[]` 留待真实场景需要时再升级（YAGNI）
+- video-prompt.md v0.6 已支持 `blocks[].references[]` 直接消费，本次零改动
+- 反模式 4 项"lint 只检查字段存在"，不检查"是否真的按决策表选对 ref"——更深一层需 Step 10 QC `global_redlines_status` 加 `v0.7_reference_decision` 实跑字段匹配，下一轮
+
+**未 commit 提示**（v0.5 + v0.6 + v0.7 共 16 文件独立 change set，本批 v0.7 5 文件 + v0.6 5 文件 + v0.5 6 文件，建议一次性合批提交；snapshot.md 是这三批的串联记录）：
+
+```bash
+git add bundled-skills/tvc-director/agents/asset-storyboard.md \
+        bundled-skills/tvc-director/agents/video-prompt.md \
+        bundled-skills/tvc-director/references/asset-prompting-cheatsheet.md \
+        bundled-skills/tvc-director/references/step-output-schema.md \
+        bundled-skills/tvc-director/SKILL.md \
+        bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh \
+        bundled-skills/tvc-director/preview/slateboard-widget.html \
+        snapshot.md
+git commit -m "feat(tvc-director): v0.5+v0.6+v0.7 — 6 layouts + handoff contract + per-block ref
+
+v0.5 (storyboard visual contract):
+- 6 类 layout_type（grid / fixed-camera / scene-planning / top-down-staging /
+  action-keyframes / narrative-comic），取代 v0.4 的 3x3/2x2/2up
+- block 级 visual_style_anchor 跟随 selected_style（不再硬编码黏土白模）
+- block 级 character_setup 每段粘贴 [Character Lock: ...]，防漂移
+- per-panel 3 项硬强制：shot_type / character_emotion / sound_effect
+- storyboard_grid artifact 新增 4 字段
+- cheatsheet §4 整章重构为 6 H3（保持 verify §11 36 项兼容）
+
+v0.6 (Step 4 → Step 9 handoff contract):
+- v0.5 故事板字段被 Step 9 video-prompt 显式消费，禁止重新从 selected_style
+  推算摄影要点 / 重拼人设
+- storyboard_to_clip_mapping 三字段来源明确
+- first_frame 首选 blocks[].grid_path（评审稿 ↔ 成片同源）
+- 新增 SKILL §15.6 handoff contract 表 + cheatsheet §4.6 反漂移 3 项 +
+  verify §12.7 字段一致性 lint
+
+v0.7 (per-block reference decision — 完成 TODO #18):
+- envelope 顶层 references[] 是'全集'（Phase 1 收集，含 base64）
+- 新增 block 级 references[] 是'精挑子集'（Phase 2 每 block 必填，
+  name 字符串引用 envelope 顶层不重复 base64）
+- cheatsheet §4.3 升级为两层模型 + 决策表 + §4.6 反模式 4 项
+- 新增 SKILL §15.7 Per-Block Reference Decision
+- verify §12.6 +1 schema 检查 + §12.8 新增 3 项消费检查
+- video-prompt.md 零改动（v0.6 写法已能直接消费 blocks[].references[]）
+- panel 级 reference_tags[] 不做（YAGNI，等真实场景需要时再加）
+
+verify: 180 PASS / 0 FAIL / 0 WARN（v0.4 163 → v0.5 169 → v0.6 176 →
+v0.7 180 = +6 v0.5 字段 + +7 v0.6 handoff + +4 v0.7 reference decision 检查）"
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+```
+
+---
+
+### TODO #28: ✅ 已完成 — tvc-director v0.8 panel 级精挑 + Step 10 QC 反漂移校验（升级 TODO #27 YAGNI 弃项 + 实跑 lint）
+
+**用户指令**：「继续优化」→ AskUserQuestion 选了全部 4 个候选（Step 10 QC 实跑 v0.5 字段消费 / 创建 segment-queue widget preview / panel 级 reference_tags[] 升级 / Step 10 自动化反漂移校验）
+
+**诊断**（v0.7 留的两个 YAGNI 弃项 + lint 形态）：
+1. **panel 级 reference_tags[]** —— v0.7 TODO #27 scope 备注说"YAGNI，等真实场景需要时再加"。v0.8 实战发现：同一 block 内 panel 01（产品特写）vs panel 05（人物反应）共用同一 `references[]` → panel 01 收到 character-* 污染，panel 05 收到 product-hero 冗余。**YAGNI 已不再成立**。
+2. **lint 形态** —— v0.5/v0.6/v0.7 verify 只检查"字段名存在"（grep `-F` schema keyword），不检查"是否真的把 v0.5 字段原文 copy 进了 video segment prompt"。需要从"schema 守门"升级到"实跑守门"（接受 envelope JSON，跑 jq + grep）。
+3. **Step 10 QC 反漂移** —— 现 qc_report.global_redlines_status 只有 5 项（产品出镜率 / 无连续 3 panel 无产品 / storyboard-final / 违禁词 / 产品驱动）。缺 3 项关键反漂移守门：跨 segment Character Lock 字面值一致性 / 跨 segment visual_style_anchor 一致性 / panel_id 不重复覆盖。
+4. **缺 segment-queue widget preview** —— L1.1 阶段 chip 落到 slateboard-widget.html 是错的（slateboard 是 Step 4 渲染，segment-queue 是 Step 9 渲染，两 widget 各管一段），需要为 Step 9 独立建 preview。
+
+**设计决策**：
+- ✅ **panel 级 `reference_tags[]`** —— v0.8 新增必填；缺省继承 block 级 `references[]`（向后兼容老 envelope）
+- ✅ **verify §12.9 实跑 lint** —— 接受 `--storyboard=<path> --video=<path>`；CI 默认无参数 → SKIP + WARN；6 项 jq + bash 实跑检查
+- ✅ **Step 10 qc_report 加 3 项 global_redlines** —— character_setup_consistency / visual_style_anchor_consistency / panel_id_unique
+- ✅ **新 preview `segment-queue-widget.html`** —— TAKE SHEET 视觉隐喻 + 3 状态完整 HTML
+
+**完成清单**（11 个文件改动）：
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | `references/step-output-schema.md` §4：panel schema 加 `reference_tags[]` 必填（v0.8）；§9 segments[].reference_images 升级消费规则（panel 级精挑合并，缺省继承 block）；§10 qc_report.global_redlines_status 加 3 项 v0.8 key | ✓ |
+| 2 | `agents/asset-storyboard.md`：Phase 2 新增"Panel-Level Reference Tags"子节（panel 决策表 + 与 block 级关系 + 反模式 3 项）；Workflow Context phase=storyboard_compilation artifact schema 加 `panels[].reference_tags[]` | ✓ |
+| 3 | `references/asset-prompting-cheatsheet.md` §4.3：新增 panel 级精挑决策表（6 行）；§4.6 加 v0.8 → panel 级参考图反漂移 2 项 | ✓ |
+| 4 | `agents/video-prompt.md` Reference Images 段升级：按本 segment 覆盖 panel 范围精挑合并 = panels[].reference_tags[]（缺省继承 block）+ 上游资源；Pre-Gen Confirmation reference_images 加 `panel_id` 字段 | ✓ |
+| 5 | `SKILL.md`：§15.7 拆为 §15.7.1 Panel-Level Reference Tags（三层模型 + panel 决策表 + 反模式 + 实施位置）；新增 §15.8 Step 10 自动化反漂移校验（global_redlines_status 8 项 + 两层 lint + 实施位置）；§17 changelog 加 v0.8 行（2026-09-06）| ✓ |
+| 6 | `agents/qc.md`：Output Guidance 的 global redlines 从 5 项升级为 8 项（保留 5 项 + 新增 3 项 v0.8 反漂移守门）| ✓ |
+| 7 | `scripts/verify-tvc-bundle.sh`：header 加 v0.8 注释；§12.6 +1 schema 检查（panel.reference_tags）；§12.9 新增实跑 lint（接受 --storyboard/--video envelope，6 项 jq + grep 守门：visual_style_anchor / character_setup 跨 segment 一致 + per-panel shot_type / character_emotion / sound_effect 在 segment prompt 中出现 + storyboard_to_clip_mapping panel_ids 覆盖全 storyboard panel_ids 且不重复）；§12.10 新增 6 项 self-check（qc.md + schema §10 必含 3 个新 key 字样）| ✓ |
+| 8 | `preview/segment-queue-widget.html`（新增，~23KB）：TAKE SHEET 视觉隐喻 + 3 状态完整 HTML（pending / failed / confirmed）+ chips（block_id / panel_ids / grid_path）+ v0.5 anchor 块（Visual Style / Character Lock 各 1 块，左 border 不同色）+ prompt preview（深 slate 底 mono）+ reference_images chips（v0.8 panel 级精挑，3 色 ref__dot）+ 4-option grilling | ✓ |
+| 9 | `preview/segment-queue-widget.md`（新增）：widget 设计记录（视觉隐喻 + 调色板 + 布局 + v0.6/v0.8 字段消费展示 + 三状态 + signature element + cheatsheet 映射 + 精修记录 + 已知 trade-off）| ✓ |
+| 10 | `snapshot.md` 本 TODO #28 记录 | ✓ |
+| 11 | `scripts/verify-tvc-bundle.sh` 跑通：**187 PASS / 0 FAIL / 1 WARN**（v0.7 180 → v0.8 187 = +1 §12.6 reference_tags + +6 §12.10 self-check；§12.9 6 项条件性实跑 lint 在 CI 默认下 SKIP + WARN，不计入 PASS）| ✓ |
+
+**verify 结果**（CI 默认无 --storyboard/--video 参数）：**187 PASS / 0 FAIL / 1 WARN**（v0.7 180 → v0.8 187 = +1 §12.6 reference_tags + +6 §12.10 self-check + 1 WARN §12.9 SKIPPED）
+
+实跑 §12.9（带 envelope）需要 workspace 里有真实 storyboard_envelope + video_envelope JSON，不进 CI。
+
+**关键设计**：
+1. **三层参考图模型** — envelope 顶层 `references[]`（全集，含 base64）→ block 级 `references[]`（精挑子集，name 引用）→ panel 级 `reference_tags[]`（精挑子集精挑，缺省继承 block）。缺省继承 = 向后兼容老 envelope 不破。
+2. **panel reference_tags 决策表**（6 行） —— 产品特写 → `[product-hero]` / 人物入镜 → `[character-*]` / 场景切换 → `[scene-*]` / 多元素同框 → 三个按重要性 / 纯文字 → `[]` / 继承 block 默认 → `[]`
+3. **verify §12.9 实跑形态** —— 第一次升级到"字段原文 copy 检查"（从 schema 守门升级到内容守门）。CI 默认 SKIP，CI 用 envelope fixture（workspace 内）才真跑。
+4. **Step 10 global_redlines_status 8 项** —— 5 项旧守门 + 3 项 v0.8 新守门（character_setup_consistency / visual_style_anchor_consistency / panel_id_unique）。qc.md 与 schema §10 字样同步，确保 lint 可发现。
+5. **segment-queue widget 与 slateboard widget 同源** —— 顶部对角线条带 + slate 底色 + ink/bone/direct/caution 调色板全套共享；视觉连续 = 同源 Skill 跨 widget 的视觉锚点。
+
+**scope 备注**（升级路径）：
+- v0.8 §12.9 实跑 lint 不进 CI（CI 默认 SKIP），需要 workspace 内 fixture 才能跑。**未来**：提供 `bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh --storyboard=tests/fixture/storyboard-envelope.json --video=tests/fixture/video-envelope.json` 集成进 CI 的可选模式
+- panel 级 `reference_tags[]` 缺省继承 block 级，老 envelope 自动向上兼容，但 schema §4 已要求新 envelope 必填字段；不强删老字段，向前向后都不破
+- 4-option grilling 默认概率（60/25/10/5）hard-coded 在 widget HTML / cheatsheet §5.2；落地到 React 时从 agent-capabilities.json 读取
+- segment-queue 假设 ≤5 segments；超 5 段时 widget take-queue 改横向滚动 + sticky 当前 take
+
+**未 commit 提示**（v0.8 11 个文件新增/改动，含 2 个新文件 segment-queue-widget.html + .md；建议一次性提交）：
+
+```bash
+git add bundled-skills/tvc-director/agents/asset-storyboard.md \
+        bundled-skills/tvc-director/agents/qc.md \
+        bundled-skills/tvc-director/agents/video-prompt.md \
+        bundled-skills/tvc-director/references/asset-prompting-cheatsheet.md \
+        bundled-skills/tvc-director/references/step-output-schema.md \
+        bundled-skills/tvc-director/SKILL.md \
+        bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh \
+        bundled-skills/tvc-director/preview/segment-queue-widget.html \
+        bundled-skills/tvc-director/preview/segment-queue-widget.md \
+        snapshot.md
+git commit -m "feat(tvc-director): v0.8 panel-level reference_tags + Step 10 QC drift checks
+
+v0.7 TODO #27 left two YAGNI items that v0.8 in-the-wild has now surfaced:
+panel-level reference_tags + 实跑 v0.5 字段消费 lint. This commit closes
+both, plus adds Step 10 global redlines to gate cross-segment drift.
+
+Three-layer reference model (envelope top -> block level -> panel level):
+- envelope top references[]: 全集 (Phase 1 collect, 含 base64)
+- blocks[].references[]: block 精挑 (Phase 2 必填, name 字符串引用)
+- panels[].reference_tags[]: panel 精挑精挑 (v0.8 必填; 缺省继承 block)
+
+panel reference_tags 决策表 (6 rows):
+- 产品特写 -> ['product-hero']
+- 人物入镜 -> ['character-<role>']
+- 场景切换 -> ['scene-<location>']
+- 多元素同框 -> 按重要性 list
+- 纯文字 / typography / logo -> []
+- 继承 block 默认 -> [] (omit field, 缺省继承)
+
+Step 10 qc_report.global_redlines_status 升级 5 -> 8:
+- character_setup_consistency (v0.8): 跨 segment 同主角 [Character Lock]
+  字面值完全一致
+- visual_style_anchor_consistency (v0.8): 跨 segment
+  blocks[].visual_style_anchor 字面值完全一致
+- panel_id_unique (v0.8): 同一 panel_id 在 storyboard_to_clip_mapping[]
+  不重复出现
+
+verify §12.9 实跑 lint (new, 6 checks):
+- 接受 --storyboard=<path> --video=<path> envelope JSON
+- jq extract blocks[].visual_style_anchor / character_setup /
+  panels[].{shot_type,character_emotion,sound_effect}
+- grep segment.prompt 是否含字段原文 (跨 segment 一致性)
+- storyboard_to_clip_mapping panel_ids 覆盖全 storyboard panel_ids
+  且无重复
+- CI 默认 SKIP + WARN; workspace 内 fixture 真跑
+- 这是首次从 schema 守门升级到内容守门
+
+verify §12.10 self-check (new, 6 checks):
+- qc.md + step-output-schema §10 各必含 3 个新 global_redlines key
+
+preview/segment-queue-widget.html (new, ~23KB):
+- TAKE SHEET 视觉隐喻 (与 slateboard 共享顶部对角线条带)
+- 3 状态完整 HTML (pending / failed / confirmed)
+- chips: block_id / panel_ids / grid_path
+- v0.5 anchor 块 (Visual Style 块 + Character Lock 块, 左 border 不同色)
+- prompt preview (深 slate 底 mono)
+- reference_images chips (v0.8 panel 级精挑, 3 色 ref__dot)
+- 4-option grilling (失败状态)
+
+preview/segment-queue-widget.md (new): widget 设计记录
+(视觉隐喻 / 调色板 / 布局 / v0.6+v0.8 字段消费展示 / 三状态 /
+signature element / cheatsheet 映射 / 精修记录 / 已知 trade-off)
+
+verify: 187 PASS / 0 FAIL / 1 WARN (v0.7 180 -> v0.8 187 =
++1 §12.6 reference_tags + +6 §12.10 self-check; §12.9 6 项实跑 lint
+在 CI 默认 SKIP + WARN, workspace fixture 真跑才进 PASS)
+
+§12.9 实跑形态升级说明 (lint 第一次从 schema 守门升到内容守门):
+- 接受 --storyboard=<path> --video=<path> envelope JSON
+- jq extract blocks[].visual_style_anchor / character_setup /
+  panels[].{shot_type, character_emotion, sound_effect} / panel_id
+- grep segments[].prompt 是否含字段原文 (跨 segment 一致性)
+- storyboard_to_clip_mapping panel_ids 覆盖全 storyboard panel_ids
+  且无重复
+- CI 默认 SKIP + WARN (workspace 无 fixture); fixture 模式下 6 项全 PASS
+- 这把 v0.5/v0.6/v0.7 的 "字段名存在" 守门升级到 "字段原文被消费" 守门
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>"
+```
+
+---
+
+### TODO #26: ✅ 已完成 — tvc-director v0.6 Step 4→Step 9 handoff contract（v0.5 故事板字段被 Step 9 显式消费）
+
+**用户指令**：「检查故事板与最终视频生成的关联」→ grlling 出诊断后「开始修复」
+
+**诊断**（v0.5 → video drift 三个根因）：
+1. `agents/video-prompt.md` Inputs 段只列 `storyboard_final_path` + `selected_style` + `all_upstream_decisions`，**未显式列出 v0.5 结构化字段**（`visual_style_anchor` / `character_setup` / `panels[].shot_type` / `character_emotion` / `sound_effect`）
+2. `references/step-output-schema.md` §9 的 `storyboard_to_clip_mapping` 标为必填但**字段来源未文档化**（panel_ids / segment_id / time_range 各自从哪来？）
+3. `first_frame` 未优先用 `blocks[].grid_path` 作上传源 → 评审稿（故事板图）与成片（视频）第一帧可能视觉漂移
+
+**未实施**（明确不做 / 推到下次）：
+- **L1.1 slateboard segment-queue chip** — `preview/` 下只有 storyboard 专属 slateboard-widget.html，没有 segment-queue widget preview；改 storyboard preview 是错位的。**已评估 / 推迟**：等真正创建 segment-queue preview 文件或 React 组件时再做
+- Step 9 → Step 10 QC 链路（不在本次范围）
+
+**完成清单**（5 个文件改动 + 1 skip）：
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | `agents/video-prompt.md`：Inputs 段改为 `storyboard_envelope`（必须读 v0.5 JSON envelope 而不只是 final_path）；新增 v0.5 字段翻译表（visual_style_anchor / character_setup / per-panel 3 键 → segment prompt 位置）；新增 `storyboard_to_clip_mapping` 派生规则；新增 First-Frame 上传源（grid_path 首选 → composite_path → 从 0 拍）；Pre-Gen Gate reference_images 增 `block_id` / `panel_id` 字段 | ✓ |
+| 2 | `references/step-output-schema.md` §9：必填字段后追加"字段来源表"（与 video-prompt 双向一致）；renderer 提示加"storyboard source chip"（block_id + panel_ids[] + grid_path basename） | ✓ |
+| 3 | `references/asset-prompting-cheatsheet.md` §4.6：新增 v0.5→视频 反漂移 3 项（全局风格声明不重推算 / 人设不重拼 / per-panel 三键必传） | ✓ |
+| 4 | `SKILL.md`：§15.5 后新增 §15.6 "Step 4→Step 9 Handoff Contract"（v0.5 字段权威映射表 + 实施位置 + lint 入口）；§17 changelog 加 v0.6 行（2026-09-06） | ✓ |
+| 5 | `scripts/verify-tvc-bundle.sh`：header 加 v0.6 注释；§12.7 新增 7 项 v0.5→video handoff 检查（video-prompt.md 显式列出 6 字段 + §9 mapping 引用 panels[].panel_id） | ✓ |
+| 6 | `preview/slateboard-widget.html` segment-queue chip（L1.1）| ⊘ 跳过 — 缺载体，推迟到下次 |
+| 7 | `snapshot.md` 本 TODO #26 记录 | ✓ |
+
+**verify 结果**：**176 PASS / 0 FAIL / 0 WARN**（v0.5 169 → v0.6 176 = +7 项 v0.5→video handoff 字段一致性检查；v0.5 6 项 baseline 保持）
+
+**关键设计**：
+1. **v0.5 字段翻译表（video-prompt.md 双权威）** — `visual_style_anchor` 是全局风格声明的**唯一源**，禁止从 `selected_style` 二次推算；`character_setup` 直接 copy，禁止重拼；跨 block 字面值必须完全一致（与 cheatsheet §4.6 v0.5 第 4 项守门共享）
+2. **`storyboard_to_clip_mapping` 三字段派生** — `panel_ids[]` ← `blocks[].panels[].panel_id` 连续区间 / `segment_id` ← `model-and-segmentation-routing.md` 拆段结果 / `time_range` ← `blocks[].panels[].time_range` 合并（与 step-output-schema §9 双向一致）
+3. **First-Frame 三级退化** — `blocks[].grid_path` 首选 → `composite_path` → 从 0 拍；前两级保留"评审稿 ↔ 成片"同源
+4. **lint 入口** — verify §12.7 强制 video-prompt.md 列出 6 个 v0.5 字段名 + step-output-schema §9 引用 `panels[].panel_id`；未来若有人改坏 handoff 立即 fail
+
+**scope 备注（升级路径）**：
+- v0.5→video 字段消费在 verify 层只检查"字段名出现"，不检查"是否真的直接 copy"——更深一层需 Step 9 → Step 10 QC（`global_redlines_status` 加 `v0.5_field_consumed`）实跑，下一轮
+- L1.1 segment-queue chip 需先创建 segment-queue widget preview 文件或 React 组件，下一轮
+- per-block reference decision（TODO #18）仍未做，与本任务正交
+
+**未 commit 提示**（v0.5 + v0.6 共 11 文件独立 change set，本批 v0.6 5 文件 + v0.5 6 文件，建议一次性合批提交；snapshot.md 是这两批的串联记录）：
+
+```bash
+git add bundled-skills/tvc-director/agents/asset-storyboard.md \
+        bundled-skills/tvc-director/agents/video-prompt.md \
+        bundled-skills/tvc-director/references/asset-prompting-cheatsheet.md \
+        bundled-skills/tvc-director/references/step-output-schema.md \
+        bundled-skills/tvc-director/SKILL.md \
+        bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh \
+        bundled-skills/tvc-director/preview/slateboard-widget.html \
+        snapshot.md
+git commit -m "feat(tvc-director): v0.5+v0.6 — 6 layouts + handoff contract to Step 9
+
+v0.5 (storyboard visual contract):
+- 6 类 layout_type（grid / fixed-camera / scene-planning / top-down-staging /
+  action-keyframes / narrative-comic），取代 v0.4 的 3x3/2x2/2up
+- block 级 visual_style_anchor 跟随 selected_style（不再硬编码黏土白模）
+- block 级 character_setup 每段粘贴 [Character Lock: ...]，防漂移
+- per-panel 3 项硬强制：shot_type / character_emotion / sound_effect
+- storyboard_grid artifact 新增 4 字段
+- cheatsheet §4 整章重构为 6 H3（保持 verify §11 36 项兼容，
+  ERE 下 '+' 是量词符被吃，用「与」代替避坑）
+
+v0.6 (Step 4 → Step 9 handoff contract):
+- v0.5 故事板字段被 Step 9 video-prompt 显式消费，禁止重新从 selected_style
+  推算摄影要点 / 重拼人设（破坏跨 block 字面值一致性）
+- storyboard_to_clip_mapping 三字段来源明确（panel_ids ← blocks[].panels[].
+  panel_id / segment_id ← model-and-segmentation-routing.md / time_range ←
+  panels[].time_range 合并）
+- first_frame 首选 blocks[].grid_path（评审稿 ↔ 成片同源），退化
+  composite_path → 从 0 拍
+- 新增 SKILL §15.6 handoff contract 表 + cheatsheet §4.6 反漂移 3 项 +
+  verify §12.7 字段一致性 lint
+
+verify: 176 PASS / 0 FAIL / 0 WARN（v0.4 163 → v0.5 169 → v0.6 176 =
++6 v0.5 字段 + +7 v0.6 handoff 字段检查）"
+```
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+
+---
+
+### TODO #25: 🚧 进行中 — tvc-director storyboard 视觉契约升级（v0.5：去黏土白模 + 6 类 layout + 三项硬约束）
+
+**用户指令**：「故事板去掉黏土白模，总结并吸收如下规范:」（用户附 8 节中文 spec：4×3 / 固定机位 / 场景规划 / 俯视调度 / 动作草图 / 情节连环画 + 实战流程 + 踩坑指南 + 早高峰冲刺参考图）
+
+**前置决策**（已与用户 4 轮 grilling 确认）：
+1. **6 类 layout 全采纳**（`grid` / `fixed-camera` / `scene-planning` / `top-down-staging` / `action-keyframes` / `narrative-comic`）—— 用户确认覆盖原 3×3 / 2×2 / 首尾帧 三档
+2. **视觉风格跟 selected_style 走** —— 不再硬编码"黏土白模"或任何单一视觉
+3. **固定人设前置** —— 每段 prompt 开头粘贴 `[Character Lock: ...]`（人设 / 面部锚点）
+4. **per-panel 3 项硬强制** —— `shot_type` / `character_emotion` / `sound_effect` 三键必出现，缺一 reject
+
+**contradictions（grlling 已记录）**：
+- tvc-director 是 30s-120s 产品 TVC，但用户选的 6 类包含 `top-down-staging`（多人调度）和 `fixed-camera`（对话长镜头），这两种在产品广告极少出现。用户明确"全采纳"，本次接受，下次实战再回访。
+- TODO #18（per-block reference decision）尚未实施，与本任务都改 Phase 2 —— **本任务先做视觉契约，per-block reference decision 推到下次独立任务**（避免单次合并改太多 Phase 2 代码）。
+
+**未实施**（明确不做）：
+- 不动 shot-planning / 6 个 style 文件本体
+- 不实现 per-block reference decision（TODO #18 推到下次）
+- 不加 `visual_style` 字段到 style schema（下次任务，等 style 库同步加视觉描述）
+
+**完成清单**（7 个文件改动）：
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | `agents/asset-storyboard.md`：Phase 2 全文重写（移除黏土白模，新增 6 类 layout 决策表 + visual_style_anchor + character_setup + per-panel 3 键 + 6 类 yaml 输出）；Pre-Gen Gate 同步；State envelope 增加 v0.5 字段 | ✓ |
+| 2 | `references/asset-prompting-cheatsheet.md` §4：整章重构为 6 H3 新结构（4.1 Mandatory + 三段式 / 4.2 Layout 类型与决策 + 6 模板 A-F / 4.3 参考图 + 固定人设 / 4.4 自适应算法 / 4.5 摄影 + selected_style 速查 / 4.6 反模式 v0.5 新增 5 项 + v0.4 保留 5 项），verify §11 expected_h3 同步刷新 | ✓ |
+| 3 | `references/step-output-schema.md` §4：`storyboard_grid` artifact 新增 4 字段（`layout_type` enum 6 / `visual_style_anchor` / `character_setup` / 每 panel 三键）；`grid` 字段标 v0.5 废弃；新增 renderer 提示（6 类 CSS class + character_setup chip + 3 项 footer） | ✓ |
+| 4 | `SKILL.md`：§15.2 重写为 6 类 layout + 决策原则；§15.3 用户覆盖扩到 6 类；§15.5 新增 v0.5 三项硬约束；§17 changelog 加 v0.5 行 | ✓ |
+| 5 | `scripts/verify-tvc-bundle.sh`：§11 expected_h3["§4"] 更新为新标题（注意：标题中 `+` 字符在 ERE 是量词符，会被吃 → 用「与」代替 `+` 避坑）；§12.6 新增 6 项 v0.5 字段检查（layout_type / visual_style_anchor / character_setup / shot_type / character_emotion / sound_effect） | ✓ |
+| 6 | `preview/slateboard-widget.html`：storyboard-canvas 支持 6 类 layout（CSS class `layout-grid`/`layout-fixed-camera`/`layout-scene-planning`/`layout-top-down-staging`/`layout-action-keyframes`/`layout-narrative-comic`）；每 panel 显示 3 项 annotation footer；block 顶部加 `character_setup` 折叠 chip + `visual_style_anchor` 摄影要点 token | ✓ |
+| 7 | `snapshot.md` 本 TODO #25 记录 | ✓ |
+
+**verify 结果**：**169 PASS / 0 FAIL / 0 WARN**（v0.4 163 → v0.5 169 = +6 项 v0.5 字段检查 + 老 36 项 cheatsheet 完整性保持）
+
+**关键设计**：
+
+1. **6 类 layout 决策表（cheatsheet §4.2 + SKILL.md §15.2 双权威）** —— 每 block 选一种 layout_type，模板 A-F 分别给完整 prompt 结构（含三段式前置 + 每 panel 三键）
+2. **三段式 prompt（cheatsheet §4.1）** —— 视觉锚点 + 人设锚点 + layout 模板顺序固定，先于 panel 描述；视频 vein（video_vein）继续保留为 block 第一段
+3. **`character_setup` 可空字符串 `""` 仅限 character_emotion** —— `shot_type` / `sound_effect` 不允许空字符串（必须有具体值）；`character_setup` block 级可填 `none`（无主角场景）
+4. **向后兼容** —— v0.4 `grid ∈ {3x3, 2x2, 2up}` 字段标"已废弃，由 layout_type 取代"，renderer 优先读 layout_type
+5. **跨 block 主角锁定** —— 同一角色跨 block 的 `character_setup` 必须字面值完全相同（cheatsheet §4.6 反模式 v0.5 第 4 项）
+
+**scope 备注（升级路径）**：
+- 6 类 layout 在 agnes 上的实际渲染质量未知（特别是 `top-down-staging` 和 `scene-planning` 非写实风格），cheatsheet §4.6 注："若 agnes 生成失败 → fall back to grid 重试"
+- per-panel 标注对 product-only panel 适用 `character_emotion=""`，但 QC 必须验证空值合理性（不是真的忘了填）
+- `selected_style` 本身没 `visual_style` 字段，agent 可能编造具体摄影描述 —— 本次先放过，下次单独给 style 加 `visual_style` 字段
+
+**未 commit 提示**（按 v0.3/v0.4 节奏，本批 7 文件改动尚未 commit）：
+
+```bash
+git add bundled-skills/tvc-director/agents/asset-storyboard.md \
+        bundled-skills/tvc-director/references/asset-prompting-cheatsheet.md \
+        bundled-skills/tvc-director/references/step-output-schema.md \
+        bundled-skills/tvc-director/SKILL.md \
+        bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh \
+        bundled-skills/tvc-director/preview/slateboard-widget.html \
+        snapshot.md
+git commit -m "feat(tvc-director): v0.5 storyboard visual contract — 6 layouts + 3 hard constraints
+
+storyboard Phase 2 视觉契约升级，移除 v0.4 的'3×3 黏土白模默认'，吸收用户提供的
+8 节中文规范：
+
+- 6 类 layout_type（grid / fixed-camera / scene-planning / top-down-staging /
+  action-keyframes / narrative-comic），取代 v0.4 的 3x3/2x2/2up 三档自适应
+- block 级 visual_style_anchor 跟随 selected_style（不再硬编码黏土白模或任何
+  单一视觉）
+- block 级 character_setup 每段粘贴 [Character Lock: ...]，防漂移
+- per-panel 3 项硬强制：shot_type / character_emotion / sound_effect 三键
+  必出现，缺一 reject
+
+cheatsheet §4 整章重构为 6 H3 新结构（4.1 Mandatory + 三段式 / 4.2 Layout 类
+型与决策 + 6 模板 A-F / 4.3 参考图 + 固定人设 / 4.4 自适应算法 / 4.5 摄影
++ selected_style 速查 / 4.6 反模式），保持 verify §11 36 项兼容性（注意：
+verify expected_h3 中不能用 '+' 字符，因 ERE 下 + 是量词符会被吃，本次用
+「与」代替 '+' 避坑）。
+
+storyboard_grid artifact 新增 4 字段；grid 旧字段标 v0.5 废弃。
+
+verify: 169 PASS / 0 FAIL / 0 WARN（v0.4 163 → v0.5 169 = +6 项 v0.5 字段
+检查）"
+```
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
 ```

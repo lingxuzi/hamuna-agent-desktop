@@ -175,60 +175,273 @@
 
 - **任何 TVC 必生成**（Step 4 Phase 2 唯一硬交付物）
 - 输入：shot plan + selected_style + segment_durations[] + scene_anchors[]
-- 输出：自适应网格（≥10s → 3×3；<10s → 2×2；<5s → 首尾帧）
+- 输出：按 `layout_type` 自适应生成（6 类见 §4.2）
 
-### 4.2 参考图输入
+**通用三段式 prompt 结构**（每 panel 必须遵循，写在 layout prompt 模板之前）：
 
-- **类型**：按 segment 拼装 reference list
-  - 产品图（§1 输出）
-  - 角色三视图（§2 输出，若涉及）
-  - 场景图（§3 输出，按 segment 选）
-- **格式**：**base64 data URI 列表**（按 segment 顺序）
-- **缺口处理**：缺任意参考图 → 触发 §5 failure code `missing_scene_ref`，**故事板编译前必 grilling** 用户确认是否退化到"全文字描述"（不推荐，会大幅降低一致性）
+1. **视觉锚点**：`[Visual Style: <selected_style> · <摄影/色彩/光线要点>]`
+2. **人设锚点**：`[Character Lock: <年龄 性别>, <种族>, <体型>, <发型发色>, <关键服饰>; face anchor: <1-2 不可漂移特征>]`（无主角 block 填 `none`，不省略）
+3. **镜头运镜 + 场景光影 + 动作情绪 + 音效**：见 §4.2 各 layout 模板内的 `panel annotations`
 
-### 4.3 Prompt Template — 自适应网格
+三段缺一即 reject（§4.6 反模式 +1 项）。
+
+### 4.2 Layout 类型与决策（6 类 — v0.5 升级）
+
+**不再使用 v0.4 的"3×3 黏土白模默认"**。每 block 先按场景内容选 `layout_type`，再写 prompt 模板。6 类如下：
+
+| `layout_type` | 何时用 | Panel 数 | Aspect | 模板 |
+|---------------|--------|---------|--------|------|
+| `grid` | 默认段落分镜；产品演示、场景切换、节奏推进 | 4×3 / 3×3 / 2×2 | 16:9 / 4:3 | 模板 A |
+| `fixed-camera` | 长镜头 / 固定机位对话 / 戏剧化停顿 | 1-3（水平排）| 16:9 | 模板 B |
+| `scene-planning` | 场景走位调度；人物移动路径；空间布局 | 1（整图俯视 + 走位标注）| 16:9 宽幅 | 模板 C |
+| `top-down-staging` | 多人站位、群戏调度、镜头走位预演 | 1（整图俯视 + 角色位置）| 1:1 或 4:3 | 模板 D |
+| `action-keyframes` | 动作分解、关键转折、动态捕捉 | 3（水平三连）| 16:9 三联 | 模板 E |
+| `narrative-comic` | 情节推进、叙事弧线、悬念揭示 | 4（水平四联 / 2×2）| 16:9 | 模板 F |
+
+**模板 A — grid（4×3 / 3×3 / 2×2 默认）**：
 
 ```text
-故事板图，{grid_layout}（3行3列 | 2行2列 | 单图首尾帧），共 {N} 格，
+[Visual Style: {selected_style} · {摄影/色彩/光线要点}]
+[Character Lock: {固定人设}]
+故事板图，{grid_layout}（4行3列 | 3行3列 | 2行2列），共 {N} 格，
 白底干净布局，格子间有细线分隔，禁止镜号/数字/时间码/字幕/箭头/水印，
 每格独立 TVC 关键状态，按 segment 顺序：
 
-格 1（segment 1）：{shot_id_1} — {framing}，{camera_move}，{core_action}，{color_light}，{mood_keyword}
-格 2（segment 2）：{shot_id_2} — ...
+格 {i}（segment {i}）：shot_type={shot_type}，character_emotion={character_emotion}，
+sound_effect={sound_effect}，{framing}，{camera_move}，{core_action}，{color_light}，{mood_keyword}
 ...（共 N 格）
 
-整体风格：{selected_style} 风格语法，{aspect_ratio}（3×3 用 16:9 / 2×2 用 4:3 / 首尾帧用 16:9 双联），
+整体风格：{selected_style} 风格语法，{aspect_ratio}，{resolution_preset}
+```
+
+**模板 B — fixed-camera**（单镜多帧水平排，强调"同一机位不同瞬间"）：
+
+```text
+[Visual Style: {selected_style} · {摄影/色彩/光线要点}]
+[Character Lock: {固定人设}]
+固定机位故事板（fixed-camera 模式），{N} 帧水平排列（{N} ≤ 3），
+同一镜头（无 cut），展示 {N} 个关键时刻的状态演变，
+白底干净布局，帧间细线分隔，禁止镜号/数字/时间码/字幕/箭头/水印：
+
+帧 {i}（t={t_i}s）：shot_type={shot_type_i}，character_emotion={character_emotion_i}，
+sound_effect={sound_effect_i}，{framing}，{camera_move=none_locked}，{core_action_i}，{color_light}，{mood_keyword}
+
 {resolution_preset}
 ```
 
+**模板 C — scene-planning**（整图走位调度，强调"先看空间再发生事件"）：
+
+```text
+[Visual Style: {selected_style} · {摄影/色彩/光线要点}]
+[Character Lock: {固定人设}]
+场景规划图（scene-planning 模式），单张 16:9 宽幅，
+俯视/斜俯视展示 {location} 的空间布局：
+- 主活动区：{main_zone}（含 {key_props}）
+- 人物路径：{character_path}（起点 → 终点，标注 {N} 个关键节点）
+- 摄像机位：{camera_position_1}（拍 {action_1}）/ {camera_position_2}（拍 {action_2}）
+- 光照：{lighting_setup}
+
+不出现最终镜头画面，仅展示空间关系与运动路径
+```
+
+**模板 D — top-down-staging**（俯视多人站位调度）：
+
+```text
+[Visual Style: {selected_style} · {摄影/色彩/光线要点}]
+[Character Lock: 各角色分别列出}]
+俯视调度图（top-down-staging 模式），单张 1:1 或 4:3，
+{scene_location} 平面布局：
+- 角色 {role_name} 站位：{x,y}（标注 {facing_direction}）
+- 角色 {role_name} 站位：{x,y}
+...（共 {N} 个角色）
+- 关键道具：{props_position}
+- 摄像机位 + 拍摄方向：{camera_facing}
+
+不出现人物面部细节，仅展示空间关系
+```
+
+**模板 E — action-keyframes**（动作分解三连）：
+
+```text
+[Visual Style: {selected_style} · {摄影/色彩/光线要点}]
+[Character Lock: {固定人设}]
+动作分解图（action-keyframes 模式），3 帧水平排列（t1 / t2 / t3 三连），
+展示 {core_action} 的 3 个关键时刻：
+- 帧 1（t1={t1}s，开始）：shot_type={shot_type}，character_emotion={emotion_1}，
+  sound_effect={sfx_1}，{state_1}
+- 帧 2（t2={t2}s，峰值）：shot_type={shot_type}，character_emotion={emotion_2}，
+  sound_effect={sfx_2}，{state_2}
+- 帧 3（t3={t3}s，结果）：shot_type={shot_type}，character_emotion={emotion_3}，
+  sound_effect={sfx_3}，{state_3}
+
+三帧构图连贯，主体姿态递进，禁止字幕/数字/箭头
+```
+
+**模板 F — narrative-comic**（四格叙事弧线）：
+
+```text
+[Visual Style: {selected_style} · {摄影/色彩/光线要点}]
+[Character Lock: {固定人设}]
+四格连环画（narrative-comic 模式），4 帧水平四联（或 2×2），
+展示情节推进的 4 个节拍：
+- 格 1（起，{beat_1}）：shot_type={shot_type}，character_emotion={emotion_1}，
+  sound_effect={sfx_1}，{action_1}
+- 格 2（承，{beat_2}）：shot_type={shot_type}，character_emotion={emotion_2}，
+  sound_effect={sfx_2}，{action_2}
+- 格 3（转，{beat_3}）：shot_type={shot_type}，character_emotion={emotion_3}，
+  sound_effect={sfx_3}，{action_3}
+- 格 4（合，{beat_4}）：shot_type={shot_type}，character_emotion={emotion_4}，
+  sound_effect={sfx_4}，{action_4}
+
+四格构图连贯，色调按节拍递进
+```
+
+**per-panel 3 项硬强制（所有 6 类共用）**：每 panel prompt 必带 `shot_type` / `character_emotion` / `sound_effect` 三键，缺一即 reject：
+
+- `shot_type` ∈ `extreme-wide / wide / medium / medium-close-up / close-up / extreme-close-up / over-the-shoulder / top-down / dutch-angle`
+- `character_emotion` ∈ `calm / tense / joyful / melancholy / determined / surprised / focused / anxious / exhausted / hopeful`（product-only panel 可空字符串 `""`，但 key 必出现）
+- `sound_effect` ∈ `dialogue / ambient / music-beat / sfx-impact / silence / vo-over / whoosh / crunch / sizzle / heartbeat / breath / city-noise`
+
+### 4.3 参考图输入与固定人设（v0.7 升级为结构化）
+
+**两层模型**（v0.7 区分"全集"与"精挑子集"）：
+
+| 层 | 字段 | 内容 | 何时填 |
+|----|------|------|--------|
+| Envelope 顶层 | `references[]` | **全集**：每项 `{name, source: base64_data_uri}`，name 是字符串 ID（`product-hero` / `character-<role>` / `scene-<location>`）；一张图只在 envelope 顶层存一次 | Phase 1 收集所有产物图 |
+| Block 级 | `blocks[].references[]` | **精挑子集**：每项是 envelope 顶层 `references[].name` 的**字符串引用**（**不**重复 base64） | Phase 2 每 block 必填 |
+
+**block 级 references[] 决策表**（必走，先于 layout / prompt 拼装）：
+
+| block 场景内容 | `references[]` 必含 | 不应包含 |
+|----------------|-------------------|----------|
+| 含产品（产品演示 / 特写 / 包转）| `product-hero` | 该 block 无关的其他场景图 |
+| 含人物（角色入镜）| `character-<role_name>`（按角色名）| 无关角色 |
+| 场景切换 / 转场 block | 该 block 起始场景对应的 `scene-<location>` | 其它 location 场景图 |
+| 多场景混合 block（少见）| 按 panel 顺序列出全部相关 scene + product + character（基本 = envelope 全集）| 无关 ref |
+| 纯文字 / 纯 typography / logo endboard | `[]`（空数组）| 任何图 |
+
+**参考图输入**：
+- **类型**：按 §1 / §2 / §3 收集产物图（必填 base64 在 envelope 顶层）
+- **block 级引用**：name 字符串，无 base64
+- **缺口处理**：缺任意参考图 → 触发 §5 failure code `missing_scene_ref`，**故事板编译前必 grilling** 用户确认是否退化到"全文字描述"（不推荐）；envelope 顶层全集必填，block 级精挑允许 `[]`（纯文字 block）
+
+**反模式**（v0.7 新增，§4.6 自动 reject）：
+- ❌ block 含人物入镜但 `references[]` 没 `character-*` → agnes 凭空生成人脸，跨 block 漂移
+- ❌ block 跨场景切换但 `references[]` 没对应 scene 图 → 转场前后视觉断裂
+- ❌ block `references[]` 是 envelope 顶层全集的复制粘贴（含 base64）→ 浪费 token + 引入无关 ref 污染
+- ❌ block `references[]` 出现 envelope 顶层不存在的 `name` → 解析期找不到 base64（hang）
+
+**固定人设（Character Setup Pinning）规则**：
+
+每段 prompt 开头粘贴人设描述，作为"防漂移锚点"：
+
+```
+[Character Lock: <年龄区间> <性别>, <种族>, <体型>, <发型发色>, <关键服饰>;
+ face anchor: <1-2 个不可漂移的面部特征>]
+```
+
+- 主角三视图（§2 输出）必须已生成；如未生成则先用 §2 流程生成
+- 若 block 无主角（如纯产品 / 纯场景 / scene-planning / top-down-staging 无角色）→ 填 `none`，不省略
+- 跨 block 同主角 → 必须粘贴完全相同的 `Character Lock`（防止漂移）
+
+**panel 级精挑（v0.8 新增）**：
+
+每 panel 必填 `reference_tags[]`，从 block 级 `references[]`（候选全集）里挑 panel 真正需要的：
+
+| panel 内容 | `reference_tags[]` 推荐 |
+|------------|----------------------|
+| 产品特写 / 包转 / 旋转 | `["product-hero"]`（不含 character/scene）|
+| 人物反应 / 入镜 / 表情 | `["character-<role_name>"]`（不含 product/scene）|
+| 场景切换 / 转场帧 | `["scene-<location>"]` |
+| 多元素同框（人物 + 产品互动）| `["product-hero", "character-<role>", "scene-<location>"]`（按重要性）|
+| 纯文字 / typography / logo | `[]`（不消费）|
+| 继承 block 默认 | `[]` |
+
+**block 级 vs panel 级**：
+
+- block 级 `references[]` 是**候选全集**；panel 级 `reference_tags[]` 是**精挑子集**
+- 缺省行为：panel `reference_tags[]` 缺省 = 继承 block 级 `references[]`（向后兼容）
+- panel `reference_tags[]` 不允许出现 block 级 `references[]` 之外的 `name`（envelope 顶层全集越界）
+
 ### 4.4 段落分镜自适应网格算法
 
-| 段落分镜时长 | 网格 | 格数 | 备注 |
-|------------|------|------|------|
-| ≥10s | 3×3 | 9 | 默认上限 |
-| 5s ~ <10s | 2×2 | 4 | 紧凑 |
-| <5s | 首尾帧 | 2（左右双联）| 极简 |
-
 **段落分镜拆分规则**（用户可在 Step 4 Phase 2 覆盖）：
-- 默认 `ceil(T/10)` 段，每段向上取整到 5s 倍数
-- 例：30s → `ceil(30/10)=3` 段，每段 10s → 全部 3×3
-- 例：25s → `ceil(25/10)=3` 段，每段 8s（25/3≈8.33，向上 5s 倍数 → 10s/10s/5s）→ 2 段 3×3 + 1 段 2×2
-- 例：12s → `ceil(12/10)=2` 段，每段 6s → 全部 2×2
 
-### 4.5 摄影 + 风格规约
+| 成片时长 T | 段数 = `ceil(T/10)` | 默认段长分配 | 推荐 layout |
+|-----------|---------------------|-------------|-----------|
+| T < 5s | 1 | T（单段）| `grid` 2×2 或 `narrative-comic` 4 联 |
+| 5s ≤ T < 10s | 1 | T（单段）| `grid` 3×3 / `action-keyframes` 3 连 |
+| 10s ≤ T < 20s | 2 | 向上 5s 倍数 | 各 block 按内容选（多 `grid`）|
+| 20s ≤ T < 30s | 3 | 向上 5s 倍数 | 多 `grid` + 1 个 `action-keyframes` |
+| 30s ≤ T < 45s | 3-4 | 向上 5s 倍数 | `grid` + `scene-planning` 转场 |
+| T ≥ 45s | ≥5 | 拆为多个 15s 板块 | 混合 6 类 |
 
+**段长分配规则**：每段时长向上取整到 5s 倍数（例：25s → 3 段 → 10s/10s/5s；例：30s → 3 段 → 全部 10s）。
+
+**自适应规则（v0.5 扩展）**：
+
+- 段落时长 ≥ 10s 且 ≥3 个 segment → 默认 `grid` 3×3 / 4×3
+- 段落时长 < 10s → 默认 `grid` 2×2；若是单一动作 → `action-keyframes` 3 连
+- 段落是叙事弧线（起承转合 4 拍）→ `narrative-comic` 4 联
+- 段落是空间建立 → `scene-planning` 或 `top-down-staging`
+- 段落是固定机位长拍 → `fixed-camera` 1-3 帧
+
+### 4.5 摄影与视觉风格（跟 selected_style）
+
+- **不再使用黏土白模**作为默认视觉基线
+- 视觉风格 = `selected_style` 的视觉语言（摄影 / 色彩 / 光线 / 质感）
+- selected_style 的 `category`（cinematic-narrative / commercial-craft / lifestyle-documentary）直接映射 prompt 中的摄影 + 色彩 + 光线描述
 - 故事板仅用于**整体节奏评审 + 客户提案**，不是视频生成的首帧
 - 每格构图必须**可执行**：framing / camera_move / focal length 必须具体
-- 颜色叙事（color narrative）：相邻 segment 的 mood_keyword 必须形成**渐进或对比**弧线
-- style grammar：与 selected_style 严格对齐（industrial / cinematic-food / beat-synced 等）
+- 颜色叙事（color narrative）：相邻 panel 的 mood_keyword 必须形成**渐进或对比**弧线
+
+**selected_style → 摄影要点速查表**：
+
+| selected_style | category | 摄影 + 色彩 + 光线 |
+|----------------|----------|-------------------|
+| `tvc-style-brand-manifesto` | cinematic-narrative | 长焦 85mm、低饱和 3200K、戏剧化光位、电影质感 |
+| `tvc-style-cinematic-food` | lifestyle-documentary | 35mm 浅景深、暖色温 3200K、大光比、食物肌理 |
+| `tvc-style-industrial-product` | commercial-craft | 50mm 标准镜头、5600K 中性色温、均匀柔光 |
+| `tvc-style-product-promo` | commercial-craft | 35-50mm、5600K + rim light、卖点层级受控光 |
+| `tvc-style-one-take` | commercial-craft | 24-35mm 广角、动机转场、连续空间 |
+| `tvc-style-beat-synced` | commercial-craft | 50mm、节奏化运镜、运动-剪辑协调 |
 
 ### 4.6 反模式（自动 reject）
+
+**v0.5 新增 5 项**（与 v0.4 旧 5 项合并，共 10 项）：
+
+- ❌ 使用黏土白模视觉（v0.4 默认）→ 已被 `selected_style` 取代
+- ❌ 三段式 prompt 缺 Visual Style 或 Character Lock → 漂移源
+- ❌ per-panel 缺 `shot_type` / `character_emotion` / `sound_effect` 任意一项 → QC fail
+- ❌ 同一角色跨 block 的 `Character Lock` 字面值不同 → 漂移
+- ❌ `layout_type` 选了 `top-down-staging` 但 prompt 写了人物面部细节 → 风格冲突
+
+**v0.4 保留 5 项**：
 
 - ❌ 故事板里出现数字 / 时间码 / 字幕 / 箭头 → 污染
 - ❌ N 格全部用同一构图（仅换主角）→ 节奏失败
 - ❌ 不分场景把 N 格塞进同一背景 → 场景混淆
 - ❌ 忽略 segment 时长硬塞 3×3 → 长 segment 信息密度不够
 - ❌ 不带产品 / 角色的 segment 也画主角（违反产品出镜率红线）→ QC fail
+
+**v0.5 → 视频翻译反漂移 3 项**（Step 9 video-prompt 必守门，详 SKILL §15.6 handoff contract）：
+
+- ❌ 视频 segment prompt 的"全局风格声明"重新从 `selected_style` 推算，而非直接 copy `blocks[].visual_style_anchor` → 双源漂移（cheatsheet §4.5 算一次，agent 再算一次）
+- ❌ 视频 segment prompt 的"人设描述"重新拼凑，而非直接 copy `blocks[].character_setup` → 跨 block 字面值漂移（破坏 §4.6 v0.5 第 4 项守门）
+- ❌ 视频 segment prompt 缺 `shot_type` / `character_emotion` / `sound_effect` 任意一项（v0.5 故事板已强制 → video 不消费 = 评审与成片脱节）
+
+**v0.7 → block 级参考图反漂移 4 项**（Step 4 Phase 2 必守门，详 SKILL §15.7 per-block reference decision）：
+
+- ❌ block 含人物入镜但 `references[]` 没 `character-*` → agnes 凭空生成人脸，跨 block 漂移
+- ❌ block 跨场景切换但 `references[]` 没对应 scene 图 → 转场前后视觉断裂
+- ❌ block `references[]` 是 envelope 顶层全集的复制粘贴（含 base64）→ 浪费 token + 引入无关 ref 污染
+- ❌ block `references[]` 出现 envelope 顶层不存在的 `name` → 解析期找不到 base64（hang）
+
+**v0.8 → panel 级参考图反漂移 2 项**（Step 4 Phase 2 panel 必守门，详 SKILL §15.7 panel-level）：
+
+- ❌ panel 元素只占 1 个但 `reference_tags[]` 含 ≥3 个无关 ref → 污染 agnes
+- ❌ panel `reference_tags[]` 含 block 级 `references[]` 之外的 `name` → 越权（envelope 顶层全集越界）
 
 ---
 

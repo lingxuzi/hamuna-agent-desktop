@@ -4,10 +4,11 @@ This file mirrors `agent-capabilities.json` in a form for humans. The JSON file
 is the contract of record; if anything here disagrees with the JSON, the JSON
 wins and this file should be regenerated.
 
-## Workflow (10 steps)
+## Workflow (11 steps)
 
 | Step | Agent | Gate | Block until | Skip when |
 |------|-------|------|-------------|-----------|
+| 0 | `tvc-agent-script` | **strong** | `user_confirms_script` | never |
 | 1 | `tvc-agent-brief` | **strong** | `user_confirms_brief` | - |
 | 2 | `tvc-agent-strategy` | **strong** | `user_selects_route` | - |
 | 3 | `tvc-agent-shot-planning` | weak | - | - |
@@ -20,6 +21,16 @@ wins and this file should be regenerated.
 | 10 | `tvc-agent-qc` | self-check | - | - |
 
 ## Agent Quick Reference
+
+### Step 0 · `tvc-agent-script`
+- **Inputs**: `user_raw_request`, `selected_duration`
+- **Outputs**: `script`, `selected_duration`
+- **References on demand**: (none)
+- **Do Not**:
+  - Skip this step even if the user supplied a complete script — the strong gate requires explicit confirmation
+  - Accept durations outside the 6 fixed options (15s / 30s / 45s / 60s / 90s / 120s)
+  - Generate scene durations whose sum differs from `selected_duration`
+  - Write shots, camera moves, or voiceover lines — those belong to shot-planning (Step 3) and voiceover (Step 5)
 
 ### Step 1 · `tvc-agent-brief`
 - **Inputs**: `user_raw_request`
@@ -126,14 +137,14 @@ wins and this file should be regenerated.
 Run `bash scripts/verify-tvc-bundle.sh` to confirm the on-disk bundle agrees with this contract. The script checks:
 
 - `agent-capabilities.json` is valid JSON and version 1
-- 10 agents present in the on-disk bundle
+- 11 agents present in the on-disk bundle (added `tvc-agent-script` as Step 0 pre-step)
 - 6 styles present in the on-disk bundle
 - Every agent's `references_on_demand` paths are reachable
-- Workflow step numbers and agent ids are unique
+- Workflow step numbers and agent ids are unique (now 0..10, total 11)
 - Workflow agent set matches the agents array
 - 25 reference markdown files exist (including `asset-prompting-cheatsheet.md` + `step-output-schema.md`)
 - 36 cheatsheet integrity checks (4 H2 × 6 H3 + 6 style Asset Prompt Adapt × 2 + 4 failure code + cheatsheet orchestrator cross-link)
-- §12 step-output-schema consistency: 42 checks (10 artifact_kind declared + 10 unique + 20 Workflow Context sub-keys + 1 schema doc + 10 §X. sections + 1 routing table)
+- §12 step-output-schema consistency: ~50 checks (11 artifact_kind declared + 11 unique + 22 Workflow Context sub-keys + 1 schema doc + 11 §X. sections + 1 routing table)
 
 > **v0.3 schema**: All 10 agent + 6 style files live as flat `.md` files inside `tvc-director/agents/` and `tvc-director/styles/` (no frontmatter). `skill_id` is preserved in `agent-capabilities.json` for cross-references but no longer maps to a directory on disk; use `internal_path` to locate the file.
 > **Pre-Generation Confirmation Gate**: Every MCP generation call (Step 4 / 5 / 6 / 9) is gated by `tvc-director/SKILL.md` §14 — orchestrator must show prompt + reference images to user before invocation. Failure → cheatsheet §5.2 4-option grilling.

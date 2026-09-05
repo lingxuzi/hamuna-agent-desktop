@@ -124,11 +124,11 @@
     background: var(--rec);
   }
 
-  /* ------------------ Timeline (10 slate cells) ------------------ */
+  /* ------------------ Timeline (11 slate cells: Step 0 pre-step + 10 main) ------------------ */
 
   .timeline {
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
+    grid-template-columns: repeat(11, 1fr);
     border-bottom: 1px solid var(--border-strong);
     background: var(--bone-2);
   }
@@ -272,6 +272,63 @@
   .grid--3x3 { grid-template-columns: repeat(3, 1fr); }
   .grid--2x2 { grid-template-columns: repeat(2, 1fr); }
   .grid--2up { grid-template-columns: 1fr 1fr; }
+
+  /* v0.5: 6 layout types (cheatsheet §4.2) */
+  .layout-grid { grid-template-columns: repeat(3, 1fr); }       /* default 3×3 — 4×3 / 2×2 同样适用 */
+  .layout-fixed-camera { grid-template-columns: repeat(3, 1fr); } /* 1-3 帧水平排 */
+  .layout-scene-planning { grid-template-columns: 1fr; }          /* 整图俯视 + 走位 */
+  .layout-top-down-staging { grid-template-columns: 1fr; }        /* 整图俯视 + 角色 */
+  .layout-action-keyframes { grid-template-columns: repeat(3, 1fr); } /* 3 帧三连 */
+  .layout-narrative-comic { grid-template-columns: repeat(4, 1fr); }   /* 4 帧四联 */
+
+  /* v0.5: block-level chips (visual_style_anchor / character_setup / layout_type) */
+  .layout-chip,
+  .style-chip,
+  .character-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: 1px solid var(--caution);
+    color: var(--caution);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    /* sharp corners — no rounding */
+  }
+  .character-chip {
+    border-color: var(--bone-3);
+    color: var(--bone-1);
+  }
+  .character-chip[data-state="none"] {
+    border-style: dashed;
+    color: var(--bone-3);
+  }
+
+  /* v0.5: per-panel 3 项硬强制 footer (shot_type / character_emotion / sound_effect) */
+  .cell__annotations {
+    display: flex;
+    gap: 3px;
+    padding: 3px 4px 2px;
+    border-top: 1px solid var(--ink);
+    background: var(--bone-1);
+    flex-wrap: wrap;
+  }
+  .cell__ann {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 1px 4px;
+    background: var(--bone-2);
+    color: var(--ink);
+    border: 1px solid var(--bone-3);
+    line-height: 1.2;
+    /* sharp corners — no rounding */
+  }
+  .cell__ann--emotion[data-empty="true"] {
+    color: var(--bone-3);
+    font-style: italic;
+  }
 
   .cell {
     aspect-ratio: 16 / 9;
@@ -578,8 +635,12 @@
         </div>
       </header>
 
-      <!-- 10-step timeline -->
+      <!-- 11-step timeline (Step 0 script pre-step + 10 main) -->
       <nav class="timeline" aria-label="Workflow timeline">
+        <button class="step step--done" title="script — confirmed (Step 0 pre-step, narrative + selected_duration)">
+          <span class="step__num">00</span>
+          <span class="step__id">script</span>
+        </button>
         <button class="step step--done" title="brief — confirmed">
           <span class="step__num">01</span>
           <span class="step__id">brief</span>
@@ -638,12 +699,14 @@
         <div class="grid-label">
           <span class="grid-label__chip">BLOCK 01</span>
           <span>storyboard grid</span>
-          <span>3×3</span>
+          <span class="layout-chip" title="v0.5 layout_type">layout: grid</span>
+          <span class="style-chip" title="v0.5 visual_style_anchor">style: tvc-style-cinematic-food</span>
+          <span class="character-chip" title="v0.5 character_setup">[Character Lock: 28-34 female, East Asian, slim build…]</span>
           <span>0–10s</span>
         </div>
 
-        <div class="grid grid--3x3" aria-label="Storyboard block 01 · 3x3 grid">
-          <!-- 9 cells -->
+        <div class="grid grid--3x3 layout-grid" aria-label="Storyboard block 01 · 3x3 grid (v0.5 layout_type=grid)">
+          <!-- 9 cells · v0.5: each cell carries 3 hard-required annotation pills (shot_type / character_emotion / sound_effect) -->
           <div class="cell">
             <span class="cell__id">01</span><span class="cell__time">0.0–1.2s</span>
             <svg class="cell__scene-svg" viewBox="0 0 100 56" preserveAspectRatio="none">
@@ -651,6 +714,11 @@
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
               <circle cx="76" cy="20" r="7" fill="#F5A524"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">ECU</span>
+              <span class="cell__ann cell__ann--emotion" title="character_emotion">focused</span>
+              <span class="cell__ann" title="sound_effect">ambient</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">02</span><span class="cell__time">1.2–2.4s</span>
@@ -658,6 +726,11 @@
               <rect x="20" y="18" width="60" height="32" fill="#15171A"/>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">medium</span>
+              <span class="cell__ann cell__ann--emotion" title="character_emotion">calm</span>
+              <span class="cell__ann" title="sound_effect">whoosh</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">03</span><span class="cell__time">2.4–3.8s</span>
@@ -666,6 +739,11 @@
               <rect x="60" y="30" width="14" height="20" fill="#3B5BDB"/>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">close-up</span>
+              <span class="cell__ann cell__ann--emotion" title="character_emotion">focused</span>
+              <span class="cell__ann" title="sound_effect">sfx-impact</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">04</span><span class="cell__time">3.8–5.2s</span>
@@ -674,6 +752,11 @@
               <circle cx="50" cy="28" r="8" fill="#F5A524"/>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">extreme-close-up</span>
+              <span class="cell__ann cell__ann--emotion" title="character_emotion">determined</span>
+              <span class="cell__ann" title="sound_effect">vo-over</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">05</span><span class="cell__time">5.2–6.5s</span>
@@ -683,6 +766,11 @@
               <rect x="62" y="14" width="22" height="36" fill="#15171A"/>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">wide</span>
+              <span class="cell__ann cell__ann--emotion" data-empty="true" title="character_emotion (product-only)">—</span>
+              <span class="cell__ann" title="sound_effect">music-beat</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">06</span><span class="cell__time">6.5–7.8s</span>
@@ -691,6 +779,11 @@
               <line x1="44" y1="12" x2="44" y2="50" stroke="#F5A524" stroke-width="0.8"/>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">medium-close-up</span>
+              <span class="cell__ann cell__ann--emotion" title="character_emotion">tense</span>
+              <span class="cell__ann" title="sound_effect">heartbeat</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">07</span><span class="cell__time">7.8–8.8s</span>
@@ -699,6 +792,11 @@
               <circle cx="68" cy="28" r="14" fill="#3B5BDB"/>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">over-the-shoulder</span>
+              <span class="cell__ann cell__ann--emotion" title="character_emotion">hopeful</span>
+              <span class="cell__ann" title="sound_effect">dialogue</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">08</span><span class="cell__time">8.8–9.4s</span>
@@ -707,6 +805,11 @@
               <text x="50" y="34" text-anchor="middle" fill="#15171A" font-family="JetBrains Mono" font-size="9" font-weight="600">HERO</text>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">medium</span>
+              <span class="cell__ann cell__ann--emotion" title="character_emotion">joyful</span>
+              <span class="cell__ann" title="sound_effect">breath</span>
+            </div>
           </div>
           <div class="cell">
             <span class="cell__id">09</span><span class="cell__time">9.4–10.0s</span>
@@ -716,24 +819,37 @@
               <text x="50" y="34" text-anchor="middle" fill="#15171A" font-family="JetBrains Mono" font-size="6" font-weight="600">LOGO</text>
               <line x1="0" y1="50" x2="100" y2="50" stroke="#15171A" stroke-width="1"/>
             </svg>
+            <div class="cell__annotations">
+              <span class="cell__ann" title="shot_type">close-up</span>
+              <span class="cell__ann cell__ann--emotion" data-empty="true" title="character_emotion (product-only)">—</span>
+              <span class="cell__ann" title="sound_effect">silence</span>
+            </div>
           </div>
         </div>
 
         <div class="prompt-wrap">
           <div class="prompt-head">
-            <span class="prompt-head__label">Prompt · agnes_image_generate · multi-panel</span>
-            <span class="prompt-head__count">248 chars</span>
+            <span class="prompt-head__label">Prompt · agnes_image_generate · multi-panel · v0.5 three-segment structure</span>
+            <span class="prompt-head__count">612 chars</span>
           </div>
-<pre class="prompt">故事板图，3行3列共9格，白底干净布局，格子间有细线分隔，
+<pre class="prompt">[Visual Style: tvc-style-cinematic-food · 35mm 浅景深，暖色温 3200K，大光比]
+[Character Lock: 28-34 female, East Asian, slim build, shoulder-length black hair,
+ white shirt + dark jeans; face anchor: small mole on left cheek]
+
+故事板图，layout_type=grid 3行3列共9格（v0.5），白底干净布局，格子间有细线分隔，
 禁止镜号/数字/时间码/字幕/箭头/水印
 
-格1（0.0-1.2s）：产品正面特写，spinning微转动
-格2（1.2-2.4s）：产品拆解图，5个组件悬浮
-格3（2.4-3.8s）：组装动画，单组件下落
+格1（0.0-1.2s）：shot_type=ECU，character_emotion=focused，sound_effect=ambient，
+  产品正面特写，spinning微转动
+格2（1.2-2.4s）：shot_type=medium，character_emotion=calm，sound_effect=whoosh，
+  产品拆解图，5个组件悬浮
+格3（2.4-3.8s）：shot_type=close-up，character_emotion=focused，sound_effect=sfx-impact，
+  组装动画，单组件下落
 ...
+格5（5.2-6.5s）：shot_type=wide，character_emotion=—（product-only），
+  sound_effect=music-beat，产品空镜
 
-style: clean storyboard layout, minimal text,
-       professional advertising concept art</pre>
+style: cinematic food close-up, 35mm shallow DOF, warm 3200K, soft amber rim</pre>
         </div>
 
         <div class="refs" aria-label="Reference images">
@@ -795,6 +911,7 @@ style: clean storyboard layout, minimal text,
       </header>
 
       <nav class="timeline" aria-label="Workflow timeline">
+        <button class="step step--done"><span class="step__num">00</span><span class="step__id">script</span></button>
         <button class="step step--done"><span class="step__num">01</span><span class="step__id">brief</span></button>
         <button class="step step--done"><span class="step__num">02</span><span class="step__id">strategy</span></button>
         <button class="step step--done"><span class="step__num">03</span><span class="step__id">shot</span></button>
@@ -887,6 +1004,7 @@ style: clean storyboard layout, minimal text,
       </header>
 
       <nav class="timeline" aria-label="Workflow timeline">
+        <button class="step step--done"><span class="step__num">00</span><span class="step__id">script</span></button>
         <button class="step step--done"><span class="step__num">01</span><span class="step__id">brief</span></button>
         <button class="step step--current"><span class="step__num">02</span><span class="step__id">strategy</span></button>
         <button class="step"><span class="step__num">03</span><span class="step__id">shot</span></button>

@@ -8,6 +8,24 @@
   },
   "agents": [
     {
+      "skill_id": "tvc-agent-script",
+      "internal_path": "agents/script.md",
+      "artifact_kind": "script",
+      "version": "1.0.0",
+      "phase": "Phase 0",
+      "name": "TVC Agent Script",
+      "description": "Collect the user's selected short film duration (6 fixed options: 15s / 30s / 45s / 60s / 90s / 120s) and generate a narrative script (story arc, protagonist, conflict, scene outline, key beats) sized exactly to that duration.",
+      "inputs": ["user_raw_request", "selected_duration"],
+      "outputs": ["script", "selected_duration"],
+      "references_on_demand": [],
+      "do_not": [
+        "Do not skip this step even if the user supplied a complete script in their raw request — the strong gate requires explicit user confirmation that the refined structure matches their intent.",
+        "Do not accept durations outside the 6 fixed options.",
+        "Do not generate scene durations whose sum differs from selected_duration.",
+        "Do not write shots, camera moves, or voiceover lines — those belong to shot-planning (Step 3) and voiceover (Step 5)."
+      ]
+    },
+    {
       "skill_id": "tvc-agent-brief",
       "internal_path": "agents/brief.md",
       "artifact_kind": "brief",
@@ -258,6 +276,7 @@
     }
   ],
   "workflow": [
+    {"step": 0, "agent": "tvc-agent-script", "gate": "strong", "block_until": "user_confirms_script"},
     {"step": 1, "agent": "tvc-agent-brief", "gate": "strong", "block_until": "user_confirms_brief"},
     {"step": 2, "agent": "tvc-agent-strategy", "gate": "strong", "block_until": "user_selects_route"},
     {"step": 3, "agent": "tvc-agent-shot-planning", "gate": "weak"},

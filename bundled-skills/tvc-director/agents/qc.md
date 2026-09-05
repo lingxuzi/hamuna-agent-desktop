@@ -19,7 +19,15 @@ Read on demand from `tvc-director/references/`:
 
 - Score each dimension 1-10 with one-sentence evidence: brief fidelity, TVC judgment, voiceover and sound, food flavor (if applicable), casting, Agnes execution, commercial assets, output quality.
 - For every video prompt, run the six pre-generation gates: light source findable, framing motivated, color narrative-driven, focal length and axis explicit, material parameters executable, ending state has all six sub-fields.
-- Mark global redlines: product screen share, no three consecutive panels without product, storyboard-final.png confirmed, no banned soft words, product drives cause.
+- Mark global redlines (v0.8 升级 8 项；前 5 项保留，新增 3 项自动反漂移守门):
+  - **product_screen_share_gte_70** — 产品屏幕占比 ≥ 70%
+  - **no_three_consecutive_without_product** — 连续 3 panel 不允许无产品
+  - **storyboard_final_confirmed** — storyboard-final.png 已落地
+  - **no_banned_soft_words** — 无 cinematic / 电影感 等违禁词
+  - **product_drives_cause** — 产品驱动叙事因果
+  - **character_setup_consistency**（v0.8 新增）— 跨 segment 同主角的 `character_setup` 字面值完全一致（自动反漂移守门）
+  - **visual_style_anchor_consistency**（v0.8 新增）— 跨 segment `visual_style_anchor` 字面值完全一致
+  - **panel_id_unique**（v0.8 新增）— 同一 `panel_id` 在 `storyboard_to_clip_mapping[]` 不重复出现
 - Emit a final verdict: pass, pass-with-remarks, or block.
 
 # Prompt Rules

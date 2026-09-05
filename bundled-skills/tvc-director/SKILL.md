@@ -37,7 +37,7 @@ description: "TVC 编排入口 - 按 agent-capabilities.json 调度 10 个 tvc-a
 | `edge-tts` | `mcp__edge-tts__*` | 内置 | 应用启动自动加载，无需配置 |
 
 **未配置 `multimedia-creator` 的降级路径**：
-- 可完成 Step 1-5（brief / strategy / shot-planning / asset-storyboard 设计）的所有创意/分镜方案，但 Step 4 之后的 `agnes_image_*` / `agnes_video_*` 调用会失败
+- 可完成 Step 0-5（script / brief / strategy / shot-planning / asset-storyboard 设计）的所有创意/分镜方案，但 Step 4 之后的 `agnes_image_*` / `agnes_video_*` 调用会失败
 - 旁白仍可用 `edge-tts` 生成（独立内置 MCP）
 - 视频资产需用户自行在外部平台生成后，导入 `outputs/<项目标识>/videos/` 对应文件位
 
@@ -46,12 +46,15 @@ description: "TVC 编排入口 - 按 agent-capabilities.json 调度 10 个 tvc-a
 - 视频生成时若需参考图，会先上传到 `img.remit.ee`（公网图床）
 - 商业 Logo / 包装小字 / 价格 / CTA 不由视频模型生成，转交后期
 
-## 3. 调度顺序（10 个协作 agent）
+**Step 0 前置脚本门控**：在 Step 1（brief）开始之前，必须先完成 Step 0（`tvc-agent-script`）—— 让用户从 6 档固定时长（15s / 30s / 45s / 60s / 90s / 120s）中选择一项，按时长生成叙事剧本（narrative script），并经用户强门确认。`selected_duration` 是硬约束，写入 envelope 后向下游所有 agent 传播；任何 drift 都必须先 grilling 用户。详见 §16.3 中 `script_envelope` 行 + `references/step-output-schema.md` §11。
+
+## 3. 调度顺序（11 个协作 agent：1 pre-step + 10 主流程）
 
 完整 workflow 在 [`agent-capabilities.json`](agent-capabilities.json) 中声明。下表是默认顺序，每一列都是 agent `## Workflow Context` section 必须声明的字段：
 
 | Step | Agent | Gate | Block until | Skip when | Phase count | State envelope |
 |------|-------|------|-------------|-----------|-------------|----------------|
+| 0 | `tvc-agent-script` | **strong** | user_confirms_script | never | 2 (collect_duration / refine) | `script_envelope` |
 | 1 | `tvc-agent-brief` | **strong** | user_confirms_brief | never | 1 | `brief_envelope` |
 | 2 | `tvc-agent-strategy` | **strong** | user_selects_route | never | 2 (propose / revise) | `routes_envelope` |
 | 3 | `tvc-agent-shot-planning` | weak | - | never | 1 | `shot_plan_envelope` |
@@ -226,13 +229,14 @@ Step 1-5 全部完成后、调用任何 `agnes_video_generate` / `text_to_speech
 
 ## 11. 参考文件
 
-- `agent-capabilities.json` — 10 agent + 6 style 接口契约（机器读）
+- `agent-capabilities.json` — 11 agent + 6 style 接口契约（机器读）
 - `agent-capabilities.md` — 人读速查表
-- `references/` — 23 个知识库文件，由各 agent 通过 Inputs 按需读取
-- 10 个 `tvc-agent-*/SKILL.md` — 协作 agent 主体
+- `references/` — 25 个知识库文件，由各 agent 通过 Inputs 按需读取
+- 11 个 `tvc-agent-*/SKILL.md` — 协作 agent 主体（含 Step 0 pre-step `tvc-agent-script`）
 - 6 个 `tvc-style-*/SKILL.md` — 风格库
-- `scripts/verify-tvc-bundle.sh` — bundle 完整性校验脚本（含 §11 cheatsheet 36 项）
-- `references/asset-prompting-cheatsheet.md` — **资产生成提示词权威**（4 类资产 / 6 段 schema / Failure Recovery），§14 / §15 引用此表
+- `scripts/verify-tvc-bundle.sh` — bundle 完整性校验脚本（含 §11 cheatsheet 36 项 + §12 schema 一致性 50+ 项）
+- `references/asset-prompting-cheatsheet.md` — **资产生成提示词权威**（4 类资产 / 6 类 layout 模板 + 6 段 schema / Failure Recovery），§14 / §15 引用此表
+- `references/step-output-schema.md` — **Step Output Schema 权威**（11 artifact_kind JSON Schema + §12 Widget Routing Table），§16 引用此文档
 
 ---
 
@@ -262,6 +266,7 @@ Step 1-5 全部完成后、调用任何 `agnes_video_generate` / `text_to_speech
 
 | Envelope | 关联 Step | 关键 artifact keys |
 |----------|-----------|-------------------|
+| `script_envelope` | 0 | script (story_arc / protagonist / conflict / scene_outline / key_beats), selected_duration |
 | `brief_envelope` | 1 | brief_card, strategy_draft |
 | `routes_envelope` | 2 | routes, recommendation, selected_route, hook_design |
 | `shot_plan_envelope` | 3 | scene_anchors, shot_handoff_table |
@@ -380,26 +385,189 @@ failure_report:
 
 **段长分配规则**：每段时长向上取整到 5s 倍数（例：25s → 3 段 → 10s/10s/5s，2 段 3×3 + 1 段 2×2）。
 
-### 15.2 网格 → 提示词映射
+### 15.2 Layout 类型与决策（6 类 — v0.5 升级）
 
-| 段落分镜时长 | 网格 | 提示词模板 |
-|------------|------|---------|
-| ≥10s | 3×3（9 格）| cheatsheet §4.3 "3行3列" 模板 |
-| 5s ~ <10s | 2×2（4 格）| cheatsheet §4.3 "2行2列" 模板 |
-| <5s | 首尾帧（2 联）| cheatsheet §4.3 "单图首尾帧" 模板 |
+**v0.5 不再使用"3×3 黏土白模默认"**。每 block 按场景内容选 `layout_type`，再写 prompt 模板。
+
+| `layout_type` | 何时用 | Panel 数 | Aspect | cheatsheet 模板 |
+|---------------|--------|---------|--------|-----------------|
+| `grid` | 默认段落分镜；产品演示、场景切换、节奏推进 | 4×3 / 3×3 / 2×2 | 16:9 / 4:3 | 模板 A（§4.2）|
+| `fixed-camera` | 长镜头 / 固定机位对话 / 戏剧化停顿 | 1-3（水平排）| 16:9 | 模板 B |
+| `scene-planning` | 场景走位调度；人物移动路径 | 1（整图俯视 + 走位）| 16:9 宽幅 | 模板 C |
+| `top-down-staging` | 多人站位、群戏调度 | 1（整图俯视 + 角色）| 1:1 或 4:3 | 模板 D |
+| `action-keyframes` | 动作分解、关键转折 | 3（水平三连）| 16:9 三联 | 模板 E |
+| `narrative-comic` | 情节推进、叙事弧线 | 4（水平四联 / 2×2）| 16:9 | 模板 F |
+
+**与 §15.1 自适应算法的关系**：§15.1 决定"一个 TVC 切成几个 block"，§15.2 决定"每个 block 用哪种 layout"。决策原则：
+
+- block 内 segment 数 ≥ 3 且需要并列展示不同角度 → `grid`
+- block 主导单镜头长拍 → `fixed-camera`
+- block 是转场或空间建立 → `scene-planning`
+- block 涉及多人位置调度 → `top-down-staging`
+- block 核心是单动作分解（开盖 / 倾倒 / 冲刺）→ `action-keyframes`
+- block 是叙事弧线推进（4 段起承转合）→ `narrative-comic`
+
+**grid 类型的细分网格选择**（v0.4 自适应算法）：
+
+| block 时长 | grid 内部选择 | Panel 数 |
+|-----------|--------------|---------|
+| ≥10s | 4×3 / 3×3 | 12 / 9 |
+| 5s ~ <10s | 2×2 | 4 |
+| <5s | 不推荐 `grid`（用 `action-keyframes` 或 `narrative-comic`）| — |
 
 ### 15.3 用户覆盖
 
-- Step 4 Phase 2 入口 orchestrator 必须问用户：「按默认算法拆分为 N 段（segment X-X 秒），是否调整？」
-- 用户答复「按默认」→ 应用 §15.1 默认算法
-- 用户答复「强制 X 段 / 每段 Y 秒」→ 覆盖算法，但 orchestrator 必须 grilling 确认 segment 总和 = T 且每段时长 ≥ 3s 且 ≤ 10s（Agnes 上限）
-- 用户答复「不分段，单段」→ 仅当 T ≤ 10s 时允许；T > 10s 必须 grilling 解释"超出 Agnes 上限会被截断"
+- Step 4 Phase 2 入口 orchestrator 必须问用户：「按默认算法拆分为 N 段（segment X-X 秒），每段使用 Y layout，是否调整？」
+- 用户答复「按默认」→ 应用 §15.1 + §15.2 默认算法
+- 用户答复「强制 X 段 / 每段 Y 秒 / 用 Z layout」→ 覆盖算法，但 orchestrator 必须 grilling 确认：
+  - segment 总和 = T
+  - 每段时长 ≥ 3s 且 ≤ 10s（Agnes 上限）
+  - 6 类 layout 选择与 block 内容匹配（用户在覆盖时可强制，但下游 QC 仍按 §4.6 反模式校验）
 
 ### 15.4 与 §3 / §4 / §11 的关系
 
 - §3 workflow table Step 4 仍标 `gate: strong`（Phase 3 materialization 强门不变）
 - §4 Phase 1 (asset_generation) 不分网格（每类资产单图）
-- §11 verify-tvc-bundle.sh §11 36 项校验覆盖网格算法 + 提示词模板完整性
+- §11 verify-tvc-bundle.sh §11 36 项校验覆盖 6 类 layout + 网格算法 + 提示词模板完整性
+
+### 15.5 v0.5 三项硬约束（per-panel + 固定人设 + 视觉跟 selected_style）
+
+每 block prompt 必满足：
+
+1. **视觉锚点**：`[Visual Style: <selected_style> · <摄影/色彩/光线要点>]`（从 cheatsheet §4.5 selected_style 速查表映射）
+2. **人设锚点**：`[Character Lock: ...]`（无主角 block 填 `none`，不省略；从 cheatsheet §4.3 规则）
+3. **per-panel 3 项硬强制**：`shot_type` / `character_emotion` / `sound_effect` 三键必出现（产品-only panel `character_emotion` 可空字符串）
+
+缺一即 reject（cheatsheet §4.6 反模式 v0.5 新增 5 项）。
+
+详细规范见 `references/asset-prompting-cheatsheet.md` §4.1 / §4.2 / §4.3 / §4.5 / §4.6 与 `references/step-output-schema.md` §4。
+
+### 15.6 Step 4 → Step 9 Handoff Contract（v0.6 新增）
+
+**问题**：v0.5 故事板新增的 6 个结构化字段若不被 Step 9 显式消费，会让"评审稿（故事板图）与成片（视频）"在 3 个维度漂移：摄影风格、人设、表演/音效。本节是 Step 4 → Step 9 的**唯一权威映射表**，任何 agent 改 Step 9 输入契约必先校对本节。
+
+**字段权威映射**：
+
+| v0.5 故事板字段 | 视频侧角色 | 必读 |
+|----------------|-----------|------|
+| `blocks[].visual_style_anchor` | segment prompt 全局风格声明的**唯一源**（禁止重新从 `selected_style` 推算） | ✓ |
+| `blocks[].character_setup` | segment prompt 人设描述的**唯一源**（禁止重拼；跨 block 字面值必须完全一致） | ✓ |
+| `blocks[].vein` | 间接消费（落到"导演意图"位置） | — |
+| `blocks[].grid_path` | segment first_frame **首选上传源**（不可用退化 `composite_path`） | ✓ |
+| `panels[].shot_type` | segment framing（已是 Agnes shot type 枚举） | ✓ |
+| `panels[].character_emotion` | segment 表演/表情方向（空字符串映射"无角色表演"） | ✓ |
+| `panels[].sound_effect` | segment 音效指令 | ✓ |
+| `panels[].{framing, camera_move, color_light, mood_keyword}` | segment 具体描写 | ✓ |
+| `panels[].panel_id` / `time_range` | `storyboard_to_clip_mapping` 派生源 | ✓ |
+| `blocks[].layout_type` | 视频侧无消费场景 | — |
+
+**实施位置**：
+- `agents/video-prompt.md` Inputs 段 / v0.5 字段翻译表 / storyboard_to_clip_mapping 派生规则 / First-Frame 上传源
+- `references/step-output-schema.md` §9 字段来源表（与 video-prompt 双向一致）
+- `references/asset-prompting-cheatsheet.md` §4.6 v0.5→视频 反漂移 3 项
+- `scripts/verify-tvc-bundle.sh` §12.7 字段一致性检查
+
+**Lint 入口**：`verify-tvc-bundle.sh` §12.7 校验 video-prompt.md 必须显式列出 `visual_style_anchor` / `character_setup` / `shot_type` / `character_emotion` / `sound_effect` / `grid_path` 6 个 v0.5 字段名；step-output-schema §9 的 `storyboard_to_clip_mapping` 字段说明必须引用 `panels[].panel_id` 来源。
+
+### 15.7 Per-Block Reference Decision（v0.7 新增）
+
+**问题**：v0.5 / v0.6 之前 envelope 顶层 `references[]` 是"全集共享"，未做 block 级精挑。结果：
+- 所有 panel 都喂全部 ref（envelope 顶层全集）→ 跨场景 block 的无关 ref 污染 agnes 生成结果
+- Scene 切换的视觉一致性靠 agnes "自己挑对"，不可靠
+- 每次 agnes_image_generate 调用传 4-5 张 base64，浪费 token
+
+**两层模型**（必背）：
+
+| 层 | 字段 | 内容 |
+|----|------|------|
+| Envelope 顶层 | `references[]` | **全集**：`{name, source: base64_data_uri}`，name 是字符串 ID（`product-hero` / `character-<role>` / `scene-<location>`）；一张图只在 envelope 顶层存一次 |
+| Block 级 | `blocks[].references[]` | **精挑子集**：每项是 envelope 顶层 `references[].name` 的字符串引用（**不**重复 base64） |
+
+**block 级 references[] 决策表**（每 block 必走，先于 layout / prompt 拼装）：
+
+| block 场景内容 | `references[]` 必含 |
+|----------------|-------------------|
+| 含产品（产品演示 / 特写 / 包转）| `product-hero` |
+| 含人物（角色入镜）| `character-<role_name>`（按角色名） |
+| 场景切换 / 转场 block | 该 block 起始场景对应的 `scene-<location>` |
+| 多场景混合 block（少见）| 按 panel 顺序列出全部相关 scene + product + character（基本 = envelope 全集） |
+| 纯文字 / 纯 typography / logo endboard | `[]`（空数组） |
+
+**反模式**（cheatsheet §4.6 v0.7 新增 4 项）：
+- ❌ block 含人物入镜但 `references[]` 没 `character-*` → agnes 凭空生成人脸，跨 block 漂移
+- ❌ block 跨场景切换但 `references[]` 没对应 scene 图 → 转场前后视觉断裂
+- ❌ block `references[]` 是 envelope 顶层全集的复制粘贴（含 base64）→ 浪费 token + 引入无关 ref 污染
+- ❌ block `references[]` 出现 envelope 顶层不存在的 `name` → 解析期找不到 base64（hang）
+
+**实施位置**：
+- `agents/asset-storyboard.md` Phase 2 头部"Per-Block Reference Decision"节 + Workflow Context artifact schema
+- `references/step-output-schema.md` §4 block 必填字段加 `references[]`
+- `references/asset-prompting-cheatsheet.md` §4.3 两层模型 + 决策表 + §4.6 v0.7 反模式 4 项
+- `scripts/verify-tvc-bundle.sh` §12.6 schema 检查 + §12.8 video 端消费检查
+
+**Lint 入口**：`verify-tvc-bundle.sh` §12.6 检查 §4 必填字段含 `references`；§12.8 检查 video-prompt.md 消费 `blocks[].references[]`（v0.6 写的"blocks[].references[] + 上游 resources"已经能直接消费 block 级 ref，不需要 v0.7 改 video-prompt.md）。
+
+#### 15.7.1 Panel-Level Reference Tags（v0.8 新增）
+
+**问题**：v0.7 block 级 `references[]` 是"全 block 共享"，但同一 block 内不同 panel 可能聚焦不同元素（panel 01 = 产品特写 vs panel 05 = 人物反应）。共享 ref 会让 panel 01 收到 character-* 污染，panel 05 收到 product-hero 冗余。
+
+**三层模型**（v0.8 完整）：
+
+| 层 | 字段 | 内容 |
+|----|------|------|
+| Envelope 顶层 | `references[]` | **全集**：`{name, source: base64_data_uri}`，name 是字符串 ID |
+| Block 级 | `blocks[].references[]` | **block 级精挑**：每项是 envelope 顶层 `references[].name` 的字符串引用 |
+| Panel 级 | `panels[].reference_tags[]` | **panel 级精挑**：每项是 envelope 顶层 `references[].name` 的字符串引用；缺省 = 继承 block 级 `references[]` |
+
+**panel 级 reference_tags[] 决策表**（每 panel 必走，先于 prompt 拼装）：
+
+| panel 内容 | `reference_tags[]` 推荐 |
+|------------|----------------------|
+| 产品特写 / 包转 / 旋转 | `["product-hero"]` |
+| 人物反应 / 入镜 / 表情 | `["character-<role_name>"]` |
+| 场景切换 / 转场帧 | `["scene-<location>"]` |
+| 多元素同框（人物 + 产品互动）| `["product-hero", "character-<role>", "scene-<location>"]`（按重要性） |
+| 纯文字 / typography / logo | `[]` |
+| 继承 block 默认 | `[]` |
+
+**反模式**（cheatsheet §4.6 v0.8 新增 2 项）：
+- ❌ panel 元素只占 1 个但 `reference_tags[]` 含 ≥3 个无关 ref → 污染 agnes
+- ❌ panel `reference_tags[]` 含 block 级 `references[]` 之外的 `name` → 越权
+
+**实施位置**：
+- `agents/asset-storyboard.md` Phase 2 "Panel-Level Reference Tags" 子节 + Workflow Context artifact schema
+- `references/step-output-schema.md` §4 panel 必填键加 `reference_tags[]`
+- `references/asset-prompting-cheatsheet.md` §4.3 panel 级精挑决策 + §4.6 v0.8 反模式 2 项
+- `agents/video-prompt.md` Reference Images 来源升级为 panel 级精挑合并
+- `scripts/verify-tvc-bundle.sh` §12.6 schema 加 reference_tags + §12.9 实跑 lint
+
+### 15.8 Step 10 自动化反漂移校验（v0.8 新增）
+
+**问题**：v0.6 / v0.7 加了"必填字段"和"决策表"，但 lint 只查"字段名存在"，**不查**实跑结果。Step 10 QC 仍然是手工 8 维度评分，没有自动反漂移检查。
+
+**`qc_report.global_redlines_status` 8 项**（v0.8 新增 3 项自动检查）：
+
+| Key | Check | 自动化方式 |
+|-----|-------|----------|
+| `product_screen_share_gte_70` | 产品出镜率 ≥ 70% | 老 |
+| `no_three_consecutive_without_product` | 连续 3 个 panel 不无产品 | 老 |
+| `storyboard_final_confirmed` | `storyboard-final.png` 用户已确认 | 老 |
+| `no_banned_soft_words` | prompt 不含 cinematic / 电影感 等违禁词 | 老 |
+| `product_drives_cause` | 产品是因果驱动（不是纯气氛）| 老 |
+| `character_setup_consistency` | 跨 segment 同主角的 `character_setup` 字面值完全一致 | **v0.8 新增**：qc.md 实跑 `video_prompts.segments[].prompt` 含同一 `character_setup` 原文 |
+| `visual_style_anchor_consistency` | 跨 segment `visual_style_anchor` 字面值完全一致 | **v0.8 新增**：qc.md 实跑 `video_prompts.segments[].prompt` 含同一 `visual_style_anchor` 原文 |
+| `panel_id_unique` | 同一 `panel_id` 在 `storyboard_to_clip_mapping[]` 不重复出现 | **v0.8 新增**：qc.md 实跑 mapping 唯一性 |
+
+**两层 lint**（build-time + runtime）：
+- **build-time / CI-time**：`scripts/verify-tvc-bundle.sh` §12.9 实跑 lint（接受 `--storyboard <envelope.json>` + `--video <envelope.json>`，用 jq 读取 envelope，正则检查 `segment.prompt` 含 `blocks[].visual_style_anchor` 原文 + `blocks[].character_setup` 原文 + 每 panel 的 `shot_type` / `character_emotion` / `sound_effect` 值）
+- **runtime / Step 10 QC**：`agents/qc.md` 实跑同 3 项 + 老 5 项 = 8 项 `global_redlines_status` 输出到 `qc_report`
+
+**实施位置**：
+- `agents/qc.md` Output Guidance 加 3 项新 global redlines
+- `references/step-output-schema.md` §10 `qc_report` 必填字段加 3 项 + 8 项定义表
+- `scripts/verify-tvc-bundle.sh` §12.9 新增实跑 lint + §12.10 self-check qc.md / schema §10 必含 3 项新 key
+
+**Lint 入口**：`verify-tvc-bundle.sh` §12.10 检查 `qc.md` 必含 `character_setup_consistency` / `visual_style_anchor_consistency` / `panel_id_unique` 三个 key 字样；`step-output-schema.md` §10 `global_redlines_status` 必含同名字段。
 
 ---
 
@@ -443,6 +611,7 @@ failure_report:
 
 | Step | envelope_type | artifact_kind | widget 变体 |
 |------|--------------|---------------|------------|
+| 0 | `script_envelope` | `script` | script-card |
 | 1 | `brief_envelope` | `brief` | brief-card |
 | 2 | `routes_envelope` | `routes` | routes-comparison |
 | 3 | `shot_plan_envelope` | `shot_plan` | shot-table |
@@ -463,9 +632,9 @@ failure_report:
 | `skipped` | any | 显示 skip_reason，淡化 widget |
 | `failed` | any | 渲染 4 选项 grilling（next_action.options） |
 
-### 16.5 完整 10 种 artifact schema
+### 16.5 完整 11 种 artifact schema
 
-详见 [`references/step-output-schema.md`](references/step-output-schema.md) §1-§10。每种含：
+详见 [`references/step-output-schema.md`](references/step-output-schema.md) §1-§11。每种含：
 
 - JSON Schema（必填字段 + 可选字段）
 - 必填字段清单
@@ -495,7 +664,7 @@ failure_report:
 
 ### 16.7 Widget Routing 速查
 
-完整 routing table 见 [`references/step-output-schema.md` §11](references/step-output-schema.md)。Renderer 实现：
+完整 routing table 见 [`references/step-output-schema.md` §12](references/step-output-schema.md)。Renderer 实现：
 
 ```
 envelope.artifact_kind → widget 变体 → 渲染对应 artifact 子对象
@@ -505,7 +674,7 @@ envelope.artifact_kind → widget 变体 → 渲染对应 artifact 子对象
 
 每个 widget 变体由独立 React 组件实现，但外壳（slateboard shell）统一：
 
-- Timeline（10 个 step cells，含 status / current / done / skipped）
+- Timeline（11 个 step cells，含 status / current / done / skipped，Step 0 是 script-card 形态）
 - Slate body（plug-in，按 artifact_kind 切换内部组件）
 - Actions row（按 status + next_action 切换按钮组）
 
@@ -521,5 +690,10 @@ envelope.artifact_kind → widget 变体 → 渲染对应 artifact 子对象
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v0.8 | 2026-09-06 | **三层 reference 模型 + Step 10 自动化反漂移校验**：(a) 新增 panel 级 `reference_tags[]`（三层模型：envelope 顶层全集 → block 级精挑 → panel 级精挑，缺省继承 block）；(b) §4.3 cheatsheet 加 panel 级决策表；§4.6 反模式新增 v0.8 两项；(c) §9 segments[].reference_images 升级为 panel 级精挑合并；(d) video-prompt.md Reference Images 来源升级；(e) qc_report `global_redlines_status` 从 5 项升 8 项，新增 `character_setup_consistency` / `visual_style_anchor_consistency` / `panel_id_unique` 三项自动反漂移；(f) §15.7.1 panel-level + §15.8 Step 10 自动化反漂移校验；(g) verify §12.9 实跑 lint（--storyboard/--video）+ §12.10 self-check qc.md / schema §10；§12.6 panel schema 加 reference_tags 检查 |
+| v0.7 | 2026-09-06 | **Per-Block Reference Decision**（完成 TODO #18）：envelope 顶层 `references[]` 是"全集"（Phase 1 收集，含 base64）；新增 block 级 `references[]` 是"精挑子集"（Phase 2 每 block 必填，name 字符串引用 envelope 顶层不重复 base64）；§4.3 cheatsheet 升级为两层模型 + 决策表；§4.6 反模式新增 v0.7 四项（缺 character-* / 缺 scene-* / 复制粘贴全集 / name 不存在）；新增 §15.7 Per-Block Reference Decision；verify §12.6 schema + §12.8 video 消费 lint |
+| v0.6 | 2026-09-06 | **Step 4 → Step 9 handoff contract**：v0.5 故事板字段（`visual_style_anchor` / `character_setup` / `grid_path` / per-panel 3 键 / `panels[].panel_id, time_range`）在 Step 9 video-prompt 显式消费，禁止重新从 `selected_style` 推算；`storyboard_to_clip_mapping` 三字段来源明确；first_frame 首选 `blocks[].grid_path`；新增 §15.6 Handoff Contract 表；cheatsheet §4.6 新增 v0.5→视频 反漂移 3 项；verify §12.7 新增字段一致性 lint |
+| v0.5 | 2026-09-06 | 移除 v0.4 "3×3 黏土白模默认"；新增 6 类 layout（`grid` / `fixed-camera` / `scene-planning` / `top-down-staging` / `action-keyframes` / `narrative-comic`），`block.layout_type` 取代 `block.grid`；视觉风格跟随 `selected_style`（cheatsheet §4.5 新增速查表）；新增固定人设（`character_setup`，`[Character Lock: ...]`）每段粘贴；新增 per-panel 3 项硬强制（`shot_type` / `character_emotion` / `sound_effect`）；`storyboard_grid` artifact 新增 4 字段（`layout_type` / `visual_style_anchor` / `character_setup` / 每 panel 三键）；§15 Adaptive Grid 重构为 §15.2 Layout 类型与决策 + §15.5 三项硬约束；cheatsheet §4 整章重写为 6 H3（仍兼容 verify §11 期望）；verify §11/§12 同步刷新 |
+| v0.4 | 2026-09 | 新增 Step 0 pre-step `tvc-agent-script`：6 档固定时长选择（15s / 30s / 45s / 60s / 90s / 120s）+ 叙事剧本生成；`script_envelope` 作为第 11 个 artifact_kind（`script` → `script-card` widget）；`selected_duration` 作为硬约束向下游传播；strong 门 + 不可跳过；§16.3 / §16.5 / §16.7 同步刷新；§11 routing 表 §11 → §12 |
 | v0.3 | 2026-09 | 16 个独立 skill 合并；Step 9 gate 升 strong；§14 Pre-Gen Confirmation；§15 Adaptive Grid；cheatsheet 引入 |
 | v0.3+ | 2026-09 | §16 统一 Step Output Schema（JSON envelope + artifact_kind 路由 widget） |
