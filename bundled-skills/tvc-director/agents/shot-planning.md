@@ -52,4 +52,6 @@ Read on demand from `tvc-director/references/`:
   - code: `shot_density_mismatch` if shot count outside pacing_tier range
   - `recoverable: true` (re-plan with explicit count target)
   - `remediation_hint`: re-author with shot_count_target = pacing_tier midpoint
+- **Artifact kind**: `shot_plan`（renderer → `shot-table` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §3
 - **Confirmation block**: 回填 orchestrator §3 模板，status: advanced

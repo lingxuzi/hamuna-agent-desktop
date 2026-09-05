@@ -43,4 +43,6 @@ Read on demand from `tvc-director/references/`:
   - code: `taste_words_abstract` (mixes taste words with abstract adjectives)
   - `recoverable: true` (rewrite with three-layer separation)
   - `remediation_hint`: re-author separating 食材肌理 / 过程递进 / 蒸汽声音
+- **Artifact kind**: `flavor_plan`（renderer → `flavor-layers` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §7
 - **Confirmation block**: skipped 时输出 `{ skipped: true }`，不调用 orchestrator §3 模板

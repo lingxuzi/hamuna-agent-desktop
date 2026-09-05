@@ -94,4 +94,6 @@ pre_generation_confirmation:
   - code: `param_invented` (duration / aspect / model not from upstream)
   - `recoverable: true` (rewrite specific segment)
   - `remediation_hint`: re-author with explicit ban-word table lookup + segment isolation check
+- **Artifact kind**: `video_prompts`（renderer → `segment-queue` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §9
 - **Confirmation block**: 回填 orchestrator §3 模板，status: advanced

@@ -103,4 +103,6 @@ hook:
   - code: `routes_indistinguishable` if 3 routes collapse to same mechanism
   - `recoverable: true` (user can ask for new mechanism mix)
   - `remediation_hint`: regenerate with explicit mechanism disjointness check
+- **Artifact kind**: `routes`（renderer → `routes-comparison` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §2
 - **Confirmation block**: 回填 orchestrator §3 模板；Phase 1 / Phase 2 各填一次

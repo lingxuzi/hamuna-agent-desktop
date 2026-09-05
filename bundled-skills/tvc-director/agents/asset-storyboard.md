@@ -173,4 +173,6 @@ pre_generation_confirmation:
     - agnes_image_failed → true (retry with adjusted prompt)
     - materialization_io_error → false (filesystem issue, escalate)
   - `remediation_hint`: see specific code
+- **Artifact kind**: `storyboard_grid`（renderer → `storyboard-canvas` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §4
 - **Confirmation block**: 回填 orchestrator §3 模板；phase=materialization 时 gate=strong，必填 user_confirms_storyboard

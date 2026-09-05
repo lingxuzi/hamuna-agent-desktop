@@ -46,4 +46,6 @@ Read on demand from `tvc-director/references/`:
   - code: `qc_block` (verdict=block，user 必须回头修 upstream)
   - `recoverable: false` (本 agent 是 check，不是 producer；block 意味着上游 step 必须重做)
   - `remediation_hint`: list dimensions that failed
+- **Artifact kind**: `qc_report`（renderer → `qc-verdict` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §10
 - **Confirmation block**: verdict=block 时按 orchestrator §10 强门拒绝格式输出；verdict=pass / pass-with-remarks 按 orchestrator §3 模板输出，status: advanced

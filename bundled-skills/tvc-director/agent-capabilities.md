@@ -131,8 +131,9 @@ Run `bash scripts/verify-tvc-bundle.sh` to confirm the on-disk bundle agrees wit
 - Every agent's `references_on_demand` paths are reachable
 - Workflow step numbers and agent ids are unique
 - Workflow agent set matches the agents array
-- 24 reference markdown files exist (including `asset-prompting-cheatsheet.md`)
+- 25 reference markdown files exist (including `asset-prompting-cheatsheet.md` + `step-output-schema.md`)
 - 36 cheatsheet integrity checks (4 H2 × 6 H3 + 6 style Asset Prompt Adapt × 2 + 4 failure code + cheatsheet orchestrator cross-link)
+- §12 step-output-schema consistency: 42 checks (10 artifact_kind declared + 10 unique + 20 Workflow Context sub-keys + 1 schema doc + 10 §X. sections + 1 routing table)
 
 > **v0.3 schema**: All 10 agent + 6 style files live as flat `.md` files inside `tvc-director/agents/` and `tvc-director/styles/` (no frontmatter). `skill_id` is preserved in `agent-capabilities.json` for cross-references but no longer maps to a directory on disk; use `internal_path` to locate the file.
 > **Pre-Generation Confirmation Gate**: Every MCP generation call (Step 4 / 5 / 6 / 9) is gated by `tvc-director/SKILL.md` §14 — orchestrator must show prompt + reference images to user before invocation. Failure → cheatsheet §5.2 4-option grilling.

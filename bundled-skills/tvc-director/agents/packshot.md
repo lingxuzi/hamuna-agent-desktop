@@ -45,4 +45,6 @@ Read on demand from `tvc-director/references/`:
   - code: `timing_out_of_range` (reveal or stable window outside spec)
   - `recoverable: true` (re-author without Logo copy or fix timing)
   - `remediation_hint`: split into prompt-safe design + post-production overlay spec
+- **Artifact kind**: `packshot_module`（renderer → `packshot-spec` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §8
 - **Confirmation block**: 回填 orchestrator §3 模板，status: advanced

@@ -10,6 +10,7 @@
     {
       "skill_id": "tvc-agent-brief",
       "internal_path": "agents/brief.md",
+      "artifact_kind": "brief",
       "version": "1.0.0",
       "phase": "Phase 0",
       "name": "TVC Agent Brief",
@@ -27,6 +28,7 @@
     {
       "skill_id": "tvc-agent-strategy",
       "internal_path": "agents/strategy.md",
+      "artifact_kind": "routes",
       "version": "1.0.0",
       "phase": "Phase 1+2",
       "name": "TVC Agent Strategy",
@@ -46,6 +48,7 @@
     {
       "skill_id": "tvc-agent-shot-planning",
       "internal_path": "agents/shot-planning.md",
+      "artifact_kind": "shot_plan",
       "version": "1.0.0",
       "phase": "Phase 3+4+5",
       "name": "TVC Agent Shot Planning",
@@ -67,6 +70,7 @@
     {
       "skill_id": "tvc-agent-asset-storyboard",
       "internal_path": "agents/asset-storyboard.md",
+      "artifact_kind": "storyboard_grid",
       "version": "1.0.0",
       "phase": "Phase 5.5+5.6+6",
       "name": "TVC Agent Asset Storyboard",
@@ -89,6 +93,7 @@
     {
       "skill_id": "tvc-agent-voiceover",
       "internal_path": "agents/voiceover.md",
+      "artifact_kind": "voiceover_list",
       "version": "1.0.0",
       "phase": "Phase 7",
       "name": "TVC Agent Voiceover",
@@ -107,6 +112,7 @@
     {
       "skill_id": "tvc-agent-product-action",
       "internal_path": "agents/product-action.md",
+      "artifact_kind": "product_action_chain",
       "version": "1.0.0",
       "phase": "Phase 8+10",
       "name": "TVC Agent Product Action",
@@ -126,6 +132,7 @@
     {
       "skill_id": "tvc-agent-food-flavor",
       "internal_path": "agents/food-flavor.md",
+      "artifact_kind": "flavor_plan",
       "version": "1.0.0",
       "phase": "Phase 11",
       "name": "TVC Agent Food Flavor",
@@ -143,6 +150,7 @@
     {
       "skill_id": "tvc-agent-packshot",
       "internal_path": "agents/packshot.md",
+      "artifact_kind": "packshot_module",
       "version": "1.0.0",
       "phase": "Phase 12",
       "name": "TVC Agent Packshot",
@@ -158,6 +166,7 @@
     {
       "skill_id": "tvc-agent-video-prompt",
       "internal_path": "agents/video-prompt.md",
+      "artifact_kind": "video_prompts",
       "version": "1.0.0",
       "phase": "Phase 9",
       "name": "TVC Agent Video Prompt",
@@ -180,6 +189,7 @@
     {
       "skill_id": "tvc-agent-qc",
       "internal_path": "agents/qc.md",
+      "artifact_kind": "qc_report",
       "version": "1.0.0",
       "phase": "Phase 13",
       "name": "TVC Agent QC",

@@ -232,10 +232,10 @@ fi
 # --- 10. references/ directory integrity ------------------------------------
 section "10. references/ directory"
 REF_COUNT=$(find "${BUNDLE_ROOT}/references" -name "*.md" -type f | wc -l | tr -d ' ')
-if [[ "${REF_COUNT}" -eq 24 ]]; then
-  ok "references/ contains 24 markdown files"
+if [[ "${REF_COUNT}" -eq 25 ]]; then
+  ok "references/ contains 25 markdown files"
 else
-  warn "references/ contains ${REF_COUNT} markdown files (expected 24 — including asset-prompting-cheatsheet.md)"
+  warn "references/ contains ${REF_COUNT} markdown files (expected 25 — including asset-prompting-cheatsheet.md + step-output-schema.md)"
 fi
 
 # --- 11. cheatsheet integrity (36-item check: 4 H2 + 24 H3 + 4 cross-link + 4 agent pre-gen) ---
@@ -305,6 +305,76 @@ else
       bad "agent ${a}.md missing Pre-Generation Confirmation Gate section"
     fi
   done
+fi
+
+# --- 12. step-output-schema consistency (v0.3+) -------------------------------
+section "12. step-output-schema consistency (v0.3+)"
+
+# Whitelist of allowed artifact_kind values (must match references/step-output-schema.md §1-§10)
+ALLOWED_KINDS="brief routes shot_plan storyboard_grid voiceover_list product_action_chain flavor_plan packshot_module video_prompts qc_report"
+
+# 12.1 every agent must declare artifact_kind (10 checks)
+declare -A declared_kinds=()
+for skill_id in "${DECLARED_AGENTS[@]}"; do
+  kind=$(jq -r ".agents[] | select(.skill_id == \"${skill_id}\") | .artifact_kind" "${CAPS_FILE}")
+  if [[ -z "${kind}" || "${kind}" == "null" ]]; then
+    bad "${skill_id}: missing artifact_kind"
+    continue
+  fi
+  if [[ " ${ALLOWED_KINDS} " != *" ${kind} "* ]]; then
+    bad "${skill_id}: artifact_kind '${kind}' not in whitelist (${ALLOWED_KINDS})"
+    continue
+  fi
+  declared_kinds["${skill_id}"]="${kind}"
+  ok "${skill_id}: artifact_kind = '${kind}'"
+done
+
+# 12.2 artifact_kinds must be unique (1 check)
+unique_kinds=$(printf '%s\n' "${declared_kinds[@]}" | sort -u | wc -l | tr -d ' ')
+total_kinds=${#declared_kinds[@]}
+if [[ "${unique_kinds}" -eq "${total_kinds}" && "${total_kinds}" -eq 10 ]]; then
+  ok "all 10 artifact_kinds are unique"
+else
+  bad "artifact_kinds not unique: ${unique_kinds} unique vs ${total_kinds} declared"
+fi
+
+# 12.3 every agent's Workflow Context must contain '**Artifact kind**' + '**Schema reference**' (10+10 = 20 checks)
+for skill_id in "${DECLARED_AGENTS[@]}"; do
+  internal_path=$(jq -r ".agents[] | select(.skill_id == \"${skill_id}\") | .internal_path" "${CAPS_FILE}")
+  full="${BUNDLE_ROOT}/${internal_path}"
+  [[ -f "${full}" ]] || continue
+  if grep -q '\*\*Artifact kind\*\*:' "${full}"; then
+    ok "${skill_id}: Workflow Context has **Artifact kind** sub-key"
+  else
+    bad "${skill_id}: Workflow Context missing **Artifact kind** sub-key"
+  fi
+  if grep -q '\*\*Schema reference\*\*:' "${full}"; then
+    ok "${skill_id}: Workflow Context has **Schema reference** sub-key"
+  else
+    bad "${skill_id}: Workflow Context missing **Schema reference** sub-key"
+  fi
+done
+
+# 12.4 step-output-schema.md exists and has 10 §X. artifact sections (11 checks: 1 file + 10 sections)
+SCHEMA_DOC="${BUNDLE_ROOT}/references/step-output-schema.md"
+if [[ ! -f "${SCHEMA_DOC}" ]]; then
+  bad "step-output-schema.md not found at ${SCHEMA_DOC}"
+else
+  ok "step-output-schema.md exists"
+  for n in 1 2 3 4 5 6 7 8 9 10; do
+    if grep -qE "^## §${n}\." "${SCHEMA_DOC}"; then
+      ok "step-output-schema.md has §${n}. artifact section"
+    else
+      bad "step-output-schema.md missing §${n}. artifact section"
+    fi
+  done
+fi
+
+# 12.5 step-output-schema.md has §11 widget routing table (1 check)
+if grep -qE "^## §11\." "${SCHEMA_DOC}"; then
+  ok "step-output-schema.md has §11 Widget Routing Table"
+else
+  bad "step-output-schema.md missing §11 Widget Routing Table"
 fi
 
 # --- summary ------------------------------------------------------------------

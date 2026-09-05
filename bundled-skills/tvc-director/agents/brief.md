@@ -43,4 +43,6 @@ Read on demand from `tvc-director/references/`:
   - code: `input_too_thin` if request lacks single core claim
   - `recoverable: false` (user must provide more product info)
   - `remediation_hint`: ask user exactly one clarifying question; do not guess
+- **Artifact kind**: `brief`（renderer → `brief-card` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §1
 - **Confirmation block**: 回填 orchestrator §3 模板，artifact 列出 brief_card + strategy_draft

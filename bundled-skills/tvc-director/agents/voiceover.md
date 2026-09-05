@@ -79,4 +79,6 @@ pre_generation_confirmation:
   - code: `vo_narrates_action` (VO text repeats visible action)
   - `recoverable: true` (rewrite VO to add unseen information)
   - `remediation_hint`: rewrite each VO line to add information not in picture
+- **Artifact kind**: `voiceover_list`（renderer → `vo-timeline` widget）
+- **Schema reference**: [references/step-output-schema.md](../references/step-output-schema.md) §5
 - **Confirmation block**: 回填 orchestrator §3 模板

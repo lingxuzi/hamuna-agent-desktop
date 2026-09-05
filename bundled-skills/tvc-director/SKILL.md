@@ -400,3 +400,126 @@ failure_report:
 - §3 workflow table Step 4 仍标 `gate: strong`（Phase 3 materialization 强门不变）
 - §4 Phase 1 (asset_generation) 不分网格（每类资产单图）
 - §11 verify-tvc-bundle.sh §11 36 项校验覆盖网格算法 + 提示词模板完整性
+
+---
+
+## 16. 统一 Step Output Schema（desktop chat UI 渲染契约）
+
+**Authoritative reference**: [`references/step-output-schema.md`](references/step-output-schema.md)。
+
+每一步完成时**必须**输出**一个** JSON envelope（schema v1），desktop chat UI renderer 按 `artifact_kind` 路由到对应 widget。**JSON 是唯一权威**——YAML 仅作 prettify 展示。
+
+### 16.1 统一 envelope schema（10 步共用）
+
+```json
+{
+  "schema_version": "1",
+  "envelope_type": "<详见 §16.3>",
+  "step": 1..10,
+  "agent": "<skill_id>",
+  "phase": "<phase_name | null>",
+  "status": "pending_user_confirmation | advanced | skipped | failed",
+  "gate": "strong | weak | self_check",
+  "produced_at": "<ISO-8601>",
+  "artifact_kind": "<详见 §16.4>",
+  "artifact": { /* artifact_kind 决定 schema */ },
+  "references": [{ "name", "type", "source", "size_bytes?" }],
+  "prompts": [{ "label", "text", "target_mcp", "call_unit" }],
+  "next_action": { "type", "label", "options?" },
+  "blocker": "<string | null>",
+  "failure": { "code", "message", "recoverable", "remediation_hint", "completed_artifacts" } | null,
+  "skip_reason": "<string | null>"
+}
+```
+
+### 16.2 设计原则
+
+1. **JSON 唯一权威**：renderer 解析 JSON；YAML 是 prettify（自动生成）
+2. **`artifact_kind` 驱动 widget**：renderer 不需要额外 widget hint，看 `artifact_kind` 路由
+3. **Strict schema**：必填字段缺失 → render fail；可选项标 `optional`，缺省 `null`
+4. **不做双格式**：旧 §12 YAML envelope 已废弃，由本节取代；v0.3 同时支持 JSON + YAML（兼容层），v0.4 仅 JSON
+
+### 16.3 envelope_type ↔ artifact_kind 映射
+
+| Step | envelope_type | artifact_kind | widget 变体 |
+|------|--------------|---------------|------------|
+| 1 | `brief_envelope` | `brief` | brief-card |
+| 2 | `routes_envelope` | `routes` | routes-comparison |
+| 3 | `shot_plan_envelope` | `shot_plan` | shot-table |
+| 4 | `storyboard_envelope` | `storyboard_grid` | storyboard-canvas |
+| 5 | `voiceover_envelope` | `voiceover_list` | vo-timeline |
+| 6 | `product_action_envelope` | `product_action_chain` | force-chain |
+| 7 | `flavor_envelope` | `flavor_plan` | flavor-layers |
+| 8 | `packshot_envelope` | `packshot_module` | packshot-spec |
+| 9 | `video_prompt_envelope` | `video_prompts` | segment-queue |
+| 10 | `qc_envelope` | `qc_report` | qc-verdict |
+
+### 16.4 status ↔ renderer 行为
+
+| status | gate | renderer 行为 |
+|--------|------|-------------|
+| `pending_user_confirmation` | strong | 渲染按钮组，禁用 next_action |
+| `advanced` | weak / self_check | 无按钮，自动进入下一步 |
+| `skipped` | any | 显示 skip_reason，淡化 widget |
+| `failed` | any | 渲染 4 选项 grilling（next_action.options） |
+
+### 16.5 完整 10 种 artifact schema
+
+详见 [`references/step-output-schema.md`](references/step-output-schema.md) §1-§10。每种含：
+
+- JSON Schema（必填字段 + 可选字段）
+- 必填字段清单
+- renderer 提示
+
+### 16.6 与 §14 Pre-Gen Confirmation 的复用
+
+每个 envelope 的 `prompts[]` 数组是 §14 的数据源：
+
+```json
+{
+  "prompts": [
+    {
+      "label": "storyboard_block_01",
+      "text": "故事板图，3行3列...",
+      "target_mcp": "agnes_image_generate",
+      "call_unit": "block_01"
+    }
+  ]
+}
+```
+
+- `prompts[].text` = 展示给用户的完整 prompt
+- `prompts[].target_mcp` = 调用目标（`agnes_image_generate` / `agnes_video_generate` / `edge-tts.text_to_speech`）
+- `prompts[].call_unit` = cheatsheet §5.2 的 4 选项触发单元
+- `prompts[].reference_images` = 与顶层 `references[]` 共享 schema
+
+### 16.7 Widget Routing 速查
+
+完整 routing table 见 [`references/step-output-schema.md` §11](references/step-output-schema.md)。Renderer 实现：
+
+```
+envelope.artifact_kind → widget 变体 → 渲染对应 artifact 子对象
+                        ↓
+                  SlateboardShell (timeline + slate body + actions row 来自 preview/slateboard-widget.html)
+```
+
+每个 widget 变体由独立 React 组件实现，但外壳（slateboard shell）统一：
+
+- Timeline（10 个 step cells，含 status / current / done / skipped）
+- Slate body（plug-in，按 artifact_kind 切换内部组件）
+- Actions row（按 status + next_action 切换按钮组）
+
+### 16.8 与旧 §12 的关系
+
+- 旧 §12 YAML envelope **已废弃**，由本节 JSON envelope 取代
+- 兼容层：renderer 在 JSON 解析失败时 fallback 到 YAML（warn 但不阻断），v0.3 支持，v0.4 移除
+- 迁移路径：所有 agent 在 v0.3 切换到输出 JSON envelope；v0.4 完全移除 YAML
+
+---
+
+## 17. 更新日志
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| v0.3 | 2026-09 | 16 个独立 skill 合并；Step 9 gate 升 strong；§14 Pre-Gen Confirmation；§15 Adaptive Grid；cheatsheet 引入 |
+| v0.3+ | 2026-09 | §16 统一 Step Output Schema（JSON envelope + artifact_kind 路由 widget） |
