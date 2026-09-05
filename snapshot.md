@@ -1401,3 +1401,124 @@ verify: 113 PASS / 0 FAIL（85 旧基线 - 8 旧路径检查 + 36 cheatsheet 36 
 ```
 
 ⚠️ 建议先用 `git status` 检查工作区没有混入他人未提交改动（仓库并发 writer 常态），再分批提交。
+
+---
+
+### TODO #16: 🚧 进行中 — tvc-director 每步输出统一 schema（便于 desktop chat UI 渲染）
+
+**用户新指令**：「规范tvc-director每一步生成的输入格式，便于desktop app chatui中渲染」
+
+**矛盾点**：
+- §12 State Envelope 当前是 YAML（人类读），但 chat UI 是 React 组件需解析 JSON
+- 若让 agent 既输出 YAML envelope 又输出 JSON render_payload，两套格式必然漂移（agent 改一处忘改另一处）
+- **推荐解**：JSON envelope 为唯一权威，YAML 是 JSON 的 prettify 展示（renderer 自动渲染）。Schema 一份真相，agent 写一遍。
+
+**10 个 artifact_kind → widget 变体映射**：
+
+| Step | artifact_kind | widget 变体 | 数据形状 |
+|------|---------------|------------|---------|
+| 1 | `brief` | brief-card | { product_summary, audience, claims[], strategy_draft } |
+| 2 | `routes` | routes-comparison | { routes: [{ id, hook, route_summary, recommendation }], selected_route } |
+| 3 | `shot_plan` | shot-table | { scene_anchors[], shot_handoff_table } |
+| 4 | `storyboard_grid` | storyboard-canvas | { blocks: [{ block_id, range, grid_path, panels[] }] } |
+| 5 | `voiceover_list` | vo-timeline | { vo_lines: [{ id, text, start, end, voice_id }] } |
+| 6 | `product_action_chain` | force-chain | { segments: [{ phase, state }], casting } |
+| 7 | `flavor_plan` | flavor-layers | { layers: { visual, process, sound } } |
+| 8 | `packshot_module` | packshot-spec | { hero, packshot, endboard, duration } |
+| 9 | `video_prompts` | segment-queue | { segments: [{ id, duration, prompt, first_frame }] } |
+| 10 | `qc_report` | qc-verdict | { dimensions: [{ name, score, evidence }], verdict } |
+
+**统一 envelope schema**（单一真相）：
+```json
+{
+  "schema_version": "1",
+  "envelope_type": "storyboard_envelope",
+  "step": 4,
+  "agent": "tvc-agent-asset-storyboard",
+  "phase": "storyboard_compilation",
+  "status": "pending_user_confirmation",
+  "gate": "strong",
+  "produced_at": "2026-09-06T10:30:00Z",
+  "artifact_kind": "storyboard_grid",
+  "artifact": { /* 详见 references/step-output-schema.md */ },
+  "references": [{ "name": "product-hero.png", "type": "image", "source": "local_path | url | base64" }],
+  "prompts": [{ "label": "...", "text": "...", "target_mcp": "agnes_image_generate" }],
+  "next_action": { "type": "user_confirm | user_select | auto_advance", "label": "..." },
+  "blocker": null,
+  "failure": null
+}
+```
+
+**改动计划**：
+1. 创建 `references/step-output-schema.md`（10 个 artifact_kind 的完整 JSON Schema + 10 个示例 + widget routing table）
+2. SKILL.md §12 升级：YAML envelope → JSON envelope，§16 新增 widget routing table
+3. 10 agents `Workflow Context` 加 `artifact_kind` 字段
+4. `agent-capabilities.json` 每个 agent 加 `artifact_kind`
+5. `verify-tvc-bundle.sh` §12 新增 schema 一致性检查（10 项：每 agent artifact_kind 必填 + 全局唯一）
+
+**未 commit 提示**：本批 ~ 13 文件改动待落盘。
+
+---
+
+## ✅ TODO #16 已完成 — tvc-director 每步输出统一 schema（便于 desktop chat UI 渲染）
+
+**实际完成时间**：2026-09-06
+**verify 结果**：**156 PASS / 0 FAIL / 0 WARN**（基线 113 → 156 = +43 项 §12 schema 一致性检查）
+
+### 矛盾点与解法
+
+| 矛盾 | 旧方案 | 推荐解（采用） |
+|------|-------|---------------|
+| YAML envelope 人类可读 vs JSON renderer 可解析 | 让 agent 双格式输出 | **JSON 唯一权威**，YAML 是 prettify（renderer 自动渲染）|
+
+### 完成清单
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | snapshot.md TODO #16 + schema 设计 | ✓ |
+| 2 | 创建 `references/step-output-schema.md`（10 种 artifact JSON Schema + §11 widget routing）| ✓ |
+| 3 | SKILL.md §16 Step Output Schema 章节 | ✓ |
+| 4 | 10 agents Workflow Context 加 `**Artifact kind**` + `**Schema reference**` 子键 | ✓ |
+| 5 | agent-capabilities.json 加 `artifact_kind` 字段（10 agents）| ✓ |
+| 6 | verify §12 schema 一致性检查（43 项）| ✓ |
+
+**总文件改动**：13 个文件（1 新建 + 11 修改 + 1 verify）
+
+### 关键设计
+
+1. **`artifact_kind` 驱动 widget 路由**：renderer 看到 `storyboard_grid` 就路由到 `storyboard-canvas` widget，**不**需要额外 widget hint。
+2. **统一 envelope schema**（JSON v1）：10 步共用同一外壳 + 每步独立 `artifact` 子对象。
+3. **Widget 变体映射**（10 种）：
+   - brief-card / routes-comparison / shot-table / storyboard-canvas / vo-timeline
+   - force-chain / flavor-layers / packshot-spec / segment-queue / qc-verdict
+4. **Shell widget 共享**：`preview/slateboard-widget.html` 的 Timeline + Slate + Actions 是所有 10 种 widget 的外壳，每种只换内部 Slate body。
+5. **Pre-Gen Confirmation 复用**：`prompts[]` 数组作为 §14 的数据源，避免双格式。
+6. **§12 YAML envelope 废弃**：v0.3 同时支持 JSON + YAML（兼容层），v0.4 仅 JSON。
+
+### 未 commit 提示
+
+本批 13 文件改动尚未 commit。建议：
+
+```bash
+git add bundled-skills/tvc-director/
+git commit -m "feat(tvc-director): §16 unified step output schema for desktop chat UI renderer
+
+JSON envelope 是唯一权威，YAML 是 prettify（renderer 自动渲染）。10 步共用
+同一外壳 + 每步独立 artifact 子对象；artifact_kind 驱动 widget 路由。
+
+新增：
+- references/step-output-schema.md（10 种 artifact JSON Schema + §11 routing）
+- SKILL.md §16 Step Output Schema 章节
+- agent-capabilities.json 每 agent 加 artifact_kind 字段
+- 10 agents Workflow Context 加 Artifact kind + Schema reference 子键
+- verify-tvc-bundle.sh §12 schema 一致性检查（43 项）
+
+10 种 artifact_kind：brief / routes / shot_plan / storyboard_grid /
+voiceover_list / product_action_chain / flavor_plan / packshot_module /
+video_prompts / qc_report
+
+renderer 实现路径：widget 变体 → SlateboardShell（preview/slateboard-widget.html
+已交付）+ artifact_kind-specific 内部组件
+
+verify: 156 PASS / 0 FAIL / 0 WARN（113 基线 + 43 schema 检查新增）"
+```
