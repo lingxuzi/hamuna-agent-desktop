@@ -304,6 +304,34 @@
 - 每 panel 显示 `reference_tags[]` chip（hover 显示对应 envelope 顶层 references[] 条目 base64 preview）；空数组显示 `inherit: block` 表示继承 block 级 references
 - current block 高亮 caution amber 边框
 
+### §4.x Canonical Fixture · 《早高峰冲》 archetype（v0.9 起）
+
+**唯一参考实现**：`bundled-skills/tvc-director/fixtures/storyboard_grid_morning_rush.json`
+
+该 fixture 是 Storyboard step 的 **canonical future-spec**——任何 future agent emit 必须能 diff 过该 fixture 才算合规。覆盖 8 panel 单 block 的 `narrative-comic` layout（30s 单 arc 全叙），所有 v0.8 必填字段填齐，并承载 morning-rush archetype 的两类外延字段：
+
+| morning-rush source 字段 | 映射到 §4 schema | widget 是否渲染 |
+|----------------------|---------------|--------------|
+| `timecode_or_moment`（07:50 / 08:00 等） | `panels[].time_range` | ✅ time_range chip |
+| `shot_size`（特写/近镜/中景/全景） | `panels[].shot_type` | ✅ shot chip |
+| `scene_description` | `panels[].core_action` | ⚠️ 仅 schema 落字段；widget 当前**未渲染** |
+| `camera_move` | `panels[].camera_move` | ⚠️ 仅 schema 落字段；widget 当前**未渲染** |
+| `lighting` | `panels[].color_light` | ⚠️ 仅 schema 落字段；widget 当前**未渲染** |
+| `capture_notes`（表演提示） | `panels[].mood_keyword` | ⚠️ 仅 schema 落字段；widget 当前**未渲染** |
+| `sound_effect`（per-panel） | `panels[].sound_effect` | ✅ sfx chip |
+| `character_emotion` | `panels[].character_emotion` | ✅ emo chip |
+| `audio_atmosphere`（global） | `blocks[].audio_atmosphere`（v0.9 提议字段）+ 每 panel `sound_effect` 复读 | ⚠️ block-level 仅 schema；widget 当前**未渲染** audio_atmosphere 字符串 |
+| `key_props[]`（global） | `blocks[].key_props[]`（v0.9 提议字段）+ `blocks[].references[]`（v0.7 既有，ref name 以 `prop-` 前缀） | ✅ block-level ref chips |
+
+**v0.9 widget 扩展计划**：storyboardCanvas 增加 panel body 行渲染 `core_action / camera_move / color_light / mood_keyword / framing` 详情（折叠态默认 1 行可展开）；新增 block-level `audio_atmosphere` 顶部 chip。详见 `bundled-skills/tvc-director/fixtures/storyboard_grid_morning_rush.json::_mapping._widget_NOT_yet_rendered_but_in_schema`。
+
+**lint 入口**：
+- `scripts/verify-tvc-bundle.sh` §14 — fixture JSON / rendered HTML / smoke test 三件套必须在场，且 rendered HTML 不得比 fixture JSON 老（widget 改了没重渲 → 报错）
+- `src/renderer/components/tools/tvcWidgets/storyboard_grid_morning_rush.fixture.test.ts` — 9 断言：valid JSON / valid envelope / 8 panels / 4 v0.8 chip keys / transformer routes correctly / 8 panel ids appear in rendered HTML / block chip + layout label / no hex literal
+- `src/renderer/components/tools/tvcWidgets/storyboard_grid_morning_rush.render.test.ts` — 每次跑把 fixture 渲染成 `fixtures/storyboard_grid_morning_rush.rendered.html`（无需起 desktop app 也能 inspect widget 实际输出）
+
+**diff 入口**：future agent 修改 §4 schema 时，先改 `step-output-schema.md` §4 → 再 sync `src/shared/tvcEnvelope.ts` → 跑 fixture smoke test → 任何字段 fail 改 widget 同步。
+
 ---
 
 ## §5. `voiceover_list` artifact (Step 5 · tvc-agent-voiceover)

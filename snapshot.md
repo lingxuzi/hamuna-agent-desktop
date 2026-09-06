@@ -2028,6 +2028,30 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>
 - T86：commit + 推送
 - E2E 验证（开发模式触发 tvc-director session，逐步推进 11 步）
 
+### 补记 — canonical future-spec fixture《早高峰冲》（2026-09-06）
+
+按 user "实跑 tvc-director 渲染这个图 + 作为未来故事板生成规范" 加 1 件：把 user 上传的早高峰冲 storyboard（8 panel · timecode-anchored · 每 panel shot_size / scene_description / camera_move / duration / lighting / capture_notes + global audio_atmosphere + key_props[]）作为 Storyboard step 的 **canonical future-spec** 钉死，所有 future agent emit 必须能 diff 过该 fixture。
+
+**新文件**：
+- `bundled-skills/tvc-director/fixtures/storyboard_grid_morning_rush.json` — 8 panel 单 block `narrative-comic` layout，schema 必填字段填齐，外延字段（`core_action / camera_move / color_light / mood_keyword / audio_atmosphere / key_props[]`）落 schema 但 widget v0.8 仅渲染 3 chip（shot_type / character_emotion / sound_effect）
+- `bundled-skills/tvc-director/fixtures/storyboard_grid_morning_rush.rendered.html` — 每次跑 fixture.render.test.ts 自动重写，便于不开 desktop app 也能 inspect widget 输出
+- `src/renderer/components/tools/tvcWidgets/storyboard_grid_morning_rush.fixture.test.ts` — 9 断言守住 fixture / transformer / widget 三方契约（**测试 9/9 ✓**）
+- `src/renderer/components/tools/tvcWidgets/storyboard_grid_morning_rush.render.test.ts` — render snapshot 写入器（**测试 1/1 ✓**）
+
+**修改**：
+- `bundled-skills/tvc-director/references/step-output-schema.md` §4.x — fixture 字段映射表（morning-rush source 字段 → §4 schema 字段 + widget 是否渲染）+ v0.9 widget 扩展计划 + lint 入口
+- `bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh` §14 — fixture JSON / rendered HTML / smoke test 三件套守门 + rendered HTML 新鲜度校验（待与 §13 一起 commit，§13 REPO_ROOT 未定义 bug 已修）
+- `bundled-skills/tvc-director/agents/asset-storyboard.md` Workflow Context — "Canonical fixture (v0.9 future-spec baseline)" 一行（待与 Renderer Contract 一起 commit）
+
+**grlling / 已知 gap**（不能默默顺从 user）：
+1. **widget 当前不渲染 morning rush 的核心字段**：`core_action / camera_move / color_light / mood_keyword / framing / audio_atmosphere` 全部落在 schema 但 widget v0.8 仅渲染 3 chip（shot_type / character_emotion / sound_effect）。意味着 agent 按 morning rush 格式 emit 后，chatui 只看得到 3 个 tag，**80% 信息视觉上消失**。已在 §4.x 表格诚实标注「⚠️ 仅 schema 落字段；widget 当前未渲染」+ v0.9 widget 扩展计划（panel body 行渲染 detail + block-level audio_atmosphere chip）。**结论**：本 commit 不强求 widget v0.8 一次性扩展——超 scope；spec 已锁定，未来某次 tvc-director 迭代再扩 widget。
+2. **layout_type 选 `narrative-comic` 是单一 fixture 决策**：8 panel 顺序叙事 → 6 layout 枚举里 `narrative-comic` 最贴切。但 layout_type 是 v0.5 6 选 1，本 fixture 只覆盖 1/6。**未覆盖**：`grid / fixed-camera / scene-planning / top-down-staging / action-keyframes`。未来若要完整覆盖 6 layout，需补 5 个 fixture（multi-block · action-keyframes · scene-planning 等典型）。**add when**：user 报某 layout agent emit 出错 / 选错。
+3. **verify §14 暂未启用**：因为 verify-tvc-bundle.sh §13 是 untracked 11-widget renderer work 的一部分，§14 与 §13 的 REPO_ROOT 修复在同一文件 hunkmix。本 commit 只 commit fixture + spec doc + test，§14 enable 留给"11-widget renderer alignment"那次合并 commit。
+
+**verify**：fixture smoke test 9/9 + render test 1/1 = 10 新测试全绿；现有 tvcWidgets cssVarContract 11/11 + tvcWidgets registry 4/4 + tvcEnvelopeTransform 7/7 = 22 老测试不 regression。
+
+**未 commit**：本会话 4 新文件 + 1 改（step-output-schema.md §4.x + snapshot.md 增量），等 user 拍板。
+
 Co-Authored-By: Claude Code <noreply@anthropic.com>
 
 ---
