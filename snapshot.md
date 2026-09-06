@@ -2050,7 +2050,38 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>
 
 **verify**：fixture smoke test 9/9 + render test 1/1 = 10 新测试全绿；现有 tvcWidgets cssVarContract 11/11 + tvcWidgets registry 4/4 + tvcEnvelopeTransform 7/7 = 22 老测试不 regression。
 
-**未 commit**：本会话 4 新文件 + 1 改（step-output-schema.md §4.x + snapshot.md 增量），等 user 拍板。
+### 补记-2 — 规范可移植性实测：午后茶歇 fixture + 双 PNG 实跑（2026-09-06）
+
+按 user 「按照故事板生成规范测试生成」（澄清后=生成**故事板图片 PNG**，不是 widget HTML），跑两步：
+
+**Step 1：spec 可移植性测试**——按规范新出 1 份 envelope，确认 schema 不耦合到 morning rush archetype。
+
+- 新文件 `bundled-skills/tvc-director/fixtures/storyboard_grid_afternoon_tea.json`（午后冷萃茶 · 5 道具 + 4 个 panel 4 个 ref tag 全异 + calm-return arc），1 block × 8 panel narrative-comic 与 morning rush 同结构、不同内容
+- 新测试 `storyboard_grid_afternoon_tea.fixture.test.ts`：**13/13 ✓**（valid JSON / valid envelope / metadata shape 同 canonical / 1 block × 8 panel / 4 v0.8 chip keys / 5 外延字段 / audio_atmosphere + key_props / shot_type 在 enum 内 / transformer routes / 8 panel ids / 渲染含 `tvc-style-documentary-afternoon` 而非 `tvc-style-documentary-morning` / 渲染输出 ≠ canonical / 无 hex literal）
+- 渲染对：下午茶 widget HTML 197 行落地 `storyboard_grid_afternoon_tea.rendered.html`
+
+**Step 2：实跑 Agnes image gen，2 张 PNG 出图**——用规范 prompt 经 `mcp__multimedia-creator__agnes25_image_generate`（agnes-image-2.5-flash 2K / 16:9）生成实际故事板图。
+
+| fixture | 内容 | 输出 |
+|---------|------|------|
+| morning_rush | 闹钟 07:50 → 冷萃罐 → 转闸 → 地铁 → 办公桌 | `storyboard_pngs/storyboard_grid_morning_rush.png`（2624×1472，5.0MB）|
+| afternoon_tea | 键盘 → 茶壶 → 阳台 → 闭目 → 玻璃瓶回桌 | `storyboard_pngs/storyboard_grid_afternoon_tea.png`（2624×1472，4.6MB）|
+
+**grlling / 真实 drift（不能默默顺从 user "测出来生成成功了"）**：
+
+1. **panel 编号漂移是 prompt→Agnes 链路的稳定问题**：两次都把"4×2 grid"渲成 4×3 = 12 帧，再把 8 个 01-08 ID 复读填满。morning 渲成 `01/02/02/03/04/05/05/06/06/07/07/08`；afternoon 更严重（`01/02/02/08/02/03/04/06/04/05/07/08`，02/04/08 都复读，05 出现 2 次）。**根因猜想**：(a) "4×2 grid" 措辞被 agnes 默认当"4 列 × 任意行"展开；(b) prompt 后段 panel 内容描述密度大，模型把"panel 01-08"作"举例"而非"硬约束"。**修法方向（**未做**）**：在 prompt 顶部加 `[Layout Constraint: EXACTLY 2 rows × 4 columns = 8 panels. Panel numbers 01-08 are HARD CONSTRAINTS, each appears exactly once. Do not duplicate panel IDs.]` 或拆 2 次生成再拼接。
+2. **morning rush panel 03 罐身出现 "07:50" 文字**：spec 没要文字，模型把"闹钟时间 = 视觉母题"过度泛化到产品包装。**根因**：prompt 里"alarm-clock 显红色 07:50" + "can navy matte" 并列，模型把"07:50"当成"贯穿全图的时间锚点"重复应用。**修法方向**：明确说"alarm-clock 上的 07:50 是闹钟表盘的字，**only** 在闹钟上出现；can 上**禁止**任何文字"。
+3. **character lock 守得住但不完全**：morning rush 角色右眉疤可见（panel 06/07），afternoon 茶角色左颊酒窝可见（panel 02/05/07）—— character_setup 锁住。但 morning 角色显得略偏 `generic Asian male` 而非 28-34 navy suit tie loosened 的"疲惫社畜"质感—— agnes 抓"白领"调性 OK，但疲劳感丢失。afternoon 角色把 linen blouse 渲成稍厚的羊毛感——细节未完全命中。
+4. **visual style anchor 全部命中**：morning 冷暖混合 4500K↔3200K / afternoon 4500K + leaf-shadow 全部按 anchor 渲。文档里写的 `tvc-style-documentary-afternoon` 和 `tvc-style-documentary-morning` 两个 anchor 都按预期影响最终图。说明 anchor 是 prompt-level 真约束，不是空字符串。
+
+**结论**：
+- schema & widget 层：**100% spec-compliant**（46 个 vitest 全绿，0 drift）
+- prompt→Agnes 层：**内容高保真**（character / product / props / lighting / narrative arc 全部命中），**layout 低保真**（panel numbering 漂移，product 文字偶发 hallucination）
+- 整改方向属于 `asset-storyboard.md` agent 端 prompt engineering 范畴，不是 tvc-director renderer 的事
+
+**测试汇总**：46 tvc 测试全绿（9 morning fixture + 13 afternoon fixture + 4 widget registry + 11 cssVarContract + 7 transformer + 1 morning render + 1 afternoon render）
+
+**未 commit**：本会话 5 新文件（afternoon_tea.json + .rendered.html + afternoon_tea.fixture.test.ts + afternoon_tea.render.test.ts + storyboard_pngs/ 含 2 个 PNG 共 9.6MB）+ 本 snapshot 增量，等 user 拍板。
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>
 
