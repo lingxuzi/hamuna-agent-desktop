@@ -36,6 +36,21 @@ export const MAX_ENV_BYTES_PER_SERVER = 8 * 1024;
 /** `${env:NAME}` placeholder → process.env.NAME */
 const ENV_PLACEHOLDER_RE = /\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
+/**
+ * `${bundled:REL_PATH}` placeholder → absolute path of a Tauri-bundled
+ * resource directory (see `tauri.conf.json > bundle.resources`). Lets an
+ * MCP entry reference a sibling package without hardcoding an absolute path
+ * that breaks across machines / install prefixes.
+ *
+ * Resolution falls through `getBundledResourcePath` which handles both the
+ * production layout (resource sits next to server-dist.js) and the dev
+ * layout (walks up to src-tauri/resources/REL_PATH). When the resource is
+ * missing (e.g. older build pre-bundling, or dev repo without the file),
+ * the placeholder is left as-is and a warning is logged — same fail-soft
+ * policy as `${env:NAME}` so a poisoned bundle never prevents Sidecar start.
+ */
+const BUNDLED_PLACEHOLDER_RE = /\$\{bundled:([^}]+)\}/g;
+
 interface RawExtendedConfig {
   version?: unknown;
   servers?: unknown;
@@ -68,6 +83,28 @@ function resolveEnvPlaceholders(env: Record<string, string>): Record<string, str
     });
   }
   return out;
+}
+
+/**
+ * Resolve `${bundled:REL_PATH}` placeholders inside an MCP arg vector to
+ * absolute paths via `getBundledResourcePath`. Args without placeholders
+ * are returned unchanged. Multi-placeholder strings are all resolved in
+ * one pass; an unresolved placeholder is left as a literal so the spawn
+ * layer's existing `command_not_found` UX surfaces the actual problem.
+ */
+function resolveBundledPlaceholdersInArgs(args: readonly string[]): string[] {
+  return args.map((arg) =>
+    arg.replace(BUNDLED_PLACEHOLDER_RE, (_match, relPath: string) => {
+      const resolved = getBundledResourcePath(relPath);
+      if (!resolved) {
+        console.warn(
+          `[extended-builtin-mcp] bundled placeholder \${bundled:${relPath}} not found, leaving literal`,
+        );
+        return `\${bundled:${relPath}}`;
+      }
+      return resolved;
+    }),
+  );
 }
 
 /**
@@ -205,6 +242,10 @@ function coerceServer(raw: RawExtendedServer, index: number): McpServerDefinitio
       return null;
     }
     server.env = resolveEnvPlaceholders(server.env);
+  }
+
+  if (server.args) {
+    server.args = resolveBundledPlaceholdersInArgs(server.args);
   }
 
   return server;

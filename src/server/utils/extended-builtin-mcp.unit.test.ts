@@ -1,6 +1,20 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { parseExtendedBuiltinMcpConfig } from './extended-builtin-mcp';
 import { MAX_SERVERS, MAX_ENV_BYTES_PER_SERVER } from './extended-builtin-mcp';
+import { getBundledResourcePath } from './runtime';
+
+// Hoist a vi.fn wrapper around the real getBundledResourcePath so the
+// ${bundled:REL_PATH} placeholder tests can override behavior per case.
+// By default the wrapper delegates to the real function (which returns
+// null in the vitest env because no Tauri resources are bundled); tests
+// without the placeholder are unaffected.
+vi.mock('./runtime', async () => {
+  const actual = await vi.importActual<typeof import('./runtime')>('./runtime');
+  return {
+    ...actual,
+    getBundledResourcePath: vi.fn(actual.getBundledResourcePath),
+  };
+});
 
 describe('parseExtendedBuiltinMcpConfig', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -226,5 +240,84 @@ describe('parseExtendedBuiltinMcpConfig', () => {
       }),
     );
     expect(result[0].args).toEqual(['ok', 'also-ok']);
+  });
+});
+
+describe('parseExtendedBuiltinMcpConfig — ${bundled:REL_PATH} placeholder', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    vi.mocked(getBundledResourcePath).mockReset();
+  });
+
+  it('resolves ${bundled:REL_PATH} in args to absolute path via getBundledResourcePath', () => {
+    vi.mocked(getBundledResourcePath).mockImplementation(
+      (rel: string) => `/abs/install/resources/${rel}`,
+    );
+    const result = parseExtendedBuiltinMcpConfig(
+      JSON.stringify({
+        version: 1,
+        servers: [
+          {
+            id: 'agnes',
+            type: 'stdio',
+            command: 'uvx',
+            args: ['--from', '${bundled:hosted_mcps/agnes-video-25}', 'agnes-video-25-mcp'],
+          },
+        ],
+      }),
+    );
+    expect(result[0].args).toEqual([
+      '--from',
+      '/abs/install/resources/hosted_mcps/agnes-video-25',
+      'agnes-video-25-mcp',
+    ]);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('leaves literal placeholder and warns when getBundledResourcePath returns null', () => {
+    vi.mocked(getBundledResourcePath).mockReturnValue(null);
+    const result = parseExtendedBuiltinMcpConfig(
+      JSON.stringify({
+        version: 1,
+        servers: [
+          {
+            id: 'agnes',
+            type: 'stdio',
+            command: 'uvx',
+            args: ['--from', '${bundled:hosted_mcps/missing}', 'tool'],
+          },
+        ],
+      }),
+    );
+    expect(result[0].args).toEqual(['--from', '${bundled:hosted_mcps/missing}', 'tool']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('${bundled:hosted_mcps/missing} not found'),
+    );
+  });
+
+  it('resolves multiple placeholders within a single arg string', () => {
+    vi.mocked(getBundledResourcePath).mockImplementation(
+      (rel: string) => `/abs/install/resources/${rel}`,
+    );
+    const result = parseExtendedBuiltinMcpConfig(
+      JSON.stringify({
+        version: 1,
+        servers: [
+          {
+            id: 'multi',
+            type: 'stdio',
+            command: 'cp',
+            args: ['${bundled:a}/${bundled:b}'],
+          },
+        ],
+      }),
+    );
+    expect(result[0].args).toEqual(['/abs/install/resources/a//abs/install/resources/b']);
   });
 });
