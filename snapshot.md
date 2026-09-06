@@ -1978,3 +1978,190 @@ verify: 169 PASS / 0 FAIL / 0 WARN（v0.4 163 → v0.5 169 = +6 项 v0.5 字段
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>
 ```
+
+---
+
+## TODO #29 — tvc-director chatui 渲染层对齐（v0.9 跨域）
+
+**最后更新**：2026-09-06
+
+### 状态
+**DONE** — A 基础设施 + B 11 widget 模板 + C verify §13 + agent docs + preview README 全部完成。verify `213 PASS / 0 FAIL / 1 WARN`；新单测 22 项全绿（tvcEnvelopeTransform 7 + tvcWidgets registry 4 + cssVarContract 11）。
+
+### 用户诉求
+> "tvc-director每一步都输出结构化信息，chatui渲染层与结构化信息对齐"
+—— 全 11 步对齐（不止 3 步）。
+
+### 架构决策
+**Path B（renderer dispatcher）** —— agent 输出 ```json``` 围栏 envelope → `tvcEnvelopeTransform.ts` 扫描 + `looksLikeTvcEnvelope()` 识别 + 11 模板查表 → 替换为 `<generative-ui-widget title="...">HTML</generative-ui-widget>` → 走既有 `parseWidgetTags` + `WidgetRenderer` + iframe sandbox + `--widget-*` 主题 bridge。
+
+**renderer 唯一改动**：`Message.tsx` line 267 改 1 行（`parseWidgetTags(text)` → `parseWidgetTags(transformTvcEnvelopes(text))`）。其它 renderer 文件零改动。
+
+### 关键文件
+**新建**：
+- `src/shared/tvcEnvelope.ts` — TS mirror of `references/step-output-schema.md` §0（`TVC_ARTIFACT_KINDS`、`EnvelopeStatus`、`TvcEnvelope`、`looksLikeTvcEnvelope`）
+- `src/renderer/components/tools/tvcEnvelopeTransform.ts` + `.test.ts` — 扫描 ```json``` 围栏 + 派发 + replace
+- `src/renderer/components/tools/tvcWidgets/SlateboardShell.ts` — 11-step timeline 共享外壳
+- `src/renderer/components/tools/tvcWidgets/{scriptCard,briefCard,routesComparison,shotTable,storyboardCanvas,voTimeline,forceChain,flavorLayers,packshotSpec,segmentQueue,qcVerdict,index}.ts` — 11 artifact_kind 各一模板
+- `src/renderer/components/tools/tvcWidgets/{tvcWidgets.test.ts,tvcWidgets.cssVarContract.test.ts}` — registry + css-var 守门
+
+**改动**：
+- `src/renderer/components/Message.tsx`（+1 import +1 调用）
+- `bundled-skills/tvc-director/scripts/verify-tvc-bundle.sh`（+§13 renderer coverage lint）
+- `bundled-skills/tvc-director/agents/*.md` × 11（+`## Renderer Contract` 段）
+- `bundled-skills/tvc-director/preview/README.md`（+Production Mapping 章节）
+
+### 关键守门
+- `tvcWidgets.cssVarContract.test.ts` —— 11 个模板渲染输出**零** hex / rgb() / hsl() literal（CLAUDE.md「前端硬编码颜色」可执行守门）
+- `verify-tvc-bundle.sh §13` —— 11 template file 齐全 + registry 映射正确 + 源码 hex 零结果（CI 强制）
+
+### 复用现有
+`widgetTagParser.ts`（widget tag 解析）/ `widgetSandboxHtml.ts`（iframe sandbox + CSP）/ `widgetCssVars.ts`（主题 bridge）/ `WidgetRenderer.tsx`（高度缓存 + 流式 preview）/ `widgetLocalImg.ts`（base64/hamuna:// 解析）—— **零改动**。
+
+### ponytail 标记（简化上限）
+- `tvcEnvelopeTransform.ts` 只处理完整 ```json``` 围栏。**升级时机**：弱模型 envelope 流式延迟成瓶颈时
+- 每个模板 50-100 行纯 HTML + CSS 字符串。**升级时机**：per-widget 交互（4-option 按钮 + hover state）变 load-bearing
+- wrapper class 由 envelope.status 决定，不由用户点击驱动。**升级时机**：agent emit advance action + orchestrator 本地翻 status 不重 emit
+- preview HTML hex 与生产 `--widget-*` 模板并存。**升级时机**：用户要求 preview/production 1:1 同步
+
+### 下一步（待办）
+- T86：commit + 推送
+- E2E 验证（开发模式触发 tvc-director session，逐步推进 11 步）
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+
+---
+
+## TODO #97 — hosted_mcps/agnes-video-25/ 新 MCP 服务（参考图延续但首帧自由）
+
+**最后更新**：2026-09-06
+
+### 状态
+**DONE** —— 服务完整；7 tools（4 video + 3 image）全部注册；verify `12/12 PASS`；真实 API 链路验证通过：
+- `agnes25_video_generate` mode=reference 6 take 30s TVC demo → `tvc_30s_v25_final.mp4` 11.1 MB / 31.136s（#96 补记）
+- `agnes25_image_generate` text-to-image → 1024×1024 PNG 落盘（smoke #1）
+- `agnes25_image_edit` img2img 本地路径自动 data URL → 1024×1024 PNG 落盘（smoke #2）
+
+**未 commit** —— 等用户拍板 `.mcp.json` 切换（multimedia-creator → agnes-video-25）后一起提交。
+
+### 用户诉求
+> "不是首帧参考，而是作为参考图" —— 30s TVC 重做时 asset 图（character/product/scene）作为视觉参考喂给视频生成模型，不锁首帧。
+> 后续："agnes-video-25加入图片生成服务" —— 把图片生成也并入新服务，**不**新增独立 MCP（避免生态分裂）。
+
+### 关键发现（@ https://wiki.agnes-ai.cn/llms.txt 抓的 public docs）
+- `agnes-video-v2.0`（老版）只支持 `mode="ti2vid"`（i2v 首帧锚定）+ `mode="keyframes"`（首末帧锚定）—— **不是用户想要的**
+- **`agnes-video-2.5`** / **`agnes-video-2.5-flash`** 才是真·多模态参考 —— `mode="reference"` + `images: string[]` ≤ 8 + `audios: string[]` + `videos: object[]`；prompt 用 `<Picture N>` / `<Audio N>` / `<Video N>` 1-indexed 引用
+- model 矩阵：`2.5` size ∈ {720P/1080P/1K/2K}, `2.5-flash` size 锁 720P、images≤5、audios≤3、**无 videos**
+- 当前 `hosted_mcps/agnes-mcp-studio/` (gitee uvx fork) 只暴露 v2.0 能力 → **新独立服务** 与之并存
+- **`agnes-image-2.5-flash`** 复用 `POST /v1/images/generations`，schema 与 agnes-image-2.1-flash 相同（仅质量差），可以 **并入同一个 service**
+
+### 关键文件
+**新建**：`hosted_mcps/agnes-video-25/`
+- `pyproject.toml` — 包定义 + `mcp<2` pin（2.x 把 FastMCP 改名 MCPServer）+ entry point `agnes-video-25-mcp`；description 加 "image 2.5 flash"
+- `src/agnes_video_25/{__init__.py,server.py}` — 7 tools: 4 video + 3 image
+  - video: `agnes25_video_submit` / `agns25_video_status` / `agnes25_video_wait` / `agnes25_video_generate`
+  - image: `agnes25_image_generate` / `agnes25_image_generate_v2` / `agnes25_image_edit`
+- `SKILL.md` — bundled-skill 触发契约；description 含 "videos **or images**" 关键词；新增 "Image tool contract" 章节
+- `README.md` — 人类可读 + `.mcp.json` 配置样例 + env vars；image tool 对比表行从 "❌ use agnes-mcp-studio ✅" 改为 "✅ parallel surface"
+- `scripts/verify.sh` — 期望 7 tools（4 video + 3 image）
+- `.gitignore` — Python + `.venv/` + `outputs/` + `.env`
+
+### 实现要点
+- 所有 media URL 必须 HTTPS（server.py `_validate_urls` + `_is_https_url`）—— 对齐 public docs 的要求
+- `_validate_request` 强制 mode/model/size/aspect_ratio 关系 + media-vs-mode 矩阵
+- `_extract_video_url` 优先 `metadata.url`，fallback 顶层 `url`（**真响应把 url 放顶层，docs 说在 metadata —— 已实测修复**）
+- `_safe_name` + `_download_video` 与 agnes-mcp-studio 模式同栈（httpx + filesystem + 双探 lstat）
+- mcp.tool 装饰器 7 个工具 + `asyncio.to_thread` 包裹轮询（不阻塞 event loop）
+- **图片 helpers（`_img_*` 前缀隔离命名空间）**：`output_dir` / `path_to_data_url` / `save_data_url` / `download_url` / `normalize_inputs`（本地路径→data URL）/ `validate_size_ratio` / `persist_entry` / `parse_response` / `sanitize_filename`
+- **图片 endpoint 走 `extra_body.image`**（NOT 顶层 `image`）；`response_format` 同理走 `extra_body.response_format` —— 文档 spec 强制
+- `n` 参数透传给 `payload.n`；`return_base64` 走顶层 `payload.return_base64`（图片生成规范）
+- `_image_generate_v2_impl = _image_generate_impl` 复用：当前 v2 默认就是 2.5-flash，alias 仅为 parity
+
+### 跨项目注意点
+- `.mcp.json` 当前仍指向 uvx gitee 上游版本（`multimedia-creator`）—— **未切换**。接入方式见 README，需用户拍板是否并存或替换
+- API key 复用 `.mcp.json` 里 `multimedia-creator` 的 `AGNES_API_KEY` 即可（CN endpoint 一致）
+- 7 tools 后 `.mcp.json` 切换到 `agnes-video-25` 可以 **完全替代** `multimedia-creator`（v2 视频 + image 2.5-flash 全部覆盖）；剩下唯一差异：`multimedia-creator` 还有 agnes-video-v2.0 兼容、agnes-image-2.1-flash 老 endpoint、亚像素级别的额外 surface —— 若无遗留代码依赖，**可下掉旧服务**
+- v0.9 渲染层（TODO #29）+ 30s TVC demo（已重做）暂不动
+
+### 下一步（待办）
+- 用户拍板：(a) `.mcp.json` 切换到 `agnes-video-25` vs 暂缓 vs 并存；(b) 是否下掉 `multimedia-creator`（uvx gitee fork）
+- commit 当前 hosted_mcps/agnes-video-25/ + snapshot.md 增量（与 .mcp.json 切换在同一 commit 还是分开？建议同 commit，原子性强）
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+
+---
+
+### #97 补记 — image generation tools 并入（2026-09-06）
+
+把 `hosted_mcps/agnes-mcp-studio/` 的 image surface 抽到 `hosted_mcps/agnes-video-25/`，**不**新增独立 MCP 服务。3 tools:
+- `agnes25_image_generate` — 主入口；text-to-image + 可选 img2img（`image_paths`）+ 可选 mask（`mask_path`）
+- `agnes25_image_generate_v2` — 与 `_generate` 同实现；为 parity 显式声明 v2
+- `agnes25_image_edit` — 必填 `image_paths`，等价 `_image_generate_impl` with image inputs
+
+**Smoke 验证**：
+- text-to-image 1K/1:1 → 1024×1024 PNG, 1MB, `cos-platform-outputs.agnes-ai.cn/images/t2i/...`
+- image-to-image 1K/1:1 → 1024×1024 PNG, 857KB, `cos-platform-outputs.agnes-ai.cn/images/i2i/...`（CDN path 区分 t2i/i2i 证明 img2img 路径真生效）
+- 本地路径自动 data URL 编码（`image_paths=[local/file.png]` → `extra_body.image=[data:image/png;base64,...]`）
+
+**验证脚本回归**：`bash hosted_mcps/agnes-video-25/scripts/verify.sh` → 12/12 PASS（manifest 2 + toolchain 1 + import 1 + tools 7 + 总 11，漏算了 1 个）。所有 7 个 tool 都注册成功，import 0 错误。
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+
+---
+
+### #97 补记-2 — 切换 .mcp.json 到 agnes-video-25，desktop 部署对齐（2026-09-06）
+
+用户诉求："切换，要求desktop部署时也可用" —— 一次性把 `multimedia-creator` 切到 `agnes-video-25`，且 dev / production 两边都跑通。
+
+**决策点**：
+- `extended_buildin_mcp/mcp.json` 用 `id="multimedia-creator"` **保留**（用户拍板），只改 command/args/env/name/description —— 避免 per-tab MCP 配置 / Settings UI 已启用状态被静默丢弃
+- 新增 `${bundled:REL_PATH}` placeholder（**arch 决策**：扩展 `extended-builtin-mcp.ts`，与现有 `${env:NAME}` 对称）→ MCP manifest 可引用 Tauri bundle 里的 sibling package，**零**硬编码绝对路径，跨机器 / 跨 install prefix 通用
+- API key 走 `${env:AGNES_API_KEY}` —— production 用户从 app 配置 / 系统 env 注入；dev `.mcp.json` 仍内联明文 key（沿用现有约定，dev file 本来就是 per-machine）
+
+**改动清单**：
+| 文件 | 变更 |
+|------|------|
+| `src/server/utils/extended-builtin-mcp.ts` | +1 regex `BUNDLED_PLACEHOLDER_RE`；+1 fn `resolveBundledPlaceholdersInArgs`；coerceServer 末尾加 args 解析步骤 |
+| `src/server/utils/extended-builtin-mcp.unit.test.ts` | +1 describe（3 个 case：resolved / unresolved-leaves-literal / multi-placeholder）；module-top `vi.mock('./runtime')` 包装 `getBundledResourcePath` |
+| `src-tauri/tauri.conf.json` | +`bundle.resources` 一项：`"../hosted_mcps/agnes-video-25": "hosted_mcps/agnes-video-25"` |
+| `extended_buildin_mcp/mcp.json` | `multimedia-creator` 条目 command 从 uvx gitee → uvx bundled-path；args/env/name/description 全部更新 |
+| `.mcp.json` | `multimedia-creator` 同上改写；用绝对 dev path（Linux：`/home/hmcz/...`）；移除 `AGNES_IMAGE_MODEL*`（agnes-video-25 不消费）|
+
+**测试验证**：
+- `npx vitest run --project unit -- src/server/utils/extended-builtin-mcp.unit.test.ts` → **23/23 PASS**（20 原有 + 3 新 placeholder）
+- `npm run test:classification` → ok (197 server tests 正确分类)
+- `npx tsc --noEmit` → 0 错误（针对 `extended-builtin-mcp` 模块）
+- 3 个 JSON 文件 (`tauri.conf.json` / `extended_buildin_mcp/mcp.json` / `.mcp.json`) 全部 valid
+- **spawn smoke**：实际跑 `timeout 8 uvx --from /home/hmcz/.../hosted_mcps/agnes-video-25 agnes-video-25-mcp` → server 干净启动，8s 内无 stderr，timeout 后正常退出
+
+**Desktop 部署路径**（用户首次跑 production build 时验证）：
+1. `tauri build` → `hosted_mcps/agnes-video-25/` 被复制到 `<install>/resources/hosted_mcps/agnes-video-25/`
+2. Sidecar 启动 → `loadExtendedBuiltinMcpServers()` 读 `extended_buildin_mcp/mcp.json`
+3. args 里 `${bundled:hosted_mcps/agnes-video-25}` → `getBundledResourcePath()` 解析为 `<install>/resources/hosted_mcps/agnes-video-25`
+4. `command: "uvx"` → `getBundledUvPath()` 解析为 `<install>/uvx.exe`（Windows bundled）
+5. uvx 安装本地包 → 启动 `agnes-video-25-mcp` → 7 tools 上线
+
+**macOS/Linux production 注意点**：
+- `getBundledUvPath()` 仅 Windows 返回路径；macOS/Linux 走系统 uvx（Homebrew / system pkg）—— 与 bundled Node.js fallback 同模式
+- 用户首次启动若无系统 uvx → spawn 失败 → 已有的 `runtimeError / runtimeDownloadHint` UX 接管（参考 agent-session.ts:3599 注释）
+
+**风险 / Trade-off**：
+- `vi.mock('./runtime')` 在 module top hoist，可能影响其他依赖 runtime.ts 的测试 —— 但目前 `extended-builtin-mcp.unit.test.ts` 是唯一 consumer，且 mock 默认 delegate 到 actual，零回归
+- tauri.conf.json 资源条目改变 → `npm run tauri:dev` 启动时 Tauri 同步 copy `hosted_mcps/agnes-video-25/` 到 `src-tauri/resources/`，第一次启动可能慢 1-2s
+- 未提交：本次改动累积未提交 7 文件（extended-builtin-mcp.ts + .test + tauri.conf.json + extended_buildin_mcp/mcp.json + .mcp.json + 之前 TODO #97 的 hosted_mcps/agnes-video-25/* + SKILL.md/README.md 增量）
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+
+---
+
+### #96 补记 — 30s TVC demo 重做完成（2026-09-06）
+
+`outputs/videos/tvc_30s_v25/tvc_30s_v25_final.mp4` (11.1 MB / 31.136s / H.264 720P 30fps)
+
+- `make_demo.py` — upload 3 asset → 6 次 `agnes25_video_generate(mode="reference")` → ffmpeg normalize + concat。带 idempotency (skip if `_raw.mp4` 存在) + line-buffered stdout 便于后台跑
+- 6 takes 各 5.184s：take01_hero / take02_pour / take03_pour_detail / take04_shake / take05_clink / take06_endboard
+- 每个 take prompt 用 `<Picture 1> 调酒师 <Picture 2> 金酒 <Picture 3> 酒吧场景` 引用 3 个 ref asset（character_setup_bartender.png / product_hero_gin.png / scene_bar_background.png），**不**作为 first-frame 锚定
+- 与旧版本对比：tvc_30s_final.mp4 (9.1 MB) 是 asset 当 first-frame 错误路径的产物；tvc_30s_v25_final.mp4 (11.1 MB) 是参考图延续路径的真版本
+- 成本：6 次 agnes-video-2.5-flash (5s × ¥0.15 = ¥4.5) + 3 次 img.remit.ee 上传
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>

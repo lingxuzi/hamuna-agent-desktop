@@ -22,18 +22,20 @@
     },
     {
       "id": "multimedia-creator",
-      "name": "视频制作",
+      "name": "视频/图片生成（Agnes 2.5）",
       "type": "stdio",
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://gitee.com/zzol_wow/agnes-mcp-studio",
-        "agnes-media-mcp"
+        "${bundled:hosted_mcps/agnes-video-25}",
+        "agnes-video-25-mcp"
       ],
       "env": {
-        "AGNES_API_KEY": "sk-Edy4Y6lXLoX3HgAWY42ttAqeBclSFQjDuhO7KBPZKwNcpJUr"
+        "AGNES_API_KEY": "${env:AGNES_API_KEY}",
+        "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1",
+        "AGNES_OUTPUT_DIR": "${env:AGNES_OUTPUT_DIR}"
       },
-      "description": "视频制作",
+      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。uvx 走 bundled uvx (Windows) 或系统 uvx (macOS/Linux)。",
       "enabled": true
     }
   ]

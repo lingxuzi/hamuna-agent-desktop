@@ -7,6 +7,18 @@
       ],
       "cwd": "D:\\Coding\\hamuna-agent-desktop",
       "type": "stdio"
+    },
+    "multimedia-creator": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "/home/hmcz/Projects/hamuna-agent-desktop/hosted_mcps/agnes-video-25",
+        "agnes-video-25-mcp"
+      ],
+      "env": {
+        "AGNES_API_KEY": "sk-Edy4Y6lXLoX3HgAWY42ttAqeBclSFQjDuhO7KBPZKwNcpJUr",
+        "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1"
+      }
     }
   }
 }
