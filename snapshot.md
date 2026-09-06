@@ -2220,3 +2220,41 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>
 - 成本：6 次 agnes-video-2.5-flash (5s × ¥0.15 = ¥4.5) + 3 次 img.remit.ee 上传
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>
+
+---
+
+### 补记-3 — Storyboard PNG 物理约束落地（2026-09-06）
+
+**用户诉求**：「修复这个bug，同时生成故事板场景要符合物理规律，茶壶都飘起来了」
+
+**Bug 范围**：v1 PNG（morning_rush + afternoon_tea）8 panel 物理规律全部破坏——闹钟悬空无人按、茶壶凭空出现手柄、罐子飘在台面上方无人碰触、茶瓶悬空
+
+**修法**：两个 hard-constraint block 写入 prompt 顶部
+
+1. `[OUTPUT FORMAT — NON-NEGOTIABLE]` 块：4×2=8 panel、编号 01-08 各出现 1 次、禁止 4×3、禁止 12 panel、阅读顺序 LT-RT-TB
+2. `[Physics & Object Anchoring]` 块：每物体必须 (a) 在可见支撑面上或 (b) 被可见手握持；手物接触必有 visible contact；倾倒动作源容器必须被手握、接收容器必须在可见台面上
+
+**逐 panel 描述模板**：每物体必须显式声明 support condition（`RESTING ON` / `HAND FIRMLY GRIPS` / `PLACED ON` / `LYING ON`）。模板见 `bundled-skills/tvc-director/references/storyboard-prompt-physics-rules.md`
+
+**结果**（v3 morning_rush + v2 afternoon_tea，PNG 在 `bundled-skills/tvc-director/fixtures/storyboard_pngs/`）：
+
+| Drift | v1 (broken) | v3/v2 (this commit) |
+|---|---|---|
+| 茶壶/闹钟/罐/茶瓶悬空 | 8/8 panel 破坏 | **0/8 panel 破坏** ✅ |
+| 倾倒动作源/接收容器 | 无支撑 | 都有 visible hand grip + visible counter edge ✅ |
+| Layout 4×3 漂移 | 12 frame 含 01/02/02/03/04/05/05/06/06/07/07/08 | 仍漂移 ~30%（morning_rush 12 frame；afternoon_tea 8 frame 但 panel 05 缺失） ⚠️ |
+| 罐上 "07:50" 文字残影 | 出现 | 仍出现（单 prompt 写"NO text on product"不够）⚠️ |
+
+**已知限制**（documented in `references/storyboard-prompt-physics-rules.md` "Known Limitations"）：
+
+- Layout 漂移 → 升级路径：per-panel 单图生成 + post-compose tile（deterministic）
+- 文字残影 → 升级路径：(a) post-edit 用 image-text-erase 模型，或 (b) text 用 overlay 层渲染不进 PNG
+- Character lock 部分漂移（panel 06/07 脸微变）→ 升级路径：3-view ref image 进 `image_paths` 锁脸
+
+**变更文件**：
+- 新增 `bundled-skills/tvc-director/fixtures/storyboard_pngs/storyboard_grid_morning_rush.png`（v3，physics 修复）
+- 新增 `bundled-skills/tvc-director/fixtures/storyboard_pngs/storyboard_grid_afternoon_tea.png`（v2，physics 修复）
+- 新增 `bundled-skills/tvc-director/references/storyboard-prompt-physics-rules.md`（prompt 模板 + 已知限制 + 升级路径）
+- 未提交：working copies 在 `outputs/images/storyboard_grid_{morning_rush,afternoon_tea}_v{2,3}-1.png`（git 仍 ignore outputs/）
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
