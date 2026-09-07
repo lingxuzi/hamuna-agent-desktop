@@ -519,7 +519,7 @@ TVC 专属迭代重点：
 
 ## agnes MCP 调用契约
 
-**MCP 服务**：`multimedia-creator`（`.mcp.json` 已切到 `hosted_mcps/agnes-video-25`，本地开发用绝对路径 `/home/hmcz/Projects/...`，生产/内置用 `uvx --from agnes-video-25-mcp==0.1.1`）。所有调用走工具名 `mcp__multimedia-creator__agnes25_*`。
+**MCP 服务**：`multimedia-creator`（`.mcp.json` 已切到 `hosted_mcps/agnes-video-25`，本地开发用绝对路径 `/home/hmcz/Projects/...`，生产/内置用 `uvx --from agnes-video-25-mcp==0.1.3`）。所有调用走工具名 `mcp__multimedia-creator__agnes25_*`。
 
 ### 工具表
 
@@ -528,12 +528,8 @@ TVC 专属迭代重点：
 | 纯文生视频 | `agnes25_video_generate` | `mode="text"`, `prompt` |
 | 首/末帧锚定视频 | `agnes25_video_generate` | `mode="keyframe"`, `first_frame`/`last_frame`（二选一必填） |
 | **多图/音/视频 reference 生视频**（TVC 主路径） | `agnes25_video_generate` | `mode="reference"`, `images[]`, `audios[]`, `videos[]` |
-| 异步提交 | `agnes25_video_submit` | 同上 + 拿 `video_id` 后 `__wait` / `__status` 轮询 |
-| 轮询/状态 | `agnes25_video_wait` / `__status` | `video_id` |
 | 文生图 | `agnes25_image_generate` | `prompt`, `size` ∈ {1K, 2K, 3K, 4K}, `ratio` ∈ {1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9} |
 | 图生图 / inpaint | `agnes25_image_edit` | **`image_paths: string[]`（本地路径自动转 base64）**, `mask_path?` |
-
-> 工具 `agnes25_image_generate_v2` 是 `agnes25_image_generate` 的别名（当前默认 model 同为 `agnes-image-2.5-flash`），两选一即可，行为一致。
 
 ### Video model 矩阵
 
@@ -563,12 +559,12 @@ TVC 专属迭代重点：
 
 | 错误 | 处置 |
 |------|------|
-| `429` / `503` | `wait` / `__status` 自动重试；如果给同步 `generate`，重试一次仍失败则 abort |
+| `429` / `503` | `video_generate` 内置自动重试；同步调用若仍失败则 abort |
 | `400` `mode/media 不匹配` | `reference` 模式 media 必填非空 / `keyframe` 模式至少一帧 / `text` 模式拒 media |
 | `400` `size 越界` | 2.5-flash 锁 720P，2.5 上限 2K；切 model 或降 size |
 | `400` `images 数量超限` | 2.5 ≤ 8 / 2.5-flash ≤ 5；多宫格用单张拼接图喂入而不是 9 张 |
 | `400` `details.body` (Flash) 或 `details.detail` (legacy) | 透传错误原样给用户，不要臆造 fix |
-| 云端超时（>10 分钟） | 报 `video_id` 给用户，让用户后续用 `__status` 轮询 |
+| 云端超时（>10 分钟） | 重调 `video_generate`，调高 `timeout_seconds`（默认 600s）和 `poll_interval_seconds`（默认 5s）参数 |
 
 ### Agent 调用工作流（TVC 实际跑通路径）
 
