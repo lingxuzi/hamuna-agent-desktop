@@ -167,7 +167,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
   agentStatusSlot,
   onOverlayHeightChange,
   workspacePath = null,
-  sessionId = null,
+  sessionId: _sessionId = null,
 }, ref) {
   const { t } = useTranslation('chat');
   const isLauncherMode = mode === 'launcher';
@@ -178,7 +178,6 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
   const effectiveMinLines = isLauncherMode ? LAUNCHER_MIN_LINES : 2;
   const isExternalRuntime = runtime !== 'builtin';
   const overlayRootRef = useRef<HTMLDivElement>(null);
-  const attachmentSessionId = sessionId;
 
   // Compute display modes and model name based on runtime
   const displayPermissionModes = isExternalRuntime && runtimePermissionModes
@@ -603,7 +602,6 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
     provider,
     currentModelId,
     isExternalRuntime,
-    attachmentSessionId,
     inputValueRef,
     textareaRef,
     fileInputRef,

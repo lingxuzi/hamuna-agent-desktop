@@ -9,7 +9,8 @@
  *          → pin （点击/球点击：变实 + 拿键盘焦点；窗口失焦/Esc/×/再点球 → hidden）
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { join } from 'node:path';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { AlertCircle, Brain, Image as ImageIcon, Loader2, Settings as SettingsIcon, StopCircle, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -29,7 +30,6 @@ import { loadAppConfig, mergePresetCustomModels } from '@/config/services/appCon
 import { getAllProviders, modelSupportsModality } from '@/config/services/providerService';
 import { applyProviderEnablementAndOrder, type Provider } from '@/config/types';
 import { ALLOWED_IMAGE_MIME_TYPES, USER_IMAGE_ATTACHMENT_MAX_BYTES, isChatImageFile, isImageMimeType } from '../../shared/fileTypes';
-import { resolveAttachmentUrl } from '@/utils/attachmentUrl';
 import { renameIfBareClipboardImage } from '@/utils/clipboardImage';
 import { formatDuration, getToolBadgeConfig, getToolLabel, getToolMainLabel, getToolSummaryNode, isSubagentContainerTool } from '@/components/tools/toolBadgeConfig';
 import { isBackgroundSubagentTool, isSubagentContainerRunning } from '@/components/tools/subagentActivity';
@@ -943,51 +943,54 @@ export default function CompanionWindow() {
         }
 
         if (imagePaths.length > 0) {
-            try {
-                if (!session.sessionId) throw new Error('session not ready');
-                const prepared = await fileService.prepareUserImageAttachments({
-                    sessionId: session.sessionId,
-                    paths: imagePaths,
-                });
-                const drafts: FbImageDraft[] = [];
-                const fallbackPaths: string[] = [];
-                let oversizedCount = 0;
-                for (const file of prepared.attachments) {
-                    const previewUrl = resolveAttachmentUrl({ relativePath: file.relativePath });
-                    if (!previewUrl) continue;
-                    drafts.push({
-                        id: file.id,
-                        name: file.name,
-                        mimeType: file.mimeType,
-                        size: file.sizeBytes,
-                        data: '',
-                        previewUrl,
-                        source: 'upload',
-                        transport: 'attachment_ref',
-                        relativePath: file.relativePath,
-                    });
-                }
-                for (const err of prepared.errors) {
-                    if (err.code === 'too_large') oversizedCount += 1;
-                    fallbackPaths.push(err.path);
-                }
-                if (oversizedCount > 0) {
-                    toast.info(
-                        oversizedCount === 1
-                            ? t('floatingBall.toasts.imageTooLargeAddedAsFile')
-                            : t('floatingBall.toasts.imagesTooLargeAddedAsFile', { count: oversizedCount }),
-                    );
-                }
-                addImageDrafts(drafts);
-                otherPaths.push(...fallbackPaths);
-            } catch (err) {
-                console.warn('[fb] failed to read dropped images, treating as files:', err);
+            if (!session.workspacePath) {
                 otherPaths.push(...imagePaths);
+                imagePaths.length = 0;
+            } else {
+                try {
+                    const result = await fileService.copyPaths({
+                        sourcePaths: imagePaths,
+                        targetDir: 'hamuna_files',
+                        autoRename: true,
+                    });
+                    if (!result.success || !result.copiedFiles || result.copiedFiles.length === 0) {
+                        throw new Error('copy failed');
+                    }
+                    await fileService.addGitignore({ pattern: 'hamuna_files/' }).catch(() => undefined);
+
+                    const drafts: FbImageDraft[] = [];
+                    const copiedSet = new Set(result.copiedFiles.map((f) => f.sourcePath));
+                    for (const copied of result.copiedFiles) {
+                        const name = copied.targetPath.split(/[\\/]/).pop() || copied.sourcePath;
+                        drafts.push({
+                            id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                            name,
+                            mimeType: '',
+                            size: 0,
+                            data: '',
+                            previewUrl: convertFileSrc(join(session.workspacePath!, copied.targetPath)),
+                            source: 'upload',
+                            transport: 'attachment_ref',
+                            relativePath: copied.targetPath,
+                        });
+                    }
+                    addImageDrafts(drafts);
+                    insertReferencePaths(result.copiedFiles.map((f) => f.targetPath));
+                    toast.success(t('floatingBall.toasts.filesAdded', { count: result.copiedFiles.length }));
+
+                    for (const src of imagePaths) {
+                        if (!copiedSet.has(src)) otherPaths.push(src);
+                    }
+                } catch (err) {
+                    console.warn('[fb] failed to copy dropped images, treating as files:', err);
+                    otherPaths.push(...imagePaths);
+                }
+                imagePaths.length = 0;
             }
         }
 
         await copyPathsAsReferences(otherPaths);
-    }, [addImageDrafts, canAttachImages, copyPathsAsReferences, fileService, session.sessionId, session.workspacePath, t, toast]);
+    }, [addImageDrafts, canAttachImages, copyPathsAsReferences, fileService, insertReferencePaths, session.workspacePath, t, toast]);
 
     useTauriFileDrop({
         enabled: mode !== 'hidden',

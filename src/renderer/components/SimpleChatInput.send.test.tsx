@@ -15,7 +15,6 @@ const workspaceMocks = vi.hoisted(() => ({
     importBase64Files: vi.fn(),
     copyPaths: vi.fn(),
     addGitignore: vi.fn(),
-    prepareUserImageAttachments: vi.fn(),
     searchFiles: vi.fn(),
     listSlashCommands: vi.fn(),
   },
@@ -332,7 +331,6 @@ describe('SimpleChatInput send paths', () => {
     await waitFor(() => expect(screen.getByAltText('attachment')).toBeInTheDocument());
     expect(workspaceMocks.service.importBase64Files).not.toHaveBeenCalled();
     expect(workspaceMocks.service.copyPaths).not.toHaveBeenCalled();
-    expect(workspaceMocks.service.prepareUserImageAttachments).not.toHaveBeenCalled();
   });
 
   it('pastes non-image attachments as workspace file references', async () => {

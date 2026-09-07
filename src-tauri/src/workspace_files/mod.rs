@@ -45,7 +45,6 @@ pub mod system_open;
 pub(crate) mod test_support;
 pub mod transfer;
 pub mod tree;
-pub mod user_attachments;
 pub mod watcher;
 
 // `lib.rs` registers each command with the FULL submodule path

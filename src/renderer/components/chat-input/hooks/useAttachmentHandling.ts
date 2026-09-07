@@ -1,3 +1,6 @@
+import { join } from 'node:path';
+
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,24 +10,22 @@ import { modelSupportsModality } from '@/config/services/providerService';
 import { isTauriEnvironment } from '@/utils/browserMock';
 import { renameIfBareClipboardImage } from '@/utils/clipboardImage';
 import { isDebugMode } from '@/utils/debug';
-import { resolveAttachmentUrl } from '@/utils/attachmentUrl';
 import { ALLOWED_IMAGE_MIME_TYPES, isChatImageFile, isImageMimeType } from '@/../shared/fileTypes';
 import type { FileReferenceUndoAction } from '@/hooks/useUndoStack';
 
 import type { ImageAttachment } from '../types';
 import { MAX_IMAGES, MAX_IMAGE_SIZE } from '../constants';
 
-interface PreparedImageAttachment {
-  id: string;
-  name: string;
-  mimeType: string;
-  sizeBytes: number;
-  relativePath: string;
+interface CopiedFile {
+  sourcePath: string;
+  targetPath: string;
+  renamed: boolean;
 }
 
-interface WorkspaceCopyResult {
+interface CopyPathsResult {
   success: boolean;
-  copiedFiles?: Array<{ targetPath: string }>;
+  copiedFiles?: CopiedFile[];
+  errors?: string[];
 }
 
 interface AttachmentFileService {
@@ -34,18 +35,11 @@ interface AttachmentFileService {
     targetDir: string;
   }): Promise<{ success: boolean; files?: string[] }>;
   addGitignore(input: { pattern: string }): Promise<unknown>;
-  prepareUserImageAttachments(input: {
-    sessionId: string;
-    paths: string[];
-  }): Promise<{
-    attachments: PreparedImageAttachment[];
-    errors: Array<{ code?: string; path: string }>;
-  }>;
   copyPaths(input: {
     sourcePaths: string[];
     targetDir: string;
     autoRename: boolean;
-  }): Promise<WorkspaceCopyResult>;
+  }): Promise<CopyPathsResult>;
 }
 
 interface AttachmentUndoStack {
@@ -66,7 +60,6 @@ interface UseAttachmentHandlingParams {
   provider?: Provider | null;
   currentModelId?: string | null;
   isExternalRuntime: boolean;
-  attachmentSessionId?: string | null;
   inputValueRef: MutableRefObject<string>;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   fileInputRef: RefObject<HTMLInputElement | null>;
@@ -83,7 +76,6 @@ export function useAttachmentHandling({
   provider,
   currentModelId,
   isExternalRuntime,
-  attachmentSessionId,
   inputValueRef,
   textareaRef,
   fileInputRef,
@@ -174,29 +166,28 @@ export function useAttachmentHandling({
     reader.readAsDataURL(file);
   }, [forgetReader, toastRef, t]);
 
-  const addPreparedImageAttachment = useCallback((attachment: PreparedImageAttachment) => {
-    const preview = resolveAttachmentUrl({ relativePath: attachment.relativePath });
-    if (!preview) {
-      toastRef.current.warning(t('input.attachments.previewFailed', { name: attachment.name }));
+  const addCopiedImageAttachment = useCallback((copied: CopiedFile, fallbackName: string) => {
+    if (!workspacePath) {
+      toastRef.current.warning(t('input.attachments.previewFailed', { name: fallbackName }));
       return;
     }
+    const name = copied.targetPath.split(/[\\/]/).pop() || fallbackName;
+    const preview = convertFileSrc(join(workspacePath, copied.targetPath));
     setImages((prev) => {
       if (prev.length >= MAX_IMAGES) {
         toastRef.current.warning(t('input.attachments.maxImages', { count: MAX_IMAGES }));
         return prev;
       }
       return [...prev, {
-        id: attachment.id,
-        file: new File([], attachment.name, { type: attachment.mimeType }),
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        file: new File([], name, { type: '' }),
         preview,
         source: 'attachment_ref',
-        name: attachment.name,
-        mimeType: attachment.mimeType,
-        sizeBytes: attachment.sizeBytes,
-        relativePath: attachment.relativePath,
+        name,
+        relativePath: copied.targetPath,
       }];
     });
-  }, [toastRef, t]);
+  }, [workspacePath, toastRef, t]);
 
   const removeImage = useCallback((id: string) => {
     setImages((prev) => prev.filter((img) => img.id !== id));
@@ -383,46 +374,54 @@ export function useAttachmentHandling({
     }
 
     if (imagePaths.length > 0) {
-      if (!attachmentSessionId) {
-        toastRef.current.error(t('input.attachments.sessionNotReadyForImage'));
-        return;
-      }
-      const pendingFileReferencePaths: string[] = [];
-      let oversizedCount = 0;
       try {
-        const prepared = await fileService.prepareUserImageAttachments({
-          sessionId: attachmentSessionId,
-          paths: imagePaths,
+        const copyResult = await fileService.copyPaths({
+          sourcePaths: imagePaths,
+          targetDir: 'hamuna_files',
+          autoRename: true,
         });
         if (!mountedRef.current) return;
-        for (const attachment of prepared.attachments) {
-          addPreparedImageAttachment(attachment);
+
+        if (!copyResult.success) {
+          throw new Error(t('input.attachments.copyFailed'));
         }
-        for (const err of prepared.errors) {
-          if (err.code === 'too_large') {
-            oversizedCount += 1;
-          } else if (isDebugMode()) {
-            console.warn('[SimpleChatInput] Failed to prepare image attachment, treating as file:', err);
+
+        const successfulCopies = copyResult.copiedFiles || [];
+        const failedSourcePaths = new Set(copyResult.errors ?? []);
+        const fallbackPaths: string[] = [];
+
+        for (const copied of successfulCopies) {
+          const fallbackName = copied.sourcePath.split(/[\\/]/).pop() || copied.sourcePath;
+          addCopiedImageAttachment(copied, fallbackName);
+        }
+
+        for (const src of imagePaths) {
+          const copiedTarget = successfulCopies.find((c) => c.sourcePath === src)?.targetPath;
+          if (!copiedTarget || failedSourcePaths.has(src)) {
+            fallbackPaths.push(src);
           }
-          pendingFileReferencePaths.push(err.path);
         }
+
+        try {
+          await fileService.addGitignore({ pattern: 'hamuna_files/' });
+        } catch {
+          // Non-fatal, continue silently.
+        }
+
+        if (successfulCopies.length > 0) {
+          toastRef.current.success(t('input.attachments.filesAdded', { count: successfulCopies.length }));
+        }
+
+        otherPaths.push(...fallbackPaths);
+        imagePaths.length = 0;
       } catch (err) {
         if (!mountedRef.current) return;
         if (isDebugMode()) {
-          console.warn('[SimpleChatInput] Failed to prepare image attachments, treating as regular files:', err);
+          console.warn('[SimpleChatInput] Image copy failed, treating as regular files:', err);
         }
-        pendingFileReferencePaths.push(...imagePaths);
+        otherPaths.push(...imagePaths);
+        imagePaths.length = 0;
       }
-
-      if (oversizedCount > 0) {
-        toastRef.current.info(
-          oversizedCount === 1
-            ? t('input.attachments.oversizedImageAddedAsReference')
-            : t('input.attachments.oversizedImagesAddedAsReference', { count: oversizedCount }),
-        );
-      }
-      otherPaths.push(...pendingFileReferencePaths);
-      imagePaths.length = 0;
     }
 
     if (otherPaths.length > 0) {
@@ -482,7 +481,7 @@ export function useAttachmentHandling({
         toastRef.current.error(err instanceof Error ? err.message : t('input.attachments.fileCopyFailed'));
       }
     }
-  }, [fileService, workspacePath, addPreparedImageAttachment, undoStack, onWorkspaceRefresh, provider, currentModelId, isExternalRuntime, attachmentSessionId, toastRef, insertReferenceText, t]);
+  }, [fileService, workspacePath, addCopiedImageAttachment, undoStack, onWorkspaceRefresh, provider, currentModelId, isExternalRuntime, toastRef, insertReferenceText, t]);
 
   const handleUploadButtonClick = useCallback(async () => {
     setShowPlusMenu(false);
