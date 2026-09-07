@@ -111,6 +111,112 @@ def _is_https_url(value: str) -> bool:
     return urlparse(value).scheme == "https"
 
 
+def _is_data_uri(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith("data:")
+
+
+def _upload_to_remit_ee(path: Path) -> str:
+    """Upload a local file to img.remit.ee free image host; return full HTTPS URL.
+
+    Endpoint: POST https://img.remit.ee/api/upload (multipart/form-data, field 'file').
+    Required headers: Referer + Origin (else 403 '不允许直接调用API').
+    """
+    headers = {
+        "Referer": "https://img.remit.ee/free-image-hosting",
+        "Origin": "https://img.remit.ee",
+    }
+    try:
+        with path.open("rb") as f:
+            r = httpx.post(
+                "https://img.remit.ee/api/upload",
+                headers=headers,
+                files={"file": (path.name, f, "application/octet-stream")},
+                timeout=60.0,
+            )
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"img.remit.ee upload network error: {exc}") from exc
+    if r.status_code == 403:
+        raise RuntimeError("img.remit.ee 403: missing Referer/Origin header.")
+    if r.status_code == 429:
+        raise RuntimeError("img.remit.ee 429 rate limited; retry after 15s.")
+    if r.status_code >= 400:
+        raise RuntimeError(f"img.remit.ee upload failed ({r.status_code}): {r.text[:200]}")
+    try:
+        data = r.json()
+    except ValueError as exc:
+        raise RuntimeError(f"img.remit.ee response not JSON: {r.text[:200]}") from exc
+    if not data.get("success"):
+        raise RuntimeError(f"img.remit.ee upload not successful: {data}")
+    direct = data.get("directUrl") or data.get("url")
+    if not direct:
+        raise RuntimeError(f"img.remit.ee response missing directUrl: {data}")
+    return "https://img.remit.ee" + direct
+
+
+def _resolve_image_ref(value: str, *, field: str) -> tuple[bool, str | dict[str, Any]]:
+    """Resolve a video media reference to an HTTPS URL (or error dict).
+
+    Branches: https URL 直传; data URI → decode bytes → 上传 img.remit.ee 拿 URL;
+    local path → 上传 img.remit.ee 拿 URL.
+    """
+    if _is_https_url(value):
+        return True, value
+    if _is_data_uri(value):
+        try:
+            header, payload = value.split(",", 1)
+            mime = (header[len("data:"):].split(";", 1)[0].strip() or "image/png")
+            ext = mimetypes.guess_extension(mime.split(";")[0].strip()) or ".png"
+            data = base64.b64decode(payload, validate=True)
+        except Exception as exc:
+            return False, _error(
+                "invalid_data_uri",
+                f"{field} is not a valid data URI base64: {exc}",
+                details={"field": field, "value_prefix": value[:64]},
+            )
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        try:
+            return True, _upload_to_remit_ee(tmp_path)
+        except Exception as exc:
+            return False, _error(
+                "remit_ee_upload_failed",
+                f"{field} data URI upload failed: {exc}",
+                details={"field": field, "exception": str(exc)},
+            )
+        finally:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+    p = Path(value)
+    if not p.is_file():
+        return False, _error(
+            "invalid_param",
+            f"{field} is neither HTTPS URL, data URI, nor existing local file.",
+            details={"field": field, "value": value},
+        )
+    try:
+        return True, _upload_to_remit_ee(p)
+    except Exception as exc:
+        return False, _error(
+            "remit_ee_upload_failed",
+            f"{field} local path upload failed: {exc}",
+            details={"field": field, "path": value, "exception": str(exc)},
+        )
+
+
+def _resolve_image_refs(values: list[str], *, field: str) -> tuple[bool, list[str] | dict[str, Any]]:
+    resolved: list[str] = []
+    for v in values:
+        ok, res = _resolve_image_ref(v, field=field)
+        if not ok:
+            return False, res  # type: ignore[return-value]
+        resolved.append(res)  # type: ignore[arg-type]
+    return True, resolved
+
+
 def _validate_urls(values: list[str] | None, *, field: str, max_count: int) -> tuple[bool, str | dict[str, Any]]:
     if not values:
         return True, ""
@@ -327,8 +433,28 @@ def _submit_impl(
     videos: list[dict[str, Any]] | None = None,
     include_raw: bool = False,
 ) -> dict[str, Any]:
+    """Internal submit helper used by _generate_impl. Not exposed as MCP tool."""
     if not prompt.strip():
         return _error("invalid_prompt", "prompt must not be empty.")
+    if mode == "keyframe":
+        if first_frame:
+            ok, first_frame = _resolve_image_ref(first_frame, field="first_frame")
+            if not ok:
+                return first_frame  # type: ignore[return-value]
+        if last_frame:
+            ok, last_frame = _resolve_image_ref(last_frame, field="last_frame")
+            if not ok:
+                return last_frame  # type: ignore[return-value]
+    elif mode == "reference":
+        if images:
+            ok, images = _resolve_image_refs(images, field="images")
+            if not ok:
+                return images  # type: ignore[return-value]
+        if audios:
+            ok, audios = _resolve_image_refs(audios, field="audios")
+            if not ok:
+                return audios  # type: ignore[return-value]
+
     err = _validate_request(model, mode, size, aspect_ratio,
                             first_frame, last_frame, images, audios, videos)
     if err:
@@ -662,11 +788,6 @@ def _image_generate_impl(
     return _img_parse_response(response, _img_sanitize_filename(output_filename))
 
 
-# v2 alias: agnes-image-2.5-flash IS the default. Kept as a thin entry so
-# callers / agent skills can stay explicit about "v2" generation mode.
-_image_generate_v2_impl = _image_generate_impl
-
-
 def _image_edit_impl(
     prompt: str, image_paths: list[str], *,
     model: str = DEFAULT_IMAGE_MODEL,
@@ -688,48 +809,6 @@ def _image_edit_impl(
 
 
 @mcp.tool()
-def agnes25_video_submit(
-    prompt: str, *,
-    model: str = DEFAULT_MODEL, mode: str = "text",
-    seconds: str = DEFAULT_SECONDS, size: str = DEFAULT_SIZE,
-    aspect_ratio: str = DEFAULT_ASPECT, seed: int | None = None,
-    first_frame: str | None = None, last_frame: str | None = None,
-    images: list[str] | None = None, audios: list[str] | None = None,
-    videos: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Submit an Agnes Video 2.5 task. Modes: text | keyframe | reference.
-
-    reference mode uses images[]/audios[]/videos[] as visual/audio/motion reference;
-    prompt may use <Picture N>, <Audio N>, <Video N> placeholders to cite them.
-    """
-    return _submit_impl(
-        prompt, model=model, mode=mode, seconds=seconds, size=size,
-        aspect_ratio=aspect_ratio, seed=seed, first_frame=first_frame,
-        last_frame=last_frame, images=images, audios=audios, videos=videos,
-    )
-
-
-@mcp.tool()
-def agnes25_video_status(video_id: str, model: str = DEFAULT_MODEL) -> dict[str, Any]:
-    """Fetch the current status of an Agnes Video 2.5 task by video_id."""
-    return _status_impl(video_id, model=model)
-
-
-@mcp.tool()
-async def agnes25_video_wait(
-    video_id: str, model: str = DEFAULT_MODEL,
-    timeout_seconds: float = 600.0, poll_interval_seconds: float = 5.0,
-    download: bool = True, output_filename: str | None = None,
-) -> dict[str, Any]:
-    """Poll an Agnes Video 2.5 task until complete / failed / timed out."""
-    return await asyncio.to_thread(
-        _wait_impl, video_id, model=model,
-        timeout_seconds=timeout_seconds, poll_interval_seconds=poll_interval_seconds,
-        download=download, output_filename=output_filename,
-    )
-
-
-@mcp.tool()
 async def agnes25_video_generate(
     prompt: str, *,
     model: str = DEFAULT_MODEL, mode: str = "text",
@@ -741,7 +820,7 @@ async def agnes25_video_generate(
     timeout_seconds: float = 600.0, poll_interval_seconds: float = 5.0,
     download: bool = True, output_filename: str | None = None,
 ) -> dict[str, Any]:
-    """Submit + wait combined. Same args as agnes25_video_submit + wait controls."""
+    """Submit + wait combined. `mode` ∈ {text, keyframe, reference}; reference mode uses images[]/audios[]/videos[] with <Picture N> / <Audio N> / <Video N> placeholders."""
     return await asyncio.to_thread(
         _generate_impl, prompt,
         model=model, mode=mode, seconds=seconds, size=size, aspect_ratio=aspect_ratio,
@@ -777,29 +856,6 @@ async def agnes25_image_generate(
         image_paths=image_paths, mask_path=mask_path,
         n=n, return_base64=return_base64, response_format=response_format,
         output_filename=output_filename, extra_body=extra_body,
-    )
-
-
-@mcp.tool()
-async def agnes25_image_generate_v2(
-    prompt: str, *,
-    model: str = DEFAULT_IMAGE_MODEL_V2,
-    size: str = DEFAULT_IMAGE_SIZE, ratio: str = DEFAULT_IMAGE_RATIO,
-    image_paths: list[str] | None = None,
-    return_base64: bool = False,
-    response_format: str | None = None,
-    output_filename: str | None = None,
-) -> dict[str, Any]:
-    """Same surface as agnes25_image_generate, but explicitly on 2.5-flash.
-
-    Kept for parity with the agnes-mcp-studio ``agnes_image_generate_v2`` tool
-    name; today both tools resolve to the same default model.
-    """
-    return await asyncio.to_thread(
-        _image_generate_v2_impl, prompt,
-        model=model, size=size, ratio=ratio,
-        image_paths=image_paths, return_base64=return_base64,
-        response_format=response_format, output_filename=output_filename,
     )
 
 

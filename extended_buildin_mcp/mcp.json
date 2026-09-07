@@ -26,16 +26,18 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
+        "--default-index",
+        "https://pypi.org/simple",
         "--from",
-        "${bundled:hosted_mcps/agnes-video-25}",
+        "agnes-video-25-mcp==0.1.3",
         "agnes-video-25-mcp"
       ],
       "env": {
-        "AGNES_API_KEY": "${env:AGNES_API_KEY}",
+        "AGNES_API_KEY": "sk-Edy4Y6lXLoX3HgAWY42ttAqeBclSFQjDuhO7KBPZKwNcpJUr",
         "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1",
-        "AGNES_OUTPUT_DIR": "${env:AGNES_OUTPUT_DIR}"
+        "AGNES_OUTPUT_DIR": "~/HamunaAgent/agnes-output"
       },
-      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。uvx 走 bundled uvx (Windows) 或系统 uvx (macOS/Linux)。",
+      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。uvx --default-index 强制 PyPI 官方源（绕开开发机/用户机器设的 UV_DEFAULT_INDEX 清华镜像，刚 publish 的包清华镜像可能未同步）；uvx --from 拉 agnes-video-25-mcp==0.1.3（首次 10-30s，后续命中 ~/.cache/uv 毫秒）。AGNES_OUTPUT_DIR 用 `~` 路径，依赖 sidecar `buildMcpSubprocessEnv` 注入 HOME/USERPROFILE（macOS/Linux → HOME；Windows → USERPROFILE，server.py `Path.expanduser` 三平台都识别 HOME）。",
       "enabled": true
     }
   ]

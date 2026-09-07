@@ -61,12 +61,8 @@ Add alongside `multimedia-creator`:
 
 | Tool | Purpose |
 |---|---|
-| `agnes25_video_submit` | Submit video task, return `video_id` immediately |
-| `agnes25_video_status` | Poll a single video status |
-| `agnes25_video_wait` | Poll video until `completed` / `failed` / timeout, download to disk |
-| `agnes25_video_generate` | Submit + wait + download video in one call |
+| `agnes25_video_generate` | Submit + wait + download video in one call (`mode="text" \| "keyframe" \| "reference"`) |
 | `agnes25_image_generate` | Generate images (text-to-image + optional img2img via `image_paths`) |
-| `agnes25_image_generate_v2` | Same as `_generate`; explicit v2 surface for parity |
 | `agnes25_image_edit` | Edit images via `image_paths` + optional `mask_path` (inpainting) |
 
 Full schema: see [`SKILL.md`](SKILL.md). Public docs:
