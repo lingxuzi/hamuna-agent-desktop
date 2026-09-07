@@ -153,28 +153,6 @@
 
 （无 — 见 §4 最近 commit 指针）
 
-## 3a. 切换 tvc-director 视频模型至 agnes-video-2.5-flash 🚧 待 commit
-
-**触发**：用户拍板切换 + 实测确认 reference 模式通（单图 190s/185s、多图 113s 全部 OK）。
-
-**改动**（4 个文件，纯文档）：
-- `bundled-skills/tvc-director/SKILL.md`：13 处文本替换 + 3 行 Phase 5 表格（model / size / images cap）；description frontmatter、§1 核心职责、§2 提示词工程层、§3 reference 模式说明、§4 Multi-Phase 输出、§7 reference 图传入规则、§7.1 Phase 5 表、§7.2 模型矩阵对比（保留两行：旧 vs 新）、§10 代码示例。Code 示例：`model="agnes-video-2.5-flash"` + `size="720P"` + `images[] ≤ 5`
-- `bundled-skills/tvc-director/README.md`：2 处（Step 4 标题 + 路径注释）+ images cap `<= 8` → `<= 5`
-- `bundled-skills/tvc-director/README_en.md`：镜像
-- `bundled-skills/tvc-director/references/treatment.md`：多宫格人物约束 heading + 内文
-
-**flash 强约束应用**（从原 flash 行推断）：
-- `size` 锁 720P（从 `{720P, 1080P, 1K, 2K}` 降到唯一值）
-- `images[]` 上限 ≤ 5（原 ≤ 8）
-- `audios[]` 上限 ≤ 3（原 ≤ 8）
-- `videos[]` 0（flash 无 video reference，原 ≤ 1）
-
-**保留**：`SKILL.md:541` 模型矩阵对比表里 `agnes-video-2.5` 那行（解释"为什么选 flash"的关键 reference；删除 = 失去约束来源的对照上下文）。
-
-**Trade-off**：tvc-director 默认输出 1080P 高清商业 TVC；切到 720P flash 后视觉密度下降，但成本/速度提升。本批次不追求视觉顶级，先跑通 reference 模式。
-
-**验证**：纯文档，无代码变更；不需跑 test。
-
 
 
 ### TODO #29 — tvc-director chatui 渲染层对齐（v0.9 跨域）✅ DONE
@@ -258,6 +236,7 @@ v0.5 物理约束落地（commit `220abea`）：storyboard objects 锚定 physic
 | `2338a83` | **feat(attachments): drag-drop media → workspace/hamuna_files**（双轨：保留历史 `~/.hamuna/attachments/` handler） |
 | `db2d91f` | **fix(attachments): resolve workspace-relative paths to absolute before read_files_b64** — `ea9b524` 漏了：renderer 把 `relativePath='hamuna_files/<file>'` 直传给 `cmd_workspace_read_files_b64`，Rust `validate_external_read_path` 拒 workspace-relative → 用户实战 `工作区图片 X 读取失败：Access denied: Path must be absolute`。修复放 renderer helper（`readWorkspaceFilesAsBase64` 接 `workspacePath`，用 `joinWorkspacePath` 拼绝对路径后再下传 fileService），不动 Rust validator（其它 4 个调用点 `widgetLocalImg/AvatarPicker/Space/SpaceSettingsWorkspace` 都传绝对路径，放开 = 弱化 path-safety）。两个调用点 + `rebaseAttachmentRefPreviewsToDataUrl` 三处都加 `workspacePath` 参数；`useCallback` 同步补 deps；新加 1 用例 `throws when workspacePath is missing`。**projection 7/7 + send 16/16 ✓** |
 | `368ee90` | **fix(attachments): override `source` to inline_base64 when rebasing attachment_ref** — `ea9b524` 第二轮漏的：`imagePayloadForSend` 按 `source` 分发而不是 `preview`，光把 `preview` 改成 `data:...` 不够 → 后端 validator 仍把 `attachment_ref + workspace-relative` 拒为 "Image attachment does not belong to this session"（用户实战）。同步在 rebased 对象里设 `source: 'inline_base64'`，dispatch 走 inline 分支绕开 validator，`data` 字段从 `preview.split(',')[1]` 取 base64 段。CompanionWindow 不受影响（它直接构造 payload 不过 `imagePayloadForSend`）。`projection` 7/7 + `send` 16/16 ✓ |
+| `079c96f` | **docs(tvc-director): switch video model from agnes-video-2.5 to agnes-video-2.5-flash** — 用户拍板切换 + 实测 reference 模式通：4 次真实 submit（单图 190s/185s、多图 113s、img2img 5s）全部成功；中途命中 429 但窗口内自动恢复（账号日配额非秒级节流）。Flash 强约束应用到 4 文件 19 处文本 + 3 行 Phase 5 表：size 锁 720P（原可选 720P/1080P/1K/2K）、images cap ≤5（原 ≤8）、audios cap ≤3（原 ≤8）、videos 0（flash 不接受 video ref）。保留 `SKILL.md:541` 旧 model 对比行（解释"为什么选 flash"）。Trade-off：1080P → 720P 视觉密度下降；3x3 = 9 panel grid 溢出 5-image 上限，agent 后续需降采样到 ≤5 或拆 grid |
 | `ea9b524` | **fix(attachments): rebase workspace attachment_ref previews to data URLs at send time** — regression 来自 `2338a83`：workspace 拖拽的 `relativePath='hamuna_files/<file>'` 触发 `validateAttachmentRelativePath` 拒为 "does not belong to this session"。Hotfix 选 renderer 侧 rebase（`readWorkspaceFilesAsBase64` + `rebaseAttachmentRefPreviewsToDataUrl` 写回 `preview=data:...`）而非协议层新增 `workspace_ref` kind：后者需 validator + attachment_protocol + SDK tool 三层协同、scope 远大于 P0 热修。`SimpleChatInput.handleSend` + `CompanionWindow.doSend` 双调用点对称改写 + try/catch toast。3 新 unit 用例（happy / read error / unavailable）；`SimpleChatInput.send` 16/16 + `userImageAttachmentProjection` 6/6 ✓。架构 follow-up 列入 TODO #98 |
 | `51f3f98` | **feat(attachments): trash workspace file when an image attachment is removed** — 用户点 × → UI 立即移除 → 后台 `deleteFile` 走 OS 回收站（`cmd_workspace_delete` 默认 `permanent: false` → `trash` crate）。Gated on `source === 'attachment_ref' + relativePath`（inline_base64 不触发）；3 失败路径分别 toast `workspaceFileDelete{Skipped,Failed}`。Fire-and-forget + reducer 捕获 rationale 详见 commit message；mock 修正（`copyPaths` 返回真实 `{ sourcePath, targetPath, renamed }` shape）+ `vi.mock('@tauri-apps/api/core')` stub `convertFileSrc` 给 jsdom；1 新增 dom 用例 **16/16 ✓** |
 | `c70fd60` | **fix(attachments): replace `node:path.join` with renderer-safe `joinWorkspacePath`** — 根因：`2338a83` 在 renderer 引入 `import { join } from 'node:path'`，Vite externalize `node:*` for WebView bundle → 加载 Chat 输入框即触发全局 ErrorBoundary 整页崩。修复：新增 `src/shared/workspacePath.ts::joinWorkspacePath`（renderer-safe），2 文件替换；3 新单测覆盖 POSIX / Windows / 空 relative。CLAUDE.md pit-of-success MUST 补 "renderer 禁止 import `node:*`" 红线 |
