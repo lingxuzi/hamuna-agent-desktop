@@ -108,7 +108,7 @@ describe('user image attachment projection', () => {
 
     expect(fileService.readPathsAsBase64).toHaveBeenCalledWith({ paths: ['/ws/hamuna_files/photo.png'] });
     expect(result[0].preview).toBe('data:image/png;base64,cGhvdG8=');
-    expect(result[0].source).toBe('attachment_ref');
+    expect(result[0].source).toBe('inline_base64');
     expect(result[0].relativePath).toBe('hamuna_files/photo.png');
   });
 

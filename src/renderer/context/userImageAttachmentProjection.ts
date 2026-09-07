@@ -133,8 +133,14 @@ export async function rebaseAttachmentRefPreviewsToDataUrl(
       throw new Error(`工作区图片 "${imageAttachmentName(img)}" 内容为空`);
     }
     const mimeType = read.mimeType || imageAttachmentMimeType(img) || 'application/octet-stream';
+    // Override `source` to inline_base64 so imagePayloadForSend dispatches the
+    // inline branch — the backend's session-scoped validator rejects
+    // workspace-relative attachment_ref paths as "Image attachment does not
+    // belong to this session". Just rewriting `preview` isn't enough:
+    // imagePayloadForSend dispatches on `source`, not on the preview URL.
     return {
       ...img,
+      source: 'inline_base64' as const,
       preview: `data:${mimeType};base64,${read.data}`,
     };
   });
