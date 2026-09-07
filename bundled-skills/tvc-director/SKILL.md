@@ -530,7 +530,7 @@ TVC 专属迭代重点：
 | Phase 4 资产图（纯文）| `agnes25_image_generate` | — | `agnes-image-2.5-flash` | `size="1K"`, `ratio="16:9"` | `prompt` | — |
 | Phase 4 资产图（img2img / 多视图）| `agnes25_image_edit` | — | `agnes-image-2.5-flash` | `size="1K"` | `image_paths[]`, `prompt`, `mask_path?` | — |
 | Phase 5 多宫格 grid（3x3）| `agnes25_image_generate` | — | `agnes-image-2.5-flash` | `size="1K"`, `ratio="16:9"` | `prompt`（含 9 宫格分镜描述）| — |
-| **Phase 5 视频（reference 主路径）** | `agnes25_video_generate` | `"reference"` | `agnes-video-2.5-flash` | `size="720P"`, `seconds="5"`, `aspect_ratio="16:9"`, `timeout_seconds=600`, `poll_interval_seconds=5` | `prompt`, `images[]`（≤5 本地路径）| `audios[]=[]`, `videos[]=[]` |
+| **Phase 5 视频（reference 主路径）** | `agnes25_video_generate` | `"reference"` | `agnes-video-2.5-flash` | `size="720P"`, `seconds="12"`, `aspect_ratio="16:9"`, `timeout_seconds=600`, `poll_interval_seconds=5` | `prompt`, `images[]`（≤5 本地路径）| `audios[]=[]`, `videos[]=[]` |
 | Phase 5 视频（keyframe 兜底）| `agnes25_video_generate` | `"keyframe"` | `agnes-video-2.5-flash` | 同上 | `prompt`, `first_frame` 或 `last_frame`（二选一）| `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
 | Phase 5 视频（text 兜底）| `agnes25_video_generate` | `"text"` | `agnes-video-2.5-flash` | 同上 | `prompt` | `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
 
@@ -541,7 +541,7 @@ TVC 专属迭代重点：
 | `agnes-video-2.5` | text / keyframe / reference | images ≤ 8, audios ≤ 8, videos ≤ 1 | {720P, 1080P, 1K, 2K} |
 | `agnes-video-2.5-flash` | text / keyframe / reference | images ≤ 5, audios ≤ 3, **无 videos** | **锁 720P** |
 
-`aspect_ratio` ∈ {21:9, 16:9, 4:3, 1:1, 3:4, 9:16}（TVC 默认 16:9）。`seconds` ∈ "4"–"12"，默认 "5"。**单请求 reference 文件总计 ≤ 12 个**（images + audios + videos 之和）。
+`aspect_ratio` ∈ {21:9, 16:9, 4:3, 1:1, 3:4, 9:16}（TVC 默认 16:9）。`seconds` ∈ `"4"`–`"12"`（storyboard reference 模式默认 `"12"`——一张多宫格分镜冻结一条视频脉络，最大化贴合 grid 的 9 帧叙事；agnes 上限；非默认 `5` / `8` 等按 brief 总时长调整）。**单请求 reference 文件总计 ≤ 12 个**（images + audios + videos 之和）。
 
 ### Reference 模式铁律（TVC 主路径必读）
 
@@ -591,7 +591,7 @@ TVC 专属迭代重点：
    - **多宫格是 prompt 内部指令，不是外部输入**——不传 `images[]`，单图直出。
 
 3. **Phase 5 视频**：
-   - `mcp__multimedia-creator__agnes25_video_generate`，参数 `{model="agnes-video-2.5-flash", mode="reference", size="720P", seconds="5", aspect_ratio="16:9", timeout_seconds=600, poll_interval_seconds=5, images=["<grid 路径>", "<产品多视图 路径>"], prompt=<用 <Picture 1>/<Picture 2> 引用>}`，其它参数 `audios=[], videos=[]`
+   - `mcp__multimedia-creator__agnes25_video_generate`，参数 `{model="agnes-video-2.5-flash", mode="reference", size="720P", seconds="12", aspect_ratio="16:9", timeout_seconds=600, poll_interval_seconds=5, images=["<grid 路径>", "<产品多视图 路径>"], prompt=<用 <Picture 1>/<Picture 2> 引用>}`，其它参数 `audios=[], videos=[]`
 
 4. **产出路径**：MCP 自动下载到 `AGNES_OUTPUT_DIR`（默认 `/tmp`）。**Agent 必须把 `local_path` 复制到工作区 `outputs/<项目>/videos/`**，否则 tmp 路径重启即失。
 

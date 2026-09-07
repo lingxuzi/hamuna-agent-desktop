@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。snapshot.md 不允许无限增长；已完成项更新完项目状态后立即清出。
 
-最后更新：**2026-09-07**（snapshot 重整 + 拖拽媒体默认复制到 `workspace/hamuna_files/` 落地，commit `2338a83`；**修复 `node:path` 在 renderer 跑导致整页崩** commit `c70fd60`；**删除图片附件时回收 workspace 文件** commit `51f3f98`；**P0 修复 workspace 拖拽图片发不出去** commit `ea9b524`；**rebase 前把 relativePath → 绝对路径（绕过 Rust validator 拒 workspace-relative）** commit `db2d91f`；**rebase 时同步改写 source 字段（dispatch 走 inline_base64）** commit `368ee90`；**tvc-director skill 视频模型切换为 agnes-video-2.5-flash** commit `079c96f`；**修正 SKILL.md / storyboard.md video prompt 双图引用约定**（待 commit））
+最后更新：**2026-09-07**（snapshot 重整 + 拖拽媒体默认复制到 `workspace/hamuna_files/` 落地，commit `2338a83`；**修复 `node:path` 在 renderer 跑导致整页崩** commit `c70fd60`；**删除图片附件时回收 workspace 文件** commit `51f3f98`；**P0 修复 workspace 拖拽图片发不出去** commit `ea9b524`；**rebase 前把 relativePath → 绝对路径（绕过 Rust validator 拒 workspace-relative）** commit `db2d91f`；**rebase 时同步改写 source 字段（dispatch 走 inline_base64）** commit `368ee90`；**tvc-director skill 视频模型切换为 agnes-video-2.5-flash** commit `079c96f`；**修正 SKILL.md / storyboard.md video prompt 双图引用约定** commit `7191b91`；**端到端验证 tvc-director video prompt 新约定**（image×2 + video×1 全通，video 720P 5.166s 落地）；**storyboard reference 默认 seconds 5→12**（待 commit））
 
 ---
 
