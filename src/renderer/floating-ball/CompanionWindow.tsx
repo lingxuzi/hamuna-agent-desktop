@@ -1030,8 +1030,34 @@ export default function CompanionWindow() {
     }, []);
 
     const removeImageDraft = useCallback((id: string) => {
-        setImageDrafts((prev) => prev.filter((draft) => draft.id !== id));
-    }, []);
+        let draftToCleanup: FbImageDraft | null = null;
+        setImageDrafts((prev) => prev.filter((draft) => {
+            if (draft.id === id) {
+                draftToCleanup = draft;
+                return false;
+            }
+            return true;
+        }));
+        // Side effects outside the reducer — see useAttachmentHandling for rationale.
+        queueMicrotask(() => {
+            const target = draftToCleanup;
+            if (!target) return;
+            // Inline base64 (screenshots, paste-as-image) has no workspace file.
+            if (target.transport !== 'attachment_ref' || !target.relativePath) return;
+            if (!fileService.isAvailable || !session.workspacePath) {
+                toast.warning(t('input.attachments.workspaceFileDeleteSkipped', { name: target.name }));
+                return;
+            }
+            // Fire-and-forget: OS trash (Rust default) keeps misclicks recoverable.
+            fileService.deleteFile({ path: target.relativePath }).then((result) => {
+                if (!result || !result.success || !result.deleted) {
+                    toast.warning(t('input.attachments.workspaceFileDeleteFailed', { name: target.name }));
+                }
+            }).catch(() => {
+                toast.warning(t('input.attachments.workspaceFileDeleteFailed', { name: target.name }));
+            });
+        });
+    }, [fileService, session.workspacePath, toast, t]);
 
     const previewDraft = useCallback((url: string, name: string) => {
         openPreview(url, name);

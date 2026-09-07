@@ -39,6 +39,7 @@ interface AttachmentFileService {
     targetDir: string;
     autoRename: boolean;
   }): Promise<CopyPathsResult>;
+  deleteFile(input: { path: string; permanent?: boolean }): Promise<{ success: boolean; deleted: boolean }>;
 }
 
 interface AttachmentUndoStack {
@@ -189,8 +190,53 @@ export function useAttachmentHandling({
   }, [workspacePath, toastRef, t]);
 
   const removeImage = useCallback((id: string) => {
-    setImages((prev) => prev.filter((img) => img.id !== id));
-  }, []);
+    let attachmentToCleanup: ImageAttachment | null = null;
+    setImages((prev) => {
+      const next = prev.filter((img) => {
+        if (img.id === id) {
+          attachmentToCleanup = img;
+          return false;
+        }
+        return true;
+      });
+      return next;
+    });
+    // Queue microtask so setImages commits before we read the captured ref.
+    // The state write above runs synchronously in the reducer; the read happens
+    // after React commits. Side effects belong outside the reducer.
+    queueMicrotask(() => {
+      const target = attachmentToCleanup;
+      if (!target) return;
+      // Only workspace-backed refs have a file on disk to clean up.
+      // `inline_base64` attachments are pure data URLs (paste / screenshot) —
+      // removing them from the draft cannot leave anything on disk behind.
+      if (target.source !== 'attachment_ref' || !target.relativePath) return;
+      if (!fileService.isAvailable) {
+        toastRef.current.warning(
+          t('input.attachments.workspaceFileDeleteSkipped', { name: target.name ?? target.relativePath }),
+        );
+        return;
+      }
+      // Fire-and-forget: the UI is already updated and we don't want a slow
+      // trash move to block the close button. OS trash (Rust default) means a
+      // misclick is recoverable via Finder / Explorer restore.
+      fileService.deleteFile({ path: target.relativePath }).then((result) => {
+        if (!mountedRef.current) return;
+        if (result && result.success && result.deleted) return;
+        toastRef.current.warning(
+          t('input.attachments.workspaceFileDeleteFailed', { name: target.name ?? target.relativePath }),
+        );
+      }).catch((err) => {
+        if (!mountedRef.current) return;
+        if (isDebugMode()) {
+          console.warn('[SimpleChatInput] workspace file delete failed:', err);
+        }
+        toastRef.current.warning(
+          t('input.attachments.workspaceFileDeleteFailed', { name: target.name ?? target.relativePath }),
+        );
+      });
+    });
+  }, [fileService, toastRef, t]);
 
   const fileToBase64 = useCallback((file: File): Promise<string> => {
     return new Promise((resolve, reject) => {

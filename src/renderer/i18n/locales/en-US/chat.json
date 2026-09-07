@@ -161,7 +161,9 @@
       "filesAddedPartial": "Added {{successCount}}/{{totalCount}} file(s) to the workspace.",
       "fileCopyFailed": "File copy failed",
       "pickFilesTitle": "Choose files",
-      "pickFilesFailed": "Failed to choose files"
+      "pickFilesFailed": "Failed to choose files",
+      "workspaceFileDeleteSkipped": "Removed from input, but workspace file \"{{name}}\" was not deleted (requires the desktop app).",
+      "workspaceFileDeleteFailed": "Removed from input, but deleting workspace file \"{{name}}\" failed (check Finder/Explorer trash)."
     },
     "repetition": {
       "title": "Repeated content detected",

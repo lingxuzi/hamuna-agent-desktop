@@ -161,7 +161,9 @@
       "filesAddedPartial": "已添加 {{successCount}}/{{totalCount}} 个文件到工作区",
       "fileCopyFailed": "文件复制失败",
       "pickFilesTitle": "选择文件",
-      "pickFilesFailed": "选择文件失败"
+      "pickFilesFailed": "选择文件失败",
+      "workspaceFileDeleteSkipped": "已从输入框移除，但未删除工作区文件 \"{{name}}\"（需在桌面应用中操作）",
+      "workspaceFileDeleteFailed": "已从输入框移除，但删除工作区文件 \"{{name}}\" 失败（已移到回收站或 Finder 可恢复）"
     },
     "repetition": {
       "title": "检测到内容存在大量重复",

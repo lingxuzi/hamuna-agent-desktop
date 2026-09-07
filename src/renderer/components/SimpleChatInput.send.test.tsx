@@ -9,6 +9,18 @@ import { i18n } from '@/i18n';
 import SimpleChatInput, { type SimpleChatInputHandle } from './SimpleChatInput';
 import { ToastProvider } from './Toast';
 
+// jsdom has no Tauri runtime, so @tauri-apps/api/core throws when called.
+// Drag-drop images take the attachment_ref branch which calls convertFileSrc
+// to build the preview URL; without this stub the image never enters state
+// and the X-button regression test cannot reach the deleteFile call.
+vi.mock('@tauri-apps/api/core', async () => {
+  const actual = await vi.importActual<typeof import('@tauri-apps/api/core')>('@tauri-apps/api/core');
+  return {
+    ...actual,
+    convertFileSrc: (path: string) => `asset://localhost/${encodeURIComponent(path)}`,
+  };
+});
+
 const workspaceMocks = vi.hoisted(() => ({
   service: {
     isAvailable: true,
@@ -17,6 +29,7 @@ const workspaceMocks = vi.hoisted(() => ({
     addGitignore: vi.fn(),
     searchFiles: vi.fn(),
     listSlashCommands: vi.fn(),
+    deleteFile: vi.fn(),
   },
 }));
 
@@ -52,13 +65,17 @@ describe('SimpleChatInput send paths', () => {
       success: true,
       files: ['hamuna_files/pasted.txt'],
     });
-    workspaceMocks.service.copyPaths.mockResolvedValue({
-      success: true,
-      copiedFiles: [{ targetPath: 'hamuna_files/report.pdf' }],
+    workspaceMocks.service.copyPaths.mockImplementation(async ({ sourcePaths, targetDir, autoRename }) => {
+      const copiedFiles = (sourcePaths ?? []).map((sourcePath: string) => {
+        const filename = sourcePath.split(/[\\/]/).pop() || sourcePath;
+        return { sourcePath, targetPath: `${targetDir}/${filename}`, renamed: !!autoRename };
+      });
+      return { success: true, copiedFiles };
     });
     workspaceMocks.service.addGitignore.mockResolvedValue({ success: true });
     workspaceMocks.service.searchFiles.mockResolvedValue([]);
     workspaceMocks.service.listSlashCommands.mockResolvedValue([]);
+    workspaceMocks.service.deleteFile.mockResolvedValue({ success: true, deleted: true });
   });
 
   it('sends text from the Chat input surface', async () => {
@@ -440,5 +457,28 @@ describe('SimpleChatInput send paths', () => {
       expect((textarea as HTMLTextAreaElement).value).toContain('keep me');
       expect((textarea as HTMLTextAreaElement).value).toContain('@hamuna_files/report.pdf');
     });
+  });
+
+  it('trashes the workspace file when an attachment_ref image is removed', async () => {
+    const ref = createRef<SimpleChatInputHandle>();
+    renderInput({ mode: 'launcher', ref, workspacePath: '/workspace' });
+
+    await act(async () => {
+      const handle = ref.current;
+      if (!handle?.processDroppedFilePaths) throw new Error('SimpleChatInput ref was not mounted');
+      await handle.processDroppedFilePaths(['/tmp/photo.png']);
+    });
+
+    await waitFor(() => expect(screen.getByAltText('attachment')).toBeInTheDocument());
+
+    const removeButton = screen.getByTitle('删除图片');
+    fireEvent.click(removeButton);
+
+    await waitFor(() => {
+      expect(workspaceMocks.service.deleteFile).toHaveBeenCalledWith({
+        path: 'hamuna_files/photo.png',
+      });
+    });
+    await waitFor(() => expect(screen.queryByAltText('attachment')).not.toBeInTheDocument());
   });
 });
