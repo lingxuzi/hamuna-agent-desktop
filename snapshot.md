@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。snapshot.md 不允许无限增长；已完成项更新完项目状态后立即清出。
 
-最后更新：**2026-09-07**（snapshot 重整 + 拖拽媒体默认复制到 `workspace/hamuna_files/` 落地，commit `2338a83`；**修复 `node:path` 在 renderer 跑导致整页崩** commit `c70fd60`；**删除图片附件时回收 workspace 文件** commit `51f3f98`；**P0 修复 workspace 拖拽图片发不出去（"Image attachment does not belong to this session"）** — 待 commit）
+最后更新：**2026-09-07**（snapshot 重整 + 拖拽媒体默认复制到 `workspace/hamuna_files/` 落地，commit `2338a83`；**修复 `node:path` 在 renderer 跑导致整页崩** commit `c70fd60`；**删除图片附件时回收 workspace 文件** commit `51f3f98`；**P0 修复 workspace 拖拽图片发不出去** commit `ea9b524`）
 
 ---
 
@@ -151,28 +151,7 @@
 
 ## 3. 当前 TODO（待完成）
 
-### TODO #98 — P0 修复 workspace 拖拽图片发不出去 🚧 待 commit
-
-**症状**：drag-drop 图片 → 点发送 → 后端报 `AI 调用失败：Image attachment does not belong to this session`。回归根因：commit `2338a83` 把图片 `relativePath` 改成 `hamuna_files/<file>`（workspace-relative），但 `src/server/runtimes/image-payload.ts::validateAttachmentRelativePath` 仍要求 `<sessionId>/<file>` 2 段路径，否则 throw。
-
-**Hotfix 方案（renderer 侧 rebase，避开协议层重构）**：发送前用 `fileService.readPathsAsBase64({ paths })` 把 workspace 文件读成 base64，把 `preview` 改写成 `data:<mime>;base64,<...>`。`imagePayloadForSend` 见到 `data:` 自动走 `inline_base64` 分支，绕过 session-scoped validator。两个调用点同步改：
-- `src/renderer/components/chat-input/SimpleChatInput.tsx::handleSend` — `imagesForSend = await rebaseAttachmentRefPreviewsToDataUrl(images, fileService)` 后调 `onSend`
-- `src/renderer/floating-ball/CompanionWindow.tsx::doSend` — 同模式重写 `images` 构建；`attachment_ref` 走 `readWorkspaceFilesAsBase64` 后 emit `inline_base64`，其他 drafts 直通。try/catch 包 toast 报错
-
-**新增公共 helper**（`src/renderer/context/userImageAttachmentProjection.ts`）：
-- `readWorkspaceFilesAsBase64(paths, fileService)` — 批量读，返回 `Map<path, {data, mimeType, error}>`；fileService 不可用 / batch 失败 → throw
-- `rebaseAttachmentRefPreviewsToDataUrl(images, fileService)` — 过滤 `attachment_ref+relativePath`，读 workspace，写回 `preview=data:...`；返回 NEW 数组（不污染 caller 的 chip state，让 chip 仍用 `asset://` URL）。Read 失败 → throw 让 caller toast
-
-**Trade-off（rationale 必写进 commit body）**：
-- **未引入** `workspace_ref` 新 payload kind —— 需要后端 `image-payload.ts` 改 validator + 渲染端 attachment_protocol + SDK tool 描述（3 层协同），scope 远大于 P0 热修。Renderer 侧 rebase 是 0 协议改动 + 立即解用户阻塞的最小路径
-- 1 次 256KB SSE 红线风险（`Cmd_workspace_read_files_b64` 单次 base64 字符串已在 Rust 端做切分走 `/refs/:id`），现状和原 `prepareUserImageAttachments` 路径同档
-- 服务端 validator 仍存在，hotfix 后变 defensive（即便未来有人误用 `attachment_ref` 也只命中 validator，不破坏已修的 chip 路径）
-
-**测试**：新增 3 个 `rebaseAttachmentRefPreviewsToDataUrl` 单测（happy path / workspace read error / fileService unavailable）。`SimpleChatInput.send.test.tsx` 16/16 ✓；`userImageAttachmentProjection.unit.test.ts` 6/6 ✓。
-
-**验证**：typecheck 仅 6 个 pre-existing tvcEnvelope 错（已删文件，与本修复无关）；eslint 0 错；dom 16/16 ✓ + unit 6/6 ✓。
-
-**架构 follow-up**（P1 排队）：新增 `workspace_ref` payload kind，后端 validator + 渲染 attachment_protocol + SDK tool 描述全栈对齐。
+（无 — 见 §4 最近 commit 指针）
 
 
 
@@ -255,6 +234,7 @@ v0.5 物理约束落地（commit `220abea`）：storyboard objects 锚定 physic
 | Commit | 摘要 |
 |--------|------|
 | `2338a83` | **feat(attachments): drag-drop media → workspace/hamuna_files**（双轨：保留历史 `~/.hamuna/attachments/` handler） |
+| `ea9b524` | **fix(attachments): rebase workspace attachment_ref previews to data URLs at send time** — regression 来自 `2338a83`：workspace 拖拽的 `relativePath='hamuna_files/<file>'` 触发 `validateAttachmentRelativePath` 拒为 "does not belong to this session"。Hotfix 选 renderer 侧 rebase（`readWorkspaceFilesAsBase64` + `rebaseAttachmentRefPreviewsToDataUrl` 写回 `preview=data:...`）而非协议层新增 `workspace_ref` kind：后者需 validator + attachment_protocol + SDK tool 三层协同、scope 远大于 P0 热修。`SimpleChatInput.handleSend` + `CompanionWindow.doSend` 双调用点对称改写 + try/catch toast。3 新 unit 用例（happy / read error / unavailable）；`SimpleChatInput.send` 16/16 + `userImageAttachmentProjection` 6/6 ✓。架构 follow-up 列入 TODO #98 |
 | `51f3f98` | **feat(attachments): trash workspace file when an image attachment is removed** — 用户点 × → UI 立即移除 → 后台 `deleteFile` 走 OS 回收站（`cmd_workspace_delete` 默认 `permanent: false` → `trash` crate）。Gated on `source === 'attachment_ref' + relativePath`（inline_base64 不触发）；3 失败路径分别 toast `workspaceFileDelete{Skipped,Failed}`。Fire-and-forget + reducer 捕获 rationale 详见 commit message；mock 修正（`copyPaths` 返回真实 `{ sourcePath, targetPath, renamed }` shape）+ `vi.mock('@tauri-apps/api/core')` stub `convertFileSrc` 给 jsdom；1 新增 dom 用例 **16/16 ✓** |
 | `c70fd60` | **fix(attachments): replace `node:path.join` with renderer-safe `joinWorkspacePath`** — 根因：`2338a83` 在 renderer 引入 `import { join } from 'node:path'`，Vite externalize `node:*` for WebView bundle → 加载 Chat 输入框即触发全局 ErrorBoundary 整页崩。修复：新增 `src/shared/workspacePath.ts::joinWorkspacePath`（renderer-safe），2 文件替换；3 新单测覆盖 POSIX / Windows / 空 relative。CLAUDE.md pit-of-success MUST 补 "renderer 禁止 import `node:*`" 红线 |
 | `0f1073e` | **feat(tvc-director): enforce strict tool contract**（locked params + fail-fast + retry once） |
