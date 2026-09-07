@@ -1110,7 +1110,7 @@ export default function CompanionWindow() {
             const workspaceRefPaths = drafts
                 .filter((draft) => draft.transport === 'attachment_ref' && !!draft.relativePath)
                 .map((draft) => draft.relativePath!);
-            const readByPath = await readWorkspaceFilesAsBase64(workspaceRefPaths, fileService);
+            const readByPath = await readWorkspaceFilesAsBase64(workspaceRefPaths, session.workspacePath, fileService);
             const images = drafts.map((draft) => {
                 if (draft.transport === 'attachment_ref' && draft.relativePath) {
                     const read = readByPath.get(draft.relativePath);
@@ -1150,7 +1150,7 @@ export default function CompanionWindow() {
             console.warn('[fb] failed to send image drafts:', err);
             toast.warning(err instanceof Error ? err.message : '发送失败');
         }
-    }, [imageDrafts, input, quote, session.busy, session.ready, send, fileService, toast]);
+    }, [imageDrafts, input, quote, session.busy, session.ready, send, fileService, toast, session.workspacePath]);
 
     const resizeInput = useCallback((el: HTMLTextAreaElement) => {
         el.style.height = 'auto';

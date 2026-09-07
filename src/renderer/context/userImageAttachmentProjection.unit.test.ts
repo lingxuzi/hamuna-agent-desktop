@@ -95,17 +95,18 @@ describe('user image attachment projection', () => {
       readPathsAsBase64: vi.fn().mockResolvedValue({
         success: true,
         files: [
-          { path: 'hamuna_files/photo.png', name: 'photo.png', mimeType: 'image/png', data: 'cGhvdG8=' },
+          { path: '/ws/hamuna_files/photo.png', name: 'photo.png', mimeType: 'image/png', data: 'cGhvdG8=' },
         ],
       }),
     };
 
     const result = await rebaseAttachmentRefPreviewsToDataUrl(
       [workspaceRefImage('local-ref-1', 'hamuna_files/photo.png', 'asset://localhost/photo.png')],
+      '/ws',
       fileService,
     );
 
-    expect(fileService.readPathsAsBase64).toHaveBeenCalledWith({ paths: ['hamuna_files/photo.png'] });
+    expect(fileService.readPathsAsBase64).toHaveBeenCalledWith({ paths: ['/ws/hamuna_files/photo.png'] });
     expect(result[0].preview).toBe('data:image/png;base64,cGhvdG8=');
     expect(result[0].source).toBe('attachment_ref');
     expect(result[0].relativePath).toBe('hamuna_files/photo.png');
@@ -117,7 +118,7 @@ describe('user image attachment projection', () => {
       readPathsAsBase64: vi.fn().mockResolvedValue({
         success: true,
         files: [
-          { path: 'hamuna_files/missing.png', name: 'missing.png', mimeType: 'image/png', data: '', error: 'NOT_FOUND' },
+          { path: '/ws/hamuna_files/missing.png', name: 'missing.png', mimeType: 'image/png', data: '', error: 'NOT_FOUND' },
         ],
       }),
     };
@@ -125,6 +126,7 @@ describe('user image attachment projection', () => {
     await expect(
       rebaseAttachmentRefPreviewsToDataUrl(
         [workspaceRefImage('local-ref-2', 'hamuna_files/missing.png', 'asset://localhost/missing.png')],
+        '/ws',
         fileService,
       ),
     ).rejects.toThrow(/工作区图片 "photo.png" 读取失败：NOT_FOUND/);
@@ -134,9 +136,26 @@ describe('user image attachment projection', () => {
     await expect(
       rebaseAttachmentRefPreviewsToDataUrl(
         [workspaceRefImage('local-ref-3', 'hamuna_files/x.png', 'asset://localhost/x.png')],
+        '/ws',
         null,
       ),
     ).rejects.toThrow(/无法读取 1 个工作区文件/);
+  });
+
+  it('throws when workspacePath is missing', async () => {
+    const fileService = {
+      isAvailable: true,
+      readPathsAsBase64: vi.fn(),
+    };
+
+    await expect(
+      rebaseAttachmentRefPreviewsToDataUrl(
+        [workspaceRefImage('local-ref-4', 'hamuna_files/x.png', 'asset://localhost/x.png')],
+        null,
+        fileService,
+      ),
+    ).rejects.toThrow(/未绑定工作区路径/);
+    expect(fileService.readPathsAsBase64).not.toHaveBeenCalled();
   });
 });
 

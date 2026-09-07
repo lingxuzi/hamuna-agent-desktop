@@ -999,7 +999,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
       // pipeline then takes the inline_base64 branch automatically. Local
       // `images` state is untouched (chip keeps using the lightweight asset://).
       const imagesForSend = images.length > 0
-        ? await rebaseAttachmentRefPreviewsToDataUrl(images, fileService)
+        ? await rebaseAttachmentRefPreviewsToDataUrl(images, workspacePath, fileService)
         : undefined;
       // Delegate thought-mode persistence to the caller (Launcher
       // BrandSection owns `thoughtCreate` + refresh-key bump). The
@@ -1021,7 +1021,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
     } finally {
       sendingRef.current = false;
     }
-  }, [onSend, images, inputValue, provider, currentModelId, isExternalRuntime, setImages, t, onSlashAction, showConfigLockedReason, fileService, toast]);
+  }, [onSend, images, inputValue, provider, currentModelId, isExternalRuntime, setImages, t, onSlashAction, showConfigLockedReason, fileService, toast, workspacePath]);
 
   // Handle keyboard navigation in file search and slash menu
   // Handler for selecting a slash command — shared by the click path

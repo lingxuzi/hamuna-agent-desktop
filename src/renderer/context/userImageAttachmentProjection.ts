@@ -1,5 +1,6 @@
 import type { ImageAttachment } from '@/components/SimpleChatInput';
 import type { MessageAttachment } from '@/types/chat';
+import { joinWorkspacePath } from '@/../shared/workspacePath';
 
 function imageAttachmentName(img: ImageAttachment): string {
   return img.name || img.file.name;
@@ -58,20 +59,33 @@ interface WorkspaceFileReader {
  * decides how to fold the data into its own shape. Throws on hard failures
  * (Tauri unavailable, batch read returned success:false) so the caller can
  * surface a clear error.
+ *
+ * `paths` are workspace-relative (e.g. `hamuna_files/photo.png`); this helper
+ * joins them with `workspacePath` to absolute paths before passing to
+ * `cmd_workspace_read_files_b64`, which validates absolute paths only.
+ * Without the join the Rust validator rejects with
+ * "Access denied: Path must be absolute".
  */
 export async function readWorkspaceFilesAsBase64(
   paths: string[],
+  workspacePath: string | null | undefined,
   fileService: WorkspaceFileReader | null,
 ): Promise<Map<string, WorkspaceFileReadResult>> {
   if (paths.length === 0) return new Map();
+  if (!workspacePath) {
+    throw new Error(`无法读取 ${paths.length} 个工作区文件：未绑定工作区路径`);
+  }
   if (!fileService?.isAvailable) {
     throw new Error(`无法读取 ${paths.length} 个工作区文件：需要在桌面应用中操作`);
   }
-  const response = await fileService.readPathsAsBase64({ paths });
+  const absolutePaths = paths.map((path) => joinWorkspacePath(workspacePath, path));
+  const response = await fileService.readPathsAsBase64({ paths: absolutePaths });
   if (!response.success) {
     throw new Error('读取工作区文件失败');
   }
-  return new Map(response.files.map((f) => [f.path, f]));
+  // Re-key results back onto the caller's workspace-relative paths so the
+  // caller can look up reads by the same identity it passed in.
+  return new Map(paths.map((relative, index) => [relative, response.files[index]]));
 }
 
 /**
@@ -92,6 +106,7 @@ export async function readWorkspaceFilesAsBase64(
  */
 export async function rebaseAttachmentRefPreviewsToDataUrl(
   images: ImageAttachment[] | undefined,
+  workspacePath: string | null | undefined,
   fileService: WorkspaceFileReader | null,
 ): Promise<ImageAttachment[]> {
   if (!images || images.length === 0) return [];
@@ -102,6 +117,7 @@ export async function rebaseAttachmentRefPreviewsToDataUrl(
 
   const readByPath = await readWorkspaceFilesAsBase64(
     workspaceRefImages.map((img) => img.relativePath!),
+    workspacePath,
     fileService,
   );
 
