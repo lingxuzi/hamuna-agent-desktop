@@ -360,7 +360,7 @@ TVC 多宫格在通用写法基础上有以下差异：
 所有已生成资产图的元素（产品/人物/场景），在多宫格和视频提示词中统一用 `<Picture N>` 引用，**不重复描述外观**——外观由资产图锁定，重复描述反而干扰还原。
 
 - **有资产图** → 调用 `mcp__multimedia-creator__agnes25_image_generate`（image 2.5-flash，size 1K/2K/3K/4K 可选，ratio 与画布一致）的 `image_paths` 上传，提示词中用 `<Picture 1>产品, <Picture 2>模特, <Picture 3>环境` 引用；本地路径 server 端自动转 base64（img2img 走 `extra_body.image`，不要用顶层 image）
-- **有资产图视频** → 调用 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"`，`images=["path1","path2",...]` 数组传入（≤ 5），prompt 里用 `<Picture 1>` 1-indexed 引用——无独立 "character/style" role，用 prompt 文案传达角色
+- **有资产图视频** → 调用 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"`，`images=["path1","path2",...]` 数组传入（≤ 5），prompt 里用 `<Picture N>` 1-indexed 引用——**多图模式必须显式引用每张图**（典型：`<Picture 1>` 引用多宫格锚定构图/色彩、`<Picture 2>` 引用产品多视图锚定外观；缺一个都会偏离还原）。无独立 "character/style" role，用 prompt 文案传达角色
 - **无资产图** → 在全局风格层中用「标准描述锚点」文字复用（见 `references/pre-production.md` Part 3）
 
 ### 5.4 视频提示词（Multi-Phase 格式）
@@ -374,7 +374,7 @@ TVC 视频提示词采用 **Multi-Phase 格式**——每个 Phase 有精确的�
 #### Multi-Phase 视频提示词结构
 
 ```
-风格：[视觉风格] / [色彩基调] / [光影系统] / [约束条件] / 无背景音乐 产品由<Picture 1>指定，参考<Picture 1>的产品外观制作广告
+风格：[视觉风格] / [色彩基调] / [光影系统] / [约束条件] / 无背景音乐 沿<Picture 1>多宫格分镜设定构图与色彩，按<Picture 2>产品多视图还原主体外观
 
 Phase 1 (0-Xs): [标题]
 [景别+视角] [运镜描述]。[产品/主体状态变化]。[光影效果]。[功能揭示（如有）]。
@@ -390,7 +390,7 @@ Phase 3 (Y-Zs): [标题]
 每段视频独立编号：Phase 从 1 开始，秒数从 0 开始，不延续上一段。
 ```
 
-> **视频模型 reference 模式（agnes-video-2.5-flash）**：调用 `mcp__multimedia-creator__agnes25_video_generate`，传 `mode="reference"` + `images=["多宫格图路径","产品多视图路径",...]`（≤ 5 张，1-indexed 对应 prompt 里的 `<Picture 1>` `<Picture 2>`）。prompt 末尾引用产品外观：`产品由<Picture N>指定，参考<Picture N>的产品外观制作广告`。**`<Picture N>` 引用是图片与视频通用语法**——多宫格图片生成阶段（`agnes25_image_edit` 的 `image_paths`）也用 `<Picture N>` 1-indexed 引用，不是 nano banana pro 的 `(图N)`。
+> **视频模型 reference 模式（agnes-video-2.5-flash）**：调用 `mcp__multimedia-creator__agnes25_video_generate`，传 `mode="reference"` + `images=["多宫格图路径","产品多视图路径",...]`（≤ 5 张，1-indexed 对应 prompt 里的 `<Picture 1>` `<Picture 2>`）。**prompt 必须同时引用 `<Picture 1>` 和 `<Picture 2>`**——`<Picture 1>` 锚定多宫格（构图 / 色彩 / 镜头节奏）、`<Picture 2>` 锚定产品多视图（外观）；典型结尾句式：`沿<Picture 1>多宫格分镜设定构图与色彩，按<Picture 2>产品多视图还原主体外观`。**reference 模式不锁首帧**，多张图作为视觉参考同时喂给视频生成模型——grid 不是「首帧 + 后续自由生成」而是「构图 / 色彩 / 节奏的全局锚点」。**`<Picture N>` 引用是图片与视频通用语法**——多宫格图片生成阶段（`agnes25_image_edit` 的 `image_paths`）也用 `<Picture N>` 1-indexed 引用，不是 nano banana pro 的 `(图N)`。
 
 #### 三种 TVC 视频提示词类型
 
