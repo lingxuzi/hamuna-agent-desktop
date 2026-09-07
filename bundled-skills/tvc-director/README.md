@@ -1,164 +1,204 @@
-# TVC 导演 (tvc-director)
+# TVC Director · TVC 广告创意导演
 
-导演级的产品广告片编排入口。基于 **multimedia-creator MCP（Agnes）** + **edge-tts**，调度 10 个协作 agent + 6 个风格库完成 TVC 创作，每个强门节点必须等用户明确确认才能继续。
+[English](README_en.md)
 
-> 与"快速生成单段视频"的差别：tvc-director 是**完整的多轮导演协作**（brief → 创意路线 → 分镜 → 故事板 → 多段视频 → 旁白 → QC），适合 15-30s 的品牌广告 / 产品短片 / 品牌故事片。轻量场景请直接用 `multimedia-creator` MCP 的 image → video 一次性生成，不必走 10 agent 编排。
+从产品 brief 到电影级 TVC 关键帧——你的 AI 广告创意导演。
 
-> **v0.3 schema breaking change**: 16 个独立 `tvc-agent-*` / `tvc-style-*` skill 目录已**合并**进 `tvc-director/agents/` 与 `tvc-director/styles/` 下的扁平 `.md` 文件（无 frontmatter）。AI 不再能独立触发子 skill；只能通过 `tvc-director` 编排入口进入。详见 `agent-capabilities.json::internal_path` 字段。
+一个将 AI Agent 转化为 **TVC 广告创意导演** 的 Skill，覆盖电视广告和品牌广告的完整创意流程：从产品 brief 到可直接使用的多宫格分镜图片提示词和视频提示词。
 
-## 典型场景
+## 工作流程
 
-- 用户提供完整产品 brief，需要多方向创意提案
-- "帮我做一条广告 / TVC / 品牌片"
-- "生成广告脚本 + 分镜"
-- 任何需要深度导演工作的 TVC 项目（15s / 30s / 自定义时长）
-
-## 架构（v0.3 合并版）
+整个流程对应真实 TVC 广告制作的阶段：
 
 ```
-tvc-director/                       ← 编排入口（本 skill）
-├── agent-capabilities.json         ← 契约权威（机器读；含 internal_path）
-├── agent-capabilities.md           ← 人读速查表
-├── SKILL.md                        ← 编排规则 + 全局铁律（§14 Pre-Gen Confirmation Gate / §15 Adaptive Storyboard Grid）
-├── scripts/verify-tvc-bundle.sh    ← bundle 一致性校验（90 项，含 §11 cheatsheet 36 项）
-├── references/                     ← 24 个知识库文件（含 asset-prompting-cheatsheet.md）
-│   └── asset-prompting-cheatsheet.md  ← 资产生成提示词权威（4 H2 × 6 H3 + Failure Recovery）
-├── agents/                         ← 10 个协作 agent（扁平 .md，无 frontmatter）
-│   ├── brief.md
-│   ├── strategy.md
-│   ├── shot-planning.md
-│   ├── asset-storyboard.md
-│   ├── voiceover.md
-│   ├── product-action.md
-│   ├── food-flavor.md
-│   ├── packshot.md
-│   ├── video-prompt.md
-│   └── qc.md
-└── styles/                         ← 6 个风格库（扁平 .md，无 frontmatter）
-    ├── brand-manifesto.md
-    ├── industrial-product.md
-    ├── cinematic-food.md
-    ├── product-promo.md
-    ├── one-take.md
-    └── beat-synced.md
+"帮我做一条户外相机的30秒TVC"
+        ↓
+  Phase 1: 创意简报        ← 客户 Brief
+  Phase 2: 创意提案        ← 创意总监提案会
+  Phase 3: 视觉定调        ← 美术风格确认
+  Phase 4: 前期筹备        ← 选角试装 + 产品定妆 + 堪景
+  Phase 5: 分镜与拍摄      ← 分镜脚本 + 现场拍摄
+  Phase 6: 审片迭代        ← 导演审片 + 修改
+  Phase 7: 交付打包        ← 终版交付
+        ↓
+  可直接复制使用的多宫格分镜图片提示词、
+  视频提示词和创意方案文档
 ```
 
-## 六轴配置（用户第一轮确认）
+## 核心特性
 
-| 轴 | 选项 |
-|----|------|
-| 时长 | 15 秒 / 30 秒 / 自定义 X 秒 |
-| 旁白 | 有旁白 / 无旁白 / 两套完整版本 |
-| 生成模式 | 直出（自然运镜）/ 九宫格（先审稿） |
-| 视频模型 | 使用推荐 / 指定模型 |
-| 分段数 | 单段 / 多段拼接 / 按 Agnes 能力自动选择 |
-| 节奏与镜头密度 | 快节奏商业版 (14-18 镜) / 标准 (11-14 镜) / 克制电影节奏 (8-10 镜) / 自定义 |
+- **类比真实 TVC 制片流程** — 选角试装、产品定妆照、场景堪景、分镜脚本、拍摄执行——每个环节都有对应的 AI 提示词产出物
+- **完整创意流水线** — 从一句话需求到可交付的分镜提示词和视频脚本，全程 AI 驱动
+- **8 种 TVC 叙事模型** — 痛点-解决、产品电影化拆解、品牌世界穿梭等，覆盖主流广告叙事
+- **电影级视觉系统** — 5 种画风预设（A-E）、12 种场景类型、精确到秒的运镜编排
+- **产品+品牌世界双线叙事** — 不只是产品特写，而是产品在真实场景中的交叉剪辑
+- **即拷即用** — 产出的提示词可直接通过 `mcp__multimedia-creator__agnes25_*` 工具调用，无需二次加工
 
-## 时长能力
+## 成品展示
 
-- **15s**：最少 2 段（5s+10s 或 8s+7s）
-- **30s**：3-6 段（每段 5-10s）
-- **>15s**：自动拆为多个 15s 故事板块（多块需额外范围规划）
-- **≤15s**：直接进 Step 4，跳过 storyboard 范围规划
+### 汽车 TVC — 产品电影化拆解
 
-## 10 步调度（强/弱门对照）
+https://github.com/user-attachments/assets/541055ed-d716-4087-86e2-a27d375282ed
 
-完整 workflow table 含 Phase count / State envelope 列，定义在 [`SKILL.md` §3](SKILL.md#3-调度顺序10-个协作-agent) 与 [`agent-capabilities.md`](agent-capabilities.md)。下面是概览：
+### 香水 TVC — 品牌世界穿梭
 
-| Step | Agent | Gate | Block until | Skip when | Phases | State envelope |
-|------|-------|------|-------------|-----------|--------|----------------|
-| 1 | `tvc-agent-brief` | **strong** | `user_confirms_brief` | never | 1 | `brief_envelope` |
-| 2 | `tvc-agent-strategy` | **strong** | `user_selects_route` | never | 2 (propose/revise) | `routes_envelope` |
-| 3 | `tvc-agent-shot-planning` | weak | - | never | 1 | `shot_plan_envelope` |
-| 4 | `tvc-agent-asset-storyboard` | **strong** | `storyboard_final_confirmed` | never | 3 (asset/compile/materialize) | `storyboard_envelope` |
-| 5 | `tvc-agent-voiceover` | **strong** | `vo_text_confirmed` | never | 1 | `voiceover_envelope` |
-| 6 | `tvc-agent-product-action` | weak | - | never | 1 | `product_action_envelope` |
-| 7 | `tvc-agent-food-flavor` | weak | - | `non_food_product` | 1 | `flavor_envelope` |
-| 8 | `tvc-agent-packshot` | weak | - | never | 1 | `packshot_envelope` |
-| 9 | `tvc-agent-video-prompt` | **strong** ⚡ | `video_prompts_confirmed` | never | 1 | `video_prompt_envelope` |
-| 10 | `tvc-agent-qc` | self_check | - | never | 1 | `qc_envelope` |
+https://github.com/user-attachments/assets/df2d51af-acc2-4f34-a228-8b35ea754345
 
-⚡ = v0.3 由 weak 升级为 strong；Step 9 视频 prompt 必须经用户确认后才提交 `agnes_video_generate`。
+## 快速上手：一条汽车 TVC 的诞生
 
-**统一状态交接信封** + **失败停机规范** 见 [`SKILL.md` §12-§13](SKILL.md)。每个 agent 的 `## Workflow Context` section 是与 orchestrator 对齐的可执行契约，由 `verify-tvc-bundle.sh` 自动校验。
+以下是一个真实的端到端案例——从一张参考图到 15 秒成片。
 
-## Pre-Generation Confirmation Gate（v0.3 新增）
+### Step 1 — 给一张参考图 + 一句话需求
 
-每次 MCP 生成调用（Step 4 / 5 / 6 / 9）执行前，**必须**先向用户展示 prompt + reference images + 预期输出，等用户确认后才执行。详见 [`SKILL.md` §14](SKILL.md) 与 [`asset-prompting-cheatsheet.md`](references/asset-prompting-cheatsheet.md) §5。
+> "帮我做一条银色轿跑的 15 秒 TVC"
 
-**触发范围 + 聚合粒度**：
+<img src="https://github.com/user-attachments/assets/0d774888-0dbb-4fb7-a861-ca3116b812b7" width="400" alt="参考图：银色轿跑" />
 
-| Agent | Step | 触发时机 | 聚合粒度 |
-|-------|------|---------|---------|
-| `tvc-agent-asset-storyboard` | 4 | Phase 1 每个 asset class；Phase 2 每个 storyboard block | per asset_class / per storyboard_block_id |
-| `tvc-agent-voiceover` | 5 | 每条 VO line | per vo_id |
-| `tvc-agent-product-action` | 6 | 每个 action chain illustration / cast reference sheet | per call_unit |
-| `tvc-agent-video-prompt` | 9 | 全部 segments 一次性聚合展示 | per segment（一次性展示全部）|
+AI 会自动进入完整创意流：需求拆解 → 创意构思 → 画风确认 → 资产生成 → 分镜 + 视频脚本。
 
-**失败必停**：任意 MCP 生成失败 → 必走 4 选项 grilling（`retry_same` / `revise_prompt` / `retry_revised` / `abort_step`）。**禁止降级 / 禁止跳过 / 禁止用旧资产**。
+### Step 2 — AI 通过 agnes-image-2.5-flash 生成产品多视图
 
-## Adaptive Storyboard Grid（v0.3 新增）
+AI 输出产品多视图提示词，调用 `mcp__multimedia-creator__agnes25_image_edit`（`image_paths` 传入参考图）/ `__image_generate`（纯文），本地路径自动转 base64，得到标准化的多角度产品图：
 
-故事板（Step 4 Phase 2 唯一硬交付物）按 segment 时长自适应选择网格，避免"30s 强塞 3×3"或"12s 浪费 3×3"。详见 [`SKILL.md` §15](SKILL.md) 与 cheatsheet §4.4。
+<img src="https://github.com/user-attachments/assets/9d97df38-79f1-4a6a-a6bb-0fdbd731faca" width="600" alt="产品多视图" />
 
-| 段落分镜时长 | 网格 |
-|------------|------|
-| ≥10s | 3×3（9 格）|
-| 5s ~ <10s | 2×2（4 格）|
-| <5s | 首尾帧（2 联）|
+### Step 3 — AI 通过 agnes-image-2.5-flash 生成 9 宫格分镜
 
-## 依赖 MCP
+AI 输出 3×3 多宫格分镜提示词（包含逐格构图、光影、运镜描述），调用 `mcp__multimedia-creator__agnes25_image_generate`，`image_paths` 传入产品多视图 + 环境图作为 `<Picture 1>` `<Picture 2>` reference，得到完整分镜：
 
-| MCP | 状态 | 说明 |
-|------|------|------|
-| `multimedia-creator` (Agnes) | **非内置，用户配置** | 图像/视频生成；用户在 MCP 设置中加入 |
-| `edge-tts` | **应用内置** | 旁白/配音；启动自动加载 |
+<img src="https://github.com/user-attachments/assets/1ca54c8a-e1c2-4a13-8e67-461ea327f2ab" width="600" alt="9 宫格分镜" />
 
-未配置 `multimedia-creator` 时，仍可完成 Step 1-5 创意/分镜方案和 edge-tts 配音，视频资产需用户在外部平台生成后导入。
+### Step 4 — AI 通过 agnes-video-2.5 reference 模式生成视频
 
-## 副作用提醒
+AI 同步输出 Multi-Phase 视频提示词（5 Phase / 15s），调用 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"` + `images=["<多宫格路径>","<产品多视图路径>"]`（≤ 8 张），prompt 用 `<Picture 1>` 引用多宫格、`<Picture 2>` 引用产品多视图——reference 模式**不锁首帧**，多张图作为视觉参考喂给视频生成模型。
 
-- `agnes_video_generate` 触发云端 GPU，**按秒计费**
-- 视频参考图会先上传到 `img.remit.ee`（公网图床）
-- 商业 Logo / 包装小字 / 价格 / CTA 不由视频模型生成，转交后期
+### 产出物一览
 
-## 全局铁律（跨阶段约束）
+| 产出物 | 工具 | 用途 |
+|--------|------|------|
+| 产品多视图 | `agnes25_image_edit`（有参考图）/ `__image_generate`（纯文） | 产品锚定，供后续步骤引用 |
+| 9 宫格分镜图 | `agnes25_image_generate`（`image_paths` 传入资产图） | 视频首帧 + 视觉校对 |
+| Multi-Phase 视频 | `agnes25_video_generate`（`mode="reference"`, `images[]` 引用资产） | 生成 15s 成片 |
+| 创意方案文档 | — | 完整创意 brief 存档 |
 
-1. 产品出镜率 ≥ 70%，禁止连续 3 格无产品
-2. `storyboard-final.png` 硬门槛：先有故事板才能 `agnes_video_generate`
-3. 产品参与因果（不是被动道具）
-4. 违禁词强制转译（cinematic / 电影感 / 高级感 等）
-5. 每镜单动作单任务
-6. 品牌世界格中产品也必须可见（10%-25%）
-7. 跨段提示词独立自包含（不引用前段）
+## 设计理念
 
-## 详细参考
+传统 AI 生成广告往往只是"产品 + 黑底 + 旋转"的无限循环。TVC Director 不同——它按真实 TVC 制片 SOP 组织提示词生成，让每条提示词都有明确的制作环节归属：
 
-- [`SKILL.md`](SKILL.md) — 编排规则、Agnes 工具决策树、目录规范、§14 Pre-Gen Confirmation Gate、§15 Adaptive Storyboard Grid
-- [`agent-capabilities.json`](agent-capabilities.json) — 契约权威（机器读；含 `internal_path` 字段）
-- [`agent-capabilities.md`](agent-capabilities.md) — 人读速查表
-- [`references/asset-prompting-cheatsheet.md`](references/asset-prompting-cheatsheet.md) — **资产生成提示词权威**（v0.3 新增）
-- [`references/`](references/) — 24 个知识库文件（含 cheatsheet）
-- `agents/*.md` — 10 个协作 agent（扁平 .md，无 frontmatter）
-- `styles/*.md` — 6 个风格库（扁平 .md，无 frontmatter）
+- **叙事驱动** — 先确定叙事模型和创意方向，再生成视觉，不是无脑套模板
+- **双世界交叉剪辑** — 产品特写与品牌世界场景交织，像真正的 TVC 一样讲故事
+- **精确到秒的运镜设计** — 每一格分镜都有明确的景别、角度、光影和转场逻辑
+- **渐进式人机协作** — 每个阶段都可以介入调整，不是一键出片的黑盒
 
-## 校验
+## 三大核心能力
+
+### 1. 产品电影化拆解（Cinematic Product Breakdown）
+
+产品是唯一主角，纯影棚，多 Phase 的产品微电影：
+
+- 零件悬浮拆解/精密组装动画
+- 材质微距：金属磨砂纹理、玻璃折射、碳纤维编织
+- 精确到秒的运镜编排：极慢拆解 → 爆发旋转 → 悬浮凝视 → 俯冲穿越
+- 光影叙事：低调影棚光、侧光勾勒轮廓、光随旋转流动
+
+### 2. 品牌世界穿梭（Brand World Crosscut）
+
+品牌世界和产品世界轮流出场，用 Match Cut 衔接：
+
+- 运动相机 → 跳伞、潜水、滑雪、攀岩
+- 越野车 → 盘山弯道、沙漠、雪地
+- 每个 Phase 完整待在一个世界里，通过匹配剪辑无缝切换
+
+### 3. 生活方式短片（Lifestyle Film）
+
+产品始终待在品牌世界中，不跳出去做影棚特写：
+
+- 跑鞋穿在脚上、手表戴在手腕、眼镜架在鼻梁
+- 通过运镜手法（低角度追拍、慢动作、景深变化）自然突出产品
+- 片尾集中做 Hero Shot 收束
+
+## 安装
+
+### Cursor
 
 ```bash
-bash scripts/verify-tvc-bundle.sh
+git clone https://github.com/Ethanxwang/tvc-director.git ~/.cursor/skills/tvc-director
 ```
 
-校验 90 项一致性检查：JSON 合法性、10 agent / 6 style 文件存在（用 `internal_path`）、各 agent `## Workflow Context` 完整、`references_on_demand` 全部可达、workflow 与 agents 一致、cheatsheet 完整性（§11 含 4 H2 章节 + 24 H3 子段 + 4 cross-link + 4 agent pre-gen section = 36 项）。
+### Claude Code
 
-## v0.3 升级摘要
+```bash
+git clone https://github.com/Ethanxwang/tvc-director.git ~/.claude/skills/tvc-director
+```
 
-- 16 个独立 skill 目录合并进 `tvc-director/agents/` 与 `styles/`（扁平 .md，无 frontmatter）
-- `agent-capabilities.json` 增加 `internal_path` 字段；`skill_id` 保留供 cross-reference
-- Step 9 (`tvc-agent-video-prompt`) gate 由 weak 升级为 strong
-- 新增 [`SKILL.md` §14](SKILL.md) Pre-Generation Confirmation Gate
-- 新增 [`SKILL.md` §15](SKILL.md) Adaptive Storyboard Grid（段落分镜自适应）
-- 新增 [`references/asset-prompting-cheatsheet.md`](references/asset-prompting-cheatsheet.md)（4 H2 × 6 H3 + Failure Recovery）
-- `references/` 从 23 增至 24 个文件
-- `verify-tvc-bundle.sh` §11 新增 cheatsheet 36 项完整性校验
-- `food-flavor` 的 do_not 修正（与 workflow.skip_when 不再矛盾）
-- 修 `food-flavor` 之前「Do not skip」的反向表述 → 改为「Do not run for non-food」
+## 入口模式
+
+| 模式 | 触发信号 | 说明 |
+|------|---------|------|
+| **A：完整 TVC 创意流** | "帮我做一条xx产品广告" | Brief → 创意 → 画风 → 资产 → 分镜 → 打包 |
+| **B：快速资产/提示词** | "帮我做一个产品 Hero Shot" | 跳过创意阶段，直接生成资产或关键帧提示词 |
+| **C：分镜转化** | 提供 TVC 分镜脚本 | 画风 → 资产 → 将分镜转化为关键帧提示词 |
+| **D：迭代修正** | "这张产品图xx不对" | 定位问题并提供修正版提示词 |
+
+## TVC 叙事模型
+
+| 模型 | 名称 | 核心逻辑 |
+|------|------|---------|
+| A | 痛点-解决 | 痛点场景 → 产品拯救 |
+| B | 产品电影化拆解 | 多 Phase 微电影逐步揭示卖点 |
+| C | 品牌世界穿梭 | 使用场景 ↔ 产品特写交叉剪辑 |
+| D | 生活方式短片 | 产品始终在场景中，运镜突出 |
+| E | 情感锚点 | 情感故事，产品为载体 |
+| F | 蒙太奇揭示 | 视觉奇观 → 产品揭示 |
+| G | 前后对比 | 使用前后的强烈反差 |
+| H | 品牌宣言 | 价值观驱动，产品收束 |
+
+## 交付物
+
+```
+my-tvc-project/
+├── concept.md                      # TVC 创意方案文档
+├── storyboard.md                   # 分镜脚本（如有）
+│
+├── assets/                         # 产品资产图提示词（agnes-image-2.5-flash）
+│   └── prompts/
+│       ├── product-multiview.md
+│       ├── product-detail-01.md
+│       ├── env-01-extreme-sports.md
+│       └── ...
+│
+├── keyframes/                      # 分镜关键帧提示词（agnes-image-2.5-flash）
+│   └── prompts/
+│       ├── grid-01-brand-world.md
+│       ├── grid-02-product-world.md
+│       ├── endframe.md
+│       └── ...
+│
+└── video-scripts/                  # Multi-Phase 视频提示词（agnes-video-2.5）
+    ├── segment-01-brand-world.md
+    ├── segment-02-product-breakdown.md
+    └── ...
+```
+
+## 如何使用交付物
+
+1. **产品多视图** — AI 调 `mcp__multimedia-creator__agnes25_image_edit`（`image_paths` 传入参考图）或 `__image_generate`（纯文），本地路径自动转 base64
+2. **分镜关键帧** — AI 调 `mcp__multimedia-creator__agnes25_image_generate`，`image_paths` 传入产品多视图 + 环境图作为 `<Picture 1>` `<Picture 2>` reference
+3. **视频脚本** — AI 调 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"` + `images=["<多宫格路径>","<产品多视图路径>"]`，prompt 用 `<Picture N>` 引用
+
+## 知识库架构
+
+知识库按真实广告制作的工种职责拆分，按需加载：
+
+| 工种 | 文件 | 对应真实制作环节 | 加载时机 |
+|------|------|---------------|---------|
+| 制片统筹 | `SKILL.md` | 制片流程管控、阶段流转 | 始终加载 |
+| 创意总监 | `treatment.md` | 创意提案、叙事模型、品类策略、出镜决策 | 创意提案 |
+| 摄影指导 | `shot-language.md` | 镜头语言、画风体系、场景类型、构图范式 | 视觉定调 / 分镜 |
+| 制片组 | `pre-production.md` | 选角试装、产品定妆、堪景、资产一致性 | 前期筹备 |
+| 导演 | `storyboard.md` | 分镜脚本、视频脚本、产品拆解、品牌世界镜头 | 分镜与拍摄 |
+| 后期 | `delivery.md` | 输出格式、迭代调试（11 种常见失败模式） | 审片 / 交付 |
+
+## License
+
+MIT
