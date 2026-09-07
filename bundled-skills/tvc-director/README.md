@@ -68,9 +68,9 @@ AI 输出 3×3 多宫格分镜提示词（包含逐格构图、光影、运镜�
 
 <img src="https://github.com/user-attachments/assets/1ca54c8a-e1c2-4a13-8e67-461ea327f2ab" width="600" alt="9 宫格分镜" />
 
-### Step 4 — AI 通过 agnes-video-2.5 reference 模式生成视频
+### Step 4 — AI 通过 agnes-video-2.5-flash reference 模式生成视频
 
-AI 同步输出 Multi-Phase 视频提示词（5 Phase / 15s），调用 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"` + `images=["<多宫格路径>","<产品多视图路径>"]`（≤ 8 张），prompt 用 `<Picture 1>` 引用多宫格、`<Picture 2>` 引用产品多视图——reference 模式**不锁首帧**，多张图作为视觉参考喂给视频生成模型。
+AI 同步输出 Multi-Phase 视频提示词（5 Phase / 15s），调用 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"` + `images=["<多宫格路径>","<产品多视图路径>"]`（≤ 5 张），prompt 用 `<Picture 1>` 引用多宫格、`<Picture 2>` 引用产品多视图——reference 模式**不锁首帧**，多张图作为视觉参考喂给视频生成模型。
 
 ### 产出物一览
 
@@ -174,7 +174,7 @@ my-tvc-project/
 │       ├── endframe.md
 │       └── ...
 │
-└── video-scripts/                  # Multi-Phase 视频提示词（agnes-video-2.5）
+└── video-scripts/                  # Multi-Phase 视频提示词（agnes-video-2.5-flash）
     ├── segment-01-brand-world.md
     ├── segment-02-product-breakdown.md
     └── ...

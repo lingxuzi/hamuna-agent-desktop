@@ -68,9 +68,9 @@ The AI outputs a 3×3 multi-grid storyboard prompt (with per-panel composition, 
 
 <img src="https://github.com/user-attachments/assets/1ca54c8a-e1c2-4a13-8e67-461ea327f2ab" width="600" alt="3×3 storyboard grid" />
 
-### Step 4 — AI generates video via agnes-video-2.5 reference mode
+### Step 4 — AI generates video via agnes-video-2.5-flash reference mode
 
-The AI outputs a Multi-Phase video script (5 phases / 15s) and invokes `mcp__multimedia-creator__agnes25_video_generate` with `mode="reference"` + `images=["<grid path>","<multiview path>"]` (≤ 8 images), referencing the grid via `<Picture 1>` and the multiview via `<Picture 2>` in the prompt — reference mode does **not** lock the first frame; multiple images are fed as visual references to the video model.
+The AI outputs a Multi-Phase video script (5 phases / 15s) and invokes `mcp__multimedia-creator__agnes25_video_generate` with `mode="reference"` + `images=["<grid path>","<multiview path>"]` (≤ 5 images), referencing the grid via `<Picture 1>` and the multiview via `<Picture 2>` in the prompt — reference mode does **not** lock the first frame; multiple images are fed as visual references to the video model.
 
 ### Output Summary
 
@@ -174,7 +174,7 @@ my-tvc-project/
 │       ├── endframe.md
 │       └── ...
 │
-└── video-scripts/                  # Multi-Phase video prompts (agnes-video-2.5)
+└── video-scripts/                  # Multi-Phase video prompts (agnes-video-2.5-flash)
     ├── segment-01-brand-world.md
     ├── segment-02-product-breakdown.md
     └── ...

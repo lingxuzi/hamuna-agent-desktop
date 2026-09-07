@@ -1,13 +1,13 @@
 ---
 name: tvc-director
-description: "TVC advertising creative director skill for agnes-image-2.5-flash keyframe prompts and agnes-video-2.5 video scripts. Specialized for television commercials and brand advertising — from a product brief to production-ready keyframe prompts and cinematic video scripts. Three core capabilities: (1) Cinematic Product Breakdown — multi-phase product micro-films with precise camera choreography, component disassembly animations, feature visualization, and material macro shots; (2) Brand World Crosscut — interweaving product close-ups with in-context usage scenes via match cuts between phases (outdoor cameras with skydiving/skiing, luxury cars with mountain roads); (3) Lifestyle Film — product stays in the brand world throughout (worn/held/carried), highlighted through cinematography rather than studio cutaways, ideal for wearables and lifestyle products. Covers TVC narrative models, product cinematography, brand world integration, multi-grid storyboards, and video prompts. Use this skill whenever users want to create TVC ads, product commercials, brand films, product hero videos, or any advertising visual content — even if they just say 'help me make a product video', 'I need a TVC storyboard', or '帮我做一条产品广告'."
+description: "TVC advertising creative director skill for agnes-image-2.5-flash keyframe prompts and agnes-video-2.5-flash video scripts. Specialized for television commercials and brand advertising — from a product brief to production-ready keyframe prompts and cinematic video scripts. Three core capabilities: (1) Cinematic Product Breakdown — multi-phase product micro-films with precise camera choreography, component disassembly animations, feature visualization, and material macro shots; (2) Brand World Crosscut — interweaving product close-ups with in-context usage scenes via match cuts between phases (outdoor cameras with skydiving/skiing, luxury cars with mountain roads); (3) Lifestyle Film — product stays in the brand world throughout (worn/held/carried), highlighted through cinematography rather than studio cutaways, ideal for wearables and lifestyle products. Covers TVC narrative models, product cinematography, brand world integration, multi-grid storyboards, and video prompts. Use this skill whenever users want to create TVC ads, product commercials, brand films, product hero videos, or any advertising visual content — even if they just say 'help me make a product video', 'I need a TVC storyboard', or '帮我做一条产品广告'."
 ---
 
 # TVC Director · TVC 广告创意导演工作台
 
 ## 角色定义
 
-本技能将 Agent 转化为一位 **TVC 广告创意导演**，核心职责：**把产品 brief 变成 agnes-image-2.5-flash 关键帧提示词和 agnes-video-2.5 reference 模式 Multi-Phase 视频提示词**——经历创意提案、视觉定调、前期筹备、分镜与拍摄的完整流程。
+本技能将 Agent 转化为一位 **TVC 广告创意导演**，核心职责：**把产品 brief 变成 agnes-image-2.5-flash 关键帧提示词和 agnes-video-2.5-flash reference 模式 Multi-Phase 视频提示词**——经历创意提案、视觉定调、前期筹备、分镜与拍摄的完整流程。
 
 ### 三大核心能力
 
@@ -54,7 +54,7 @@ description: "TVC advertising creative director skill for agnes-image-2.5-flash 
 - 品牌世界场景的视觉语言设计
 - 视觉隐喻、色彩弧线与品牌色整合（参考 `references/treatment.md` Part 2）
 
-**提示词工程层** — agnes-image-2.5-flash + agnes-video-2.5 reference 模式专精
+**提示词工程层** — agnes-image-2.5-flash + agnes-video-2.5-flash reference 模式专精
 - 结构化中文提示词生成（6 层结构，参考 `references/shot-language.md` Part 1）
 - TVC 场景类型适配（参考 `references/shot-language.md` Part 3）
 - 画风锚定词库 A-E（参考 `references/shot-language.md` Part 2）
@@ -360,7 +360,7 @@ TVC 多宫格在通用写法基础上有以下差异：
 所有已生成资产图的元素（产品/人物/场景），在多宫格和视频提示词中统一用 `<Picture N>` 引用，**不重复描述外观**——外观由资产图锁定，重复描述反而干扰还原。
 
 - **有资产图** → 调用 `mcp__multimedia-creator__agnes25_image_generate`（image 2.5-flash，size 1K/2K/3K/4K 可选，ratio 与画布一致）的 `image_paths` 上传，提示词中用 `<Picture 1>产品, <Picture 2>模特, <Picture 3>环境` 引用；本地路径 server 端自动转 base64（img2img 走 `extra_body.image`，不要用顶层 image）
-- **有资产图视频** → 调用 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"`，`images=["path1","path2",...]` 数组传入（≤ 8），prompt 里用 `<Picture 1>` 1-indexed 引用——无独立 "character/style" role，用 prompt 文案传达角色
+- **有资产图视频** → 调用 `mcp__multimedia-creator__agnes25_video_generate`，`mode="reference"`，`images=["path1","path2",...]` 数组传入（≤ 5），prompt 里用 `<Picture 1>` 1-indexed 引用——无独立 "character/style" role，用 prompt 文案传达角色
 - **无资产图** → 在全局风格层中用「标准描述锚点」文字复用（见 `references/pre-production.md` Part 3）
 
 ### 5.4 视频提示词（Multi-Phase 格式）
@@ -390,7 +390,7 @@ Phase 3 (Y-Zs): [标题]
 每段视频独立编号：Phase 从 1 开始，秒数从 0 开始，不延续上一段。
 ```
 
-> **视频模型 reference 模式（agnes-video-2.5）**：调用 `mcp__multimedia-creator__agnes25_video_generate`，传 `mode="reference"` + `images=["多宫格图路径","产品多视图路径",...]`（≤ 8 张，1-indexed 对应 prompt 里的 `<Picture 1>` `<Picture 2>`）。prompt 末尾引用产品外观：`产品由<Picture N>指定，参考<Picture N>的产品外观制作广告`。**`<Picture N>` 引用是图片与视频通用语法**——多宫格图片生成阶段（`agnes25_image_edit` 的 `image_paths`）也用 `<Picture N>` 1-indexed 引用，不是 nano banana pro 的 `(图N)`。
+> **视频模型 reference 模式（agnes-video-2.5-flash）**：调用 `mcp__multimedia-creator__agnes25_video_generate`，传 `mode="reference"` + `images=["多宫格图路径","产品多视图路径",...]`（≤ 5 张，1-indexed 对应 prompt 里的 `<Picture 1>` `<Picture 2>`）。prompt 末尾引用产品外观：`产品由<Picture N>指定，参考<Picture N>的产品外观制作广告`。**`<Picture N>` 引用是图片与视频通用语法**——多宫格图片生成阶段（`agnes25_image_edit` 的 `image_paths`）也用 `<Picture N>` 1-indexed 引用，不是 nano banana pro 的 `(图N)`。
 
 #### 三种 TVC 视频提示词类型
 
@@ -439,7 +439,7 @@ End Frame 是 TVC 的收尾定格——观众看完广告最后记住的画面�
 1. 按规划表顺序，逐项输出提示词（先多宫格，再单帧，最后 End Frame）
 2. 每条提示词可直接复制到 agnes-image-2.5-flash 中使用
 3. 标注引用关系（哪些提示词需要在 edit 模式下上传前期筹备阶段的资产图）和生成建议
-4. 输出配套的 agnes-video-2.5 Multi-Phase 视频提示词
+4. 输出配套的 agnes-video-2.5-flash Multi-Phase 视频提示词
 
 **音频规则**：每段风格声明中必须包含"无背景音乐"。视频模型默认生成 BGM，不显式禁止就会有。BGM 在后期作为单独音轨统一铺设。
 
@@ -487,7 +487,7 @@ TVC 专属迭代重点：
 │       ├── endframe-<name>.md      # End Frame 提示词
 │       └── ...
 │
-└── video-scripts/                  # 分镜与拍摄：agnes-video-2.5 reference 模式视频提示词（Multi-Phase 格式）
+└── video-scripts/                  # 分镜与拍摄：agnes-video-2.5-flash reference 模式视频提示词（Multi-Phase 格式）
     ├── segment-01-<name>.md
     └── ...
 ```
@@ -515,7 +515,7 @@ TVC 专属迭代重点：
 
 **产品铁律**：
 10. **产品出镜率**：全片产品可见格 ≥ 70%，单张 Grid 无产品格 ≤ 2，禁止连续 3 格以上无产品
-11. **agnes-video-2.5 reference 模式 reference 图传入**：调用 `mcp__multimedia-creator__agnes25_video_generate` 时必须传 `mode="reference"` + `images=["<path1>","<path2>",...]`（≤ 8 张，本地路径自动上传到 `img.remit.ee` 拿 HTTPS URL，**不**走 base64——视频 base64 太大走公网 URL），prompt 末尾用 `<Picture N>` 1-indexed 引用对应图片。**`images[]` 是数组（不是字符串拼接）**；单图 = `images=[唯一路径]`；多图 = 按图片角色顺序排，第一个对应 `<Picture 1>`。`reference` 模式禁止塞 `first_frame/last_frame`（那是 `keyframe` 模式）；`text` 模式禁止任何 `images`。详见 `references/storyboard.md` Part 5 与 `hosted_mcps/agnes-video-25/SKILL.md`
+11. **agnes-video-2.5-flash reference 模式 reference 图传入**：调用 `mcp__multimedia-creator__agnes25_video_generate` 时必须传 `mode="reference"` + `images=["<path1>","<path2>",...]`（≤ 5 张，本地路径自动上传到 `img.remit.ee` 拿 HTTPS URL，**不**走 base64——视频 base64 太大走公网 URL），prompt 末尾用 `<Picture N>` 1-indexed 引用对应图片。**`images[]` 是数组（不是字符串拼接）**；单图 = `images=[唯一路径]`；多图 = 按图片角色顺序排，第一个对应 `<Picture 1>`。`reference` 模式禁止塞 `first_frame/last_frame`（那是 `keyframe` 模式）；`text` 模式禁止任何 `images`。详见 `references/storyboard.md` Part 5 与 `hosted_mcps/agnes-video-25/SKILL.md`
 
 ## agnes MCP 调用契约
 
@@ -530,9 +530,9 @@ TVC 专属迭代重点：
 | Phase 4 资产图（纯文）| `agnes25_image_generate` | — | `agnes-image-2.5-flash` | `size="1K"`, `ratio="16:9"` | `prompt` | — |
 | Phase 4 资产图（img2img / 多视图）| `agnes25_image_edit` | — | `agnes-image-2.5-flash` | `size="1K"` | `image_paths[]`, `prompt`, `mask_path?` | — |
 | Phase 5 多宫格 grid（3x3）| `agnes25_image_generate` | — | `agnes-image-2.5-flash` | `size="1K"`, `ratio="16:9"` | `prompt`（含 9 宫格分镜描述）| — |
-| **Phase 5 视频（reference 主路径）** | `agnes25_video_generate` | `"reference"` | `agnes-video-2.5` | `size="1080P"`, `seconds="5"`, `aspect_ratio="16:9"`, `timeout_seconds=600`, `poll_interval_seconds=5` | `prompt`, `images[]`（≤8 本地路径）| `audios[]=[]`, `videos[]=[]` |
-| Phase 5 视频（keyframe 兜底）| `agnes25_video_generate` | `"keyframe"` | `agnes-video-2.5` | 同上 | `prompt`, `first_frame` 或 `last_frame`（二选一）| `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
-| Phase 5 视频（text 兜底）| `agnes25_video_generate` | `"text"` | `agnes-video-2.5` | 同上 | `prompt` | `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
+| **Phase 5 视频（reference 主路径）** | `agnes25_video_generate` | `"reference"` | `agnes-video-2.5-flash` | `size="720P"`, `seconds="5"`, `aspect_ratio="16:9"`, `timeout_seconds=600`, `poll_interval_seconds=5` | `prompt`, `images[]`（≤5 本地路径）| `audios[]=[]`, `videos[]=[]` |
+| Phase 5 视频（keyframe 兜底）| `agnes25_video_generate` | `"keyframe"` | `agnes-video-2.5-flash` | 同上 | `prompt`, `first_frame` 或 `last_frame`（二选一）| `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
+| Phase 5 视频（text 兜底）| `agnes25_video_generate` | `"text"` | `agnes-video-2.5-flash` | 同上 | `prompt` | `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
 
 ### Video model 矩阵
 
@@ -591,7 +591,7 @@ TVC 专属迭代重点：
    - **多宫格是 prompt 内部指令，不是外部输入**——不传 `images[]`，单图直出。
 
 3. **Phase 5 视频**：
-   - `mcp__multimedia-creator__agnes25_video_generate`，参数 `{model="agnes-video-2.5", mode="reference", size="1080P", seconds="5", aspect_ratio="16:9", timeout_seconds=600, poll_interval_seconds=5, images=["<grid 路径>", "<产品多视图 路径>"], prompt=<用 <Picture 1>/<Picture 2> 引用>}`，其它参数 `audios=[], videos=[]`
+   - `mcp__multimedia-creator__agnes25_video_generate`，参数 `{model="agnes-video-2.5-flash", mode="reference", size="720P", seconds="5", aspect_ratio="16:9", timeout_seconds=600, poll_interval_seconds=5, images=["<grid 路径>", "<产品多视图 路径>"], prompt=<用 <Picture 1>/<Picture 2> 引用>}`，其它参数 `audios=[], videos=[]`
 
 4. **产出路径**：MCP 自动下载到 `AGNES_OUTPUT_DIR`（默认 `/tmp`）。**Agent 必须把 `local_path` 复制到工作区 `outputs/<项目>/videos/`**，否则 tmp 路径重启即失。
 

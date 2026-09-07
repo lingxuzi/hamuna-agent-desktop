@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。snapshot.md 不允许无限增长；已完成项更新完项目状态后立即清出。
 
-最后更新：**2026-09-07**（snapshot 重整 + 拖拽媒体默认复制到 `workspace/hamuna_files/` 落地，commit `2338a83`；**修复 `node:path` 在 renderer 跑导致整页崩** commit `c70fd60`；**删除图片附件时回收 workspace 文件** commit `51f3f98`；**P0 修复 workspace 拖拽图片发不出去** commit `ea9b524`；**rebase 前把 relativePath → 绝对路径（绕过 Rust validator 拒 workspace-relative）** commit `db2d91f`；**rebase 时同步改写 source 字段（dispatch 走 inline_base64）** commit `368ee90`）
+最后更新：**2026-09-07**（snapshot 重整 + 拖拽媒体默认复制到 `workspace/hamuna_files/` 落地，commit `2338a83`；**修复 `node:path` 在 renderer 跑导致整页崩** commit `c70fd60`；**删除图片附件时回收 workspace 文件** commit `51f3f98`；**P0 修复 workspace 拖拽图片发不出去** commit `ea9b524`；**rebase 前把 relativePath → 绝对路径（绕过 Rust validator 拒 workspace-relative）** commit `db2d91f`；**rebase 时同步改写 source 字段（dispatch 走 inline_base64）** commit `368ee90`；**tvc-director skill 视频模型切换为 agnes-video-2.5-flash**（实测 reference 模式 OK，待 commit））
 
 ---
 
@@ -152,6 +152,28 @@
 ## 3. 当前 TODO（待完成）
 
 （无 — 见 §4 最近 commit 指针）
+
+## 3a. 切换 tvc-director 视频模型至 agnes-video-2.5-flash 🚧 待 commit
+
+**触发**：用户拍板切换 + 实测确认 reference 模式通（单图 190s/185s、多图 113s 全部 OK）。
+
+**改动**（4 个文件，纯文档）：
+- `bundled-skills/tvc-director/SKILL.md`：13 处文本替换 + 3 行 Phase 5 表格（model / size / images cap）；description frontmatter、§1 核心职责、§2 提示词工程层、§3 reference 模式说明、§4 Multi-Phase 输出、§7 reference 图传入规则、§7.1 Phase 5 表、§7.2 模型矩阵对比（保留两行：旧 vs 新）、§10 代码示例。Code 示例：`model="agnes-video-2.5-flash"` + `size="720P"` + `images[] ≤ 5`
+- `bundled-skills/tvc-director/README.md`：2 处（Step 4 标题 + 路径注释）+ images cap `<= 8` → `<= 5`
+- `bundled-skills/tvc-director/README_en.md`：镜像
+- `bundled-skills/tvc-director/references/treatment.md`：多宫格人物约束 heading + 内文
+
+**flash 强约束应用**（从原 flash 行推断）：
+- `size` 锁 720P（从 `{720P, 1080P, 1K, 2K}` 降到唯一值）
+- `images[]` 上限 ≤ 5（原 ≤ 8）
+- `audios[]` 上限 ≤ 3（原 ≤ 8）
+- `videos[]` 0（flash 无 video reference，原 ≤ 1）
+
+**保留**：`SKILL.md:541` 模型矩阵对比表里 `agnes-video-2.5` 那行（解释"为什么选 flash"的关键 reference；删除 = 失去约束来源的对照上下文）。
+
+**Trade-off**：tvc-director 默认输出 1080P 高清商业 TVC；切到 720P flash 后视觉密度下降，但成本/速度提升。本批次不追求视觉顶级，先跑通 reference 模式。
+
+**验证**：纯文档，无代码变更；不需跑 test。
 
 
 
