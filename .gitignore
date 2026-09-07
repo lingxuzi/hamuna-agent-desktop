@@ -113,3 +113,4 @@ hamuna_files/
 # Added by code-review-graph
 .code-review-graph/
 .tokensave/
+outputs/

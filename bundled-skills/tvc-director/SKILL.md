@@ -545,6 +545,20 @@ TVC 专属迭代重点：
 
 `aspect_ratio` ∈ {21:9, 16:9, 4:3, 1:1, 3:4, 9:16}（TVC 默认 16:9）。`seconds` ∈ `"4"`–`"12"`（storyboard reference 模式默认 `"12"`——一张多宫格分镜冻结一条视频脉络，最大化贴合 grid 的 9 帧叙事；agnes 上限；非默认 `5` / `8` 等按 brief 总时长调整）。**单请求 reference 文件总计 ≤ 12 个**（images + audios + videos 之和）。
 
+### Keyframe 模式铁律（first_frame 兜底必读，2026-09 端到端踩坑）
+
+🔴 **`first_frame` 自身画幅会覆盖 `aspect_ratio`**——keyframe 模式下，`first_frame` 图片的纵横比锁定输出 video 的画幅，参数 `aspect_ratio="16:9"` 不生效（end-to-end 实战：用户产品原图 1404×1046 ≈ 4:3 → 输出 video 960×704 4:3，与同片其它段 1280×720 16:9 拼接时画幅突变）。
+
+**Agent 流程要求**：调用 `mode="keyframe"` 前，MUST 先把 `first_frame` 转成与目标 `aspect_ratio` 一致的纵横比：
+
+1. **首选**：用 `mcp__multimedia-creator__agnes25_image_edit`（`image_paths=["<原图>"]` + `prompt` 要求 `扩展为 16:9 横屏 / 保留主体位置不变 / 两侧环境自然延伸`，`size="1K"`）生成一张 16:9 版本的 first_frame；把产物路径传入 `first_frame`
+2. **次选**：从已生成的 16:9 多宫格 grid 里挑一格作为 `first_frame`（grid 内已 16:9）
+3. **禁止**：直接传用户原图当 first_frame（即使是同一产品）——会画幅不一致
+
+**判断捷径**：传 first_frame 之前先 `ffprobe` 它的实际纵横比（或读 `PIL.Image.size`），与目标 `aspect_ratio` 比对；不一致就走上述 1 或 2。
+
+**典型 keyframe 场景**（30s TVC 的 6s EndFrame 收尾）：first_frame = grid 第 9 格（已在 16:9 内）→ output video 16:9 ✓ 拼接无画幅突变。
+
 ### Reference 模式铁律（TVC 主路径必读）
 
 1. **`images` / `audios` / `videos` 必须至少一个非空**——空数组 = 走 `text` 模式而不是 `reference`。

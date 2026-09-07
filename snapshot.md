@@ -207,6 +207,20 @@ v0.5 物理约束落地（commit `220abea`）：storyboard objects 锚定 physic
 
 `widgetSandboxHtml.test.ts` 等 6 个 unit test 在 master `5c92cd8` 同样失败，与本批次所有修复**无关**。**待独立排期**。
 
+### TODO #51 — tvc-director 跨段过渡方法 + keyframe 比例约束 + grid 单场景多机位铁律（待提交）
+
+**来源**：30s TVC 端到端实测踩坑 + 用户拍板纳入 mooko.cn/article/52 段间过渡方法 + keyframe 兜底画幅突变 + grid video 跳 panel。
+
+**改动**（3 文件）：
+- `bundled-skills/tvc-director/SKILL.md` — 第 546 行后新增 `### Keyframe 模式铁律（first_frame 兜底必读，2026-09 端到端踩坑）` 小节：`first_frame` 自身画幅覆盖 `aspect_ratio` 的根因（用户原图 1404×1046 4:3 → video 960×704 4:3，与同片 1280×720 16:9 拼接画幅突变）；agent 流程要求调 `keyframe` 模式前 MUST 先用 `image_edit` 把 first_frame 转 16:9（首选）或用 grid 第 9 格当 first_frame（次选，grid 内已 16:9）；判断捷径 `ffprobe` first_frame 实际纵横比
+- `bundled-skills/tvc-director/references/storyboard.md` — Part 二「视频脉络先行」末尾加 `### 视频脉络的衔接：bridge 段` 小节：单段 12s 脉络分块 `[主叙事 10.5-11s] → [bridge 0.8-1.5s]`；bridge 在 grid 最后一格 P9；三种 bridge 子类型（同构图推进/时间流逝/尾帧延续）；无 bridge 代价（30s TVC = 12s+12s 直拼观众感到"跳"）
+- `bundled-skills/tvc-director/references/storyboard.md` — Part 三「网格规格选择策略」3x3 行附注扩展 + 末尾加 `### 铁律：12s 9 panel = 同一场景不同机位（2026-09 端到端踩坑）` 小节：9 panel 不是 9 个分镜故事板而是 9 个关键帧（同一场景不同机位）；9 panel 机位分配表（P1 全景→P9 bridge）；反模式（4-5 个跳切场景 → video 跳过次要 panel）；端到端踩坑（G1 grid 4-5 场景，video 全居家消毒，跳过街景/门口/沙发）；横跨场景拆段建议（按场景拆 grid 而不是塞进 1 张）
+- `bundled-skills/tvc-director/references/storyboard.md` — Part 六「多段视频的跨段连续性」末尾加 4 小节：(1) 桥接镜头法 0.8-1.5s + 三种子类型 + grid P9 位置 + 视频提示词写法；(2) 风格锁定三句（光色/材质/运动，字面复制粘贴，禁软词）；(3) 负面提示词清单（8 条最小集，含 `no BGM/no background music`，后期铺 BGM 不能让 video 自带）；(4) 节奏比例 30/45/25（建立/推进/收束）+ 与 bridge 关系（bridge 不计入节奏）
+
+**验证**：3 文件改动无新增依赖、无新工具调用契约（仅文档扩展）。
+
+**待办**：用户拍板后 commit（`feat(tvc-director): add segment transition methods + keyframe aspect ratio guard + grid single-scene rule`）。
+
 ### ✅ 最近完成（commit `2338a83`）— 拖拽媒体默认复制到 `workspace/hamuna_files/`
 
 - **Rust**：删 `src-tauri/src/workspace_files/user_attachments.rs` + `mod.rs` 模块声明 + `lib.rs::run` 命令注册（`cmd_prepare_user_image_attachments` 退场）
