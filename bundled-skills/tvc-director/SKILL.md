@@ -521,15 +521,18 @@ TVC 专属迭代重点：
 
 **MCP 服务**：`multimedia-creator`（`.mcp.json` 已切到 `hosted_mcps/agnes-video-25`，本地开发用绝对路径 `/home/hmcz/Projects/...`，生产/内置用 `uvx --from agnes-video-25-mcp==0.1.3`）。所有调用走工具名 `mcp__multimedia-creator__agnes25_*`。
 
-### 工具表
+### 步骤→工具→参数表（参数全部定死，仅 prompt / ref inputs 可改）
 
-| 任务 | 工具 | 关键参数 |
-|------|------|---------|
-| 纯文生视频 | `agnes25_video_generate` | `mode="text"`, `prompt` |
-| 首/末帧锚定视频 | `agnes25_video_generate` | `mode="keyframe"`, `first_frame`/`last_frame`（二选一必填） |
-| **多图/音/视频 reference 生视频**（TVC 主路径） | `agnes25_video_generate` | `mode="reference"`, `images[]`, `audios[]`, `videos[]` |
-| 文生图 | `agnes25_image_generate` | `prompt`, `size` ∈ {1K, 2K, 3K, 4K}, `ratio` ∈ {1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9} |
-| 图生图 / inpaint | `agnes25_image_edit` | **`image_paths: string[]`（本地路径自动转 base64）**, `mask_path?` |
+**定死原则**：model / mode / size / ratio / seconds / aspect_ratio / timeout_seconds / poll_interval_seconds 全部定死；**agent 不得偏离**。仅 `prompt` 与 reference 类输入（`images[]` / `first_frame` / `last_frame` / `image_paths[]` / `mask_path?`）可改。
+
+| 步骤 | 工具 | mode（定死）| model（定死）| size / ratio / seconds / aspect_ratio / timeout（定死）| 可改输入 | 强制空参数 |
+|------|------|---------|----------|-----------------------------------|---------|----------|
+| Phase 4 资产图（纯文）| `agnes25_image_generate` | — | `agnes-image-2.5-flash` | `size="1K"`, `ratio="16:9"` | `prompt` | — |
+| Phase 4 资产图（img2img / 多视图）| `agnes25_image_edit` | — | `agnes-image-2.5-flash` | `size="1K"` | `image_paths[]`, `prompt`, `mask_path?` | — |
+| Phase 5 多宫格 grid（3x3）| `agnes25_image_generate` | — | `agnes-image-2.5-flash` | `size="1K"`, `ratio="16:9"` | `prompt`（含 9 宫格分镜描述）| — |
+| **Phase 5 视频（reference 主路径）** | `agnes25_video_generate` | `"reference"` | `agnes-video-2.5` | `size="1080P"`, `seconds="5"`, `aspect_ratio="16:9"`, `timeout_seconds=600`, `poll_interval_seconds=5` | `prompt`, `images[]`（≤8 本地路径）| `audios[]=[]`, `videos[]=[]` |
+| Phase 5 视频（keyframe 兜底）| `agnes25_video_generate` | `"keyframe"` | `agnes-video-2.5` | 同上 | `prompt`, `first_frame` 或 `last_frame`（二选一）| `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
+| Phase 5 视频（text 兜底）| `agnes25_video_generate` | `"text"` | `agnes-video-2.5` | 同上 | `prompt` | `images[]=[]`, `audios[]=[]`, `videos[]=[]` |
 
 ### Video model 矩阵
 
@@ -555,23 +558,42 @@ TVC 专属迭代重点：
 2. **`response_format` 走 `extra_body.response_format`**——server 端处理，调用方通常不需要显式传。
 3. **本地路径前置要求**——必须是绝对路径、文件存在、不是 symlink（如果输出 dir 在沙箱外，需要先 `lstat` 探测，对齐 `tech_docs/pit_of_success.md`「fs-utils」节）。
 
-### 错误恢复
+### 错误处理（fail-fast：禁止 fallback，允许 retry 一次）
 
-| 错误 | 处置 |
-|------|------|
-| `429` / `503` | `video_generate` 内置自动重试；同步调用若仍失败则 abort |
-| `400` `mode/media 不匹配` | `reference` 模式 media 必填非空 / `keyframe` 模式至少一帧 / `text` 模式拒 media |
-| `400` `size 越界` | 2.5-flash 锁 720P，2.5 上限 2K；切 model 或降 size |
-| `400` `images 数量超限` | 2.5 ≤ 8 / 2.5-flash ≤ 5；多宫格用单张拼接图喂入而不是 9 张 |
-| `400` `details.body` (Flash) 或 `details.detail` (legacy) | 透传错误原样给用户，不要臆造 fix |
-| 云端超时（>10 分钟） | 重调 `video_generate`，调高 `timeout_seconds`（默认 600s）和 `poll_interval_seconds`（默认 5s）参数 |
+**禁止 fallback 的范围**（以下任何一种都属 fallback，agent 不得执行）：
+- 换工具 / 换 model / 换 size / 换 ratio / 换 seconds / 换 aspect_ratio
+- 减 `timeout_seconds` 或改 `poll_interval_seconds`
+- 改 `images[]` 元素 / 改 `image_paths[]` / 改 `mask_path`
+- 改 `first_frame` / `last_frame`
+- 改 prompt 语义（避开错误来临时改写 prompt 重试）
 
-### Agent 调用工作流（TVC 实际跑通路径）
+**允许 retry 一次**：同一工具 + 同一参数再调一次（处理网络瞬态）。第二次仍失败 → **立即停止**，把 `video_id`（如有）和错误原样给用户，**等用户决策**。
 
-1. **Phase 4 资产图**：`mcp__multimedia-creator__agnes25_image_generate`（纯文）或 `__edit`（img2img，含产品多视图）。
-2. **Phase 5 多宫格**：`mcp__multimedia-creator__agnes25_image_generate` 出 3x3 grid 提示词——单图，多宫格是 prompt 内部指令不是外部输入。
-3. **Phase 5 视频**：`mcp__multimedia-creator__agnes25_video_generate` 传 `mode="reference"` + `images=["<grid 路径>", "<产品多视图 路径>"]`（典型 2 张），prompt 用 `<Picture 1>` 引用 grid、`<Picture 2>` 引用产品多视图。
-4. **产出路径**：MCP 自动下载到 `AGNES_OUTPUT_DIR`（默认 `/tmp`）。**Agent 必须把 `local_path` 复制到工作区 `outputs/<项目>/videos/`** 才能进入交付清单——tmp 路径重启即失。
+🔴 **任何错误都不得自动改参数/换工具/降级**——必须停止 + 等用户拍板。错误恢复表已废；所有处置统一为「retry 一次 → 失败则停止」。
+
+| 错误类型 | 处置 |
+|---------|------|
+| 任何 4xx / 5xx（含 429 / 503 / 云端超时）| retry 一次（同一工具同一参数）；仍失败 → 停止 + 把 `video_id` 和错误给用户 |
+| 工具名错 / 工具不存在 | 不 retry，立即停止，等用户决策 |
+| `details.body` (Flash) 或 `details.detail` (legacy) | 不臆造 fix，原样给用户，等用户决策 |
+| 模型校验失败（mode / size / seconds / timeout 与定死参数不符）| 不 retry，立即停止——说明工具调用方传了非定死参数，违反 skill 契约 |
+
+### Agent 调用工作流（严格工具契约，参数定死）
+
+每步调哪个工具 + 参数定死如下；**agent 不得偏离**。任何步骤报错 → **立即停止 + 等用户决策**，不得换工具、降级 model、降 size、减 timeout、改 prompt 语义。
+
+1. **Phase 4 资产图**（按 brief 选择路径）：
+   - **纯文**：`mcp__multimedia-creator__agnes25_image_generate`，参数 `{model="agnes-image-2.5-flash", size="1K", ratio="16:9", prompt=<资产描述>}`
+   - **img2img / 多视图**：`mcp__multimedia-creator__agnes25_image_edit`，参数 `{image_paths=["<产品图1>", "<产品图2>"], prompt=<编辑指令>}`（mask_path 视需要）
+
+2. **Phase 5 多宫格**（3x3 grid）：
+   - `mcp__multimedia-creator__agnes25_image_generate`，参数 `{model="agnes-image-2.5-flash", size="1K", ratio="16:9", prompt=<包含 9 宫格分镜描述>}`
+   - **多宫格是 prompt 内部指令，不是外部输入**——不传 `images[]`，单图直出。
+
+3. **Phase 5 视频**：
+   - `mcp__multimedia-creator__agnes25_video_generate`，参数 `{model="agnes-video-2.5", mode="reference", size="1080P", seconds="5", aspect_ratio="16:9", timeout_seconds=600, poll_interval_seconds=5, images=["<grid 路径>", "<产品多视图 路径>"], prompt=<用 <Picture 1>/<Picture 2> 引用>}`，其它参数 `audios=[], videos=[]`
+
+4. **产出路径**：MCP 自动下载到 `AGNES_OUTPUT_DIR`（默认 `/tmp`）。**Agent 必须把 `local_path` 复制到工作区 `outputs/<项目>/videos/`**，否则 tmp 路径重启即失。
 
 > **更多细节**（mode 矩阵、限制、错误恢复）：`hosted_mcps/agnes-video-25/SKILL.md`（MCP 自带 bundled skill，触发条件："Agnes Video 2.5 / 2.5 Flash / Agnes Image 2.5 Flash" + 生图生视频意图）。
 > **多宫格四层结构 / 视频提示词 Multi-Phase 格式 / 9 类 TVC 多宫格写法**：`references/storyboard.md`。
