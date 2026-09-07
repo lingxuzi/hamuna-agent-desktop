@@ -1,5 +1,3 @@
-import { join } from 'node:path';
-
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react';
@@ -11,6 +9,7 @@ import { isTauriEnvironment } from '@/utils/browserMock';
 import { renameIfBareClipboardImage } from '@/utils/clipboardImage';
 import { isDebugMode } from '@/utils/debug';
 import { ALLOWED_IMAGE_MIME_TYPES, isChatImageFile, isImageMimeType } from '@/../shared/fileTypes';
+import { joinWorkspacePath } from '@/../shared/workspacePath';
 import type { FileReferenceUndoAction } from '@/hooks/useUndoStack';
 
 import type { ImageAttachment } from '../types';
@@ -172,7 +171,7 @@ export function useAttachmentHandling({
       return;
     }
     const name = copied.targetPath.split(/[\\/]/).pop() || fallbackName;
-    const preview = convertFileSrc(join(workspacePath, copied.targetPath));
+    const preview = convertFileSrc(joinWorkspacePath(workspacePath, copied.targetPath));
     setImages((prev) => {
       if (prev.length >= MAX_IMAGES) {
         toastRef.current.warning(t('input.attachments.maxImages', { count: MAX_IMAGES }));

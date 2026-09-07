@@ -76,3 +76,21 @@ export function workspacePathsEqual(
 ): boolean {
   return normalizeWorkspacePathIdentity(a ?? '') === normalizeWorkspacePathIdentity(b ?? '');
 }
+
+/**
+ * Join a workspace root with a relative path using the separator style of the
+ * workspace root (Windows backslashes for `X:\…` / UNC, POSIX slashes otherwise).
+ *
+ * Renderer-safe: deliberately avoids `node:path` because Vite externalizes
+ * `node:*` for browser bundles and accessing the stub throws "Module has been
+ * externalized for browser compatibility" — which is a render-time crash for
+ * any code path that imports this helper. Tauri v2's `convertFileSrc` accepts
+ * either separator style on either platform, so we only need to produce a
+ * lexically-correct joined path here, not a perfectly-normalized one.
+ */
+export function joinWorkspacePath(workspace: string, relative: string): string {
+  const sep = workspace.includes('\\') ? '\\' : '/';
+  const trimmedRoot = workspace.replace(/[\\/]+$/, '');
+  const trimmedRelative = relative.replace(/^[\\/]+/, '');
+  return trimmedRelative.length > 0 ? `${trimmedRoot}${sep}${trimmedRelative}` : trimmedRoot;
+}

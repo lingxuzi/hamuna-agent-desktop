@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeWorkspacePathIdentity, workspacePathsEqual } from './workspacePath';
+import { joinWorkspacePath, normalizeWorkspacePathIdentity, workspacePathsEqual } from './workspacePath';
 
 describe('normalizeWorkspacePathIdentity', () => {
   // Mirrors the Rust `normalize_path_*` tests in src-tauri/src/cron_task.rs so
@@ -69,5 +69,35 @@ describe('workspacePathsEqual', () => {
     expect(workspacePathsEqual(undefined, 'C:/Users/me/proj')).toBe(false);
     expect(workspacePathsEqual('C:/Users/me/proj', null)).toBe(false);
     expect(workspacePathsEqual(undefined, undefined)).toBe(true);
+  });
+});
+
+describe('joinWorkspacePath', () => {
+  // Renderer-safe path join — must NOT import `node:path` because Vite externalizes
+  // it for the WebView bundle (Module has been externalized for browser compatibility).
+  it('uses POSIX separators for POSIX-style workspaces', () => {
+    expect(joinWorkspacePath('/Users/me/proj', 'hamuna_files/a.png')).toBe(
+      '/Users/me/proj/hamuna_files/a.png',
+    );
+    expect(joinWorkspacePath('/Users/me/proj/', 'hamuna_files/a.png')).toBe(
+      '/Users/me/proj/hamuna_files/a.png',
+    );
+    expect(joinWorkspacePath('/Users/me/proj', '/hamuna_files/a.png')).toBe(
+      '/Users/me/proj/hamuna_files/a.png',
+    );
+  });
+
+  it('uses backslash separators when the workspace root is Windows-style', () => {
+    expect(joinWorkspacePath('C:\\Users\\me\\proj', 'hamuna_files\\a.png')).toBe(
+      'C:\\Users\\me\\proj\\hamuna_files\\a.png',
+    );
+    expect(joinWorkspacePath('C:/Users/me/proj', 'hamuna_files/a.png')).toBe(
+      'C:/Users/me/proj/hamuna_files/a.png',
+    );
+  });
+
+  it('returns the trimmed workspace when the relative part is empty', () => {
+    expect(joinWorkspacePath('/Users/me/proj/', '')).toBe('/Users/me/proj');
+    expect(joinWorkspacePath('C:\\proj\\', '')).toBe('C:\\proj');
   });
 });

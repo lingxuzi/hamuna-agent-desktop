@@ -9,7 +9,6 @@
  *          → pin （点击/球点击：变实 + 拿键盘焦点；窗口失焦/Esc/×/再点球 → hidden）
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { join } from 'node:path';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { AlertCircle, Brain, Image as ImageIcon, Loader2, Settings as SettingsIcon, StopCircle, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +29,7 @@ import { loadAppConfig, mergePresetCustomModels } from '@/config/services/appCon
 import { getAllProviders, modelSupportsModality } from '@/config/services/providerService';
 import { applyProviderEnablementAndOrder, type Provider } from '@/config/types';
 import { ALLOWED_IMAGE_MIME_TYPES, USER_IMAGE_ATTACHMENT_MAX_BYTES, isChatImageFile, isImageMimeType } from '../../shared/fileTypes';
+import { joinWorkspacePath } from '../../shared/workspacePath';
 import { renameIfBareClipboardImage } from '@/utils/clipboardImage';
 import { formatDuration, getToolBadgeConfig, getToolLabel, getToolMainLabel, getToolSummaryNode, isSubagentContainerTool } from '@/components/tools/toolBadgeConfig';
 import { isBackgroundSubagentTool, isSubagentContainerRunning } from '@/components/tools/subagentActivity';
@@ -968,7 +968,7 @@ export default function CompanionWindow() {
                             mimeType: '',
                             size: 0,
                             data: '',
-                            previewUrl: convertFileSrc(join(session.workspacePath!, copied.targetPath)),
+                            previewUrl: convertFileSrc(joinWorkspacePath(session.workspacePath!, copied.targetPath)),
                             source: 'upload',
                             transport: 'attachment_ref',
                             relativePath: copied.targetPath,
