@@ -42,6 +42,7 @@ import { imageAttachmentName } from './attachmentNames';
 import { MentionTabButton } from './components/MentionTabButton';
 import { ThoughtPickerRow } from './components/ThoughtPickerRow';
 import { useAttachmentHandling } from './hooks/useAttachmentHandling';
+import { rebaseAttachmentRefPreviewsToDataUrl } from '@/context/userImageAttachmentProjection';
 
 // ===== Module-level pure helpers (extracted from render body) =====
 
@@ -990,11 +991,21 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
     }
 
     try {
+      // `attachment_ref` images carry an asset:// preview URL pointing into
+      // the workspace. The backend's `validateAttachmentRelativePath` rejects
+      // workspace-relative paths as "Image attachment does not belong to this
+      // session" — so before handing the images off, read each workspace file
+      // and rebase the preview onto a data: URL. The existing imagePayloadForSend
+      // pipeline then takes the inline_base64 branch automatically. Local
+      // `images` state is untouched (chip keeps using the lightweight asset://).
+      const imagesForSend = images.length > 0
+        ? await rebaseAttachmentRefPreviewsToDataUrl(images, fileService)
+        : undefined;
       // Delegate thought-mode persistence to the caller (Launcher
       // BrandSection owns `thoughtCreate` + refresh-key bump). The
       // boolean-return protocol (`return true` = saved, clear textarea)
       // lets the parent signal when to reset input state here.
-      const result = onSend(text, images.length > 0 ? images : undefined);
+      const result = onSend(text, imagesForSend);
       // If onSend returns a promise, await it; if sync, use directly
       const accepted = result instanceof Promise ? await result : result;
       // Only clear input if not explicitly rejected (false)
@@ -1002,10 +1013,15 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
         setInputValue('');
         setImages([]);
       }
+    } catch (err) {
+      // Workspace file read failure — surface the reason and keep the input
+      // intact so the user can retry or remove the offending attachment.
+      toast.error(err instanceof Error ? err.message : '发送失败');
+      return;
     } finally {
       sendingRef.current = false;
     }
-  }, [onSend, images, inputValue, provider, currentModelId, isExternalRuntime, setImages, t, onSlashAction, showConfigLockedReason]);
+  }, [onSend, images, inputValue, provider, currentModelId, isExternalRuntime, setImages, t, onSlashAction, showConfigLockedReason, fileService, toast]);
 
   // Handle keyboard navigation in file search and slash menu
   // Handler for selecting a slash command — shared by the click path

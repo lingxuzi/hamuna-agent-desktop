@@ -30,6 +30,7 @@ import { getAllProviders, modelSupportsModality } from '@/config/services/provid
 import { applyProviderEnablementAndOrder, type Provider } from '@/config/types';
 import { ALLOWED_IMAGE_MIME_TYPES, USER_IMAGE_ATTACHMENT_MAX_BYTES, isChatImageFile, isImageMimeType } from '../../shared/fileTypes';
 import { joinWorkspacePath } from '../../shared/workspacePath';
+import { readWorkspaceFilesAsBase64 } from '@/context/userImageAttachmentProjection';
 import { renameIfBareClipboardImage } from '@/utils/clipboardImage';
 import { formatDuration, getToolBadgeConfig, getToolLabel, getToolMainLabel, getToolSummaryNode, isSubagentContainerTool } from '@/components/tools/toolBadgeConfig';
 import { isBackgroundSubagentTool, isSubagentContainerRunning } from '@/components/tools/subagentActivity';
@@ -1099,33 +1100,57 @@ export default function CompanionWindow() {
             previewUrl: draft.previewUrl,
             isImage: true,
         }));
-        await send(text, {
-            quote: q,
-            images: drafts.map((draft) => (
-                draft.transport === 'attachment_ref' && draft.relativePath
-                    ? {
-                        kind: 'attachment_ref' as const,
-                        id: draft.id,
-                        name: draft.name,
-                        mimeType: draft.mimeType,
-                        sizeBytes: draft.size,
-                        relativePath: draft.relativePath,
+        try {
+            // `attachment_ref` drafts carry an asset:// preview URL pointing
+            // into the workspace. The backend's `validateAttachmentRelativePath`
+            // rejects workspace-relative paths as "Image attachment does not
+            // belong to this session" — so read each workspace file and emit
+            // an inline_base64 payload instead. Image drafts (`data` already
+            // populated) pass through unchanged.
+            const workspaceRefPaths = drafts
+                .filter((draft) => draft.transport === 'attachment_ref' && !!draft.relativePath)
+                .map((draft) => draft.relativePath!);
+            const readByPath = await readWorkspaceFilesAsBase64(workspaceRefPaths, fileService);
+            const images = drafts.map((draft) => {
+                if (draft.transport === 'attachment_ref' && draft.relativePath) {
+                    const read = readByPath.get(draft.relativePath);
+                    if (!read || read.error) {
+                        throw new Error(`工作区图片 "${draft.name}" 读取失败：${read?.error ?? '未找到文件'}`);
                     }
-                    : {
+                    if (!read.data) {
+                        throw new Error(`工作区图片 "${draft.name}" 内容为空`);
+                    }
+                    return {
                         kind: 'inline_base64' as const,
                         id: draft.id,
                         name: draft.name,
-                        mimeType: draft.mimeType,
+                        mimeType: read.mimeType || draft.mimeType || 'application/octet-stream',
                         sizeBytes: draft.size,
-                        data: draft.data,
-                    }
-            )),
-            attachments,
-            appName: screenshotDraft?.appName ?? ctx?.appName ?? null,
-            windowTitle: screenshotDraft?.windowTitle ?? ctx?.windowTitle ?? null,
-            screenshotAttached: Boolean(screenshotDraft),
-        });
-    }, [imageDrafts, input, quote, session.busy, session.ready, send]);
+                        data: read.data,
+                    };
+                }
+                return {
+                    kind: 'inline_base64' as const,
+                    id: draft.id,
+                    name: draft.name,
+                    mimeType: draft.mimeType,
+                    sizeBytes: draft.size,
+                    data: draft.data,
+                };
+            });
+            await send(text, {
+                quote: q,
+                images,
+                attachments,
+                appName: screenshotDraft?.appName ?? ctx?.appName ?? null,
+                windowTitle: screenshotDraft?.windowTitle ?? ctx?.windowTitle ?? null,
+                screenshotAttached: Boolean(screenshotDraft),
+            });
+        } catch (err) {
+            console.warn('[fb] failed to send image drafts:', err);
+            toast.warning(err instanceof Error ? err.message : '发送失败');
+        }
+    }, [imageDrafts, input, quote, session.busy, session.ready, send, fileService, toast]);
 
     const resizeInput = useCallback((el: HTMLTextAreaElement) => {
         el.style.height = 'auto';
