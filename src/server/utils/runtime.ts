@@ -264,8 +264,11 @@ export function getBundledCusePath(): string | null {
  * plain PATH lookup, and so the spawn path doesn't need to think about the
  * uv→uvx trampoline.
  *
- * Layout mirrors `getBundledCusePath`:
- *   - Windows prod: <install-dir>/uvx.exe
+ * Layout (Tauri 2 NSIS empirically places single-file .exe bundle.resources
+ * entries at the install-dir ROOT, while sibling entries like server-dist.js
+ * land in `resources/` — observed in 2026-09-08 installed build):
+ *   - Windows prod: <install-dir>/uvx.exe  (preferred — confirmed in installed builds)
+ *                   <install-dir>/resources/uvx.exe  (fallback if Tauri layout changes)
  *   - macOS/Linux: returns null (Homebrew / system packages are the convention)
  *   - Dev: walk up from scriptDir to find `src-tauri/resources/uvx.exe`
  *
@@ -276,9 +279,15 @@ export function getBundledUvPath(): string | null {
 
   const scriptDir = getScriptDir();
 
-  // Production: flat layout, uvx.exe next to server-dist.js
-  const prodBin = resolve(scriptDir, 'uvx.exe');
-  if (existsSync(prodBin)) return prodBin;
+  // Production (preferred): Tauri 2 NSIS places uvx.exe flat at install-dir root.
+  // scriptDir is <install-dir>/resources/, so we walk one level up.
+  const rootBin = resolve(scriptDir, '..', 'uvx.exe');
+  if (existsSync(rootBin)) return rootBin;
+
+  // Production (fallback): if Tauri's layout ever changes to nest all
+  // bundle.resources under `resources/`, this catches it without breaking prod.
+  const nestedBin = resolve(scriptDir, 'uvx.exe');
+  if (existsSync(nestedBin)) return nestedBin;
 
   // Development: walk up from scriptDir to find src-tauri/resources/uvx.exe
   let dir = scriptDir;

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HamunaAgent",
-  "version": "0.3.87",
+  "version": "0.3.88",
   "identifier": "com.hamuna.app",
   "build": {
     "frontendDist": "../dist",
@@ -56,6 +56,7 @@
       "../hosted_mcps/agnes-video-25": "hosted_mcps/agnes-video-25",
       "../src-tauri/resources/cli": "cli",
       "../src-tauri/resources/cuse-latest.json": "cuse-latest.json",
+      "../src-tauri/resources/uvx.exe": "uvx.exe",
       "../src-tauri/resources/assets/feedback_qr_code.png": "assets/feedback_qr_code.png",
       "../mino": "mino",
       "infoplist/en.lproj/InfoPlist.strings": "en.lproj/InfoPlist.strings",

@@ -3607,6 +3607,11 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
         if (bundled) {
           console.log(`[agent] MCP ${server.id}: resolved uvx via bundled fallback → ${bundled}`);
           command = bundled;
+        } else {
+          // No bundled fallback (macOS/Linux, or Windows setup skipped download_uv.ps1).
+          // Surface a clear hint instead of silently letting PATH spawn fail with
+          // `command_not_found` — users otherwise think the app is broken.
+          console.warn(`[agent] MCP ${server.id}: no bundled uvx found; falling back to PATH. Install uv (https://docs.astral.sh/uv/) or run scripts/download_uv.ps1 on Windows dev.`);
         }
       }
 
