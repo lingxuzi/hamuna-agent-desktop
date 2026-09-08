@@ -1,6 +1,6 @@
 ---
 name: creative-video-suite
-description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。商业广告大片请走 tvc-director。
+description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。用户在 planner / assets 阶段可选 6 个视觉风格预设（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），全局风格锚点一字不变贯穿 5 阶段；commercial 分支 style_ref 是强门控，未提供则追问。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。商业广告大片请走 tvc-director。
 ---
 
 # Creative Video Suite · 综合剧情视频创作套件
@@ -71,6 +71,25 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 
 工具返回后必须先确认上屏播放，再输出成功格式。
 
+## 视觉风格选择
+
+**所有视觉产出必须锁定一个全局风格锚点**——一旦确定，整个项目所有 prompt 的开头必须一字不差带这个限定词（详见 `references/drama/assets.md`「强制：全资产风格统一锚点」）。风格锚点在 5 阶段（assets → frame → prompt → 视频）中不可漂移。
+
+**6 个预设**（可在 planner 或 assets 阶段锁定，planner 阶段未指定则按题材默认推断）：
+
+| 预设 | 适配场景 |
+|---|---|
+| 写实电影 | 现代都市 / 剧情片 / 真人短剧 |
+| 3D 国漫 | 古装仙侠 / 国风玄幻 / 动画 |
+| 日漫赛璐璐 | 二次元 / 校园 / 异世界 |
+| 赛博朋克 | 科幻 / 未来都市 / 反乌托邦 |
+| 古风 | 古代宫廷 / 武侠 / 仙侠 |
+| 广告质感 | 产品广告 / 商业宣传 / 品牌片 |
+
+**commercial 分支**：`style_ref` 是**强门控**——必须明确来源（用户提供 / ref 提取 / AI 起草），未提供则追问而非默认推断。
+
+未指定风格时由 planner 按题材默认推断，但 assets 阶段必须用户确认后才能继续生成。
+
 ## 需求分类判断
 
 ### 短剧 / 剧情视频（走 Drama 分支）
@@ -133,7 +152,7 @@ planner → scriptwriter → storyboard → assets → frame → prompt → 视�
 
 | 阶段 | 需要澄清 |
 |---|---|
-| planner | 目标 / 产物形式 / 受众 / 全流程范围 / 已有素材 / 希望从哪个阶段开始 |
+| planner | 目标 / 产物形式 / 受众 / 全流程范围 / 已有素材 / 视觉风格（可选，未指定则按题材推断）/ 希望从哪个阶段开始 |
 | scriptwriter | 故事主题 / 题材 / 目标时长或集数 / 主角 / 核心冲突 / 结局方向 / 情绪基调 / 禁用内容 |
 | storyboard | 要处理的集数 / 单集时长 / 片段结构 / 镜头密度 / 台词 / 字幕 / 声音要求 |
 | assets | 角色 / 场景 / 道具 / 视觉风格 / 参考图用途 / 一致性锚点 |
@@ -163,11 +182,12 @@ planner → scriptwriter → storyboard → assets → frame → prompt → 视�
 1. 识别用户是否有视频生成意图。
 2. 判断请求属于产品广告视频 / 口播 / 旁白视频 / UGC / marketing / corporate / 企业宣传商务视频。
 3. 提取用户已给的时长 / 比例 / 内容 / 产品信息 / 口播 / 旁白 / ref。
-4. 命中产品广告 / UGC / marketing / corporate 时先执行「产品 / 企业资料门控」。
-5. 如果基础参数 / 产品信息 / 口播信息缺失，先追问；用户已给全参数也必须输出确认摘要。
-6. 包含口播 / 旁白 / 解说时，明确最终台词来源：用户提供 / ref 提取 / AI 起草；最终台词必须出现在确认摘要中。
-7. 用户明确确认后才调用视频生成工具。
-8. 进入 UGC / marketing / corporate ref 策略前，先执行「分镜图片 / 关键帧门控」；没有明确图片需求时只输出分镜表，不生成分镜图或关键帧图。
+4. **提取并明确 `style_ref` 来源（强门控）**：用户未提供风格参考视频 / 风格图 / 竞品内容 / moodboard 时必须追问；最终 style_ref 必须出现在确认摘要中（参见 `## 视觉风格选择`）。
+5. 命中产品广告 / UGC / marketing / corporate 时先执行「产品 / 企业资料门控」。
+6. 如果基础参数 / 产品信息 / 口播信息缺失，先追问；用户已给全参数也必须输出确认摘要。
+7. 包含口播 / 旁白 / 解说时，明确最终台词来源：用户提供 / ref 提取 / AI 起草；最终台词必须出现在确认摘要中。
+8. 用户明确确认后才调用视频生成工具。
+9. 进入 UGC / marketing / corporate ref 策略前，先执行「分镜图片 / 关键帧门控」；没有明确图片需求时只输出分镜表，不生成分镜图或关键帧图。
 
 ### 产品 / 企业资料门控
 
