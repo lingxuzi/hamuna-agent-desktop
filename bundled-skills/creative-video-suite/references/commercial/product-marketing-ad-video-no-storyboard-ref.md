@@ -757,3 +757,32 @@ prompt 末尾第一句必须写：
 - **运动与节奏**：是否至少 2 种运镜策略、1 次速度变化；快剪是否每 2-3 个切点回到产品清晰锚点；最后 1 秒是否稳定 hold。
 - **字幕与音频**：是否默认无字幕、无 caption、无贴纸字、水印和乱码；广告大字是否短、稳、用中文双引号；旁白是否不只剩结尾 slogan，旁白原文是否用 `{具体台词}` 并绑定 `voiceover_scene_map`，音色是否匹配品类和调性，BGM/人声/拟音是否统一。
 - **Prompt 与工具**：是否使用六段式导演稿；是否没有把字段表原样丢给视频模型；工具是否返回真实可用视频链接或路径，并已调用 `在聊天中以 Markdown 视频渲染展示` 展示。
+
+## 持久化（Marketing 专有）
+
+**完整规范**见 `references/output-conventions.md`（§5 商业 3 路差异点表 Marketing 行 + §3 落盘时机表）。Marketing 路径概览：
+
+```text
+<workspace>/creative-video-suite/<project-name>/
+├── project.json                                  # type="marketing"
+├── 01_planner.md                                 # brief + 卖点 + 调性路线 + 平台
+├── 02_storyboard.md                              # 15s 分镜(8-10 镜头),**不**生成分镜图
+├── 03_assets/
+│   └── product-refs/<产品名>.png                 # Marketing 必传产品参考图(产品一致性最高优先级)
+├── 04_videos/
+│   ├── segment-01.mp4                            # 15s 单条成片(用户要 30s/60s 走 long_video_stitch_mode 拆多 segment)
+│   ├── segment-01.md                             # 元数据 + 旁白 voiceover + voiceover_scene_map
+│   ├── segment-02.mp4                            # long_video_stitch_mode 第二个 segment
+│   ├── segment-02.md
+│   └── ...
+└── ...
+```
+
+**Marketing 强门控**（commercial 输出契约层 + persistence 层）：
+
+1. **产品图必传**：`03_assets/product-refs/<产品名>.png` 没落盘 = 该阶段未完成（产品一致性是 Marketing 第一原则）
+2. **不**调 `image_edit`、**不**生成分镜图（CLAUDE.md 用户报"分镜图片门控"；本 ref `SKILL.md:208` 明确）
+3. **旁白结构必落 `segment-XX.md` 的 `voiceover_scene_map` 字段**：3-5 句主体旁白 + 1 句结尾 slogan（信息型）/ 2-3 句诗性 + 1 句结尾 slogan（诗性 / 高端 / 香氛 / 珠宝）。每句旁白必落到 Hook/产品出现/卖点证明/使用结果/packshot 5 个画面阶段之一，**不**能只剩结尾 slogan
+4. **15s 结构铁律**：`0-2s hook` / `2-5s 产品揭示` / `5-10s 卖点证明` / `10-13s 结果` / `13-15s packshot hold`，最后 1 秒必稳定 hold；落 `segment-XX.md` 的 `structure_check` 字段自检
+
+落盘前自检 §7 集成清单；**所有** segment 落盘 + 用户确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`。

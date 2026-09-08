@@ -319,3 +319,34 @@ Seedance 强提示：
 - 是否满足 `recommendation_score`，每句有卖点/体感/证据动作，语感像真人临场推荐？
 - 是否有产品试用、质感特写、使用反馈或对比；每个含台词镜头是否有语义触发的自然动作/微表情？
 - 字幕 off 时是否没有逐句字幕、自动 caption、双语字幕框、lower-third 或口播逐字转写进入视频 prompt；口播/改写台词是否只以 `{具体台词}` 进入 `Monologue/audio_voiceover/Audio`，没有进入画面文字；重点信息花字/贴纸文字/浮动文字是否只用于卖点、优惠、CTA、痛点反差或结果关键词，且短、少、不遮挡，并与口播字段分离；硬负向是否没有误禁真实产品 logo？
+
+## 持久化（UGC 专有）
+
+**完整规范**见 `references/output-conventions.md`（§5 商业 3 路差异点表 UGC 行 + §3 落盘时机表）。UGC 路径概览：
+
+```text
+<workspace>/creative-video-suite/<project-name>/
+├── project.json                                  # type="ugc" / style_anchor 强门控必填
+├── 01_planner.md                                 # brief + style_ref 来源（强门控追问）+ 比例 + 时长
+├── 02_storyboard.md                              # 轻量分镜表（商业分支,直接写,跳过 drama 剧本阶段）
+├── 03_assets/
+│   └── product-refs/<产品名>.png                 # UGC 必传产品参考图(产品一致性优先级最高)
+├── 04_videos/                                    # UGC 视频最终落这里(drama 用 06_videos,UGC 用 04_videos 区分)
+│   ├── segment-01.mp4
+│   ├── segment-01.md                             # 元数据 + 口播 {具体台词}
+│   ├── segment-01-script.md                      # 完整口播台词稿(独立文件,方便复用 / 二次创作)
+│   ├── segment-02.mp4
+│   ├── segment-02.md
+│   ├── segment-02-script.md
+│   └── ...
+└── ...
+```
+
+**UGC 强门控**（commercial 输出契约层 + persistence 层双重确认）：
+
+1. **`style_ref` 来源强门控**：落盘前 `project.json.notes` 必含 `style_ref` 来源（用户提供 / ref 提取 / AI 起草），**未填则不算完成 UGC 阶段**
+2. **口播台词必独立落盘**：每个 segment 必写 `segment-XX-script.md`（纯文本，方便用户复制 / 二次创作；视频 prompt 中的 `{具体台词}` 与该文件一一对应）
+3. **重点花字落 `emphasis_text` 字段**：写 `segment-XX.md` 头部 metadata，**不**进视频 prompt（硬门控见 §54 字幕硬门控）
+4. **不**调 `image_edit`，**不**生成分镜图（见 `SKILL.md` `### 分镜图片 / 关键帧门控` 默认交付是分镜表）
+
+落盘前自检 §7 集成清单；**所有** segment 落盘 + 用户确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`。

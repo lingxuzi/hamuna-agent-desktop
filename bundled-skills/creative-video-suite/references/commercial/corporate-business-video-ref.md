@@ -396,3 +396,37 @@ Constraints：
 - 旁白不是只有 slogan，声音系统没有音色、BGM、混音和拟音不一致的问题。
 - 最后 1-2 秒有稳定品牌或 CTA。
 - 文字不遮挡人脸、logo、关键设备、产品细节或重要动作。
+
+## 持久化（Corporate 专有）
+
+**完整规范**见 `references/output-conventions.md`（§5 商业 3 路差异点表 Corporate 行 + §3 落盘时机表）。Corporate 路径概览：
+
+```text
+<workspace>/creative-video-suite/<project-name>/
+├── project.json                                  # type="corporate"
+├── 01_planner.md                                 # brief + 4 类必填信息确认摘要(企业/宣传文案/品牌资产/旁白)
+├── 02_assets/
+│   └── brand-refs/                               # Corporate 必传品牌资产
+│       ├── logo.png                              # 企业 logo 原图
+│       ├── ip.png                                # IP / 吉祥物
+│       ├── vi/<品牌色>/<字体>.png               # VI 规范
+│       └── case/<客户案例>.<ext>                # 客户案例授权素材
+├── 03_storyboard.md                              # 10-12 镜头分镜表
+├── 04_videos/
+│   ├── segment-01.mp4                            # 15s 单条 / long_video_stitch_mode 第一段
+│   ├── segment-01.md                             # 元数据 + 完整旁白 + 声音系统音色 / BGM / 混音
+│   ├── segment-02.mp4
+│   ├── segment-02.md
+│   ├── ...
+│   └── narration.md                              # Corporate 专属:完整旁白稿(全片一份,不分散在每个 segment.md)
+└── ...
+```
+
+**Corporate 强门控**（4 类必填信息门控 + persistence 层）：
+
+1. **4 类必填信息齐备才进 planner**：`01_planner.md` 必须明确列出 4 类信息确认状态，缺一类 = 不进 `02_assets/` 落盘
+2. **`02_assets/brand-refs/` 必落盘**：logo / IP / VI / 案例授权文件；缺 = 不进 `03_storyboard.md`（没有品牌资产就强行分镜会事实失真）
+3. **完整旁白稿必独立落 `04_videos/narration.md`**：全片一份完整旁白（不是分散在每个 segment.md），方便用户审核旁白整体调性 / 配音录制；`segment-XX.md` 只放该 segment 的旁白子集 + 与 `narration.md` 的引用关系
+4. **logo / IP 落 `segment-XX.md` 的 `frame_chain_refs`**：跨阶段溯源用，明确每段视频里 logo / IP 的来源图（避免下游 segment 错引其他品牌资产）
+
+落盘前自检 §7 集成清单；**所有** segment 落盘 + 用户最终确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`、`updated_at` 更新。

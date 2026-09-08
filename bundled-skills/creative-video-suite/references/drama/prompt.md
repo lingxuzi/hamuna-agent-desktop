@@ -167,5 +167,23 @@
 1. **节奏调整**：是否需要让镜头推得更慢，或者动作发生得更快？
 2. **运镜优化**：比如把“远景俯拍”改成“角色脸部特写”来强化情绪？
 3. **细节补充**：需要增加某些环境细节（如下雨、起风）或角色的微表情吗？
-4. **重新生成**：如果不满意当前的抽卡效果，我们可以保持参数不变直接重新生成一次。
+4. **重新生成**：如果不满意当前的抽卡效果，我们可以保持参数不变重新生成一次。
+
+## 持久化
+
+**每个 segment 视频生成后立刻落盘**：
+
+1. **本地副本**：`cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制 `segment-XX.mp4` 到 `<workspace>/creative-video-suite/<project-name>/06_videos/segment-XX.mp4`（**必须**本地副本，**不**只依赖 URL——URL 是 agnes CDN 的临时链接，关闭 session 后不可访问）
+2. **元数据**：`cmd_write_workspace_file` 写 `<workspace>/creative-video-suite/<project-name>/06_videos/segment-XX.md`，含：
+   - `prompt`（最终视频生成 prompt，**用户确认摘要中展示过的版本**）
+   - `mode`（`text` / `keyframe` / `reference`）
+   - `duration` / `aspect_ratio` / `size`
+   - `style_anchor`（从 `project.json` 同步，确保一字不差）
+   - `first_frame` / `last_frame` / `images[]`（model 端传的 HTTPS URL）
+   - `frame_chain_refs`（`04_assets` / `05_keyframes` 里的 file path 列表，跨阶段溯源用）
+   - 口播 / 旁白原文（UGC 走 `{具体台词}`，Marketing / Corporate 走 `voiceover` / `narration` 完整台词）
+
+落盘前自检 §7 集成清单（特别注意"用户确认在前，落盘在后"门控）；**全部** segment 落盘 + 用户最终确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`、`updated_at` 更新。
+
+commercial 3 路产物差异（见 output-conventions.md §5）：UGC 每个 segment 额外落盘 `segment-XX-script.md`（口播台词）；Marketing 分镜表落 `03_storyboard.md`；Corporate 完整旁白稿落 `06_videos/narration.md`，**不**分散在每个 segment.md。
 ```

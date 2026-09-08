@@ -209,3 +209,9 @@
 ## 交接
 
 分镜由用户确认/由用户提供后，路由到 `assets.md` 建立角色、场景和道具资产。
+
+## 持久化
+
+**用户确认分镜后，AI 必须把分镜表落盘到 `<workspace>/creative-video-suite/<project-name>/03_storyboard.md`**（`cmd_write_workspace_file`）。落盘前自检 §7 集成清单；落盘后 update `project.json.current_stage = "storyboard"`。
+
+分镜表内每个镜头的角色 / 场景 / 道具名**严格沿用 `02_script.md` 已确认的命名**（drama）或 brief 命名（commercial）——命名漂移会破坏 assets 阶段 file 查找。跨阶段引用：下一阶段 assets 阶段读 `03_storyboard.md` 时，角色 / 场景 / 道具名直接当 file path 段用（`04_assets/characters/<角色名>/...`）。commercial 分支 ugc / marketing / corporate 的分镜表落盘路径同上，差异在产物形态（见 output-conventions.md §5）。

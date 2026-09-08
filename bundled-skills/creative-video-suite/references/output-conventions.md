@@ -1,0 +1,235 @@
+# Output Conventions · 输出目录与产物规范
+
+**何时读**：planner 阶段（建项目） + 每阶段完成落盘时（持续参考）。
+
+creative-video-suite 的产物分两层：
+
+| 层 | 写在哪 | 谁写 | 谁读 |
+|---|---|---|---|
+| **MCP server output**（素材层） | `AGNES_OUTPUT_DIR=~/HamunaAgent/agnes-output/`（`multimedia-creator` server 控制） | MCP server | skill 通过 `cmd_workspace_copy_paths` 复制到 user workspace |
+| **Skill user workspace**（项目层） | `<workspace>/creative-video-suite/<project-name>/` | **skill（AI）** 调 `cmd_write_workspace_file` / `cmd_workspace_copy_paths` 写 | 同 session + 跨 session 续跑 + 用户 |
+
+**关键约束**（违反会破坏二次创作 + 跨 session 续跑）：
+
+1. **每阶段完成 + 用户确认后**，AI **必须** 把该阶段产物落盘到 user workspace（不是可选、不是建议）。落盘门控与"用户确认"门控平级，没落盘等于没完成。
+2. **落盘走 Tauri invoke**（`cmd_write_workspace_file` / `cmd_workspace_copy_paths`），**禁止**直写 Sidecar HTTP / `node:fs` / `path.join` 拼绝对路径。理由：CLAUDE.md pit-of-success 红线「工作区文件 IO 必须走 Rust invoke，Sidecar HTTP `/api/files/*` 已全部下线」。
+3. **跨阶段 file 引用走 workspace-relative path**（`<workspace>/creative-video-suite/<project>/04_assets/characters/林远_设定.png`），**不依赖 URL 字符串**。URL 是 model 端用的（`image_generate.first_frame`），file path 是 AI 端用的，分清。
+4. **失败 / 重跑旧产物加 `_v1` / `_v2` 后缀**，**不**直接覆盖。用户要清理就手动 `rm`。
+5. **`<workspace>` 由用户在 HamunaAgent 工作区选择时确定**，AI 不要硬编码 `~/Documents/...` 之类具体路径——通过 `useWorkspaceFileService(workspacePath)` 拿当前 workspace。
+
+---
+
+## 1. 项目目录结构
+
+```text
+<workspace>/
+└── creative-video-suite/                                  # 顶层（区分于其他 skill 产物）
+    └── <project-name>/                                   # 项目名（kebab-case,planner 阶段确认）
+        ├── project.json                                  # 项目元数据（见 §3 schema）
+        ├── 01_planner.md                                 # 阶段产物按 01-06 顺序
+        ├── 02_script.md                                  # drama 才有；commercial 跳过
+        ├── 03_storyboard.md                              # drama 必有；commercial 视分支
+        ├── 04_assets/                                    # 资产层
+        │   ├── characters/<角色名>/<角色名>_设定.png      # 角色资产图（人设 / 三视图 / 表情 / 服装）
+        │   ├── characters/<角色名>/assets.md             # 角色资产清单 + 验收表
+        │   ├── scenes/<场景名>/<场景名>_全景.png          # 场景资产图
+        │   ├── scenes/<场景名>/assets.md
+        │   ├── props/<道具名>/<道具名>.png                # 道具资产图
+        │   └── props/<道具名>/assets.md
+        ├── 05_keyframes/                                 # drama 才有
+        │   ├── episode-01/segment-XX/                    # 按 episode / segment 组织
+        │   │   ├── SEG01_START.png
+        │   │   ├── SEG01_END.png
+        │   │   └── frames.md                             # 该 segment 关键帧 prompt + 验收
+        │   └── frames-index.md                           # 全剧关键帧总索引
+        └── 06_videos/                                    # 最终视频产物（drama + commercial 共用）
+            ├── segment-01.mp4                            # 本地副本（cmd_workspace_copy_paths 从 AGNES_OUTPUT_DIR 复制）
+            ├── segment-01.md                             # segment 元数据：prompt / mode / 时长 / 比例 / 风格锚点 / 口播或旁白
+            ├── segment-02.mp4
+            ├── segment-02.md
+            └── ...
+```
+
+**命名规范**：
+- 项目名：`kebab-case` 自动从用户 brief 提炼（`<subject>-<type>-<yyyymmdd>` 格式，如 `afternoon-tea-tvc-20260908` / `gufeng-drama-ep01-20260908`）。planner 阶段输出项目名提议 + 让用户确认或改。
+- 角色 / 场景 / 道具名：用中文（与项目文档语言一致），目录名做转码处理（中英混排按字符直存；如 `林远/` 合法；如要纯 ASCII 备份名可以 `_linyuan/` 平行，但首选中文）。
+- segment 编号：`segment-01` / `segment-02` ...（2 位零填充，10 段以内；超过 99 段用 3 位）
+
+---
+
+## 2. project.json Schema
+
+`project.json` 是 AI 跨 session 续跑的"断点文件"。**每阶段完成 + 用户确认后** AI 必须 update 它。
+
+```json
+{
+  "name": "afternoon-tea-tvc-20260908",
+  "type": "drama" | "ugc" | "marketing" | "corporate",
+  "style_anchor": "广告质感",                          // 6 个预设之一
+  "aspect_ratio": "16:9",                              // 项目默认画幅
+  "created_at": "2026-09-08T12:00:00Z",
+  "updated_at": "2026-09-08T14:30:00Z",
+  "stages_completed": [                                // 推进过的阶段（planner 必出现）
+    "planner",
+    "storyboard",
+    "assets",
+    "frame",
+    "video"
+  ],
+  "current_stage": "video",                            // 当前所在阶段（= stages_completed[last] 或下一个）
+  "notes": "用户原 brief 摘要 + 关键决策"             // AI 自由写,做 session 续跑 context
+}
+```
+
+**`type` 取值决定产物形态**：
+- `drama`：完整 5 阶段（planner → script → storyboard → assets → frame → video）
+- `ugc`：planner → storyboard（轻量）→ assets（产品图）→ video
+- `marketing`：planner → storyboard → video（**不**生成分镜图、不调 image_edit）
+- `corporate`：planner → assets（含 brand-refs）→ storyboard → video（强制旁白）
+
+`stages_completed` 是 AI 续跑的 **唯一权威**。新 session 开始时 AI 先 `cat project.json` 看 `current_stage`，从下一个阶段继续。
+
+---
+
+## 3. 落盘时机与门控
+
+| 阶段完成 | 落盘什么 | 路径 | 门控 |
+|---|---|---|---|
+| **planner** | `01_planner.md`（项目 brief + 风格锚点 + 路线选择 + 项目名确认）+ `project.json`（新建） | `<project>/01_planner.md` + `project.json` | 用户确认项目名 + type + style_anchor + aspect_ratio |
+| **script** | `02_script.md` | `<project>/02_script.md` | 用户确认剧本 |
+| **storyboard** | `03_storyboard.md`（含分镜表 + 符号规则 + 运镜） | `<project>/03_storyboard.md` | 用户确认分镜 |
+| **assets** | 每个角色 / 场景 / 道具生成后立刻落盘（不等全部完成）；阶段末落盘资产清单 `04_assets/<type>/<name>/assets.md` | `<project>/04_assets/...` | 用户确认资产验收表（每张"已生成"才进 frame 阶段） |
+| **frame** | 每个关键帧生成后立刻落盘；阶段末落盘 `05_keyframes/frames-index.md` | `<project>/05_keyframes/...` | 用户确认关键帧 |
+| **video** | 每个 segment 视频 `cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制到本地 + 写 `segment-XX.md` 元数据 | `<project>/06_videos/...` | 用户确认视频 + update `project.json.current_stage` |
+
+**门控 = AND**：用户确认 AND 落盘成功，两件事都做完才能进入下一阶段。**禁止**"口头确认 + 不落盘就推进"。
+
+---
+
+## 4. 跨阶段 File 引用规则
+
+drama 流水线跨阶段 file 引用走 workspace-relative path，**不**用 URL 字符串。
+
+**示例**：
+
+```text
+# frame 阶段引用 assets 阶段生成的林远人设
+prompt_first_frame_ref: "<workspace>/creative-video-suite/gufeng-drama-ep01-20260908/04_assets/characters/林远/林远_设定.png"
+
+# frame 阶段引用 frame 阶段前一集的关键帧
+prompt_ref: "<workspace>/creative-video-suite/gufeng-drama-ep01-20260908/05_keyframes/episode-01/segment-05/SEG05_END.png"
+```
+
+**给 model 的 URL vs 给 AI 的 file path**：
+- `image_generate` / `image_edit` / `video_generate` 的 `image_paths` / `first_frame` / `last_frame` / `images` 参数 → 用 `url`（HTTPS URL，model 端接受）
+- AI 自己跨阶段定位文件 → 用 file path（workspace-relative）
+- **AI 内部维护一个 `<relative_path> → <https_url>` 的映射**（`project.json.notes` 或各阶段 .md 头部 metadata），切换时手查
+
+**反例**（错误）：
+- 把 `https://cos-platform-outputs.agnes-ai.cn/...` 直接传给 `cmd_workspace_copy_paths`——那是 MCP 资源，Tauri fs scope 不认
+- 把 `<workspace>/creative-video-suite/.../林远_设定.png` 直接喂 `image_generate.first_frame`——model 端不认本地路径，会触发 server 上传 `img.remit.ee` 撞 QPS 限流（见 `agnes-ai-api.md` 输入源铁律）
+
+---
+
+## 5. 商业 3 路差异点
+
+| type | 必含目录 | 产物形态 | 必填门控 |
+|---|---|---|---|
+| **ugc** | `06_videos/segment-XX.md` + `06_videos/segment-XX-script.md`（**口播台词**） | 完整分镜表 + 口播视频 | style_ref 来源（强门控,见 `SKILL.md` 视觉风格选择）；口播原文进入 `{具体台词}`；重点花字走 `emphasis_text` 不入视频 prompt |
+| **marketing** | `04_assets/product-refs/<产品名>.png`（**产品参考图**） | 完整分镜表 + 视频；**不**生成分镜图、不调 image_edit | `product_ref` 必传 + 卖点锁定；15s 结构 `0-2s hook / 2-5s 揭示 / 5-10s 证明 / 10-13s 结果 / 13-15s packshot hold`；旁白走 `voiceover_scene_map` |
+| **corporate** | `04_assets/brand-refs/<资产名>.png`（**logo / IP / 品牌资产**） + `06_videos/narration.md`（**完整旁白稿**） | 完整分镜表 + 视频；默认带旁白 | 4 类必填信息（企业信息 / 宣传文案 / 品牌资产 / 旁白）；任何一类缺失必须补问 |
+
+**drama 与 commercial 共用顶层**（`<workspace>/creative-video-suite/<project>/`）；不分子目录（`drama/` / `commercial/`），**靠 `project.json.type` 区分**——因为跨 session 续跑只看 `type`，不强求路径区分。
+
+---
+
+## 6. 失败 / 重跑 / 旧产物处理
+
+| 场景 | 处理 |
+|---|---|
+| 单张图 / 单段视频生成失败 | 重试一次（不重试第二次）；第二次仍失败则停下说明失败原因 + 所需补充信息 |
+| 重跑前次产物（用户说"这张再抽一次"） | 新产物加 `_v2` / `_v3` 后缀,**不**覆盖原文件;同时 update `project.json.notes` 记录"v2 替换 v1 的原因" |
+| 整个项目废弃 | 用户手动 `rm -rf <project>/`；AI 不主动删 |
+| session 中断后用户重启 | AI 进项目第一件事 `cat project.json` 看 `current_stage` + `stages_completed`,从下一个未完成阶段继续 |
+| 项目名冲突 | planner 阶段输出提议名 + 让用户改;不引入复杂命名空间(避免 auto-suffix `-1` `-2` 让人搞不清哪个是哪个) |
+
+---
+
+## 7. 集成清单（每阶段落盘前自检）
+
+每写一个产物前,AI 内部跑一遍（mental check 或自检脚本):
+
+```text
+[ ] 走的是 Tauri invoke (cmd_write_workspace_file / cmd_workspace_copy_paths) 吗？
+[ ] 路径是 workspace-relative (以 <workspace>/creative-video-suite/... 开头) 吗？
+[ ] 该阶段已经在 project.json.stages_completed 之前 update 过 current_stage 吗？
+[ ] 用户已经明确确认本阶段产物吗？
+[ ] 跨阶段引用的 file 都存在吗？(前一阶段产物落盘了吗)
+[ ] 失败 / 重跑场景用 _v2 后缀而不是覆盖吗？
+```
+
+8 项全过才允许进入下一阶段。**任何一项没过 = 该阶段未完成**,必须停下补做。
+
+---
+
+## 8. 不要做的事
+
+- ❌ **不要**把 chat 即时输出当唯一交付——chat 历史会滚走,产物必须落盘
+- ❌ **不要**绕开 `cmd_workspace_*` 走 Sidecar HTTP / `node:fs`——CLAUDE.md 红线
+- ❌ **不要**让 project.json 缺失 `current_stage` 字段——新 session 不知道从哪继续
+- ❌ **不要**用 `~/Documents/...` 等具体绝对路径——用户的工作区由 HamunaAgent 在 UI 层选择
+- ❌ **不要**在 `06_videos/` 直接放 URL 字符串——必须是 `.mp4` 本地文件 + `.md` 元数据
+- ❌ **不要**假设 `AGNES_OUTPUT_DIR` 路径已知——MCP server 控制,AI 通过 `cmd_workspace_copy_paths` 从 `output_filename` / `local_path` 字段复制,不能直接拼 `~/HamunaAgent/agnes-output/...`
+
+---
+
+## 9. 完整示例 (drama 跑完整 5 阶段)
+
+```text
+# 用户 brief: "我想做一个 60 秒的职场逆袭短剧,主角林远被踢出公司又逆袭"
+# planner 阶段确认:
+#   - project name: workplace-comeback-drama-ep01-20260908
+#   - type: drama
+#   - style_anchor: 写实电影
+#   - aspect_ratio: 16:9
+#   - episodes: 1 (60s)
+
+# 项目目录最终结构
+<workspace>/creative-video-suite/workplace-comeback-drama-ep01-20260908/
+├── project.json                                       # name/type/style/锚点/stages
+├── 01_planner.md                                      # brief 摘要 + 决策 + 6 段规划
+├── 02_script.md                                       # 完整剧本 + 角色清单 + 场景清单 + 道具清单
+├── 03_storyboard.md                                   # 6 段 × 3 镜头 = 18 行分镜 + 符号 + 运镜
+├── 04_assets/
+│   ├── characters/
+│   │   ├── 林远/林远_设定.png                          # 人设正脸
+│   │   ├── 林远/林远_三视图.png                        # 正面 / 侧面 / 背面
+│   │   ├── 林远/林远_服装.png                          # 西装
+│   │   ├── 林远/assets.md                              # 角色资产清单 + 验收
+│   │   ├── 周凯/周凯_设定.png
+│   │   └── 周凯/assets.md
+│   ├── scenes/
+│   │   ├── 林远办公室/林远办公室_全景.png
+│   │   ├── 林远办公室/林远办公室_氛围.png
+│   │   └── 林远办公室/assets.md
+│   └── props/
+│       ├── 怀表/怀表.png                              # 关键道具
+│       └── 怀表/assets.md
+├── 05_keyframes/
+│   ├── episode-01/
+│   │   ├── segment-01/SEG01_START.png
+│   │   ├── segment-01/SEG01_END.png
+│   │   ├── segment-01/frames.md
+│   │   ├── segment-02/SEG02_END.png
+│   │   └── ...
+│   └── frames-index.md
+└── 06_videos/
+    ├── segment-01.mp4                                 # 5s 开幕冲突
+    ├── segment-01.md                                  # prompt / mode / 时长 / 锚点 / 链接
+    ├── segment-02.mp4
+    ├── segment-02.md
+    ├── ...
+    └── segment-06.mp4
+```
+
+每阶段完成 + 用户确认 → 落盘 → update `project.json.current_stage`。新 session 重启时 `cat project.json` 即知断点。

@@ -92,6 +92,23 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 
 未指定风格时由 planner 按题材默认推断，但 assets 阶段必须用户确认后才能继续生成。
 
+## 输出约定
+
+**每阶段完成 + 用户确认后，AI 必须把该阶段产物落盘到 user workspace**——不是可选、不是建议；chat 即时输出只是临时展示，产物必须落盘才能跨 session 续跑 + 二次创作。
+
+**完整规范**（项目目录结构 / `project.json` schema / 落盘时机 / 跨阶段 file 引用规则 / 商业 3 路差异点 / 失败重跑处理 / 集成清单自检）见 `references/output-conventions.md`。
+
+**核心约束**（落盘前必须自检，违反 = 该阶段未完成）：
+
+1. 走 Tauri invoke（`cmd_write_workspace_file` / `cmd_workspace_copy_paths`），**禁止** Sidecar HTTP / `node:fs` / 裸 `path.join` 拼绝对路径——CLAUDE.md pit-of-success 红线「工作区文件 IO 必须走 Rust invoke」
+2. 路径 workspace-relative，以 `<workspace>/creative-video-suite/<project-name>/` 开头；`<workspace>` 由用户在 HamunaAgent 工作区选择时确定，AI **不**硬编码 `~/Documents/...` 等具体路径
+3. 每阶段末 update `project.json.current_stage`——AI 跨 session 续跑的**唯一权威**；新 session 进项目第一件事 `cat project.json` 看断点
+4. 跨阶段 file 引用走 workspace-relative path（给 model 的 URL 与给 AI 的 file path 分清，前者给 `image_generate` / `video_generate`，后者给 AI 自己定位文件）
+5. 失败 / 重跑旧产物加 `_v1` / `_v2` 后缀，**不**直接覆盖；用户清理手动 `rm`
+6. 商业 3 路（ugc / marketing / corporate）共用顶层 `<workspace>/creative-video-suite/<project>/`，**靠 `project.json.type` 区分**（不分子目录），但产物形态有差异（见 output-conventions.md §5）
+
+**项目名**：`kebab-case` 自动从用户 brief 提炼（`<subject>-<type>-<yyyymmdd>`，如 `afternoon-tea-tvc-20260908`），planner 阶段提议 + 用户确认或改。
+
 ## 需求分类判断
 
 ### 短剧 / 剧情视频（走 Drama 分支）
@@ -154,7 +171,7 @@ planner → scriptwriter → storyboard → assets → frame → prompt → 视�
 
 | 阶段 | 需要澄清 |
 |---|---|
-| planner | 目标 / 产物形式 / 受众 / 全流程范围 / 已有素材 / 视觉风格（可选，未指定则按题材推断）/ 希望从哪个阶段开始 |
+| planner | 目标 / 产物形式 / 受众 / 全流程范围 / 已有素材 / **项目名（kebab-case 自动提议，用户确认或改）** / **当前 workspace 路径（确定产物落盘根目录）** / 视觉风格（可选，未指定则按题材推断）/ 希望从哪个阶段开始 |
 | scriptwriter | 故事主题 / 题材 / 目标时长或集数 / 主角 / 核心冲突 / 结局方向 / 情绪基调 / 禁用内容 |
 | storyboard | 要处理的集数 / 单集时长 / 片段结构 / 镜头密度 / 台词 / 字幕 / 声音要求 |
 | assets | 角色 / 场景 / 道具 / 视觉风格 / 参考图用途 / 一致性锚点 |

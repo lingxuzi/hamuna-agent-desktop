@@ -228,3 +228,19 @@
 3. **场景细节**：场景的光影和陈设是否足够有氛围感？
 4. **重新生成/补全**：如果有某张图不满意，或者需要我补全某个场景的其他视角图，请随时告诉我。
 5. **进入下一步**：如果资产确认无误，我们可以直接进入片段关键帧生成阶段。
+
+## 持久化
+
+**每张资产图生成后立刻落盘**（不等全部完成）：
+
+- 角色图 → `<workspace>/creative-video-suite/<project-name>/04_assets/characters/<角色名>/<角色名>_<视角>.png`（`<视角>` 取 `设定` / `三视图` / `服装` 等）
+- 场景图 → `<workspace>/creative-video-suite/<project-name>/04_assets/scenes/<场景名>/<场景名>_<视角>.png`
+- 道具图 → `<workspace>/creative-video-suite/<project-name>/04_assets/props/<道具名>/<道具名>.png`
+
+**资产图落盘走 `cmd_workspace_copy_paths`**（从 `AGNES_OUTPUT_DIR` 复制，**不**直接下载，**不**用 Sidecar HTTP）；文件名 / 路径在调用前确认 workspace-relative 合法（pit-of-success 红线「工作区文件 IO 必须走 Rust invoke」）。
+
+**阶段末落盘资产清单** `<角色|场景|道具>/assets.md`：每张图"已生成"才进 frame 阶段。update `project.json.current_stage = "assets"`。
+
+跨阶段引用：frame 阶段用 `<workspace>/creative-video-suite/<project-name>/04_assets/characters/<角色名>/<角色名>_设定.png` 这种 file path 直接定位（**不**用 URL）；model 端用 HTTPS URL 时由 AI 内部维护 `<file_path> → <https_url>` 映射（写在 `assets.md` 头部 metadata）。
+
+commercial 分支额外落盘（见 output-conventions.md §5）：ugc 加 `04_assets/product-refs/<产品名>.png`；marketing 必传产品图；corporate 加 `04_assets/brand-refs/<资产名>.png`（logo / IP / VI）。

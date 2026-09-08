@@ -11,10 +11,11 @@
 
 ```text
 creative-video-suite/
-├── SKILL.md                        # 主入口（planner / 路由）
+├── SKILL.md                        # 主入口（planner / 路由 / 输出约定）
 ├── README.md                       # 本文件
 └── references/
     ├── agnes-ai-api.md             # multimedia-creator MCP 工具参考
+    ├── output-conventions.md       # 输出目录 / project.json / 落盘时机 / 商业 3 路差异
     ├── drama/
     │   ├── scriptwriter.md         # 剧本创作
     │   ├── storyboard.md           # 分镜切分
@@ -44,6 +45,10 @@ planner (SKILL.md) → scriptwriter → storyboard → assets → frame → prom
 | `mcp__multimedia-creator__agnes25_video_generate` | 视频生成（text / keyframe / reference 三模式） |
 
 详细参数：`references/agnes-ai-api.md`。
+
+## 输出约定
+
+每跑一个项目，产物落盘到 `<workspace>/creative-video-suite/<project-name>/`，配 `project.json` 跟踪断点（跨 session 续跑）。drama 5 阶段产物结构、商业 3 路（UGC / Marketing / Corporate）差异点、落盘时机门控、跨阶段 file 引用规则见 `references/output-conventions.md`。
 
 ## 路由边界
 

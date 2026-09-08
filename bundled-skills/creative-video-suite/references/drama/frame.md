@@ -148,3 +148,13 @@ EP01_SEG06_END.png
 - 7 张关键帧与选定集数的片段匹配。
 
 一集所有关键帧确认后，交接至 `prompt.md`，除非用户明确要求批量处理所有关键帧。
+
+## 持久化
+
+**每张关键帧图生成后立刻落盘**到 `<workspace>/creative-video-suite/<project-name>/05_keyframes/episode-XX/segment-YY/<KEYFRAME_NAME>.png`（`<KEYFRAME_NAME>` 格式 `SEG01_START` / `SEG01_END` / `SEG02_END` 等，命名约定见本文件顶部）。
+
+**关键帧图落盘走 `cmd_workspace_copy_paths`**（同 assets 阶段，从 `AGNES_OUTPUT_DIR` 复制）；落盘前自检 §7 集成清单；落盘后写 `frames.md`（该 segment 的 prompt 摘要 + 验收表，**不**含完整生图 prompt——生图 prompt 是内部推演，按 `frame.md:95` 铁律**禁止输出给用户**）。
+
+**阶段末落盘 `05_keyframes/frames-index.md`**：全剧关键帧总索引（按 episode × segment × KEYFRAME_NAME 列）；update `project.json.current_stage = "frame"`。
+
+跨阶段引用：prompt 阶段读关键帧图时用 file path（`<workspace>/creative-video-suite/<project-name>/05_keyframes/...`），model 端用 HTTPS URL（来自 MCP 返回的 `data[0].url`）。前后集跨段连续性引用前一集 `SEG_END` 时走同一 file path 路径。

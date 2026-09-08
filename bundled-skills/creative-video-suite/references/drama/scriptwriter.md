@@ -200,3 +200,9 @@
 ## 交接
 
 输出后询问用户是否需要修改。用户确认后，路由到 `storyboard.md`创作分镜切分表。
+
+## 持久化
+
+**用户确认剧本后，AI 必须把剧本落盘到 `<workspace>/creative-video-suite/<project-name>/02_script.md`**（落盘走 `cmd_write_workspace_file`，参考 `references/output-conventions.md`）。落盘前自检 §7 集成清单；落盘后 update `project.json.current_stage = "script"` 并把 `stages_completed` 追加 `"script"`。drama 5 阶段必跑；commercial 跳过本阶段（`project.json.type` 非 `drama` 时不创建 `02_script.md`，直接从 planner → storyboard）。
+
+剧本文件结构：标题 + 项目信息头 + 故事模式 + 完整剧情基础 + 角色清单 + 场景清单 + 道具清单 + 结尾"进入分镜切分"提示。与 `01_planner.md` 的内容交叉时，**剧本里的人物 / 场景 / 道具清单是 stage 间 contract**，下一阶段直接读，不重新生成。
