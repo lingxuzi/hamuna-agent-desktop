@@ -14,6 +14,8 @@
 
 **+ creative-video-suite: prompt 中文铁律（`baebe3c`）**：874ad4f 引入 6 个中文风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），但 `references/agnes-ai-api.md` 6 个范例 `prompt:` 还是英文 → 实际喂 agnes API 时每阶段要英语→中文翻译，风格锚点保真度会漂移（如 "anime lineart" → "anime 线稿" 丢失 Lineart 结构 cue，cel-shading 锁定失败）。2 改动：(1) `SKILL.md` 在工具调用契约段后新增 `🔒 Prompt 语言铁律（必读）` 平行于现有 `🔒 输入源铁律`，**显式列举语法例外**（`<Picture N>` 多图引用标记 / `mode="text"` enum / `size` / `ratio` / `aspect_ratio` / `seconds` 参数键名 / `audios` / `videos` 数组 / `16:9` / `720P` 数值字面量保持英文）——LLM 见"全中文"容易过度翻译固定 token，明列例外避免破坏 model 端 schema；(2) `references/agnes-ai-api.md` 6 个 `prompt:` 全部翻中文，严格保留 `<Picture 1>` / `<Picture 2>` 标记（model 端多图引用语法）。**已知遗留**（不是 bug，是 utility skill 设计）：`creative-video-suite` 不在 `SYSTEM_SKILLS` 清单（仅 `task-alignment` / `task-implement` / `download-anything` / `agent-browser` / `hamuna-cli` / `hamuna-docs` / `tool-creator` / `hamuna-memory-{update,gardener,molt}` / `prompt-writer`），按 utility skill 走 seed-once-then-hands-off，**已 seed 老用户拿到的是旧英文版**。如需强制 update：(a) 提升为 system skill + bump `SYSTEM_SKILLS_VERSION` 39→40；或 (b) 告知用户 `rm -rf ~/.hamuna/skills/creative-video-suite/`。未在这里 promote，因为 promote 改全局 skill-sync lock 主人、收益与风险不匹配，标记为待 user 拍板的 follow-up。
 
+**+ creative-video-suite: 输出目录 + 持久化契约（`cd6a091`）**：用户报"跑完 5 阶段短剧后 chat 滚几屏就找不到第 1 阶段剧本了" + "商业分支产物散落 `AGNES_OUTPUT_DIR` 没项目归属"——3 个具体失败：(1) session 中断 AI 找不到前阶段产物（无 file handle 只能重新生成）；(2) 5 阶段跑完 chat 滚走，用户想"改第 3 段台词"找不到 `02_script.md` / `03_storyboard.md`；(3) UGC / Marketing / Corporate 共享 `AGNES_OUTPUT_DIR` 无命名空间，跨项目互踩。架构决策：**一个项目一棵树** `<workspace>/creative-video-suite/<project-name>/`，**`project.json` 是 stage tracking 唯一权威**。drama 5 阶段 + 商业 3 路**共用**顶层（**不分子目录，靠 `project.json.type` 区分形态**）——避免 marketing 长成 series 后用户被迫迁移目录。11 文件改动：1 新 canonical ref `references/output-conventions.md`（~280 行，目录树 + project.json schema + 8 项集成清单 + 6 不要 + 完整 drama 示例）；`SKILL.md` 加 `## 输出约定` 段（6 条硬约束 + 项目名命名规范）；`README.md` 加新 ref + 一段摘要；9 个 ref 各加 `## 持久化` 段锚定到 output-conventions.md 并补 stage-specific 强门控（UGC style_ref 来源强门控 / Marketing product-refs 必传 + voiceover_scene_map 必落 / Corporate 4 类必填信息 + narration.md 独立完整旁白稿 / drama 各阶段子目录约定）。**重申** CLAUDE.md pit-of-success 红线（不是新增）：工作区 IO MUST 走 `cmd_workspace_*` Rust invoke（Sidecar HTTP `/api/files/*` 早下线，PRD 0.2.7 Phase E）；`<workspace>` 走 `useWorkspaceFileService(workspacePath)` 拿，**禁**硬编码 `~/Documents/...`。**已知遗留**（与 baebe3c 同源）：utility skill 不自动同步老用户；如需强制 update promote + bump `SYSTEM_SKILLS_VERSION` 39→40 或 `rm -rf ~/.hamuna/skills/creative-video-suite/`，未在这里 promote。
+
 ---
 
 ## 1. 模块状态总览
@@ -94,7 +96,7 @@
 | 内置 MA 小助理 | `bundled-agents/hamuna_helper/` | 稳定；改 MUST bump `ADMIN_AGENT_VERSION` |
 | 内置 Skills | `bundled-skills/` | 稳定；`SYSTEM_SKILLS` 清单内改 MUST bump `SYSTEM_SKILLS_VERSION` |
 | tvc-director skill | `bundled-skills/tvc-director/` | 稳定；v0.9 + agnes-video-25-mcp v0.1.3 + 严格工具契约 |
-| creative-video-suite skill | `bundled-skills/creative-video-suite/` | 稳定；utility skill（非 SYSTEM_SKILLS，seed-once）；短剧/UGC/企业宣传；6 风格预设 + 中文 prompt 铁律；5 段口播端到端验证通过；老用户无 SYSTEM_SKILLS bump 不自动更新 |
+| creative-video-suite skill | `bundled-skills/creative-video-suite/` | 稳定；utility skill（非 SYSTEM_SKILLS，seed-once）；短剧/UGC/企业宣传；6 风格预设 + 中文 prompt 铁律 + 输出目录持久化契约；5 段口播端到端验证通过；老用户无 SYSTEM_SKILLS bump 不自动更新 |
 | agnes-short-drama skill | `bundled-skills/agnes-short-drama/` | utility；Pavo 调研产物；4 字段用户输入 → 6 元数据 → 导演式剧本；未入 `SYSTEM_SKILLS` |
 | xueqiu skill | `skills/crawl-xueqiu-my-timeline/` | 实验 skill，untracked；TODO #9 |
 | hosted_mcps | `hosted_mcps/agnes-video-25/` | 7 tools（4 video + 3 image）；本仓库代码 = PyPI 0.1.3 vendor 源；P3 多 key fallback 进行中 |
@@ -220,6 +222,7 @@
 |--------|------|
 | `874ad4f` | **feat(creative-video-suite): expose 6 visual style presets + commercial style_ref gate** |
 | `baebe3c` | **docs(creative-video-suite): enforce Chinese-only prompts with explicit syntax exceptions** |
+| `cd6a091` | **feat(creative-video-suite): add output directory + persistence contract for cross-session continuation** |
 | `197837b` | **fix(mcp): pin bundled uv 0.5.11 and inject uvx dir into MCP spawn PATH** |
 | `ffe8edb` | **feat(bundled-skills): add creative-video-suite for short-drama / UGC / corporate** |
 | `853da79` | v2 |
