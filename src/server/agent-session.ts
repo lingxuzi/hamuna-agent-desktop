@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import { createRequire } from 'module';
 import { query, getSessionMessages as sdkGetSessionMessages, forkSession as sdkForkSession, deleteSession as sdkDeleteSession, type Query, type SDKUserMessage, type AgentDefinition, type HookInput, type HookJSONOutput, type PreToolUseHookInput, type PostToolUseHookInput, type PermissionRequestHookInput, type SlashCommand as SdkSlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import {
@@ -3590,30 +3590,9 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
         console.log(`[agent] MCP ${server.id}: resolved to bundled cuse at ${cusePath}`);
       }
 
-      // Bundled uvx fallback. Windows installer ships uvx.exe under
-      // src-tauri/resources/, so when the user hasn't installed uvx
-      // system-wide we resolve `command: 'uvx'` to the bundled absolute
-      // path. Otherwise the SDK spawns `uvx` from PATH and falls through
-      // to `command_not_found` if missing.
-      //
-      // Python (python / python3) does NOT get this fallback — the
-      // installer runs the official Python 3.12 installer which registers
-      // python.exe on PATH. If PATH doesn't have it (very old install),
-      // spawn fails with `command_not_found` and the existing
-      // runtimeError / runtimeDownloadHint UX kicks in.
-      if (command === 'uvx') {
-        const { getBundledUvPath } = await import('./utils/runtime');
-        const bundled = getBundledUvPath();
-        if (bundled) {
-          console.log(`[agent] MCP ${server.id}: resolved uvx via bundled fallback → ${bundled}`);
-          command = bundled;
-        } else {
-          // No bundled fallback (macOS/Linux, or Windows setup skipped download_uv.ps1).
-          // Surface a clear hint instead of silently letting PATH spawn fail with
-          // `command_not_found` — users otherwise think the app is broken.
-          console.warn(`[agent] MCP ${server.id}: no bundled uvx found; falling back to PATH. Install uv (https://docs.astral.sh/uv/) or run scripts/download_uv.ps1 on Windows dev.`);
-        }
-      }
+      // Bundled uvx fallback: runs after `mcpEnv` is built below — see
+      // "Bundled uvx PATH injection" block post-mcpEnv construction.
+
 
       // For npx commands: prefer system npx → bundled Node.js npx → bun x
       // System Node.js is maintained by the user's package manager, more reliable than our bundled npm.
@@ -3632,6 +3611,39 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
       // needs NO_PROXY protection. Per-server env has final authority so users
       // can work around downstream proxy parser bugs for a specific MCP.
       const mcpEnv = buildMcpSubprocessEnv(process.env, server.env);
+
+      // Bundled uvx PATH injection. Windows installer ships uvx.exe next to
+      // hamuna.exe (see `runtime.ts::getBundledUvPath`); when the user hasn't
+      // installed uv system-wide we prepend the bundled uvx dir to PATH so the
+      // SDK's PATH-based spawn (`command: 'uvx'`) resolves to the bundled copy
+      // without rewriting `command` to an absolute path. One resolution at
+      // spawn, one env write, one log line — no "search everywhere" feel.
+      //
+      // Pinned uv version lives in scripts/download_uv.ps1 (currently 0.5.11)
+      // so `.mcp.json` / `extended_buildin_mcp/mcp.json` keep their legacy
+      // args (`--from <pkg> <cmd>`, `--default-index`) working. See the pin
+      // comment there before bumping.
+      //
+      // Python (python / python3) does NOT get this fallback — the installer
+      // runs the official Python 3.12 installer which registers python.exe on
+      // PATH. If PATH doesn't have it (very old install), spawn fails with
+      // `command_not_found` and the existing runtimeError / runtimeDownloadHint
+      // UX kicks in.
+      if (command === 'uvx') {
+        const { getBundledUvPath } = await import('./utils/runtime');
+        const bundled = getBundledUvPath();
+        if (bundled) {
+          const uvDir = dirname(bundled);
+          const delimiter = process.platform === 'win32' ? ';' : ':';
+          mcpEnv.PATH = `${uvDir}${delimiter}${mcpEnv.PATH}`;
+          console.log(`[agent] MCP ${server.id}: bundled uvx dir prepended to PATH (${uvDir})`);
+        } else {
+          // No bundled fallback (macOS/Linux, or Windows setup skipped download_uv.ps1).
+          // Surface a clear hint instead of silently letting PATH spawn fail with
+          // `command_not_found` — users otherwise think the app is broken.
+          console.warn(`[agent] MCP ${server.id}: no bundled uvx found; falling back to PATH. Install uv (https://docs.astral.sh/uv/) or run scripts/download_uv.ps1 on Windows dev.`);
+        }
+      }
 
       // Playwright MCP: two user-selectable modes (configured in Settings UI):
       // - Isolated (--isolated): concurrent browser sessions, storage-state for login

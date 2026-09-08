@@ -24,7 +24,14 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = "",
+    # Pin default to a known-stable uv release. uv 0.5.x is the last line that
+    # tolerates the legacy args our `.mcp.json` / `extended_buildin_mcp/mcp.json`
+    # use (`--from <pkg> <cmd>`, pipx-style invoker). Newer uv (0.6+) tightened
+    # argument parsing and started rejecting `--default-index` outright,
+    # breaking the multimedia-creator MCP. Bump this only after:
+    #   (a) updating both mcp.json files to the modern `uvx <tool>@<ver>` syntax,
+    #   (b) running the bundled-uvx args smoke test in CI.
+    [string]$Version = "0.5.11",
     [switch]$Force,
     [switch]$Clean
 )

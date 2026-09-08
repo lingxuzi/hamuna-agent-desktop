@@ -26,18 +26,17 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
-        "--default-index",
-        "https://pypi.org/simple",
         "--from",
         "agnes-video-25-mcp==0.1.4",
         "agnes-video-25-mcp"
       ],
       "env": {
+        "UV_INDEX_URL": "https://pypi.org/simple",
         "AGNES_API_KEYS": "cpk-q4sHrUC4k9kZwM7PSkeUmHi7BmKKX8PSOQT0Qmeon7E0Im0v,sk-Edy4Y6lXLoX3HgAWY42ttAqeBclSFQjDuhO7KBPZKwNcpJUr",
         "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1",
         "AGNES_OUTPUT_DIR": "~/HamunaAgent/agnes-output"
       },
-      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。uvx --default-index 强制 PyPI 官方源（绕开开发机/用户机器设的 UV_DEFAULT_INDEX 清华镜像，刚 publish 的包清华镜像可能未同步）；uvx --from 拉 agnes-video-25-mcp==0.1.4（首次 10-30s，后续命中 ~/.cache/uv 毫秒）。AGNES_OUTPUT_DIR 用 `~` 路径，依赖 sidecar `buildMcpSubprocessEnv` 注入 HOME/USERPROFILE（macOS/Linux → HOME；Windows → USERPROFILE，server.py `Path.expanduser` 三平台都识别 HOME）。0.1.4 起支持 AGNES_API_KEYS 多 key fallback：逗号分隔，撞 429 quota / 503 短冷却自动切下一个 key；401 永久禁用。AGNES_API_KEY 单值仍兼容（向后兼容路径）。",
+      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。UV_INDEX_URL 强制 PyPI 官方源（绕开开发机/用户机器设的清华镜像，刚 publish 的包清华镜像可能未同步）；uvx --from 拉 agnes-video-25-mcp==0.1.4（首次 10-30s，后续命中 ~/.cache/uv 毫秒）。bundled uvx 版本由 scripts/download_uv.ps1 锁在 0.5.11（最后兼容 --from 老语法的 0.5.x patch），sidecar `agent-session.ts` 把 bundled uvx 目录 prepend 进 MCP spawn env 的 PATH，`.mcp.json` 仍写 `command: 'uvx'` 不暴露机器路径。AGNES_OUTPUT_DIR 用 `~` 路径，依赖 sidecar `buildMcpSubprocessEnv` 注入 HOME/USERPROFILE（macOS/Linux → HOME；Windows → USERPROFILE，server.py `Path.expanduser` 三平台都识别 HOME）。0.1.4 起支持 AGNES_API_KEYS 多 key fallback：逗号分隔，撞 429 quota / 503 短冷却自动切下一个 key；401 永久禁用。AGNES_API_KEY 单值仍兼容（向后兼容路径）。",
       "enabled": true
     }
   ]
