@@ -216,6 +216,7 @@
 
 | Commit | 摘要 |
 |--------|------|
+| `874ad4f` | **feat(creative-video-suite): expose 6 visual style presets + commercial style_ref gate** |
 | `197837b` | **fix(mcp): pin bundled uv 0.5.11 and inject uvx dir into MCP spawn PATH** |
 | `ffe8edb` | **feat(bundled-skills): add creative-video-suite for short-drama / UGC / corporate** |
 | `853da79` | v2 |
