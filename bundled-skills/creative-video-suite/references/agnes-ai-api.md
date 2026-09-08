@@ -69,7 +69,7 @@
 
 ```text
 mcp__multimedia-creator__agnes25_image_generate({
-  prompt: "A cinematic portrait of a young man in a black suit, standing in a modern office, dramatic lighting, 16:9",
+  prompt: "电影感的年轻男士肖像，身穿黑色西装，站在现代化办公室，戏剧化打光，16:9",
   model: "agnes-image-2.5-flash",
   size: "1K",
   ratio: "16:9"
@@ -95,7 +95,7 @@ mcp__multimedia-creator__agnes25_image_generate({
 
 ```text
 mcp__multimedia-creator__agnes25_image_edit({
-  prompt: "Change background to cyberpunk city at night, keep the face and outfit unchanged, 16:9",
+  prompt: "把背景换成夜晚赛博朋克城市街景，保持人脸和服装不变，16:9",
   image_paths: ["/path/to/portrait.png"]
 })
 ```
@@ -104,7 +104,7 @@ mcp__multimedia-creator__agnes25_image_edit({
 
 ```text
 mcp__multimedia-creator__agnes25_image_edit({
-  prompt: "Combine <Picture 1> warrior and <Picture 2> dragon into an intense battle scene, dramatic lighting, cinematic composition, 16:9",
+  prompt: "把<Picture 1>中的战士和<Picture 2>中的巨龙合成一场激烈的战斗场景，戏剧化打光，电影感构图，16:9",
   image_paths: ["/path/to/warrior.png", "/path/to/dragon.png"]
 })
 ```
@@ -135,7 +135,7 @@ mcp__multimedia-creator__agnes25_image_edit({
 
 ```text
 mcp__multimedia-creator__agnes25_video_generate({
-  prompt: "A peaceful ocean sunset with gentle waves, cinematic, 16:9",
+  prompt: "宁静的海面日落，浪花轻柔，电影感，16:9",
   mode: "text",
   size: "720P",
   seconds: "12",
@@ -151,7 +151,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ```text
 mcp__multimedia-creator__agnes25_video_generate({
-  prompt: "Character slowly turns head, subtle expression change, cinematic lighting",
+  prompt: "角色缓缓转头，表情微妙变化，电影感打光",
   mode: "keyframe",
   first_frame: "/path/to/first_frame.png",
   size: "720P",
@@ -166,7 +166,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ```text
 mcp__multimedia-creator__agnes25_video_generate({
-  prompt: "Cinematic product breakdown following <Picture 1> grid layout, restoring <Picture 2> product appearance, smooth camera motion, 16:9",
+  prompt: "电影感的产品拆解演示，按<Picture 1>九宫格布局，呈现<Picture 2>产品外观，镜头平滑运动，16:9",
   mode: "reference",
   images: ["/path/to/grid.png", "/path/to/product.png"],
   size: "720P",

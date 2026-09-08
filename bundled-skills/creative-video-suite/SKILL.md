@@ -31,6 +31,8 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 
 **🔒 输入源铁律（必读）**：`image_paths` / `images` / `first_frame` / `last_frame` 一律传 **HTTPS URL**（来自 `image_generate` 返回的 `data[0].url` 或 `video_generate` 的 `video_url`），**禁止用本地路径或 base64 data URL**——本地路径会触发 server 上传 `img.remit.ee` 图床撞 QPS 限流，base64 撞 256KB 红线。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 必须用 HTTPS URL」章节。
 
+**🔒 Prompt 语言铁律（必读）**：所有 `prompt` 参数（`agnes25_image_generate` / `agnes25_image_edit` / `agnes25_video_generate`，包括负向约束与全局风格锚点）必须使用**中文**。理由：项目文档与 6 个视觉风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感）全程中文，且 agnes 国内版 API 完整支持中文 prompt。**语法例外**（保持英文 / 固定字面量）：`<Picture N>` / `@图片N` 多图引用标记、`mode="text"` 等 enum 取值、`size` / `ratio` / `aspect_ratio` / `seconds` 等参数键名、`audios` / `videos` 数组结构、`16:9` / `720P` 等数值字面量。完整调用范例（已全部中文）见 `references/agnes-ai-api.md`。
+
 ## 核心通用规则
 
 ### 视频生成门禁
