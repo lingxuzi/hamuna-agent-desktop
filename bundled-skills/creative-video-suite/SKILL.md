@@ -34,7 +34,9 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 **🔒 MCP 调用前 5 步硬门控（每次调 MCP 工具前必过，全过才允许调）**：
 
 0. **产品图门控**：用户 brief 含产品关键词（品牌名 / 商品词 / 广告剧情信号）→ 用户已上传产品图 + 落 `<workspace>/.../04_assets/product-refs/<产品名>.{jpg,png}`，**或**用户**显式 ack 降级**（无产品图直接生成）→ 落 `project.json.notes.product_image_gate: "bypassed-by-user"`。**drama 和 commercial 同级强门控**——drama 涉及品牌植入 / 产品道具也必传。详见 `references/mcp-usage-guide.md` §1
-1. **输入源 HTTPS URL 铁律**：`image_paths` / `images` / `first_frame` / `last_frame` 一律传 **HTTPS URL**（来自 `image_generate` 返回的 `data[0].url` 或 `video_generate` 的 `video_url`），**禁止用本地路径或 base64 data URL**——本地路径会触发 server 上传 `img.remit.ee` 图床撞 QPS 限流，base64 撞 256KB 红线。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 必须用 HTTPS URL」章节
+1. **输入源按工具拆分**（2026-09-08 拆分）：
+   - **`image_edit` 字段**（`image_paths` / `mask_path`）：**允许 3 种**（HTTPS URL / `data:image/...;base64,...` data URI / 本地路径）。hosted_mcps wrapper 对本地路径 client-side 编码为 data URL 后传入 agnes（**不**走 `img.remit.ee`）；data URI / HTTPS URL pass through。推荐优先 HTTPS URL（与上下游 URL 流一致），data URI 受 256KB Sidecar SSE 红线约束。
+   - **`video_generate` 字段**（`images[]` / `first_frame` / `last_frame` / `audios[]`）：**只允许 HTTPS URL**。hosted_mcps 对本地路径 / data URI 都做"上传 `img.remit.ee` 拿 URL"处理（因为 agnes 视频 API 只接受公开可访问 HTTPS URL），并发撞图床 QPS 限流 5xx。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 按工具拆分」章节
 2. **中文 prompt 铁律**：所有 `prompt` 参数中文（语法例外：`<Picture N>` / `mode="text"` 等 enum / 参数键名 / 数值字面量保持英文）。详见 `references/agnes-ai-api.md` 范例（已全部中文）
 3. **mode ↔ params 互斥自检**：text 模式无图 / keyframe 必有 first_frame / reference 必传 images[]；`mask_path` 只对 image_edit 有效；`audios[]` / `videos[]` 仅 video 接受。详见 `references/mcp-usage-guide.md` §2.3
 4. **参数 schema 边界**：`size=720P` 锁死 / `seconds="4"-"12"` 字符串 / `aspect_ratio` 与 first_frame 比例一致（不一致先 image_edit 转比例）。详见 `references/agnes-ai-api.md` 参数表
@@ -131,7 +133,8 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 
 | 流向 | 当前状态 | 是否问题 |
 |---|---|---|
-| **AI → MCP 输入**：`first_frame` / `images[]` 传 HTTPS URL | 正确（MCP server 只接受 HTTPS URL；本地路径触发 `img.remit.ee` 图床上传撞 QPS 限流；5 步硬门控第 1 条强制） | ❌ 不是问题，**不能改成本地路径** |
+| **AI → MCP 输入**（`video_generate.images[]` / `first_frame` / `last_frame`）：传 HTTPS URL | 正确（hosted_mcps 对 video_generate 字段本地 / data URI 都做"上传 `img.remit.ee` 拿 URL"，并发撞图床 QPS 限流；5 步硬门控第 1 条 video_generate 分支强制） | ❌ 不是问题，**不能改成本地路径 / data URI** |
+| **AI → MCP 输入**（`image_edit.image_paths` / `mask_path`）：HTTPS URL / data URI / 本地路径 都可 | 正确（hosted_mcps 对本地路径 client-side 编码为 data URL，**不**走 `img.remit.ee`；agnes 官方 API 支持 HTTPS URL + Data URI） | ❌ 不是问题；**优先 HTTPS URL**（与上下游 URL 流一致） |
 | **MCP → chatui 输出**：`image_generate` / `video_generate` 返回的 HTTPS URL 在 chatui 里是否可视化 | `src/server/utils/tool-result-attachments.ts::classifyToolAttachmentPresentation` 当前未把 `mcp__multimedia-creator__agnes25_*` 纳入 attachment 包装 → URL 仅以纯文本落到 chat，没被 `ToolImageAttachment` 渲染成 inline 卡 | ✅ 是问题根因 |
 
 **本次 skill 侧补偿**：AI 主动 emit `<generative-ui-widget>` 块（per-stage 摘要）让用户看到。Sidecar 包装属于另一 PR follow-up——在 Sidecar 包装落地前，inline 图卡不可用，widget 是唯一 chatui 可视化路径。

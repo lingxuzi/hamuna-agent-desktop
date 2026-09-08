@@ -26,30 +26,44 @@
 
 > **🔗 硬编码调用模板**（2026-09-08 锁定）：所有需要参考图的生成禁止 AI 自由组合 mode / images[] / first_frame——必须字面照抄 `references/mcp-call-templates.md` 对应 T 编号模板（image_edit → T01-T03，video_generate → T04-T12，按 (分支 × ref 类型) 决策表选唯一合法模板）。
 
-## 输入源支持 · 🔒 必须用 HTTPS URL（端到端实测 + 图床限流避让）
+## 输入源支持 · 按工具拆分（2026-09-08 拆分）
 
-**铁律**：所有 `image_paths` / `images` / `first_frame` / `last_frame` / `mask_path` 一律传 **HTTPS URL**（来自 `image_generate` / `image_edit` 返回的 `data[].url` 或 `video_url`），**禁止**用本地路径或 base64 data URL。
+输入源支持按工具走两条路——根因是 hosted_mcps wrapper 对 `image_edit` 字段与 `video_generate` 字段的 client-side 归一化行为**完全不同**：
 
-**为什么 MUST 用 URL（不是"建议"）**：
+### 路径 A · `image_edit` 字段（`image_paths` / `mask_path`）— 3 种输入都接
 
-1. **图床限流**（核心动机）：本地路径会触发 server 端**上传到图床**（`img.remit.ee`）拿 HTTPS URL 再喂给下游。同一进程短时间内大量本地路径上传会撞**第三方图床 QPS 限流**（5xx 失败），但 HTTPS URL 直传走 agnes 内部 CDN 通道零额外上传，**省一次跨域上传 + 避图床限流**
+**官方 agnes API 支持**：`extra_body.image` 接受 HTTPS URL + Data URI Base64（"如果 URL 无法公开访问，请使用 Data URI Base64"——见 wiki.agnes-ai.cn/docs/agnes-image-25-flash）。**官方未列本地路径**——hosted_mcps wrapper 对本地路径做 client-side 编码为 data URL 后传入 agnes（**不**走 `img.remit.ee`）。
+
+| 输入类型 | 例子 | hosted_mcps client-side action | agnes 端接受 | 合规性 |
+|---|---|---|---|---|
+| **HTTPS URL** | `"https://cos-platform-outputs.agnes-ai.cn/.../output.png"` | pass through | ✅ 官方推荐 | ✅ 优先 |
+| **Data URI base64** | `"data:image/png;base64,iVBORw..."` | pass through | ✅ 官方 fallback | ✅ 可用（受 256KB Sidecar SSE 红线约束） |
+| **本地路径** | `"/path/to/portrait.png"` 或 `"file:///path/to/portrait.png"` | 编码为 data URL 后传入 agnes | ✅ 经 client-side 转换 | ✅ 可用（避免大图，< 256KB 编码后） |
+
+**优先级**：**优先 HTTPS URL**（与上下游 URL 流一致 + 零转换 + 不受 256KB 约束）；用户上传的小图 / `data:` URL / 本地路径**可用**（hosted_mcps 不会触发 img.remit.ee，所以不撞 QPS）。
+
+### 路径 B · `video_generate` 字段（`images[]` / `first_frame` / `last_frame` / `audios[]`）— 🔒 只接 HTTPS URL
+
+**官方 agnes API 支持**：仅 HTTPS URL（schema `string`，demo 全 HTTPS URL，docs 写"所有媒体 URL 都应当可由 Agnes AI 服务公开访问"）。**本地路径 / data URI 都未列入**——hosted_mcps wrapper 对这两种输入都做"上传 `img.remit.ee` 拿 URL"处理（因为 agnes 视频 API 自身不接受）。
+
+| 输入类型 | 例子 | hosted_mcps client-side action | 合规性 |
+|---|---|---|---|
+| **HTTPS URL** | `"https://cos-platform-outputs.agnes-ai.cn/.../keyframe.png"` | pass through | ✅ **唯一合规** |
+| Data URI base64 | `"data:image/png;base64,iVBORw..."` | decode 字节 → temp 文件 → **上传 `img.remit.ee` → URL** | ❌ **禁止**——并发撞 `img.remit.ee` QPS 限流（5xx） |
+| 本地路径 | `"/path/to/first_frame.png"` | **上传 `img.remit.ee` → URL** | ❌ **禁止**——同上 |
+
+**为什么 MUST 用 URL**：
+1. **图床限流**（核心动机）：hosted_mcps 对 video_generate 字段的本地/data URI 都走 `img.remit.ee` 上传；并发撞**第三方图床 QPS 限流**（5xx 失败）；HTTPS URL 直传走 agnes 内部 CDN 通道零额外上传
 2. **`local_path` 是诱饵**：server 返回的 `local_path` 指向 `server cwd/outputs/{images,videos}/` —— **不在调用方项目目录**，跨进程不可见
 3. **`output_filename` 绝对路径无效**：传绝对路径 server 把字符串当 filename 处理，丢 dir 前缀，落 `server cwd + outputs/`（与你想的不一样）
 
-**输入源支持**（按合规顺序）：
-
-| 输入类型 | 例子 | 何时用 | 合规性 |
-|---|---|---|---|
-| **HTTPS URL**（强制） | `"https://cos-platform-outputs.agnes-ai.cn/images/t2i/task_xxx/output_yyy.png"` | `image_generate` / `image_edit` 返回的 `data[0].url` 直接喂下游 | ✅ 唯一合规 |
-| 本地路径 | `"/path/to/frame.png"` | ❌ **禁止**——触发图床上传 + QPS 限流 | ❌ |
-| `data:` URL（base64） | `"data:image/png;base64,iVBORw0..."` | ❌ **禁止**——视频 base64 太大 + 256KB SSE 红线 | ❌ |
-
 **实测确认（2026-09-08 UGC 5 段测试）**：
 - `image_generate` → `url` 字段直接喂给 `video_generate.first_frame` / `last_frame` ✅ 5/5 通过
-- `image_edit` / `video_generate` reference 模式的 `images[]` 接 HTTPS URL ✅ 文档原理一致，应同样支持
+- `video_generate` reference 模式的 `images[]` 接 HTTPS URL ✅ 文档原理一致，应同样支持
 - 全流程 0 次本地路径，0 次图床上传，0 次限流
 
-**frame 链工作流铁律（必读）**：
+### frame 链工作流铁律（必读）
+
 1. Step N 用 `image_generate` 生成首帧图，**必须捕获**返回的 `data[0].url`（**不是 `local_path`**）
 2. Step N+1 直接用上一步 `url` 作 `first_frame`（keyframe 模式）或 `images[0]`（reference 模式）
 3. 全流程在 URL 字符串层流转，**禁止** wget / curl 下载到本地再喂给下游
@@ -86,8 +100,8 @@ mcp__multimedia-creator__agnes25_image_generate({
 |---|---|---|---|
 | `prompt` | string | 是 | 编辑指令 |
 | `model` | string | 否 | 固定 `agnes-image-2.5-flash` |
-| `image_paths` | string[] | 是 | 输入图本地路径列表（≤ 8），按顺序对应 `<Picture N>` |
-| `mask_path` | string | 否 | 局部编辑蒙版路径 |
+| `image_paths` | string[] | 是 | 输入图列表（≤ 8）——HTTPS URL / Data URI base64 / 本地路径 3 种都接（hosted_mcps client-side 归一化）；按顺序对应 `<Picture N>` |
+| `mask_path` | string | 否 | 局部编辑蒙版（HTTPS URL / Data URI / 本地路径，与 `image_paths` 同） |
 | `size` | string | 否 | `1K` 默认 / `2K` / `3K` / `4K` |
 | `ratio` | string | 否 | 输出比例 |
 
@@ -153,8 +167,8 @@ mcp__multimedia-creator__agnes25_image_edit({
 | `aspect_ratio` | `1:1` / `3:4` / `4:3` / `9:16` / `16:9` / `21:9` | 与 first_frame 比例一致；不一致**先 `image_edit` 转比例**再喂 video |
 | `ratio`（image） | `1:1` / `3:4` / `4:3` / `9:16` / `16:9` / `21:9` | 同上 |
 | `num_images` | 1-4 | 默认 1 |
-| `image_paths[]` | ≤ 8 HTTPS URL | 按顺序对应 `<Picture 1>` / `<Picture 2>` |
-| `images[]` | ≤ 5 HTTPS URL | 同上 |
+| `image_paths[]` | ≤ 8（HTTPS URL / Data URI base64 / 本地路径） | image_edit 字段：3 种都接；按顺序对应 `<Picture 1>` / `<Picture 2>` |
+| `images[]` | ≤ 5 HTTPS URL | video_generate 字段：只接 HTTPS URL；本地 / data URI 走 `img.remit.ee` 撞 QPS |
 | `audios[]` | ≤ 3 URL | flash 不接受 video audio |
 | `videos[]` | 0 | flash 限制 |
 | `mask_path` | URL | **仅 image_edit 接受**，传 image_generate / video_generate → 400 |
@@ -242,12 +256,12 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ```text
 [ ] (0)  产品图门控：用户 brief 含产品关键词 → product-refs/ 有图（否则降级模式 ack 落 project.json.notes）
-[ ] (1)  输入源是 HTTPS URL（不是本地路径 / base64 / file://）
+[ ] (1)  输入源按工具拆分：image_edit 字段（image_paths / mask_path）可 HTTPS URL / data URI / 本地路径；video_generate 字段（images[] / first_frame / last_frame）**只** HTTPS URL（避免 `img.remit.ee` QPS）
 [ ] (2)  prompt 是中文（枚举值 / 参数键 / 数值字面量保留英文）
 [ ] (3)  mode ↔ params 互斥：text 无图 / keyframe 有 first_frame / reference 有 images[]
 [ ] (4)  size / seconds / aspect_ratio 取值在合法范围
 [ ] (5)  first_frame 比例与 aspect_ratio 一致（不一致先 image_edit 转比例）
-[ ] (6)  image_paths[] / images[] 全是 HTTPS URL
+[ ] (6)  images[]（video_generate）**是** HTTPS URL；image_paths[]（image_edit）按上条（1）允许 3 种
 [ ] (7)  style_anchor 与 project.json.style_anchor 一字不差
 [ ] (8)  上一步 URL 已记到 project.json.notes <file_path> → <https_url> 映射
 [ ] (9)  失败重试不超过 1 次（不撞二次 quota）

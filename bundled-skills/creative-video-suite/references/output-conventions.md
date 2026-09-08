@@ -125,7 +125,7 @@ prompt_ref: "<workspace>/creative-video-suite/gufeng-drama-ep01-20260908/05_keyf
 ```
 
 **给 model 的 URL vs 给 AI 的 file path**：
-- `image_generate` / `image_edit` / `video_generate` 的 `image_paths` / `first_frame` / `last_frame` / `images` 参数 → 用 `url`（HTTPS URL，model 端接受）
+- `image_generate` / `image_edit` / `video_generate` 的 `image_paths` / `first_frame` / `last_frame` / `images` 参数 → 按工具拆分：`image_edit` 字段（`image_paths` / `mask_path`）接受 HTTPS URL / Data URI / 本地路径（hosted_mcps client-side 归一化，**不**走 `img.remit.ee`）；`video_generate` 字段（`images[]` / `first_frame` / `last_frame` / `audios[]`）只接受 HTTPS URL（避免 `img.remit.ee` QPS 限流）。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 按工具拆分」。
 - AI 自己跨阶段定位文件 → 用 file path（workspace-relative）
 - **AI 内部维护一个 `<relative_path> → <https_url>` 的映射**（`project.json.notes` 或各阶段 .md 头部 metadata），切换时手查
 

@@ -361,3 +361,42 @@
 **不动任何 skill**：`bundled-skills/` / `specs/DESIGN.md` / `specs/ARCHITECTURE.md` 全部保持现状。
 
 → 提交后见 `git log --oneline --grep="creative-screenwriting-methodology"`
+
+### 5.5 输入源铁律按工具拆分（2026-09-08 落地，commit `<pending>`）✅
+
+**触发**：用户报"`mcp__multimedia-creator__agnes25_image_generate` 传入的 `image_paths` 预处理三种类型" → grlling 指出工具名错（`image_generate` schema 不含 `image_paths`），用户原意指 `image_edit.image_paths`。验证官方 agnes API + hosted_mcps wrapper client-side 归一化行为后，确认现有铁律（HTTPS URL only / 禁本地 / 禁 base64）**一刀切过度推广**——根因动机只对 video_generate 字段成立（避开 `img.remit.ee` QPS 限流）。用户拍板"参考 agnes api 支持格式判断" → 走**选项 C**（按工具拆两段铁律）。
+
+**实测与文档证据**：
+- agnes 官方 docs（`wiki.agnes-ai.cn/docs/agnes-image-25-flash`）：`extra_body.image` 接 HTTPS URL + Data URI Base64（"如果 URL 无法公开访问，请使用 Data URI Base64"）；官方未列本地路径
+- agnes 官方 docs（`wiki.agnes-ai.cn/docs/agnes-video-25`）：`images[]` / `first_frame` / `last_frame` 仅 HTTPS URL（"所有媒体 URL 都应当可由 Agnes AI 服务公开访问"）
+- `hosted_mcps/agnes-video-25/SKILL.md:40-79` Reference media resolution 表 + Image tool contract 段（client-side 归一化）
+
+**最终铁律（按工具拆两段）**：
+
+| 工具 / 字段 | HTTPS URL | Data URI base64 | 本地路径 | 根因 |
+|---|---|---|---|---|
+| `image_edit.image_paths` / `mask_path` | ✅ 优先 | ✅ pass through（256KB SSE 约束） | ✅ server 编码 data URL 后传入（**不走** img.remit.ee） | agnes 官方 API 支持 URL + Data URI；hosted_mcps 客户端归一化 |
+| `video_generate.images[]` / `first_frame` / `last_frame` / `audios[]` | ✅ **唯一合规** | ❌ decode→temp→上传 img.remit.ee（撞 QPS 限流） | ❌ 上传 img.remit.ee（撞 QPS 限流） | agnes 视频 API 只接受公开可访问 HTTPS URL；hosted_mcps 上传 img.remit.ee 是不可避免的归一化路径 |
+
+**改动 5 文件**（净 +54 行 / -10 行）：
+1. `bundled-skills/creative-video-suite/SKILL.md` — 5 步硬门控第 1 条按工具拆两段；诊断澄清表 (line 134) 拆成 video_generate / image_edit 两行
+2. `bundled-skills/creative-video-suite/references/agnes-ai-api.md` — 「输入源支持」段重写为路径 A (image_edit 3 种) / 路径 B (video_generate HTTPS-only) 两段；`image_paths` / `mask_path` 参数描述更新；schema 表 `image_paths[]` 行更新；集成清单 (1)(6) 项按工具拆分
+3. `bundled-skills/creative-video-suite/references/mcp-usage-guide.md` — schema 表 `image_paths[]` 行更新；集成清单 (1)(6) 项按工具拆分
+4. `bundled-skills/creative-video-suite/references/mcp-call-templates.md` — T01-T03 `image_edit` 模板 placeholder 注释标明 image_edit 字段允许 3 种格式
+5. `bundled-skills/creative-video-suite/references/output-conventions.md` — line 128 给 model 的 URL vs 给 AI 的 file path 段按工具拆分表述
+
+**未改动**：
+- `references/commercial/{ugc-talking-video-ref,product-marketing-ad-video-no-storyboard-ref,corporate-business-video-ref}.md`（line 389, 471, 809, 823 等）—— 都是 `video_generate` 字段 HTTPS URL only，**与新铁律 video_generate 段一致**
+- `references/drama/{assets,frame,prompt}.md` —— frame / prompt 阶段产物都是 `video_generate` 喂入（`first_frame` / `images[]`），HTTPS URL only 不变；assets 阶段产物说明「model 端用 HTTPS URL」也是 video_generate 喂入路径
+- `references/widget-templates.md` —— widget URL 是 sandboxed iframe CSP 路径（output 端），与 MCP input 端铁律独立，**不**改
+- `bundled-skills/tvc-director/` —— grep 0 命中 input-source iron rule，无同步需求
+- `references/agnes-ai-api.md:140 / 115`（video_generate first_frame / last_frame 旧描述"本地图路径"）—— video_generate 字段按新铁律仍是 HTTPS URL only，旧描述与新铁律兼容（"本地"是 tool 自身字段类型描述，不是允许本地路径）；保留避免引入新争议
+
+**commit 模板**（待 git 提交）：
+- subject: `fix(creative-video-suite): split input-source iron rule by tool (image_edit 3 forms vs video_generate HTTPS-only)`
+- body 多段：触发（用户原意混淆 image_generate / image_edit / image_paths）+ grlling（4 个矛盾点）+ 实测（官方 agnes API + hosted_mcps wrapper 行为对比）+ 最终拆分方案 + 5 文件改动列表 + 未改动文件理由 + 潜在 follow-up（Sidecar SSE 256KB clamp 验证 / image_edit 本地路径审计字段）
+
+**已知遗留**：
+- (a) Sidecar SSE 256KB clamp 行为是否对 `image_edit` 输出生效——`tool-result-attachments.ts` 是否 spill 大 attachment 没看源码，本铁律默认假设 image_edit 输出经 Sidecar SSE 路径受 256KB 约束（与 video_generate base64 撞红线相同）
+- (b) `image_edit` 放行本地路径后，`project.json.notes.image_paths_source` 是否加新字段追踪「本地 vs URL vs Data URI」未拍板
+- (c) utility skill 不自动同步老用户（与 baebe3c / cd6a091 / a79ce1e / dc0bacb / 9207fbd / 4f944b2 / `<pending>` 同源）—— promote + bump `SYSTEM_SKILLS_VERSION` 39→40 或 `rm -rf ~/.hamuna/skills/creative-video-suite/` 二选一仍未拍板

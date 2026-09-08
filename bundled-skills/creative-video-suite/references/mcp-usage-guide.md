@@ -109,8 +109,8 @@ AI 落盘产品参考图：<workspace>/creative-video-suite/<project>/04_assets/
 | `size` | `720P`（video） / `1K` / `2K` / `3K` / `4K`（image） | video **锁死 720P**；旧版 1080P / 1K / 2K 已废除 |
 | `seconds` | `"4"` / `"5"` / `"6"` ... `"12"` **字符串** | **字符串**！非 int。范围 4-12 秒 |
 | `aspect_ratio` | `1:1` / `3:4` / `4:3` / `9:16` / `16:9` / `21:9` | 与 first_frame 比例一致（不一致先 image_edit 转比例） |
-| `image_paths[]` | ≤ 8 HTTPS URL（image_edit） | 按顺序对应 `<Picture 1>` / `<Picture 2>` |
-| `images[]` | ≤ 5 HTTPS URL（video.reference） | 按顺序对应 `<Picture 1>` / `<Picture 2>` |
+| `image_paths[]` | ≤ 8（HTTPS URL / Data URI / 本地路径，image_edit） | hosted_mcps 客户端归一化，3 种都接；按顺序对应 `<Picture 1>` / `<Picture 2>` |
+| `images[]` | ≤ 5 HTTPS URL（video.reference） | agnes 视频 API 只接受公开可访问 HTTPS URL；本地/data URI 走 `img.remit.ee` 撞 QPS；按顺序对应 `<Picture 1>` / `<Picture 2>` |
 | `audios[]` | ≤ 3 URL（video） | flash 不接受 video audio |
 | `videos[]` | 0（video 2.5-flash 不接受） | flash 限制 |
 | `mask_path` | URL（image_edit 局部编辑） | 仅 image_edit 接受 |
@@ -266,12 +266,12 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ```text
 [ ] (0) 产品图门控过吗？（涉及产品 → 用户上传 + 落 product-refs/）
-[ ] (1) 输入源是 HTTPS URL 吗？（本地路径 / base64 / file:// 全禁止）
+[ ] (1) 输入源按工具拆分：image_edit 字段（image_paths / mask_path）允许 HTTPS URL / Data URI base64 / 本地路径；video_generate 字段（images[] / first_frame / last_frame）**只** HTTPS URL
 [ ] (2) prompt 是中文吗？（枚举值 / 参数键 / 数值字面量保留英文）
 [ ] (3) mode 与 params 互斥吗？（text 无图 / keyframe 有 first_frame / reference 有 images[]）
 [ ] (4) size / seconds / aspect_ratio 取值在合法范围吗？
 [ ] (5) first_frame 比例与 aspect_ratio 一致吗？（不一致先 image_edit 转比例）
-[ ] (6) image_paths[] / images[] 全是 HTTPS URL 吗？（不是本地路径）
+[ ] (6) images[]（video_generate）是 HTTPS URL；image_paths[]（image_edit）按 (1) 允许 3 种
 [ ] (7) style_anchor 一字不差贯穿吗？（与 project.json.style_anchor 对齐）
 [ ] (8) 上一步 URL 已记到 project.json.notes <file_path> → <https_url> 映射了吗？
 [ ] (9) 失败重试 ≤ 2 次？超 2 次 → 停下，【交由用户处理】（禁止继续重试 / 自主改 prompt / 自作主张）

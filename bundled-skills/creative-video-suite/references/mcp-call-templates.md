@@ -65,7 +65,7 @@
 ```javascript
 mcp__multimedia-creator__agnes25_image_edit({
   image_paths: [
-    "{{source_url}}"          // 上游 image_generate 返回的 HTTPS URL（或上一阶段落盘的 product-refs URL）
+    "{{source_url}}"          // 上游 image_generate 返回的 HTTPS URL（或上一阶段落盘的 product-refs URL；image_edit 字段允许 HTTPS URL / Data URI / 本地路径 3 种，见 agnes-ai-api.md §输入源支持）
   ],
   prompt: "{{style_anchor}}，保持<产品N>（如涉及）的外观 / 角色身份 / 场景结构 / 光影方向 100% 不变；仅调整画幅比例为 {{target_aspect_ratio}}；不修改内容、不裁切主体、不变形。",
   aspect_ratio: "{{target_aspect_ratio}}"  // "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "21:9"
@@ -74,7 +74,7 @@ mcp__multimedia-creator__agnes25_image_edit({
 ```
 
 **占位符替换**：
-- `{{source_url}}` → 上游 `data[0].url`
+- `{{source_url}}` → 上游 `data[0].url`（或 Data URI base64 / 本地路径；image_edit 字段允许 3 种格式，hosted_mcps client-side 归一化）
 - `{{target_aspect_ratio}}` → 本项目目标比例（drama 默认 9:16 / Marketing 默认 9:16 / UGC 默认 9:16 / Corporate 默认 16:9）
 - `{{style_anchor}}` → 见 §0.1
 
@@ -91,7 +91,7 @@ mcp__multimedia-creator__agnes25_image_edit({
 ```javascript
 mcp__multimedia-creator__agnes25_image_edit({
   image_paths: [
-    "{{ref_1_url}}",          // <Picture 1>：按 ref 角色排序（同 §0.4 顺序，product → person → scene）
+    "{{ref_1_url}}",          // <Picture 1>：按 ref 角色排序（同 §0.4 顺序，product → person → scene）；image_edit 字段允许 HTTPS URL / Data URI / 本地路径 3 种
     "{{ref_2_url}}",          // <Picture 2>
     "{{ref_3_url}}",          // <Picture 3>（可选）
     "{{ref_4_url}}"           // <Picture 4>（可选，≤ 8）
@@ -103,7 +103,7 @@ mcp__multimedia-creator__agnes25_image_edit({
 ```
 
 **占位符替换**：
-- `{{ref_N_url}}` → 按 §0.4 顺序填入
+- `{{ref_N_url}}` → 按 §0.4 顺序填入（image_edit 字段允许 3 种格式；优先 HTTPS URL 与上下游 URL 流一致）
 - `{{role_N}}` → `产品` / `主角` / `场景` / `IP` / `道具` 等
 - `{{role_N_desc}}` → `iPhone 15 Pro 钛金色正面照` / `林远 30 岁职业装正面设定图` / `苏家大厅全景氛围图`
 
@@ -120,16 +120,16 @@ mcp__multimedia-creator__agnes25_image_edit({
 ```javascript
 mcp__multimedia-creator__agnes25_image_edit({
   image_paths: [
-    "{{source_url}}"          // 待编辑原图
+    "{{source_url}}"          // 待编辑原图（image_edit 字段允许 HTTPS URL / Data URI / 本地路径 3 种）
   ],
-  mask_path: "{{mask_url}}",  // 用户提供的 mask PNG（白=编辑区，黑=保留区，HTTPS URL）
+  mask_path: "{{mask_url}}",  // 用户提供的 mask PNG（白=编辑区，黑=保留区；image_edit 字段允许 3 种格式）
   prompt: "{{style_anchor}}，仅修改 <Picture 1> 中 mask 标注的区域为 {{target_desc}}（{{target_spec}}）；mask 外的区域 100% 保留（角色身份、场景结构、光影、周围元素不变）；编辑区域与周围融合自然，无明显接缝、无色差。",
   aspect_ratio: "{{source_aspect_ratio}}"  // 与原图一致，不改比例
 })
 ```
 
 **占位符替换**：
-- `{{mask_url}}` → 用户上传 mask 的 HTTPS URL
+- `{{mask_url}}` → 用户上传 mask（HTTPS URL / Data URI / 本地路径，与 image_paths 同）
 - `{{target_desc}}` + `{{target_spec}}` → 如"空荡的石板路" + "无人物、保留石板纹理和光线"
 
 **落盘**：同 T01。
