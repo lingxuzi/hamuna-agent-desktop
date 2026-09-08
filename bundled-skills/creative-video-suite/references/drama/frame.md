@@ -183,7 +183,7 @@ EP01_SEG06_END.png
 4. mode 互斥（image_generate 不传 image_paths / first_frame / images）
 5. 参数 schema（size / ratio / num_images 取值合法）
 
-**失败处理**：单次失败重试 1 次（可微调 prompt）；连续 2 次失败停下问用户。**不**降级（image_generate 失败 → 不降级 image_edit）。
+**失败处理**：单次失败重试 2 次（**0 微调**，按 attempt 1 原样重试）；连续 3 次失败停下问用户。**不**降级（image_generate 失败 → 不降级 image_edit）。
 
 > **🔗 硬编码 MCP 调用**（2026-09-08 锁定）：调 `image_generate` / `image_edit` 之前必读 `references/mcp-call-templates.md`——image_edit 转比例走 T01、多图合成走 T02、局部编辑走 T03；不得自由组合 `image_paths[]` 顺序或 prompt 结构。
 

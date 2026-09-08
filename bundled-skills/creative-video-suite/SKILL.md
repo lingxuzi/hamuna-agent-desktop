@@ -60,11 +60,11 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 2. **`images[]` 顺序必按角色**：`product → person → scene → logo → ip`（mcp-call-templates.md §0.4），跳过位不留空，**数组紧凑**
 3. **公共 block 必嵌入**：`{{style_anchor}}`（§0.1）+ 产品漂移负向（§0.2，涉及产品时）+ 五维物理负向（§0.3，drama video）
 4. **占位符替换必填满**：所有 `{{...}}` 替换为具体值，**禁**留字面占位符进 prompt
-5. **不偏离模板**：模板 prompt 结构 / negative block 不得自由改写；微调只在重试允许的字句范围内
+5. **不偏离模板**：模板 prompt 结构 / negative block 不得自由改写；重试 0 微调，按 attempt 1 原样
 
-**失败重试铁律**（2026-09-08 锁定）：
+**失败重试铁律**（2026-09-08 锁定，retry 期间 0 微调）：
 - 单次工具调用：最多重试 **2 次**（共 3 次 attempt：1 initial + 2 retries）
-- retry #1 / retry #2 允许微调字句 / 补具体描述 / 改 aspect_ratio 候选
+- retry #1 / retry #2 按 attempt 1 原样重试（**0 微调**：prompt 字句 / aspect_ratio / size / seconds 全部冻结）
 - **任何 attempt 不得 fallback**（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 - 2 次重试后仍失败 → 停下，**交由用户处理**；把三次 attempt 的 prompt + 错误码 + URL 映射写到 `project.json.notes.last_failure`；widget emit 失败卡；**不**输出"已生成"等措辞
 

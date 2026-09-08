@@ -473,7 +473,7 @@ images[4] = 客户案例（如有）
 4. mode 互斥（Corporate 默认 reference 必有 images[] 1-5 张；不传 first_frame）
 5. 参数 schema（12s 时长（MCP `seconds` 上限 12） / size 锁 720P / aspect_ratio 按 platform 推断）
 
-**失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**用 AI 自由生成 logo（必须用用户上传的 logo 原图作 image_generate 或 reference）。
+**失败处理**：单次失败重试 2 次（**0 微调**，按 attempt 1 原样重试）；连续 3 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**用 AI 自由生成 logo（必须用用户上传的 logo 原图作 image_generate 或 reference）。
 
 > **🔗 硬编码 MCP 调用**（2026-09-08 锁定）：Corporate 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md` T08 (`video_reference_corporate`)——4 类必填信息（logo / IP / VI / 客户案例 / 产品图）映射到 `images[0..4]` 严格按 §0.4 顺序（logo → ip → product → space → case）。跳过位不留空，数组紧凑；不得自由切换 mode 或简化 prompt。
 

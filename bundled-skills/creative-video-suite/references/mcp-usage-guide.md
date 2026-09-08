@@ -142,9 +142,9 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 
 | 失败点 | 处理（按 2026-09-08 锁定重试铁律） |
 |---|---|
-| Step 1 image_generate 失败 | retry #1 微调 prompt；retry #2 微调 prompt；仍失败 → **交由用户处理**（**禁**降级到 image_edit，image_edit 必传图） |
-| Step 2 image_edit 失败（转比例场景） | retry #1 微调 prompt；retry #2 微调 prompt；仍失败 → **交由用户处理**（**禁**擅自"接受原图比例不一致"——必须保持目标比例契约） |
-| Step 3 video_generate 失败 | **禁**降级到 text 模式（CLAUDE.md 红线）；retry #1 微调 prompt；retry #2 微调 prompt；仍失败 → **交由用户处理** |
+| Step 1 image_generate 失败 | retry #1 (0 微调)；retry #2 (0 微调，按 attempt 1 原样)；仍失败 → **交由用户处理**（**禁**降级到 image_edit，image_edit 必传图） |
+| Step 2 image_edit 失败（转比例场景） | retry #1 (0 微调)；retry #2 (0 微调，按 attempt 1 原样)；仍失败 → **交由用户处理**（**禁**擅自"接受原图比例不一致"——必须保持目标比例契约） |
+| Step 3 video_generate 失败 | **禁**降级到 text 模式（CLAUDE.md 红线）；retry #1 (0 微调)；retry #2 (0 微调，按 attempt 1 原样)；仍失败 → **交由用户处理** |
 | 上一步 URL 失效（`AGNES_OUTPUT_DIR` 文件被 OS 清掉 / 上游 CDN 401） | 用 `cmd_workspace_copy_paths` 落盘的本地副本（`<workspace>/.../06_videos/segment-XX.mp4` / `04_assets/...`）反查；本地副本也没了 → 重新跑上游工具（不算失败重试，是数据恢复） |
 
 **硬禁止 fallback（任何 attempt 都不允许）**：
@@ -163,7 +163,7 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 ```text
 1. 成功的 segment 立刻 cmd_workspace_copy_paths 落盘 + 写 segment-XX.md
 2. 失败的 segment 不落盘（但 prompt / params / 三次 attempt 错误码写到 project.json.notes 方便用户接手）
-3. 单 segment 失败 → retry #1 → retry #2（同 params 或微调 prompt；不得 fallback）
+3. 单 segment 失败 → retry #1 → retry #2（同 params；不得 fallback；**0 微调**，按 attempt 1 原样重试）
 4. 单 segment 两次重试仍失败 → 标记 failed，**交由用户处理**（不自动全段重试，撞二次 quota）
 5. 多 segment 同时失败（≥ 50%）→ 立即停下，**交由用户处理**（疑似配额撞顶或网络问题）
 ```

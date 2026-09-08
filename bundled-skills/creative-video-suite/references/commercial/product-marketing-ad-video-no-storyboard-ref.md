@@ -825,7 +825,7 @@ prompt 末尾第一句必须写：
 4. mode 互斥（Marketing 默认 keyframe 必有 first_frame；`text` 仅在用户 ack 降级时）
 5. 参数 schema（12s 时长（MCP `seconds` 上限 12） / size 锁 720P / aspect_ratio 按 platform 推断）
 
-**失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。
+**失败处理**：单次失败重试 2 次（**0 微调**，按 attempt 1 原样重试）；连续 3 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。
 
 **long_video_stitch_mode**：30s / 60s 视频拆多 segment → 每个 segment 独立调 video_generate，partial success 处理见 `mcp-usage-guide.md` §3.3。
 

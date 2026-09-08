@@ -393,7 +393,7 @@ Seedance 强提示：
 
 **模式例外**：用户**明确**要"分镜图 → 视频"工作流时（要首帧驱动）→ mode 改 `keyframe` + 用 `image_generate` 出的分镜图作 `first_frame` HTTPS URL。
 
-**失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**逐句字幕进入 prompt（硬门控见 §54 字幕硬门控）。
+**失败处理**：单次失败重试 2 次（**0 微调**，按 attempt 1 原样重试）；连续 3 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**逐句字幕进入 prompt（硬门控见 §54 字幕硬门控）。
 
 ## Widget emit
 

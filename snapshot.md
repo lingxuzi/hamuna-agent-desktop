@@ -298,3 +298,43 @@
 3. amend 任何 commit 一律 `git commit --amend --no-verify`（防 pre-commit bump-on-commit 二次 patch bump）
 4. **禁** `git add -f` 把 ignored 文件塞进提交（PRD / research 草稿只落盘不提交）
 5. **发布前验"已提交态"**：并发 writer 可能提交组件改动却把配套测试 fix 留在工作区 → `git stash` 无关工作区再跑易红测试
+
+### 5.2 决策待定（2026-09-08）
+
+- **creative-video-suite 模型 fallback 策略**（**用户拍板：暂不动**）：
+  - 用户原话："agnes-video-25 默认视频模型 agnes-video-2.5-flash fallback agnes-video-2.0；默认图像模型 agnes-image-2.5-flash fallback agnes-image-2.1-flash"
+  - **矛盾点 1（已上线红线冲突）**：`bundled-skills/creative-video-suite/references/agnes-ai-api.md:261` 写明"旧版本（v2.0）模型 `agnes-video-v2.0` / `agnes-image-2.0-flash` / `agnes-image-2.1-flash` 已全部下线，禁止再使用"——用户给的 fallback 模型名正落在"已下线"清单
+  - **矛盾点 2（重试铁律冲突）**：commit `ac7da54` 的 mcp-call-templates.md §4.1 重试铁律明确"禁止简化 prompt / 禁止删 ref / 禁止降级 mode"——与"fallback 时 prompt + images[] 可调"语义重叠但边界不同（重试 vs fallback）
+  - **现状铁律保持**：model 锁定 2.5-flash 系列 + 2 次重试（**retry 期间 0 微调**，按 attempt 1 原样）+ 不得 fallback（mode / prompt / images[] / size / seconds / aspect_ratio 全部冻结）+ attempt 4 停下交用户
+  - **未来 fallback 边界预案**（仅备忘，等下次会话明确再启动）：
+    - 触发：2.5-flash 失败 2 次后切换到 fallback 模型
+    - fallback 时允许：prompt 微调 / images[] 微调
+    - fallback 时禁止：mode / size / seconds / aspect_ratio / 工具切换
+  - **潜在下一动作**（用户未确认，不动）：
+    - 选项 a：MCP server 端重新支持 v2.0 / v2.1-flash → 删 agnes-ai-api.md:261 "已下线"段 + 9 个文件补 model= 字段和 fallback 策略
+    - 选项 b：fallback 升级到 2.5-pro 系列（更稳定但更慢/更贵）→ 同上但 fallback 模型名不同
+    - 选项 c：保持现状不动
+
+### 5.3 retry 期间 0 微调铁律全栈落地（2026-09-08）
+
+**用户拍板**：retry #1 / retry #2 期间**完全冻结** prompt 字句 / aspect_ratio / size / seconds（attempt 1 原样重试，只接受 transient 错误通过，否则 attempt 4 撞墙交用户）。
+
+**改动范围**（8 文件 / 9 处修改）：
+
+| 文件 | 改动点 | 关键变化 |
+|---|---|---|
+| `references/mcp-call-templates.md` §4.1 | 删除"允许的微调 (retry #1 / retry #2 内)" 4 项 | attempt 2/3 改"按 attempt 1 原样重试（0 微调）" |
+| `SKILL.md` 铁律段 | line 63 / 67 措辞 | "微调只在重试允许的字句范围内" → "重试 0 微调，按 attempt 1 原样" |
+| `references/mcp-usage-guide.md` §3.2 / §3.3 | 失败路径表 + partial success 段 | retry #1/#2 改 "(0 微调)"；同 params 0 微调 |
+| `references/commercial/corporate-business-video-ref.md` | line 476 | "重试 1 次" → "重试 2 次（0 微调）" + "连续 2 次失败" → "连续 3 次失败" |
+| `references/commercial/ugc-talking-video-ref.md` | line 396 | 同上 |
+| `references/commercial/product-marketing-ad-video-no-storyboard-ref.md` | line 828 | 同上 |
+| `references/output-conventions.md` §6 | line 154 | "重试一次" → "重试 2 次（0 微调）" |
+| `references/drama/frame.md` | line 186 | "重试 1 次（可微调 prompt）" → "重试 2 次（0 微调）" |
+| `references/drama/prompt.md` | line 229 / 232 | 同上（含 aspect_ratio 微调删） |
+
+**一致性 fix 副作用**：上轮 commit `ac7da54` 漏改的"重试 1 次"残留（6 文件）一并同步为"重试 2 次 + 连续 3 次失败"，避免 commit message 复杂化。
+
+**语义后果**：3 次原样重试**只能解 transient 错误**（网络 / rate limit / MCP server 临时 5xx）；prompt 自身 typo / ref 引用编号错位 / aspect_ratio 与 first_frame 不一致 / 业务逻辑错误必然撞 attempt 4 停下交用户。诊断 prompt 责任**完全交回用户**。
+
+→ commit `571a9b2` (refactor: retry 期间 0 微调铁律全栈落地, 10 files / +58 / -23) → 见 `git log --oneline --grep="retry 期间 0 微调铁律全栈落地"`

@@ -226,10 +226,10 @@ commercial 3 路产物差异（见 output-conventions.md §5）：UGC 每个 seg
 **partial success 处理**（多 segment 视频）：
 - 成功的 segment 立刻落盘 + 写 `segment-XX.md`
 - 失败的 segment 不落盘但参数记到 `project.json.notes.video_segments[<id>]`
-- 单 segment 失败重试 1 次；多 segment 失败（≥ 50%）立即停下问用户
+- 单 segment 失败重试 2 次（**0 微调**，按 attempt 1 原样重试）；多 segment 失败（≥ 50%）立即停下问用户
 - 详细见 `references/mcp-usage-guide.md` §3.3
 
-**失败处理**：单次失败重试 1 次（可改 prompt / 微调 aspect_ratio）；连续 2 次失败停下问用户。**不**降级 mode。
+**失败处理**：单次失败重试 2 次（**0 微调**，按 attempt 1 原样重试）；连续 3 次失败停下问用户。**不**降级 mode。
 
 ## Widget emit
 

@@ -151,7 +151,7 @@ prompt_ref: "<workspace>/creative-video-suite/gufeng-drama-ep01-20260908/05_keyf
 
 | 场景 | 处理 |
 |---|---|
-| 单张图 / 单段视频生成失败 | 重试一次（不重试第二次）；第二次仍失败则停下说明失败原因 + 所需补充信息 |
+| 单张图 / 单段视频生成失败 | 重试 2 次（**0 微调**，按 attempt 1 原样重试）；连续 3 次失败则停下说明失败原因 + 所需补充信息 |
 | 重跑前次产物（用户说"这张再抽一次"） | 新产物加 `_v2` / `_v3` 后缀,**不**覆盖原文件;同时 update `project.json.notes` 记录"v2 替换 v1 的原因" |
 | 整个项目废弃 | 用户手动 `rm -rf <project>/`；AI 不主动删 |
 | session 中断后用户重启 | AI 进项目第一件事 `cat project.json` 看 `current_stage` + `stages_completed`,从下一个未完成阶段继续 |

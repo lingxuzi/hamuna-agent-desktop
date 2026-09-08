@@ -406,14 +406,14 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 11/11 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
 
-### 4.1 重试铁律（用户 2026-09-08 锁定）
+### 4.1 重试铁律（用户 2026-09-08 收紧：retry 期间 0 微调）
 
 **所有生成步骤**（image_generate / image_edit / video_generate，无论 mode）的重试策略：
 
 ```text
 attempt 1 (initial)  →  fail
-attempt 2 (retry #1) →  fail   ← 可微调 prompt 字句 / 参数取值（不删 ref、不降 mode）
-attempt 3 (retry #2) →  fail   ← 仍只允许微调 prompt；禁止结构性改动
+attempt 2 (retry #1) →  按 attempt 1 原样重试（0 微调：prompt 字句 / mode / images[] / aspect_ratio / size / seconds 全部冻结）
+attempt 3 (retry #2) →  按 attempt 1 原样重试（同上 0 微调）
 attempt 4 → 停下，原地待命，【交由用户处理】
 ```
 
@@ -425,12 +425,7 @@ attempt 4 → 停下，原地待命，【交由用户处理】
 - 改换模型供应商 / Runtime
 - 简化 prompt（如去掉 negative block / 删 ref 引用 / 删 style_anchor）
 - 用上一步产物 URL 重复当新图喂回去（避免 hallucination 累积）
-
-**允许的微调**（retry #1 / retry #2 内）：
-- 修字句不通顺 / typo
-- 补更具体的视觉描述（如 "光线方向由顶光改为左侧光"）
-- 改 aspect_ratio 候选（如 9:16 → 16:9 但**禁止**从 reference 退到 keyframe）
-- 微调 size / seconds 取值（在合法范围内）
+- **retry 期间微调任何参数**（prompt 字句 / aspect_ratio / size / seconds 全部冻结；只接受 transient 错误通过，否则 attempt 4 撞墙交用户）
 
 **attempt 4 停下时的标准动作**：
 1. 把 attempt 1-3 的完整 prompt + 返回错误码 + URL 映射写到 `project.json.notes.last_failure`
