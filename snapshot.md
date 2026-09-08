@@ -246,6 +246,7 @@
 | `9207fbd` | **fix(creative-video-suite): align default video duration to MCP 12s cap (15s → 12s across 7 files)** |
 | `4f944b2` | **feat(creative-video-suite): absorb director-grade storyboard craft (drama 跨段稳定编号 + 双档时长 + 五维物理表演 + 运镜分级)** |
 | `<pending>` | **feat(creative-video-suite): add hard-coded MCP call templates + 2-retry gate + product_ref drift-compare widget (8 files, 12 templates)** |
+| `3eba012` | **fix(creative-video-suite): split input-source iron rule by tool (image_edit 3 forms vs video_generate HTTPS-only)**（dev/skill-input-source-split） |
 | `d9a5f70` | **chore(deps): sync Cargo.lock + package.json after 4f944b2** |
 | `197837b` | **fix(mcp): pin bundled uv 0.5.11 and inject uvx dir into MCP spawn PATH** |
 | `ffe8edb` | **feat(bundled-skills): add creative-video-suite for short-drama / UGC / corporate** |
@@ -362,7 +363,7 @@
 
 → 提交后见 `git log --oneline --grep="creative-screenwriting-methodology"`
 
-### 5.5 输入源铁律按工具拆分（2026-09-08 落地，commit `<pending>`）✅
+### 5.5 输入源铁律按工具拆分（2026-09-08 落地，commit `3eba012` on `dev/skill-input-source-split`）✅
 
 **触发**：用户报"`mcp__multimedia-creator__agnes25_image_generate` 传入的 `image_paths` 预处理三种类型" → grlling 指出工具名错（`image_generate` schema 不含 `image_paths`），用户原意指 `image_edit.image_paths`。验证官方 agnes API + hosted_mcps wrapper client-side 归一化行为后，确认现有铁律（HTTPS URL only / 禁本地 / 禁 base64）**一刀切过度推广**——根因动机只对 video_generate 字段成立（避开 `img.remit.ee` QPS 限流）。用户拍板"参考 agnes api 支持格式判断" → 走**选项 C**（按工具拆两段铁律）。
 
@@ -392,7 +393,7 @@
 - `bundled-skills/tvc-director/` —— grep 0 命中 input-source iron rule，无同步需求
 - `references/agnes-ai-api.md:140 / 115`（video_generate first_frame / last_frame 旧描述"本地图路径"）—— video_generate 字段按新铁律仍是 HTTPS URL only，旧描述与新铁律兼容（"本地"是 tool 自身字段类型描述，不是允许本地路径）；保留避免引入新争议
 
-**commit 模板**（待 git 提交）：
+**commit 模板**（已 git 提交，commit `3eba012` on `dev/skill-input-source-split`）：
 - subject: `fix(creative-video-suite): split input-source iron rule by tool (image_edit 3 forms vs video_generate HTTPS-only)`
 - body 多段：触发（用户原意混淆 image_generate / image_edit / image_paths）+ grlling（4 个矛盾点）+ 实测（官方 agnes API + hosted_mcps wrapper 行为对比）+ 最终拆分方案 + 5 文件改动列表 + 未改动文件理由 + 潜在 follow-up（Sidecar SSE 256KB clamp 验证 / image_edit 本地路径审计字段）
 
