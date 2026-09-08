@@ -35,7 +35,7 @@ load_dotenv()
 mcp = FastMCP("Agnes Video 2.5 MCP")
 
 DEFAULT_BASE_URL = "https://api.agnes-ai.cn/v1"
-DEFAULT_MODEL = "agnes-video-2.5"
+DEFAULT_MODEL = "agnes-video-2.5-flash"
 DEFAULT_FLASH_MODEL = "agnes-video-2.5-flash"
 DEFAULT_SIZE = "720P"
 DEFAULT_ASPECT = "16:9"
