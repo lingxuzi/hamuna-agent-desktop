@@ -176,8 +176,8 @@ agnes-video-2.5-flash 的 video prompt 分为 4 个 Phase：
   timeout_seconds: 600,
   poll_interval_seconds: 5,
   images: [
-    "<分镜关键帧路径>",  // Picture 1：分镜精修图
-    "<资产图路径>"        // Picture 2：角色/场景资产
+    "<分镜关键帧 HTTPS URL>",  // Picture 1：分镜精修图（**HTTPS URL 最稳**）
+    "<资产图 HTTPS URL>"        // Picture 2：角色/场景资产
   ],
   prompt: "<Multi-Phase 视频提示词>"
 }
@@ -187,6 +187,11 @@ agnes-video-2.5-flash 的 video prompt 分为 4 个 Phase：
 - size 必须 `720P`（flash 不接受 1080P）
 - seconds 必须 `≤ 12`（flash 上限）
 - images 最多 5 张，videos 0（不接受视频参考）
+
+**images 字段最佳实践（端到端验证 2026-09-08）**：
+- **HTTPS URL 最稳**：调用 `image_generate` 后从响应 `data[0].url` 取出，传给后续 `video_generate`
+- 本地路径不稳：MCP CWD 跨机器不同（`hosted_mcps/agnes-video-25/outputs/images/` vs `<project>/outputs/images/`），需先确认 MCP CWD
+- 错误信息 `"images is neither HTTPS URL, data URI, nor existing local file"` 即路径问题
 
 ### 4.4 跨参考图策略（多张 reference）
 

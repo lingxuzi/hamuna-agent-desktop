@@ -16,8 +16,11 @@ import base64
 import math
 import mimetypes
 import os
+import re
+import threading
 import time
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -92,6 +95,93 @@ def _ensure_output_dir() -> Path:
     directory = root / "videos"
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+# ----- Multi-API-key fallback pool (0.1.4+) -----
+# Single key (AGNES_API_KEY) is backward-compatible; multi-key (AGNES_API_KEYS,
+# comma-separated) tries the next key on 429/503/401. State is in-memory + a
+# module-level lock; MCP server is stdio + single-process, so concurrent writes
+# are not a concern in practice. State resets on process restart.
+@dataclass
+class _KeyState:
+    raw: str
+    masked: str
+    disabled_until: float = 0.0  # epoch seconds; 0 = available
+    disabled_reason: str | None = None
+    consecutive_failures: int = 0
+
+
+_KEY_POOL: list[_KeyState] = []
+_KEY_POOL_LOCK = threading.Lock()
+_KEY_POOL_LOADED = False
+
+
+def _mask_key(raw: str) -> str:
+    if len(raw) <= 8:
+        return "***"
+    return raw[:4] + "***" + raw[-4:]
+
+
+def _parse_quota_reset(body: str | None) -> float | None:
+    """Parse 'Please try again after 2026-09-09 00:00.' style hints."""
+    if not body:
+        return None
+    m = re.search(r"after\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})", body)
+    if not m:
+        return None
+    try:
+        from datetime import datetime, timezone
+        dt = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except ValueError:
+        return None
+
+
+def _next_utc_midnight() -> float:
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return midnight.timestamp()
+
+
+def _load_key_pool() -> list[_KeyState]:
+    """Read AGNES_API_KEYS (comma-separated, preferred) or AGNES_API_KEY (single)."""
+    multi = _env("AGNES_API_KEYS")
+    single = _env("AGNES_API_KEY")
+    raw_list: list[str] = []
+    if multi:
+        raw_list = [s.strip() for s in multi.split(",") if s.strip()]
+    elif single:
+        raw_list = [single.strip()]
+    return [_KeyState(raw=k, masked=_mask_key(k)) for k in raw_list]
+
+
+def _pick_key() -> _KeyState | None:
+    global _KEY_POOL_LOADED
+    with _KEY_POOL_LOCK:
+        if not _KEY_POOL_LOADED:
+            _KEY_POOL[:] = _load_key_pool()
+            _KEY_POOL_LOADED = True
+        now = time.time()
+        for k in _KEY_POOL:
+            if k.disabled_until <= now:
+                return k
+        return None
+
+
+def _mark_disabled(key: _KeyState, reason: str, until: float) -> None:
+    key.disabled_until = until
+    key.disabled_reason = reason
+    key.consecutive_failures += 1
+    if reason == "auth_401":
+        # Permanent until process restart; user must rotate key.
+        print(f"[agnes-video-25-mcp] KEY DISABLED (auth_401, permanent): {key.masked}. Rotate key in AGNES_API_KEYS.", flush=True)
+    elif reason == "quota_429":
+        from datetime import datetime, timezone
+        when = datetime.fromtimestamp(until, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        print(f"[agnes-video-25-mcp] KEY DISABLED (quota_429): {key.masked}, disabled until {when}.", flush=True)
+    elif reason == "service_503":
+        print(f"[agnes-video-25-mcp] KEY DISABLED (service_503, 60s): {key.masked}.", flush=True)
 
 
 def _sanitize_filename(name: str | None) -> str | None:
@@ -244,26 +334,71 @@ def _request_json(
     timeout: float = 120.0,
     base_url: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
-    key = _env("AGNES_API_KEY")
-    if not key:
-        return False, _error("missing_api_key", "Set AGNES_API_KEY before calling Agnes.")
+    """Call Agnes API with multi-key fallback on 401/429/503.
+
+    Iterates the key pool: 2xx → success; 401 → mark permanent + switch; 429 →
+    parse reset time + mark temp + switch; 503 → 60s cooldown + switch; other
+    status / network errors → return immediately (not key-related). All keys
+    exhausted → return last error with all_keys_exhausted context.
+    """
     url = f"{base_url or _base_url()}{path}"
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            r = client.request(method, url, headers=headers, json=json_body)
-            r.raise_for_status()
-            return True, r.json() if r.content else {}
-    except httpx.HTTPStatusError as exc:
-        return False, _error("http_error", "Agnes returned non-success.",
-                             details={"status_code": exc.response.status_code,
-                                      "body": exc.response.text})
-    except httpx.TimeoutException as exc:
-        return False, _error("timeout", "Agnes request timed out.", details=str(exc))
-    except httpx.RequestError as exc:
-        return False, _error("request_error", "Agnes request failed.", details=str(exc))
-    except ValueError as exc:
-        return False, _error("invalid_response", "Non-JSON response from Agnes.", details=str(exc))
+    tried: list[tuple[str, int, str]] = []  # (masked_key, status_code, reason)
+    last_error: dict[str, Any] | None = None
+    pool_size = 0
+    global _KEY_POOL_LOADED  # noqa: PLW0603 — assigning to module-level flag.
+    with _KEY_POOL_LOCK:
+        if not _KEY_POOL_LOADED:
+            _KEY_POOL[:] = _load_key_pool()
+            _KEY_POOL_LOADED = True
+        pool_size = len(_KEY_POOL)
+    if pool_size == 0:
+        return False, _error("missing_api_key", "Set AGNES_API_KEY (or AGNES_API_KEYS) before calling Agnes.")
+    for _ in range(pool_size):
+        key = _pick_key()
+        if key is None:
+            break  # all disabled
+        headers = {"Authorization": f"Bearer {key.raw}", "Content-Type": "application/json"}
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                r = client.request(method, url, headers=headers, json=json_body)
+                r.raise_for_status()
+                return True, r.json() if r.content else {}
+        except httpx.HTTPStatusError as exc:
+            sc = exc.response.status_code
+            body = exc.response.text
+            err = _error("http_error", "Agnes returned non-success.",
+                         details={"status_code": sc, "body": body})
+            if sc == 401:
+                _mark_disabled(key, "auth_401", float("inf"))
+                tried.append((key.masked, sc, "auth_401"))
+                last_error = err
+                continue
+            if sc == 429:
+                reset = _parse_quota_reset(body) or _next_utc_midnight()
+                _mark_disabled(key, "quota_429", reset)
+                tried.append((key.masked, sc, "quota_429"))
+                last_error = err
+                continue
+            if sc == 503:
+                _mark_disabled(key, "service_503", time.time() + 60.0)
+                tried.append((key.masked, sc, "service_503"))
+                last_error = err
+                continue
+            return False, err  # 4xx/5xx other → not key-related, surface immediately
+        except httpx.TimeoutException as exc:
+            return _error("timeout", "Agnes request timed out.", details=str(exc))
+        except httpx.RequestError as exc:
+            return _error("request_error", "Agnes request failed.", details=str(exc))
+        except ValueError as exc:
+            return _error("invalid_response", "Non-JSON response from Agnes.", details=str(exc))
+    # All keys exhausted
+    if last_error is not None:
+        last_error.setdefault("error", {}).setdefault("code", "http_error")
+        last_error["error"]["message"] = f"All {pool_size} key(s) exhausted (tried: {tried})."
+        last_error["error"]["details"] = {**last_error["error"].get("details", {}), "tried": tried, "pool_size": pool_size}
+        return False, last_error
+    return False, _error("all_keys_exhausted", f"All {pool_size} key(s) disabled.",
+                         details={"tried": tried, "pool_size": pool_size})
 
 
 def _extract(response: dict[str, Any], *keys: str) -> Any:

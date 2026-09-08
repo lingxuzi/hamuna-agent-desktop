@@ -407,3 +407,19 @@ echo "✅ ${EPISODE} 合成完成: final/${EPISODE}.mp4"
 - 复盘失败模式
 - 优化后续 prompt
 - 用户决策追溯
+
+### 8.4 agnes API 日配额限制（已验证）
+
+**现象**：单账户日配额约 5-10 次视频生成 + 20-30 次图片生成。触限后服务端返回 429：
+```
+Daily API usage limit reached. Please try again after YYYY-MM-DD 00:00.
+```
+
+**应对策略**：
+1. **大项目分日执行**：5 集短剧（每集 13 镜头 = 65 视频）至少需 7-13 天
+2. **关键镜头优先**：先建 9 宫格分镜图确认构图与视觉，再批量生成视频
+3. **多 key fallback**（TODO）：`.pavo-research/agnes-multi-key-fallback-spec.md` 规范了多账号切换策略；待用户拍板进 Step 2 实现
+4. **避免失败重试浪费**：fail-fast 协议 + retry 一次原则 + 不 fallback 的硬约束——都是为了不浪费配额
+
+**写入 SKILL.md 时同步加一行**：
+> **警告**：agnes API 有日配额限制（单账户 5-10 视频/天）。长项目分日执行或启用多 key fallback。
