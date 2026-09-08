@@ -11,12 +11,14 @@
     "multimedia-creator": {
       "command": "uvx",
       "args": [
+        "--default-index",
+        "https://pypi.org/simple",
         "--from",
-        "/home/hmcz/Projects/hamuna-agent-desktop/hosted_mcps/agnes-video-25",
+        "agnes-video-25-mcp==0.1.3",
         "agnes-video-25-mcp"
       ],
       "env": {
-        "AGNES_API_KEY": "cpk-q4sHrUC4k9kZwM7PSkeUmHi7BmKKX8PSOQT0Qmeon7E0Im0v",
+        "AGNES_API_KEY": "cpk-q4sHrUC4k9kZwM7PSkeUmHi7BmKKX8PSOQT0Qmeon7E0Im0v,sk-Edy4Y6lXLoX3HgAWY42ttAqeBclSFQjDuhO7KBPZKwNcpJUr",
         "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1"
       }
     }

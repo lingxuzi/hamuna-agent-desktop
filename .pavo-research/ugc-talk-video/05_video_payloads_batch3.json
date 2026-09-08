@@ -1,0 +1,34 @@
+{
+  "_comment": "Batch 3：Cut5 video_generate（CTA 收尾）。本批 1 个。",
+  "_model_lock": "agnes-video-2.5-flash",
+  "_size_lock": "720P",
+  "_max_seconds": "12",
+  "_aspect_ratio": "9:16",
+  "_output_dir": ".pavo-research/ugc-talk-video/videos/",
+  "calls": [
+    {
+      "id": "cut5_cta",
+      "tool": "mcp__multimedia-creator__agnes25_video_generate",
+      "depends_on": ["frame_05_cta"],
+      "args": {
+        "model": "agnes-video-2.5-flash",
+        "mode": "keyframe",
+        "size": "720P",
+        "seconds": "12",
+        "aspect_ratio": "9:16",
+        "first_frame": ".pavo-research/ugc-talk-video/frames/frame_05_cta.png",
+        "last_frame": ".pavo-research/ugc-talk-video/frames/frame_05_cta.png",
+        "prompt": "UGC vlog selfie-style shot. Same young Chinese woman in soft warm bedroom, holds the amber facial serum bottle up close to phone camera at eye level with a confident warm smile, winks left eye playfully, then gives a small encouraging nod to camera, healthy glowing dewy cheeks with no redness, soft morning window light from left, soft warm bedroom background slightly blurred with bokeh, natural subtle hand gesture and friendly nod, phone camera aesthetic with slight grain and natural micro-shake, ambient cozy bedroom sounds, 9:16 vertical, photorealistic, shot on iPhone 14 front camera, no text no subtitle, call-to-action energy",
+        "timeout_seconds": 600,
+        "poll_interval_seconds": 5,
+        "output_filename": "cut5_cta.mp4"
+      },
+      "_delivery_check": "生成完成后必须 Markdown 视频渲染: ![cut5](file://.pavo-research/ugc-talk-video/videos/cut5_cta.mp4)"
+    }
+  ],
+  "_post_check": [
+    "Cut5 是收尾段，首末帧相同 → 让 video 在同一画面做微动作（眨眼+点头）",
+    "5 段视频全部生成后，整体检查节奏：Cut1 hook → Cut2 慢引入 → Cut3 体验 → Cut4 高潮反差 → Cut5 CTA",
+    "BGM 与后期配音需在剪辑软件中合成（本流程不涉及）"
+  ]
+}

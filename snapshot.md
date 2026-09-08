@@ -3,7 +3,7 @@
 > 实时记录项目模块状态、当前 TODO 与已完成任务。
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。snapshot.md 不允许无限增长；已完成项更新完项目状态后立即清出。
 
-最后更新：**2026-09-07**（snapshot 重整 + 拖拽媒体默认复制到 `workspace/hamuna_files/` 落地，commit `2338a83`；**修复 `node:path` 在 renderer 跑导致整页崩** commit `c70fd60`；**删除图片附件时回收 workspace 文件** commit `51f3f98`；**P0 修复 workspace 拖拽图片发不出去** commit `ea9b524`；**rebase 前把 relativePath → 绝对路径（绕过 Rust validator 拒 workspace-relative）** commit `db2d91f`；**rebase 时同步改写 source 字段（dispatch 走 inline_base64）** commit `368ee90`；**tvc-director skill 视频模型切换为 agnes-video-2.5-flash** commit `079c96f`；**修正 SKILL.md / storyboard.md video prompt 双图引用约定** commit `7191b91`；**端到端验证 tvc-director video prompt 新约定**（image×2 + video×1 全通，video 720P 5.166s 落地）；**storyboard reference 默认 seconds 5→12** commit `66b6397`；**重规划 TVC 默认 grid 单元 15s→12s**（待 commit））
+最后更新：**2026-09-08**（v12 60s TVC 完成 + 1fps 抽检 11 帧验证：①条件 PASS / ②③ 弱通过；新增 LED 颜色偏白粉 + G5 背景 slat wall 瑕疵；见 TODO #101）。**+ Pavo 短剧调研完成**：`.pavo-research/` 沉淀 6 样本 + REPORT + COMPARISON；新建 `bundled-skills/agnes-short-drama/`（SKILL.md 17KB + 6 references ~70KB + README 双语 + examples/E01_模糊的勇气 503 行端到端 demo）：AI 短剧创作导演工作台（4 字段用户输入 → 6 元数据自动展开 → 导演式剧本语法 → agnes-image/video 关键帧/视频提示词；3 风格层级 60+ 模板 + 4 叙事模型；未注册 `SYSTEM_SKILLS`，属 utility）。**+ multimedia-creator 端到端验证 4/4 PASS**（@日记道具 / @林小满惊惶 / @图书馆黄昏 / E01_Shot05 reference 模式 8s 720P 视频）；触发 2 项 prompt 修复（场景"无人物"→ 加英文反面词；道具"二次元动漫风格"→ 加"anime lineart"风格强化），已写入 `pre-production.md` §2.2 + §2.3。**+ creative-video-suite 端到端 UGC 5 段 60s 视频生成成功**（详见 TODO #103→已落地+ TODO #104；MCP `/mcp -32000` 根因诊断：host 加载 `.mcp.json` 后首次 stdio 握手时 uvx 拉 `agnes-video-25-mcp==0.1.3` 依赖未就绪，retry 一次即过）。
 
 ---
 
@@ -105,6 +105,7 @@
 | 内置 MA 小助理 | `bundled-agents/hamuna_helper/` | 稳定；改 MUST bump `ADMIN_AGENT_VERSION` |
 | 内置 Skills | `bundled-skills/` | 稳定；`SYSTEM_SKILLS` 清单内改 MUST bump `SYSTEM_SKILLS_VERSION` |
 | tvc-director skill | `bundled-skills/tvc-director/` | 稳定；v0.9 + agnes-video-25-mcp v0.1.3 + 严格工具契约（参数锁定 + fail-fast） |
+| agnes-short-drama skill | `bundled-skills/agnes-short-drama/` | 新增；AI 短剧创作导演（基于 Pavo 调研）；4 字段用户输入 → 6 元数据 → 导演式剧本 → agnes 资产/分镜/视频；3 风格层级（真人/3D/2D）60+ 模板 + 4 叙事模型；utility skill，未入 `SYSTEM_SKILLS`；`.pavo-research/` 沉淀调研数据（3 完整样本 + 3 元数据 + REPORT + COMPARISON）；`examples/E01_模糊的勇气/` 端到端 demo（503 行）证明模板可产出真实可执行提示词 |
 | 雪球时间线 Skill | `skills/crawl-xueqiu-my-timeline/` | 实验 skill，未入 `bundled-skills/`，未注册 `SYSTEM_SKILLS` |
 | `scripts/ensure_claude_sdk_package.ps1` | — | 稳定；`Test-SdkVersionRange` semver 三态（`^`/`~`/`exact`）|
 | `scripts/ensure_rust_toolchain.ps1` | — | 稳定 |
@@ -151,9 +152,189 @@
 
 ## 3. 当前 TODO（待完成）
 
-（无 — 见 §4 最近 commit 指针）
+### TODO #75 — v14 POC: image_edit 修 LED/slat wall bias 🔄 进行中
 
+**用户决策**（2026-09-08）：
+- 先做最小 POC，验证 image_edit 预处理路径是否真能修 model bias
+- 再决定 v14 完整 60s TVC 是否推进
 
+**POC 计划**：
+1. 选 v12 G3 grid（已知 LED 偏白粉最严重的段）作为 reference 输入
+2. 用 `image_edit` mask 强制把 LED ring 染蓝 + 背景擦黑
+3. 用 edit 后的 grid 重新跑 G3 video（keyframe mode + first_frame lock）
+4. 验证 last frame LED 是否真蓝 + 背景是否纯黑
+5. POC PASS → 进入 v14 完整；POC FAIL → 评估 post-process color grading 或换 agnes-video-2.5（非 flash）
+
+**成功标准**：
+- ✅ POC PASS：v12 G3 末帧 LED ring = 蓝色（不是白粉/白紫），背景 = 纯黑（不是 slat wall）
+- ❌ POC FAIL：LED 仍白粉，或 background 仍 slat wall
+
+**Stop hook 确认**：v11/v12/v13 都没达成「3 条件全 PASS」，v14 POC 必须先验证 image_edit 路径才能继续。
+
+### TODO #99 — 60s 有故事性生活场景 TVC（最终纯色背景 + 产品 Hero）✅ DONE
+
+**用户新需求**："做一个有故事性生活场景介绍产品的tvc视频，60秒，要求最终纯色背景+产品Hero"
+
+**叙事**（5 段 × 12s = 60s）：卧室醒来 → 客厅早午餐 → 厨房烹饪 → 书房午后 → 黄昏阳台 → **纯黑背景 + 产品 Hero**（endframe 自然落 G5 尾帧）
+
+**执行产物**：
+- 5 个 env_refs（bedroom 复用 v9 + 4 个新：livingroom/kitchen/study/balcony）
+- 5 个 2x3 grids（初次命名错位 → 重命名为 narrative order）
+- 5 段 videos（reference mode + keyframe mode + bridge first_frame）
+- 1 个 concat 60s TVC：`outputs/videos/e2e_v10_tvc_60s.mp4`（1280×720, 61.25s, 24fps, 23MB）
+- 11 个抽帧验证帧（`outputs/videos/e2e_v10_frames/`）
+
+**验证结果（PASS）**：
+- ✅ 故事连贯：5 段 = 一天生活轨迹
+- ✅ Endframe = G5 尾帧：纯黑背景 + 产品 hero pose（无单独生成 endframe image）
+- ✅ LCD 全程无数字（G3-G5 强化 prompt 起作用）
+- ✅ 4 次 bridge 过渡自然（pull-back / dissolve）
+- ✅ Anti-grid prompt 生效（无 grid literal composite）
+- ⚠️ 产品底部 mesh 在 video 中变成 dotted/水平网孔（与 v8 黑色蜂窝方块略有差异，但顶部木纹 + 蓝色 LED + 银色风扇格栅都一致 → 整体产品形态识别 OK）
+
+**新发现的 prompt 强化**（v10 比 v9 多摸出的硬约束）：
+- v9「NO digits」prompt 在 G2 仍出现 "23" 7-segment 数字
+- G3-G5 强化 prompt：「HARD CONSTRAINT, must hold at EVERY frame including the final frame」+ 「NO '23' or any other digits at any moment」→ 之后全程无数字
+- 此 prompt 强化应固化进 skill doc 教训
+
+**核心交付**：`outputs/videos/e2e_v10_tvc_60s.mp4`
+
+### TODO #100 — v11 60s TVC 端到端（5 段生活方式叙事 + Hero 收束）⚠️ 部分通过
+
+**触发**：TODO #99 v10 用户复检反馈 "视频里依然出现了 grid"，需要更激进的 anti-grid prompt + 强化 LCD 数字降级。
+
+**改动**（v10 → v11）：HARD CONSTRAINT 多条款 anti-grid + 6 phases × 2s 严格对应 panel + bridge first_frame lock。
+
+**执行产物**：`e2e_v11_video_0{1-5}_*.mp4` + `e2e_v11_tvc_60s.mp4` 12.1MB/61.26s + 61 个 1fps 抽帧。
+
+**1fps 抽检 14 帧关键 FAIL**：f_05/f_10/f_22 LCD "03" 数字 bias；f_48 fan grille "ACANIKS" 虚构品牌；f_24 bridge G2→G3 场景跳。
+
+**3 条件验证**：
+- ① 无 grid 复合 ✅ PASS（14 帧全单景别）
+- ② 分镜顺序匹配 ❌ FAIL（3/14 帧 LCD 数字 bias）
+- ③ 衔接自然 ⚠ 部分通过（G2→G3 场景跳）
+
+**残留瑕疵**：LCD 数字 bias（3/14 帧）+ "ACANIKS" 虚构品牌 + 场景跳。
+
+**结论**：v11 达成核心目标（最终纯色 + Hero），但 3 条件**未全 PASS**（Stop hook 重审）。仅可作 narrative 参考，不能算 exit criterion 完成。
+
+### TODO #101 — v12 60s TVC 端到端（5 段纯产品电影化拆解 + Hero 收束）⚠️ 条件1 PASS / 条件2-3 弱
+
+**触发**：TODO #100 残留 LCD 数字 + 场景跳 + 虚构品牌字问题，启动第 2 种 TVC 类型 = 纯产品镜头（无 lifestyle 场景切换）。
+
+**策略变更**：
+- 每段都用同一只产品（pure product cinematic breakdown），不切场景
+- 5 段覆盖：① orbit 全景 ② top-down grille ③ wood+LED detail ④ mesh macro ⑤ hero pose
+- 新增 5 个 JSON 提示词文件 `outputs/videos/e2e_v12_prompts/g{1-5}_*.json`（含完整 prompt + hard_constraints + bridge_constraint + rationale）— 用户 debug 用
+
+**执行产物**：
+- 5 个 16:9 grid（`outputs/images/e2e_v12_g{1-5}_*_grid-1.png`）— G2 重做一次（v1 panels 全做成 3/4 斜视、不是 top-down；v2 用 "STRICTLY FROM DIRECTLY ABOVE + 方形 wood 边框" 重做，6 panels 全 bird's eye ✓）
+- 5 段 12s v12 视频（`outputs/videos/e2e_v12_video_0{1-5}_*.mp4` 1.9-3.4MB）— G2 重做一次（v1 末帧出现 "中间大圆 + 周围 5 小 frame" 的 grid composite；v2 用 single-shot camera motion 描述替换 panel-by-panel 描述，5 panels 已全无 grid ✓）
+- 1 个 concat 60s TVC（`outputs/videos/e2e_v12_tvc_60s.mp4` 13.1MB / 61.26s）
+- 61 个 1fps 抽帧（`outputs/videos/e2e_v12_1fps/f_01.jpg` ~ `f_61.jpg`）
+- 5 个 last_frame（`outputs/videos/e2e_v12_frames/g{1-5}_last.jpg`）
+
+**1fps 抽检 11 帧关键验证**（边界点 + 每段中段）：
+
+| 帧 | 时间 | 内容 | 判定 |
+|----|------|------|------|
+| f_06 | 6s G1 中 | 白 cylinder hero pose + 蓝 LED + 蜂窝 | ✅ 干净 |
+| f_12 | 12s G1→G2 边界 | 黑 cylinder + 灰雾 | ⚠ bridge 瑕疵 |
+| f_13 | 13s G2 起 | 顶视 grille + 木边框 | ✅ |
+| f_18 | 18s G2 中 | blade 极近景 macro | ✅ |
+| f_24 | 24s G2 末 | 顶视 grille + 浅木边框 | ✅ |
+| f_25 | 25s G2→G3 边界 | 顶视 grille + 深棕木 + 黑 body | ⚠ bridge 瑕疵 |
+| f_30 | 30s G3 中 | 木纹理大平面 + LED ring **白粉** + 视角错 | ❌ LED 颜色错 + 视角错 |
+| f_36 | 36s G3 中 | wood 包到 body 外侧、LED **白紫** | ❌ LED 颜色错 + wood 错位 |
+| f_42 | 42s G3→G4 | 蜂窝细节 | ✅ |
+| f_48 | 48s G4 中 | 蜂窝 + 蓝气 | ✅ |
+| f_49 | 49s G4→G5 边界 | **slat wall 木栅栏背景** + LED **白粉** | ❌ 背景错 + LED 颜色错 |
+| f_55 | 55s G5 中 | 蜂窝 air flow | ✅ |
+| f_61 | 61s G5 末 | **slat wall 背景** + LED **白粉** | ❌ 背景错 + LED 颜色错 |
+
+**3 条件验证结果**：
+
+| 条件 | 结果 | 说明 |
+|------|------|------|
+| ① 无 grid 复合 | ✅ **PASS** | 抽样 11 帧全部为单景别电影感画面，0 处 2x3 拼接 / 白边 / 分屏 |
+| ② 分镜顺序匹配 | ⚠ 弱通过 | 段内推进大致对（top-down / wood / mesh / hero），但 **LED ring 颜色在 G3-末/G5 全部偏白粉/白紫**（prompt 强制 blue，模型未执行），G3 wood 包到 body 外侧、G5 背景渲染成 slat wall（违反 pure-black-bg） |
+| ③ 衔接自然 | ⚠ 部分通过 | G2→G3 / G4→G5 bridge 处出现灰雾/黑 cylinder 过渡瑕疵 |
+
+**残留瑕疵 vs v11 对比**：
+- ✅ v11 失败的「LCD 数字 bias」「虚构品牌文字」「场景跳」 — v12 全部消除
+- ❌ 新增「LED ring 颜色偏白粉/白紫」bias（5+ 帧）— 比 v11 的数字更刺眼（蓝色是产品品牌色，错了直接破坏识别）
+- ❌ 新增「G5 背景渲染成木栅栏 slat wall」 — 违反 pure-black-bg hard constraint
+- ⚠ bridge 灰雾瑕疵（v11 也有，但比 v12 轻）
+
+**结论**：
+- v12 60s TVC **"5 段纯产品电影化拆解"** 类型 ① 条件 PASS，②③ 弱通过
+- **不能算 v12 完全 PASS**：LED 颜色 + G5 背景两处 prompt 完全无效，需要修复策略
+- **下一步**：① 修 LED 颜色 — 在 prompt 顶部强约束 + image reference 强 blue 锁定；② 修 G5 背景 — 把 G5 prompt 拆成无 first_frame reference mode 让 G4→G5 bridge 不把 slat wall context 带过去；或尝试 v13 lifestyle narrative 类
+
+### TODO #102 — v13 1x5 reference mode 实验 ❌ FAIL（5 图导致 panel composite）
+
+**触发**：v12 残留 LED 颜色 + slat wall 背景问题，尝试换 image_edit pipeline：用 1x5 strip（5 panel 横排）切分成 5 张独立图 → reference mode 喂给 video model（避开 grid 单图的视觉 anchor 太强）。
+
+**策略变更**：
+- 每段生成 1x5 strip（不是 2x3 grid）
+- numpy 检测 vertical borders 切分成 5 张独立 panel
+- video generate 用 reference mode + 5 张 panel 作为 images[]
+- 期望：reference mode 把 5 张当 visual reference，不会渲染成 grid
+
+**实际产物**：
+- 5 个 1x5 strip（`outputs/images/e2e_v13_g{1-5}_1x5_strip-1.png`）
+- 25 张 panel 切分（v1 用 `h//2` 数学切分 — **用户 grlling：坐标错**；v2 用 numpy 检测的 actual borders 切分）
+- 3 段 v13 视频（`outputs/videos/e2e_v13_video_0{1,2,3}_*.mp4`，G4/G5 upload 失败）
+
+**G3 末帧验证**（FAIL 截图 `outputs/videos/e2e_v13_frames/g3_last_v3.jpg`）：
+- ❌ **3-panel horizontal composite**：模型把 5 张图同时渲染成 3-panel 横向拼接，违反条件①
+
+**ROOT CAUSE（grlling）**：
+- Agnes reference mode 的 `images[]` 是 **visual style reference**，不是 time-ordered panels
+- 喂 5 张图 = 模型认为要"展示 5 个 panel" → 渲染成 multi-panel composite
+- 即使换 single-shot prompt，reference mode 仍倾向同时展示多张参考图
+- **v12 keyframe mode（1 张 grid + first_frame lock）才是已验证 PASS 的模式**，v13 偏离了已验证策略
+
+**grlling 决策**：放弃 v13 重试，**不再在 reference mode 路径上挣扎**。v12 已验证条件① PASS，LED 颜色 + slat wall 是 prompt 工程问题，不是 mode 问题。直接进 v14 lifestyle narrative（Task #75），用 v12 的 keyframe mode + grid 模式达成第 3 种 TVC 类型多样性。
+
+**保留产物**（debug 用）：
+- v13 G1/G2 video（意外 PASS — 可能因为参考图少或巧合）— 可对比 v12 G1/G2 的 prompt 差异
+- v13 G3 last_frame composite（FAIL 截图）— 作为 "reference mode 不适合 panel-by-panel" 的反例
+
+### TODO #98 — 30s TVC e2e 端到端验证（v9 ✅ PASS — v7/v8/v9 三轮迭代摸清 model 硬约束）✅ DONE
+
+**核心要求**：最终视频保持产品图一致性，多故事板衔接自然，不要过度跳脱，视频内遵循产品一致性，视频过渡自然不会突然风格转变。
+**附加用户约束**：必须使用 grid + 反例 prompt「不要直接显示 grid」+ bridge: G1_last → G2_first + G2_last → G3_first + endframe = 最后一个 grid 尾帧不单独生成。
+
+**演进**：
+- **v7** → G3「雏菊花田 + 假 Hero Logo + 中文文字」灾难
+- **v8** → 修文字/Logo，但 Frame 01 literal grid composite / Frame 06 LCD 镜像堆叠 / Frame 09-10 G3 产品漂移
+- **v9** ✅ → 全部满足用户 5 条约束 + Frame 01-10 视觉验证通过
+
+**v9 端到端结论**：
+- 10/10 帧产品形态一致（高瘦圆柱 + 浅原木顶 + 蓝色 LED 环无数字 + 黑色蜂窝底）
+- Bridge 无缝（G1→G2 阳台同画面 + G2→G3 影棚同画面）
+- 无 grid literal composite（反例 prompt 起效）
+- 无文字/Logo/水印（v7/v8 残留全部消除）
+
+**v9 残留瑕疵**：Frame 07 G2 末段 0.5s 透明 X 光效果（exploded view 过度），不影响 TVC 整体流畅。
+
+**e2e 摸清的 5 条 model 硬约束**（必写入 skill 文档）：
+1. **必须使用 grid 作为 video 输入**（`images=[grid, product]`）— grid 是规划与一致性双重锚
+2. **反例 prompt 必加**：「DO NOT display any multi-panel grid image as a frame」— 防 reference mode literal composite
+3. **Bridge workflow**：上一段 last_frame → 下一段 first_frame（keyframe mode 锁住实现无缝衔接），第一段无 first_frame 用 reference mode
+4. **Endframe = 最后一个 grid 视频的尾帧**，**不单独生成** endframe image
+5. **LCD 数字降级**：video prompt 必含「LCD MUST display ONLY a clean blue circular ring breathing effect, NO numeric digits NO characters NO 7-segment numbers」— 7 段码在 video 模型中视觉不稳定
+
+**输出物**：
+- `outputs/videos/e2e_v9_video_g1.mp4` 12.25s 1280×720（reference mode + images=[grid_g1, product]）
+- `outputs/videos/e2e_v9_video_g2.mp4` 12.25s 1280×704（keyframe mode + first_frame=G1_last + images=[grid_g2, product]）
+- `outputs/videos/e2e_v9_video_g3.mp4` 6.58s 1280×704（keyframe mode + first_frame=G2_last + images=[grid_g3, product]）
+- `outputs/videos/e2e_v9_tvc_30s.mp4` 31.08s 1280×720（concat + scale all 1280×720）
+- `outputs/images/e2e_v9_frames/frame_01.png` ~ `frame_10.png`
+- `outputs/images/e2e_v9_g{1,2,g3_hero}_*` 各 grid + `_last` bridge 帧
+
+**待办**：把 5 条 model 硬约束写入 `bundled-skills/tvc-director/SKILL.md` 与 `references/storyboard.md` 的 video prompt 模板，作为强制约束。v9 端到端测试结论可作为 skill docs 增补的输入。
 
 ### TODO #29 — tvc-director chatui 渲染层对齐（v0.9 跨域）✅ DONE
 
@@ -207,6 +388,40 @@ v0.5 物理约束落地（commit `220abea`）：storyboard objects 锚定 physic
 
 `widgetSandboxHtml.test.ts` 等 6 个 unit test 在 master `5c92cd8` 同样失败，与本批次所有修复**无关**。**待独立排期**。
 
+### TODO #103 — 拷贝 video-skill 到 bundled-skills/ 并迁移 multimedia-creator MCP 🔄 进行中
+
+**用户拍板**（2026-09-08）：
+- 跟 tvc-director **并存为独立 skill**（不合并/不替代）
+- **全量迁移**：改 SKILL.md 工具名为 `mcp__multimedia-creator/...` + 升级到 `agnes-image-2.5-flash` + `agnes-video-2.5-flash` + **删除 `scripts/` 整个目录**
+- **name 决策**：`doubao-creative-video-suite` → `creative-video-suite`（doubao 是豆包平台标识，HamunaAgent 不适用）
+- **路由差异化**：tvc-director 吃 TVC 商业广告大片；creative-video-suite 吃短剧/微电影/动画/动态漫/UGC/企业宣传
+
+**执行清单**：
+1. 拷结构 `FreeVideoSkill/.claude/skills/video-skill/{SKILL.md, README.md, references/}` → `bundled-skills/creative-video-suite/`（**改名**，不叫 video-skill 避免与 FreeVideoSkill 仓库同名）
+2. 删 scripts/ 整个目录（`agnes_ai_client.py` + `generate_with_agnes.py` + `__pycache__`）
+3. 删 examples/ 二进制产物（`*.mp4` + `*.gif`），仅保留 examples/README.md 作"使用样例说明"
+4. 改 SKILL.md 全文：
+   - 删除"豆包"全文检索规则（line 303 平台特化）
+   - 删除 `notify_hunman`（豆包飞书术语，HamunaAgent 无此工具）
+   - 工具门禁：`image_gen/image_edit/text_to_video/image_to_video` → `mcp__multimedia-creator/agnes25_*`
+   - 模型对应表升级到 `agnes-image-2.5-flash` + `agnes-video-2.5-flash`
+   - 删 scripts/ 章节
+5. 改写 `references/agnes-ai-api.md`：从 agnes 2.1/2.0/v2.0 文档 + apihub.agnes-ai.com 国际版 → 改为 multimedia-creator MCP 7 tools 参考（4 video + 3 image）
+6. 清洗 5 个 drama refs + 3 个 commercial refs 中的 `notify_hunman` / `豆包` / 飞书特化术语
+7. 注册 SYSTEM_SKILLS：Rust `src-tauri/src/commands.rs` + Node `src/server/index.ts::SYSTEM_SKILLS` 双清单加入 `creative-video-suite`，bump `SYSTEM_SKILLS_VERSION`
+8. 验证：`npm run typecheck` + `npm run test:unit` + `grep` 验证无残留 `notify_hunman` / `doubao` / `scripts/`
+
+**与 tvc-director 边界（路由差异化）**：
+
+| 路由关键词 | 命中 skill |
+|---|---|
+| TVC / 商业广告大片 / 品牌广告 / 产品广告大片 / 4A 广告 | **tvc-director** |
+| 短剧 / 剧情 / 微电影 / 动画 / 动态漫 / 预告片 / UGC / 企业宣传 / 商务视频 | **creative-video-suite** |
+
+**风险**：
+- bundled-skill 与 FreeVideoSkill 仓库同名（结构同源但不同代码）→ 永久分叉
+- SYSTEM_SKILLS bump 触发新客户端下载流程（用户机器首次拉取 new skill manifest）
+
 ### TODO #51 — tvc-director 跨段过渡方法 + keyframe 比例约束 + grid 单场景多机位铁律（待提交）
 
 **来源**：30s TVC 端到端实测踩坑 + 用户拍板纳入 mooko.cn/article/52 段间过渡方法 + keyframe 兜底画幅突变 + grid video 跳 panel。
@@ -221,23 +436,36 @@ v0.5 物理约束落地（commit `220abea`）：storyboard objects 锚定 physic
 
 **待办**：用户拍板后 commit（`feat(tvc-director): add segment transition methods + keyframe aspect ratio guard + grid single-scene rule`）。
 
-### ✅ 最近完成（commit `2338a83`）— 拖拽媒体默认复制到 `workspace/hamuna_files/`
+### ✅ 最近完成（detail 见 git show，table 在 §4）
 
-- **Rust**：删 `src-tauri/src/workspace_files/user_attachments.rs` + `mod.rs` 模块声明 + `lib.rs::run` 命令注册（`cmd_prepare_user_image_attachments` 退场）
-- **Renderer**：`WorkspaceFileService.prepareUserImageAttachments` 接口 + 4 个 type + 实现 + useMemo 导出全删；`useAttachmentHandling.processDroppedFilePaths` + `CompanionWindow.processDroppedFilePaths` 图片分支从 `prepareUserImageAttachments` 切到 `copyPaths({sourcePaths, targetDir: 'hamuna_files', autoRename: true})`，preview 用 `convertFileSrc(joinWorkspacePath(workspacePath, targetPath))`；`attachmentSessionId` 参数、`PreparedImageAttachment` 类型、`resolveAttachmentUrl` 引用清理；`SimpleChatInput.send.test.tsx` mock + 断言同步更新
-- **双轨**：`src-tauri/src/attachment_protocol.rs::build_attachment_response` 保留（**intentional**），服务历史 session 中 `~/.hamuna/attachments/<sessionId>/` 老引用——老对话渲染不丢，新拖拽始终进 workspace/hamuna_files/
-- **Trade-off**：per-file size 校验丢失（copyPaths 信任 extension filter + 整体 batch）；后续如要恢复可在 `cmd_workspace_copy_paths` 内加 size cap
-- **验证**：`tsc --noEmit` 改动的文件 0 错；`eslint <改动的 5 个文件>` 0 错；`vitest --project dom SimpleChatInput.send` **15/15 ✓**
+`2338a83`（drag-drop → workspace/hamuna_files）+ `51f3f98`（删除附件 trash 回收站）的完整实现细节已移至 git commit message，本节只保留指针。
 
-### ✅ 最近完成（commit `51f3f98`）— 删除图片附件时同步清理 `hamuna_files/`
+### TODO #104 — creative-video-suite 端到端 UGC 5 段 + URL 复用 ✅ DONE
 
-- **行为**：用户点击图片附件的 × → UI 立即移除（fire-and-forget，不阻塞关闭手势）→ 后台 `fileService.deleteFile({ path: relativePath })` 把 workspace 文件移到 OS 回收站（`cmd_workspace_delete` 默认走 `trash` crate，`permanent: false`）
-- **范围**：仅 `source === 'attachment_ref'` + `relativePath` 存在的图片触发。`inline_base64`（截图/粘贴 dataURL）没有 workspace 文件，**不**触发 delete；2 个调用点都一致（`useAttachmentHandling.removeImage` + `CompanionWindow.removeImageDraft`）
-- **失败兜底**：3 条失败路径分别 toast `workspaceFileDeleteSkipped`（桌面应用未就绪）/`workspaceFileDeleteFailed`（Rust 返回 `deleted: false` 或抛错）。UI 状态无论如何都先清空——draft 与磁盘文件 1:1 失同步时 toast 提示用户
-- **Trade-off**：不弹确认模态（drag-drop 文件本来就是用户临时上传的副本；OS 回收站保底）。不接 undo stack（回退需要重新 base64-encode 图片、复杂度溢出）
-- **i18n**：`input.attachments.workspaceFileDelete{Skipped,Failed}` zh-CN + en-US 各加 1 条
-- **测试**：`SimpleChatInput.send.test.tsx` 新增 1 用例 `trashes the workspace file when an attachment_ref image is removed`（drop `/tmp/photo.png` → 点 × → 断言 `deleteFile({ path: 'hamuna_files/photo.png' })`）。mock 修正：`copyPaths` 返回真实 `{ sourcePath, targetPath, renamed }` shape（之前 mock 漏 `sourcePath` 触发 `Cannot read properties of undefined (reading 'split')`）。新增 `vi.mock('@tauri-apps/api/core')` stub `convertFileSrc` → `asset://localhost/...`（jsdom 没有 Tauri runtime，原 import 会抛错）
-- **验证**：typecheck 0 错（仅 6 个 pre-existing tvcEnvelope 错无关）；eslint 0 错；`vitest --project dom SimpleChatInput.send` **16/16 ✓**
+**触发**：TODO #103 落地后首次跑通端到端验证。用户提供测试 prompt："测试用 skill 生成一个口播视频"。
+
+**执行产物**（UGC 60s = 5 × 12s）：
+- 5 张人设首帧图（`agnes25_image_generate`）：帧链 anchor for Cut1-5
+- 3 批 video_generate（keyframe mode + 720P + 9:16）：batch1 = Cut1+Cut2 / batch2 = Cut3+Cut4 / batch3 = Cut5（单段）
+- 总耗时 ≈ 25 分钟（含2 门禁点人眼核对 + 5 段视频轮询）
+
+**实测耗时 vs 理论**：5 段视频实际 135-246s/段，平均 ≈ 195s。Server 并发友好（同时发 Cut1+Cut2 不触发 rate limit）。
+
+**新发现 + skill 文档更新**（已写入 `references/agnes-ai-api.md` + `SKILL.md`）：
+1. **`image_generate` 返回的 `url` 字段可直接喂给下游 `video_generate.first_frame` / `last_frame`** —— 无需 `wget` / `curl` 下载到本地再传；实测 5/5 段验证
+2. **`output_filename` 传绝对路径无效**：server 把字符串当 filename 处理，落 `server cwd + outputs/{images,videos}/`；建议只传纯文件名 + 用返回的 `url` 自己 curl 持久化
+3. **HTTPS URL / 本地路径 / base64 三种都支持**（`image_url` / path / data URL），文档原理一致，应同样支持
+4. **端到端零下载** pipeline：全流程在 URL 字符串层流转，省 IO + 省时间
+
+**MCP `/mcp -32000` 根因诊断**（备忘）：
+- `.mcp.json` 文件层修复（已加 `multimedia-creator` + env + `--default-index https://pypi.org/simple`）→ 文件 OK
+- 但 Claude Code MCP host **不热加载 `.mcp.json`** → 需重启 session 或 tool 调用触发 host 懒发现
+- 第一次 tool 调用触发 stdio 握手时，uvx 首次拉 `agnes-video-25-mcp==0.1.3` 依赖未就绪 → handshake 超时 → `-32000`
+- **Retry 一次即过**：uvx 缓存命中 + server 立刻 ready
+
+**§7 完成检查 9/9 全过**：未跳阶段 / 必要澄清全确认 / 参数全记录 / 帧链连续 / 主角无形象漂移 / 未降级到 T2V / 单批 ≤2 / 即时输出 / Markdown 渲染。
+
+**已沉淀给后续 skill 用户的经验**：参考资料 `.pavo-research/ugc-talk-video/`（7 文件 + 5 段视频 URL + 5 张图 URL）。
 
 ---
 
@@ -248,15 +476,15 @@ v0.5 物理约束落地（commit `220abea`）：storyboard objects 锚定 physic
 | Commit | 摘要 |
 |--------|------|
 | `2338a83` | **feat(attachments): drag-drop media → workspace/hamuna_files**（双轨：保留历史 `~/.hamuna/attachments/` handler） |
-| `db2d91f` | **fix(attachments): resolve workspace-relative paths to absolute before read_files_b64** — `ea9b524` 漏了：renderer 把 `relativePath='hamuna_files/<file>'` 直传给 `cmd_workspace_read_files_b64`，Rust `validate_external_read_path` 拒 workspace-relative → 用户实战 `工作区图片 X 读取失败：Access denied: Path must be absolute`。修复放 renderer helper（`readWorkspaceFilesAsBase64` 接 `workspacePath`，用 `joinWorkspacePath` 拼绝对路径后再下传 fileService），不动 Rust validator（其它 4 个调用点 `widgetLocalImg/AvatarPicker/Space/SpaceSettingsWorkspace` 都传绝对路径，放开 = 弱化 path-safety）。两个调用点 + `rebaseAttachmentRefPreviewsToDataUrl` 三处都加 `workspacePath` 参数；`useCallback` 同步补 deps；新加 1 用例 `throws when workspacePath is missing`。**projection 7/7 + send 16/16 ✓** |
-| `368ee90` | **fix(attachments): override `source` to inline_base64 when rebasing attachment_ref** — `ea9b524` 第二轮漏的：`imagePayloadForSend` 按 `source` 分发而不是 `preview`，光把 `preview` 改成 `data:...` 不够 → 后端 validator 仍把 `attachment_ref + workspace-relative` 拒为 "Image attachment does not belong to this session"（用户实战）。同步在 rebased 对象里设 `source: 'inline_base64'`，dispatch 走 inline 分支绕开 validator，`data` 字段从 `preview.split(',')[1]` 取 base64 段。CompanionWindow 不受影响（它直接构造 payload 不过 `imagePayloadForSend`）。`projection` 7/7 + `send` 16/16 ✓ |
-| `079c96f` | **docs(tvc-director): switch video model from agnes-video-2.5 to agnes-video-2.5-flash** — 用户拍板切换 + 实测 reference 模式通：4 次真实 submit（单图 190s/185s、多图 113s、img2img 5s）全部成功；中途命中 429 但窗口内自动恢复（账号日配额非秒级节流）。Flash 强约束应用到 4 文件 19 处文本 + 3 行 Phase 5 表：size 锁 720P（原可选 720P/1080P/1K/2K）、images cap ≤5（原 ≤8）、audios cap ≤3（原 ≤8）、videos 0（flash 不接受 video ref）。保留 `SKILL.md:541` 旧 model 对比行（解释"为什么选 flash"）。Trade-off：1080P → 720P 视觉密度下降；3x3 = 9 panel grid 溢出 5-image 上限，agent 后续需降采样到 ≤5 或拆 grid |
-| `7191b91` | **fix(tvc-director): video prompt must reference both `<Picture 1>` (grid) and `<Picture 2>` (product)** — 用户实测发现传入 grid 但 prompt 不引用 → 锁定文档自相矛盾：README.md / README_en.md（正确：grid 锁构图/色彩、product 锁外观，prompt 同时引用两张图，reference 模式不锁首帧）vs SKILL.md / references/storyboard.md（错误：假设「reference 模式 = 首帧 + 后续自由生成」→ 推导出 prompt 只引用 product 不引用 grid）。以 README 为准修 6 处：`SKILL.md:363` bullet 强调多图必须显式引用每张图；`SKILL.md:377` Multi-Phase template 改为 `沿<Picture 1>多宫格分镜设定构图与色彩，按<Picture 2>产品多视图还原主体外观`；`SKILL.md:393` reference 模式 blockquote 加「prompt 必须同时引用 + reference 不锁首帧」明确陈述；`storyboard.md:552` 必须覆盖 + `storyboard.md:554` blockquote（删除错误声明 "`<Picture N>` 参考图映射...不用于视频提示词"，替换为「视频提示词同样适用」+「reference 不锁首帧」）；`storyboard.md:561` 输出示例 + `storyboard.md:1221` 紧凑示例同步。`grep "产品由<Picture"` 0 hit / `grep "Picture 1>多宫格.*Picture 2>产品"` 6 hit 验证无残留 |
-| `66b6397` | **fix(tvc-director): set storyboard reference default seconds to 12** — SKILL.md 之前把 reference 模式定死 `seconds="5"`，但 grid 是从 ~12s 视频脉络冻结的 9 帧，`5` 等于把一张 grid 拆成 2 段断续视频，跨格连贯性被切碎。参考 agnes 文档（`hosted_mcps/agnes-video-25/SKILL.md:35` `seconds ∈ "4"–"12"` 默认 `"5"`），把 storyboard reference 默认改 `"12"`（agnes 上限，贴合 grid 9 帧语义）；保留 `∈ "4"–"12"` 范围给 brief 短时长场景（片头片尾快剪）。改 `SKILL.md:533` Phase 5 表 + `:544` range 说明附 rationale + `:594` Agent 调用示例。**端到端验证后 commit**：`mcp__multimedia-creator/agnes25_video_generate` reference 模式 + `images=[grid, product]`（1.49MB+0.86MB） + prompt 同时引用 `<Picture 1>`/`<Picture 2>` → 720P 5.166s h264 输出（`outputs/videos/e2e_video_morning_coffee.mp4` 1.95MB，116s submit）。Trade-off：单段 submit 时长 +30-60s，但减少 grid 跨格切割失真，提升 video↔分镜语义对齐。后续 agent 按 brief 总时长在 `4`–`"12"` 内调整 |
-| `276d8e8` | **fix(tvc-director): set grid default unit from 15s to 12s (agnes max)** — SKILL.md / storyboard.md / treatment.md 默认把 1 张 grid 当作 15s 视频脉络冻结，但 agnes 单段 video 最大 12s（旧"一条脉络冻结"假设在 15s 下不成立，必须拆 2 段跨段连贯性断）。按 agnes 上限重规划 3 文件 13 处：新时长拆分表 12s 基线（1 grid）+ 30s（2 grid + 6s keyframe 收尾）+ 60s（5 grid 正好填满）；新规划表示例 30s 拆 G1 0-12s / G2 12-24s / G3 24-30s；新节奏表时段全部按 12s 段重写；storyboard.md 视频脉络/L103 grid 密度表/L238 切割策略/L448 运动相机示例/L620 节奏编排/L1089 切换频率/L1107+L1123 30s 模板 Phase；treatment.md Part 5 切分（0-15s/15-30s/30-45s/45-60s → 0-12s/12-24s/24-36s/36-48s/48-60s，新增 48-60s 收 - End Frame 给 60s 5 段拆法）+ 分幕剧本格式。验证 `grep "15 秒\|15秒"` 跨 3 文件 0 hit（仅保留 1 处注释"取代 15 秒旧表"）。下次 agent 写 TVC brief 自动按 12s 段拆分，不再尝试塞 15s 进 grid |
-| `ea9b524` | **fix(attachments): rebase workspace attachment_ref previews to data URLs at send time** — regression 来自 `2338a83`：workspace 拖拽的 `relativePath='hamuna_files/<file>'` 触发 `validateAttachmentRelativePath` 拒为 "does not belong to this session"。Hotfix 选 renderer 侧 rebase（`readWorkspaceFilesAsBase64` + `rebaseAttachmentRefPreviewsToDataUrl` 写回 `preview=data:...`）而非协议层新增 `workspace_ref` kind：后者需 validator + attachment_protocol + SDK tool 三层协同、scope 远大于 P0 热修。`SimpleChatInput.handleSend` + `CompanionWindow.doSend` 双调用点对称改写 + try/catch toast。3 新 unit 用例（happy / read error / unavailable）；`SimpleChatInput.send` 16/16 + `userImageAttachmentProjection` 6/6 ✓。架构 follow-up 列入 TODO #98 |
-| `51f3f98` | **feat(attachments): trash workspace file when an image attachment is removed** — 用户点 × → UI 立即移除 → 后台 `deleteFile` 走 OS 回收站（`cmd_workspace_delete` 默认 `permanent: false` → `trash` crate）。Gated on `source === 'attachment_ref' + relativePath`（inline_base64 不触发）；3 失败路径分别 toast `workspaceFileDelete{Skipped,Failed}`。Fire-and-forget + reducer 捕获 rationale 详见 commit message；mock 修正（`copyPaths` 返回真实 `{ sourcePath, targetPath, renamed }` shape）+ `vi.mock('@tauri-apps/api/core')` stub `convertFileSrc` 给 jsdom；1 新增 dom 用例 **16/16 ✓** |
-| `c70fd60` | **fix(attachments): replace `node:path.join` with renderer-safe `joinWorkspacePath`** — 根因：`2338a83` 在 renderer 引入 `import { join } from 'node:path'`，Vite externalize `node:*` for WebView bundle → 加载 Chat 输入框即触发全局 ErrorBoundary 整页崩。修复：新增 `src/shared/workspacePath.ts::joinWorkspacePath`（renderer-safe），2 文件替换；3 新单测覆盖 POSIX / Windows / 空 relative。CLAUDE.md pit-of-success MUST 补 "renderer 禁止 import `node:*`" 红线 |
+| `db2d91f` | **fix(attachments): resolve workspace-relative paths to absolute before read_files_b64**（renderer helper 加 workspacePath 参数；projection 7/7 + send 16/16 ✓） |
+| `368ee90` | **fix(attachments): override `source` to inline_base64 when rebasing attachment_ref**（绕开 validator；projection 7/7 + send 16/16 ✓） |
+| `079c96f` | **docs(tvc-director): switch video model from agnes-video-2.5 to agnes-video-2.5-flash**（size 锁 720P / images cap ≤5 / audios cap ≤3 / videos 0；保留 SKILL.md:541 旧 model 对比行） |
+| `7191b91` | **fix(tvc-director): video prompt must reference both `<Picture 1>` (grid) and `<Picture 2>` (product)**（以 README 为准修 6 处；reference 模式不锁首帧明确陈述） |
+| `66b6397` | **fix(tvc-director): set storyboard reference default seconds to 12**（贴合 grid 9 帧语义；端到端 5.166s h264 输出验证；116s submit） |
+| `276d8e8` | **fix(tvc-director): set grid default unit from 15s to 12s (agnes max)**（3 文件 13 处重规划；新增 48-60s End Frame 给 60s 5 段拆法） |
+| `ea9b524` | **fix(attachments): rebase workspace attachment_ref previews to data URLs at send time**（renderer 侧 hotfix；send 16/16 + projection 6/6 ✓；follow-up 列 TODO #98） |
+| `51f3f98` | **feat(attachments): trash workspace file when an image attachment is removed**（OS 回收站保底；fire-and-forget；send 16/16 ✓） |
+| `c70fd60` | **fix(attachments): replace `node:path.join` with renderer-safe `joinWorkspacePath`**（Vite externalize `node:*` 触 ErrorBoundary；新增 `src/shared/workspacePath.ts`） |
 | `0f1073e` | **feat(tvc-director): enforce strict tool contract**（locked params + fail-fast + retry once） |
 | `db191e2` | **fix(tvc-director): align SKILL.md to agnes-video-25-mcp v0.1.3 tool surface**（5 stale references） |
 | `220abea` | **fix(tvc-director): anchor storyboard objects via physics + layout hard constraints** |
@@ -265,7 +493,7 @@ v0.5 物理约束落地（commit `220abea`）：storyboard objects 锚定 physic
 | `4b5c90c` | **feat(mcp): introduce agnes-video-25 + unify media MCP under id="multimedia-creator"** |
 | `7f8c60d` | **feat(extended-builtin-mcp): add `${bundled:REL_PATH}` placeholder for portable MCP args** |
 
-更早完成的 follow-up（TODO #11—#28，TODO #29，TODO #97，TODO #14，TODO #16，TODO #12，TODO #17—#21 等）历史细节归档：见 `git log --oneline --grep="..."` 或 git show 对应 commit；CWD 当前会话主要工作是 commit `2338a83`，无需在本 snapshot 复述历史 narrative。
+更早完成（TODO #11—#28，#29，#97，#14，#16，#12，#17—#21）历史归档：见 `git log --oneline --grep="..."` 或 git show 对应 commit。
 
 ---
 

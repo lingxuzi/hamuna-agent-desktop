@@ -29,7 +29,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 - `audios[]` ≤ 3（video）
 - `videos[]` 0（video 2.5-flash 不接受 video ref）
 
-**本地路径自动转 base64 / 上传图床**：本地路径传给 `image_paths` 时 server 自动 base64；传给 video `images` 时 server 自动上传 `img.remit.ee` 拿 HTTPS URL。
+**🔒 输入源铁律（必读）**：`image_paths` / `images` / `first_frame` / `last_frame` 一律传 **HTTPS URL**（来自 `image_generate` 返回的 `data[0].url` 或 `video_generate` 的 `video_url`），**禁止用本地路径或 base64 data URL**——本地路径会触发 server 上传 `img.remit.ee` 图床撞 QPS 限流，base64 撞 256KB 红线。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 必须用 HTTPS URL」章节。
 
 ## 核心通用规则
 

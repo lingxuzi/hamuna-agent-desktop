@@ -1,0 +1,53 @@
+{
+  "_comment": "Batch 1：Cut1 + Cut2 video_generate（keyframe 模式）。本批 2 个 = SKILL.md 单批上限。",
+  "_model_lock": "agnes-video-2.5-flash",
+  "_size_lock": "720P",
+  "_max_seconds": "12",
+  "_aspect_ratio": "9:16",
+  "_output_dir": ".pavo-research/ugc-talk-video/videos/",
+  "calls": [
+    {
+      "id": "cut1_hook",
+      "tool": "mcp__multimedia-creator__agnes25_video_generate",
+      "depends_on": ["frame_01_hook"],
+      "args": {
+        "model": "agnes-video-2.5-flash",
+        "mode": "keyframe",
+        "size": "720P",
+        "seconds": "12",
+        "aspect_ratio": "9:16",
+        "first_frame": ".pavo-research/ugc-talk-video/frames/frame_01_hook.png",
+        "last_frame": ".pavo-research/ugc-talk-video/frames/frame_02_product_reveal.png",
+        "prompt": "UGC vlog selfie-style shot. A young Chinese woman sits at her vanity mirror, soft warm bedroom, talks to phone camera with tired weary expression, gently touches her red cheek showing her sensitive skin, soft morning window light from left, natural subtle head movement and breathing, phone camera aesthetic with slight grain and natural micro-shake, ambient cozy bedroom sounds, 9:16 vertical, photorealistic, shot on iPhone 14 front camera, no text no subtitle",
+        "timeout_seconds": 600,
+        "poll_interval_seconds": 5,
+        "output_filename": "cut1_hook.mp4"
+      },
+      "_delivery_check": "生成完成后必须 Markdown 视频渲染: ![cut1](file://.pavo-research/ugc-talk-video/videos/cut1_hook.mp4)"
+    },
+    {
+      "id": "cut2_product_reveal",
+      "tool": "mcp__multimedia-creator__agnes25_video_generate",
+      "depends_on": ["frame_02_product_reveal", "frame_03_apply"],
+      "args": {
+        "model": "agnes-video-2.5-flash",
+        "mode": "keyframe",
+        "size": "720P",
+        "seconds": "12",
+        "aspect_ratio": "9:16",
+        "first_frame": ".pavo-research/ugc-talk-video/frames/frame_02_product_reveal.png",
+        "last_frame": ".pavo-research/ugc-talk-video/frames/frame_03_apply.png",
+        "prompt": "UGC vlog selfie-style shot. Same young Chinese woman in soft warm bedroom, holds up a small frosted glass dropper bottle of amber facial serum to the phone camera, rotates it to show the label, then brings it close to her face with a curious micro-smile, soft morning window light from left, natural subtle hand movement and slight head tilt, phone camera aesthetic with slight grain and natural micro-shake, ambient cozy bedroom sounds, 9:16 vertical, photorealistic, shot on iPhone 14 front camera, no text no subtitle",
+        "timeout_seconds": 600,
+        "poll_interval_seconds": 5,
+        "output_filename": "cut2_product_reveal.mp4"
+      },
+      "_delivery_check": "生成完成后必须 Markdown 视频渲染: ![cut2](file://.pavo-research/ugc-talk-video/videos/cut2_product_reveal.mp4)"
+    }
+  ],
+  "_post_check": [
+    "Cut1 起始人脸必须与 frame_01_hook 一致，Cut1 结尾人脸必须接近 frame_02_product_reveal（允许 30% 漂移）",
+    "Cut2 起始人脸必须接近 frame_02_product_reveal，结尾人脸必须接近 frame_03_apply",
+    "如人脸漂移严重 → 调整 prompt 锚点重新生成对应图片，不要硬让 video 在错误首末帧之间补间"
+  ]
+}

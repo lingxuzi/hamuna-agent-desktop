@@ -24,9 +24,34 @@
 - `mcp__multimedia-creator__agnes25_image_edit` 传 `image_paths=["<p1>", "<p2>", ...]`，对应 prompt 中的 `<Picture 1>` / `<Picture 2>`。
 - `mcp__multimedia-creator__agnes25_video_generate` reference 模式传 `images=["<p1>", "<p2>", ...]`（≤ 5），对应 prompt 中的 `<Picture 1>` / `<Picture 2>`。
 
-**本地路径自动处理**：
-- `image_paths` 中的本地路径：server 端自动转 base64。
-- video `images` 中的本地路径：server 端自动上传 `img.remit.ee` 拿 HTTPS URL（视频 base64 太大，不走 base64）。
+## 输入源支持 · 🔒 必须用 HTTPS URL（端到端实测 + 图床限流避让）
+
+**铁律**：所有 `image_paths` / `images` / `first_frame` / `last_frame` / `mask_path` 一律传 **HTTPS URL**（来自 `image_generate` / `image_edit` 返回的 `data[].url` 或 `video_url`），**禁止**用本地路径或 base64 data URL。
+
+**为什么 MUST 用 URL（不是"建议"）**：
+
+1. **图床限流**（核心动机）：本地路径会触发 server 端**上传到图床**（`img.remit.ee`）拿 HTTPS URL 再喂给下游。同一进程短时间内大量本地路径上传会撞**第三方图床 QPS 限流**（5xx 失败），但 HTTPS URL 直传走 agnes 内部 CDN 通道零额外上传，**省一次跨域上传 + 避图床限流**
+2. **`local_path` 是诱饵**：server 返回的 `local_path` 指向 `server cwd/outputs/{images,videos}/` —— **不在调用方项目目录**，跨进程不可见
+3. **`output_filename` 绝对路径无效**：传绝对路径 server 把字符串当 filename 处理，丢 dir 前缀，落 `server cwd + outputs/`（与你想的不一样）
+
+**输入源支持**（按合规顺序）：
+
+| 输入类型 | 例子 | 何时用 | 合规性 |
+|---|---|---|---|
+| **HTTPS URL**（强制） | `"https://cos-platform-outputs.agnes-ai.cn/images/t2i/task_xxx/output_yyy.png"` | `image_generate` / `image_edit` 返回的 `data[0].url` 直接喂下游 | ✅ 唯一合规 |
+| 本地路径 | `"/path/to/frame.png"` | ❌ **禁止**——触发图床上传 + QPS 限流 | ❌ |
+| `data:` URL（base64） | `"data:image/png;base64,iVBORw0..."` | ❌ **禁止**——视频 base64 太大 + 256KB SSE 红线 | ❌ |
+
+**实测确认（2026-09-08 UGC 5 段测试）**：
+- `image_generate` → `url` 字段直接喂给 `video_generate.first_frame` / `last_frame` ✅ 5/5 通过
+- `image_edit` / `video_generate` reference 模式的 `images[]` 接 HTTPS URL ✅ 文档原理一致，应同样支持
+- 全流程 0 次本地路径，0 次图床上传，0 次限流
+
+**frame 链工作流铁律（必读）**：
+1. Step N 用 `image_generate` 生成首帧图，**必须捕获**返回的 `data[0].url`（**不是 `local_path`**）
+2. Step N+1 直接用上一步 `url` 作 `first_frame`（keyframe 模式）或 `images[0]`（reference 模式）
+3. 全流程在 URL 字符串层流转，**禁止** wget / curl 下载到本地再喂给下游
+4. 本机持久化需要 → 用返回的 `url` 单独 `curl -o <local>`（与 pipeline 无关）
 
 ## agnes25_image_generate（文生图）
 

@@ -1,0 +1,424 @@
+- generic [active] [ref=f5e1]:
+  - generic [ref=f5e450]:
+    - banner [ref=f5e451]:
+      - heading "首单阳春面" [level=1] [ref=f5e453] [cursor=pointer]
+      - generic [ref=f5e454]:
+        - button "批量生成图片" [disabled] [ref=f5e456]
+        - button "批量生成视频" [disabled] [ref=f5e459]
+        - button "批量下载" [disabled] [ref=f5e462]
+        - button "预览" [ref=f5e465] [cursor=pointer]
+        - button "生成最终视频" [ref=f5e468]
+    - generic [ref=f5e471]:
+      - complementary [ref=f5e472]:
+        - generic [ref=f5e473] [cursor=pointer]: 意外穿越
+        - generic [ref=f5e479] [cursor=pointer]
+        - generic [ref=f5e482] [cursor=pointer]
+        - generic [ref=f5e485] [cursor=pointer]
+        - generic [ref=f5e488] [cursor=pointer]
+      - generic [ref=f5e491]:
+        - generic [ref=f5e493]:
+          - generic [ref=f5e494]:
+            - generic [ref=f5e495]:
+              - generic [ref=f5e496]:
+                - generic [ref=f5e497]:
+                  - generic [ref=f5e498]: 分镜 1
+                  - generic [ref=f5e500]: 意外穿越
+                - generic [ref=f5e501]:
+                  - button [ref=f5e502] [cursor=pointer]:
+                    - img "edit" [ref=f5e503]
+                  - button "delete" [disabled] [ref=f5e504]:
+                    - img "delete"
+              - paragraph [ref=f5e506]: 片段时长请限制在4-15s，输入“@”可引用角色、场景
+            - generic [ref=f5e507]:
+              - generic [ref=f5e508]:
+                - text: 根据以下分镜生成视频
+                - generic [ref=f5e509]:
+                  - generic [ref=f5e510]: 本镜头场景设定：
+                  - button "林家面馆-基础形象" [disabled] [ref=f5e511]
+              - generic [ref=f5e514]:
+                - article [ref=f5e516]:
+                  - generic [ref=f5e518]:
+                    - generic [ref=f5e519]: 猛然惊醒
+                    - generic [ref=f5e520]: 3s
+                  - paragraph [ref=f5e525]:
+                    - generic [ref=f5e526]: 起幅为一碗葱油面画面，耳边传来滋啦一声热油泼在葱花上的清脆声响，伴随着音效突兀地瞬间切断，画面猛烈切换到昏暗的
+                    - generic [ref=f5e528]: 林家面馆-基础形象
+                    - generic [ref=f5e530]: 内，近景。
+                    - generic [ref=f5e532]: 林小满-日常
+                    - generic [ref=f5e534]: 趴在破旧落灰的木桌上猛地惊醒，上身剧烈一震，大口喘着粗气。镜头固定，
+                    - generic [ref=f5e536]: 林小满-日常
+                    - generic [ref=f5e538]: 眼神慌乱无助地快速环顾四周陌生的环境，落幅在她极度迷茫惊恐的表情上。
+                - article [ref=f5e541]:
+                  - generic [ref=f5e543]:
+                    - generic [ref=f5e544]: 震惊穿越
+                    - generic [ref=f5e545]: 5s
+                  - paragraph [ref=f5e550]:
+                    - generic [ref=f5e551]: 承接上镜
+                    - generic [ref=f5e553]: 林小满-日常
+                    - generic [ref=f5e555]: 惊醒的落点，镜头缓缓下摇。
+                    - generic [ref=f5e557]: 林小满-日常
+                    - generic [ref=f5e559]: 低头看着自己身上的粗布麻衣，用手抚摸着粗粝的衣料，眼神更加难以置信。随后镜头拉开成中近景，将林家面馆的环境尽数收入画面。
+                    - generic [ref=f5e561]: 林小满-日常
+                    - generic [ref=f5e563]: 彻底意识到自己穿越了，神色惊惶，声音因疑惑而颤抖：“我刚拍完葱油面教程……这是哪里？我这是穿越了吗？！” 镜头固定，落幅在她双手紧抓衣襟、神情极度震惊的半身画面上。
+          - generic [ref=f5e565]:
+            - generic [ref=f5e566]:
+              - generic [ref=f5e567]: ( 关键帧展示片段内容。可选择用作参考，或跳过生成 )
+              - generic [ref=f5e570]:
+                - generic [ref=f5e571]:
+                  - paragraph [ref=f5e572]: 等待生成
+                  - paragraph [ref=f5e573]: 建议先生成分镜图片，以获得更统一的角色形象和更流畅的故事呈现。
+                - generic [ref=f5e574]:
+                  - button "Add image" [disabled] [ref=f5e575]
+                  - button "生成" [ref=f5e576] [cursor=pointer]
+            - generic [ref=f5e578]:
+              - generic [ref=f5e581]:
+                - button "Add video" [disabled] [ref=f5e582]
+                - button "生成" [ref=f5e583] [cursor=pointer]
+              - generic [ref=f5e585]:
+                - generic [ref=f5e587]:
+                  - generic [ref=f5e588]:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - button "Play video"
+                            - generic: 00:00 / 00:00
+                          - generic:
+                            - button "Mute video"
+                            - button "Fullscreen video"
+                        - button "Seek video"
+                  - generic [ref=f5e591]: 加载中
+                - generic [ref=f5e594]:
+                  - generic [ref=f5e595]: 历史记录
+                  - button "Select video history item" [pressed] [ref=f5e597] [cursor=pointer]
+        - generic [ref=f5e599]:
+          - generic [ref=f5e600]:
+            - generic [ref=f5e601]:
+              - generic [ref=f5e602]:
+                - generic [ref=f5e603]:
+                  - generic [ref=f5e604]: 分镜 2
+                  - generic [ref=f5e606]: 逼债对峙
+                - generic [ref=f5e607]:
+                  - button [ref=f5e608] [cursor=pointer]:
+                    - img "edit" [ref=f5e609]
+                  - button "delete" [disabled] [ref=f5e610]:
+                    - img "delete"
+              - paragraph [ref=f5e612]: 片段时长请限制在4-15s，输入“@”可引用角色、场景
+            - generic [ref=f5e613]:
+              - generic [ref=f5e614]:
+                - text: 根据以下分镜生成视频
+                - generic [ref=f5e615]:
+                  - generic [ref=f5e616]: 本镜头场景设定：
+                  - button "林家面馆-基础形象" [disabled] [ref=f5e617]
+              - generic [ref=f5e620]:
+                - article [ref=f5e622]:
+                  - generic [ref=f5e624]:
+                    - generic [ref=f5e625]: 账房闯入敲桌逼债
+                    - generic [ref=f5e626]: 4s
+                  - paragraph [ref=f5e631]:
+                    - generic [ref=f5e632]: 起幅为过肩中景，逆光从
+                    - generic [ref=f5e634]: 林家面馆-基础形象
+                    - generic [ref=f5e636]: 被掀开的门帘中洒入。
+                    - generic [ref=f5e638]: 刘账房-日常
+                    - generic [ref=f5e640]: 板着脸、攥着账本猛然闯入大厅，快步走到粗糙的木桌前。镜头跟随
+                    - generic [ref=f5e642]: 刘账房-日常
+                    - generic [ref=f5e644]: 的动作下移，只见他用毛笔笔杆重重敲击木桌。随后镜头快速上拉，对准
+                    - generic [ref=f5e646]: 刘账房-日常
+                    - generic [ref=f5e648]: 嚣张的面部近景，他朝着桌子对面的
+                    - generic [ref=f5e650]: 林小满-日常
+                    - generic [ref=f5e652]: 大声呵斥。
+                    - generic [ref=f5e654]: 刘账房-日常
+                    - generic [ref=f5e656]: 说：“
+                    - generic [ref=f5e658]: 林小满-日常
+                    - generic [ref=f5e660]: ！你爹娘欠的二两银子，后天再不还，这
+                    - generic [ref=f5e662]: 林家面馆-基础形象
+                    - generic [ref=f5e664]: 可就归我们当铺了。”落幅在
+                    - generic [ref=f5e666]: 刘账房-日常
+                    - generic [ref=f5e668]: 那因轻蔑而微微挑起的嘴角上。
+                - article [ref=f5e671]:
+                  - generic [ref=f5e673]:
+                    - generic [ref=f5e674]: 原主记忆闪回
+                    - generic [ref=f5e675]: 4s
+                  - paragraph [ref=f5e680]:
+                    - generic [ref=f5e681]: 起幅为对向近景，
+                    - generic [ref=f5e683]: 林小满-日常
+                    - generic [ref=f5e685]: 的面部占据画面中央，瞳孔因听到债务而微微震颤。镜头不切，通过水波纹状的幻觉转场，迅速切入脑海中的记忆碎片。画面色调变黄，特写镜头下，一双颤抖的小手正紧紧攥着泛黄破损的
+                    - generic [ref=f5e687]: 二两债务欠条-日常
+                    - generic [ref=f5e689]: ，上面赫然写着债务信息；随后镜头向上拉开，露出昔日的原主独自蹲在灶台角落无声哭泣。画面再度通过叠画回切至现实，
+                    - generic [ref=f5e691]: 林小满-日常
+                    - generic [ref=f5e693]: 用力闭眼后再次睁开，眼中的迷茫转瞬即逝，取而代之的是无底的坚定，目光直视前方的
+                    - generic [ref=f5e695]: 刘账房-日常
+                    - generic [ref=f5e697]: 。落幅在
+                    - generic [ref=f5e699]: 林小满-日常
+                    - generic [ref=f5e701]: 那充满笃定之色、亮如寒星的双眸。
+                - article [ref=f5e704]:
+                  - generic [ref=f5e706]:
+                    - generic [ref=f5e707]: 笃定承诺自信还债
+                    - generic [ref=f5e708]: 4s
+                  - paragraph [ref=f5e713]:
+                    - generic [ref=f5e714]: 起幅承接上一镜中
+                    - generic [ref=f5e716]: 林小满-日常
+                    - generic [ref=f5e718]: 坚定的眼神。镜头拉远至双人中景，
+                    - generic [ref=f5e720]: 林小满-日常
+                    - generic [ref=f5e722]: 从容不迫地站起身，抬手轻轻拍了拍粗布衣服上的灰尘。她跨前一步，迎着
+                    - generic [ref=f5e724]: 刘账房-日常
+                    - generic [ref=f5e726]: 愕然的目光，嘴角微扬，气定神闲。
+                    - generic [ref=f5e728]: 林小满-日常
+                    - generic [ref=f5e730]: 说：“急什么。后天这个时候，我连本带利还给你。”随后镜头向右横移重组画面，将
+                    - generic [ref=f5e732]: 刘账房-日常
+                    - generic [ref=f5e734]: 纳入前景。
+                    - generic [ref=f5e736]: 刘账房-日常
+                    - generic [ref=f5e738]: 不屑地嗤笑一声，双手抱臂斜过身子，退到一旁等着看好戏。落幅在
+                    - generic [ref=f5e740]: 林小满-日常
+                    - generic [ref=f5e742]: 挺拔自信的身影与
+                    - generic [ref=f5e744]: 刘账房-日常
+                    - generic [ref=f5e746]: 在旁冷眼冷笑的站位对比中。
+          - generic [ref=f5e748]:
+            - generic [ref=f5e749]:
+              - generic [ref=f5e750]: ( 关键帧展示片段内容。可选择用作参考，或跳过生成 )
+              - generic [ref=f5e753]:
+                - generic [ref=f5e754]:
+                  - paragraph [ref=f5e755]: 等待生成
+                  - paragraph [ref=f5e756]: 建议先生成分镜图片，以获得更统一的角色形象和更流畅的故事呈现。
+                - generic [ref=f5e757]:
+                  - button "Add image" [disabled] [ref=f5e758]
+                  - button "生成" [ref=f5e759] [cursor=pointer]
+            - generic [ref=f5e764]:
+              - paragraph [ref=f5e766]: 等待生成
+              - generic [ref=f5e767]:
+                - button "Add video" [disabled] [ref=f5e768]
+                - button "生成" [ref=f5e769] [cursor=pointer]
+        - generic [ref=f5e772]:
+          - generic [ref=f5e773]:
+            - generic [ref=f5e774]:
+              - generic [ref=f5e775]:
+                - generic [ref=f5e776]:
+                  - generic [ref=f5e777]: 分镜 3
+                  - generic [ref=f5e779]: 第一位食客
+                - generic [ref=f5e780]:
+                  - button [ref=f5e781] [cursor=pointer]:
+                    - img "edit" [ref=f5e782]
+                  - button "delete" [disabled] [ref=f5e783]:
+                    - img "delete"
+              - paragraph [ref=f5e785]: 片段时长请限制在4-15s，输入“@”可引用角色、场景
+            - generic [ref=f5e786]:
+              - generic [ref=f5e787]:
+                - text: 根据以下分镜生成视频
+                - generic [ref=f5e788]:
+                  - generic [ref=f5e789]: 本镜头场景设定：
+                  - button "林家面馆-基础形象" [disabled] [ref=f5e790]
+              - generic [ref=f5e793]:
+                - article [ref=f5e795]:
+                  - generic [ref=f5e797]:
+                    - generic [ref=f5e798]: 拍桌要面
+                    - generic [ref=f5e799]: 3s
+                  - paragraph [ref=f5e804]:
+                    - generic [ref=f5e805]: 全景，镜头对准
+                    - generic [ref=f5e807]: 林家面馆-基础形象
+                    - generic [ref=f5e809]: 的大门。粗布门帘再次被猛地掀开，挎着佩刀的
+                    - generic [ref=f5e811]: 赵衙役-日常
+                    - generic [ref=f5e813]: 大大咧咧地迈步跨入。
+                    - generic [ref=f5e815]: 赵衙役-日常
+                    - generic [ref=f5e817]: 走到靠近门边的一张破木桌旁，一巴掌重重拍在桌面上，扯着嗓子大喊：
+                    - generic [ref=f5e819]: 赵衙役-日常
+                    - generic [ref=f5e821]: ：“老板，来碗面！”此时站在一旁的
+                    - generic [ref=f5e823]: 刘账房-日常
+                    - generic [ref=f5e825]: 冷眼瞧着，而
+                    - generic [ref=f5e827]: 林小满-日常
+                    - generic [ref=f5e829]: 则应声抬头，镜头最终定格在
+                    - generic [ref=f5e831]: 赵衙役-日常
+                    - generic [ref=f5e833]: 按在桌面上的粗大掌心上。
+                - article [ref=f5e836]:
+                  - generic [ref=f5e838]:
+                    - generic [ref=f5e839]: 嫌弃警告
+                    - generic [ref=f5e840]: 3s
+                  - paragraph [ref=f5e845]:
+                    - generic [ref=f5e846]: 中景过肩镜头。镜头由
+                    - generic [ref=f5e848]: 林小满-日常
+                    - generic [ref=f5e850]: 的肩膀后方越过，聚焦在已经大大咧咧坐下的
+                    - generic [ref=f5e852]: 赵衙役-日常
+                    - generic [ref=f5e854]: 身上。
+                    - generic [ref=f5e856]: 赵衙役-日常
+                    - generic [ref=f5e858]: 满脸嫌弃地敲着空荡荡的桌面，向着
+                    - generic [ref=f5e860]: 林小满-日常
+                    - generic [ref=f5e862]: 大声警告：“先说好了，你们家的面要是再那么难吃，我可一分钱不给！”镜头随着他的话语微微向前推进，落在他满是质疑的挑衅神情上。
+                - article [ref=f5e865]:
+                  - generic [ref=f5e867]:
+                    - generic [ref=f5e868]: 自信挽袖
+                    - generic [ref=f5e869]: 3s
+                  - paragraph [ref=f5e874]:
+                    - generic [ref=f5e875]: 中景。镜头平视，首先捕捉到在一旁抱臂冷笑、面露讥讽的
+                    - generic [ref=f5e877]: 刘账房-日常
+                    - generic [ref=f5e879]: 。
+                    - generic [ref=f5e881]: 刘账房-日常
+                    - generic [ref=f5e883]: 冷笑着挖苦道：“就她这破手艺？能吃就不错了！”镜头随即横移，聚焦在神色淡然的
+                    - generic [ref=f5e885]: 林小满-日常
+                    - generic [ref=f5e887]: 身上。
+                    - generic [ref=f5e889]: 林小满-日常
+                    - generic [ref=f5e891]: 嘴角勾起一抹自信的浅笑，优雅地抬手挽起粗布长袖，朝着
+                    - generic [ref=f5e893]: 赵衙役-日常
+                    - generic [ref=f5e895]: 微微点头说道：“稍等，马上就好。”随后
+                    - generic [ref=f5e897]: 林小满-日常
+                    - generic [ref=f5e899]: 利落转身走入后方厨房，镜头落在她自信从容的背影上。
+          - generic [ref=f5e901]:
+            - generic [ref=f5e902]:
+              - generic [ref=f5e903]: ( 关键帧展示片段内容。可选择用作参考，或跳过生成 )
+              - generic [ref=f5e906]:
+                - generic [ref=f5e907]:
+                  - paragraph [ref=f5e908]: 等待生成
+                  - paragraph [ref=f5e909]: 建议先生成分镜图片，以获得更统一的角色形象和更流畅的故事呈现。
+                - generic [ref=f5e910]:
+                  - button "Add image" [disabled] [ref=f5e911]
+                  - button "生成" [ref=f5e912] [cursor=pointer]
+            - generic [ref=f5e917]:
+              - paragraph [ref=f5e919]: 等待生成
+              - generic [ref=f5e920]:
+                - button "Add video" [disabled] [ref=f5e921]
+                - button "生成" [ref=f5e922] [cursor=pointer]
+        - generic [ref=f5e925]:
+          - generic [ref=f5e926]:
+            - generic [ref=f5e927]:
+              - generic [ref=f5e928]:
+                - generic [ref=f5e929]:
+                  - generic [ref=f5e930]: 分镜 4
+                  - generic [ref=f5e932]: 厨艺展示
+                - generic [ref=f5e933]:
+                  - button [ref=f5e934] [cursor=pointer]:
+                    - img "edit" [ref=f5e935]
+                  - button "delete" [disabled] [ref=f5e936]:
+                    - img "delete"
+              - paragraph [ref=f5e938]: 片段时长请限制在4-15s，输入“@”可引用角色、场景
+            - generic [ref=f5e939]:
+              - generic [ref=f5e940]:
+                - text: 根据以下分镜生成视频
+                - generic [ref=f5e941]:
+                  - generic [ref=f5e942]: 本镜头场景设定：
+                  - button "林家面馆厨房-基础形象" [disabled] [ref=f5e943]
+              - generic [ref=f5e946]:
+                - article [ref=f5e948]:
+                  - generic [ref=f5e950]:
+                    - generic [ref=f5e951]: 行云流水揉面切面
+                    - generic [ref=f5e952]: 3s
+                  - paragraph [ref=f5e957]:
+                    - generic [ref=f5e958]: 中景，低角度平视。在
+                    - generic [ref=f5e960]: 林家面馆厨房-基础形象
+                    - generic [ref=f5e962]: 内，
+                    - generic [ref=f5e964]: 林小满-日常
+                    - generic [ref=f5e966]: 挽起粗布双袖，双手熟练地揉面、擀面，动作利落而富有节奏。随后镜头切至案板处的切面特写，伴随轻快的刀刃起落声，
+                    - generic [ref=f5e968]: 林小满-日常
+                    - generic [ref=f5e970]: 飞快地将面皮切成根根粗细均匀的白玉细面，画面停留在面条整齐排开在木案上的特写镜头。
+                - article [ref=f5e973]:
+                  - generic [ref=f5e975]:
+                    - generic [ref=f5e976]: 骨汤翻滚特调底料
+                    - generic [ref=f5e977]: 4s
+                  - paragraph [ref=f5e982]:
+                    - generic [ref=f5e983]: 近景，平视角度。灶膛内柴火烧得极旺，热浪袭人；镜头推近至沸腾的铁锅，浓郁的老骨汤在锅里咕嘟咕嘟冒着大朵白色气泡。随后镜头横移到灶台旁的陶碗上，
+                    - generic [ref=f5e985]: 林小满-日常
+                    - generic [ref=f5e987]: 迅速打入酱油和调料，并舀起一勺炼好的白猪油放入碗底，再用木勺子浇一勺老骨汤在碗里，瞬间油香四溢、白烟升腾，定格在猪油、调料溶于骨汤的诱人画面。
+                - article [ref=f5e990]:
+                  - generic [ref=f5e992]:
+                    - generic [ref=f5e993]: 沸水捞面香气四溢
+                    - generic [ref=f5e994]: 3s
+                  - paragraph [ref=f5e999]:
+                    - generic [ref=f5e1000]: 中近景。承接上一步骤，
+                    - generic [ref=f5e1002]: 林小满-日常
+                    - generic [ref=f5e1004]: 熟练地用竹漏勺从沸水锅中捞起筋道的细面，手腕轻巧一抖，面条整齐顺滑地卧入大海碗的清亮宽汤中。镜头微微前推，
+                    - generic [ref=f5e1006]: 林小满-日常
+                    - generic [ref=f5e1008]: 伸手撒下一把翠绿的葱花，画面定格在汤水清亮、葱花翠绿、热气腾腾的阳春面
+                    - generic [ref=f5e1010]: 阳春面-美食
+                    - generic [ref=f5e1012]: 上。
+          - generic [ref=f5e1014]:
+            - generic [ref=f5e1015]:
+              - generic [ref=f5e1016]: ( 关键帧展示片段内容。可选择用作参考，或跳过生成 )
+              - generic [ref=f5e1019]:
+                - generic [ref=f5e1020]:
+                  - paragraph [ref=f5e1021]: 等待生成
+                  - paragraph [ref=f5e1022]: 建议先生成分镜图片，以获得更统一的角色形象和更流畅的故事呈现。
+                - generic [ref=f5e1023]:
+                  - button "Add image" [disabled] [ref=f5e1024]
+                  - button "生成" [ref=f5e1025] [cursor=pointer]
+            - generic [ref=f5e1030]:
+              - paragraph [ref=f5e1032]: 等待生成
+              - generic [ref=f5e1033]:
+                - button "Add video" [disabled] [ref=f5e1034]
+                - button "生成" [ref=f5e1035] [cursor=pointer]
+        - generic [ref=f5e1038]:
+          - generic [ref=f5e1039]:
+            - generic [ref=f5e1040]:
+              - generic [ref=f5e1041]:
+                - generic [ref=f5e1042]:
+                  - generic [ref=f5e1043]: 分镜 5
+                  - generic [ref=f5e1045]: 首单告捷
+                - generic [ref=f5e1046]:
+                  - button [ref=f5e1047] [cursor=pointer]:
+                    - img "edit" [ref=f5e1048]
+                  - button "delete" [disabled] [ref=f5e1049]:
+                    - img "delete"
+              - paragraph [ref=f5e1051]: 片段时长请限制在4-15s，输入“@”可引用角色、场景
+            - generic [ref=f5e1052]:
+              - generic [ref=f5e1053]:
+                - text: 根据以下分镜生成视频
+                - generic [ref=f5e1054]:
+                  - generic [ref=f5e1055]: 本镜头场景设定：
+                  - button "林家面馆-基础形象" [disabled] [ref=f5e1056]
+              - generic [ref=f5e1059]:
+                - article [ref=f5e1061]:
+                  - generic [ref=f5e1063]:
+                    - generic [ref=f5e1064]: 阳春面端上木桌
+                    - generic [ref=f5e1065]: 3s
+                  - paragraph [ref=f5e1070]:
+                    - generic [ref=f5e1071]: 特写镜头起幅，一碗热气腾腾、葱花翠绿的骨汤阳春面
+                    - generic [ref=f5e1073]: 阳春面-美食
+                    - generic [ref=f5e1075]: “咚”地一声稳稳落在
+                    - generic [ref=f5e1077]: 林家面馆-基础形象
+                    - generic [ref=f5e1079]: 的粗糙木桌上。随后镜头快速向上摇起并后退，拉成中景，对准坐在桌边的
+                    - generic [ref=f5e1081]: 赵衙役-日常
+                    - generic [ref=f5e1083]: 。
+                    - generic [ref=f5e1085]: 赵衙役-日常
+                    - generic [ref=f5e1087]: 的鼻子用力耸动，双眼放光，直勾勾地盯着面前的面碗，嘴唇微张，喉咙忍不住上下滚动，双手迫不及待地抓起桌上的竹筷。
+                - article [ref=f5e1090]:
+                  - generic [ref=f5e1092]:
+                    - generic [ref=f5e1093]: 赵衙役大口嗦面
+                    - generic [ref=f5e1094]: 3s
+                  - paragraph [ref=f5e1099]:
+                    - generic [ref=f5e1100]: 近景，镜头平视对准
+                    - generic [ref=f5e1102]: 赵衙役-日常
+                    - generic [ref=f5e1104]: 的面部。承接上一镜
+                    - generic [ref=f5e1106]: 赵衙役-日常
+                    - generic [ref=f5e1108]: 抓起竹筷的动作，他迫不及待地挑起一大筷子细面送入口中，大口嗦面。他双眼因惊艳而瞬间瞪大，接着双手端起大海碗“咕嘟咕嘟”连汤带面喝了大半，满脸陶醉地抬起袖子一抹嘴，冲着厨房方向大喊：“这面怎么这么筋道！连这汤都鲜得掉眉毛！
+                    - generic [ref=f5e1110]: 林小满-日常
+                    - generic [ref=f5e1112]: ，再给我来一碗！”
+                - article [ref=f5e1115]:
+                  - generic [ref=f5e1117]:
+                    - generic [ref=f5e1118]: 自信宣告胜利
+                    - generic [ref=f5e1119]: 4s
+                  - paragraph [ref=f5e1124]:
+                    - generic [ref=f5e1125]: 中景，镜头从右侧的
+                    - generic [ref=f5e1127]: 赵衙役-日常
+                    - generic [ref=f5e1129]: 快速横移转向左侧。
+                    - generic [ref=f5e1131]: 林小满-日常
+                    - generic [ref=f5e1133]: 正悠闲地倚着柜台，指尖轻巧地转动着刚收到的黄澄澄的铜板，发出一声清脆的金属撞击声，嘴角挂着自信的微笑。镜头继续向右侧缓慢平移，露出站在一旁、面部肌肉彻底僵硬、呆立在原地不知所措的
+                    - generic [ref=f5e1135]: 刘账房-日常
+                    - generic [ref=f5e1137]: 。
+                    - generic [ref=f5e1139]: 林小满-日常
+                    - generic [ref=f5e1141]: 挑眉看着
+                    - generic [ref=f5e1143]: 刘账房-日常
+                    - generic [ref=f5e1145]: ，清脆地宣告：“
+                    - generic [ref=f5e1147]: 刘账房-日常
+                    - generic [ref=f5e1149]: ，二两银子用不了三天，你就等着数钱吧。”
+          - generic [ref=f5e1151]:
+            - generic [ref=f5e1152]:
+              - generic [ref=f5e1153]: ( 关键帧展示片段内容。可选择用作参考，或跳过生成 )
+              - generic [ref=f5e1156]:
+                - generic [ref=f5e1157]:
+                  - paragraph [ref=f5e1158]: 等待生成
+                  - paragraph [ref=f5e1159]: 建议先生成分镜图片，以获得更统一的角色形象和更流畅的故事呈现。
+                - generic [ref=f5e1160]:
+                  - button "Add image" [disabled] [ref=f5e1161]
+                  - button "生成" [ref=f5e1162] [cursor=pointer]
+            - generic [ref=f5e1167]:
+              - paragraph [ref=f5e1169]: 等待生成
+              - generic [ref=f5e1170]:
+                - button "Add video" [disabled] [ref=f5e1171]
+                - button "生成" [ref=f5e1172] [cursor=pointer]
+  - alert [ref=f5e151]

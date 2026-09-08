@@ -1,0 +1,69 @@
+{
+  "_comment": "UGC 5 段关键首帧 · image_generate 调用。每个 prompt 严格锁定主角面部/服装/发型/场景一致锚点。",
+  "_model_lock": "agnes-image-2.5-flash",
+  "_size": "1K",
+  "_ratio": "9:16",
+  "_output_dir": ".pavo-research/ugc-talk-video/frames/",
+  "calls": [
+    {
+      "id": "frame_01_hook",
+      "tool": "mcp__multimedia-creator__agnes25_image_generate",
+      "args": {
+        "model": "agnes-image-2.5-flash",
+        "size": "1K",
+        "ratio": "9:16",
+        "output_filename": "frame_01_hook.png",
+        "prompt": "A young Chinese woman, 28 years old, sitting at a vanity mirror in a soft warm bedroom, candid UGC vlog selfie-style angle from above-front, her face shows visible redness on both cheeks and nose bridge (sensitive skin), tired weary expression with slight dark circles, wearing a simple white cotton t-shirt with crew neck, hair tied in a loose low bun with a few stray strands around face, no makeup natural skin, soft morning window light from left side, phone camera aesthetic with slight grain and natural shadow, cozy cluttered dressing table background with skincare bottles and a jade roller visible, 9:16 vertical frame, photorealistic, Instagram Reels aesthetic, shot on iPhone 14 front camera"
+      }
+    },
+    {
+      "id": "frame_02_product_reveal",
+      "tool": "mcp__multimedia-creator__agnes25_image_generate",
+      "args": {
+        "model": "agnes-image-2.5-flash",
+        "size": "1K",
+        "ratio": "9:16",
+        "output_filename": "frame_02_product_reveal.png",
+        "prompt": "Same young Chinese woman, 28, in the same soft warm bedroom vanity setting, holding a small frosted glass dropper bottle of amber-colored facial serum close to her face with both hands, examining it carefully with curious hopeful expression, transition from skeptical to curious micro-smile forming, same simple white cotton t-shirt with crew neck, hair tied in loose low bun with same stray strands, same soft morning window light from left, same cluttered vanity mirror background with skincare bottles, UGC vlog selfie-style angle from above-front, phone camera aesthetic with slight grain, 9:16 vertical frame, photorealistic, shot on iPhone 14 front camera"
+      }
+    },
+    {
+      "id": "frame_03_apply",
+      "tool": "mcp__multimedia-creator__agnes25_image_generate",
+      "args": {
+        "model": "agnes-image-2.5-flash",
+        "size": "1K",
+        "ratio": "9:16",
+        "output_filename": "frame_03_apply.png",
+        "prompt": "Same young Chinese woman, 28, in the same soft warm bedroom, gently applying amber facial serum with fingertips to her right cheek, eyes closed in calm relaxed expression, lips slightly parted, same simple white cotton t-shirt with crew neck, hair tied in loose low bun with same stray strands, same soft morning window light from left, same cluttered vanity mirror background, UGC vlog selfie-style angle from above-front, phone camera aesthetic with slight grain, 9:16 vertical frame, photorealistic, natural skincare moment, shot on iPhone 14 front camera"
+      }
+    },
+    {
+      "id": "frame_04_mirror_check",
+      "tool": "mcp__multimedia-creator__agnes25_image_generate",
+      "args": {
+        "model": "agnes-image-2.5-flash",
+        "size": "1K",
+        "ratio": "9:16",
+        "output_filename": "frame_04_mirror_check.png",
+        "prompt": "Same young Chinese woman, 28, in the same soft warm bedroom, looking at her own reflection in the vanity mirror with wide eyes and slightly open mouth in amazed surprised expression, both cheeks now visibly glowing and dewy with healthy pink tint and dramatically reduced redness, wearing the same simple white cotton t-shirt with crew neck, hair tied in loose low bun with same stray strands, same soft morning window light from left, same cluttered vanity mirror background, UGC vlog selfie-style angle slightly off-center, phone camera aesthetic with slight grain, 9:16 vertical frame, photorealistic, natural happy surprised moment, shot on iPhone 14 front camera"
+      }
+    },
+    {
+      "id": "frame_05_cta",
+      "tool": "mcp__multimedia-creator__agnes25_image_generate",
+      "args": {
+        "model": "agnes-image-2.5-flash",
+        "size": "1K",
+        "ratio": "9:16",
+        "output_filename": "frame_05_cta.png",
+        "prompt": "Same young Chinese woman, 28, in the same soft warm bedroom, holding the amber facial serum bottle up close to phone camera at eye level with a confident warm smile, winking left eye playfully, healthy glowing dewy cheeks with no redness, same simple white cotton t-shirt with crew neck, hair tied in loose low bun with same stray strands, same soft morning window light from left, soft warm bedroom background slightly blurred with bokeh, UGC vlog selfie-style close-up framing, phone camera aesthetic with slight grain, 9:16 vertical frame, photorealistic, recommendation endorsement moment, shot on iPhone 14 front camera"
+      }
+    }
+  ],
+  "_post_check": [
+    "5 张图生成后，必须人工对照：主角脸部五官 / 服装 / 发型 / 场景是否基本一致",
+    "若 Cut2-5 与 Cut1 主角明显不同，停止后续 video 生成，重新调整 prompt 锚点",
+    "Cut1 必须展示「泛红肌」，Cut4 必须展示「退红后」形成视觉反差"
+  ]
+}
