@@ -23,7 +23,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 // ---- 跳过条件 1：CI ----
 if (process.env.GITHUB_ACTIONS === 'true') {
@@ -83,13 +83,13 @@ try {
         /const SYSTEM_SKILLS_VERSION: &str = "\d+";/,
         `const SYSTEM_SKILLS_VERSION: &str = "${nextVer}";`
       );
-      require('node:fs').writeFileSync('src-tauri/src/commands.rs', nextCmd);
+      writeFileSync('src-tauri/src/commands.rs', nextCmd);
       const wcTs = readFileSync('src/shared/systemSkills.ts', 'utf8');
       const nextTs = wcTs.replace(
         /export const SYSTEM_SKILLS_VERSION = '\d+';/,
         `export const SYSTEM_SKILLS_VERSION = '${nextVer}';`
       );
-      require('node:fs').writeFileSync('src/shared/systemSkills.ts', nextTs);
+      writeFileSync('src/shared/systemSkills.ts', nextTs);
       execSync('git add src-tauri/src/commands.rs src/shared/systemSkills.ts', {
         stdio: 'inherit',
         cwd: process.cwd(),
