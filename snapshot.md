@@ -16,6 +16,8 @@
 
 **+ creative-video-suite: 输出目录 + 持久化契约（`cd6a091`）**：用户报"跑完 5 阶段短剧后 chat 滚几屏就找不到第 1 阶段剧本了" + "商业分支产物散落 `AGNES_OUTPUT_DIR` 没项目归属"——3 个具体失败：(1) session 中断 AI 找不到前阶段产物（无 file handle 只能重新生成）；(2) 5 阶段跑完 chat 滚走，用户想"改第 3 段台词"找不到 `02_script.md` / `03_storyboard.md`；(3) UGC / Marketing / Corporate 共享 `AGNES_OUTPUT_DIR` 无命名空间，跨项目互踩。架构决策：**一个项目一棵树** `<workspace>/creative-video-suite/<project-name>/`，**`project.json` 是 stage tracking 唯一权威**。drama 5 阶段 + 商业 3 路**共用**顶层（**不分子目录，靠 `project.json.type` 区分形态**）——避免 marketing 长成 series 后用户被迫迁移目录。11 文件改动：1 新 canonical ref `references/output-conventions.md`（~280 行，目录树 + project.json schema + 8 项集成清单 + 6 不要 + 完整 drama 示例）；`SKILL.md` 加 `## 输出约定` 段（6 条硬约束 + 项目名命名规范）；`README.md` 加新 ref + 一段摘要；9 个 ref 各加 `## 持久化` 段锚定到 output-conventions.md 并补 stage-specific 强门控（UGC style_ref 来源强门控 / Marketing product-refs 必传 + voiceover_scene_map 必落 / Corporate 4 类必填信息 + narration.md 独立完整旁白稿 / drama 各阶段子目录约定）。**重申** CLAUDE.md pit-of-success 红线（不是新增）：工作区 IO MUST 走 `cmd_workspace_*` Rust invoke（Sidecar HTTP `/api/files/*` 早下线，PRD 0.2.7 Phase E）；`<workspace>` 走 `useWorkspaceFileService(workspacePath)` 拿，**禁**硬编码 `~/Documents/...`。**已知遗留**（与 baebe3c 同源）：utility skill 不自动同步老用户；如需强制 update promote + bump `SYSTEM_SKILLS_VERSION` 39→40 或 `rm -rf ~/.hamuna/skills/creative-video-suite/`，未在这里 promote。
 
+**+ creative-video-suite: MCP 使用正确性 + 产品图强制门控（待 commit）**：用户连续提 2 个跨分支硬约束 → (a) "如果用户提到产品，则必须让用户提交产品图"；(b) "drama 也必须要传产品图"（不是软门控，与 commercial 同级）。5 个具体 gap：(1) `image_generate` / `image_edit` / `video_generate` 三工具混用，**mode ↔ params 互斥不显式**（video text/keyframe/reference 互斥没写在 ref 里，AI 自由组合易触发 400）；(2) 跨工具链 URL 传递契约散落（frame HTTPS URL → video first_frame 路径，命名空间 `<Picture N>` ↔ `@image1` ↔ `@product_ref` ↔ `ref_images` 不统一）；(3) failure handling 没有显式分层（MCP 4xx / 5xx / 业务超时 / 状态层中断）；(4) 降级路径禁不写明（CLAUDE.md 红线是"不降级"但 ref 里没复述，AI 容易 keyframe 失败 → 改 text 模式）；(5) per-branch MCP tool map 缺（drama 默认 keyframe / UGC 默认 text / Marketing 默认 keyframe / Corporate 默认 reference 没写明）。11 文件改动：1 新 canonical ref `references/mcp-usage-guide.md`（~250 行，§1 产品图强制门控 / §2 工具 + mode 决策树 / §3 跨工具链 URL / §4 失败处理分层 / §5 命名空间 / §6 per-branch MCP map / §7 集成清单 10 项）；`SKILL.md` 工具调用契约段升级到 5 步硬门控（产品图门控置顶 → HTTPS URL → 中文 prompt → mode 互斥 → schema）；`references/agnes-ai-api.md` 加 `## 参数互斥`（mode × params 全矩阵）+ `## 错误处理`（MCP 层 / 业务层 / 状态层）+ `## 调用前自检清单` 11 项；8 个 ref 各加 `## 产品图强制门控` 和/或 `## MCP 工具调用`（drama 5 ref + commercial 3 ref），drama 与 commercial 同级硬门控；`README.md` 目录树加新 ref。**关键架构决策**：(1) **降级铁律重述**：keyframe/reference 失败 → 必保持 mode 不变，可重试 1 次，连续 2 次失败停下问用户，**不**降级 text（与 CLAUDE.md 红线对齐）；(2) **partial success 处理**：多 segment 视频成功的立刻落盘 + 写 segment-XX.md，失败的记 `project.json.notes.video_segments[<id>]`，单段重试 1 次，多段失败 ≥50% 立即停下；(3) **Corporate 4 类必填信息升级**：原 "logo / IP 等品牌资产" 扩展为含**产品图必传**，3 类必填信息 4 类化（企业 / 宣传 / 品牌资产+产品图 / 旁白），降级模式仅用户书面 ack 后放行。**已知遗留**（与 baebe3c / cd6a091 同源）：utility skill 不自动同步老用户；强制 update 路径相同（promote + bump `SYSTEM_SKILLS_VERSION` 39→40 或 `rm -rf ~/.hamuna/skills/creative-video-suite/`），未在这里 promote。
+
 ---
 
 ## 1. 模块状态总览
@@ -96,7 +98,7 @@
 | 内置 MA 小助理 | `bundled-agents/hamuna_helper/` | 稳定；改 MUST bump `ADMIN_AGENT_VERSION` |
 | 内置 Skills | `bundled-skills/` | 稳定；`SYSTEM_SKILLS` 清单内改 MUST bump `SYSTEM_SKILLS_VERSION` |
 | tvc-director skill | `bundled-skills/tvc-director/` | 稳定；v0.9 + agnes-video-25-mcp v0.1.3 + 严格工具契约 |
-| creative-video-suite skill | `bundled-skills/creative-video-suite/` | 稳定；utility skill（非 SYSTEM_SKILLS，seed-once）；短剧/UGC/企业宣传；6 风格预设 + 中文 prompt 铁律 + 输出目录持久化契约；5 段口播端到端验证通过；老用户无 SYSTEM_SKILLS bump 不自动更新 |
+| creative-video-suite skill | `bundled-skills/creative-video-suite/` | 稳定；utility skill（非 SYSTEM_SKILLS，seed-once）；短剧/UGC/企业宣传；6 风格预设 + 中文 prompt 铁律 + 输出目录持久化契约 + MCP 使用正确性（产品图强制门控 + mode 决策树 + 跨工具链 URL + 失败处理 + 命名空间 + per-branch MCP map）；5 段口播端到端验证通过；老用户无 SYSTEM_SKILLS bump 不自动更新 |
 | agnes-short-drama skill | `bundled-skills/agnes-short-drama/` | utility；Pavo 调研产物；4 字段用户输入 → 6 元数据 → 导演式剧本；未入 `SYSTEM_SKILLS` |
 | xueqiu skill | `skills/crawl-xueqiu-my-timeline/` | 实验 skill，untracked；TODO #9 |
 | hosted_mcps | `hosted_mcps/agnes-video-25/` | 7 tools（4 video + 3 image）；本仓库代码 = PyPI 0.1.3 vendor 源；P3 多 key fallback 进行中 |
@@ -223,6 +225,7 @@
 | `874ad4f` | **feat(creative-video-suite): expose 6 visual style presets + commercial style_ref gate** |
 | `baebe3c` | **docs(creative-video-suite): enforce Chinese-only prompts with explicit syntax exceptions** |
 | `cd6a091` | **feat(creative-video-suite): add output directory + persistence contract for cross-session continuation** |
+| (待提交) | **feat(creative-video-suite): add MCP usage correctness contract with product image hard gate (drama + commercial 同级)** |
 | `197837b` | **fix(mcp): pin bundled uv 0.5.11 and inject uvx dir into MCP spawn PATH** |
 | `ffe8edb` | **feat(bundled-skills): add creative-video-suite for short-drama / UGC / corporate** |
 | `853da79` | v2 |
