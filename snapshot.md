@@ -200,7 +200,7 @@
 `widgetSandboxHtml.test.ts` 等 6 个 unit test 在 master `5c92cd8` 同样失败；**待独立排期**。
 
 #### TODO #107 — creative-video-suite: 多视角产品图（opt-in）+ JSON metadata 统一（skill-optimizer 流程）✅ DONE
-（落地详见 §5.6 + §4 `<pending>` commit）
+（落地详见 §5.6 + §4 `aa19103` commit）
 
 ### 3.2 P3 多 Key Fallback Pipeline（新）🔄
 
@@ -251,8 +251,8 @@
 | `9207fbd` | **fix(creative-video-suite): align default video duration to MCP 12s cap (15s → 12s across 7 files)** |
 | `4f944b2` | **feat(creative-video-suite): absorb director-grade storyboard craft (drama 跨段稳定编号 + 双档时长 + 五维物理表演 + 运镜分级)** |
 | `<pending>` | **feat(creative-video-suite): add hard-coded MCP call templates + 2-retry gate + product_ref drift-compare widget (8 files, 12 templates)** |
-| `<pending>` | **feat(creative-video-suite): add opt-in multiview grid image + product_metadata JSON schema + promote to system skill (bump SYSTEM_SKILLS_VERSION 39→40)** |
-| `<pending>` | **chore(deps): sync Cargo.lock hamuna 0.3.96 → 0.3.99 (bump-on-commit hook drift)** |
+| `aa19103` | **feat(creative-video-suite): add opt-in multiview grid image + product_metadata JSON schema + promote to system skill (bump SYSTEM_SKILLS_VERSION 39→40)** |
+| `f47c650` | **chore(deps): sync Cargo.lock hamuna 0.3.96 → 0.3.100 (bump-on-commit hook drift)** |
 | `3eba012` | **fix(creative-video-suite): split input-source iron rule by tool (image_edit 3 forms vs video_generate HTTPS-only)**（dev/skill-input-source-split） |
 | `d9a5f70` | **chore(deps): sync Cargo.lock + package.json after 4f944b2** |
 | `197837b` | **fix(mcp): pin bundled uv 0.5.11 and inject uvx dir into MCP spawn PATH** |
@@ -411,12 +411,12 @@
 
 ### 5.6 creative-video-suite: promote utility → system skill + `SYSTEM_SKILLS_VERSION` 39→40（2026-09-09）
 
-**用户拍板**：grlling 指出 utility skill 不自动同步老用户的根因（与 baebe3c / cd6a091 / a79ce1e / dc0bacb / 9207fbd / 4f944b2 / `<pending>` 同源 6 commit 已积累 1 周未生效）→ AskUserQuestion 3 选项让用户拍板 → 选 **「Promote + bump（强制更新老用户）」**（vs 仅 mv utility 目录 + 用户手动 `rm -rf`）。
+**用户拍板**：grlling 指出 utility skill 不自动同步老用户的根因（与 baebe3c / cd6a091 / a79ce1e / dc0bacb / 9207fbd / 4f944b2 / `<pending>` 同源 7 个 commit 已积累 1 周未生效）→ AskUserQuestion 3 选项让用户拍板 → 选 **「Promote + bump（强制更新老用户）」**（vs 仅 mv utility 目录 + 用户手动 `rm -rf`）。
 
 **改动 3 文件**（最小 diff）：
 1. `src-tauri/src/commands.rs` — `SYSTEM_SKILLS_VERSION` `"39"` → `"40"` + `SYSTEM_SKILLS` 数组追加 `"creative-video-suite"`（`v40:` 注释说明升级原因：T13 多视角宫格图 + `product_metadata` schema 是 flow-level contract，老用户如不拿到会静默 fallback legacy single-view 路径忽略 metadata）
 2. `src/server/index.ts` — `SYSTEM_SKILLS` 数组同步追加 `'creative-video-suite'`（mirror Rust 注释；保持 `seedBundledSkills` 的"系统 skill 跳过种子"行为不变）
-3. `snapshot.md` — TODO #107 ✅ DONE / TODO #103 follow-up 改 DONE / §4 git log 加 `<pending>` commit / §5.5(c) 已知遗留划掉 ✅ / 本 §5.6 新增
+3. `snapshot.md` — TODO #107 ✅ DONE / TODO #103 follow-up 改 DONE / §4 git log 加 `aa19103` commit / §5.5(c) 已知遗留划掉 ✅ / 本 §5.6 新增
 
 **关键架构决策**：
 1. **版本号为何选 40 而非跳号**——CLAUDE.md 红线是"bump 即强制 overwrite 老用户"，跳号（如 40 → 50）没语义价值；保持线性 bump 与现有 `v8 / v9 / v10 / v18 / v29 / v33 / v35` 注释对齐，未来 `git blame` 一眼能定位 promote 节点
