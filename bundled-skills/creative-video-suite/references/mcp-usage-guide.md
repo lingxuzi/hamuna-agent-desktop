@@ -19,16 +19,22 @@
 | 行业广告剧情信号 | "广告剧情" / "品牌植入" / "赞助商品" / "甲方指定" |
 | 中英文产品词 | "产品" / "product" / "商品" / "包装" / "品牌" / "SKU" / "货品" |
 
-### 1.2 必传图类型
+### 1.2 必传图类型（默认 1 张正面图 + 可选多视角）
 
-| 类型 | 用途 |
-|---|---|
-| **正面 / 包装图** | 产品识别 + 一致性锚点 |
-| **侧面 / 背面** | 立体感 + 细节还原 |
-| **细节特写**（logo / 纹理 / 关键卖点） | 视频特写镜头锚点 |
-| **使用场景图**（可选） | 让模型理解产品在真实环境的呈现 |
+**默认路径（80% 场景）**：**1 张正面 / 包装图必传**——作为产品识别 + 一致性锚点。
 
-**最少 1 张正面图必传**；建议 3 张以上（正 / 侧 / 细）覆盖 video 镜头需求。
+```text
+04_assets/product-refs/<产品名>.png  ← 默认单图（正面图）
+```
+
+| 类型 | 用途 | 是否默认 |
+|---|---|---|
+| **正面 / 包装图** | 产品识别 + 一致性锚点 | ✅ 默认 1 张必传 |
+| **侧面 / 背面** | 立体感 + 细节还原（多角度镜头需要） | ❌ 仅多视角调性触发（§1.6） |
+| **细节特写**（logo / 纹理 / 关键卖点） | 视频特写镜头锚点 | ❌ 仅多视角调性触发（§1.6） |
+| **使用场景图**（可选） | 让模型理解产品在真实环境的呈现 | ❌ 仅多视角调性触发（§1.6） |
+
+**最少 1 张正面图必传**。多视角（侧 / 背 / 细 / 顶）生成是 **opt-in**（planner 阶段判定调性为 360° reveal / 多角度展示 / 产品 9 宫格 才触发），详见 §1.6。**不**强制 3 张以上——避免 universal cost（80% 场景用不到 1 张以上的多角度）。
 
 ### 1.3 流程
 
@@ -63,6 +69,42 @@ AI 落盘产品参考图：<workspace>/creative-video-suite/<project>/04_assets/
 | **commercial Corporate** | 强门控 | 第 3 类必填信息扩展为产品图 + logo + IP + VI + 客户案例，**全必传** |
 
 **drama 内部细分**：剧本创阶段如果用户说"我用 XX 牌手机做道具"——AI **必须**先问产品图，**不**自动用"看起来像 XX 牌"的虚构道具图代替。
+
+### 1.6 多视角产品图（opt-in，仅 360° reveal / 多角度调性触发）
+
+**2026-09-09 user 锁定**：多视角产品图是**单张宫格图**（1 张图含 N 个角度），**不是**多张分图。本节描述单张宫格图生成流程。
+
+**为什么 opt-in**：5 分支（drama / UGC / Marketing / Corporate）中只有 Marketing "360° reveal" 调性真正需要多视角——强制生成 = 增加 token + 1 张图生成时间 + 资产体积膨胀，但 80% 场景用不到。
+
+**触发条件**（满足任一即 AI 在确认摘要中询问用户）：
+
+| 触发信号 | 典型关键词 |
+|---|---|
+| 调性需求 | "360° 产品展示" / "多角度 reveal" / "产品 9 宫格" / "全景产品图" / "产品旋转动画" / "产品特写镜头多角度" |
+| shot 类型需求 | 同 segment 有 ≥ 3 个不同角度的产品镜头（如 reveal + packshot + 特写 三角度切换） |
+| 用户明示 | 用户明确说"要多个角度的产品图" |
+
+**触发动作**（planner 或 assets 阶段）：
+
+1. AI 在确认摘要中**明示**："本项目涉及多视角产品图，是否需要预生成 1 张多视角宫格图（如 9 宫格 3×3 布局，1 张图含 9 个角度）？如不生成，video 阶段只能用单一 `primary_url` 作 product_ref"
+2. 用户 ack → 触发 T13 `image_generate_multiview_grid` 模板（详见 `mcp-call-templates.md §3 T13`），1 张宫格图生成完成后落 `project.json.notes.product_metadata.<产品名>.multiview_grid_url` + `multiview_grid_layout: "3x3"` + `view_status: "multiview-completed"` + `multiview_grid_generated_at`
+3. 用户跳过 → 走默认 single 路径（`view_status: "single"`）
+
+**video 阶段如何使用宫格图**：
+
+- `video_generate.images[0] = product_metadata.<产品名>.multiview_grid_url`（**仍是 1 张图**作 product_ref，但宫格内含 9 个角度，model 端一次性看到多角度产品特征）
+- 比 5 张分图的好处：(1) 节省 `images[]` 名额给人物 / 场景 / logo；(2) model 端视觉锚更连贯（不会因多张图风格漂移打断一致性）；(3) 上游仅 1 次 image_generate 调用，token / 时间 / 资产体积远低于 5 张分图
+
+**何时不触发**（明确不生成多视角）：
+
+- 商业分支：UGC（产品只在主播手中出现，1 张正面图足够）/ Corporate（产品图仅作 logo+IP 配角，1 张足够）
+- drama：产品道具特写（1 张产品图作特写镜头的 anchor）
+- text / keyframe 模式的 video：不需要多张产品参考图
+
+**失败回退**（CLAUDE.md 精神：失败停下但**不**阻断下游）：
+
+- 宫格图生成失败 → `view_status: "multiview-failed"`（**保留** `primary_url` 作 fallback，不阻断 video 阶段）
+- 宫格图整体失败 → 记 `project.json.notes.last_failure` + widget emit `assets-error-card`；video 阶段回退 single 路径（**不**触发 2-retry gate——多视角是 opt-in，失败就走 single）
 
 ---
 
@@ -273,7 +315,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 [ ] (5) first_frame 比例与 aspect_ratio 一致吗？（不一致先 image_edit 转比例）
 [ ] (6) images[]（video_generate）是 HTTPS URL；image_paths[]（image_edit）按 (1) 允许 3 种
 [ ] (7) style_anchor 一字不差贯穿吗？（与 project.json.style_anchor 对齐）
-[ ] (8) 上一步 URL 已记到 project.json.notes <file_path> → <https_url> 映射了吗？
+[ ] (8) 上一步 URL 已记到 project.json.notes <file_path> → <https_url> 映射了吗？（**产品图必落到 `notes.product_metadata.<产品名>.primary_url`**；多视角宫格图完成后填充 `multiview_grid_url` + `multiview_grid_layout` + `view_status: "multiview-completed"`，详见 `output-conventions.md §2.1`）
 [ ] (9) 失败重试 ≤ 2 次？超 2 次 → 停下，【交由用户处理】（禁止继续重试 / 自主改 prompt / 自作主张）
 [ ] (10) 任何失败【不得 fallback】（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 [ ] (11) 【硬编码铁律】涉及 ref 的生成走对应 T 编号模板吗？images[] 顺序按 mcp-call-templates.md §0.4 排吗？negative block 已嵌入吗？
@@ -292,9 +334,10 @@ mcp__multimedia-creator__agnes25_video_generate({
 **何时读**：
 - 调 `image_edit` 之前 → 读 T01-T03
 - 调 `video_generate` 之前 → 读 T04-T12（按 (分支 × ref 类型) 选模板）
+- 调 `image_generate` 多视角产品图 → 读 T13（2026-09-09 新增，单张宫格图模板）
 
 **强制约束**（从 §6 项 (11) 提升为铁律）：
-1. **必选对应模板**：参考 §3 决策表 / mcp-call-templates.md §3 一图选
+1. **必选对应模板**：参考 §4 决策表 / mcp-call-templates.md §4 一图选
 2. **images[] 顺序必按角色**：product → person → scene → logo → ip（mcp-call-templates.md §0.4）
 3. **公共 block 必嵌入**：style_anchor（§0.1）+ 产品漂移负向（§0.2，涉及产品时）+ 五维物理负向（§0.3，drama video）
 4. **占位符替换必填满**：所有 `{{...}}` 替换为具体值，**禁**留 `{{}}` 字面占位符进 prompt
@@ -306,12 +349,13 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ## 7. 集成清单（每阶段末落盘前自检）
 
-见 `references/output-conventions.md` §7；本文件专注 MCP 调用，新增 3 项：
+见 `references/output-conventions.md` §7；本文件专注 MCP 调用，新增 4 项：
 
 ```text
 [ ] product_image_gate: 用户 brief 含产品关键词 → product-refs/ 有图（否则降级模式 ack 落 project.json.notes）
 [ ] mode_decision_recorded: 当前阶段 mode 选择依据落到 stage .md（如 "drama frame 阶段选 keyframe 因为有 SEG01_START 首帧图"）
 [ ] template_used: 调 MCP 走的 T 编号模板（如 "video_generate: T04 video_reference_drama_product"）落到 stage .md + project.json.notes
+[ ] product_metadata_recorded: 产品图元数据已写到 project.json.notes.product_metadata.<产品名>（含 primary_url + primary_local_path + view_status；多视角 opt-in 用户 ack 时还含 multiview_grid_url + multiview_grid_layout + multiview_grid_generated_at），详见 output-conventions.md §2.1
 ```
 
-3 项 + output-conventions.md §7 八项 = 11 项集成清单。
+4 项 + output-conventions.md §7 八项 = 12 项集成清单。

@@ -24,7 +24,7 @@
 - `mcp__multimedia-creator__agnes25_image_edit` 传 `image_paths=["<p1>", "<p2>", ...]`，对应 prompt 中的 `<Picture 1>` / `<Picture 2>`。
 - `mcp__multimedia-creator__agnes25_video_generate` reference 模式传 `images=["<p1>", "<p2>", ...]（≤ 5`，对应 prompt 中的 `<Picture 1>` / `<Picture 2>`。
 
-> **🔗 硬编码调用模板**（2026-09-08 锁定）：所有需要参考图的生成禁止 AI 自由组合 mode / images[] / first_frame——必须字面照抄 `references/mcp-call-templates.md` 对应 T 编号模板（image_edit → T01-T03，video_generate → T04-T12，按 (分支 × ref 类型) 决策表选唯一合法模板）。
+> **🔗 硬编码调用模板**（2026-09-08 锁定，2026-09-09 加 T13）：所有需要参考图的生成禁止 AI 自由组合 mode / images[] / first_frame——必须字面照抄 `references/mcp-call-templates.md` 对应 T 编号模板（image_edit → T01-T03，video_generate → T04-T12，image_generate 多视角产品图 → T13，按 (分支 × ref 类型) 决策表选唯一合法模板）。
 
 ## 输入源支持 · 按工具拆分（2026-09-08 拆分）
 

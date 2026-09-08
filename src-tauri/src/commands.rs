@@ -1302,7 +1302,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // matching exclusion list in src/server/index.ts::seedBundledSkills
 // MUST be kept in sync (comment there points back here).
 
-const SYSTEM_SKILLS_VERSION: &str = "39";
+const SYSTEM_SKILLS_VERSION: &str = "40";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -1360,6 +1360,15 @@ const SYSTEM_SKILLS: &[&str] = &[
     // improvements. System status trades user customisation (overwritten on
     // every version bump) for keeping the methodology current.
     "prompt-writer",
+    // v40: creative-video-suite promoted from utility → system skill. Its
+    // SKILL.md + references/ encode a multi-stage pipeline (planner →
+    // scriptwriter → storyboard → assets → frame → video) with hard MCP
+    // call templates and product-image gates. The 2026-09-09 update added
+    // T13 (multiview grid) plus a project.json product_metadata schema;
+    // existing installs must receive these in lockstep or downstream
+    // video generation will silently fall back to the legacy single-view
+    // path and ignore the metadata extension.
+    "creative-video-suite",
 ];
 
 /// Skills unavailable on certain platforms due to upstream bugs.

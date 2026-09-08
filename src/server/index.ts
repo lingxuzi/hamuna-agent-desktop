@@ -1410,6 +1410,13 @@ const SYSTEM_SKILLS: readonly string[] = [
   // v29: prompt-writer promoted from utility → system skill so content
   // improvements reach existing installs (seed-once never updates).
   'prompt-writer',
+  // v40: creative-video-suite promoted from utility → system skill. Its
+  // SKILL.md / references encode the drama 5-stage pipeline + commercial
+  // 3-branch gates; the 2026-09-09 update added T13 (multiview grid) and
+  // the project.json product_metadata schema. Existing installs must
+  // receive these in lockstep or downstream video generation will
+  // silently fall back to the legacy single-view path.
+  'creative-video-suite',
 ];
 
 /**

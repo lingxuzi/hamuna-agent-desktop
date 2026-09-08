@@ -374,7 +374,78 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ---
 
-## 3. 模板选择决策表（一图选模板）
+## 3. image_generate 模板（产品多视角宫格图，2026-09-09 新增）
+
+### T13 — `image_generate_multiview_grid`（产品多视角宫格图）
+
+**适用场景**：planner / assets 阶段判定调性为 360° reveal / 多角度展示 / 产品 9 宫格 / 多角度 packshot → 用户 ack 后生成 1 张多视角宫格图（一图含 9/6/4 个角度），作为 video 阶段的 `images[0]`（product_ref）使用。详见 `mcp-usage-guide.md §1.6`（触发条件 + opt-in 流程 + 失败回退）。
+
+**核心设计**（2026-09-09 user 锁定）：多视角产品图是**单张宫格图**，**不是**多张分图。一次 `image_generate` 调用 → 1 张 HTTPS URL → 落到 `product_metadata.<产品名>.multiview_grid_url`。比 5 张分图（`views.{front,side,back,top,detail}`）更轻：
+- 节省 `video_generate.images[]` 名额（仍占 1 位，但承载 9 角度信息）
+- model 端视觉锚更连贯（不会因多张图风格漂移打断一致性）
+- 上游仅 1 次 image_generate 调用，token / 时间 / 资产体积远低于 5 张分图
+
+**硬编码参数**：
+
+```javascript
+mcp__multimedia-creator__agnes25_image_generate({
+  prompt: "{{style_anchor}}，<产品名>（{{product_name}}）{{grid_layout_label}}多视角产品展示图，{{grid_layout_desc}}布局完整呈现 {{view_count}} 个角度：{{view_angles_desc}}；保持 <产品名>（{{product_name}}）包装 / logo / 颜色 / 材质 / 比例 / 品牌细节 100% 锁定；统一光影方向（顶部主光，柔和补光）+ 统一背景（{{grid_bg_label}}）；{{negative_product_block}}",
+  model: "agnes-image-2.5-flash",
+  size: "2K",          // 宫格图需高分辨率，3×3 默认 2K（每个格子 ≈ 682×682 px）
+  ratio: "{{grid_ratio}}",  // 3×3 → "1:1" / 2×3 → "3:4" / 2×2 → "1:1"
+  num_images: 1         // 只生成 1 张（不是 4）
+})
+```
+
+**占位符替换**：
+
+| 占位符 | 来源 | 默认值 |
+|---|---|---|
+| `{{grid_layout_label}}` | planner 阶段根据调性选 | `"9 宫格"`（3×3 默认）/ `"6 宫格"`（2×3）/ `"4 宫格"`（2×2） |
+| `{{grid_layout_desc}}` | 同上 | `"3×3"` / `"2×3"` / `"2×2"` |
+| `{{view_count}}` | 派生自 grid_layout | `9` / `6` / `4` |
+| `{{view_angles_desc}}` | 派生自 grid_layout | 3×3：`"左上 正面 / 中上 3/4 视角 / 右上 左侧面 / 中左 背面 / 中中 正面放大特写 / 中右 顶部俯视 / 左下 logo 特写 / 中下 纹理材质细节 / 右下 比例对比参照"`；2×3：`"上排 正面 / 3/4 视角 / 侧面 / 下排 背面 / 顶部俯视 / 局部细节"`；2×2：`"左上 正面 / 右上 侧面 / 左下 背面 / 右下 顶部俯视"` |
+| `{{grid_ratio}}` | 派生自 grid_layout | `"1:1"`（3×3 / 2×2）/ `"3:4"`（2×3） |
+| `{{grid_bg_label}}` | 由 style_anchor 派生 | 广告质感：`"纯白"`；写实电影：`"浅灰渐变"`；3D 国漫 / 日漫赛璐璐：`"淡蓝渐变"`；赛博朋克：`"深黑带霓虹边"`；古风：`"米黄宣纸"` |
+| `{{style_anchor}}` | 见 §0.1 | runtime 填 |
+| `{{product_name}}` | 用户 brief 提炼的中文产品名 | e.g. `"iPhone 15 Pro 钛金色"` |
+| `{{negative_product_block}}` | 见 §0.2 | runtime 填（涉及产品时） |
+
+**落盘**：
+
+```text
+1. cmd_workspace_copy_paths(<grid_url> → <workspace>/creative-video-suite/<project>/04_assets/product-refs/<产品名>_multiview_grid.png)
+2. update project.json.notes.product_metadata.<产品名>:
+   {
+     "primary_url": "<已有>",
+     "primary_local_path": "<已有>",
+     "view_status": "multiview-completed",   // 从 "single" 升到 "multiview-completed"
+     "multiview_grid_url": "<grid HTTPS URL>",
+     "multiview_grid_layout": "{{grid_layout_desc}}",   // "3x3" / "2x3" / "2x2"
+     "multiview_grid_generated_at": "<ISO timestamp>"
+   }
+3. emit widget: assets-image-gallery（带 9/6/4 角度标注）+ product-multiview-gallery（详见 widget-templates.md §6.6）
+```
+
+**video 阶段如何使用**：
+
+- 默认 product_ref 路径：`video_generate.images[0] = product_metadata.<产品名>.multiview_grid_url`（仍是 1 张图，但宫格内含多角度信息）
+- 如 video 段同时需 person_ref / scene_ref → images[1] / images[2] 按 §0.4 顺序继续填（≤ 5 上限不变）
+- T04 / T06 / T07 / T08 等 video 模板的 `{{product_ref_url}}` 占位符**优先读 `multiview_grid_url`**（存在即用），fallback 到 `primary_url`
+
+**失败回退**（与 §1.6 同步）：
+- 生成失败 → `view_status: "multiview-failed"`，**保留** `primary_url` 作 fallback
+- video 阶段检测到 `multiview-failed` → 自动回退 single 路径（`images[0] = primary_url`），不阻断
+- 2-retry gate **不**触发：多视角是 opt-in，失败即回退（与 mcp-usage-guide.md §1.6 失败回退一致）
+
+**何时不调 T13**：
+- 用户未 ack 多视角 → 走默认 `image_generate` 单图（`view_status: "single"`）
+- drama 道具 / Corporate 配角产品 → 1 张正面图足够
+- 已有现成的 9 宫格素材（用户提供）→ 直接落 `multiview_grid_url`，不调 T13
+
+---
+
+## 4. 模板选择决策表（一图选模板）
 
 按 (分支 × ref 类型) 一眼选：
 
@@ -387,7 +458,9 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 **粗体** = 该分支涉及该 ref 类型时的**唯一合法模板**。其它模板禁止使用。
 
-## 4. 调用前自检（11 项 gate，每条必过）
+> **T13（image_generate 多视角产品图）独立于上表**——T13 是 `image_generate` 工具的 opt-in 多视角宫格图模板（2026-09-09 新增），不在 video_generate (分支 × ref 类型) 决策表中。触发条件详见 `mcp-usage-guide.md §1.6`（360° reveal / 多角度调性 / 用户明示）。T13 生成的宫格图作为 product_ref 落到 `video_generate.images[0]`（替代默认 `primary_url`，存在 `multiview_grid_url` 即优先用）。上表的 product_ref 列同时指 `primary_url` 与 `multiview_grid_url`，video 模板（T04/T06/T07/T08）的 `{{product_ref_url}}` 占位符**优先读 `multiview_grid_url`**。
+
+## 5. 调用前自检（11 项 gate，每条必过）
 
 ```text
 [ ] (0)  产品图门控过吗？（涉及产品 → product-refs/ 有图，否则降级模式 ack 落 project.json.notes）
@@ -406,7 +479,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 11/11 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
 
-### 4.1 重试铁律（用户 2026-09-08 收紧：retry 期间 0 微调）
+### 5.1 重试铁律（用户 2026-09-08 收紧：retry 期间 0 微调）
 
 **所有生成步骤**（image_generate / image_edit / video_generate，无论 mode）的重试策略：
 
@@ -435,7 +508,7 @@ attempt 4 → 停下，原地待命，【交由用户处理】
 
 ---
 
-## 5. 集成清单（每阶段末落盘前自检）
+## 6. 集成清单（每阶段末落盘前自检）
 
 见 `references/output-conventions.md` §7；本文件新增 3 项：
 
@@ -445,4 +518,4 @@ attempt 4 → 停下，原地待命，【交由用户处理】
 [ ] template_used: 调用走的 T 编号模板（如 "video_generate: T04 video_reference_drama_product"）落到 stage .md + project.json.notes
 ```
 
-3 项 + output-conventions.md §7 八项 + mcp-usage-guide.md §7 二项 = 13 项集成清单。
+3 项 + output-conventions.md §7 八项 + mcp-usage-guide.md §7 四项 = 15 项集成清单。

@@ -592,6 +592,143 @@ drift_score: **{{driftScoreFormatted}}**（{{driftLevel}}）
 
 ---
 
+## 6.6 product-multiview-gallery（产品多视角宫格图展示块，2026-09-09 新增）
+
+**渲染目标**：让用户**直观看**多视角产品宫格图（**单张图含 9/6/4 个角度**）+ 各角度标注 + view_status badge + 生成时间。区别于 §6.5 漂移对比：§6.5 是「用户上传 product_ref vs 当前生成」左右对比；§6.6 是「单张宫格图 + 角度标注 + 元数据」展示块。
+
+**触发条件**：
+- T13 `image_generate_multiview_grid` 调用成功（`view_status: "multiview-completed"`）→ assets 阶段 emit 一次
+- 用户在 planner / assets 阶段 ack 多视角时也 emit 占位卡片（"待生成"）
+- 多视角失败（`view_status: "multiview-failed"`）→ emit 失败占位（红色边框 + 错误摘要 + primary_url fallback 提示）
+
+**数据来源**：
+- `{{productName}}` → `04_assets/product-refs/<产品名>.png` 文件名 → 产品中文名
+- `{{gridUrl}}` → `project.json.notes.product_metadata.<产品名>.multiview_grid_url`（T13 落盘的 HTTPS URL）
+- `{{gridLayout}}` → `multiview_grid_layout`（"3x3" / "2x3" / "2x2"）
+- `{{viewCount}}` → 派生自 gridLayout（9 / 6 / 4）
+- `{{viewAngles}}` → 派生自 gridLayout（3×3 9 角度 / 2×3 6 角度 / 2×2 4 角度，参考 `mcp-call-templates.md §3 T13` 角度描述）
+- `{{viewStatus}}` → `"single"` / `"multiview-pending"` / `"multiview-completed"` / `"multiview-failed"`
+- `{{generatedAt}}` → `multiview_grid_generated_at`（ISO timestamp）
+- `{{primaryUrl}}` → `multiview_grid_url` 不存在时的 fallback（同时显示 primary_url 作 single fallback）
+- `{{errorMessage}}` → 仅 `view_status: "multiview-failed"` 时填
+
+**HTML 骨架**：
+
+```html
+<generative-ui-widget title="产品多视角宫格图 · {{productName}}">
+<style>
+  .cv-mvg { padding: 12px; font-family: var(--font-sans); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+  .cv-mvg h2 { margin: 0 0 8px; font-size: 14px; }
+  .cv-mvg .header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .cv-mvg .badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; }
+  .cv-mvg .badge.completed { background: rgba(22, 163, 74, 0.15); color: #16a34a; }
+  .cv-mvg .badge.pending { background: rgba(234, 179, 8, 0.15); color: #ca8a04; }
+  .cv-mvg .badge.failed { background: rgba(220, 38, 38, 0.15); color: #dc2626; }
+  .cv-mvg .badge.single { background: rgba(107, 114, 128, 0.15); color: var(--ink-secondary); }
+  .cv-mvg .meta { font-size: 11px; color: var(--ink-secondary); }
+  .cv-mvg .grid-wrap { background: var(--paper-inset); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+  .cv-mvg .grid-img { width: 100%; aspect-ratio: {{gridAspectRatio}}; object-fit: contain; background: #000; display: block; }
+  .cv-mvg .angles { display: grid; grid-template-columns: repeat({{angleCols}}, 1fr); gap: 4px; margin-top: 8px; }
+  .cv-mvg .angle { padding: 6px 8px; background: var(--paper-inset); border: 1px solid var(--line); border-radius: 4px; font-size: 11px; }
+  .cv-mvg .angle-num { font-weight: 600; color: var(--ink-secondary); margin-right: 4px; }
+  .cv-mvg .fallback { padding: 8px; margin-top: 8px; background: var(--paper-inset); border-radius: 4px; font-size: 12px; }
+  .cv-mvg .fallback a { color: var(--link); text-decoration: underline; }
+  .cv-mvg .error { padding: 8px; margin-top: 8px; background: rgba(220, 38, 38, 0.1); color: #dc2626; border-radius: 4px; font-size: 12px; }
+</style>
+
+<h2>{{productName}} · {{viewCount}} 视角宫格（{{gridLayout}} 布局）</h2>
+
+<div class="header">
+  <span class="badge {{viewStatusClass}}">{{viewStatusBadge}}</span>
+  <span class="meta">生成于 {{generatedAt}}</span>
+</div>
+
+<div class="grid-wrap">
+  <img class="grid-img" src="{{gridUrl}}" alt="{{productName}} 多视角宫格图" />
+</div>
+
+<div class="angles">
+  <div class="angle"><span class="angle-num">1</span>{{angle1}}</div>
+  <div class="angle"><span class="angle-num">2</span>{{angle2}}</div>
+  <div class="angle"><span class="angle-num">3</span>{{angle3}}</div>
+  {{如有更多}}
+  <div class="angle"><span class="angle-num">N</span>{{angleN}}</div>
+  {{/如有更多}}
+</div>
+
+{{如有 fallback}}
+<div class="fallback">
+  ⚠️ 多视角宫格图未生成（view_status: "multiview-failed"）→ video 阶段自动回退使用 primary_url：
+  <a href="{{primaryUrl}}" target="_blank">{{primaryUrlLabel}}</a>
+</div>
+{{/如有 fallback}}
+
+{{如有 error}}
+<div class="error">
+  ❌ 多视角宫格图生成失败：{{errorMessage}}<br/>
+  video 阶段回退 single 路径（images[0] = primary_url），不阻断下游。
+</div>
+{{/如有 error}}
+</generative-ui-widget>
+```
+
+**占位符替换规则**：
+
+| 占位符 | 来源 |
+|---|---|
+| `{{productName}}` | `04_assets/product-refs/<产品名>.png` 文件名 → 产品中文名 |
+| `{{viewCount}}` | 派生自 `multiview_grid_layout`（3×3→9 / 2×3→6 / 2×2→4） |
+| `{{gridLayout}}` | `multiview_grid_layout` 字面量（"3x3" / "2x3" / "2x2"） |
+| `{{gridUrl}}` | `multiview_grid_url` HTTPS URL |
+| `{{gridAspectRatio}}` | 派生自 `gridLayout`（3×3 / 2×2 → "1/1" / 2×3 → "3/4"） |
+| `{{angleCols}}` | 派生自 `gridLayout`（3×3 / 2×3 → 3 / 2×2 → 2） |
+| `{{angle1..N}}` | 派生自 `gridLayout`（参考 `mcp-call-templates.md §3 T13::{{view_angles_desc}}`） |
+| `{{viewStatus}}` | `view_status` 字面量（"single" / "multiview-pending" / "multiview-completed" / "multiview-failed"） |
+| `{{viewStatusClass}}` | 派生自 viewStatus（completed/pending/failed/single） |
+| `{{viewStatusBadge}}` | 派生文本（`✅ multiview-completed` / `⏳ multiview-pending` / `❌ multiview-failed` / `single`） |
+| `{{generatedAt}}` | `multiview_grid_generated_at` 格式化为本地时间（**不是** UTC `toISOString().split('T')[0]`） |
+| `{{primaryUrl}}` / `{{primaryUrlLabel}}` | `primary_url` HTTPS URL / 简化标签（"primary_url"） |
+| `{{errorMessage}}` | 多视角失败时的错误摘要（来自 `project.json.notes.last_failure`） |
+
+**angle 角度文案**（3 套布局，硬编码复用 `mcp-call-templates.md §3 T13::{{view_angles_desc}}`）：
+
+| Layout | angle1-9 文案 |
+|---|---|
+| **3x3** | `正面` / `3/4 视角` / `左侧面` / `背面` / `正面放大特写` / `顶部俯视` / `logo 特写` / `纹理材质细节` / `比例对比参照` |
+| **2x3** | `正面` / `3/4 视角` / `侧面` / `背面` / `顶部俯视` / `局部细节` |
+| **2x2** | `正面` / `侧面` / `背面` / `顶部俯视` |
+
+**追加模式**：
+- assets 阶段 T13 成功 → emit 完整 widget（status=completed）
+- 多视角失败 → emit 错误占位（status=failed，含 errorMessage + primary_url fallback 链接）
+- 同一产品多次重跑 → 替换当前 widget（多次 emit 取最新一次）
+
+**占位符缺失处理**：
+- `{{gridUrl}}` 缺失（`view_status: "single"` 或 `multiview-pending`）→ 不 emit 本 widget；改用 §4 `assets-image-gallery` 的 `productRefs` 组直接展示 primary_url 单图
+- `{{errorMessage}}` 缺失（`view_status: "multiview-failed"` 但无 last_failure）→ 简化为 `"生成失败，详情见 unified log"`
+
+**Markdown fallback**：
+
+```markdown
+📐 **产品多视角宫格图 · {{productName}}（{{viewCount}} 视角 / {{gridLayout}} 布局）**
+
+**状态**: {{viewStatusBadge}} · 生成于 {{generatedAt}}
+
+![]({{gridUrl}})
+
+**角度清单**: 1) {{angle1}} · 2) {{angle2}} · 3) {{angle3}} · ... {{如有更多}} N) {{angleN}} {{/如有更多}}
+
+{{如有 fallback}}
+⚠️ 多视角宫格图未生成 → video 阶段回退使用 primary_url: ![primary_url]({{primaryUrl}})
+{{/如有 fallback}}
+
+{{如有 error}}
+❌ 多视角宫格图生成失败：{{errorMessage}}（video 阶段回退 single 路径，不阻断下游）
+{{/如有 error}}
+```
+
+---
+
 ## 7. 集成清单（每阶段 emit widget 前自检）
 
 ```text
@@ -603,6 +740,7 @@ drift_score: **{{driftScoreFormatted}}**（{{driftLevel}}）
 [ ] Markdown fallback 已保留吗？（widget 解析失败时仍能看到）
 [ ] widget HTML 总长 ≤ 50KB 吗？（sandboxed iframe 性能）
 [ ] 涉及产品的生成后 emit 了 product-ref-drift-compare widget 吗？（§6.5）
+[ ] 多视角产品图生成后 emit 了 product-multiview-gallery widget 吗？（§6.6，仅 T13 触发）
 ```
 
 8 项全过才允许 emit widget，**任何一项不过 = 该阶段未完成**。

@@ -45,7 +45,7 @@ brief -> 产品锁定 -> 随机主播脸谱蓝图 -> 多卖点脚本 -> 轻量�
 - **硬门控**：任何视频工具调用前必须先在用户可见回答里输出分镜表；未输出分镜表禁止调用 `text_to_video/image_to_video`。如果视频模型只返回视频，也必须把调用前已生成的分镜表一并展示给用户。
 - 最小必输块五项缺一不可：风格调性、主播设定、产品锁定、轻量分镜表、视频链接/生成状态。
 
-> **🔗 硬编码 MCP 调用**（2026-09-08 锁定）：UGC 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md`——有 product_ref / creator_ref 走 T06 (`video_reference_ugc`)，纯文生口播走 T12 (`video_text_ugc_default`)。不得自由组合 `ref_images` 顺序或切 mode 跳过 ref。
+> **🔗 硬编码 MCP 调用**（2026-09-08 锁定，2026-09-09 加 T13）：UGC 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md`——有 product_ref / creator_ref 走 T06 (`video_reference_ugc`)，纯文生口播走 T12 (`video_text_ugc_default`)。**多视角产品图**（opt-in，仅 360° reveal / 多角度 UGC 调性触发）走 T13 (`image_generate_multiview_grid`)，详见 `mcp-usage-guide.md §1.6` + `output-conventions.md §2.1`。不得自由组合 `ref_images` 顺序或切 mode 跳过 ref。
 
 ## 默认策略
 

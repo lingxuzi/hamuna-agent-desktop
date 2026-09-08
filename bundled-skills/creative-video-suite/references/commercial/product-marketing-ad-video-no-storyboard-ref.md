@@ -49,7 +49,7 @@ brief -> 产品锁定 -> 品类识别 -> 调性路线 -> 确认摘要 -> 用户�
 - 用户明确指定平台/比例/时长时优先遵从；用户未明说比例但 prompt 能推断平台时，必须写 `platform_ratio_decision`：平台/投放场景 -> 推荐比例 -> 推断依据。
 - 有产品图时优先 `image_to_video`，产品图作为最高优先级参考；无可靠图片参考时用 `text_to_video`。
 
-> **🔗 硬编码 MCP 调用**（2026-09-08 锁定）：Marketing 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md`——有 product_ref + voiceover_scene_map 走 T07 (`video_reference_marketing`)，产品图作首帧走 T09 (`video_keyframe_marketing`)。两者互斥，planner / storyboard 阶段必选一个。不得中途切换 mode。
+> **🔗 硬编码 MCP 调用**（2026-09-08 锁定，2026-09-09 加 T13）：Marketing 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md`——有 product_ref + voiceover_scene_map 走 T07 (`video_reference_marketing`)，产品图作首帧走 T09 (`video_keyframe_marketing`)。**多视角产品图**（opt-in，Marketing "360° reveal" 调性最常触发）走 T13 (`image_generate_multiview_grid`)，详见 `mcp-usage-guide.md §1.6` + `output-conventions.md §2.1`。两者互斥，planner / storyboard 阶段必选一个。不得中途切换 mode。
 - 12 秒结构：`0-2s hook/蓄势`、`2-4s 产品揭示`、`4-8s 卖点证明`、`8-10s 结果/情绪价值`、`10-12s packshot hold`。
 - 快剪可出现 0.5-1.5 秒节奏点，但每 2-3 个快切后必须给一次产品清晰锚点。
 - 旁白密度按路线决定，并在确认摘要中展示完整旁白台词与结尾 slogan，以及 `voiceover_scene_map`：信息型/功能型/促销型路线默认 3-5 句主体旁白 + 1 句结尾 slogan；诗性/氛围/高端/香氛/珠宝/礼赠路线默认 2-3 句诗性主体旁白 + 1 句结尾 slogan。每句旁白必须落到 Hook/产品出现/卖点证明/使用结果/packshot 等画面阶段。

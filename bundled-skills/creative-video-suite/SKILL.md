@@ -45,11 +45,12 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 
 **🔒 MCP 调用模板硬编码铁律（2026-09-08 用户锁定，所有需要参考图的生成必过）**：
 
-**核心约束**：AI **不得**在涉及参考图的生成中自由组合 `mode` / `images[]` / `first_frame` / `prompt` 结构——必须字面照抄 `references/mcp-call-templates.md` 对应 T 编号模板（按场景编号 T01-T12）。
+**核心约束**：AI **不得**在涉及参考图的生成中自由组合 `mode` / `images[]` / `first_frame` / `prompt` 结构——必须字面照抄 `references/mcp-call-templates.md` 对应 T 编号模板（按场景编号 T01-T13；T13 为 2026-09-09 新增的产品多视角宫格图 image_generate 模板）。
 
 ```text
 调 image_edit 之前 → 读 T01-T03（转比例 / 多图合成 / 局部编辑）
 调 video_generate 之前 → 读 T04-T12，按 (分支 × ref 类型) 决策表选唯一合法模板
+调 image_generate 多视角产品图之前（opt-in 触发时） → 读 T13 image_generate_multiview_grid
 ```
 
 **为什么是铁律**：

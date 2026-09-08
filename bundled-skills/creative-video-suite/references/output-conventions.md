@@ -79,9 +79,73 @@ creative-video-suite 的产物分两层：
     "video"
   ],
   "current_stage": "video",                            // 当前所在阶段（= stages_completed[last] 或下一个）
-  "notes": "用户原 brief 摘要 + 关键决策"             // AI 自由写,做 session 续跑 context
+  "notes": {                                          // object 结构（已知子字段见 §2.1 + mcp-usage-guide.md §1.4 / §3.3）
+    "summary": "用户原 brief 摘要 + 关键决策",        // AI 自由写,做 session 续跑 context
+    "product_image_gate": "passed" | "bypassed-by-user",  // 已在用,详见 mcp-usage-guide.md §1.4
+    "video_segments": { /* partial success 时填,详见 mcp-usage-guide.md §3.3 */ },
+    "product_metadata": { /* 产品图元数据,详见 §2.1 */ }
+  }
 }
 ```
+
+### 2.1 `notes.product_metadata` 子对象（产品图元数据）
+
+`product_metadata` 是产品图的**单一权威元数据**——记录主图 URL / 本地路径 / 多视角状态。所有 video 阶段 + downstream 资产生成都从这里读（**避免每次重新扫描 / 重新转换**）。
+
+**触发条件**：assets 阶段生成产品图后**必填**（commercial 涉及产品 + drama 涉及产品道具）。
+
+**schema**：
+
+```json
+{
+  "notes": {
+    "product_metadata": {
+      "<产品中文名>": {
+        "primary_url": "https://cos-platform-outputs.agnes-ai.cn/.../output.png",
+        "primary_local_path": "<workspace>/creative-video-suite/<project>/04_assets/product-refs/<产品名>.png",
+        "view_status": "single" | "multiview-pending" | "multiview-completed" | "multiview-failed",
+        "multiview_grid_url": "https://cos-platform-outputs.agnes-ai.cn/.../grid.png",
+        "multiview_grid_layout": "3x3" | "2x3" | "2x2",
+        "multiview_grid_generated_at": "2026-09-09T12:00:00Z"
+      }
+    }
+  }
+}
+```
+
+**字段说明**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `primary_url` | string (HTTPS URL) | ✅ | 主图 HTTPS URL；`video_generate.images[0]` 默认读这个（沿用 `3eba012` video_generate HTTPS-only 铁律，0 img.remit.ee） |
+| `primary_local_path` | string (workspace-relative) | ✅ | 主图本地副本路径（AI 自己定位用） |
+| `view_status` | enum | ✅ | 当前视角状态：`"single"`（默认 1 张主图，80% 场景）/ `"multiview-pending"`（宫格图生成中）/ `"multiview-completed"`（单张宫格图完成）/ `"multiview-failed"`（宫格图失败但保留 single fallback，**不**阻断 video 阶段） |
+| `multiview_grid_url` | string (HTTPS URL, optional) | ❌ | **单张**多视角宫格图 HTTPS URL；9 个/6 个/4 个角度**合在一张图里**呈现（不是多张分图）；opt-in 生成（详见 `mcp-usage-guide.md §1.6` + `mcp-call-templates.md §3 T13`） |
+| `multiview_grid_layout` | enum (optional) | ❌ | 宫格布局：`"3x3"`（默认 9 视角）/ `"2x3"`（6 视角）/ `"2x2"`（4 视角）；与 `multiview_grid_url` 配对填 |
+| `multiview_grid_generated_at` | string (ISO timestamp, optional) | ❌ | 宫格图生成完成时间；用于诊断 stale URL（CDN purge / 失效） |
+
+> **2026-09-09 user 锁定**：多视角产品图是**单张宫格图**（一张图含 N 个角度），**不是**多张分图。`views.{front,side,back,top,detail}` 的 5 URL 设计是过度拆分——video 阶段 `images[]` 上限 5，1 张宫格图即承载全部角度信息，**单 URL 落地更轻**。
+
+**读侧契约**（video 阶段 / 资产生成阶段）：
+
+- **默认场景**（`view_status: "single"`）：`video_generate.images[0] = product_metadata.<产品名>.primary_url`
+- **多视角场景**（`view_status: "multiview-completed"`）：`video_generate.images[0] = product_metadata.<产品名>.multiview_grid_url`（仍是 1 张图，但宫格内含全部视角 → model 端一次性看到多角度产品特征，比 5 张分图更连贯，且节省 `images[]` 名额给人物 / 场景 / logo）
+- **多视角失败回退**（`view_status: "multiview-failed"`）：回退到 single 路径，video 阶段可继续（**不**阻断）
+
+**写侧契约**（assets 阶段）：
+
+- 主图生成完成 → 立刻写 `primary_url` + `primary_local_path` + `view_status: "single"`
+- 多视角宫格图生成完成（T13 模板）→ 写 `multiview_grid_url` + `multiview_grid_layout` + `view_status: "multiview-completed"` + `multiview_grid_generated_at`
+- 多视角宫格图生成中 → `view_status: "multiview-pending"`
+- 多视角宫格图生成失败 → `view_status: "multiview-failed"`（**保留** `primary_url` 作 fallback）
+
+**为什么是单一权威**：
+
+- 双源风险（新建独立 `.asset_metadata.json`）易与 `project.json.notes` 不同步 → 跨 session 续跑时哪边是真？哪边过期？
+- 扩展 `project.json.notes.product_metadata` 与现有 `video_segments` / `product_image_gate` 子对象同源结构一致（详见 mcp-usage-guide.md §1.4 / §3.3 既有用法）
+- AI 续跑第一件事 `cat project.json` 看断点已经覆盖这个字段（output-conventions.md §6 续跑逻辑）
+
+**与 `project.json.stages_completed` 关系**：写入时机与 assets 阶段落盘同步；不强制每次 video 阶段都 update `view_status`，但 video 阶段首次使用某产品时应落 `project.json.notes.video_segments[<segment>]` 包含 `product_ref_url` 字段。
 
 **`type` 取值决定产物形态**：
 - `drama`：完整 5 阶段（planner → script → storyboard → assets → frame → video）
