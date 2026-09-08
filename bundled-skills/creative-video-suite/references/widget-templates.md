@@ -596,6 +596,8 @@ drift_score: **{{driftScoreFormatted}}**（{{driftLevel}}）
 
 **渲染目标**：让用户**直观看**多视角产品宫格图（**单张图含 9/6/4 个角度**）+ 各角度标注 + view_status badge + 生成时间。区别于 §6.5 漂移对比：§6.5 是「用户上传 product_ref vs 当前生成」左右对比；§6.6 是「单张宫格图 + 角度标注 + 元数据」展示块。
 
+> **🔗 范围说明**：本 widget 展示的是 `image_generate` (T13) 产物——**不受** MCP 视频时长边界（4-12 秒）约束（视频时长边界仅约束 `video_generate.seconds`）。多视角宫格图是静态图，时长参数 N/A；下游 video 阶段将本图作为 `video_generate.images[0]`（product_ref）时，时长边界才生效。
+
 **触发条件**：
 - T13 `image_generate_multiview_grid` 调用成功（`view_status: "multiview-completed"`）→ assets 阶段 emit 一次
 - 用户在 planner / assets 阶段 ack 多视角时也 emit 占位卡片（"待生成"）

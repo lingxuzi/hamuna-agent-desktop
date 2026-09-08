@@ -202,6 +202,9 @@
 #### TODO #107 — creative-video-suite: 多视角产品图（opt-in）+ JSON metadata 统一（skill-optimizer 流程）✅ DONE
 （落地详见 §5.6 + §4 `aa19103` commit）
 
+#### TODO #108 — creative-video-suite: 视频时长边界单源化（MCP `seconds` 4-12 字符串，硬约束）🔄
+**触发**：用户 mid-turn "规范creative-video-suite skill生成分镜的最低/追高秒数要符合mcp对应工具的定义"——MCP `mcp__multimedia-creator__agnes25_video_generate.seconds` 是**字符串**（非 int），合法值集合 `"4"`/`"5"`/`"6"`/`"7"`/`"8"`/`"9"`/`"10"`/`"11"`/`"12"`（9 个整数秒），双重约束（4 下限 / 12 上限），半秒 / 小数 / 浮点字符串均被拒。**问题**：全 skill 散落"4-12 秒"/"≤ 12 秒"措辞，无单一权威源；新增 reference 或 commit 易引入边界漂移（如写"≤ 13 秒" / "11 秒半合法" / 把 `seconds` 写成 int）。**目标**：把完整约束（双重约束 + 9 合法值集合 + 各分支锁定策略 + 边界外异常处理）压到一个 canonical 段；其它 9 个 ref 文件全部 cross-link 到该段，**不**在多处复制。**10 文件改动**：(1) `references/agnes-ai-api.md` 新增 `## 视频时长边界（单一权威 · 2026-09-09 加）` 段（含双重约束表 / 合法值集合 / 各分支默认 vs 锁定策略表 / 边界外异常处理表 / 跨 ref cross-link 锚点表）；(2) `SKILL.md` Step 4 5步硬门控末加 `references/agnes-ai-api.md §视频时长边界（单一权威）` cross-link；(3) `references/drama/frame.md` 残留"90 秒短剧单集默认生成 7 张关键帧"→ 72 秒（与 storyboard 6 段×12s 对齐，**不是** 90/7.5；frame.md 是 image 阶段不直接受 video boundary 约束故不交叉链接）；(4) `references/mcp-usage-guide.md` §6 调用前自检 11→12 项 gate（加 (12) `video_generate.seconds` 字符串 ∈ 9 合法值集合）；(5) `references/drama/storyboard.md` 时长模型表后加 cross-link；(6) `references/drama/prompt.md` line 13 "4-12 秒" 后加 cross-link；(7) `references/commercial/{ugc-talking-video-ref,product-marketing-ad-video-no-storyboard-ref,corporate-business-video-ref}.md` "MCP `seconds` 上限 12" / "MCP 视频 `seconds` 上限 12" 16 处全部改 "MCP `seconds` 边界 `4`-`12`（上限 12）"（in-place 即可，标 (上限 12) 让旧上下文理解延续）；(8) `references/mcp-call-templates.md` T04 seconds 注释 `// 字符串 "4"-"12"` → cross-link 到 §视频时长边界；T07 Marketing `// Marketing 锁死 12 秒（MCP 上限）` → "边界 4-12 上限，见 §视频时长边界（单一权威）"；§5 gate 11→12 项 + "11/11"→"12/12"；(9) `references/widget-templates.md` §6.6 头部加 footnote 标明 T13 多视角宫格图**不受**视频时长边界约束（image_generate 无 `seconds` 参数）；(10) `README.md` 加 `## 视频时长边界（2026-09-09 加）` 段（含双重约束表 / 各分支锁定策略表 / 何时不调此约束 image_generate/image_edit/T13）。**关键架构决策**：(1) **单一权威** = `references/agnes-ai-api.md §视频时长边界（单一权威）`；其余 9 个文件全部 cross-link，**不**重复内容；(2) **in-place 改写 16 处"上限 12"→"边界 4-12（上限 12）"**——保留"上限 12"在括注内让旧上下文理解延续，避免破坏既有跨 ref 引用；(3) **T13 footnote 显式豁免**——多视角宫格图是静态图无 `seconds` 参数，下游 video 阶段才受约束；(4) **drama 72 秒 + 7 帧对齐**——之前 90 秒残留是 12s 上限对齐 PR (`9207fbd`) 漏改，与 storyboard 6 段×12s 不匹配；本次一并修复；(5) **step 5 verify 待执行**：frontmatter / cross-ref / 残留 90 秒 / gate item 一致性。**已知遗留**：(a) utility skill 不自动同步老用户遗留已通过 §5.6 promote + bump `SYSTEM_SKILLS_VERSION` 39→40 解决（**不**再是遗留）；(b) `references/output-conventions.md` 中如有 `15s`/`13 秒` 字眼需独立 grep 复核（与 §5.6 同源 commit `9207fbd` 残留）；(c) `references/drama/scriptwriter.md` 未加 cross-ref（脚本阶段不直接涉及 video_generate `seconds`，跨阶段引用在 storyboard 已覆盖）；(d) `references/drama/assets.md` 未加 cross-ref（同上，assets 阶段产物是图不是视频）。
+
 ### 3.2 P3 多 Key Fallback Pipeline（新）🔄
 
 **目标**：让 `agnes-video-25-mcp` server 在 `AGNES_API_KEY` daily quota 撞顶（429）时自动切换备用 key。解决 2026-09-08 UGC 2nd 跑 5 个 key 撞 daily quota → 17h 阻塞问题。
@@ -251,6 +254,7 @@
 | `9207fbd` | **fix(creative-video-suite): align default video duration to MCP 12s cap (15s → 12s across 7 files)** |
 | `4f944b2` | **feat(creative-video-suite): absorb director-grade storyboard craft (drama 跨段稳定编号 + 双档时长 + 五维物理表演 + 运镜分级)** |
 | `<pending>` | **feat(creative-video-suite): add hard-coded MCP call templates + 2-retry gate + product_ref drift-compare widget (8 files, 12 templates)** |
+| `<pending>` | **feat(creative-video-suite): single-source video duration boundary (MCP `seconds` "4"-"12" 字符串, 10 files, 2026-09-09)** |
 | `aa19103` | **feat(creative-video-suite): add opt-in multiview grid image + product_metadata JSON schema + promote to system skill (bump SYSTEM_SKILLS_VERSION 39→40)** |
 | `f47c650` | **chore(deps): sync Cargo.lock hamuna 0.3.96 → 0.3.100 (bump-on-commit hook drift)** |
 | `3eba012` | **fix(creative-video-suite): split input-source iron rule by tool (image_edit 3 forms vs video_generate HTTPS-only)**（dev/skill-input-source-split） |
@@ -432,3 +436,23 @@
 - (a) 老用户本地如有 `~/.hamuna/skills/creative-video-suite/` 下自定义文件（非 skill 内容，如 `my-notes.md`），force-overwrite 会删除——按现有 system skill 设计就该这样（不向用户承诺保留）；如未来需保留用户文件，需在 `cmd_sync_system_skills` 加白名单逻辑（不在本 PR 范围）
 - (b) bump 版本号 vs 内容版本号脱钩——后续 creative-video-suite 内容改动**不**再 bump 版本号（system skill 自动同步），但 `SYSTEM_SKILLS_VERSION` 总号仍是同步基线（如未来有新 skill 加入或现有 system skill 大改需 bump）；**未来**如要做"分 skill 独立版本"需要在 `cmd_sync_system_skills` 加每 skill version manifest（独立 TODO，不在本 PR）
 - (c) 本 skill `~/.hamuna/skills/creative-video-suite/` 老版本用户本地 `project.json.notes.product_metadata` 不存在——promote 后新约定 T13 + product_metadata schema，AI 在 assets 阶段首次需要时会**主动创建**（不是兼容性问题，是正向演进）
+
+### 5.7 视频时长边界单源化（2026-09-09 落地，§3.1 TODO #108 `<pending>`）
+
+**触发**：用户 mid-turn 报 "creative-video-suite skill 生成分镜的最低/追高秒数要符合 mcp 对应工具的定义"——`video_generate.seconds` 字符串合法值集合与 4-12 双重约束散落 9 个 ref，**没有**单一权威源 → 易在新增 commit 漂移（如把 `seconds` 写 int / 写 13 / 写 11.5）。
+
+**单一权威段**：`bundled-skills/creative-video-suite/references/agnes-ai-api.md §视频时长边界（单一权威 · 2026-09-09 加）`——含双重约束（4 下限 / 12 上限）+ 9 合法值字符串集合 `"4"`-`"12"` + 各分支锁定策略表（drama / UGC / Marketing / Corporate 默认 vs 下探 vs 锁定上限）+ 边界外异常处理表（<4 改 image_generate + 拼接，>12 走 long_video_stitch_mode）+ 跨 ref cross-link 锚点。
+
+**红线条目**：
+
+| 红线 | 后果 | 正确做法 |
+|---|---|---|
+| 把 `video_generate.seconds` 当 int 喂（如 `12` 而非 `"12"`） | MCP schema 校验失败 → 400 | 严格用字符串字面量 |
+| 用 9 合法值集合外的字符串（`"3"` / `"13"` / `"4.5"` / `"11.5"`） | MCP schema 校验失败 → 400 | 用 `"4"`-`"12"` 整数秒字符串 |
+| 改 4 下限（写 `< 4 秒` 可生成） | 撞 schema 校验失败 | 必须 ≥ `"4"`，< 4 改 image_generate + frame 拼接 |
+| 改 12 上限（写 `≤ 13 秒`） | 撞 schema 校验失败 | 必须 ≤ `"12"`，> 12 走 `long_video_stitch_mode` |
+| 在多个 ref 重复完整约束（drift 风险） | 9 处 copy 易漂移 | 全部 cross-link 到 §视频时长边界（单一权威） |
+
+**全栈落地 10 文件**：`agnes-ai-api.md` (canonical) / `SKILL.md` (Step 4 cross-link) / `drama/{frame,storyboard,prompt}.md` (drama 2 路 cross-link + 90→72 fix，frame.md 是 image 阶段不直接受 video boundary 约束故不交叉链接) / `mcp-usage-guide.md` (gate 11→12) / `commercial/{ugc,marketing,corporate}-*-ref.md` (16 处 "上限 12"→"边界 4-12（上限 12）" in-place) / `mcp-call-templates.md` (T04/T07 注释 + gate 11→12) / `widget-templates.md` (§6.6 T13 footnote 显式豁免) / `README.md` (新 `## 视频时长边界` 段) / `snapshot.md` (本段 + TODO #108)。
+
+**image_generate / image_edit / T13 不受约束**：3 类工具无 `seconds` 参数 → widget-templates.md §6.6 footnote 显式说明，README.md 段"何时不调此约束"也列出。

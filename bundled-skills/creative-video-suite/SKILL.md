@@ -39,7 +39,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
    - **`video_generate` 字段**（`images[]` / `first_frame` / `last_frame` / `audios[]`）：**只允许 HTTPS URL**。hosted_mcps 对本地路径 / data URI 都做"上传 `img.remit.ee` 拿 URL"处理（因为 agnes 视频 API 只接受公开可访问 HTTPS URL），并发撞图床 QPS 限流 5xx。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 按工具拆分」章节
 2. **中文 prompt 铁律**：所有 `prompt` 参数中文（语法例外：`<Picture N>` / `mode="text"` 等 enum / 参数键名 / 数值字面量保持英文）。详见 `references/agnes-ai-api.md` 范例（已全部中文）
 3. **mode ↔ params 互斥自检**：text 模式无图 / keyframe 必有 first_frame / reference 必传 images[]；`mask_path` 只对 image_edit 有效；`audios[]` / `videos[]` 仅 video 接受。详见 `references/mcp-usage-guide.md` §2.3
-4. **参数 schema 边界**：`size=720P` 锁死 / `seconds="4"-"12"` 字符串 / `aspect_ratio` 与 first_frame 比例一致（不一致先 image_edit 转比例）。详见 `references/agnes-ai-api.md` 参数表
+4. **参数 schema 边界**：`size=720P` 锁死 / `seconds="4"-"12"` 字符串 / `aspect_ratio` 与 first_frame 比例一致（不一致先 image_edit 转比例）。**时长边界完整约束见 `references/agnes-ai-api.md §视频时长边界（单一权威）`**（包括 4 秒下限、12 秒上限、9 个合法字符串值集合、各分支锁定策略、边界外异常处理）。详见 `references/agnes-ai-api.md` 参数表
 
 5 步全过才允许调 MCP 工具，**任何一项不过 = 该阶段未完成**。
 
@@ -71,7 +71,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 - **任何 attempt 不得 fallback**（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 - 2 次重试后仍失败 → 停下，**交由用户处理**；把三次 attempt 的 prompt + 错误码 + URL 映射写到 `project.json.notes.last_failure`；widget emit 失败卡；**不**输出"已生成"等措辞
 
-**完整规范**（12 个 T 模板 + 公共 block + 决策表 + 11 项 gate + 失败流程）见 `references/mcp-call-templates.md`。
+**完整规范**（12 个 T 模板 + 公共 block + 决策表 + 12 项 gate + 失败流程）见 `references/mcp-call-templates.md`。
 
 **🔒 Prompt 语言铁律（必读）**：所有 `prompt` 参数（`agnes25_image_generate` / `agnes25_image_edit` / `agnes25_video_generate`，包括负向约束与全局风格锚点）必须使用**中文**。理由：项目文档与 6 个视觉风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感）全程中文，且 agnes 国内版 API 完整支持中文 prompt。**语法例外**（保持英文 / 固定字面量）：`<Picture N>` / `@图片N` 多图引用标记、`mode="text"` 等 enum 取值、`size` / `ratio` / `aspect_ratio` / `seconds` 等参数键名、`audios` / `videos` 数组结构、`16:9` / `720P` 等数值字面量。完整调用范例（已全部中文）见 `references/agnes-ai-api.md`。
 

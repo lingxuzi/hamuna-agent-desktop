@@ -14,8 +14,51 @@
 
 **模型强约束（2.5-flash）**：
 - 视频 size 锁死 `720P`（旧版可选 720P / 1080P / 1K / 2K 已废除）
-- 视频 seconds 仅支持 `"4"` 至 `"12"` 字符串（旧 num_frames / frame_rate / duration 已废除）
+- 视频 seconds 仅支持 `"4"` 至 `"12"` 字符串（旧 num_frames / frame_rate / duration 已废除）— **完整约束见下文 `## 视频时长边界（单一权威）`**
 - 视频 images ≤ 5 / audios ≤ 3 / videos = 0（flash 不接受 video ref）
+
+## 视频时长边界（单一权威 · 2026-09-09 加）
+
+`mcp__multimedia-creator__agnes25_video_generate.seconds` 参数是**字符串**（非 int），**双重约束**：
+
+| 约束 | 取值 | 含义 |
+|---|---|---|
+| **下限 4 秒** | `seconds` 字符串值 **必须 ≥ `"4"`** | 小于 4 秒（MCP schema 校验失败）→ 必须用 image_generate 出图 + frame 拼接，或放弃短视频需求 |
+| **上限 12 秒** | `seconds` 字符串值 **必须 ≤ `"12"`** | 超过 12 秒（MCP schema 校验失败）→ 多段拼接 `long_video_stitch_mode`（见 `references/commercial/corporate-business-video-ref.md`） |
+| **合法值集合** | `"4"` / `"5"` / `"6"` / `"7"` / `"8"` / `"9"` / `"10"` / `"11"` / `"12"`（共 9 个，**只接受整数秒**） | 半秒 / 小数 / 浮点字符串均被拒（如 `"3.5"` / `"4.5"` 都不合法） |
+
+### 各分支默认 vs 锁定策略（4-12s 边界内的具体取值）
+
+| 分支 | 默认值 | 下探到 4 秒 | 锁定上限 | 备注 |
+|---|---|---|---|---|
+| **drama** | `{{seconds}}` 占位符（runtime 替换） | ✅ 灵活档 4-12s 三段式 | 12 秒 | 详见 `references/drama/storyboard.md`「时长模型：默认 12s 节奏档 + 灵活档（并存）」；默认档 12s 节奏速查表 / 灵活档按 MCP 上限 12s 比例压缩（参考材料 30s 哲学按 4-12s 三段式 0-25% / 25-75% / 75-100%） |
+| **UGC** | 12 秒 | ⚠ 用户 ack 后可缩短到 6-8 秒（短口播） | 12 秒 | 12 秒 60-72 字 / 高密度 72-84 字（`speech_pace` 字数同步重算）；缩短到 4 秒只允许纯 logo splash / transition 类 |
+| **Marketing** | 12 秒 | ❌ 不下探 | 12 秒 | 5 段式结构（0-2 / 2-4 / 4-8 / 8-10 / 10-12）硬绑定 12s，缩短会破坏 hook → packshot 弧线 |
+| **Corporate** | 12 秒 | ❌ 不下探 | 12 秒 | 8-10 分镜结构 + `long_video_stitch_mode` 拼接（多段都是 12s） |
+
+### 跨 ref cross-link 锚点（本节是单一权威）
+
+所有提到"秒数" / "时长" / "MCP 边界"的 ref 都 MUST 指向本节：
+
+| 上游 ref | 引用入口 | 改动模式 |
+|---|---|---|
+| `SKILL.md` 5 步硬门控第 4 步 | 第 4 条 `参数 schema 边界` | 追加 1 行 `(时长边界见 references/agnes-ai-api.md §视频时长边界)` |
+| `references/mcp-usage-guide.md` §6 | 调门前自检清单 | 新增 item (12) `seconds ∈ {4-12 字符串}？` 指向本节 |
+| `references/mcp-call-templates.md` §6 | 调门前自检清单 | 新增 `{{seconds}}` 占位符 ∈ {4-12 字符串}？指向本节 |
+| `references/drama/storyboard.md` | 「时长模型」段 | 末尾追加 1 行 `(MCP 边界 4-12s 见 references/agnes-ai-api.md §视频时长边界)` |
+| `references/drama/prompt.md` | 「每个视频时长：4-12 秒」段 | 末尾追加 1 行 cross-link 到本节 |
+| `references/commercial/ugc-talking-video-ref.md` | 所有"MCP `seconds` 上限 12"出现处 | 改写为"MCP `seconds` 边界 `4`-`12`" + 末尾 cross-link |
+| `references/commercial/product-marketing-ad-video-no-storyboard-ref.md` | 同上 | 同上 |
+| `references/commercial/corporate-business-video-ref.md` | 同上 | 同上 |
+
+### 异常处理（边界外请求）
+
+| 用户请求 | AI 行动 |
+|---|---|
+| `< 4 秒`（如 splash / transition / logo 闪白） | ❌ 拒绝调 video_generate；建议改用 `image_generate` 出图 + frame 拼接 / 或放弃；**不**允许 fallback 到非 MCP 工具 |
+| `> 12 秒`（如 15s / 30s / 60s 长视频） | ❌ 拒绝单次 video_generate；进入 `long_video_stitch_mode`（详见 corporate-business-video-ref.md）；按 12 秒切段拼接 |
+| 半秒 / 小数（`4.5` / `5.5`） | ❌ 拒绝；MCP 9 合法值都是整数秒字符串 |
+| 占位符 `{{seconds}}` 未替换 | ❌ 拒绝调 MCP；详见 `mcp-call-templates.md` §6 gate item |
 
 ## 多图引用语法
 

@@ -108,6 +108,29 @@ planner (SKILL.md) → scriptwriter → storyboard → assets → frame → prom
 
 完整 schema + 读侧 / 写侧契约见 `references/output-conventions.md §2.1`。
 
+## 视频时长边界（2026-09-09 加）
+
+MCP `mcp__multimedia-creator__agnes25_video_generate.seconds` 参数是**字符串**（非 int），**双重约束**：
+
+| 约束 | 取值 | 含义 |
+|---|---|---|
+| **下限 4 秒** | `seconds` 字符串值 **必须 ≥ `"4"`** | <4s MCP schema 校验失败 → 改用 `image_generate` 出图 + frame 拼接 |
+| **上限 12 秒** | `seconds` 字符串值 **必须 ≤ `"12"`** | >12s MCP schema 校验失败 → 多段拼接 `long_video_stitch_mode` |
+| **合法值集合** | `"4"`/`"5"`/`"6"`/`"7"`/`"8"`/`"9"`/`"10"`/`"11"`/`"12"`（9 个整数秒） | 半秒 / 小数 / 浮点字符串均被拒 |
+
+**各分支锁定策略**：
+
+| 分支 | 默认 | 下探到 4 秒 | 锁定上限 |
+|---|---|---|---|
+| drama | `{{seconds}}` 占位符 | ✅ 灵活档 4-12s 三段式 | 12s |
+| UGC | 12s | ⚠️ 用户 ack 后可缩到 6-8s | 12s |
+| Marketing | 12s | ❌ 不下探 | 12s |
+| Corporate | 12s | ❌ 不下探 | 12s |
+
+**单一权威**：`references/agnes-ai-api.md §视频时长边界（单一权威）` 段（含完整 9 合法值集合 / 双重约束 / 各分支锁定策略 / 边界外异常处理）。本文档、SKILL.md、commercial 3 路 ref、drama 2 路 ref（storyboard / prompt）、mcp-usage-guide / mcp-call-templates / widget-templates **均**交叉引用此节，**不**在多处复制。
+
+**何时不调此约束**：`image_generate` / `image_edit` / T13 `image_generate_multiview_grid` 产物**不受**视频时长边界约束（这些是静态图工具，无 `seconds` 参数）。
+
 ## 路由边界
 
 | 关键词命中 | 路由到 |

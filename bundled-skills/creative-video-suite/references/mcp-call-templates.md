@@ -152,7 +152,7 @@ mcp__multimedia-creator__agnes25_video_generate({
     "{{person_ref_url}}"      // <Picture 2> = person_ref（涉及人物出镜时传；纯产品特写无人物则 images.length === 1）
   ],
   prompt: "{{style_anchor}}，参考 <产品N>（<Picture 1>，{{product_name}}）的包装、logo、颜色、材质 100% 锁定；<角色N>（<Picture 2>）{{如有人物}}手持 / 使用 / 呈现 该产品{{/如有人物}}；分镜脚本：{{storyboard_shot_description}}；镜头时长严格 {{seconds}} 秒；{{negative_product_block}}{{negative_drama_block}}",
-  seconds: "{{seconds}}",     // 字符串 "4"-"12"
+  seconds: "{{seconds}}",     // 字符串合法值集合见 `references/agnes-ai-api.md §视频时长边界（单一权威）`
   size: "720P",               // 锁死
   aspect_ratio: "{{aspect_ratio}}"  // drama 默认 9:16
   // audios / videos / first_frame / last_frame / mask_path 不传
@@ -240,7 +240,7 @@ mcp__multimedia-creator__agnes25_video_generate({
     "{{voiceover_scene_url}}" // <Picture 2> = voiceover_scene_map（来自 03_storyboard.md 的 voiceover_scene_map 落盘 PNG / 02_assets）
   ],
   prompt: "{{style_anchor}}，参考 <产品N>（<Picture 1>，{{product_name}}）的包装、logo、颜色、卖点视觉 100% 锁定；按 5 段式结构生成：0-2s hook 视觉反差强冲击、2-4s 产品揭示 logo/产品居中、4-8s 卖点证明（3 个卖点用 voiceover_scene_map <Picture 2> 锚定视觉）、8-10s 结果 + 受众收益、10-12s packshot hold logo 持续露出；旁白（{{voiceover_excerpt}}）；镜头时长严格 12 秒；{{negative_product_block}}",
-  seconds: "12",              // Marketing 锁死 12 秒（MCP 上限）
+  seconds: "12",              // Marketing 锁死 12 秒（边界 4-12 上限，见 `references/agnes-ai-api.md §视频时长边界（单一权威）`）
   size: "720P",
   aspect_ratio: "9:16"         // Marketing 默认 9:16
 })
@@ -460,7 +460,7 @@ mcp__multimedia-creator__agnes25_image_generate({
 
 > **T13（image_generate 多视角产品图）独立于上表**——T13 是 `image_generate` 工具的 opt-in 多视角宫格图模板（2026-09-09 新增），不在 video_generate (分支 × ref 类型) 决策表中。触发条件详见 `mcp-usage-guide.md §1.6`（360° reveal / 多角度调性 / 用户明示）。T13 生成的宫格图作为 product_ref 落到 `video_generate.images[0]`（替代默认 `primary_url`，存在 `multiview_grid_url` 即优先用）。上表的 product_ref 列同时指 `primary_url` 与 `multiview_grid_url`，video 模板（T04/T06/T07/T08）的 `{{product_ref_url}}` 占位符**优先读 `multiview_grid_url`**。
 
-## 5. 调用前自检（11 项 gate，每条必过）
+## 5. 调用前自检（12 项 gate，每条必过）
 
 ```text
 [ ] (0)  产品图门控过吗？（涉及产品 → product-refs/ 有图，否则降级模式 ack 落 project.json.notes）
@@ -475,9 +475,10 @@ mcp__multimedia-creator__agnes25_image_generate({
 [ ] (9)  失败重试 ≤ 2 次？超 2 次 → 停下，【交由用户处理】（禁止继续重试 / 自主改 prompt / 自作主张）
 [ ] (10) 任何失败【不得 fallback】（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 [ ] (11) 【硬编码铁律】涉及 ref 的生成走对应 T 编号模板吗？images[] 顺序按 §0.4 排吗？negative block 已嵌入吗？
+[ ] (12) `video_generate.seconds` 字符串值 ∈ `{"4","5","6","7","8","9","10","11","12"}`？完整约束（4 下限 / 12 上限 / 各分支锁定策略 / 边界外异常处理）见 `references/agnes-ai-api.md §视频时长边界（单一权威）`
 ```
 
-11/11 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
+12/12 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
 
 ### 5.1 重试铁律（用户 2026-09-08 收紧：retry 期间 0 微调）
 
