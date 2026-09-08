@@ -176,3 +176,25 @@ EP01_SEG06_END.png
 5. 参数 schema（size / ratio / num_images 取值合法）
 
 **失败处理**：单次失败重试 1 次（可微调 prompt）；连续 2 次失败停下问用户。**不**降级（image_generate 失败 → 不降级 image_edit）。
+
+## Widget emit
+
+**emit 时机**：**追加模式**——每生成一张关键帧图后**立即** emit `frame-keyframe-grid` widget（HTML 模板 + 占位符替换见 `references/widget-templates.md` §5）。**不**等全部 7 张完成才 emit 一次。
+
+**数据来源**：`05_keyframes/episode-XX/segment-YY/<KEYFRAME_NAME>.png` 的 HTTPS URL（来自 `image_generate` 返回的 `data[0].url`，记到 stage .md 头部映射）。
+
+**关键帧命名约束**（widget 分组 key）：
+- `SEG01_START` / `SEG01_END` / `SEG02_END` / `SEG03_END` / `SEG04_END` / `SEG05_END` / `SEG06_END`（drama 默认 7 张）
+- 命名错位会破坏 widget 帧序显示
+
+**占位符替换规则**：
+- `{{episodeLabel}}` → `第1集` 等
+- `{{frameCount}}` → 该集关键帧总数
+- `{{segmentLabel}}` → `segment-01` 等
+- `{{frameUrl}}` / `{{frameName}}` → `05_keyframes/episode-XX/segment-YY/<KEYFRAME>.png` HTTPS URL
+
+**追加语义**：每次 emit 包含**该 segment 已生成的关键帧**（含本次新增）；按 episode × segment 二维网格展示，让用户一眼看到帧序对不对。
+
+**Markdown fallback**：保留所有关键帧图按 segment 分组 inline。**禁**只 emit widget 不写 fallback。
+
+**commercial 不调 frame 阶段**——Marketing 强门控禁止分镜图，UGC / Corporate 走 `storyboard-shot-table` widget 代替。

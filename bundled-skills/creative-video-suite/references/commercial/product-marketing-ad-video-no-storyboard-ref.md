@@ -828,3 +828,21 @@ prompt 末尾第一句必须写：
 **失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。
 
 **long_video_stitch_mode**：30s / 60s 视频拆多 segment → 每个 segment 独立调 video_generate，partial success 处理见 `mcp-usage-guide.md` §3.3。
+
+## Widget emit
+
+**emit 时机**：
+1. **assets-image-gallery**（追加模式）：每张产品 hero 图 / 细节特写图生成后立即 emit（见 `references/widget-templates.md` §4）
+2. **video-segment-list**（追加模式）：每段视频生成后立即 emit（见 `references/widget-templates.md` §6）
+
+**Marketing 强门控**：**不** emit `storyboard-shot-table` widget（Marketing 强门控禁止分镜图，详见 SKILL.md「分镜图片 / 关键帧门控」）。视频流程是 `assets → video`，中间**不** emit 分镜相关 widget。
+
+**Marketing 特殊字段**：每段 `video-segment-list` widget 额外显示 `voiceover_scene_map` 旁白摘要（从 `06_videos/voiceover_scene_map.md` 拿该 segment 的旁白子集）——在 widget 的 `.seg-meta` 行后加 `.voiceover-excerpt` 段：`voiceover_scene_map` 该段原文（中文 + `{}` 包裹标记）。
+
+**占位符替换规则**：
+- `{{voiceover}}` → Marketing 必含 voiceover（`voiceover_scene_map`），配 `true`
+- `{{voiceoverExcerpt}}` → `voiceover_scene_map.md` 该段旁白子集
+
+**drama 默认走 frame-keyframe-grid → video-segment-list**，Marketing 跳过 frame 阶段（无分镜图）+ 跳过 storyboard-shot-table widget（无分镜），直接从 assets-image-gallery 跳到 video-segment-list。
+
+**Markdown fallback**：保留每段视频 inline + voiceover_scene_map 该段旁白摘要（用 `> 旁白：` 引用格式）。**禁**只 emit widget 不写 fallback。

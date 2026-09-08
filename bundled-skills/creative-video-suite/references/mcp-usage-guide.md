@@ -173,6 +173,8 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 }
 ```
 
+**widget 中的失败展示**：`video-segment-list` widget（见 `references/widget-templates.md` §6）对失败的 segment **不**消失，**红色边框 + ⚠️ + 错误摘要 + retry 提示**——用户在 widget 里就看到失败（不需要翻 chat 历史）。失败的 segment 不阻断后续成功的 segment 落盘 + 写 `segment-XX.md` + widget emit。
+
 ---
 
 ## 4. 失败处理与降级禁止

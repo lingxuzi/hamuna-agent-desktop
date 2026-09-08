@@ -231,3 +231,15 @@
 4. 用户**显式 ack 降级** → 标记该镜头为"产品视觉相似，无真实参考"，不阻塞后续流程
 
 完整规范见 `references/mcp-usage-guide.md` §1。
+
+## Widget emit
+
+**emit 时机**：用户确认分镜 + `03_storyboard.md` 落盘后**立即** emit `storyboard-shot-table` widget（HTML 模板 + 占位符替换见 `references/widget-templates.md` §3）。
+
+**数据来源**：`03_storyboard.md` 分镜表（含 shot_number / time_range / shot_goal / camera_path / audio_or_dialogue）+ 关键帧 HTTPS URL（来自 assets / frame 阶段已落盘的副本 + `image_generate` 返回的 `data[0].url` 映射）。
+
+**关键帧 HTTPS URL 获取**：从 `image_generate` 返回的 `data[0].url` 直接用（drama frame 阶段已生成关键帧，URL 在 stage .md 头部 `<file_path> → <https_url>` 映射里）。**禁**用本地 file path——sandboxed iframe CSP 只放 `data:` + `https:`。
+
+**占位符替换规则**：每个 shot 一行 `<tr>`，含 `{{shotGoalNN}}` / `{{cameraPathNN}}` / `{{dialogueNN}}` / `{{keyframeNNUrl}}`（drama 默认 7 行；commercial 按 10-12 行）。
+
+**Markdown fallback**：保留分镜表 + 关键帧图 inline `![SEGXX_YY](<URL>)`。**禁**只 emit widget 不写 fallback。

@@ -267,3 +267,25 @@ commercial 分支额外落盘（见 output-conventions.md §5）：ugc 加 `04_a
 4. 用户**显式 ack 降级**（"我用 AI 生成看起来像 XX 牌"）→ 标记为视觉相似虚构道具，**不**作产品图
 
 完整规范见 `references/mcp-usage-guide.md` §1。
+
+## Widget emit
+
+**emit 时机**：**追加模式**——每生成一张资产图（角色 / 场景 / 道具）后**立即** emit `assets-image-gallery` widget（HTML 模板 + 占位符替换见 `references/widget-templates.md` §4）。**不**等全部完成才 emit 一次。
+
+**数据来源**：`04_assets/<type>/<name>/<name>_设定.png` 的 HTTPS URL（来自 `image_generate` 返回的 `data[0].url`，记到 stage .md 头部 `<file_path> → <https_url>` 映射）。
+
+**drama 内部细分**（widget 分组规则）：
+- 角色 → `characters` 组
+- 场景 → `scenes` 组
+- 通用道具（桌椅 / 装饰 / 抽象物）→ `props` 组
+- **产品类道具**（品牌手机 / 真实商品 / 包装）→ `productRefs` 组（**必须**走用户上传，不进 AI 自由生成的 `props` 组）
+
+**占位符替换规则**：
+- `{{stageCount}}` → 当前总资产数（含本次新增）
+- `{{charactersCount}}` / `{{character01Url}}` / `{{character01Name}}` → `04_assets/characters/<name>/<name>_设定.png`
+- `{{scenesCount}}` / `{{propsCount}}` → 同上
+- `{{productRefsCount}}` / `{{productRefsItems}}` → **commercial only** `04_assets/product-refs/<name>.png`（drama 仅在产品类道具时填）
+
+**追加语义**：每次 emit 包含**全部已生成图**（含本次新增）。前端 WidgetRenderer 渲染最新版本（streaming-style 行为）。
+
+**Markdown fallback**：保留所有资产图 inline `![<name>](<URL>)` 按分组列表。**禁**只 emit widget 不写 fallback。

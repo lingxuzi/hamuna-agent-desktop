@@ -476,3 +476,20 @@ images[4] = 客户案例（如有）
 5. 参数 schema（15s 时长 / size 锁 720P / aspect_ratio 按 platform 推断）
 
 **失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**用 AI 自由生成 logo（必须用用户上传的 logo 原图作 image_generate 或 reference）。
+
+## Widget emit
+
+**emit 时机**：
+1. **assets-image-gallery**（追加模式）：每张 logo / IP / VI / 产品图生成后立即 emit（见 `references/widget-templates.md` §4）。Corporate 专属 `brandRefs` 组（logo / IP / VI / 客户案例）+ `productRefs` 组（含产品图升级后的第 3 类必填信息）。
+2. **video-segment-list**（追加模式）：每段视频生成后立即 emit（见 `references/widget-templates.md` §6）
+
+**Corporate 强门控**：Corporate 走 `storyboard-shot-table` widget（10-12 行标准企业宣传分镜表）+ `narration` 旁白卡（仅 Corporate 专属，旁白稿独立 `narration.md` 落盘）。可在 `video-segment-list` widget 顶部加 `.narration-card` 段，显示当前段对应的全片旁白子集 + `narration.md` 引用关系。
+
+**占位符替换规则**：
+- `{{voiceover}}` → Corporate 必含 narration（`narration.md`），配 `true`
+- `{{voiceoverExcerpt}}` → `narration.md` 该段旁白子集（不是分散在每个 segment.md）
+- `{{brandRefsCount}}` / `{{brandRefsItems}}` → `04_assets/brand-refs/<name>.png`（Corporate 专属，含 logo / IP / VI / 客户案例 / 产品图）
+
+**drama 默认走 frame-keyframe-grid → video-segment-list**，Corporate 跳过 frame 阶段（10-12 行分镜表已满足，不需要单独关键帧）+ 走 storyboard-shot-table（10-12 行）+ 跳过 frame-keyframe-grid，直接从 assets-image-gallery（含 brandRefs 组）→ storyboard-shot-table → video-segment-list（含 narration-card）。
+
+**Markdown fallback**：保留每段视频 inline + narration.md 该段旁白子集 + brand-refs 资产图分组。**禁**只 emit widget 不写 fallback。

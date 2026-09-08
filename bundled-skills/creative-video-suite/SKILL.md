@@ -79,9 +79,33 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 
 ### 交付规范
 
-视频工具返回 `video_url` / `output_url` / 本地视频路径后，必须在聊天输出中以 `![segment](<URL>)` Markdown 形式直接展示视频本体（多媒体路径会被渲染为可播放视频）。不得只传总结文案或裸链接文本。
+**每阶段产物完成后，AI 必须 emit `<generative-ui-widget>` 块**（渲染目标 / 数据来源 / HTML 骨架 / 占位符替换见 `references/widget-templates.md`）让用户在 chatui **直观看**生成内容；同时保留 `![image](<URL>)` / `![video](<URL>)` Markdown 作为 fallback（widget 解析失败时仍可见）。
 
-工具返回后必须先确认上屏播放，再输出成功格式。
+**6 个阶段 × widget 模板对应**：
+
+| 阶段 | widget 模板 | 数据来源 |
+|---|---|---|
+| planner | planner-meta-card | `project.json` + `01_planner.md` 头部 |
+| scriptwriter | scriptwriter-summary-card | `02_script.md` |
+| storyboard | storyboard-shot-table | `03_storyboard.md` + 关键帧 URL |
+| assets | assets-image-gallery | `04_assets/<type>/<name>/*.png` |
+| frame | frame-keyframe-grid | `05_keyframes/episode-XX/segment-YY/*.png` |
+| video | video-segment-list | `06_videos/segment-XX.{mp4,md}` + `project.json.notes.video_segments` |
+
+**视频交付**：工具返回 `video_url` / `output_url` / 本地视频路径后，emit `video-segment-list` widget（每段含 `<video>` 标签 + 元数据 + 失败占位），**同时**保留 `![segment](<URL>)` Markdown 作为 fallback。不得只传总结文案或裸链接文本。
+
+**工具返回后必须先确认 widget 渲染 + 上屏播放，再输出成功格式。**
+
+## ⚠️ 诊断澄清：HTTPS URL 是契约，output 不可视才是问题
+
+用户常见误解："creative-video-suite 把 web URL 直接传给 MCP 服务，导致 chatui 看不到"——这是把 **input** 和 **output** 混为一谈。
+
+| 流向 | 当前状态 | 是否问题 |
+|---|---|---|
+| **AI → MCP 输入**：`first_frame` / `images[]` 传 HTTPS URL | 正确（MCP server 只接受 HTTPS URL；本地路径触发 `img.remit.ee` 图床上传撞 QPS 限流；5 步硬门控第 1 条强制） | ❌ 不是问题，**不能改成本地路径** |
+| **MCP → chatui 输出**：`image_generate` / `video_generate` 返回的 HTTPS URL 在 chatui 里是否可视化 | `src/server/utils/tool-result-attachments.ts::classifyToolAttachmentPresentation` 当前未把 `mcp__multimedia-creator__agnes25_*` 纳入 attachment 包装 → URL 仅以纯文本落到 chat，没被 `ToolImageAttachment` 渲染成 inline 卡 | ✅ 是问题根因 |
+
+**本次 skill 侧补偿**：AI 主动 emit `<generative-ui-widget>` 块（per-stage 摘要）让用户看到。Sidecar 包装属于另一 PR follow-up——在 Sidecar 包装落地前，inline 图卡不可用，widget 是唯一 chatui 可视化路径。
 
 ## 视觉风格选择
 

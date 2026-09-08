@@ -93,16 +93,18 @@ creative-video-suite 的产物分两层：
 
 ## 3. 落盘时机与门控
 
-| 阶段完成 | 落盘什么 | 路径 | 门控 |
-|---|---|---|---|
-| **planner** | `01_planner.md`（项目 brief + 风格锚点 + 路线选择 + 项目名确认）+ `project.json`（新建） | `<project>/01_planner.md` + `project.json` | 用户确认项目名 + type + style_anchor + aspect_ratio |
-| **script** | `02_script.md` | `<project>/02_script.md` | 用户确认剧本 |
-| **storyboard** | `03_storyboard.md`（含分镜表 + 符号规则 + 运镜） | `<project>/03_storyboard.md` | 用户确认分镜 |
-| **assets** | 每个角色 / 场景 / 道具生成后立刻落盘（不等全部完成）；阶段末落盘资产清单 `04_assets/<type>/<name>/assets.md` | `<project>/04_assets/...` | 用户确认资产验收表（每张"已生成"才进 frame 阶段） |
-| **frame** | 每个关键帧生成后立刻落盘；阶段末落盘 `05_keyframes/frames-index.md` | `<project>/05_keyframes/...` | 用户确认关键帧 |
-| **video** | 每个 segment 视频 `cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制到本地 + 写 `segment-XX.md` 元数据 | `<project>/06_videos/...` | 用户确认视频 + update `project.json.current_stage` |
+| 阶段完成 | 落盘什么 | 路径 | 门控 | widget emit |
+|---|---|---|---|---|
+| **planner** | `01_planner.md`（项目 brief + 风格锚点 + 路线选择 + 项目名确认）+ `project.json`（新建） | `<project>/01_planner.md` + `project.json` | 用户确认项目名 + type + style_anchor + aspect_ratio | **planner-meta-card** |
+| **script** | `02_script.md` | `<project>/02_script.md` | 用户确认剧本 | **scriptwriter-summary-card** |
+| **storyboard** | `03_storyboard.md`（含分镜表 + 符号规则 + 运镜） | `<project>/03_storyboard.md` | 用户确认分镜 | **storyboard-shot-table** |
+| **assets** | 每个角色 / 场景 / 道具生成后立刻落盘（不等全部完成）；阶段末落盘资产清单 `04_assets/<type>/<name>/assets.md` | `<project>/04_assets/...` | 用户确认资产验收表（每张"已生成"才进 frame 阶段） | **assets-image-gallery**（追加模式：每张图生成后立即 emit） |
+| **frame** | 每个关键帧生成后立刻落盘；阶段末落盘 `05_keyframes/frames-index.md` | `<project>/05_keyframes/...` | 用户确认关键帧 | **frame-keyframe-grid**（追加模式：每张关键帧生成后立即 emit） |
+| **video** | 每个 segment 视频 `cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制到本地 + 写 `segment-XX.md` 元数据 | `<project>/06_videos/...` | 用户确认视频 + update `project.json.current_stage` | **video-segment-list**（追加模式：每段视频生成后立即 emit；失败段显示 ⚠️ 占位） |
 
-**门控 = AND**：用户确认 AND 落盘成功，两件事都做完才能进入下一阶段。**禁止**"口头确认 + 不落盘就推进"。
+**门控 = AND**：用户确认 AND 落盘成功 AND widget emit，三件事都做完才能进入下一阶段。**禁止**"口头确认 + 不落盘就推进" / "落盘但 widget 没 emit 就推进"。Widget HTML 模板 + 占位符替换规则见 `references/widget-templates.md`。
+
+**widget emit 追加模式语义**：每生成一张图 / 一个 segment 后立即 emit 最新 widget（不是等全部完成才 emit 一次）——WidgetRenderer streaming-style，前端看到的是不断追加新图的最新版 widget。失败的 segment / 图片在 widget 中以 ⚠️ 占位（红色边框 + 错误摘要）保留，不消失。
 
 ---
 

@@ -222,4 +222,29 @@ commercial 3 路产物差异（见 output-conventions.md §5）：UGC 每个 seg
 - 详细见 `references/mcp-usage-guide.md` §3.3
 
 **失败处理**：单次失败重试 1 次（可改 prompt / 微调 aspect_ratio）；连续 2 次失败停下问用户。**不**降级 mode。
+
+## Widget emit
+
+**emit 时机**：**追加模式**——每生成一段视频（segment-XX.mp4 落盘后）**立即** emit `video-segment-list` widget（HTML 模板 + 占位符替换见 `references/widget-templates.md` §6）。**不**等全部段完成才 emit 一次。
+
+**数据来源**：
+- `<workspace>/.../06_videos/segment-XX.mp4` HTTPS URL（来自 `video_generate` 返回的 `video_url`，或 `cmd_workspace_copy_paths` 复制后从 agnes 拿）
+- `06_videos/segment-XX.md` 元数据（`mode` / `duration` / `aspect_ratio` / `style_anchor` / `first_frame` / `last_frame` / `images[]`）
+- `project.json.notes.video_segments[<id>]`（partial success 状态）
+
+**占位符替换规则**：
+- `{{projectName}}` → `project.json.name`
+- `{{completedCount}}` / `{{totalCount}}` → 成功段数 / 总段数（drama 默认 6 段 / long_video_stitch_mode N 段）
+- `{{segmentLabel}}` / `{{duration}}` / `{{aspectRatio}}` / `{{mode}}` → 从 `segment-XX.md` 头部拿
+- `{{voiceover}}` → 是否含旁白（drama 必含）
+- `{{status}}` → `completed` / `failed` / `pending`（从 `project.json.notes.video_segments` 拿）
+- `{{videoUrl}}` / `{{errorMessage}}` → 视频 HTTPS URL 或失败摘要
+
+**失败展示**（partial success）：失败的 segment 在 widget 中**不**消失，**红色边框 + ⚠️ + 错误摘要 + retry 提示**——用户在 widget 里就看到失败。失败的 segment 不阻断后续成功的 segment 落盘 + 写 `segment-XX.md` + widget emit。
+
+**追加语义**：每次 emit 包含**全部已生成段**（含失败占位）；widget 按 segment 顺序展示。
+
+**Markdown fallback**：保留每段视频 inline `![segment-XX](<URL>)` + 失败段错误摘要。**禁**只 emit widget 不写 fallback。
+
+**long_video_stitch_mode**：每段独立 widget emit，全部完成后 widget 显示 `{{completedCount}}/{{totalCount}}`。
 ```

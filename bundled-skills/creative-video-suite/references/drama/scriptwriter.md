@@ -223,3 +223,17 @@
 4. 用户**显式 ack 降级**（"无产品图直接生成"）→ 落 `project.json.notes.product_image_gate: "bypassed-by-user"` + 剧本中**明示**该产品为"虚构道具 / 视觉相似"
 
 **drama 内部细分**：只有涉及产品的片段 / 场景 / 道具触发门控，其他剧情段不受影响。完整规范见 `references/mcp-usage-guide.md` §1。
+
+## Widget emit
+
+**emit 时机**：用户确认剧本 + `02_script.md` 落盘后**立即** emit `scriptwriter-summary-card` widget（HTML 模板 + 占位符替换见 `references/widget-templates.md` §2）。
+
+**数据来源**：`02_script.md` 标题 / 类型 / 集数 / 单集时长 + 角色清单 / 场景清单 / 道具清单。
+
+**占位符替换规则**：
+- `{{title}}` → 剧本标题
+- `{{genre}}` / `{{episodeCount}}` / `{{secondsPerEpisode}}` → 题材 / 集数 / 单集时长
+- `{{characterCount}}` / `{{sceneCount}}` / `{{propCount}}` → 各清单条目数
+- `{{characterList}}` / `{{sceneList}}` / `{{propList}}` → `<li>` 列表
+
+**Markdown fallback**：保留剧本标题 + 角色 / 场景 / 道具列表 inline。**禁**只 emit widget 不写 fallback（widget 解析失败时用户看不到任何内容）。

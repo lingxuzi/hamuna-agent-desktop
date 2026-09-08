@@ -392,3 +392,19 @@ Seedance 强提示：
 **模式例外**：用户**明确**要"分镜图 → 视频"工作流时（要首帧驱动）→ mode 改 `keyframe` + 用 `image_generate` 出的分镜图作 `first_frame` HTTPS URL。
 
 **失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**逐句字幕进入 prompt（硬门控见 §54 字幕硬门控）。
+
+## Widget emit
+
+**emit 时机**：
+1. **assets-image-gallery**（追加模式）：每张产品图 / 主播图生成后立即 emit（见 `references/widget-templates.md` §4）
+2. **video-segment-list**（追加模式）：每段视频生成后立即 emit（见 `references/widget-templates.md` §6）
+
+**UGC 特殊字段**：每段 `video-segment-list` widget 额外显示 `Monologue` 口播原文（从 `06_videos/segment-XX-script.md` 拿）——在 widget 的 `.seg-meta` 行后加 `.monologue` 段：`{具体台词}` 原文（带 `{}` 包裹标记）。
+
+**占位符替换规则**：
+- `{{voiceover}}` → `Monologue` 必为 `true`（与 `{{voiceoverExcerpt}}` 配对，UGC 默认必含口播）
+- `{{voiceoverExcerpt}}` → `segment-XX-script.md` 头部口播原文
+
+**drama 默认走 frame-keyframe-grid → video-segment-list**，UGC 跳过 frame 阶段（无分镜图），直接从 assets-image-gallery 跳到 video-segment-list（中间无 frame-keyframe-grid emit）。
+
+**Markdown fallback**：保留每段视频 inline + Monologue 口播原文（用 `> 旁白：` 引用格式）。**禁**只 emit widget 不写 fallback。
