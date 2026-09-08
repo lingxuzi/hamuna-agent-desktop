@@ -477,6 +477,121 @@
 
 ---
 
+## 6.5 product-ref-drift-compare（产品参考漂移对比块）
+
+**渲染目标**：让用户**直观看** product_ref（用户上传的真实产品图）vs 当前 segment / 关键帧生成结果，**第一眼识别漂移**——产品包装 / logo / 颜色 / 比例 / 细节是否有偏差。
+
+**触发条件**：
+- **涉及产品的 video_generate 调用后**（无论成功 / 失败）必 emit——即每段商业视频（UGC / Marketing / Corporate 含产品图）或 drama 产品特写段
+- **降级模式**：text 模式生成产品外观时（产品图未上传 + 用户 ack 降级）必须 emit 漂移风险提示
+
+**数据来源**：
+- `{{productRefUrl}}` → `04_assets/product-refs/<产品名>.png` 的 HTTPS URL（用户上传的 ground truth）
+- `{{generatedFrameUrl}}` → 当前 segment / 关键帧生成结果的 HTTPS URL（来自 `image_generate` 或 `video_generate` 返回的 `data[0].url`）
+- `{{driftScore}}` → `project.json.notes.product_ref_drift_score[<segment>]`（0-1，0=完全一致，1=完全漂移；多模态自评字段）
+- `{{productName}}` → `04_assets/product-refs/<产品名>.png` 文件名中的产品名
+
+**HTML 骨架**：
+
+```html
+<generative-ui-widget title="产品参考漂移对比 · {{segmentLabel}}">
+<style>
+  .cv-drift { padding: 12px; font-family: var(--font-sans); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+  .cv-drift h2 { margin: 0 0 8px; font-size: 14px; }
+  .cv-drift .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+  .cv-drift .pane { background: var(--paper-inset); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .cv-drift .pane-label { padding: 4px 8px; font-size: 11px; color: var(--ink-secondary); text-transform: uppercase; border-bottom: 1px solid var(--line); }
+  .cv-drift .pane img { width: 100%; aspect-ratio: 9/16; object-fit: contain; background: #000; display: block; }
+  .cv-drift .drift-bar { padding: 8px; background: var(--paper-inset); border-radius: 4px; }
+  .cv-drift .drift-bar .label { font-size: 11px; color: var(--ink-secondary); margin-bottom: 4px; }
+  .cv-drift .drift-bar .bar { height: 8px; background: var(--paper); border-radius: 4px; overflow: hidden; }
+  .cv-drift .drift-bar .fill { height: 100%; transition: width 0.3s; }
+  .cv-drift .drift-bar .fill.low { background: #16a34a; }       /* drift < 0.2 OK */
+  .cv-drift .drift-bar .fill.mid { background: #eab308; }       /* 0.2-0.5 警告 */
+  .cv-drift .drift-bar .fill.high { background: #dc2626; }      /* > 0.5 严重漂移 */
+  .cv-drift .verdict { padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 12px; }
+  .cv-drift .verdict.ok { background: rgba(22, 163, 74, 0.1); color: #16a34a; }
+  .cv-drift .verdict.warn { background: rgba(234, 179, 8, 0.1); color: #ca8a04; }
+  .cv-drift .verdict.bad { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+  .cv-drift .verdict.degraded { background: rgba(107, 114, 128, 0.1); color: var(--ink-secondary); }
+</style>
+
+<h2>{{productName}} · {{segmentLabel}}</h2>
+
+<div class="compare">
+  <div class="pane">
+    <div class="pane-label">📌 product_ref（ground truth）</div>
+    <img src="{{productRefUrl}}" alt="{{productName}}" />
+  </div>
+  <div class="pane">
+    <div class="pane-label">🎬 当前生成结果</div>
+    <img src="{{generatedFrameUrl}}" alt="{{segmentLabel}}" />
+  </div>
+</div>
+
+<div class="drift-bar">
+  <div class="label">product_ref_drift_score: {{driftScoreFormatted}}</div>
+  <div class="bar">
+    <div class="fill {{driftLevel}}" style="width: {{driftPercent}}%;"></div>
+  </div>
+</div>
+
+<div class="verdict {{verdictLevel}}">
+  {{verdictText}}
+</div>
+</generative-ui-widget>
+```
+
+**占位符替换规则**：
+
+| 占位符 | 来源 |
+|---|---|
+| `{{productName}}` | `04_assets/product-refs/<产品名>.png` 文件名 → 产品中文名 |
+| `{{segmentLabel}}` | 当前 segment 编号（如 `segment-02` / `SEG03_END`） |
+| `{{productRefUrl}}` | `04_assets/product-refs/<产品名>.png` HTTPS URL（已落盘的 ground truth） |
+| `{{generatedFrameUrl}}` | 当前帧的 HTTPS URL（image_generate / video_generate 首帧） |
+| `{{driftScore}}` | `project.json.notes.product_ref_drift_score[<segment>]` 数值（0-1） |
+| `{{driftScoreFormatted}}` | 格式化为两位小数（如 `0.08` / `0.34` / `0.72`） |
+| `{{driftLevel}}` | `low` (<0.2) / `mid` (0.2-0.5) / `high` (>0.5) |
+| `{{driftPercent}}` | `{{driftScore}} * 100` |
+| `{{verdictLevel}}` | `ok` / `warn` / `bad` / `degraded` |
+| `{{verdictText}}` | 见下方判定文本表 |
+
+**判定文本表**：
+
+| driftScore | level | verdict 文本 |
+|---|---|---|
+| **< 0.2** | `ok` | ✅ 产品外观与参考图高度一致（包装 / logo / 颜色 / 比例匹配） |
+| **0.2-0.5** | `warn` | ⚠️ 轻微漂移：检测到部分细节偏差（颜色 / 比例 / 细节），建议用户肉眼复核；如不接受可走 2-retry 铁律 |
+| **> 0.5** | `bad` | ❌ 严重漂移：包装 / logo / 颜色明显不一致，建议重试（retry #1）微调 prompt，或**交由用户处理** |
+| **降级模式** | `degraded` | ⚠️ 当前为 text 降级模式（产品图缺失），产品外观由 prompt 描述生成，**不保证**真实一致；如需真实一致请上传产品图 |
+
+**drift_score 计算（AI 自评，多模态对比）**：
+- 0.0-0.2：包装形状 / logo 颜色 / 主色调 / 比例 4 项全部匹配
+- 0.2-0.5：1-2 项轻微偏差（如 logo 字体粗细 / 包装高光方向）
+- 0.5-1.0：3 项以上偏差，或产品变体（不同型号 / 不同品牌）/ 整体外观替换
+
+**追加模式**：每个涉及产品的 video segment / 关键帧生成后立即 emit；新 emit 替换当前 segment 的对比块（同一 segment 多次生成取最新一次）。
+
+**占位符缺失处理**：
+- `{{productRefUrl}}` 缺失 → 不 emit 本 widget，改用 `assets-image-gallery` 的 `productRefs` 组直接展示（用户根本没传产品图）
+- `{{driftScore}}` 缺失 → 默认 0.0 + `ok`（无自评数据时不假设漂移）
+
+**Markdown fallback**：
+
+```markdown
+🔍 **产品参考漂移对比 · {{productName}} · {{segmentLabel}}**
+
+📌 product_ref: ![]({{productRefUrl}})
+🎬 当前生成: ![]({{generatedFrameUrl}})
+
+drift_score: **{{driftScoreFormatted}}**（{{driftLevel}}）
+
+> {{verdictText}}
+```
+
+---
+
 ## 7. 集成清单（每阶段 emit widget 前自检）
 
 ```text
@@ -487,6 +602,7 @@
 [ ] 失败 segment 已显示 ⚠️ 占位吗？（不消失）
 [ ] Markdown fallback 已保留吗？（widget 解析失败时仍能看到）
 [ ] widget HTML 总长 ≤ 50KB 吗？（sandboxed iframe 性能）
+[ ] 涉及产品的生成后 emit 了 product-ref-drift-compare widget 吗？（§6.5）
 ```
 
 8 项全过才允许 emit widget，**任何一项不过 = 该阶段未完成**。

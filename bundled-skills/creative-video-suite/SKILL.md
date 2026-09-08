@@ -41,6 +41,35 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 
 5 步全过才允许调 MCP 工具，**任何一项不过 = 该阶段未完成**。
 
+**🔒 MCP 调用模板硬编码铁律（2026-09-08 用户锁定，所有需要参考图的生成必过）**：
+
+**核心约束**：AI **不得**在涉及参考图的生成中自由组合 `mode` / `images[]` / `first_frame` / `prompt` 结构——必须字面照抄 `references/mcp-call-templates.md` 对应 T 编号模板（按场景编号 T01-T12）。
+
+```text
+调 image_edit 之前 → 读 T01-T03（转比例 / 多图合成 / 局部编辑）
+调 video_generate 之前 → 读 T04-T12，按 (分支 × ref 类型) 决策表选唯一合法模板
+```
+
+**为什么是铁律**：
+- AI 自由发挥会让产品 / 角色 / 场景跨段漂移（v0.2.15 实战：换 Runtime 后图片不渲染 / 角色发色 / 服装 / 脸型漂移）
+- mode 自由切换 = 把 reference 降级成 text = 丢失参考图锚点（CLAUDE.md 红线「不得 fallback」已封堵）
+- prompt 结构自由改写 = 拆掉 negative block / 改 `<Picture N>` 引用顺序 = 模型端解读错位
+
+**强制 5 条**：
+1. **必选对应模板**：参考 `mcp-call-templates.md` §3 决策表 + `mcp-usage-guide.md` §3 决策树（参考 `text` / `keyframe` / `reference` 选唯一合法模板）
+2. **`images[]` 顺序必按角色**：`product → person → scene → logo → ip`（mcp-call-templates.md §0.4），跳过位不留空，**数组紧凑**
+3. **公共 block 必嵌入**：`{{style_anchor}}`（§0.1）+ 产品漂移负向（§0.2，涉及产品时）+ 五维物理负向（§0.3，drama video）
+4. **占位符替换必填满**：所有 `{{...}}` 替换为具体值，**禁**留字面占位符进 prompt
+5. **不偏离模板**：模板 prompt 结构 / negative block 不得自由改写；微调只在重试允许的字句范围内
+
+**失败重试铁律**（2026-09-08 锁定）：
+- 单次工具调用：最多重试 **2 次**（共 3 次 attempt：1 initial + 2 retries）
+- retry #1 / retry #2 允许微调字句 / 补具体描述 / 改 aspect_ratio 候选
+- **任何 attempt 不得 fallback**（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
+- 2 次重试后仍失败 → 停下，**交由用户处理**；把三次 attempt 的 prompt + 错误码 + URL 映射写到 `project.json.notes.last_failure`；widget emit 失败卡；**不**输出"已生成"等措辞
+
+**完整规范**（12 个 T 模板 + 公共 block + 决策表 + 11 项 gate + 失败流程）见 `references/mcp-call-templates.md`。
+
 **🔒 Prompt 语言铁律（必读）**：所有 `prompt` 参数（`agnes25_image_generate` / `agnes25_image_edit` / `agnes25_video_generate`，包括负向约束与全局风格锚点）必须使用**中文**。理由：项目文档与 6 个视觉风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感）全程中文，且 agnes 国内版 API 完整支持中文 prompt。**语法例外**（保持英文 / 固定字面量）：`<Picture N>` / `@图片N` 多图引用标记、`mode="text"` 等 enum 取值、`size` / `ratio` / `aspect_ratio` / `seconds` 等参数键名、`audios` / `videos` 数组结构、`16:9` / `720P` 等数值字面量。完整调用范例（已全部中文）见 `references/agnes-ai-api.md`。
 
 ## 核心通用规则

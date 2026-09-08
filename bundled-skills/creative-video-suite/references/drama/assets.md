@@ -286,6 +286,8 @@ commercial 分支额外落盘（见 output-conventions.md §5）：ugc 加 `04_a
 
 完整规范见 `references/mcp-usage-guide.md` §1。
 
+> **🔗 硬编码 MCP 调用**：涉及产品的视频段走 `references/mcp-call-templates.md` T04 (`video_reference_drama_product`) / T05 (`video_reference_drama_character_continuity`)，image_edit 转比例 / 合成走 T01-T02。
+
 ## Widget emit
 
 **emit 时机**：**追加模式**——每生成一张资产图（角色 / 场景 / 道具）后**立即** emit `assets-image-gallery` widget（HTML 模板 + 占位符替换见 `references/widget-templates.md` §4）。**不**等全部完成才 emit 一次。

@@ -185,6 +185,8 @@ EP01_SEG06_END.png
 
 **失败处理**：单次失败重试 1 次（可微调 prompt）；连续 2 次失败停下问用户。**不**降级（image_generate 失败 → 不降级 image_edit）。
 
+> **🔗 硬编码 MCP 调用**（2026-09-08 锁定）：调 `image_generate` / `image_edit` 之前必读 `references/mcp-call-templates.md`——image_edit 转比例走 T01、多图合成走 T02、局部编辑走 T03；不得自由组合 `image_paths[]` 顺序或 prompt 结构。
+
 ## Widget emit
 
 **emit 时机**：**追加模式**——每生成一张关键帧图后**立即** emit `frame-keyframe-grid` widget（HTML 模板 + 占位符替换见 `references/widget-templates.md` §5）。**不**等全部 7 张完成才 emit 一次。

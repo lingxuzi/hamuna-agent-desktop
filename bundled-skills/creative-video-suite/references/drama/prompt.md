@@ -20,6 +20,8 @@
 
 没有确认时，不得进行视频生成。
 
+> **🔗 硬编码 MCP 调用**（2026-09-08 锁定）：调 `video_generate` 之前必读 `references/mcp-call-templates.md`——drama 普通段走 T10 (keyframe) / 纯剧情段走 T11 (text) / 产品特写段走 T04 (reference) / 角色跨段延续走 T05 (reference)。`images[]` 顺序按 §0.4 (product → person → scene) 排，公共 block 必嵌入。
+
 ## 输入引用规则
 
 **参考素材动态编号**

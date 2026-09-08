@@ -138,14 +138,23 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 
 **关键**：每一步的 URL 必须**当场**记到 `<file_path> → <https_url>` 映射（写到 `project.json.notes` 或 stage .md 头部 metadata）。session 重启 / 上一步 URL 失效时**没有这个映射就找不到原图**。
 
-### 3.2 失败路径 fallback
+### 3.2 失败路径（**不得 fallback**）
 
-| 失败点 | Fallback |
+| 失败点 | 处理（按 2026-09-08 锁定重试铁律） |
 |---|---|
-| Step 1 image_generate 失败 | 改 prompt 重试 1 次；仍失败 → 停下告诉用户（**禁**降级到 image_edit，image_edit 必传图） |
-| Step 2 image_edit 失败（转比例场景） | 改 prompt 重试 1 次；仍失败 → **接受原图比例不一致**，video 阶段调 image_generate 重新生成一张目标比例的 keyframe 替代 |
-| Step 3 video_generate 失败 | **禁**降级到 text 模式（CLAUDE.md 红线）；改 prompt / mode 重试 1 次；仍失败 → 停下告诉用户 |
-| 上一步 URL 失效（`AGNES_OUTPUT_DIR` 文件被 OS 清掉 / 上游 CDN 401） | 用 `cmd_workspace_copy_paths` 落盘的本地副本（`<workspace>/.../06_videos/segment-XX.mp4` / `04_assets/...`）反查；本地副本也没了 → 重新跑上游工具 |
+| Step 1 image_generate 失败 | retry #1 微调 prompt；retry #2 微调 prompt；仍失败 → **交由用户处理**（**禁**降级到 image_edit，image_edit 必传图） |
+| Step 2 image_edit 失败（转比例场景） | retry #1 微调 prompt；retry #2 微调 prompt；仍失败 → **交由用户处理**（**禁**擅自"接受原图比例不一致"——必须保持目标比例契约） |
+| Step 3 video_generate 失败 | **禁**降级到 text 模式（CLAUDE.md 红线）；retry #1 微调 prompt；retry #2 微调 prompt；仍失败 → **交由用户处理** |
+| 上一步 URL 失效（`AGNES_OUTPUT_DIR` 文件被 OS 清掉 / 上游 CDN 401） | 用 `cmd_workspace_copy_paths` 落盘的本地副本（`<workspace>/.../06_videos/segment-XX.mp4` / `04_assets/...`）反查；本地副本也没了 → 重新跑上游工具（不算失败重试，是数据恢复） |
+
+**硬禁止 fallback（任何 attempt 都不允许）**：
+- ❌ 删 `images[]` 中任何一个 ref 元素
+- ❌ 改 `mode`（reference ↔ keyframe ↔ text）
+- ❌ 把 product_ref 退化成纯文本描述
+- ❌ 切换工具（image_generate 失败 → image_edit；反之亦然）
+- ❌ 改换模型供应商 / Runtime
+- ❌ 简化 prompt（去 negative block / 删 ref 引用 / 删 style_anchor）
+- ❌ 用上一步产物 URL 重复当新图喂回去（避免 hallucination 累积）
 
 ### 3.3 partial success 处理（多 segment 视频）
 
@@ -153,10 +162,10 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 
 ```text
 1. 成功的 segment 立刻 cmd_workspace_copy_paths 落盘 + 写 segment-XX.md
-2. 失败的 segment 不落盘（但 prompt / params 写到 project.json.notes 方便重跑）
-3. 单 segment 失败 → 重试 1 次（同 params）
-4. 单 segment 重试仍失败 → 标记 failed 停下问用户（**不**自动全段重试，撞二次 quota）
-5. 多 segment 同时失败（≥ 50%）→ 立即停下问用户（疑似配额撞顶或网络问题）
+2. 失败的 segment 不落盘（但 prompt / params / 三次 attempt 错误码写到 project.json.notes 方便用户接手）
+3. 单 segment 失败 → retry #1 → retry #2（同 params 或微调 prompt；不得 fallback）
+4. 单 segment 两次重试仍失败 → 标记 failed，**交由用户处理**（不自动全段重试，撞二次 quota）
+5. 多 segment 同时失败（≥ 50%）→ 立即停下，**交由用户处理**（疑似配额撞顶或网络问题）
 ```
 
 **`project.json.notes` 字段记录**：
@@ -183,23 +192,27 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 
 | 错误类型 | 来源 | 处理 |
 |---|---|---|
-| **MCP 层错**（工具 spawn 失败 / poll timeout） | MCP wrapper / `multimedia-creator` server | 重试 1 次；仍失败 → 停下告诉用户（网络 / MCP 配置问题） |
-| **业务层错**（agnes API 返回 4xx / 5xx） | agnes 国内版 API | 401 → 永久禁；400 → 检查 params；429 → 退避后重试 1 次；500 → 重试 1 次 |
-| **状态错**（返回 `failed` 状态） | 任务执行失败（模型层） | 改 prompt 重试 1 次（**禁**降级 mode）；仍失败 → 停下 |
+| **MCP 层错**（工具 spawn 失败 / poll timeout） | MCP wrapper / `multimedia-creator` server | retry #1 → retry #2；仍失败 → 交由用户处理（网络 / MCP 配置问题） |
+| **业务层错**（agnes API 返回 4xx / 5xx） | agnes 国内版 API | 401 → 永久禁；400 → 检查 params；429 → 工具内部退避后重试；500 → retry #1 → retry #2 → 交由用户 |
+| **状态错**（返回 `failed` 状态） | 任务执行失败（模型层） | retry #1 微调 prompt；retry #2 微调 prompt（**禁**降级 mode / 删 ref）；仍失败 → 交由用户 |
 
-### 4.2 重试边界
+### 4.2 重试边界（2026-09-08 锁定铁律）
 
-- **单次工具调用**：最多重试 1 次（同 params 或微调 prompt）
-- **连续 2 次失败**：立即停下问用户，不进入第 3 次
+- **单次工具调用**：最多重试 2 次（共 3 次 attempt：1 initial + 2 retries）
+- **retry #1 / retry #2 允许的微调**：修字句 / 补具体视觉描述 / 改 aspect_ratio 候选（**禁**改 mode / 删 ref / 切工具 / 简化 prompt）
+- **2 次重试后仍失败**：立即停下，**交由用户处理**；把三次 attempt 的 prompt + 错误码 + URL 映射写到 `project.json.notes.last_failure`；widget emit 失败卡；**不**输出"已生成"等措辞
 - **不引入 backoff 调度**：CLAUDE.md pit-of-success 红线"同步 busy-wait"（`Atomics.wait` / spin / `while Date.now()`）禁止；MCP 工具内部自带退避（见 agnes-ai-api.md 错误处理表 "429 Too Many Requests → 工具内部退避重试"）
 
-### 4.3 降级禁止（CLAUDE.md 红线）
+### 4.3 降级禁止（**任何 attempt 都不允许 fallback**，2026-09-08 升级）
 
-**禁止**为了绕过失败擅自降级：
+**禁止**为了绕过失败擅自降级（任一项违反 → 该 attempt 作废，按"交由用户"流程走）：
 - ❌ video_generate keyframe 失败 → 降级 text 模式（**必保持 keyframe**；失败停下）
 - ❌ video_generate reference 失败 → 降级 text 模式（**必保持 reference**；失败停下）
+- ❌ video_generate reference 失败 → 删 `images[]` 元素（**必保持所有 ref**；失败停下）
 - ❌ image_generate 失败 → 降级 image_edit（image_edit 必传图，零图编辑没有意义）
 - ❌ image_edit 失败 → 降级 image_generate（损失参考图锚点）
+- ❌ prompt 失败 → 删 negative block / 删 ref 引用 / 删 style_anchor
+- ❌ 上一步 URL 失效 → 用上一步产物 URL 重复当新图喂（避免 hallucination 累积）
 
 **唯一允许的"降级"**：用户在确认摘要中**显式 ack** 改 mode / 改 plan（这是用户决策，不是 AI 自动降级）。
 
@@ -249,7 +262,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 | **frame** | `image_generate` + `image_edit`（**转比例必走**） | (跳过) | (跳过) | (跳过) |
 | **video** | `video_generate`（**默认 keyframe**） | `video_generate`（**默认 text**） | `video_generate`（**默认 keyframe**） | `video_generate`（**默认 reference**） |
 
-**调用前自检（每条 MCP 调用前必过）**：
+**调用前自检（每条 MCP 调用前必过，11 项 gate）**：
 
 ```text
 [ ] (0) 产品图门控过吗？（涉及产品 → 用户上传 + 落 product-refs/）
@@ -261,21 +274,44 @@ mcp__multimedia-creator__agnes25_video_generate({
 [ ] (6) image_paths[] / images[] 全是 HTTPS URL 吗？（不是本地路径）
 [ ] (7) style_anchor 一字不差贯穿吗？（与 project.json.style_anchor 对齐）
 [ ] (8) 上一步 URL 已记到 project.json.notes <file_path> → <https_url> 映射了吗？
-[ ] (9) 失败重试不超过 1 次吗？（不撞二次 quota）
-[ ] (10) 不降级 mode 吗？（CLAUDE.md 红线）
+[ ] (9) 失败重试 ≤ 2 次？超 2 次 → 停下，【交由用户处理】（禁止继续重试 / 自主改 prompt / 自作主张）
+[ ] (10) 任何失败【不得 fallback】（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
+[ ] (11) 【硬编码铁律】涉及 ref 的生成走对应 T 编号模板吗？images[] 顺序按 mcp-call-templates.md §0.4 排吗？negative block 已嵌入吗？
 ```
 
-10/10 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
+11/11 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。**项 (11) 的具体模板与强制参数体**见下一节「§8 硬编码 MCP 调用模板入口」。
+
+---
+
+## 8. 硬编码 MCP 调用模板入口
+
+> **2026-09-08 用户锁定**：所有需要参考图的生成**禁止 AI 自由发挥**——必须在 `references/mcp-call-templates.md` 字面照抄对应 T 编号模板，按场景选 mode / images[] 顺序 / prompt 模板 / negative block。
+
+**入口文件**：`references/mcp-call-templates.md`（canonical，~570 行）。
+
+**何时读**：
+- 调 `image_edit` 之前 → 读 T01-T03
+- 调 `video_generate` 之前 → 读 T04-T12（按 (分支 × ref 类型) 选模板）
+
+**强制约束**（从 §6 项 (11) 提升为铁律）：
+1. **必选对应模板**：参考 §3 决策表 / mcp-call-templates.md §3 一图选
+2. **images[] 顺序必按角色**：product → person → scene → logo → ip（mcp-call-templates.md §0.4）
+3. **公共 block 必嵌入**：style_anchor（§0.1）+ 产品漂移负向（§0.2，涉及产品时）+ 五维物理负向（§0.3，drama video）
+4. **占位符替换必填满**：所有 `{{...}}` 替换为具体值，**禁**留 `{{}}` 字面占位符进 prompt
+5. **不偏离模板**：模板 prompt 结构 / negative block 不得被 AI 自由改写；如需微调只能在 retry #1 / retry #2 允许的字句范围内
+
+**违反后果**：模板未走 / 模式自由组合 / 顺序错乱 → 产品漂移 + 角色漂移 + 跨段不一致（v0.2.15 实战已记录）；CLAUDE.md 红线"不得 fallback"已封堵任何捷径。
 
 ---
 
 ## 7. 集成清单（每阶段末落盘前自检）
 
-见 `references/output-conventions.md` §7；本文件专注 MCP 调用，新增 2 项：
+见 `references/output-conventions.md` §7；本文件专注 MCP 调用，新增 3 项：
 
 ```text
 [ ] product_image_gate: 用户 brief 含产品关键词 → product-refs/ 有图（否则降级模式 ack 落 project.json.notes）
 [ ] mode_decision_recorded: 当前阶段 mode 选择依据落到 stage .md（如 "drama frame 阶段选 keyframe 因为有 SEG01_START 首帧图"）
+[ ] template_used: 调 MCP 走的 T 编号模板（如 "video_generate: T04 video_reference_drama_product"）落到 stage .md + project.json.notes
 ```
 
-2 项 + output-conventions.md §7 八项 = 10 项集成清单。
+3 项 + output-conventions.md §7 八项 = 11 项集成清单。

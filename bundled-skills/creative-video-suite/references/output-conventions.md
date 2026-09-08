@@ -17,6 +17,8 @@ creative-video-suite 的产物分两层：
 4. **失败 / 重跑旧产物加 `_v1` / `_v2` 后缀**，**不**直接覆盖。用户要清理就手动 `rm`。
 5. **`<workspace>` 由用户在 HamunaAgent 工作区选择时确定**，AI 不要硬编码 `~/Documents/...` 之类具体路径——通过 `useWorkspaceFileService(workspacePath)` 拿当前 workspace。
 
+> **🔗 MCP 调用契约**：所有调 `mcp__multimedia-creator__agnes25_*` 的场景必读 `references/mcp-call-templates.md`（12 个硬编码模板 + 决策表 + 11 项 gate）+ `references/mcp-usage-guide.md`（决策树 / 跨工具链 / 失败处理）。本文件专注落盘契约，不重复 MCP 调用规则。
+
 ---
 
 ## 1. 项目目录结构
