@@ -10,6 +10,8 @@
 
 **+ uvx.exe prod layout 假设错误修复（继上述）**：用户实测确认"新安装的 uvx.exe 在安装目录根"——Tauri 2 NSIS 把单文件 `.exe` bundle.resources 放在 `<install-dir>/` 而非 `<install-dir>/resources/`（与 `server-dist.js`/`nodejs/` 等不同），但 `runtime.ts::getBundledUvPath()` 此前假设 `resolve(scriptDir, 'uvx.exe')`（nested）。修复 `runtime.ts::getBundledUvPath()` 优先查 `<install-dir>/uvx.exe`（root, `resolve(scriptDir, '..', 'uvx.exe')`）+ 保留 nested fallback 兼容 layout 变化 + dev walk-up 不变。**端到端验证建议**：用户下次升级安装后看 `[agent] MCP multimedia-creator: resolved uvx via bundled fallback → C:\...\HamunaAgent\uvx.exe` 这条日志。
 
+**+ uvx 0.5.11 pin + MCP spawn PATH 注入（`197837b`）**：用户报"uvx 0.12.3 不支持 `--from`"——一手源码（uv main `crates/uv/src/commands/tool/run.rs`）确认 `--from` 仍支持，但 0.12.x 把 arg 解析变严格 + 拒绝未知 flag（如我们 args 里的 `--default-index` uv tool run 根本不存在）。3 改动：(1) `scripts/download_uv.ps1` param default 锁 `"0.5.11"`（0.5.x 最后 patch，最后兼容 `--from <pkg> <cmd>` 老语法的版本线），注释标"升级前要先改 mcp.json 到现代 `uvx <tool>@<ver>` 语法 + CI smoke test"；(2) `src/server/agent-session.ts` uvx fallback 从"覆写 `command` 为绝对路径"改成"把 bundled uvx 目录 prepend 进 `mcpEnv.PATH`"——`.mcp.json` 仍写 `command: "uvx"`（声明式、不暴露机器路径），SDK PATH 解析命中 bundled 副本；副作用：macOS/Linux 仍走 null warning（未 bundle，按设计）；(3) `.mcp.json` + `extended_buildin_mcp/mcp.json` 删 `--default-index` 改 `env.UV_INDEX_URL`（`uv tool run` 没 `--default-index` flag；PyPI 是默认源，写 `--default-index https://pypi.org/simple` 等于重复 + 0.12.x reject；绕开清华镜像的正确做法是 `UV_INDEX_URL` env）。**已知遗留风险**：两个 mcp.json 仍是 tracked 且含真实 `AGNES_API_KEYS`（用户拍板"先改不改 key"，tracked-key rotation 单独 TODO）。**layout 矛盾**（`runtime.ts:42-48` 注释 vs 实际 prod layout）未解——pin 0.5.11 让 prod probe 链继续工作，没动力现在改；下次再 break 加 probe log。
+
 ---
 
 ## 1. 模块状态总览
@@ -214,6 +216,7 @@
 
 | Commit | 摘要 |
 |--------|------|
+| `197837b` | **fix(mcp): pin bundled uv 0.5.11 and inject uvx dir into MCP spawn PATH** |
 | `ffe8edb` | **feat(bundled-skills): add creative-video-suite for short-drama / UGC / corporate** |
 | `853da79` | v2 |
 | `77fdd97` | docs(snapshot) log 276d8e8 tvc-director grid default 15s→12s |
