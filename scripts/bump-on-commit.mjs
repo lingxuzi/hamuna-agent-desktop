@@ -59,3 +59,44 @@ try {
   process.stderr.write(`[bump-on-commit] 版本 bump 失败，跳过: ${err.message}\n`);
   process.exit(0);
 }
+
+// ---- SYSTEM_SKILLS_VERSION 自动 bump（creative-video-suite 改动触发，A5 拍板） ----
+// 背景：creative-video-suite 在 v40 promote 为 system skill（commands.rs:1371 + src/server/index.ts:1419）。
+// 用户拍板 A5（严格自动 + 接受爆炸）：每次 commit creative-video-suite 改动 → SYSTEM_SKILLS_VERSION +1
+// → 全量 system skill 重下载（含 memory / hamuna-cli / tool-creator / 等无关项）。
+//
+// 双源同步：commands.rs::SYSTEM_SKILLS_VERSION (Rust) + systemSkills.ts::SYSTEM_SKILLS_VERSION (Node)。
+// 跳过条件：用户已主动改（wcVer != headVer）、非 creative-video-suite 改动、CI、版本字段未匹配。
+try {
+  const stagedCv = execSync(
+    'git diff --cached --name-only -- bundled-skills/creative-video-suite/',
+    { encoding: 'utf8' }
+  ).trim();
+  if (stagedCv) {
+    const wcCmd = readFileSync('src-tauri/src/commands.rs', 'utf8');
+    const headCmd = execSync('git show HEAD:src-tauri/src/commands.rs', { encoding: 'utf8' });
+    const wcVer = wcCmd.match(/const SYSTEM_SKILLS_VERSION: &str = "(\d+)";/)?.[1];
+    const headVer = headCmd.match(/const SYSTEM_SKILLS_VERSION: &str = "(\d+)";/)?.[1];
+    if (wcVer && headVer && wcVer === headVer) {
+      const nextVer = String(Number(wcVer) + 1);
+      const nextCmd = wcCmd.replace(
+        /const SYSTEM_SKILLS_VERSION: &str = "\d+";/,
+        `const SYSTEM_SKILLS_VERSION: &str = "${nextVer}";`
+      );
+      require('node:fs').writeFileSync('src-tauri/src/commands.rs', nextCmd);
+      const wcTs = readFileSync('src/shared/systemSkills.ts', 'utf8');
+      const nextTs = wcTs.replace(
+        /export const SYSTEM_SKILLS_VERSION = '\d+';/,
+        `export const SYSTEM_SKILLS_VERSION = '${nextVer}';`
+      );
+      require('node:fs').writeFileSync('src/shared/systemSkills.ts', nextTs);
+      execSync('git add src-tauri/src/commands.rs src/shared/systemSkills.ts', {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      });
+      process.stderr.write(`[bump-on-commit] SYSTEM_SKILLS_VERSION ${wcVer} → ${nextVer}\n`);
+    }
+  }
+} catch (err) {
+  process.stderr.write(`[bump-on-commit] SYSTEM_SKILLS_VERSION bump 失败，跳过: ${err.message}\n`);
+}

@@ -343,7 +343,7 @@ Rust 工具链由仓库根目录 `rust-toolchain.toml` 固定，开发机和 CI 
 
 - 修改 `bundled-agents/hamuna_helper/` 的 CLAUDE.md 或 Skills → MUST bump `ADMIN_AGENT_VERSION`（`src-tauri/src/commands.rs`）
 - 修改 `src/cli/hamuna.ts` 或 `src/cli/hamuna.cmd` → MUST bump `CLI_VERSION`，并同步更新 `bundled-skills/hamuna-cli/SKILL.md`（CLI surface 变化必须在 skill 文档里反映出来）+ bump `SYSTEM_SKILLS_VERSION`
-- 修改 `bundled-skills/` 中 system skill（清单见 `SYSTEM_SKILLS`） → MUST bump `SYSTEM_SKILLS_VERSION`
+- 修改 `bundled-skills/` 中 system skill（清单见 `SYSTEM_SKILLS`） → MUST bump `SYSTEM_SKILLS_VERSION`（`creative-video-suite` 例外：由 `scripts/bump-on-commit.mjs` 自动 detect `bundled-skills/creative-video-suite/` 改动 +1，仍可手改覆盖）
 - 新增 system skill：(1) 放入 `bundled-skills/<name>/`；(2) 加入 Rust `SYSTEM_SKILLS` 和 Node `src/server/index.ts::SYSTEM_SKILLS` 两个清单；(3) bump 版本
 - **utility skill vs system skill**：清单内 = system（强制更新）；其它 = utility（首次 seed 后归用户）
 

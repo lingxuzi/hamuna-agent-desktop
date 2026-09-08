@@ -5,8 +5,6 @@
 **模型绑定**: `agnes-image-2.5-flash` + `agnes-video-2.5-flash`
 **后端**: `multimedia-creator` MCP（`hosted_mcps/agnes-video-25`，agnes 国内版 `https://api.agnes-ai.cn/v1`）
 
-> 商业广告大片请走 `bundled-skills/tvc-director/`（TVC 专用）。本 skill 专攻有完整故事线的剧情内容与商业短视频。
-
 ## 目录结构
 
 ```text
@@ -135,5 +133,4 @@ MCP `mcp__multimedia-creator__agnes25_video_generate.seconds` 参数是**字符�
 
 | 关键词命中 | 路由到 |
 |---|---|
-| TVC / 商业广告大片 / 品牌广告 / 4A 广告 | **tvc-director** |
 | 短剧 / 剧情 / 微电影 / 动画 / 动态漫 / 预告片 / UGC / 企业宣传 / 商务视频 | **creative-video-suite** |
