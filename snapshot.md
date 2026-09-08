@@ -338,3 +338,26 @@
 **语义后果**：3 次原样重试**只能解 transient 错误**（网络 / rate limit / MCP server 临时 5xx）；prompt 自身 typo / ref 引用编号错位 / aspect_ratio 与 first_frame 不一致 / 业务逻辑错误必然撞 attempt 4 停下交用户。诊断 prompt 责任**完全交回用户**。
 
 → commit `571a9b2` (refactor: retry 期间 0 微调铁律全栈落地, 10 files / +58 / -23) → 见 `git log --oneline --grep="retry 期间 0 微调铁律全栈落地"`
+
+### 5.4 产品带货短剧编剧方法论内化笔记落地（2026-09-08）
+
+**用户拍板**：学 XiaoLuo 方法论，不动 skill；目标形态 = 产品带货短剧；三路 hybrid（UGC 升级 / Marketing 剧情弧 / Drama 完整短剧）。
+
+**新增文档**：`specs/tech_docs/creative-screenwriting-methodology.md`（约 300 行）
+
+**覆盖内容**：
+- 4 模式路由（创意开发 / 剧本大纲 / 人物小传 / 剧本正文）→ 对应 planner / scriptwriter / assets / storyboard 阶段
+- 三幕结构 vs 短剧结构 vs 广告结构 对比 + hybrid 路径结构选择
+- 短剧钩子设计（前 0-10s 异常画面 / 未完成动作 / 身份暴露 / 结果倒置）
+- 三路 hybrid 方法论（A / B / C 路径详细结构 + product_ref 门控 + 时长硬约束）
+- 人物小传 9 项深层设计 + 戏剧功能 + 关系网
+- LuoDesign 五维微表演系统（微表情 / 肢体 / 中间态 / 生理 / 光影）
+- 视觉导演化表达（景别 / 运镜 / 镜头提示格式）
+
+**减法原则**：不复制 XiaoLuo 17 个相关 skill 中的 15 个（场景俯视 / 四视图 / 故事面板 / 角色表情 / 道具 / 动作 / 服装 / 三视图 / 设定图 / 分镜脚本 / 资产-DNA-美术 / 九宫格 / 拉片 / 剧本分析 / 剧本改编 / AI 短剧布局）—— 它们是 XiaoLuo "AI 短剧全流程"，本方法论只聚焦"产品带货短剧"编剧子集。
+
+**与现有铁律兼容点**：保留 `cmd_workspace_*` / 中文 prompt / 产品图门控 / 12 T 模板 / retry 0 微调 / drama 5 阶段 / 商业 3 路差异表 / T 模板 images[] 顺序 / 模板硬编码铁律。
+
+**不动任何 skill**：`bundled-skills/` / `specs/DESIGN.md` / `specs/ARCHITECTURE.md` 全部保持现状。
+
+→ 提交后见 `git log --oneline --grep="creative-screenwriting-methodology"`
