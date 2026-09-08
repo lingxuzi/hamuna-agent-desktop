@@ -12,6 +12,8 @@
 
 **+ uvx 0.5.11 pin + MCP spawn PATH 注入（`197837b`）**：用户报"uvx 0.12.3 不支持 `--from`"——一手源码（uv main `crates/uv/src/commands/tool/run.rs`）确认 `--from` 仍支持，但 0.12.x 把 arg 解析变严格 + 拒绝未知 flag（如我们 args 里的 `--default-index` uv tool run 根本不存在）。3 改动：(1) `scripts/download_uv.ps1` param default 锁 `"0.5.11"`（0.5.x 最后 patch，最后兼容 `--from <pkg> <cmd>` 老语法的版本线），注释标"升级前要先改 mcp.json 到现代 `uvx <tool>@<ver>` 语法 + CI smoke test"；(2) `src/server/agent-session.ts` uvx fallback 从"覆写 `command` 为绝对路径"改成"把 bundled uvx 目录 prepend 进 `mcpEnv.PATH`"——`.mcp.json` 仍写 `command: "uvx"`（声明式、不暴露机器路径），SDK PATH 解析命中 bundled 副本；副作用：macOS/Linux 仍走 null warning（未 bundle，按设计）；(3) `.mcp.json` + `extended_buildin_mcp/mcp.json` 删 `--default-index` 改 `env.UV_INDEX_URL`（`uv tool run` 没 `--default-index` flag；PyPI 是默认源，写 `--default-index https://pypi.org/simple` 等于重复 + 0.12.x reject；绕开清华镜像的正确做法是 `UV_INDEX_URL` env）。**已知遗留风险**：两个 mcp.json 仍是 tracked 且含真实 `AGNES_API_KEYS`（用户拍板"先改不改 key"，tracked-key rotation 单独 TODO）。**layout 矛盾**（`runtime.ts:42-48` 注释 vs 实际 prod layout）未解——pin 0.5.11 让 prod probe 链继续工作，没动力现在改；下次再 break 加 probe log。
 
+**+ creative-video-suite: prompt 中文铁律（`baebe3c`）**：874ad4f 引入 6 个中文风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），但 `references/agnes-ai-api.md` 6 个范例 `prompt:` 还是英文 → 实际喂 agnes API 时每阶段要英语→中文翻译，风格锚点保真度会漂移（如 "anime lineart" → "anime 线稿" 丢失 Lineart 结构 cue，cel-shading 锁定失败）。2 改动：(1) `SKILL.md` 在工具调用契约段后新增 `🔒 Prompt 语言铁律（必读）` 平行于现有 `🔒 输入源铁律`，**显式列举语法例外**（`<Picture N>` 多图引用标记 / `mode="text"` enum / `size` / `ratio` / `aspect_ratio` / `seconds` 参数键名 / `audios` / `videos` 数组 / `16:9` / `720P` 数值字面量保持英文）——LLM 见"全中文"容易过度翻译固定 token，明列例外避免破坏 model 端 schema；(2) `references/agnes-ai-api.md` 6 个 `prompt:` 全部翻中文，严格保留 `<Picture 1>` / `<Picture 2>` 标记（model 端多图引用语法）。**已知遗留**（不是 bug，是 utility skill 设计）：`creative-video-suite` 不在 `SYSTEM_SKILLS` 清单（仅 `task-alignment` / `task-implement` / `download-anything` / `agent-browser` / `hamuna-cli` / `hamuna-docs` / `tool-creator` / `hamuna-memory-{update,gardener,molt}` / `prompt-writer`），按 utility skill 走 seed-once-then-hands-off，**已 seed 老用户拿到的是旧英文版**。如需强制 update：(a) 提升为 system skill + bump `SYSTEM_SKILLS_VERSION` 39→40；或 (b) 告知用户 `rm -rf ~/.hamuna/skills/creative-video-suite/`。未在这里 promote，因为 promote 改全局 skill-sync lock 主人、收益与风险不匹配，标记为待 user 拍板的 follow-up。
+
 ---
 
 ## 1. 模块状态总览
@@ -92,7 +94,7 @@
 | 内置 MA 小助理 | `bundled-agents/hamuna_helper/` | 稳定；改 MUST bump `ADMIN_AGENT_VERSION` |
 | 内置 Skills | `bundled-skills/` | 稳定；`SYSTEM_SKILLS` 清单内改 MUST bump `SYSTEM_SKILLS_VERSION` |
 | tvc-director skill | `bundled-skills/tvc-director/` | 稳定；v0.9 + agnes-video-25-mcp v0.1.3 + 严格工具契约 |
-| creative-video-suite skill | `bundled-skills/creative-video-suite/` | 稳定；TODO #103 落地；短剧/UGC/企业宣传；5 段口播端到端验证通过 |
+| creative-video-suite skill | `bundled-skills/creative-video-suite/` | 稳定；utility skill（非 SYSTEM_SKILLS，seed-once）；短剧/UGC/企业宣传；6 风格预设 + 中文 prompt 铁律；5 段口播端到端验证通过；老用户无 SYSTEM_SKILLS bump 不自动更新 |
 | agnes-short-drama skill | `bundled-skills/agnes-short-drama/` | utility；Pavo 调研产物；4 字段用户输入 → 6 元数据 → 导演式剧本；未入 `SYSTEM_SKILLS` |
 | xueqiu skill | `skills/crawl-xueqiu-my-timeline/` | 实验 skill，untracked；TODO #9 |
 | hosted_mcps | `hosted_mcps/agnes-video-25/` | 7 tools（4 video + 3 image）；本仓库代码 = PyPI 0.1.3 vendor 源；P3 多 key fallback 进行中 |
@@ -139,7 +141,7 @@
 - **Stop hook**：v11/v12/v13 都没 3 条件全 PASS；v14 必须先验证 image_edit 路径
 
 #### TODO #103 — 拷 video-skill → bundled-skills/creative-video-suite 🔄
-**全量迁移完成**（见 §4 指针）：5 段口播端到端验证 + URL 复用铁律 + prompt 修复（场景「无人物」→ 英文反面词 / 道具「二次元动漫」→ 「anime lineart」）。**待 user 拍板 commit**（含 `.mcp.json` / `extended_buildin_mcp/mcp.json` 切换拍板）。
+**已落地**（见 §3.4 `#104` + §4 `874ad4f` / `197837b` / `baebe3c`）。5 段口播端到端验证 + URL 复用铁律 + 6 风格预设 + prompt 中文铁律。剩余 follow-up：是否 promote creative-video-suite 为 system skill 强制 update 老用户（见 narrative）。
 
 #### TODO #51 — tvc-director 跨段过渡 + keyframe 比例 + grid 单场景多机位铁律 🔄
 **3 文件改动**（待 commit）：
@@ -208,7 +210,7 @@
 
 ### 3.4 已落地（仅指针，detail 见 §4 + git log）
 
-- #29 tvc-director chatui 渲染层对齐 v0.9 / #97 hosted_mcps/agnes-video-25/ 7 tools / #14 TypeGraph 重构 KB / #16 fresh install kb-relations poller / #12 skill 安装 `/skillname` unknown command 修复 / #98 30s TVC e2e v9 PASS / #99 v10 60s lifestyle TVC PASS / #100 v11 60s TVC ⚠ 部分通过 / #101 v12 60s TVC ⚠ 条件1 PASS / #102 v13 1x5 reference mode ❌ FAIL / #104 1st UGC 5 段 60s ✅ DONE + URL 复用铁律
+- #29 tvc-director chatui 渲染层对齐 v0.9 / #97 hosted_mcps/agnes-video-25/ 7 tools / #14 TypeGraph 重构 KB / #16 fresh install kb-relations poller / #12 skill 安装 `/skillname` unknown command 修复 / #98 30s TVC e2e v9 PASS / #99 v10 60s lifestyle TVC PASS / #100 v11 60s TVC ⚠ 部分通过 / #101 v12 60s TVC ⚠ 条件1 PASS / #102 v13 1x5 reference mode ❌ FAIL / #103 creative-video-suite 全量迁移 ✅ DONE / #104 1st UGC 5 段 60s ✅ DONE + URL 复用铁律
 
 ---
 
@@ -217,6 +219,7 @@
 | Commit | 摘要 |
 |--------|------|
 | `874ad4f` | **feat(creative-video-suite): expose 6 visual style presets + commercial style_ref gate** |
+| `baebe3c` | **docs(creative-video-suite): enforce Chinese-only prompts with explicit syntax exceptions** |
 | `197837b` | **fix(mcp): pin bundled uv 0.5.11 and inject uvx dir into MCP spawn PATH** |
 | `ffe8edb` | **feat(bundled-skills): add creative-video-suite for short-drama / UGC / corporate** |
 | `853da79` | v2 |
