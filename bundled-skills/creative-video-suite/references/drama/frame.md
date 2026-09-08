@@ -158,3 +158,21 @@ EP01_SEG06_END.png
 **阶段末落盘 `05_keyframes/frames-index.md`**：全剧关键帧总索引（按 episode × segment × KEYFRAME_NAME 列）；update `project.json.current_stage = "frame"`。
 
 跨阶段引用：prompt 阶段读关键帧图时用 file path（`<workspace>/creative-video-suite/<project-name>/05_keyframes/...`），model 端用 HTTPS URL（来自 MCP 返回的 `data[0].url`）。前后集跨段连续性引用前一集 `SEG_END` 时走同一 file path 路径。
+
+## MCP 工具调用
+
+**frame 阶段默认工具**：`mcp__multimedia-creator__agnes25_image_generate`（T2I）。仅 first_frame 比例与目标 `aspect_ratio` 不一致时才调 `image_edit` 转比例（**禁**用作自由编辑）。
+
+**image_edit 唯一合法场景**：
+- 上一阶段 image_generate 输出的图比例 ≠ 目标 aspect_ratio（必须先转比例）
+- 局部编辑蒙版（mask_path 局部涂改）—— 仅在用户明确要"修这张图的某个区域"时使用
+- 多图合成（同 frame 内拼接多张资产）—— image_edit.image_paths[] 一次传多张
+
+**调用前 5 步硬门控**（详见 `SKILL.md` 调用前 5 步硬门控 + `references/mcp-usage-guide.md` §6）：
+1. 产品图门控（涉及产品 → product-refs/ 有图或用户显式 ack）
+2. 输入源 HTTPS URL（参考图全是 URL）
+3. 中文 prompt（含风格锚点）
+4. mode 互斥（image_generate 不传 image_paths / first_frame / images）
+5. 参数 schema（size / ratio / num_images 取值合法）
+
+**失败处理**：单次失败重试 1 次（可微调 prompt）；连续 2 次失败停下问用户。**不**降级（image_generate 失败 → 不降级 image_edit）。

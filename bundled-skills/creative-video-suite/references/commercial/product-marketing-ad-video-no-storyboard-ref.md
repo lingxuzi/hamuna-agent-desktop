@@ -786,3 +786,45 @@ prompt 末尾第一句必须写：
 4. **15s 结构铁律**：`0-2s hook` / `2-5s 产品揭示` / `5-10s 卖点证明` / `10-13s 结果` / `13-15s packshot hold`，最后 1 秒必稳定 hold；落 `segment-XX.md` 的 `structure_check` 字段自检
 
 落盘前自检 §7 集成清单；**所有** segment 落盘 + 用户确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`。
+
+## 产品图强制门控
+
+**强门控**：Marketing 项目**必传产品图**到 `<workspace>/creative-video-suite/<project-name>/04_assets/product-refs/<产品名>.{jpg,png}`，否则不能调 MCP 生成视频。
+
+**触发判定**（Marketing）：
+- 用户 brief 含产品关键词（品牌名 / 商品词 / "广告" / "营销" / "种草" / "产品展示" / "TVC"）→ **必传**
+- 用户上传产品 ref 文件 → **必传**
+- 用户**明确**说"无产品图 / 按概念 brief 生成" → 触发降级路径
+
+**降级路径（用户显式 ack）**：
+1. AI 在确认摘要中**明示**：
+   > ⚠️ 降级模式：本 Marketing 项目无产品图参考。产品外观 / 包装 / 品牌视觉不保证真实一致。
+2. 落 `project.json.notes.product_image_gate: "bypassed-by-user"` + 时间戳
+3. 视频 mode 改 `text`（不传 `first_frame`）+ prompt 用文字描述产品，AI 必须接受"产品可能与用户描述不符"
+
+**完整流程**：
+- planner 阶段确认 Marketing + 检测到产品 → 追问产品图（正 / 侧 / 细节 / 包装至少 2 张）
+- 用户上传 → 落 `04_assets/product-refs/<产品名>.{jpg,png}`
+- assets 阶段**必传** product-refs/ 图到 `image_generate`（出产品 hero 图 / 细节图）
+- video 阶段**默认 mode="keyframe"**（产品 hero 图作 `first_frame` HTTPS URL）；无产品图降级时改 `text` 模式
+
+## MCP 工具调用
+
+**Marketing 必调**：
+- `image_generate` —— 出产品 hero 图 / 细节特写图 / packshot hold 图
+- `video_generate`（**默认 mode="keyframe"**）—— 产品图作首帧驱动
+
+**Marketing 默认不调**：
+- ❌ `image_edit`（不生成分镜图，不调比例，**Marketing 强门控禁止分镜图**）
+- ❌ 多图合成的 `image_generate`（每张产品图独立生成，保留原始参考图结构）
+
+**调用前 5 步硬门控**（详见 `SKILL.md` + `references/mcp-usage-guide.md` §6）：
+1. 产品图门控（**强门控**，本段已写）
+2. 输入源 HTTPS URL
+3. 中文 prompt（含 voiceover 旁白原文、style_anchor、广告大字）
+4. mode 互斥（Marketing 默认 keyframe 必有 first_frame；`text` 仅在用户 ack 降级时）
+5. 参数 schema（15s 时长 / size 锁 720P / aspect_ratio 按 platform 推断）
+
+**失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。
+
+**long_video_stitch_mode**：30s / 60s 视频拆多 segment → 每个 segment 独立调 video_generate，partial success 处理见 `mcp-usage-guide.md` §3.3。

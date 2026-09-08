@@ -22,6 +22,8 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 | `mcp__multimedia-creator__agnes25_image_edit` | 图生图 / 多图合成（I2I） | `model="agnes-image-2.5-flash"`, `image_paths=["path1",...]`, `prompt`, 可选 `mask_path` |
 | `mcp__multimedia-creator__agnes25_video_generate` | 视频生成 | `model="agnes-video-2.5-flash"`, `mode="text"\|"keyframe"\|"reference"`, `size="720P"`, `seconds="4"-"12"`, `aspect_ratio`, `timeout_seconds=600`, `poll_interval_seconds=5`, 按 `mode` 决定 `first_frame` / `last_frame` / `images=["path1",...]` (≤5) / `audios=[]` / `videos=[]` |
 
+**完整 MCP 调用正确性规范**（mode 决策树 / 跨工具链 URL 传递契约 / 失败处理与降级禁止 / 命名空间对照 / per-stage tool map / 调用前 10 项自检）见 `references/mcp-usage-guide.md`。
+
 **多图引用语法（image / video 通用）**：`images[]` / `image_paths[]` 按传入顺序从 1 开始编号，prompt 中用 `<Picture 1>` / `<Picture 2>` / ... 引用对应图片。
 
 - `images[]` ≤ 5：reference 模式
@@ -29,7 +31,15 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 - `audios[]` ≤ 3（video）
 - `videos[]` 0（video 2.5-flash 不接受 video ref）
 
-**🔒 输入源铁律（必读）**：`image_paths` / `images` / `first_frame` / `last_frame` 一律传 **HTTPS URL**（来自 `image_generate` 返回的 `data[0].url` 或 `video_generate` 的 `video_url`），**禁止用本地路径或 base64 data URL**——本地路径会触发 server 上传 `img.remit.ee` 图床撞 QPS 限流，base64 撞 256KB 红线。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 必须用 HTTPS URL」章节。
+**🔒 MCP 调用前 5 步硬门控（每次调 MCP 工具前必过，全过才允许调）**：
+
+0. **产品图门控**：用户 brief 含产品关键词（品牌名 / 商品词 / 广告剧情信号）→ 用户已上传产品图 + 落 `<workspace>/.../04_assets/product-refs/<产品名>.{jpg,png}`，**或**用户**显式 ack 降级**（无产品图直接生成）→ 落 `project.json.notes.product_image_gate: "bypassed-by-user"`。**drama 和 commercial 同级强门控**——drama 涉及品牌植入 / 产品道具也必传。详见 `references/mcp-usage-guide.md` §1
+1. **输入源 HTTPS URL 铁律**：`image_paths` / `images` / `first_frame` / `last_frame` 一律传 **HTTPS URL**（来自 `image_generate` 返回的 `data[0].url` 或 `video_generate` 的 `video_url`），**禁止用本地路径或 base64 data URL**——本地路径会触发 server 上传 `img.remit.ee` 图床撞 QPS 限流，base64 撞 256KB 红线。完整规范见 `references/agnes-ai-api.md`「输入源支持 · 必须用 HTTPS URL」章节
+2. **中文 prompt 铁律**：所有 `prompt` 参数中文（语法例外：`<Picture N>` / `mode="text"` 等 enum / 参数键名 / 数值字面量保持英文）。详见 `references/agnes-ai-api.md` 范例（已全部中文）
+3. **mode ↔ params 互斥自检**：text 模式无图 / keyframe 必有 first_frame / reference 必传 images[]；`mask_path` 只对 image_edit 有效；`audios[]` / `videos[]` 仅 video 接受。详见 `references/mcp-usage-guide.md` §2.3
+4. **参数 schema 边界**：`size=720P` 锁死 / `seconds="4"-"12"` 字符串 / `aspect_ratio` 与 first_frame 比例一致（不一致先 image_edit 转比例）。详见 `references/agnes-ai-api.md` 参数表
+
+5 步全过才允许调 MCP 工具，**任何一项不过 = 该阶段未完成**。
 
 **🔒 Prompt 语言铁律（必读）**：所有 `prompt` 参数（`agnes25_image_generate` / `agnes25_image_edit` / `agnes25_video_generate`，包括负向约束与全局风格锚点）必须使用**中文**。理由：项目文档与 6 个视觉风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感）全程中文，且 agnes 国内版 API 完整支持中文 prompt。**语法例外**（保持英文 / 固定字面量）：`<Picture N>` / `@图片N` 多图引用标记、`mode="text"` 等 enum 取值、`size` / `ratio` / `aspect_ratio` / `seconds` 等参数键名、`audios` / `videos` 数组结构、`16:9` / `720P` 等数值字面量。完整调用范例（已全部中文）见 `references/agnes-ai-api.md`。
 

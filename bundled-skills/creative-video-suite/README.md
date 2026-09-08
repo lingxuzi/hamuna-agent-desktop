@@ -11,21 +11,22 @@
 
 ```text
 creative-video-suite/
-├── SKILL.md                        # 主入口（planner / 路由 / 输出约定）
+├── SKILL.md                        # 主入口（planner / 路由 / 输出约定 + 5 步硬门控）
 ├── README.md                       # 本文件
 └── references/
-    ├── agnes-ai-api.md             # multimedia-creator MCP 工具参考
+    ├── agnes-ai-api.md             # multimedia-creator MCP 工具参考 + 参数互斥 + 调用前自检清单
+    ├── mcp-usage-guide.md          # MCP 使用正确性指南（产品图门控 / mode 决策树 / 跨工具链 / 失败处理）
     ├── output-conventions.md       # 输出目录 / project.json / 落盘时机 / 商业 3 路差异
     ├── drama/
-    │   ├── scriptwriter.md         # 剧本创作
-    │   ├── storyboard.md           # 分镜切分
-    │   ├── assets.md               # 资产设定（角色 / 场景 / 道具）
-    │   ├── frame.md                # 关键帧生成
-    │   └── prompt.md               # 视频提示词与生成
+    │   ├── scriptwriter.md         # 剧本创作（含产品图强制门控）
+    │   ├── storyboard.md           # 分镜切分（含产品图强制门控）
+    │   ├── assets.md               # 资产设定（角色 / 场景 / 道具 / 产品类禁止 AI 自由生成）
+    │   ├── frame.md                # 关键帧生成（含 MCP 工具调用）
+    │   └── prompt.md               # 视频提示词与生成（含 MCP 工具调用 + mode 决策树）
     └── commercial/
-        ├── ugc-talking-video-ref.md             # UGC 口播
-        ├── product-marketing-ad-video-no-storyboard-ref.md  # 产品营销无分镜
-        └── corporate-business-video-ref.md      # 企业宣传 / 商务视频
+        ├── ugc-talking-video-ref.md             # UGC 口播（强门控升级 + MCP 调用）
+        ├── product-marketing-ad-video-no-storyboard-ref.md  # 产品营销无分镜（强门控 + MCP 调用）
+        └── corporate-business-video-ref.md      # 企业宣传 / 商务视频（4 类必填信息升级 + MCP 调用）
 ```
 
 ## 5 阶段剧情流水线

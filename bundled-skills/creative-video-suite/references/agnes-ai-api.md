@@ -129,6 +129,34 @@ mcp__multimedia-creator__agnes25_image_edit({
 | `timeout_seconds` | int | 否 | 任务超时秒数，默认 600 |
 | `poll_interval_seconds` | int | 否 | 轮询间隔秒数，默认 5 |
 
+## 参数互斥（mode ↔ params 必检）
+
+**违反互斥 → 400 Bad Request**，浪费一轮 quota + 用户等待。调用 MCP 前**必过**本表：
+
+| 工具 | `mode` | `first_frame` | `last_frame` | `images[]` | `image_paths[]` | `mask_path` | `audios[]` | 备注 |
+|---|---|---|---|---|---|---|---|---|
+| `image_generate` | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 纯文生图 |
+| `image_edit` | — | ❌ | ❌ | ❌ | ✅ **必传** ≤ 8 | ⚠️ 可选 | ❌ | I2I / 多图合成 / 局部编辑 |
+| `video_generate` | `text` | ❌ 禁止 | ❌ 禁止 | ❌ 禁止 | ❌ | ❌ | ⚠️ 可选 | 纯文生视频 |
+| `video_generate` | `keyframe` | ✅ **必传** | ⚠️ 可选（首末帧驱动才传） | ❌ 禁止 | ❌ | ❌ | ⚠️ 可选 | 单帧 / 首末帧驱动 |
+| `video_generate` | `reference` | ❌ 禁止 | ❌ 禁止 | ✅ **必传** ≤ 5 | ❌ | ❌ | ⚠️ 可选 | 1-5 张参考图作视觉锚 |
+
+**参数 schema 边界**：
+
+| 参数 | 取值 | 备注 |
+|---|---|---|
+| `size`（video） | `720P` | 锁死；旧版 `1080P` / `1K` / `2K` / `2K` 已废除 |
+| `size`（image） | `1K` / `2K` / `3K` / `4K` | 默认 `1K` |
+| `seconds` | `"4"` / `"5"` ... `"12"` | **字符串**（非 int） |
+| `aspect_ratio` | `1:1` / `3:4` / `4:3` / `9:16` / `16:9` / `21:9` | 与 first_frame 比例一致；不一致**先 `image_edit` 转比例**再喂 video |
+| `ratio`（image） | `1:1` / `3:4` / `4:3` / `9:16` / `16:9` / `21:9` | 同上 |
+| `num_images` | 1-4 | 默认 1 |
+| `image_paths[]` | ≤ 8 HTTPS URL | 按顺序对应 `<Picture 1>` / `<Picture 2>` |
+| `images[]` | ≤ 5 HTTPS URL | 同上 |
+| `audios[]` | ≤ 3 URL | flash 不接受 video audio |
+| `videos[]` | 0 | flash 限制 |
+| `mask_path` | URL | **仅 image_edit 接受**，传 image_generate / video_generate → 400 |
+
 ### 三种 mode 详解
 
 #### `text` 模式（纯文生视频）
@@ -187,12 +215,44 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ## 错误处理
 
-| 错误 | 原因 | 处理 |
-|---|---|---|
-| 401 Unauthorized | API Key 无效 | 检查 mcp.json env.AGNES_API_KEY |
-| 400 Bad Request | 参数错误 | 检查参数 schema（size / seconds / aspect_ratio 取值） |
-| 429 Too Many Requests | 频率限制 | 工具内部退避重试；持续失败则降低并发 |
-| 500 Internal Error | 服务端错误 | 重试 |
+**错误分层**：
+
+| 层 | 典型错 | 来源 | 处理 |
+|---|---|---|---|
+| **MCP 层** | 工具 spawn 失败 / poll timeout | `multimedia-creator` server / MCP wrapper | 重试 1 次；仍失败 → 停下告诉用户（网络 / MCP 配置问题） |
+| **业务层（4xx）** | 400 Bad Request | 参数 schema 错（mode 互斥 / size 越界 / 取值非法） | **不**重试——修正参数后再调 |
+| **业务层（4xx）** | 401 Unauthorized | API Key 无效 / 永久禁 | **不**重试——检查 `mcp.json` env.AGNES_API_KEYS / 换 key |
+| **业务层（4xx）** | 429 Too Many Requests | 频率限制 / daily quota 撞顶 | 工具内部退避；单次调用重试 1 次；持续撞顶 → 停下问用户（疑似配额问题，**不**自动降低并发撞二次 quota） |
+| **业务层（5xx）** | 500 Internal Error | 服务端错误 | 重试 1 次 |
+| **状态层** | 返回 `failed` 状态（非异常） | 任务执行失败（模型层） | 改 prompt 重试 1 次；**禁**降级 mode（CLAUDE.md 红线）；仍失败 → 停下 |
+
+**重试边界**：
+- 单次工具调用最多重试 1 次
+- 连续 2 次失败 → 立即停下问用户，不进入第 3 次
+- 不引入 backoff 调度（CLAUDE.md pit-of-success 红线 "同步 busy-wait" 禁止 `Atomics.wait` / spin / `while Date.now()`）
+- MCP 工具内部自带退避（429）
+
+**降级禁止**（CLAUDE.md 红线）：video keyframe/reference 失败 → **不**降级 text；image_edit 失败 → **不**降级 image_generate。失败停下问用户。详见 `references/mcp-usage-guide.md` §4.3。
+
+## 调用前自检清单
+
+每次调 MCP 工具前 11 项自检（10/10 全过才允许调）：
+
+```text
+[ ] (0)  产品图门控：用户 brief 含产品关键词 → product-refs/ 有图（否则降级模式 ack 落 project.json.notes）
+[ ] (1)  输入源是 HTTPS URL（不是本地路径 / base64 / file://）
+[ ] (2)  prompt 是中文（枚举值 / 参数键 / 数值字面量保留英文）
+[ ] (3)  mode ↔ params 互斥：text 无图 / keyframe 有 first_frame / reference 有 images[]
+[ ] (4)  size / seconds / aspect_ratio 取值在合法范围
+[ ] (5)  first_frame 比例与 aspect_ratio 一致（不一致先 image_edit 转比例）
+[ ] (6)  image_paths[] / images[] 全是 HTTPS URL
+[ ] (7)  style_anchor 与 project.json.style_anchor 一字不差
+[ ] (8)  上一步 URL 已记到 project.json.notes <file_path> → <https_url> 映射
+[ ] (9)  失败重试不超过 1 次（不撞二次 quota）
+[ ] (10) 不降级 mode（CLAUDE.md 红线）
+```
+
+任何一项不过 = 该阶段未完成，必须停下补做。完整 mode 决策树 / 跨工具链 URL 传递契约 / partial success 处理见 `references/mcp-usage-guide.md`。
 
 ## 历史参考
 

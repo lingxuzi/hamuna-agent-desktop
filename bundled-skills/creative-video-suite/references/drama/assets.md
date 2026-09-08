@@ -244,3 +244,26 @@
 跨阶段引用：frame 阶段用 `<workspace>/creative-video-suite/<project-name>/04_assets/characters/<角色名>/<角色名>_设定.png` 这种 file path 直接定位（**不**用 URL）；model 端用 HTTPS URL 时由 AI 内部维护 `<file_path> → <https_url>` 映射（写在 `assets.md` 头部 metadata）。
 
 commercial 分支额外落盘（见 output-conventions.md §5）：ugc 加 `04_assets/product-refs/<产品名>.png`；marketing 必传产品图；corporate 加 `04_assets/brand-refs/<资产名>.png`（logo / IP / VI）。
+
+## 产品图强制门控
+
+**drama 强门控**（与 commercial 同级）：产品类资产图**禁止 AI 自由生成**，必走 `cmd_workspace_copy_paths` 从用户提供的产品图落 `<workspace>/.../04_assets/product-refs/<产品名>.{jpg,png}`。
+
+**核心区分**（drama 资产阶段最易踩坑）：
+
+| 资产类型 | AI 自由生成 | 用户必传图 | 落盘路径 |
+|---|---|---|---|
+| 角色（人设 / 三视图 / 表情） | ✅ | ❌ | `04_assets/characters/<角色名>/...` |
+| 场景（全景 / 氛围 / 视角） | ✅ | ❌ | `04_assets/scenes/<场景名>/...` |
+| 通用道具（桌椅 / 装饰 / 抽象物） | ✅ | ❌ | `04_assets/props/<道具名>/...` |
+| **产品类道具**（品牌手机 / 真实商品 / 包装） | ❌ **禁止** | ✅ **必传** | `04_assets/product-refs/<产品名>.{jpg,png}` |
+
+**判定方法**：如果道具是"某品牌某型号的真实工业品" → 产品类；如果是"桌椅 / 装饰 / 抽象物" → 通用道具。
+
+**流程**：
+1. 剧本 + 分镜阶段已识别产品 → 资产阶段开始前用户已上传产品图
+2. AI 检查 `04_assets/product-refs/` 是否存在产品图（**不**则 stop，告诉用户上传）
+3. 产品图落盘后 → frame 阶段调 `image_generate` 时以产品图作 `<Picture N>` 引用；video 阶段 video_generate.mode="reference" 把产品图放 `images[]` 数组首位
+4. 用户**显式 ack 降级**（"我用 AI 生成看起来像 XX 牌"）→ 标记为视觉相似虚构道具，**不**作产品图
+
+完整规范见 `references/mcp-usage-guide.md` §1。

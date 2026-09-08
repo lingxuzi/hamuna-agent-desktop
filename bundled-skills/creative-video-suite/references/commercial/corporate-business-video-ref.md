@@ -430,3 +430,49 @@ Constraints：
 4. **logo / IP 落 `segment-XX.md` 的 `frame_chain_refs`**：跨阶段溯源用，明确每段视频里 logo / IP 的来源图（避免下游 segment 错引其他品牌资产）
 
 落盘前自检 §7 集成清单；**所有** segment 落盘 + 用户最终确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`、`updated_at` 更新。
+
+## 产品图强制门控 + 4 类必填信息升级
+
+**4 类必填信息升级**（原"logo、IP 等品牌资产"扩展为**第 3 类全必传含产品图**）：
+
+1. **企业信息**：公司全称 / 品牌名 / 行业 / 主营业务 / 核心产品-服务 / 成立时间 / 所在地区 / 目标客户 / 优势能力 / 可公开数据 / 资质荣誉 / 官网或官方账号链接
+2. **宣传文案**：企业介绍 / 主宣传语 / 品牌主张 / 业务卖点 / 项目主题 / 活动主题 / CTA / 禁用词 / 必须出现和不得出现的表达
+3. **logo / IP / VI / 客户案例 / 产品图**（**升级**：原仅 logo / IP 必传；现产品图也必传）：
+   - logo 原图 / IP 吉祥物 / 品牌色 / 字体 / VI 规范
+   - **产品图**（用户提及的所有产品 / 服务 / 解决方案的图片，必传）
+   - 产品 / 空间 / 团队图片 / 工厂 / 办公室 / 门店 / 活动素材
+   - 可用客户 logo 或案例授权范围
+4. **口播和旁白文案信息**：语言 / 声线 / 语速 / 语气 / 完整旁白文案 / 可改写方向 / 字幕策略 / 必须原样保留的表达
+
+**任一类别缺失 = 不进 planner 阶段**，必须先补问或要求上传素材。
+
+**产品图降级路径**：
+1. AI 在确认摘要中**明示**：
+   > ⚠️ 降级模式：本 Corporate 项目无产品图参考。产品外观 / 企业视觉资产不保证真实一致。
+2. 落 `project.json.notes.product_image_gate: "bypassed-by-user"`
+3. Corporate 强门控：**降级模式仅在用户书面 ack 后才放行**，否则 stop 收集
+
+## MCP 工具调用
+
+**Corporate 必调**：
+- `image_generate` —— 出 logo 落地图 / IP 形象图 / 品牌资产渲染图 / 产品展示图
+- `image_edit`（可选）—— 多张品牌资产合成 / 局部编辑
+- `video_generate`（**默认 mode="reference"**）—— 多参考图含 logo / IP / 品牌资产 / 产品图
+
+**Corporate 调 `video_generate` 的 `images[]` 顺序约定**：
+```text
+images[0] = logo 落地图（品牌识别第一）
+images[1] = IP / 吉祥物
+images[2] = 产品图（如有）
+images[3] = 空间 / 场景参考
+images[4] = 客户案例（如有）
+```
+
+**调用前 5 步硬门控**（详见 `SKILL.md` + `references/mcp-usage-guide.md` §6）：
+1. **4 类必填信息门控**（含产品图）— **Corporate 强门控**
+2. 输入源 HTTPS URL（`images[]` 全是 URL）
+3. 中文 prompt（含 `narration` 旁白原文、style_anchor）
+4. mode 互斥（Corporate 默认 reference 必有 images[] 1-5 张；不传 first_frame）
+5. 参数 schema（15s 时长 / size 锁 720P / aspect_ratio 按 platform 推断）
+
+**失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**用 AI 自由生成 logo（必须用用户上传的 logo 原图作 image_generate 或 reference）。

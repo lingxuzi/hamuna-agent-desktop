@@ -186,4 +186,40 @@
 落盘前自检 §7 集成清单（特别注意"用户确认在前，落盘在后"门控）；**全部** segment 落盘 + 用户最终确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`、`updated_at` 更新。
 
 commercial 3 路产物差异（见 output-conventions.md §5）：UGC 每个 segment 额外落盘 `segment-XX-script.md`（口播台词）；Marketing 分镜表落 `03_storyboard.md`；Corporate 完整旁白稿落 `06_videos/narration.md`，**不**分散在每个 segment.md。
+
+## MCP 工具调用 + mode 决策树
+
+**video 阶段默认工具**：`mcp__multimedia-creator__agnes25_video_generate`。**drama 默认 mode = `keyframe`**（frame 阶段已生成首尾关键帧图）。
+
+**mode 决策树**：
+
+```text
+是否有 first_frame 图（来自 05_keyframes/ 的 SEG_START / SEG_END）？
+├── 是 → keyframe 模式
+│   ├── 是否有 last_frame（来自 SEG_END）？ → keyframe + last_frame 双帧驱动
+│   └── 无 last_frame？ → keyframe 单帧驱动
+└── 否 → 是否有 1-5 张参考图（含 product-refs / 04_assets 角色场景图）？
+    ├── 是 → reference 模式（不锁首帧，锁视觉锚）
+    └── 否 → text 模式（纯文生视频）
+```
+
+**调用前 5 步硬门控**（详见 `SKILL.md` + `references/mcp-usage-guide.md` §6）：
+1. 产品图门控（涉及产品 → product-refs/ 有图或用户显式 ack）
+2. 输入源 HTTPS URL（`first_frame` / `last_frame` / `images[]` 全是 URL，**不**是本地路径）
+3. 中文 prompt
+4. **mode ↔ params 互斥**：text 模式无图 / keyframe 必有 first_frame / reference 必传 images[]（违反 → 400）
+5. first_frame 比例与 aspect_ratio 一致（不一致先 image_edit 转比例）
+
+**降级禁止（CLAUDE.md 红线）**：
+- ❌ keyframe 失败 → 降级 text 模式（丢失首帧控制）
+- ❌ reference 失败 → 降级 text 模式（丢失视觉锚）
+- ❌ keyframe / reference 失败 → 改 mode 重新调（**必保持 mode 不变**）
+
+**partial success 处理**（多 segment 视频）：
+- 成功的 segment 立刻落盘 + 写 `segment-XX.md`
+- 失败的 segment 不落盘但参数记到 `project.json.notes.video_segments[<id>]`
+- 单 segment 失败重试 1 次；多 segment 失败（≥ 50%）立即停下问用户
+- 详细见 `references/mcp-usage-guide.md` §3.3
+
+**失败处理**：单次失败重试 1 次（可改 prompt / 微调 aspect_ratio）；连续 2 次失败停下问用户。**不**降级 mode。
 ```

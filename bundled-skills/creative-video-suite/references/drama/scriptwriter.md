@@ -206,3 +206,20 @@
 **用户确认剧本后，AI 必须把剧本落盘到 `<workspace>/creative-video-suite/<project-name>/02_script.md`**（落盘走 `cmd_write_workspace_file`，参考 `references/output-conventions.md`）。落盘前自检 §7 集成清单；落盘后 update `project.json.current_stage = "script"` 并把 `stages_completed` 追加 `"script"`。drama 5 阶段必跑；commercial 跳过本阶段（`project.json.type` 非 `drama` 时不创建 `02_script.md`，直接从 planner → storyboard）。
 
 剧本文件结构：标题 + 项目信息头 + 故事模式 + 完整剧情基础 + 角色清单 + 场景清单 + 道具清单 + 结尾"进入分镜切分"提示。与 `01_planner.md` 的内容交叉时，**剧本里的人物 / 场景 / 道具清单是 stage 间 contract**，下一阶段直接读，不重新生成。
+
+## 产品图强制门控
+
+**drama 强门控**（与 commercial 同级）：剧本创作阶段如果用户 brief 含产品关键词（品牌名 / 商品词 / "广告剧情" / "品牌植入" / 任何用户提及的真实商品）→ AI **必须**先追问产品图，**不进入剧本推演**直到产品图到位。
+
+**触发判定**（剧本层）：
+- 剧本里出现"XX 牌手机" / "可口可乐" / "小米 SU7" 等品牌名
+- 剧本涉及"广告剧情" / "品牌植入" / "赞助商品"
+- 道具清单含"产品类道具"（用户明确指定品牌的实物）
+
+**流程**：
+1. 剧本阶段发现产品关键词 → 停下追问产品图（正 / 侧 / 细节至少 1 张）
+2. 用户提供 → AI 落 `<workspace>/.../04_assets/product-refs/<产品名>.{jpg,png}`（即使 drama 其他资产还没建，先把产品图建 product-refs/ 子目录）
+3. 落盘后续阶段（assets / frame / video）**直接用 product-refs/ 的图**作 image_generate 锚 / video_generate reference 模式参考
+4. 用户**显式 ack 降级**（"无产品图直接生成"）→ 落 `project.json.notes.product_image_gate: "bypassed-by-user"` + 剧本中**明示**该产品为"虚构道具 / 视觉相似"
+
+**drama 内部细分**：只有涉及产品的片段 / 场景 / 道具触发门控，其他剧情段不受影响。完整规范见 `references/mcp-usage-guide.md` §1。

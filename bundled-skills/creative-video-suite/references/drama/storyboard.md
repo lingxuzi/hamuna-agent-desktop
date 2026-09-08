@@ -215,3 +215,19 @@
 **用户确认分镜后，AI 必须把分镜表落盘到 `<workspace>/creative-video-suite/<project-name>/03_storyboard.md`**（`cmd_write_workspace_file`）。落盘前自检 §7 集成清单；落盘后 update `project.json.current_stage = "storyboard"`。
 
 分镜表内每个镜头的角色 / 场景 / 道具名**严格沿用 `02_script.md` 已确认的命名**（drama）或 brief 命名（commercial）——命名漂移会破坏 assets 阶段 file 查找。跨阶段引用：下一阶段 assets 阶段读 `03_storyboard.md` 时，角色 / 场景 / 道具名直接当 file path 段用（`04_assets/characters/<角色名>/...`）。commercial 分支 ugc / marketing / corporate 的分镜表落盘路径同上，差异在产物形态（见 output-conventions.md §5）。
+
+## 产品图强制门控
+
+**drama 强门控**（与 commercial 同级）：分镜切分阶段如果分镜表涉及产品特写 / 品牌植入镜头 → AI **必须**确认产品图已落 `04_assets/product-refs/<产品名>.{jpg,png}`，否则 stop。
+
+**触发判定**（分镜层）：
+- 分镜表里某镜头标注"产品特写" / "品牌 LOGO 出现" / "XX 牌包装入镜"
+- 镜头时长 > 1s 且主体是产品（不是角色 / 场景）
+
+**流程**：
+1. 分镜阶段发现产品镜头 → 检查 `04_assets/product-refs/<产品名>.{jpg,png}` 是否存在
+2. 不存在 → 停下告诉用户"剧本确认有产品但没传图，请上传"
+3. 存在 → 分镜表该镜头**显式标注**产品参考图来源：`<产品特写镜头> 参考 product-refs/<产品名>.png；保持包装 / logo / 颜色 / 比例一致`
+4. 用户**显式 ack 降级** → 标记该镜头为"产品视觉相似，无真实参考"，不阻塞后续流程
+
+完整规范见 `references/mcp-usage-guide.md` §1。

@@ -350,3 +350,45 @@ Seedance 强提示：
 4. **不**调 `image_edit`，**不**生成分镜图（见 `SKILL.md` `### 分镜图片 / 关键帧门控` 默认交付是分镜表）
 
 落盘前自检 §7 集成清单；**所有** segment 落盘 + 用户确认后 update `project.json.current_stage = "video"`、`stages_completed` 追加 `"video"`。
+
+## 产品图强制门控（升级：原"产品 / 企业资料门控"为强门控）
+
+**强门控**（之前软约束升级为硬）：UGC 项目**必传产品图**到 `<workspace>/creative-video-suite/<project-name>/04_assets/product-refs/<产品名>.{jpg,png}`，否则不能调 MCP 生成视频。
+
+**触发判定**（UGC）：
+- 用户 brief 含产品关键词（品牌名 / 商品词 / "带货" / "测评" / "种草" / "开箱" / "教程" 等）→ **必传**
+- 用户上传 ref 文件含产品图 → **必传**
+- 用户**明确**说"无产品图 / 纯达人讲解" → 触发降级路径
+
+**降级路径（用户显式 ack）**：
+1. AI 在确认摘要中**明示**：
+   > ⚠️ 降级模式：本 UGC 项目无产品图参考。产品外观 / 包装 / 品牌 logo 不保证真实一致。如有真实产品需求请上传产品图。
+2. 落 `project.json.notes.product_image_gate: "bypassed-by-user"` + 用户原话 + 时间戳
+3. 视频 prompt 描述产品**用文字**（不传 `images[]`），AI 必须接受"产品可能与用户描述不符"
+
+**完整流程**：
+- planner 阶段确认 UGC + 检测到产品关键词 → 追问产品图（正 / 侧 / 细节至少 1 张）
+- 用户上传 → 落 `04_assets/product-refs/<产品名>.{jpg,png}`
+- assets 阶段**必传** product-refs/ 图到 `image_generate`（出产品展示图）
+- video 阶段**默认 mode="text"**（真人讲解无 first_frame）+ product-refs/ 作 `<Picture N>` 引用（prompt 中 `@image1` 是产品参考）
+
+## MCP 工具调用
+
+**UGC 必调**：
+- `image_generate` —— 出产品展示图 / 主播背景图
+- `video_generate`（**默认 mode="text"**）—— 真人讲解无 first_frame
+
+**UGC 默认不调**：
+- ❌ `image_edit`（不生成分镜图 / 不调比例，UGC 单图为主）
+- ❌ `image_generate` 多图合成（主播图 + 产品图用 video.reference mode 而非 image_edit）
+
+**调用前 5 步硬门控**（详见 `SKILL.md` + `references/mcp-usage-guide.md` §6）：
+1. 产品图门控（**强门控**，本段已升级）
+2. 输入源 HTTPS URL
+3. 中文 prompt（含 `Monologue` 口播原文、style_anchor）
+4. mode 互斥（UGC 默认 text 模式无 first_frame / images[]）
+5. 参数 schema（9:16 比例 / 15s 时长 / size 锁 720P）
+
+**模式例外**：用户**明确**要"分镜图 → 视频"工作流时（要首帧驱动）→ mode 改 `keyframe` + 用 `image_generate` 出的分镜图作 `first_frame` HTTPS URL。
+
+**失败处理**：单次失败重试 1 次；连续 2 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**逐句字幕进入 prompt（硬门控见 §54 字幕硬门控）。
