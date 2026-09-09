@@ -281,6 +281,10 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
     → 避免本次启动后"看起来在跑"但实际没人 fire
 [ ] 本次要生成的 segment 不存在 status = "completed" 且 local_path 文件实际存在
     → 若已存在：用户拍板（"重跑 / 跳过 / 用 _v2 后缀"）后才推进
+[ ] video_generate 调用的 `model` 字段锁定为 `"agnes-video-2.5-flash"`（2026-09-09 加，T04-T12 9 模板硬编码）
+    → 不得 fallback 到 pro / plus / 3.0-flash 等其它变体
+    → 详见 `SKILL.md`「🔒 MCP 调用前 6 步硬门控」step 1.5 + 「失败重试铁律」禁止 fallback 列表
+    → MCP 端 `DEFAULT_MODEL = "agnes-video-2.5-flash"` 兜底虽同值，但显式锁是 AI 不漂移的硬契约（不可依赖 MCP 默认）
 [ ] notes.video_segments[<id>].required_assets[] 全 ready 检查（2026-09-09 加，H1）
     → 任意 asset_status !== "ready" → 停下问用户补生成
     → 字段 schema + asset_type 枚举 + asset_status 四态见 `references/output-conventions.md §2.2`

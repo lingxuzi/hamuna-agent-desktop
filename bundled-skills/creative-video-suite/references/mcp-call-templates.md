@@ -147,6 +147,7 @@ mcp__multimedia-creator__agnes25_image_edit({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "reference",          // 强制 reference，不用 keyframe（产品漂移问题）
+  model: "agnes-video-2.5-flash",  // 强制默认 model；不得改 pro/plus/3.0-flash 等其它变体（详见 SKILL.md「🔒 MCP 调用前 6 步硬门控」step 1.5）
   images: [
     "{{product_ref_url}}",    // <Picture 1> = product_ref（04_assets/product-refs/<产品名>.png HTTPS URL）
     "{{person_ref_url}}"      // <Picture 2> = person_ref（涉及人物出镜时传；纯产品特写无人物则 images.length === 1）
@@ -181,6 +182,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "reference",
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   images: [
     "{{character_ref_url}}"   // <Picture 1> = character_ref（04_assets/characters/<角色名>/<角色名>_设定.png HTTPS URL）
   ],
@@ -208,6 +210,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "reference",          // 强制 reference（text 模式产品/主播都会漂移）
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   images: [
     "{{product_ref_url}}",    // <Picture 1> = product_ref（04_assets/product-refs/<产品名>.png）
     "{{creator_ref_url}}"     // <Picture 2> = person_ref（UGC 主播图，用户上传或上轮 image_generate 产物）
@@ -235,6 +238,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "reference",
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   images: [
     "{{product_ref_url}}",    // <Picture 1> = product_ref
     "{{voiceover_scene_url}}" // <Picture 2> = voiceover_scene_map（来自 03_storyboard.md 的 voiceover_scene_map 落盘 PNG / 02_assets）
@@ -261,6 +265,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "reference",          // 强制 reference（4 类必传 brand_ref）
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   images: [
     "{{logo_ref_url}}",       // <Picture 1> = logo_ref（04_assets/brand-refs/logo.png）
     "{{ip_ref_url}}",         // <Picture 2> = ip_ref（04_assets/brand-refs/ip.png）
@@ -293,6 +298,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "keyframe",            // 锁 keyframe
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   first_frame: "{{product_ref_url}}",  // <产品N> 作首帧
   prompt: "{{style_anchor}}，以 <Picture 1>（{{product_name}} 产品图）为起始画面；按 5 段式结构：0-2s hook 从产品特写开始（构图变化或 logo reveal）、2-4s 产品揭示延续、4-8s 卖点证明（场景化使用）、8-10s 结果 + 收益、10-12s packshot hold 回到产品原图或 logo；旁白（{{voiceover_excerpt}}）；镜头时长严格 12 秒；保持产品外观 100% 一致于 first_frame；{{negative_product_block}}",
   seconds: "12",
@@ -315,6 +321,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "keyframe",
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   first_frame: "{{seg_start_frame_url}}",  // <起始帧N> = frame 阶段已落的 SEG_XX_START.png HTTPS URL
   last_frame: "{{seg_end_frame_url}}",     // <结束帧N> = SEG_XX_END.png（首末帧驱动才传；单帧驱动则不传）
   prompt: "{{style_anchor}}，从 <起始帧N>（<Picture 1>，SEG_XX_START 起始帧）{{如有末帧}}过渡到 <结束帧N>（<Picture 2>，SEG_XX_END 结束帧）{{/如有末帧}}；保持场景空间、角色身份、光影方向、摄影机逻辑 100% 与起始帧一致；分镜脚本：{{storyboard_segment_description}}；镜头时长严格 {{seconds}} 秒；{{negative_drama_block}}",
@@ -342,6 +349,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "text",                // 锁 text（无参考图才能用 text）
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   prompt: "{{style_anchor}}，分镜脚本：{{storyboard_segment_description}}；镜头时长严格 {{seconds}} 秒；纯文生视频，无参考图；{{negative_drama_block}}",
   seconds: "{{seconds}}",
   size: "720P",
@@ -363,6 +371,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 ```javascript
 mcp__multimedia-creator__agnes25_video_generate({
   mode: "text",                // UGC 默认 text（real human speaking, no keyframe）
+  model: "agnes-video-2.5-flash",  // 强制默认 model（详见 SKILL.md step 1.5）
   prompt: "{{style_anchor}}，真人主播口播带货：{{voiceover_full_excerpt}}（{{seconds}} 秒字数：12s 60-72 字 / 高密度 72-84 字）；分镜：{{ugc_segment_shots}}（4 段式 Cut1 0-2s hook / Cut2 2-5s 产品揭示 / Cut3 5-9s 卖点证明 / Cut4 9-12s packshot）；产品 {{product_name}} 视觉外观由 prompt 描述锁定（非 ref 模式，外观可能漂移，已在确认摘要明示降级）",
   seconds: "{{seconds}}",
   size: "720P",
@@ -484,7 +493,8 @@ mcp__multimedia-creator__agnes25_image_generate({
 [ ] (10) 任何失败【不得 fallback】（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 [ ] (11) 【硬编码铁律】涉及 ref 的生成走对应 T 编号模板吗？images[] 顺序按 §0.4 排吗？negative block 已嵌入吗？
 [ ] (12) `video_generate.seconds` 字符串值 ∈ `{"4","5","6","7","8","9","10","11","12"}`？完整约束（4 下限 / 12 上限 / 各分支锁定策略 / 边界外异常处理）见 `references/agnes-ai-api.md §视频时长边界（单一权威）`
-[ ] (13) image_generate 已显式传 `ratio:` 吗？按 SKILL.md「🔒 image_generate ratio 分支默认表」选值（drama 9:16 / Marketing 9:16 / UGC 9:16 / Corporate 16:9；Marketing 平台例外见 product-marketing-ad-video-no-storyboard-ref.md §平台→比例）？MCP 兜底默认 1:1 是图锁 1:1 的直接来源，**不**依赖 MCP 默认
+[ ] (13) `video_generate` 已显式传 `model: "agnes-video-2.5-flash"` 吗？不得 fallback 到其它变体（pro / plus / 3.0-flash 等），MCP 端 `DEFAULT_MODEL = "agnes-video-2.5-flash"` 兜底虽同值但显式锁是 AI 不漂移的硬契约；详见 SKILL.md「🔒 MCP 调用前 6 步硬门控」step 1.5 + 「失败重试铁律」禁止 fallback 列表
+[ ] (14) image_generate 已显式传 `ratio:` 吗？按 SKILL.md「🔒 image_generate ratio 分支默认表」选值（drama 9:16 / Marketing 9:16 / UGC 9:16 / Corporate 16:9；Marketing 平台例外见 product-marketing-ad-video-no-storyboard-ref.md §平台→比例）？MCP 兜底默认 1:1 是图锁 1:1 的直接来源，**不**依赖 MCP 默认
 ```
 
 14/14 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
