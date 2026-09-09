@@ -281,7 +281,7 @@ commercial 分支额外落盘（见 output-conventions.md §5）：ugc 加 `04_a
 **流程**：
 1. 剧本 + 分镜阶段已识别产品 → 资产阶段开始前用户已上传产品图
 2. AI 检查 `04_assets/product-refs/` 是否存在产品图（**不**则 stop，告诉用户上传）
-3. 产品图落盘后 → frame 阶段调 `image_generate` 时以产品图作 `<Picture N>` 引用；video 阶段 video_generate.mode="reference" 把产品图放 `images[]` 数组首位
+3. 产品图落盘后 → frame 阶段调 `image_edit(image_paths=[产品图], ...)` 时以产品图作 `<Picture N>` 引用（`image_generate` 是 T2I 不能传图，详见 SKILL.md「🔒 产品参考图硬门控」规则 2）；video 阶段 video_generate.mode="reference" 把产品图放 `images[]` 数组首位
 4. 用户**显式 ack 降级**（"我用 AI 生成看起来像 XX 牌"）→ 标记为视觉相似虚构道具，**不**作产品图
 
 完整规范见 `references/mcp-usage-guide.md` §1。

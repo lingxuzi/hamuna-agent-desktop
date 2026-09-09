@@ -2,7 +2,7 @@
 
 **何时读**：每阶段产物落盘后 + 写完 `segment-XX.md` 后。AI **必须** emit `<generative-ui-widget>` 块在 chatui 实时渲染，让用户**直观看**生成内容，**不**只看到裸 URL 文本。
 
-> **诊断澄清**：creative-video-suite **input 端**用 HTTPS URL 喂 MCP 是**正确**的——MCP server 只接受 HTTPS URL（本地路径触发 `img.remit.ee` 图床上传撞 QPS 限流，5 步硬门控第 1 条强制）。问题在 **output 端**——`mcp__multimedia-creator__agnes25_*` 当前没在 `src/server/utils/tool-result-attachments.ts::classifyToolAttachmentPresentation` 注册，URL 仅以纯文本落到 chat，没被 `ToolImageAttachment` 渲染成本地图卡。本文件作为 **skill 侧补偿**：AI 主动 emit widget 块让用户看到。Sidecar 包装属于另一 PR follow-up。
+> **诊断澄清**：creative-video-suite **input 端**用 HTTPS URL 喂 MCP 是**正确**的——MCP server 只接受 HTTPS URL（`video_generate` 字段本地路径触发 hosted_mcps 隐式 `img.remit.ee` 上传撞 QPS 限流；`image_edit` 字段本地路径走 client-side data URL 编码，**不**触发上传，详见 SKILL.md §38）。**新增显式工具 `agnes25_upload_image`**：AI 可主动把本地路径转 HTTPS URL，**仅在必须**把已有本地图喂 `video_generate` 但缺 URL 时使用——批量请自加间隔避免 429。问题在 **output 端**——`mcp__multimedia-creator__agnes25_*` 当前没在 `src/server/utils/tool-result-attachments.ts::classifyToolAttachmentPresentation` 注册，URL 仅以纯文本落到 chat，没被 `ToolImageAttachment` 渲染成本地图卡。本文件作为 **skill 侧补偿**：AI 主动 emit widget 块让用户看到。Sidecar 包装属于另一 PR follow-up。
 
 ---
 
@@ -211,9 +211,9 @@
 | `{{shotGoalNN}}` | `shot_goal` 字段 |
 | `{{cameraPathNN}}` | `camera_path` 字段（景别 / 视角 / 镜头） |
 | `{{dialogueNN}}` | `audio_or_dialogue` 字段（用 `{}` 包裹的口播 / 旁白） |
-| `{{keyframeNNUrl}}` | 关键帧 HTTPS URL（drama 从 `05_keyframes/episode-XX/segment-YY/SEGXX_YY.png` 复制后的本地副本 + 上传到 `img.remit.ee` 转 HTTPS；commercial Marketing 无分镜图，传空 `<td></td>`） |
+| `{{keyframeNNUrl}}` | 关键帧 HTTPS URL（drama 直接用 `image_generate` 返回的 `data[0].url`，已写到 stage .md 头部 `<file_path> → <https_url>` 映射；commercial Marketing 无分镜图，传空 `<td></td>`） |
 
-**关键帧 HTTPS URL 获取**：本地副本路径 `<workspace>/.../05_keyframes/.../SEGXX_YY.png` → 走 `cmd_workspace_copy_paths` 上传到 `img.remit.ee` 拿 HTTPS URL（见 mcp-usage-guide §3.1 输入源铁律，本地路径会触发 server 自动上传，**不**手动上传避免 QPS 限流）。**替代方案**：从 `image_generate` 返回的 `data[0].url` 直接用（drama frame 阶段已生成关键帧，URL 在 stage .md 头部 `<file_path> → <https_url>` 映射里）。
+**关键帧 HTTPS URL 获取**：直接从 `image_generate` 返回的 `data[0].url` 取（已在 stage .md 头部 `<file_path> → <https_url>` 映射里）。**禁止**用 `cmd_workspace_copy_paths` 之类的本地复制工具或主动调 `agnes25_upload_image` 上传——drama frame 阶段生成的 URL 已经是 HTTPS，无需再走图床（video 阶段 hosted_mcps 自动归一化即可）。
 
 **Markdown fallback**：
 
@@ -234,7 +234,7 @@
 
 **渲染目标**：资产图集（角色 / 场景 / 道具缩略图，按 type 分组）
 
-**数据来源**：`04_assets/<type>/<name>/<name>_设定.png` 的 HTTPS URL（每张图生成后立刻上传 / `image_generate` 返回的 `data[0].url`）
+**数据来源**：`04_assets/<type>/<name>/<name>_设定.png` 对应的 HTTPS URL（`image_generate` 返回的 `data[0].url`，已写到 stage .md 头部 `<file_path> → <https_url>` 映射，**不**经图床）
 
 **HTML 骨架**：
 

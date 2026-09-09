@@ -1,6 +1,6 @@
 ---
 name: creative-video-suite
-version: "3"
+version: "5"
 description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。用户在 planner / assets 阶段可选 6 个视觉风格预设（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），全局风格锚点一字不变贯穿 5 阶段；commercial 分支 style_ref 是强门控，未提供则追问。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。
 ---
 
@@ -21,6 +21,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 | `mcp__multimedia-creator__agnes25_image_generate` | 文生图（T2I） | `model="agnes-image-2.5-flash"`, `size="1K"\|"2K"\|"3K"\|"4K"`, `ratio`, `prompt` |
 | `mcp__multimedia-creator__agnes25_image_edit` | 图生图 / 多图合成（I2I） | `model="agnes-image-2.5-flash"`, `image_paths=["path1",...]`, `prompt`, 可选 `mask_path` |
 | `mcp__multimedia-creator__agnes25_video_generate` | 视频生成 | `model="agnes-video-2.5-flash"`, `mode="text"\|"keyframe"\|"reference"`, `size="720P"`, `seconds="4"-"12"`, `aspect_ratio`, `timeout_seconds=600`, `poll_interval_seconds=5`, 按 `mode` 决定 `first_frame` / `last_frame` / `images=["path1",...]` (≤5) / `audios=[]` / `videos=[]` |
+| `mcp__multimedia-creator__agnes25_upload_image` | 本地文件 → HTTPS URL（图床上传） | `path`（绝对本地文件路径）。**drama 流水线不主动调**（用 `image_generate` 返回的 `data[0].url` 就够），仅当必须把已有本地图变 URL 又缺 `image_generate` 历史时调用；并发撞图床 QPS 限流（429 等 15s），单批 ≤ 5 张 + 间隔 2-3s |
 
 **完整 MCP 调用正确性规范**（mode 决策树 / 跨工具链 URL 传递契约 / 失败处理与降级禁止 / 命名空间对照 / per-stage tool map / 调用前 10 项自检）见 `references/mcp-usage-guide.md`。
 
@@ -43,6 +44,39 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 5. **image_generate 必须显式 `ratio:`**（2026-09-09 加，**单一权威**见下方「🔒 image_generate ratio 分支默认表」）——`mcp__multimedia-creator__agnes25_image_generate` 漏传 `ratio` 时 MCP 兜底默认 `1:1`（详见 `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` `DEFAULT_IMAGE_RATIO`），是图锁 1:1 的直接来源；skill 模板**必须**显式传 `ratio: "<分支默认>"`（占位符 `{{default_ratio_for_branch}}`），**不得**依赖 MCP 默认。
 
 6 步全过才允许调 MCP 工具，**任何一项不过 = 该阶段未完成**。
+
+**🔒 产品参考图硬门控（2026-09-09 加）**：
+
+**核心约束**：当 brief 含产品关键词（品牌名 / 商品词 / 广告剧情信号）且 `project.json.notes.product_image_gate` 未标 `bypassed-by-user` 时，以下 3 类 MCP 调用**必须**按工具边界处理产品参考图：
+
+**工具边界**：
+
+| 工具 | 能否传产品参考图 | 必传场景 |
+|---|---|---|
+| `mcp__multimedia-creator__agnes25_image_generate` | ❌ **不能**（T2I 无 `image_paths` 字段） | 仅在不涉及产品参考的多视图生成（默认走 T13 `image_generate_multiview_grid`） |
+| `mcp__multimedia-creator__agnes25_image_edit` | ✅ **必须**（I2I `image_paths[]`） | 产品相关关键帧 → `image_paths=[产品图, ...]` 产品图作 `<Picture 1>` |
+| `mcp__multimedia-creator__agnes25_video_generate` | ✅ **必须**（reference 模式 `images[]`） | 产品相关视频段 → `images=[产品图, ...]` 产品图作 `<Picture 1>` |
+
+**规则 1 — 产品多视图**：`opt-in` 触发时（planner 阶段判定产品有"多角度展示需求"）→ 调 `image_generate` 走 T13 `image_generate_multiview_grid`（单张图，多角度拼宫格）。**不**走产品参考图路径，产品图仅作 T13 prompt 内的"产品外观描述"。
+
+**规则 2 — 产品相关关键帧**：image_edit **必须**传产品图作 `image_paths[]` 首位（`<Picture 1>`）。**严禁**走纯文生图（即使是无产品参考图的产品，这时 AI 应 stop 问用户上传）。
+
+**规则 3 — 视频生成**：按（分支 × ref 类型）决策表选唯一合法模板，**产品图在 `images[]` 数组首位**：
+
+| 分支 | 模板 | `images[]` 顺序 |
+|---|---|---|
+| drama · 产品道具 | `video_reference_drama_product` (T04) | `[product_ref, ...其余 refs]` |
+| drama · 角色道具 | `video_reference_drama_character_continuity` (T05) | 产品道具时把 `product_ref` 放在 `character_ref` 之后 |
+| commercial · UGC 口播 | `video_reference_ugc_talking` (T06) | `[product_ref, person_ref]` 或纯产品 + 真人图 |
+| commercial · Marketing | `video_reference_marketing` (T07) | `[product_ref, ...其余 refs]` |
+| commercial · Corporate | `video_reference_corporate` (T08) | `[product_ref, brand_ref, ...其余 refs]` |
+
+**硬禁令**：
+- **不得**从 `images[]` 删除 `product_ref` 元素（即使 prompt 调整，产品图必须保留）
+- **不得**把 `mode="reference"` 降级成 `mode="text"`（丢失产品锚点，违反"不得 fallback"红线）
+- **不得**对产品图调 `image_generate`（T2I 不能传图）
+
+完整规范见 `references/mcp-usage-guide.md` §1 + `references/drama/assets.md`「产品图强制门控」段。
 
 **🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）**：
 
@@ -157,6 +191,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 | **AI → MCP 输入**（`video_generate.images[]` / `first_frame` / `last_frame`）：传 HTTPS URL | 正确（hosted_mcps 对 video_generate 字段本地 / data URI 都做"上传 `img.remit.ee` 拿 URL"，并发撞图床 QPS 限流；5 步硬门控第 1 条 video_generate 分支强制） | ❌ 不是问题，**不能改成本地路径 / data URI** |
 | **AI → MCP 输入**（`image_edit.image_paths` / `mask_path`）：HTTPS URL / data URI / 本地路径 都可 | 正确（hosted_mcps 对本地路径 client-side 编码为 data URL，**不**走 `img.remit.ee`；agnes 官方 API 支持 HTTPS URL + Data URI） | ❌ 不是问题；**优先 HTTPS URL**（与上下游 URL 流一致） |
 | **MCP → chatui 输出**：`image_generate` / `video_generate` 返回的 HTTPS URL 在 chatui 里是否可视化 | `src/server/utils/tool-result-attachments.ts::classifyToolAttachmentPresentation` 当前未把 `mcp__multimedia-creator__agnes25_*` 纳入 attachment 包装 → URL 仅以纯文本落到 chat，没被 `ToolImageAttachment` 渲染成 inline 卡 | ✅ 是问题根因 |
+| **AI → MCP 输入**（`agnes25_upload_image`：本地路径 → HTTPS URL） | 正确（走 hosted_mcps `_upload_to_remit_ee` helper，与 `video_generate` 字段隐式归一化**同一条路径**；显式工具 vs 隐式上传只是 caller 选择） | ❌ 不是问题；**drama 流水线不主动调**（用 `image_generate` 返回的 `data[0].url` 就够，重复上传 = QPS 翻倍）；仅在必须把已有本地图变 URL 又缺 `image_generate` 历史时调用；批量自加 sleep 防 429 |
 
 **本次 skill 侧补偿**：AI 主动 emit `<generative-ui-widget>` 块（per-stage 摘要）让用户看到。Sidecar 包装属于另一 PR follow-up——在 Sidecar 包装落地前，inline 图卡不可用，widget 是唯一 chatui 可视化路径。
 

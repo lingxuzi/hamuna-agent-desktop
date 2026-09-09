@@ -1016,6 +1016,41 @@ async def agnes25_image_edit(
     )
 
 
+@mcp.tool()
+async def agnes25_upload_image(path: str) -> dict[str, Any]:
+    """Upload a local image file to img.remit.ee; return public HTTPS URL.
+
+    Args:
+        path: Absolute path to a local file readable by this server.
+
+    Returns:
+        ``{"ok": True, "url": "https://img.remit.ee/..."}`` on success,
+        or ``{"ok": False, "error": {"code": ..., "message": ...}}`` on failure.
+
+    Notes:
+        img.remit.ee is a free image host with rate limits (~429, wait 15s)
+        and a 20MB per-file cap. Prefer reusing the ``url`` returned by
+        ``agnes25_image_generate`` over manually uploading assets; for
+        batches, call serially with a small sleep between calls.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return _error(
+            "invalid_param",
+            "path is not an existing local file.",
+            details={"path": path},
+        )
+    try:
+        url = await asyncio.to_thread(_upload_to_remit_ee, p)
+    except Exception as exc:
+        return _error(
+            "remit_ee_upload_failed",
+            f"img.remit.ee upload failed: {exc}",
+            details={"path": path, "exception": str(exc)},
+        )
+    return {"ok": True, "url": url}
+
+
 def main() -> None:
     mcp.run()
 
