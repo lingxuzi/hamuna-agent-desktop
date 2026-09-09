@@ -1036,7 +1036,7 @@ fn copy_folder_to_templates_blocking(
 
 // ============= Admin Agent Sync =============
 
-const ADMIN_AGENT_VERSION: &str = "24";
+const ADMIN_AGENT_VERSION: &str = "25";
 
 /// Helper-bundled paths (relative to `~/.hamuna/`) that previous versions
 /// shipped but that have since been retired.
@@ -1731,8 +1731,8 @@ mod system_skills_tests {
     }
 
     #[test]
-    fn v24_helper_routes_product_knowledge_and_diagnosis() {
-        assert_eq!(ADMIN_AGENT_VERSION, "24");
+    fn v25_helper_routes_product_knowledge_and_diagnosis() {
+        assert_eq!(ADMIN_AGENT_VERSION, "25");
         let helper = include_str!("../../bundled-agents/hamuna_helper/CLAUDE.md");
         let support =
             include_str!("../../bundled-agents/hamuna_helper/.claude/skills/support/SKILL.md");
