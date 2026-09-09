@@ -290,6 +290,11 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
     → 任意字段缺失 → 停下问用户补 recipe（不是自动补——避免 AI 自由发挥 prompt 与原意漂移）
     → 用途：跨 session 续跑 / 重生成 / widget 展示 prompt / 用户审视 recipe
     → 详见 `references/output-conventions.md §2.2` 字段说明表 + 写侧契约 recipe 三件套必填
+    → recipe 三件套是 §2.3 storyboard 的派生缓存：缺失可从对应 storyboard.shots[] 复读补回
+[ ] 派生一致性校验（2026-09-09 加，H1 续）
+    → `notes.video_segments[<id>].required_assets[].asset_id` 必须是 `notes.storyboard.scenes[*].shots[*].required_assets[].asset_id` 的子集
+    → 不在 storyboard 的 asset_id → 停下问用户：是 storyboard 漏写还是 video_segments 写漂了？修源头（§2.3）后再继续
+    → 详见 `references/output-conventions.md §2.2` 与 `§2.3` 派生关系段
 ```
 
 **Step 2 pre-call 写入**：调 MCP 之前 `cmd_write_workspace_file` 落 status="in-progress" + started_at——这是"轮询状态"的语义落点（MCP 内部 poll 不暴露，AI 用 project.json 状态机模拟）。

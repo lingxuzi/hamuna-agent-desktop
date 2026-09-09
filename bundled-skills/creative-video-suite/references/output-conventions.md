@@ -259,6 +259,12 @@ creative-video-suite 的产物分两层：
 - 扩展 `project.json.notes.video_segments[].required_assets[]` 与现有 `video_segments[].status` / `product_metadata` / `product_image_gate` 子对象同源结构
 - AI 续跑第一件事 `cat project.json` 看断点已经覆盖这个字段（output-conventions.md §6 续跑逻辑）
 
+**与 §2.3 storyboard JSON 的关系**（2026-09-09 加，**派生关系**）：
+- §2.3 `notes.storyboard.scenes[].shots[]` 是分镜**生产侧权威**（每个 shot 怎么设计 + 怎么生成，含完整生成 recipe）
+- §2.2 `notes.video_segments[].required_assets[]` 是 video **消费侧视图**（video 阶段要哪些 asset ready）
+- 派生方向：§2.3 → §2.2（frame 阶段末尾，AI 读 storyboard.shots[].required_assets[] → 去重聚合写入 video_segments[].required_assets[]）
+- §2.2 的 recipe 三件套（`generation_prompt` / `mcp_tool_name` / `tool_params`）是从对应 shot 复制的**派生缓存**——修改必须先改 §2.3，再让 §2.2 派生跟随，避免双源漂移
+
 **与 `project.json.stages_completed` 关系**：写时机 = frame 阶段末尾（关键帧全部生成完成时）；与 §3 落盘时机表 frame 行新加列 `notes.video_segments[].required_assets[] 同步落盘` 联动。
 
 **`type` 取值决定产物形态**：
@@ -269,6 +275,121 @@ creative-video-suite 的产物分两层：
 
 `stages_completed` 是 AI 续跑的 **唯一权威**。新 session 开始时 AI 先 `cat project.json` 看 `current_stage`，从下一个阶段继续。
 
+### 2.3 `notes.storyboard.scenes[].shots[]` 子对象（分镜设计 JSON，2026-09-09 加）
+
+`storyboard` JSON 是分镜阶段的**生产侧权威**——每个 shot 含完整生成 recipe（prompt + mcp_tool_name + tool_params）+ 按顺序引用的资产（`required_assets[]`）——把 `03_storyboard.md` 里 inline 的分镜表行拆成结构化 JSON，frame 阶段生成关键帧时直接复读 + 用户审视 prompt 时看 schema 而非 markdown。
+
+**为什么需要**（与 §2.2 video_segments.required_assets[] 互补）：
+- §2.2 是 **消费侧**（video 阶段 pre-flight 读"哪些 asset ready"）；§2.3 是 **生产侧**（storyboard / frame 阶段写"每个分镜图怎么设计 + 怎么生成"）。
+- `03_storyboard.md` 是 markdown，AI frame 阶段需要 grep 每个 shot 行提取 prompt + asset 引用 → 易遗漏 + 跨 session 续跑重 parse 慢。
+- 拆分到 `notes.storyboard.scenes[].shots[]` 后，frame 阶段 `cat project.json` 一次拿到全部 shot 的生成 recipe。
+- **2026-09-09 补**：shot 必须自带 **生成 recipe**（shot_prompt + mcp_tool_name + tool_params）+ **按顺序的资产引用**（`required_assets[]`，每个 entry 含 `asset_role` 区分 first_frame / character_ref / scene_ref / prop_ref / product_ref / brand_ref + `asset_id` 引用全局资产 + `asset_path` 冗余 + `reference_mode` 决定怎么进 image_generate / image_edit 的 params）。无 recipe = "分镜图怎么再出一张"无答案 = 重生成 prompt 全靠 AI 重新摸索 = 风格漂移 + 耗时翻倍。
+
+**schema**：
+
+```json
+{
+  "notes": {
+    "storyboard": {
+      "scenes": {
+        "scene-01": {
+          "scene_title": "林远办公室夜景",
+          "shots": [
+            {
+              "shot_id": "shot-01a",
+              "shot_purpose": "开场镜头 / 林远办公室全景",
+              "shot_duration_seconds": null,
+              "shot_prompt": "写实电影风格，<style_anchor>，现代都市高级办公室落地窗夜景，全景俯拍",
+              "mcp_tool_name": "mcp__multimedia-creator__agnes25_image_generate",
+              "tool_params": {"model": "agnes-image-2.5-flash", "size": "1K", "ratio": "9:16"},
+              "required_assets": [
+                {
+                  "asset_role": "scene_ref",
+                  "asset_id": "scene-office",
+                  "asset_path": "04_assets/scenes/林远办公室/林远办公室_全景.png",
+                  "reference_mode": "image_generate_direct"
+                }
+              ],
+              "output_path": "05_keyframes/episode-01/segment-01/SEG01_START.png",
+              "status": "ready",
+              "created_at": "2026-09-09T11:00:00Z",
+              "finished_at": "2026-09-09T11:05:00Z"
+            },
+            {
+              "shot_id": "shot-01b",
+              "shot_purpose": "角色出场 / 林远转身",
+              "shot_duration_seconds": null,
+              "shot_prompt": "写实电影风格，<style_anchor>，林远转身面对镜头，表情凝重，medium shot",
+              "mcp_tool_name": "mcp__multimedia-creator__agnes25_image_generate",
+              "tool_params": {"model": "agnes-image-2.5-flash", "size": "1K", "ratio": "9:16"},
+              "required_assets": [
+                {
+                  "asset_role": "character_ref",
+                  "asset_id": "char-linyuan",
+                  "asset_path": "04_assets/characters/林远/林远_设定.png",
+                  "reference_mode": "image_generate_direct"
+                },
+                {
+                  "asset_role": "first_frame",
+                  "asset_id": "kf-seg01-start",
+                  "asset_path": "05_keyframes/episode-01/segment-01/SEG01_START.png",
+                  "reference_mode": "image_edit_ref"
+                }
+              ],
+              "output_path": "05_keyframes/episode-01/segment-01/SEG01_END.png",
+              "status": "pending",
+              "created_at": null,
+              "finished_at": null
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+**字段说明**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `scene_title` | string | ❌ | scene 自由描述（如"林远办公室夜景"） |
+| `shots[]` | array | ✅ | scene 内 shot 列表，按时间顺序 |
+| `shot_id` | string | ✅ | shot 唯一标识，kebab-case（`shot-01a` / `shot-01b`），AI 跨阶段续跑引用锚点 |
+| `shot_purpose` | string | ❌ | shot 用途描述（"开场 / 角色介绍 / 关键动作 / 转场"） |
+| `shot_duration_seconds` | string / null | ❌ | 若是分镜图（关键帧）= null；若是 video shot 写 `"5"` 等（沿用 video_generate `seconds` 字符串格式）。drama 必有；commercial 3 路按需 |
+| `shot_prompt` | string | ✅ | 生成该 shot 的完整 prompt（中文，沿用 §MCP 调用前 5 步硬门控"中文 prompt 铁律"） |
+| `mcp_tool_name` | enum | ✅ | 生成该 shot 的 MCP 工具名（默认 `mcp__multimedia-creator__agnes25_image_generate`；可用 `mcp__multimedia-creator__agnes25_image_edit` 多图合成；也可用 `mcp__multimedia-creator__agnes25_video_generate` 直接生成 video shot）。 |
+| `tool_params` | object | ✅ | 传给 MCP 工具的 params（JSON 化），如 image_generate `{model, size, ratio}` / image_edit `{image_paths, prompt}` / video_generate `{mode, first_frame, last_frame, images, seconds, aspect_ratio}`。 |
+| `required_assets[]` | array | ❌（允许空如纯 text mode shot） | 按顺序引用的资产（从 first_frame 到 character_ref 到 scene_ref）。drama 5 类 + commercial 按需 |
+| — `asset_role` | enum | ✅ | 6 选 1：`"first_frame"` / `"character_ref"` / `"scene_ref"` / `"prop_ref"` / `"product_ref"` / `"brand_ref"`。决定这个 asset 在 `tool_params` 里怎么分发（如 `image_paths[]` / `images[]` / `first_frame` / `last_frame`）。 |
+| — `asset_id` | string | ✅ | kebab-case，全局唯一（与 §2.2 `video_segments[].required_assets[].asset_id` 同一命名空间）。 |
+| — `asset_path` | string (workspace-relative) | ✅ | 冗余，加速 AI 读（避免每次 `cat project.json` 后再 `stat` 找路径）。 |
+| — `reference_mode` | enum | ✅ | 3 选 1：`"image_generate_direct"`（asset 是 image_generate 输入参考，但实际通过 `images[]` 参数传入）/ `"image_edit_ref"`（asset 进 image_edit 的 `image_paths[]`）/ `"not_referenced"`（shot 不真用这个 asset，仅记录依赖关系）。 |
+| `output_path` | string (workspace-relative) | ✅ | shot 输出路径（如关键帧 `05_keyframes/episode-XX/segment-YY/SEGZZ_START.png`；video shot `06_videos/segment-XX.mp4`） |
+| `status` | enum | ✅ | shot 状态四态：`"pending"` / `"generating"` / `"ready"` / `"missing"`（与 §2.2 asset_status 四态同模式，但语义是"shot 本身"而非"shot 引用的 asset"） |
+| `created_at` | string (ISO timestamp, optional) | ❌ | shot 开始生成时间；status !== "ready" 时为 null |
+| `finished_at` | string (ISO timestamp, optional) | ❌ | shot 生成完成时间；status !== "ready" 时为 null |
+
+**写侧契约**（storyboard 阶段末尾）：
+
+- drama：每个 scene 的 shot 设计完成 → storyboard 阶段末尾**立即**写 `notes.storyboard.scenes[].shots[]`，含所有 shot 的 shot_prompt + mcp_tool_name + tool_params + required_assets[]
+- commercial 3 路：根据 §3 type 决策表，ugc / marketing 轻量 storyboard（只列 video shot，不生成分镜图）；corporate 强制旁白（shot 必含 `shot_duration_seconds`）
+- status 初始值 = "pending"，frame 阶段生成时更新
+
+**读侧契约**（frame 阶段）：
+
+- **必读**：每张关键帧生成前**必须**从 `storyboard.scenes[].shots[]` 复读 shot_prompt + mcp_tool_name + tool_params + required_assets[]
+- **asset 引用解析**：`required_assets[]` 每个 entry 的 `asset_id` 必须能在 §2.2 `video_segments[].required_assets[].asset_id` 找到对应项（asset_path 冗余字段）—— 否则视为 schema 漂移，停下问用户修复
+
+**与 §2.2 video_segments[].required_assets[] 的派生关系**（2026-09-09 加）：
+
+- **§2.3 storyboard = source of truth**（生产侧：每个 shot 怎么设计 + 怎么生成）
+- **§2.2 video_segments[].required_assets[] = 派生缓存**（消费侧：video 阶段要哪些 asset ready）
+- 派生时机 = frame 阶段末尾：AI 读 storyboard.scenes[].shots[].required_assets[] → 去重 + 聚合到对应 segment.video_segments[<id>].required_assets[]
+- 派生一致性 = 写入时校验：video_segments[].required_assets[].asset_id ⊆ union(storyboard.shots[].required_assets[].asset_id)；recipe 三件套（generation_prompt / mcp_tool_name / tool_params）从对应 shot 复制（不必 AI 改写）
+- **双源风险控制**：两者都嵌入 `project.json.notes`，单一权威（§2.3），§2.2 是派生视图；任何 schema 修改先改 §2.3，再让 §2.2 派生逻辑跟随
+
 ---
 
 ## 3. 落盘时机与门控
@@ -277,7 +398,7 @@ creative-video-suite 的产物分两层：
 |---|---|---|---|---|---|
 | **planner** | `01_planner.md`（项目 brief + 风格锚点 + 路线选择 + 项目名确认）+ `project.json`（新建） | `<project>/01_planner.md` + `project.json` | 用户确认项目名 + type + style_anchor + aspect_ratio | **planner-meta-card** | `project.json` 首次创建（schema 见 §2） |
 | **script** | `02_script.md` | `<project>/02_script.md` | 用户确认剧本 | **scriptwriter-summary-card** | `notes.summary` 更新（剧情核心摘要） |
-| **storyboard** | `03_storyboard.md`（含分镜表 + 符号规则 + 运镜） | `<project>/03_storyboard.md` | 用户确认分镜 | **storyboard-shot-table** | — |
+| **storyboard** | `03_storyboard.md`（含分镜表 + 符号规则 + 运镜） | `<project>/03_storyboard.md` | 用户确认分镜 | **storyboard-shot-table** | **stage 末尾写 `notes.storyboard.scenes[].shots[]`**（§2.3 schema；含每 shot 的 shot_prompt + mcp_tool_name + tool_params + 按序 required_assets[]） |
 | **assets** | 每个角色 / 场景 / 道具生成后立刻落盘（不等全部完成）；阶段末落盘资产清单 `04_assets/<type>/<name>/assets.md` | `<project>/04_assets/...` | 用户确认资产验收表（每张"已生成"才进 frame 阶段） | **assets-image-gallery**（追加模式：每张图生成后立即 emit） | 涉及产品 → 写 `notes.product_metadata.<产品名>`（§2.1 schema） |
 | **frame** | 每个关键帧生成后立刻落盘；阶段末落盘 `05_keyframes/frames-index.md` | `<project>/05_keyframes/...` | 用户确认关键帧 | **frame-keyframe-grid**（追加模式：每张关键帧生成后立即 emit） | **每 segment 末尾写 `notes.video_segments[<id>].required_assets[]`**（§2.2 schema；含所有 4-5 类资产 status + path + url） |
 | **video** | 每个 segment 视频 `cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制到本地 + 写 `segment-XX.md` 元数据 | `<project>/06_videos/...` | 用户确认视频 + update `project.json.current_stage` | **video-segment-list**（追加模式：每段视频生成后立即 emit；失败段显示 ⚠️ 占位） | 4 步硬门控（§3.4）pre-flight 第 4 项读 `required_assets[]` 全 ready + post-call 写 `required_assets[].asset_url_consumed[]` |
