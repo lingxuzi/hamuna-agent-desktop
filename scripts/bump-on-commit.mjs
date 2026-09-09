@@ -100,3 +100,51 @@ try {
 } catch (err) {
   process.stderr.write(`[bump-on-commit] SYSTEM_SKILLS_VERSION bump 失败，跳过: ${err.message}\n`);
 }
+
+// ---- AGNES_MCP_VERSION auto-bump（PyPI latest → mcp.json pin） ----
+// 背景：multimedia-creator MCP（extended_buildin_mcp/mcp.json）依赖 agnes-video-25-mcp PyPI 包，
+// 原始 pin ==0.1.4；用户拍板「Build-time / pre-commit hook auto-bump」——每次 commit 查 PyPI latest，
+// mismatch 则 patch mcp.json 的 --from arg；与 SYSTEM_SKILLS_VERSION auto-bump 同模式。
+//
+// 跳过条件：
+//  1. CI（GITHUB_ACTIONS=true）—— 上文已 process.exit(0) 提前 return
+//  2. 用户主动改 mcp.json（wcMcp !== headMcp）——尊重用户的 pin 手动选择 / 回退
+//  3. PyPI 不可达 / 超时（5s AbortSignal.timeout）——不阻塞 commit，stderr 告警即可
+//  4. mcp.json 未匹配 pin 格式（regex miss）——大概率是用户手改了结构，跳过
+//
+// 为什么用 top-level await：fetch 是 async API；.mjs 在 Node 13+ 支持 top-level await，
+// 项目 Node v24 满足。整段包 try/catch，任何子步骤失败都只 stderr 不 exit(1)。
+//
+// 代价：开发者必须 commit 才会触发 → 老用户必须升级 App 才拿到新 pin（与 system skill 模式一致）。
+//   如需"已安装用户也 auto-upgrade"，需要走 App 启动期 check + ~/.hamuna/ mirror（更重，本任务不做）。
+try {
+  const wcMcp = readFileSync('extended_buildin_mcp/mcp.json', 'utf8');
+  const headMcp = execSync('git show HEAD:extended_buildin_mcp/mcp.json', { encoding: 'utf8' });
+  if (wcMcp === headMcp) {
+    const resp = await fetch('https://pypi.org/pypi/agnes-video-25-mcp/json', {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) {
+      process.stderr.write(`[bump-on-commit] PyPI 返回 ${resp.status}, 跳过 AGNES_MCP auto-bump\n`);
+    } else {
+      const data = await resp.json();
+      const latest = data.info.version;
+      const pinMatch = wcMcp.match(/agnes-video-25-mcp==(\d+\.\d+\.\d+)/);
+      if (!pinMatch) {
+        process.stderr.write('[bump-on-commit] mcp.json 未匹配 pin 格式 agnes-video-25-mcp==X.Y.Z, 跳过\n');
+      } else if (pinMatch[1] !== latest) {
+        const newMcp = wcMcp.replace(
+          /agnes-video-25-mcp==\d+\.\d+\.\d+/,
+          `agnes-video-25-mcp==${latest}`,
+        );
+        writeFileSync('extended_buildin_mcp/mcp.json', newMcp);
+        execSync('git add extended_buildin_mcp/mcp.json', { stdio: 'inherit', cwd: process.cwd() });
+        process.stderr.write(`[bump-on-commit] AGNES_MCP auto-bumped: ${pinMatch[1]} → ${latest}\n`);
+      }
+      // else: pinMatch[1] === latest, 已是最新, 静默跳过
+    }
+  }
+  // else: wcMcp !== headMcp, 用户主动改过, 尊重
+} catch (err) {
+  process.stderr.write(`[bump-on-commit] AGNES_MCP check 失败, 跳过: ${err.message}\n`);
+}
