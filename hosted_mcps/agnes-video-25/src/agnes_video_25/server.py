@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import math
 import mimetypes
 import os
-import re
 import threading
 import time
 import uuid
@@ -109,6 +109,7 @@ class _KeyState:
     disabled_until: float = 0.0  # epoch seconds; 0 = available
     disabled_reason: str | None = None
     consecutive_failures: int = 0
+    last_429_at: float = 0.0  # epoch seconds; 0 = no prior 429 in this process
 
 
 _KEY_POOL: list[_KeyState] = []
@@ -122,30 +123,63 @@ def _mask_key(raw: str) -> str:
     return raw[:4] + "***" + raw[-4:]
 
 
-def _parse_quota_reset(body: str | None) -> float | None:
-    """Parse 'Please try again after 2026-09-09 00:00.' style hints."""
-    if not body:
-        return None
-    m = re.search(r"after\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})", body)
-    if not m:
-        return None
+# ----- Persisted key pool state (2026-09-10+) -----
+# State survives process restart so 401-permanent keys aren't reused and the
+# 30s-window 429 cooldown counter (last_429_at) doesn't get reset mid-window.
+# Single-writer (stdio MCP, single process); atomic write via tmp + replace;
+# no flock required. AGNES_KEY_POOL_STATE_DIR overrides the path for tests.
+_STATE_DIR = Path.home() / ".hamuna" / "state"
+_STATE_FILE_NAME = "agnes-key-pool.json"
+
+
+def _state_file() -> Path:
+    override = os.environ.get("AGNES_KEY_POOL_STATE_DIR")
+    base = Path(override) if override else _STATE_DIR
+    return base / _STATE_FILE_NAME
+
+
+def _load_persisted_state() -> dict[str, Any]:
+    """Read persisted state. Returns {} on missing/corrupt/unreadable file."""
+    path = _state_file()
+    if not path.exists():
+        return {}
     try:
-        from datetime import datetime, timezone
-        dt = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-        return dt.timestamp()
-    except ValueError:
-        return None
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
-def _next_utc_midnight() -> float:
-    from datetime import datetime, timedelta, timezone
-    now = datetime.now(timezone.utc)
-    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return midnight.timestamp()
+def _persist_state() -> None:
+    """Atomically write key pool state. Acquires _KEY_POOL_LOCK internally."""
+    with _KEY_POOL_LOCK:
+        path = _state_file()
+        payload: dict[str, dict[str, Any]] = {}
+        for k in _KEY_POOL:
+            payload[k.raw] = {
+                "disabled_until": k.disabled_until,
+                "disabled_reason": k.disabled_reason,
+                "last_429_at": k.last_429_at,
+                "consecutive_failures": k.consecutive_failures,
+            }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+            tmp.replace(path)
+        except OSError as exc:
+            print(f"[agnes-video-25-mcp] WARN: failed to persist key pool state to {path}: {exc}", flush=True)
 
 
 def _load_key_pool() -> list[_KeyState]:
-    """Read AGNES_API_KEYS (comma-separated, preferred) or AGNES_API_KEY (single)."""
+    """Read AGNES_API_KEYS (comma-separated, preferred) or AGNES_API_KEY (single).
+
+    Merges persisted cooldown state from disk: keys with future ``disabled_until``
+    keep their disable + reason + last_429_at; expired disables are dropped so
+    the key starts healthy.
+    """
     multi = _env("AGNES_API_KEYS")
     single = _env("AGNES_API_KEY")
     raw_list: list[str] = []
@@ -153,11 +187,38 @@ def _load_key_pool() -> list[_KeyState]:
         raw_list = [s.strip() for s in multi.split(",") if s.strip()]
     elif single:
         raw_list = [single.strip()]
-    return [_KeyState(raw=k, masked=_mask_key(k)) for k in raw_list]
+    keys = [_KeyState(raw=k, masked=_mask_key(k)) for k in raw_list]
+    if not keys:
+        return keys
+    persisted = _load_persisted_state()
+    now = time.time()
+    for k in keys:
+        ps = persisted.get(k.raw)
+        if not isinstance(ps, dict):
+            continue
+        try:
+            disabled_until = float(ps.get("disabled_until", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if disabled_until <= now:
+            continue  # expired → drop; key is healthy again
+        k.disabled_until = disabled_until
+        k.disabled_reason = ps.get("disabled_reason")
+        try:
+            k.last_429_at = float(ps.get("last_429_at", 0.0))
+        except (TypeError, ValueError):
+            pass
+        try:
+            k.consecutive_failures = int(ps.get("consecutive_failures", 0))
+        except (TypeError, ValueError):
+            pass
+    return keys
 
 
 def _pick_key() -> _KeyState | None:
     global _KEY_POOL_LOADED
+    picked: _KeyState | None = None
+    needs_persist = False
     with _KEY_POOL_LOCK:
         if not _KEY_POOL_LOADED:
             _KEY_POOL[:] = _load_key_pool()
@@ -165,8 +226,15 @@ def _pick_key() -> _KeyState | None:
         now = time.time()
         for k in _KEY_POOL:
             if k.disabled_until <= now:
-                return k
-        return None
+                # Cooldown complete → refresh 429 allowance (key gets 2 fresh 429 chances).
+                if k.last_429_at > 0.0:
+                    k.last_429_at = 0.0
+                    needs_persist = True
+                picked = k
+                break
+    if needs_persist:
+        _persist_state()
+    return picked
 
 
 def _mark_disabled(key: _KeyState, reason: str, until: float) -> None:
@@ -177,11 +245,19 @@ def _mark_disabled(key: _KeyState, reason: str, until: float) -> None:
         # Permanent until process restart; user must rotate key.
         print(f"[agnes-video-25-mcp] KEY DISABLED (auth_401, permanent): {key.masked}. Rotate key in AGNES_API_KEYS.", flush=True)
     elif reason == "quota_429":
+        # 2026-09-10: fixed 60s cooldown (was quota-reset parse). See call_with_fallback.
         from datetime import datetime, timezone
         when = datetime.fromtimestamp(until, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        print(f"[agnes-video-25-mcp] KEY DISABLED (quota_429): {key.masked}, disabled until {when}.", flush=True)
+        print(f"[agnes-video-25-mcp] KEY COOLDOWN (quota_429, 60s): {key.masked}, retry after {when}.", flush=True)
+    elif reason == "consecutive_429_30s":
+        # 2 consecutive 429 within 30s window on the same key → enter cooldown state.
+        # Cooldown still 60s; reason is preserved for downstream visibility.
+        from datetime import datetime, timezone
+        when = datetime.fromtimestamp(until, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        print(f"[agnes-video-25-mcp] KEY COOLDOWN (consecutive_429_30s, 60s): {key.masked}, 2 consecutive 429 within 30s window, retry after {when}. Consider rotating key or checking upstream quota.", flush=True)
     elif reason == "service_503":
-        print(f"[agnes-video-25-mcp] KEY DISABLED (service_503, 60s): {key.masked}.", flush=True)
+        print(f"[agnes-video-25-mcp] KEY COOLDOWN (service_503, 60s): {key.masked}.", flush=True)
+    _persist_state()
 
 
 def _sanitize_filename(name: str | None) -> str | None:
@@ -374,9 +450,17 @@ def _request_json(
                 last_error = err
                 continue
             if sc == 429:
-                reset = _parse_quota_reset(body) or _next_utc_midnight()
-                _mark_disabled(key, "quota_429", reset)
-                tried.append((key.masked, sc, "quota_429"))
+                # 2026-09-10: fixed 60s cooldown, drop _parse_quota_reset.
+                # 30s window: 1st 429 → "quota_429"; 2nd 429 within 30s →
+                # "consecutive_429_30s" (enters cooldown state). _pick_key
+                # resets last_429_at on cooldown completion to refresh the
+                # 2-429 allowance.
+                now = time.time()
+                in_window = key.last_429_at > 0.0 and (now - key.last_429_at) <= 30.0
+                key.last_429_at = now
+                reason = "consecutive_429_30s" if in_window else "quota_429"
+                _mark_disabled(key, reason, now + 60.0)
+                tried.append((key.masked, sc, reason))
                 last_error = err
                 continue
             if sc == 503:
