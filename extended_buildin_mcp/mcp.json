@@ -27,7 +27,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "agnes-video-25-mcp==0.1.5",
+        "agnes-video-25-mcp@latest",
         "agnes-video-25-mcp"
       ],
       "env": {
