@@ -108,6 +108,8 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 - **生成详细内容**：画面主体、动作、场景、风格、镜头运动、情绪氛围、声音（`audios=[]` / prompt 文字描述）、负向约束。
 - **生成数量**：一次最多生成 2 个视频，超出必须澄清。
 
+**🔒 段间串行 + project.json 状态机（2026-09-09 加）**：单批 ≤ 2 是数量上限，**不**是并发起跑 2 个 MCP 调用——video 阶段 MUST 严格按 4 步硬门控执行（pre-flight → pre-call → serial-call → post-call），status 四态 `pending / in-progress / completed / failed` 同步到 `project.json.notes.video_segments`，段间冷却 2-5s（建议，不强制）。完整规范 + 字段 schema + 错误码枚举见 `references/mcp-usage-guide.md §3.4`。
+
 ### 确认机制
 
 **只有在用户明确确认参数后，才可以继续生成。** 无论用户是否已经一次性提供完整参数，都必须先输出一次参数摘要并等待确认。

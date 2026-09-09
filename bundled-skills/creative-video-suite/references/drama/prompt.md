@@ -179,6 +179,8 @@
 
 ## 持久化
 
+> **🔗 video 阶段 4 步硬门控（pre-flight / pre-call / serial-call / post-call）+ status 四态（pending / in-progress / completed / failed）+ 段间串行 + 段间冷却建议**——完整规范见 `references/mcp-usage-guide.md §3.4`，本文不复述。本节只覆盖"成功 segment 落盘"的 post-call 子步骤。
+
 **每个 segment 视频生成后立刻落盘**：
 
 1. **本地副本**：`cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制 `segment-XX.mp4` 到 `<workspace>/creative-video-suite/<project-name>/06_videos/segment-XX.mp4`（**必须**本地副本，**不**只依赖 URL——URL 是 agnes CDN 的临时链接，关闭 session 后不可访问）

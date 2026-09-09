@@ -210,21 +210,105 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 5. 多 segment 同时失败（≥ 50%）→ 立即停下，**交由用户处理**（疑似配额撞顶或网络问题）
 ```
 
-**`project.json.notes` 字段记录**：
+**`project.json.notes` 字段记录**（status 四态 + 时间戳 + attempt 计数 + 错误码）：
 
 ```json
 {
   "video_segments": {
-    "segment-01": { "status": "completed", "url": "https://...", "local_path": "..." },
-    "segment-02": { "status": "completed", "url": "https://...", "local_path": "..." },
-    "segment-03": { "status": "failed", "error": "MCP timeout 600s", "last_attempt_at": "...", "params": {...} },
+    "segment-01": {
+      "status": "completed",
+      "started_at": "2026-09-09T10:00:00Z",
+      "finished_at": "2026-09-09T10:03:30Z",
+      "attempt_count": 1,
+      "url": "https://...",
+      "local_path": "<workspace>/creative-video-suite/<project>/06_videos/segment-01.mp4"
+    },
+    "segment-02": {
+      "status": "in-progress",
+      "started_at": "2026-09-09T10:03:35Z"
+    },
+    "segment-03": {
+      "status": "failed",
+      "started_at": "2026-09-09T10:08:00Z",
+      "finished_at": "2026-09-09T10:18:30Z",
+      "attempt_count": 3,
+      "last_error_code": "MCP_TIMEOUT_600s",
+      "last_error_message": "agnes poll timed out after 3 attempts",
+      "params": {...}
+    },
     "segment-04": { "status": "pending", "params": {...} },
     "segment-05": { "status": "pending", "params": {...} }
   }
 }
 ```
 
+**status 四态语义**：
+
+| status | 写入时机 | 必含字段 | 含义 |
+|---|---|---|---|
+| `pending` | video 阶段开始时（pre-flight 阶段） | `params` | 已规划未启动 |
+| `in-progress` | 调 `video_generate` **之前**（pre-call 阶段） | `started_at` | MCP 调用已 fire，阻塞等内部 poll 返回 |
+| `completed` | MCP 调用成功返回 **之后**（post-call 阶段） | `started_at` + `finished_at` + `attempt_count` + `url` + `local_path` | 视频已落盘到 workspace |
+| `failed` | 2-retry 撞墙 **之后**（post-call 阶段） | `started_at` + `finished_at` + `attempt_count` + `last_error_code` + `last_error_message` + `params` | 交用户处理（不自动重试，撞二次 quota） |
+
+**字段约定**：
+- `started_at` / `finished_at`：ISO 8601 UTC（与 `project.json.created_at` / `updated_at` 同格式）
+- `attempt_count`：成功 = 1（首次即过）；失败 = 实际 attempt 数（1 / 2 / 3）
+- `last_error_code`：MCP 层错填 `MCP_TIMEOUT_600s` / `MCP_SPAWN_FAILED`；业务层错填 `AGNES_429_QUOTA` / `AGNES_401_AUTH` / `AGNES_500_SERVER`；状态层错填 `AGNES_TASK_FAILED`
+- `last_error_message`：人类可读的错误描述（widget error 占位 + 用户接手诊断用）
+
 **widget 中的失败展示**：`video-segment-list` widget（见 `references/widget-templates.md` §6）对失败的 segment **不**消失，**红色边框 + ⚠️ + 错误摘要 + retry 提示**——用户在 widget 里就看到失败（不需要翻 chat 历史）。失败的 segment 不阻断后续成功的 segment 落盘 + 写 `segment-XX.md` + widget emit。
+
+### 3.4 video 阶段 4 步硬门控（serial + state machine，2026-09-09 加）
+
+**为什么需要**：MCP `video_generate` 内部已 poll（5s / 600s，详见 `references/agnes-ai-api.md`），AI 视角下"轮询" = **project.json 状态机的 `in-progress` 中间态同步**（CLAUDE.md 红线禁 busy-wait，AI 不主动轮询 MCP）；多 segment 场景下"不要并发" = **段间串行 + 段内串行**（单批 ≤ 2 是数量上限，**不**是并发起跑 2 个 MCP 调用）；"避免限流" = 段间冷却建议 + MCP 内部 429 退避 + `AGNES_API_KEYS` 多 key fallback 三层防御（SKILL 层只补"段间冷却"，不重复造 MCP 已做的轮子）。
+
+**video 阶段 MUST 严格按 4 步执行（顺序不可换、不可跳）**：
+
+```text
+1. pre-flight   cat project.json → 验证 current_stage ≥ "frame" + notes.video_segments 无 in-progress 残留
+2. pre-call     cmd_write_workspace_file 写 notes.video_segments[<id>].status = "in-progress" + started_at
+3. serial-call  一次调一个 video_generate（不并发起跑 2 个 MCP call）；段间 sleep 2-5s
+4. post-call    cmd_write_workspace_file 写 status = "completed"/"failed" + finished_at + attempt_count + (url/local_path | last_error_code/message)
+```
+
+**Step 1 pre-flight 检查项**（必须全过）：
+
+```text
+[ ] current_stage ∈ { "frame", "video" }（video 阶段开始时 ≥ frame）
+[ ] notes.video_segments 不含 status = "in-progress" 的 segment
+    → 若有：上 session 异常退出卡住，必须先标 failed + 写 last_error_code = "PREVIOUS_SESSION_CRASH"
+    → 避免本次启动后"看起来在跑"但实际没人 fire
+[ ] 本次要生成的 segment 不存在 status = "completed" 且 local_path 文件实际存在
+    → 若已存在：用户拍板（"重跑 / 跳过 / 用 _v2 后缀"）后才推进
+```
+
+**Step 2 pre-call 写入**：调 MCP 之前 `cmd_write_workspace_file` 落 status="in-progress" + started_at——这是"轮询状态"的语义落点（MCP 内部 poll 不暴露，AI 用 project.json 状态机模拟）。
+
+**Step 3 serial-call 契约**：
+- **段内串行**：1 个 video_generate = 1 次 MCP 调用 = 阻塞等内部 poll 返回（不等完不能 fire 下一段）
+- **段间串行**：上一段 completed/failed 落盘后才推进下一段
+- **段间冷却**：2-5s（不强制；MCP 内部 429 退避兜底；冷却是建议，不是硬闸）
+- **单批 ≤ 2 是数量上限**：drama 默认 6 段 / UGC 1-3 段 / Marketing 1 段 / Corporate 2-4 段都是多段；**不**是一次起 N 个 MCP 调用并行
+
+**Step 4 post-call 写入**：
+- 成功 → `status="completed"` + `url`（MCP 返回的 video_url） + `local_path`（cmd_workspace_copy_paths 落盘路径） + `finished_at` + `attempt_count=1`
+- 失败 → `status="failed"` + `last_error_code` + `last_error_message` + `finished_at` + `attempt_count`（实际次数，含 retry） + `params`（方便用户重试时直接复制）
+- 立刻调 cmd_workspace_copy_paths 落盘 + 写 segment-XX.md + emit video-segment-list widget（**不**等全部段完成才 emit，追加模式见 `references/drama/prompt.md` §Widget emit）
+
+**全部 segment 完成后**：单独一次 `current_stage = "video"` + `stages_completed` append `"video"` + `updated_at` 刷新（**不**在每段 post-call 都推 current_stage，避免 AI 跨 session 续跑误判"video 阶段已完成"）。
+
+**为什么不自己后台 fire + 主动 poll MCP**：
+- MCP `video_generate` 是阻塞返回（一次调用 30s-10min），CLAUDE.md pit-of-success 红线明禁同步 busy-wait
+- MCP 没暴露 status query 端点，`AGNES_API_KEYS` 多 key fallback 状态也不可查
+- "轮询"语义必须在 SKILL 层落地为 project.json 状态机的 `in-progress` 中间态，而不是真的循环 query
+
+**为什么段间冷却只建议不强制**：
+- MCP 内部 429 退避已存在（`references/agnes-ai-api.md` 错误处理表）
+- `AGNES_API_KEYS` 多 key fallback 已自动切（`extended_buildin_mcp/mcp.json:35`）
+- SKILL 层硬闸 = 与 MCP 内部退避双重等待 + 用户体感变慢；建议 = 软引导 + 不破坏现有保护
+
+**drama 与 commercial 共享**：4 步硬门控对 drama / ugc / marketing / corporate 全适用；商业 3 路若分段（long_video_stitch_mode N 段）同样走 4 步。
 
 ---
 
