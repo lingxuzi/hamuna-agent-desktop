@@ -101,6 +101,60 @@ try {
   process.stderr.write(`[bump-on-commit] SYSTEM_SKILLS_VERSION bump 失败，跳过: ${err.message}\n`);
 }
 
+// ---- SKILL_VERSION auto-bump（bundled-skills/creative-video-suite/SKILL.md frontmatter） ----
+// 背景：用户拍板"每次更新 creative-video-suite skill 自动更新 skill 内版本号"（2026-09-09）→
+// bump-on-commit.mjs 扩展 SKILL frontmatter version 同步。scope 暂限 creative-video-suite：其它 skill 的
+// frontmatter version 格式不统一：
+//   - prompt-writer:        `version: 20260707`（日期格式，Number() + 1 语义错）
+//   - hamuna-strategy-v2:   `version: 20260818`（同上）
+//   - agent-browser:        `version: 1` 在 SKILL.md body（非 frontmatter，regex 不匹配）
+// 扩展前 MUST 先统一版本格式策略（独立 PR，本任务不做）。
+//
+// 触发条件：staged `bundled-skills/creative-video-suite/` 任意文件（含 references/* 改动）→ bump
+// SKILL.md frontmatter `version: "X"` → `version: "X+1"`（数字字符串格式，与 SYSTEM_SKILLS_VERSION
+// auto-bump 同 design pattern；A 路径选择，外部 consumer 漏读 bump 不报错）。
+//
+// 跳过条件：
+//   1. CI（GITHUB_ACTIONS=true）—— 上文已 process.exit(0) 提前 return
+//   2. 用户主动改 SKILL.md（wcSkill !== headSkill）—— 尊重，完整文件 diff 由用户控制
+//   3. wcVersion !== headVersion（用户主动 bump 了 frontmatter version）—— 尊重
+//   4. version 字段未匹配（regex miss / 格式漂移）—— 静默跳过
+try {
+  const stagedSkill = execSync(
+    'git diff --cached --name-only -- bundled-skills/creative-video-suite/',
+    { encoding: 'utf8' }
+  ).trim();
+  if (stagedSkill) {
+    const skillPath = 'bundled-skills/creative-video-suite/SKILL.md';
+    const wcSkill = readFileSync(skillPath, 'utf8');
+    const wcVerMatch = wcSkill.match(/^version:\s*"(\d+)"\s*$/m);
+    if (wcVerMatch) {
+      let headVer = null;
+      try {
+        const headSkill = execSync(`git show HEAD:${skillPath}`, { encoding: 'utf8' });
+        const headVerMatch = headSkill.match(/^version:\s*"(\d+)"\s*$/m);
+        if (headVerMatch) headVer = headVerMatch[1];
+      } catch {
+        // 首次 commit 无 HEAD — 默认 bump
+      }
+      if (!headVer || wcVerMatch[1] === headVer) {
+        const nextVer = String(Number(wcVerMatch[1]) + 1);
+        const nextSkill = wcSkill.replace(
+          /^version:\s*"\d+"\s*$/m,
+          `version: "${nextVer}"`,
+        );
+        writeFileSync(skillPath, nextSkill);
+        execSync(`git add ${skillPath}`, { stdio: 'inherit', cwd: process.cwd() });
+        process.stderr.write(`[bump-on-commit] creative-video-suite version ${wcVerMatch[1]} → ${nextVer}\n`);
+      }
+      // else: wcVer !== headVer, 用户主动 bump, 尊重
+    }
+    // else: version 字段未匹配（格式漂移）, 静默跳过
+  }
+} catch (err) {
+  process.stderr.write(`[bump-on-commit] SKILL_VERSION bump 失败，跳过: ${err.message}\n`);
+}
+
 // ---- AGNES_MCP_VERSION auto-bump（PyPI latest → mcp.json pin） ----
 // 背景：multimedia-creator MCP（extended_buildin_mcp/mcp.json）依赖 agnes-video-25-mcp PyPI 包，
 // 原始 pin ==0.1.4；用户拍板「Build-time / pre-commit hook auto-bump」——每次 commit 查 PyPI latest，
