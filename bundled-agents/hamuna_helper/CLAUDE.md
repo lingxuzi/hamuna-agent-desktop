@@ -100,12 +100,8 @@
 
 ### 完整创作流水线（推荐路径）
 
-- 走 5 阶段剧情流水线（drama 短剧 / Commercial Marketing / UGC / Corporate / 多视角产品图）→ 加载 `bundled-skills/creative-video-suite/SKILL.md`（system skill，`SYSTEM_SKILLS_VERSION` 已在 commands.rs + systemSkills.ts 双源同步，HEAD = 43）。该文件承载 6 步硬门控 + 14 项 gate + 13 个 T 编号硬编码模板（T01-T13）+ 5 阶段流水线 + 视觉风格锚点 + 输出约定。
+- 走 5 阶段剧情流水线（drama 短剧 / Commercial Marketing / UGC / Corporate / 多视角产品图）→ 加载 `creative-video-suite skill`。
 - **单一权威** = creative-video-suite skill；helper 不重复 dump 7 工具参数表（避免重复 + 2000+ tokens 常驻税），用 cross-link 给其他 context 指引。
-
-### 直接调用 MCP（兜底 · 写新 skill / 调试 / 单点生成）
-
-其他 context 想绕开 creative-video-suite skill 直接调 MCP 时（例如写新 bundled-skill / 调试 agnes-video-25 行为 / 单点生成测试）→ 读 `bundled-skills/creative-video-suite/references/agnes-ai-api.md` 拿 7 工具参数表 + 调用示例 + 输入源支持 + 错误处理完整规范。
 
 7 个工具速查（详细参数 cross-link 到 agnes-ai-api.md）：
 
@@ -123,20 +119,11 @@
 
 ### 关键铁律（违反 → MCP 返回错误或产物异常）
 
-1. **image_generate 必须显式传 `ratio:`** —— MCP 兜底默认 `1:1`（详见 `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py:49 DEFAULT_IMAGE_RATIO = "1:1"`），是图锁 1:1 的直接来源。按分支默认：drama 9:16 / Marketing 9:16 / UGC 9:16 / Corporate 16:9（Marketing 平台级例外 cross-link 到 `references/commercial/product-marketing-ad-video-no-storyboard-ref.md`）。完整分支表 + 单一权威见 `bundled-skills/creative-video-suite/SKILL.md`「🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）」。
-2. **video_generate.seconds 是字符串** —— 合法值集合 `{"4", "5", "6", "7", "8", "9", "10", "11", "12"}`；半秒 / 小数 / 浮点字符串均被拒。完整约束见 `bundled-skills/creative-video-suite/references/agnes-ai-api.md §视频时长边界（单一权威）`。
-3. **mode ↔ params 互斥** —— text 无图 / keyframe 有 first_frame / reference 有 images[]；任何一项混传 → 400 Bad Request 浪费一轮 quota + 用户等待。完整互斥表见 `agnes-ai-api.md §参数互斥`。
-4. **失败重试 ≤ 2 次 + 不得 fallback** —— 单次工具调用重试 2 次（3 次 attempt）；**任何 attempt 不得降级 mode / 删 images[] 元素 / 改 product_ref 到 text / 简化 prompt**。完整铁律见 `bundled-skills/creative-video-suite/references/mcp-call-templates.md §5.1` + `mcp-usage-guide.md §4.3`。
+1. **image_generate 必须显式传 `ratio:`** —— MCP 兜底默认 `1:1`
+2. **video_generate.seconds 是字符串** —— 合法值集合 `{"4", "5", "6", "7", "8", "9", "10", "11", "12"}`；半秒 / 小数 / 浮点字符串均被拒。
+3. **mode ↔ params 互斥** —— text 无图 / keyframe 有 first_frame / reference 有 images[]；任何一项混传 → 400 Bad Request 浪费一轮 quota + 用户等待。
+4. **失败重试 ≤ 2 次 + 不得 fallback** —— 单次工具调用重试 2 次（3 次 attempt）；**任何 attempt 不得降级 mode / 删 images[] 元素 / 改 product_ref 到 text / 简化 prompt**。
 
-### 跨场景路由（按用户意图分发）
-
-| 用户说 | helper 行动 |
-|---|---|
-| "用 multimedia-creator 生成图 / 视频" | 引导加载 `bundled-skills/creative-video-suite/`（5 阶段流水线），**不**让 helper 自己组装 prompt |
-| "agnes-video-25 MCP 怎么调 / 参数是什么" | 给 7 工具速查表（上方）+ cross-link 到 `agnes-ai-api.md` 详细参数表 |
-| "agnes-video-25 调用失败 / 出错 / 5xx / 4xx" | 跳到 `/support`：先用本地统一日志（`~/.hamuna/logs/unified-{YYYY-MM-DD}.log`）+ MCP 错误分层（MCP 层 / 业务层 4xx / 业务层 5xx / 状态层）分类。错误处理表见 `agnes-ai-api.md §错误处理` |
-| "把 agnes-video-25 加到新 skill" | 告诉用户去 `bundled-skills/<新 skill>/SKILL.md` 写 + cross-ref 到 creative-video-suite 既有 T 编号模板做 image_generate / video_generate 调用；不要新建 MCP 调用契约（避免分散 single source of truth） |
-| "agnes-video-25 默认 1:1 怎么改 / ratio 选什么" | 引到 `bundled-skills/creative-video-suite/SKILL.md`「🔒 image_generate ratio 分支默认表」+ 强调"必须显式传 ratio:" |
 
 ### 不要做的事
 

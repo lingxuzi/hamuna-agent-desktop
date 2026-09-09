@@ -7,19 +7,6 @@
       ],
       "cwd": "D:\\Coding\\hamuna-agent-desktop",
       "type": "stdio"
-    },
-    "multimedia-creator": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "agnes-video-25-mcp==0.1.4",
-        "agnes-video-25-mcp"
-      ],
-      "env": {
-        "UV_INDEX_URL": "https://pypi.org/simple",
-        "AGNES_API_KEYS": "cpk-q4sHrUC4k9kZwM7PSkeUmHi7BmKKX8PSOQT0Qmeon7E0Im0v,sk-Edy4Y6lXLoX3HgAWY42ttAqeBclSFQjDuhO7KBPZKwNcpJUr",
-        "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1"
-      }
     }
   }
 }
