@@ -1,6 +1,6 @@
 ---
 name: creative-video-suite
-version: "4"
+version: "5"
 description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。用户在 planner / assets 阶段可选 6 个视觉风格预设（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），全局风格锚点一字不变贯穿 5 阶段；commercial 分支 style_ref 是强门控，未提供则追问。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。
 ---
 
@@ -44,6 +44,39 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 5. **image_generate 必须显式 `ratio:`**（2026-09-09 加，**单一权威**见下方「🔒 image_generate ratio 分支默认表」）——`mcp__multimedia-creator__agnes25_image_generate` 漏传 `ratio` 时 MCP 兜底默认 `1:1`（详见 `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` `DEFAULT_IMAGE_RATIO`），是图锁 1:1 的直接来源；skill 模板**必须**显式传 `ratio: "<分支默认>"`（占位符 `{{default_ratio_for_branch}}`），**不得**依赖 MCP 默认。
 
 6 步全过才允许调 MCP 工具，**任何一项不过 = 该阶段未完成**。
+
+**🔒 产品参考图硬门控（2026-09-09 加）**：
+
+**核心约束**：当 brief 含产品关键词（品牌名 / 商品词 / 广告剧情信号）且 `project.json.notes.product_image_gate` 未标 `bypassed-by-user` 时，以下 3 类 MCP 调用**必须**按工具边界处理产品参考图：
+
+**工具边界**：
+
+| 工具 | 能否传产品参考图 | 必传场景 |
+|---|---|---|
+| `mcp__multimedia-creator__agnes25_image_generate` | ❌ **不能**（T2I 无 `image_paths` 字段） | 仅在不涉及产品参考的多视图生成（默认走 T13 `image_generate_multiview_grid`） |
+| `mcp__multimedia-creator__agnes25_image_edit` | ✅ **必须**（I2I `image_paths[]`） | 产品相关关键帧 → `image_paths=[产品图, ...]` 产品图作 `<Picture 1>` |
+| `mcp__multimedia-creator__agnes25_video_generate` | ✅ **必须**（reference 模式 `images[]`） | 产品相关视频段 → `images=[产品图, ...]` 产品图作 `<Picture 1>` |
+
+**规则 1 — 产品多视图**：`opt-in` 触发时（planner 阶段判定产品有"多角度展示需求"）→ 调 `image_generate` 走 T13 `image_generate_multiview_grid`（单张图，多角度拼宫格）。**不**走产品参考图路径，产品图仅作 T13 prompt 内的"产品外观描述"。
+
+**规则 2 — 产品相关关键帧**：image_edit **必须**传产品图作 `image_paths[]` 首位（`<Picture 1>`）。**严禁**走纯文生图（即使是无产品参考图的产品，这时 AI 应 stop 问用户上传）。
+
+**规则 3 — 视频生成**：按（分支 × ref 类型）决策表选唯一合法模板，**产品图在 `images[]` 数组首位**：
+
+| 分支 | 模板 | `images[]` 顺序 |
+|---|---|---|
+| drama · 产品道具 | `video_reference_drama_product` (T04) | `[product_ref, ...其余 refs]` |
+| drama · 角色道具 | `video_reference_drama_character_continuity` (T05) | 产品道具时把 `product_ref` 放在 `character_ref` 之后 |
+| commercial · UGC 口播 | `video_reference_ugc_talking` (T06) | `[product_ref, person_ref]` 或纯产品 + 真人图 |
+| commercial · Marketing | `video_reference_marketing` (T07) | `[product_ref, ...其余 refs]` |
+| commercial · Corporate | `video_reference_corporate` (T08) | `[product_ref, brand_ref, ...其余 refs]` |
+
+**硬禁令**：
+- **不得**从 `images[]` 删除 `product_ref` 元素（即使 prompt 调整，产品图必须保留）
+- **不得**把 `mode="reference"` 降级成 `mode="text"`（丢失产品锚点，违反"不得 fallback"红线）
+- **不得**对产品图调 `image_generate`（T2I 不能传图）
+
+完整规范见 `references/mcp-usage-guide.md` §1 + `references/drama/assets.md`「产品图强制门控」段。
 
 **🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）**：
 
