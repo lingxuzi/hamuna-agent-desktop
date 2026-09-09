@@ -1,6 +1,6 @@
 ---
 name: creative-video-suite
-version: "3"
+version: "4"
 description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。用户在 planner / assets 阶段可选 6 个视觉风格预设（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），全局风格锚点一字不变贯穿 5 阶段；commercial 分支 style_ref 是强门控，未提供则追问。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。
 ---
 
@@ -21,6 +21,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 | `mcp__multimedia-creator__agnes25_image_generate` | 文生图（T2I） | `model="agnes-image-2.5-flash"`, `size="1K"\|"2K"\|"3K"\|"4K"`, `ratio`, `prompt` |
 | `mcp__multimedia-creator__agnes25_image_edit` | 图生图 / 多图合成（I2I） | `model="agnes-image-2.5-flash"`, `image_paths=["path1",...]`, `prompt`, 可选 `mask_path` |
 | `mcp__multimedia-creator__agnes25_video_generate` | 视频生成 | `model="agnes-video-2.5-flash"`, `mode="text"\|"keyframe"\|"reference"`, `size="720P"`, `seconds="4"-"12"`, `aspect_ratio`, `timeout_seconds=600`, `poll_interval_seconds=5`, 按 `mode` 决定 `first_frame` / `last_frame` / `images=["path1",...]` (≤5) / `audios=[]` / `videos=[]` |
+| `mcp__multimedia-creator__agnes25_upload_image` | 本地文件 → HTTPS URL（图床上传） | `path`（绝对本地文件路径）。**drama 流水线不主动调**（用 `image_generate` 返回的 `data[0].url` 就够），仅当必须把已有本地图变 URL 又缺 `image_generate` 历史时调用；并发撞图床 QPS 限流（429 等 15s），单批 ≤ 5 张 + 间隔 2-3s |
 
 **完整 MCP 调用正确性规范**（mode 决策树 / 跨工具链 URL 传递契约 / 失败处理与降级禁止 / 命名空间对照 / per-stage tool map / 调用前 10 项自检）见 `references/mcp-usage-guide.md`。
 
@@ -157,6 +158,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 | **AI → MCP 输入**（`video_generate.images[]` / `first_frame` / `last_frame`）：传 HTTPS URL | 正确（hosted_mcps 对 video_generate 字段本地 / data URI 都做"上传 `img.remit.ee` 拿 URL"，并发撞图床 QPS 限流；5 步硬门控第 1 条 video_generate 分支强制） | ❌ 不是问题，**不能改成本地路径 / data URI** |
 | **AI → MCP 输入**（`image_edit.image_paths` / `mask_path`）：HTTPS URL / data URI / 本地路径 都可 | 正确（hosted_mcps 对本地路径 client-side 编码为 data URL，**不**走 `img.remit.ee`；agnes 官方 API 支持 HTTPS URL + Data URI） | ❌ 不是问题；**优先 HTTPS URL**（与上下游 URL 流一致） |
 | **MCP → chatui 输出**：`image_generate` / `video_generate` 返回的 HTTPS URL 在 chatui 里是否可视化 | `src/server/utils/tool-result-attachments.ts::classifyToolAttachmentPresentation` 当前未把 `mcp__multimedia-creator__agnes25_*` 纳入 attachment 包装 → URL 仅以纯文本落到 chat，没被 `ToolImageAttachment` 渲染成 inline 卡 | ✅ 是问题根因 |
+| **AI → MCP 输入**（`agnes25_upload_image`：本地路径 → HTTPS URL） | 正确（走 hosted_mcps `_upload_to_remit_ee` helper，与 `video_generate` 字段隐式归一化**同一条路径**；显式工具 vs 隐式上传只是 caller 选择） | ❌ 不是问题；**drama 流水线不主动调**（用 `image_generate` 返回的 `data[0].url` 就够，重复上传 = QPS 翻倍）；仅在必须把已有本地图变 URL 又缺 `image_generate` 历史时调用；批量自加 sleep 防 429 |
 
 **本次 skill 侧补偿**：AI 主动 emit `<generative-ui-widget>` 块（per-stage 摘要）让用户看到。Sidecar 包装属于另一 PR follow-up——在 Sidecar 包装落地前，inline 图卡不可用，widget 是唯一 chatui 可视化路径。
 

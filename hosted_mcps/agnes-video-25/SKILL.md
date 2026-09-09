@@ -24,6 +24,7 @@ Use the `agnes_video_25` MCP server. If its tools are unavailable, ask the user 
 | Image / audio / video reference | `agnes25_video_generate` | `mode="reference"`, `images`, `audios`, `videos` |
 | Text-to-image (default) | `agnes25_image_generate` | `prompt`, `size`, `ratio` |
 | Image-to-image / inpaint | `agnes25_image_edit` | `image_paths` (required), `mask_path?` |
+| Upload local file → HTTPS URL | `agnes25_upload_image` | `path` (absolute local file path) |
 
 ## Model matrix
 
