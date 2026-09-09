@@ -1,9 +1,10 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Fetch the latest Astral uv Windows binary and install it as
+    Track the latest Astral uv Windows release and stage it as
     src-tauri\resources\uvx.exe so the Windows installer can bundle it via
-    bundle.resources.
+    bundle.resources. Default behavior fetches the newest published release;
+    pass -Version only for temporary compatibility testing.
 
 .DESCRIPTION
     HamunaAgent bundles uv (which provides uvx) on Windows so MCP servers
@@ -11,16 +12,23 @@
     single self-contained binary:
         https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip
 
-    We pull the latest tag, fetch its `.sha256` sidecar from the same
-    release, and extract `uv.exe` as `uvx.exe` (the install hook is uvx-
-    shaped, not uv- shaped). SHA-256 verification reuses Astral's GitHub
-    sidecar file — same trust model as cuse's R2 sidecar.
+    By default we pull the latest tag, fetch its `.sha256` sidecar from the
+    same release, and extract `uv.exe` as `uvx.exe` (the install hook is
+    uvx-shaped, not uv-shaped). The resolved version is written to
+    `src-tauri\resources\.uv-version` for `getBundledUvPath` to read as a
+    freshness marker. SHA-256 verification reuses Astral's GitHub sidecar
+    file — same trust model as cuse's R2 sidecar.
+
+    Pass `-Version <tag>` to pin a specific release (use case: verify the
+    bundled copy against a known-good version before bumping the default).
+    Production install path is always latest — no version is hardcoded in
+    this script or the Tauri bundle config.
 
 .EXAMPLE
-    .\scripts\download_uv.ps1                  # Latest version
-    .\scripts\download_uv.ps1 -Version 0.5.5   # Pin a specific release tag
-    .\scripts\download_uv.ps1 -Force           # Re-download even if up-to-date
-    .\scripts\download_uv.ps1 -Clean           # Remove existing uvx.exe
+    .\scripts\download_uv.ps1                  # Track latest Astral uv release
+    .\scripts\download_uv.ps1 -Version 0.5.11 # Pin for temporary compatibility check (overrides default)
+    .\scripts\download_uv.ps1 -Force           # Re-download latest even if marker matches
+    .\scripts\download_uv.ps1 -Clean           # Remove existing uvx.exe + marker
 #>
 [CmdletBinding()]
 param(
@@ -94,7 +102,7 @@ if (-not $Version) {
         # GitHub API needs a User-Agent (otherwise 403).
         $headers = @{ 'User-Agent' = 'hamuna-download-uv' }
         $latest = Invoke-RestMethod -Uri "$ReleaseApiBase/latest" -Headers $headers -TimeoutSec 30 -ErrorAction Stop
-        # Astral tags use plain `0.5.5` (no v-prefix).
+        # Astral tags use plain semver (no v-prefix).
         $Version = $latest.tag_name
     } catch {
         Write-Err "Failed to query GitHub Releases API: $($_.Exception.Message)"

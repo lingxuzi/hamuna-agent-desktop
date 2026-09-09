@@ -3619,10 +3619,13 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
       // without rewriting `command` to an absolute path. One resolution at
       // spawn, one env write, one log line — no "search everywhere" feel.
       //
-      // Pinned uv version lives in scripts/download_uv.ps1 (currently 0.5.11)
-      // so `.mcp.json` / `extended_buildin_mcp/mcp.json` keep their legacy
-      // args (`--from <pkg> <cmd>`, `--default-index`) working. See the pin
-      // comment there before bumping.
+      // Bundled uv version tracks the latest Astral release by default;
+      // `scripts/download_uv.ps1` queries `releases/latest` and stages
+      // `src-tauri/resources/uvx.exe` + writes the resolved tag to
+      // `.uv-version` (read by `getBundledUvPath` as a freshness marker).
+      // `--from <pkg> <cmd>` legacy args in `.mcp.json` /
+      // `extended_buildin_mcp/mcp.json` are tested against the staged binary
+      // in CI — see scripts/download_uv.ps1 SYNOPSIS before bumping.
       //
       // Python (python / python3) does NOT get this fallback — the installer
       // runs the official Python 3.12 installer which registers python.exe on

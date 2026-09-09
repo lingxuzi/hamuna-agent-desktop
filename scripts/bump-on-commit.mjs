@@ -185,7 +185,18 @@ try {
       const latest = data.info.version;
       const pinMatch = wcMcp.match(/agnes-video-25-mcp==(\d+\.\d+\.\d+)/);
       if (!pinMatch) {
-        process.stderr.write('[bump-on-commit] mcp.json 未匹配 pin 格式 agnes-video-25-mcp==X.Y.Z, 跳过\n');
+        // mcp.json args 字段未使用 `==X.Y.Z` pin 形式（很可能用了
+        // `@latest`），auto-bump 无法生效。stderr 警告 + 列出 PyPI
+        // latest 让作者拍板改 pin —— 旧行为是静默 skip，结果 fdd624e
+        // 后 description 文本与 args 字段漂移、PyPI 一 publish breaking
+        // change 已装用户立刻拉炸。
+        const hasLatest = /agnes-video-25-mcp@latest/.test(wcMcp);
+        process.stderr.write(
+          `[bump-on-commit] mcp.json 未匹配 pin 格式 agnes-video-25-mcp==X.Y.Z${
+            hasLatest ? ' (当前用 @latest, auto-bump 不会生效)' : ''
+          }, 跳过. PyPI latest=${latest}, 请手动 pin.`,
+        );
+        process.stderr.write('\n');
       } else if (pinMatch[1] !== latest) {
         const newMcp = wcMcp.replace(
           /agnes-video-25-mcp==\d+\.\d+\.\d+/,
