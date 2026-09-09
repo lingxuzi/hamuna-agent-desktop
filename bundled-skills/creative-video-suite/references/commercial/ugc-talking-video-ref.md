@@ -46,6 +46,8 @@ brief -> 产品锁定 -> 随机主播脸谱蓝图 -> 多卖点脚本 -> 轻量�
 - 最小必输块五项缺一不可：风格调性、主播设定、产品锁定、轻量分镜表、视频链接/生成状态。
 
 > **🔗 硬编码 MCP 调用**（2026-09-08 锁定，2026-09-09 加 T13）：UGC 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md`——有 product_ref / creator_ref 走 T06 (`video_reference_ugc`)，纯文生口播走 T12 (`video_text_ugc_default`)。**多视角产品图**（opt-in，仅 360° reveal / 多角度 UGC 调性触发）走 T13 (`image_generate_multiview_grid`)，详见 `mcp-usage-guide.md §1.6` + `output-conventions.md §2.1`。不得自由组合 `ref_images` 顺序或切 mode 跳过 ref。
+>
+> **🔗 创意方向横切（2026-09-09 加）**：planner 阶段创意方向未定时 → 读 [`creative-templates-from-9-references.md`](./creative-templates-from-9-references.md) 选模板。本文件是 UGC 纵切指引，新文件是 9 抖音参考视频拉片提炼的横切总览（含模板 #3 都市倦怠、#8 电商促销、#9 纯产品 适合 UGC 复刻）。
 
 ## 默认策略
 

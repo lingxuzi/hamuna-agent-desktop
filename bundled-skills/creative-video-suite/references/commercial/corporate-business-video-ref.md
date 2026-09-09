@@ -476,6 +476,8 @@ images[4] = 客户案例（如有）
 **失败处理**：单次失败重试 2 次（**0 微调**，按 attempt 1 原样重试）；连续 3 次失败停下问用户。**不**降级 mode（CLAUDE.md 红线）。**禁**用 AI 自由生成 logo（必须用用户上传的 logo 原图作 image_generate 或 reference）。
 
 > **🔗 硬编码 MCP 调用**（2026-09-08 锁定，2026-09-09 加 T13）：Corporate 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md` T08 (`video_reference_corporate`)——4 类必填信息（logo / IP / VI / 客户案例 / 产品图）映射到 `images[0..4]` 严格按 §0.4 顺序（logo → ip → product → space → case）。**多视角产品图**（opt-in，Corporate 较少触发；如需产品全方位展示走 T13 (`image_generate_multiview_grid`)，详见 `mcp-usage-guide.md §1.6` + `output-conventions.md §2.1`）跳过位不留空，数组紧凑；不得自由切换 mode 或简化 prompt。
+>
+> **🔗 创意方向横切（2026-09-09 加）**：planner 阶段创意方向未定时 → 读 [`creative-templates-from-9-references.md`](./creative-templates-from-9-references.md) 选模板。本文件是 Corporate 纵切指引，新文件是 9 抖音参考视频拉片提炼的横切总览（含模板 #1 古风IP、#4 反转悬念式情感、#5 拟人IP、#6 异族部落+神迹降临 适合 Corporate 复刻）。
 
 ## Widget emit
 

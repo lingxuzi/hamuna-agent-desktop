@@ -53,6 +53,8 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 调 image_generate 多视角产品图之前（opt-in 触发时） → 读 T13 image_generate_multiview_grid
 ```
 
+**🔗 创意方向横切（2026-09-09 加）**：planner 阶段创意方向未定时 → 读 `references/commercial/creative-templates-from-9-references.md` 选模板（9 抖音参考视频拉片提炼 + 决策树：按产品类型 / 品牌调性 / 投放目标三维度匹配）；3 路 commercial ref（`ugc-talking-video-ref.md` / `product-marketing-ad-video-no-storyboard-ref.md` / `corporate-business-video-ref.md`）各自维护创意方向的纵切指引，本文件提供横切总览。
+
 **为什么是铁律**：
 - AI 自由发挥会让产品 / 角色 / 场景跨段漂移（v0.2.15 实战：换 Runtime 后图片不渲染 / 角色发色 / 服装 / 脸型漂移）
 - mode 自由切换 = 把 reference 降级成 text = 丢失参考图锚点（CLAUDE.md 红线「不得 fallback」已封堵）

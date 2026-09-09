@@ -50,6 +50,8 @@ brief -> 产品锁定 -> 品类识别 -> 调性路线 -> 确认摘要 -> 用户�
 - 有产品图时优先 `image_to_video`，产品图作为最高优先级参考；无可靠图片参考时用 `text_to_video`。
 
 > **🔗 硬编码 MCP 调用**（2026-09-08 锁定，2026-09-09 加 T13）：Marketing 视频调 `video_generate` 之前必读 `references/mcp-call-templates.md`——有 product_ref + voiceover_scene_map 走 T07 (`video_reference_marketing`)，产品图作首帧走 T09 (`video_keyframe_marketing`)。**多视角产品图**（opt-in，Marketing "360° reveal" 调性最常触发）走 T13 (`image_generate_multiview_grid`)，详见 `mcp-usage-guide.md §1.6` + `output-conventions.md §2.1`。两者互斥，planner / storyboard 阶段必选一个。不得中途切换 mode。
+>
+> **🔗 创意方向横切（2026-09-09 加）**：planner 阶段创意方向未定时 → 读 [`creative-templates-from-9-references.md`](./creative-templates-from-9-references.md) 选模板。本文件是 Marketing 纵切指引，新文件是 9 抖音参考视频拉片提炼的横切总览（含模板 #1 古风IP、#2 经典IP痛苦解救、#5 拟人IP、#7 历史人物+原料拟人 适合 Marketing 复刻）。
 - 12 秒结构：`0-2s hook/蓄势`、`2-4s 产品揭示`、`4-8s 卖点证明`、`8-10s 结果/情绪价值`、`10-12s packshot hold`。
 - 快剪可出现 0.5-1.5 秒节奏点，但每 2-3 个快切后必须给一次产品清晰锚点。
 - 旁白密度按路线决定，并在确认摘要中展示完整旁白台词与结尾 slogan，以及 `voiceover_scene_map`：信息型/功能型/促销型路线默认 3-5 句主体旁白 + 1 句结尾 slogan；诗性/氛围/高端/香氛/珠宝/礼赠路线默认 2-3 句诗性主体旁白 + 1 句结尾 slogan。每句旁白必须落到 Hook/产品出现/卖点证明/使用结果/packshot 等画面阶段。
