@@ -1,6 +1,6 @@
 ---
 name: creative-video-suite
-version: "6"
+version: "7"
 description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。用户在 planner / assets 阶段可选 6 个视觉风格预设（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），全局风格锚点一字不变贯穿 5 阶段；commercial 分支 style_ref 是强门控，未提供则追问。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。
 ---
 
@@ -77,6 +77,30 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 - **不得**对产品图调 `image_generate`（T2I 不能传图）
 
 完整规范见 `references/mcp-usage-guide.md` §1 + `references/drama/assets.md`「产品图强制门控」段。
+
+**🔒 禁止凭空生成产品图（2026-09-09 加）**：
+
+**核心约束**：产品类资产图（品牌手机 / 真实商品 / 包装 / 工业品）**严禁** AI 自由生成。任何涉及"产品图 / 品牌商品 / 真实工业品"的生成请求，**用户未上传产品图 → AI MUST stop 问用户上传**；**严禁**调 `image_generate` 凭空生成产品图（无论 prompt 内是否含品牌名）；**严禁**以"按 iPhone / 茅台 / 耐克的样子"为 prompt 调 image_generate。本章是上一段「🔒 产品参考图硬门控」硬禁令 ③ 的强化与执行细则，**不**改变硬禁令本身。
+
+**if-then 三段式**：
+
+| 触发条件 | 一线修复 | 仍失败兜底 |
+|---|---|---|
+| 用户未上传产品图 + brief 含产品关键词 | stop 问用户上传到 `<workspace>/.../04_assets/product-refs/<产品名>.{jpg,png}`，**不**调任何 MCP 工具 | 用户**显式 ack 降级**（"用 AI 生成看起来像 XX 牌"）→ 落 `project.json.notes.product_image_gate: "bypassed-by-user"`，生成产物标"视觉相似虚构道具" |
+| 用户已上传产品图 + 要求"再来 N 张同款 / 多角度" | 调 `image_edit(image_paths=[产品图, ...], ...)` 或 T13 `image_generate_multiview_grid`（参见上一段规则 1-2） | **不**允许 fallback 到 image_generate + prompt 描述产品外观（违反硬禁令 ③） |
+| 用户上传了产品图但图模糊 / 比例不对 | 用 `image_edit(image_paths=[产品图], ...)` 转比例 / 局部修 | 仍失败 → 重新 stop 问用户重传，**不**擅自用 AI 生成补 |
+| 用户说"按 [品牌名] 风格生成"但未上传产品图 | stop 问用户上传产品图；品牌名仅作风格锚点，**不**作产品参考 | 用户明确"无产品图按概念生成" → 走显式 ack 降级路径 |
+
+**4 反模式（不要做）**：
+
+1. ❌ 调 `image_generate` 凭空生成"iPhone 15 Pro Max"产品图（prompt 含品牌名 → 违反硬禁令 ③）
+2. ❌ 调 `image_generate` 凭空生成"某品牌智能手表"产品图（无 image_paths → 违反硬禁令 ③）
+3. ❌ 用户未上传产品图时擅自调 `image_edit(image_paths=[])` 或无 image_paths 调 `image_generate`
+4. ❌ 用户上传过 A 产品图但当前任务复用 B 品牌 → 不问用户直接用旧 A 产品图作 `image_paths`（跨界复用 = 产品身份漂移）
+
+**路径白名单（产品图参考唯一合规来源）**：`<workspace>/.../04_assets/product-refs/<产品名>.{jpg,png}`（用户上传）。**不**接受 `05_keyframes/`、`04_assets/characters/`、`04_assets/scenes/`、`04_assets/props/` 下的 PNG 作产品图参考输入。
+
+**cross-link**：本章与上一段「🔒 产品参考图硬门控」硬禁令 ③ / 工具边界表 image_generate 行 / `references/drama/assets.md`「产品图强制门控」段联动执行；任何一处冲突以本章为准。
 
 **🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）**：
 
