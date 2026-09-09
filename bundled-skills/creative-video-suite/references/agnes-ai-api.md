@@ -135,6 +135,17 @@ mcp__multimedia-creator__agnes25_image_generate({
 })
 ```
 
+> **🔒 image_generate 必须显式传 `ratio:`**（2026-09-09 加，承接 SKILL.md「🔒 image_generate ratio 分支默认表」）：漏传 `ratio` 时 MCP 兜底默认 `1:1`（详见 `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` `DEFAULT_IMAGE_RATIO = "1:1"`），是图锁 1:1 的直接来源。skill 模板**必须**按分支默认表显式传 `ratio:`：
+>
+> | 分支 | 默认 `ratio` | 例外 |
+> |---|---|---|
+> | drama（短剧 / 剧情 / 微电影） | `9:16` | 横屏需求（电影预告片 / 宽屏剧情片）→ `16:9` |
+> | Commercial · Marketing（产品广告） | `9:16` | 抖音 / 小红书 / 快手 / 视频号 / 竖屏信息流 `9:16`；电视 / TVC / Web / YouTube / 横版展播 `16:9`；电商详情页 / 方形卡片 `1:1`；平台未定 → `9:16`（详见 `references/commercial/product-marketing-ad-video-no-storyboard-ref.md`「平台→比例」） |
+> | Commercial · UGC（口播 / 种草） | `9:16` | 抖音 / 小红书 / 快手默认 `9:16`；B站横屏 `16:9` |
+> | Commercial · Corporate（企业宣传 / 商务） | `16:9` | 路演 / 招商 / 客户案例 `16:9`；短视频版（1 分钟内）`9:16` |
+>
+> 合法值：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9`（**禁**其它比值，含 `2:1` / `9:18` / `1.85:1` 等变体；agnes 端会回 `invalid_ratio`）。**单一权威**：`SKILL.md`「🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）」。
+
 ## agnes25_image_edit（图生图 / 多图合成）
 
 ### 参数

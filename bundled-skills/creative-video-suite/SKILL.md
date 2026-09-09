@@ -40,8 +40,22 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 2. **中文 prompt 铁律**：所有 `prompt` 参数中文（语法例外：`<Picture N>` / `mode="text"` 等 enum / 参数键名 / 数值字面量保持英文）。详见 `references/agnes-ai-api.md` 范例（已全部中文）
 3. **mode ↔ params 互斥自检**：text 模式无图 / keyframe 必有 first_frame / reference 必传 images[]；`mask_path` 只对 image_edit 有效；`audios[]` / `videos[]` 仅 video 接受。详见 `references/mcp-usage-guide.md` §2.3
 4. **参数 schema 边界**：`size=720P` 锁死 / `seconds="4"-"12"` 字符串 / `aspect_ratio` 与 first_frame 比例一致（不一致先 image_edit 转比例）。**时长边界完整约束见 `references/agnes-ai-api.md §视频时长边界（单一权威）`**（包括 4 秒下限、12 秒上限、9 个合法字符串值集合、各分支锁定策略、边界外异常处理）。详见 `references/agnes-ai-api.md` 参数表
+5. **image_generate 必须显式 `ratio:`**（2026-09-09 加，**单一权威**见下方「🔒 image_generate ratio 分支默认表」）——`mcp__multimedia-creator__agnes25_image_generate` 漏传 `ratio` 时 MCP 兜底默认 `1:1`（详见 `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` `DEFAULT_IMAGE_RATIO`），是图锁 1:1 的直接来源；skill 模板**必须**显式传 `ratio: "<分支默认>"`（占位符 `{{default_ratio_for_branch}}`），**不得**依赖 MCP 默认。
 
-5 步全过才允许调 MCP 工具，**任何一项不过 = 该阶段未完成**。
+6 步全过才允许调 MCP 工具，**任何一项不过 = 该阶段未完成**。
+
+**🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）**：
+
+| 分支 | 默认 ratio | 例外 |
+|---|---|---|
+| drama（短剧 / 剧情 / 微电影） | `9:16` | 横屏需求（电影预告片 / 宽屏剧情片）→ `16:9` |
+| Commercial · Marketing（产品广告） | `9:16` | 平台级例外：抖音 / 小红书 / 快手 / 视频号 / 竖屏信息流走 `9:16`；电视 / TVC / Web / 官网 / YouTube / 横版展播走 `16:9`；电商详情页 / 方形卡片走 `1:1`；平台未定 → `9:16`。详见 `references/commercial/product-marketing-ad-video-no-storyboard-ref.md`「平台→比例」段 |
+| Commercial · UGC（口播 / 种草） | `9:16` | 抖音 / 小红书 / 快手默认 `9:16`；B站横屏 `16:9` |
+| Commercial · Corporate（企业宣传 / 商务） | `16:9` | 路演 / 招商 / 客户案例 → `16:9`；短视频版（1 分钟内）→ `9:16` |
+
+**比例合法值集合**：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9`（**禁**其它比值，含 `2:1` / `9:18` / `1.85:1` 等变体；agnes 端会回 `invalid_ratio`）。
+
+**为什么是单一权威**：ratio 是 creative-video-suite 各分支的视觉语言核心——drama 9:16 适配手机竖屏用户，Corporate 16:9 适配企业大屏，UGC 9:16 适配信息流；漏传 → MCP 默认 1:1 → 与目标平台视觉规范脱节 → 投放效果受损。**所有 image_generate 调用模板**（`references/mcp-call-templates.md` T02 / T06 / T07 / T08 / T11 / T13）已硬编码 `ratio: "{{default_ratio_for_branch}}"` 占位符，**不**依赖 MCP 默认。
 
 **🔒 MCP 调用模板硬编码铁律（2026-09-08 用户锁定，所有需要参考图的生成必过）**：
 
@@ -73,7 +87,7 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 - **任何 attempt 不得 fallback**（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 - 2 次重试后仍失败 → 停下，**交由用户处理**；把三次 attempt 的 prompt + 错误码 + URL 映射写到 `project.json.notes.last_failure`；widget emit 失败卡；**不**输出"已生成"等措辞
 
-**完整规范**（12 个 T 模板 + 公共 block + 决策表 + 12 项 gate + 失败流程）见 `references/mcp-call-templates.md`。
+**完整规范**（13 个 T 模板 + 公共 block + 决策表 + 14 项 gate + 失败流程）见 `references/mcp-call-templates.md`。
 
 **🔒 Prompt 语言铁律（必读）**：所有 `prompt` 参数（`agnes25_image_generate` / `agnes25_image_edit` / `agnes25_video_generate`，包括负向约束与全局风格锚点）必须使用**中文**。理由：项目文档与 6 个视觉风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感）全程中文，且 agnes 国内版 API 完整支持中文 prompt。**语法例外**（保持英文 / 固定字面量）：`<Picture N>` / `@图片N` 多图引用标记、`mode="text"` 等 enum 取值、`size` / `ratio` / `aspect_ratio` / `seconds` 等参数键名、`audios` / `videos` 数组结构、`16:9` / `720P` 等数值字面量。完整调用范例（已全部中文）见 `references/agnes-ai-api.md`。
 

@@ -69,7 +69,7 @@ mcp__multimedia-creator__agnes25_image_edit({
   ],
   prompt: "{{style_anchor}}，保持<产品N>（如涉及）的外观 / 角色身份 / 场景结构 / 光影方向 100% 不变；仅调整画幅比例为 {{target_aspect_ratio}}；不修改内容、不裁切主体、不变形。",
   aspect_ratio: "{{target_aspect_ratio}}"  // "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "21:9"
-  // size / ratio 不传（MCP 默认）
+  // image_edit 用 `aspect_ratio`（不是 `ratio`），此场景不传 `ratio`；ratio 仅 image_generate 用（见下方 image_generate 段说明 + SKILL.md「🔒 image_generate ratio 分支默认表」）
 })
 ```
 
@@ -376,6 +376,14 @@ mcp__multimedia-creator__agnes25_video_generate({
 
 ## 3. image_generate 模板（产品多视角宫格图，2026-09-09 新增）
 
+**🔒 image_generate 必须显式 `ratio:`（2026-09-09 加，承接 SKILL.md「🔒 image_generate ratio 分支默认表」）**：
+
+- `mcp__multimedia-creator__agnes25_image_generate` 漏传 `ratio` 时 MCP 兜底默认 `1:1`（详见 `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` `DEFAULT_IMAGE_RATIO`），是图锁 1:1 的直接来源；本节模板**必须**显式传 `ratio:`，**不**依赖 MCP 默认
+- ratio 取值按分支默认（drama 9:16 / Marketing 9:16 / UGC 9:16 / Corporate 16:9），单一权威见 `SKILL.md`「🔒 image_generate ratio 分支默认表」
+- 合法值集合：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9`（其它比值含 `2:1` / `9:18` 等变体 agnes 端会回 `invalid_ratio`）
+- T13 的 `ratio: "{{grid_ratio}}"` 是宫格布局派生（与分支默认表**独立**——3×3 / 2×2 宫格用 `1:1`，2×3 宫格用 `3:4`），不与分支默认冲突
+- video_generate / image_edit 模板（§1 / §2）**不受**本约束——它们用 `aspect_ratio` 不是 `ratio`
+
 ### T13 — `image_generate_multiview_grid`（产品多视角宫格图）
 
 **适用场景**：planner / assets 阶段判定调性为 360° reveal / 多角度展示 / 产品 9 宫格 / 多角度 packshot → 用户 ack 后生成 1 张多视角宫格图（一图含 9/6/4 个角度），作为 video 阶段的 `images[0]`（product_ref）使用。详见 `mcp-usage-guide.md §1.6`（触发条件 + opt-in 流程 + 失败回退）。
@@ -460,7 +468,7 @@ mcp__multimedia-creator__agnes25_image_generate({
 
 > **T13（image_generate 多视角产品图）独立于上表**——T13 是 `image_generate` 工具的 opt-in 多视角宫格图模板（2026-09-09 新增），不在 video_generate (分支 × ref 类型) 决策表中。触发条件详见 `mcp-usage-guide.md §1.6`（360° reveal / 多角度调性 / 用户明示）。T13 生成的宫格图作为 product_ref 落到 `video_generate.images[0]`（替代默认 `primary_url`，存在 `multiview_grid_url` 即优先用）。上表的 product_ref 列同时指 `primary_url` 与 `multiview_grid_url`，video 模板（T04/T06/T07/T08）的 `{{product_ref_url}}` 占位符**优先读 `multiview_grid_url`**。
 
-## 5. 调用前自检（12 项 gate，每条必过）
+## 5. 调用前自检（14 项 gate，每条必过）
 
 ```text
 [ ] (0)  产品图门控过吗？（涉及产品 → product-refs/ 有图，否则降级模式 ack 落 project.json.notes）
@@ -476,9 +484,10 @@ mcp__multimedia-creator__agnes25_image_generate({
 [ ] (10) 任何失败【不得 fallback】（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 [ ] (11) 【硬编码铁律】涉及 ref 的生成走对应 T 编号模板吗？images[] 顺序按 §0.4 排吗？negative block 已嵌入吗？
 [ ] (12) `video_generate.seconds` 字符串值 ∈ `{"4","5","6","7","8","9","10","11","12"}`？完整约束（4 下限 / 12 上限 / 各分支锁定策略 / 边界外异常处理）见 `references/agnes-ai-api.md §视频时长边界（单一权威）`
+[ ] (13) image_generate 已显式传 `ratio:` 吗？按 SKILL.md「🔒 image_generate ratio 分支默认表」选值（drama 9:16 / Marketing 9:16 / UGC 9:16 / Corporate 16:9；Marketing 平台例外见 product-marketing-ad-video-no-storyboard-ref.md §平台→比例）？MCP 兜底默认 1:1 是图锁 1:1 的直接来源，**不**依赖 MCP 默认
 ```
 
-12/12 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
+14/14 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。
 
 ### 5.1 重试铁律（用户 2026-09-08 收紧：retry 期间 0 微调）
 

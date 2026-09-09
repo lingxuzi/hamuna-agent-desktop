@@ -129,6 +129,23 @@ MCP `mcp__multimedia-creator__agnes25_video_generate.seconds` 参数是**字符�
 
 **何时不调此约束**：`image_generate` / `image_edit` / T13 `image_generate_multiview_grid` 产物**不受**视频时长边界约束（这些是静态图工具，无 `seconds` 参数）。
 
+## image_generate 比例（2026-09-09 加）
+
+`mcp__multimedia-creator__agnes25_image_generate.ratio` 漏传时 MCP 兜底默认 `1:1`（详见 `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` `DEFAULT_IMAGE_RATIO`），是项目图锁 1:1 的直接来源。skill 模板**必须**按下方分支默认表显式传 `ratio:`：
+
+| 分支 | 默认 `ratio` | 例外 |
+|---|---|---|
+| drama（短剧 / 剧情 / 微电影） | `9:16` | 横屏需求（电影预告片 / 宽屏剧情片）→ `16:9` |
+| Commercial · Marketing（产品广告） | `9:16` | 抖音 / 小红书 / 快手 / 视频号 / 竖屏信息流 `9:16`；电视 / TVC / Web / YouTube / 横版展播 `16:9`；电商详情页 / 方形卡片 `1:1`；平台未定 → `9:16`（详见 `references/commercial/product-marketing-ad-video-no-storyboard-ref.md`） |
+| Commercial · UGC（口播 / 种草） | `9:16` | 抖音 / 小红书 / 快手默认 `9:16`；B站横屏 `16:9` |
+| Commercial · Corporate（企业宣传 / 商务） | `16:9` | 路演 / 招商 / 客户案例 `16:9`；短视频版（1 分钟内）`9:16` |
+
+**合法值集合**：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9`（**禁**其它比值含 `2:1` / `9:18` / `1.85:1` 等变体；agnes 端会回 `invalid_ratio`）。
+
+**何时用 `1:1`**：仅当用户**显式**要求方形图（电商详情页方形卡片 / Instagram 方形 post / 头像 / icon / 网格布局单图）才用；不得依赖 MCP 默认。
+
+**单一权威**：`SKILL.md`「🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）」+ `references/agnes-ai-api.md §调用示例` 段；SKILL.md 5 步硬门控第 5 条 + `mcp-call-templates.md §5` gate (13) + `mcp-usage-guide.md §6` gate (13) **均**交叉引用此表，**不**在多处复制。
+
 ## 路由边界
 
 | 关键词命中 | 路由到 |

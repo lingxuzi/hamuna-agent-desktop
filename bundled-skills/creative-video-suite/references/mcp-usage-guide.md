@@ -304,7 +304,7 @@ mcp__multimedia-creator__agnes25_video_generate({
 | **frame** | `image_generate` + `image_edit`（**转比例必走**） | (跳过) | (跳过) | (跳过) |
 | **video** | `video_generate`（**默认 keyframe**） | `video_generate`（**默认 text**） | `video_generate`（**默认 keyframe**） | `video_generate`（**默认 reference**） |
 
-**调用前自检（每条 MCP 调用前必过，12 项 gate）**：
+**调用前自检（每条 MCP 调用前必过，14 项 gate）**：
 
 ```text
 [ ] (0) 产品图门控过吗？（涉及产品 → 用户上传 + 落 product-refs/）
@@ -320,9 +320,10 @@ mcp__multimedia-creator__agnes25_video_generate({
 [ ] (10) 任何失败【不得 fallback】（不降级 mode、不删 images[] 元素、不改 product_ref 到 text、不简化 prompt、不切 mode 跳过 ref、不擅自换工具）
 [ ] (11) 【硬编码铁律】涉及 ref 的生成走对应 T 编号模板吗？images[] 顺序按 mcp-call-templates.md §0.4 排吗？negative block 已嵌入吗？
 [ ] (12) video_generate `seconds` 字符串值 ∈ {`"4"`, `"5"`, `"6"`, `"7"`, `"8"`, `"9"`, `"10"`, `"11"`, `"12"`}？完整约束见 `references/agnes-ai-api.md §视频时长边界（单一权威）`
+[ ] (13) image_generate 已显式传 `ratio:` 吗？按 SKILL.md「🔒 image_generate ratio 分支默认表」选值（drama 9:16 / Marketing 9:16 / UGC 9:16 / Corporate 16:9；Marketing 平台例外见 product-marketing-ad-video-no-storyboard-ref.md §平台→比例）？MCP 兜底默认 1:1 是图锁 1:1 的直接来源，**不**依赖 MCP 默认
 ```
 
-12/12 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。**项 (11) 的具体模板与强制参数体**见下一节「§8 硬编码 MCP 调用模板入口」。**项 (12) 的 9 合法值集合 / 双重约束（4-12 字符串）/ 各分支锁定策略**见 `references/agnes-ai-api.md §视频时长边界（单一权威）`。
+14/14 全过才允许调 MCP 工具。**任何一项不过 = 该阶段未完成**，必须停下补做。**项 (11) 的具体模板与强制参数体**见下一节「§8 硬编码 MCP 调用模板入口」。**项 (12) 的 9 合法值集合 / 双重约束（4-12 字符串）/ 各分支锁定策略**见 `references/agnes-ai-api.md §视频时长边界（单一权威）`。**项 (13) 的分支默认表 + Marketing 平台例外 + 单一权威**见 `SKILL.md`「🔒 image_generate ratio 分支默认表（单一权威 · 2026-09-09 加）」。
 
 ---
 
