@@ -1,6 +1,6 @@
 ---
 name: creative-video-suite
-version: "1"
+version: "2"
 description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。用户在 planner / assets 阶段可选 6 个视觉风格预设（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），全局风格锚点一字不变贯穿 5 阶段；commercial 分支 style_ref 是强门控，未提供则追问。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。
 ---
 
@@ -109,6 +109,8 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 - **生成数量**：一次最多生成 2 个视频，超出必须澄清。
 
 **🔒 段间串行 + project.json 状态机（2026-09-09 加）**：单批 ≤ 2 是数量上限，**不**是并发起跑 2 个 MCP 调用——video 阶段 MUST 严格按 4 步硬门控执行（pre-flight → pre-call → serial-call → post-call），status 四态 `pending / in-progress / completed / failed` 同步到 `project.json.notes.video_segments`，段间冷却 2-5s（建议，不强制）。完整规范 + 字段 schema + 错误码枚举见 `references/mcp-usage-guide.md §3.4`。
+
+**🔒 视频生成前确认资产（2026-09-09 加）**：每个 segment video_generate 调用前 MUST 走 4 步硬门控 §3.4 pre-flight 第 4 项 —— `notes.video_segments[<id>].required_assets[]` 全部 `asset_status === "ready"`（任意 missing/pending/generating → 停下问用户补生成）+ 每个 entry 必须带 recipe 三件套 `generation_prompt` + `mcp_tool_name` + `tool_params`（任意字段缺失 → 停下问用户补 recipe，不自动补）。字段 schema + asset_status 四态（pending / generating / ready / missing）+ 6 类 asset_type 枚举 + 4 路（drama / ugc / marketing / corporate）asset 来源决策表见 `references/output-conventions.md §2.2 + §5.1`，与 §3.4 pre-flight 第 4 项 + recipe 三件套必填项联动。
 
 ### 确认机制
 

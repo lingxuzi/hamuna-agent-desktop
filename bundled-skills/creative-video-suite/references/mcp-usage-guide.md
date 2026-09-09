@@ -266,10 +266,10 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 **video 阶段 MUST 严格按 4 步执行（顺序不可换、不可跳）**：
 
 ```text
-1. pre-flight   cat project.json → 验证 current_stage ≥ "frame" + notes.video_segments 无 in-progress 残留
+1. pre-flight   cat project.json → 验证 current_stage ≥ "frame" + notes.video_segments 无 in-progress 残留 + notes.video_segments[<id>].required_assets[] 全部 asset_status === "ready"
 2. pre-call     cmd_write_workspace_file 写 notes.video_segments[<id>].status = "in-progress" + started_at
 3. serial-call  一次调一个 video_generate（不并发起跑 2 个 MCP call）；段间 sleep 2-5s
-4. post-call    cmd_write_workspace_file 写 status = "completed"/"failed" + finished_at + attempt_count + (url/local_path | last_error_code/message)
+4. post-call    cmd_write_workspace_file 写 status = "completed"/"failed" + finished_at + attempt_count + (url/local_path | last_error_code/message) + 把 video CDN url 回写到 required_assets[].asset_url_consumed[]
 ```
 
 **Step 1 pre-flight 检查项**（必须全过）：
@@ -281,6 +281,15 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
     → 避免本次启动后"看起来在跑"但实际没人 fire
 [ ] 本次要生成的 segment 不存在 status = "completed" 且 local_path 文件实际存在
     → 若已存在：用户拍板（"重跑 / 跳过 / 用 _v2 后缀"）后才推进
+[ ] notes.video_segments[<id>].required_assets[] 全 ready 检查（2026-09-09 加，H1）
+    → 任意 asset_status !== "ready" → 停下问用户补生成
+    → 字段 schema + asset_type 枚举 + asset_status 四态见 `references/output-conventions.md §2.2`
+    → 4 路（drama / ugc / marketing / corporate）asset 来源差异决策表见 `references/output-conventions.md §5`
+[ ] recipe 三件套必填检查（2026-09-09 加，H1 续）
+    → 每个 required_assets entry 必须有 `generation_prompt` + `mcp_tool_name` + `tool_params` 三件套（不论 asset_status）
+    → 任意字段缺失 → 停下问用户补 recipe（不是自动补——避免 AI 自由发挥 prompt 与原意漂移）
+    → 用途：跨 session 续跑 / 重生成 / widget 展示 prompt / 用户审视 recipe
+    → 详见 `references/output-conventions.md §2.2` 字段说明表 + 写侧契约 recipe 三件套必填
 ```
 
 **Step 2 pre-call 写入**：调 MCP 之前 `cmd_write_workspace_file` 落 status="in-progress" + started_at——这是"轮询状态"的语义落点（MCP 内部 poll 不暴露，AI 用 project.json 状态机模拟）。
@@ -295,6 +304,7 @@ Step 3: video_generate(mode="keyframe", first_frame=Step 2 URL, prompt=video_pro
 - 成功 → `status="completed"` + `url`（MCP 返回的 video_url） + `local_path`（cmd_workspace_copy_paths 落盘路径） + `finished_at` + `attempt_count=1`
 - 失败 → `status="failed"` + `last_error_code` + `last_error_message` + `finished_at` + `attempt_count`（实际次数，含 retry） + `params`（方便用户重试时直接复制）
 - 立刻调 cmd_workspace_copy_paths 落盘 + 写 segment-XX.md + emit video-segment-list widget（**不**等全部段完成才 emit，追加模式见 `references/drama/prompt.md` §Widget emit）
+- **回写 required_assets**（2026-09-09 加）：成功 → 在 `notes.video_segments[<id>].required_assets[]` 每个元素的 `asset_url_consumed[]` 数组 push 当前 video 的 `video_url`（即该 asset 实际被哪个 segment 消费）；方便后续 widget 显示 asset 引用链路 + 跨集续跑时定位"被消费过的 asset"。**不**写 asset_status（保持 ready，不动），只追加消费记录。
 
 **全部 segment 完成后**：单独一次 `current_stage = "video"` + `stages_completed` append `"video"` + `updated_at` 刷新（**不**在每段 post-call 都推 current_stage，避免 AI 跨 session 续跑误判"video 阶段已完成"）。
 

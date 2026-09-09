@@ -1,5 +1,5 @@
 /** Version shared with Rust's SYSTEM_SKILLS_VERSION contract. */
-export const SYSTEM_SKILLS_VERSION = '44';
+export const SYSTEM_SKILLS_VERSION = '45';
 
 /**
  * Product-owned skills that are part of HamunaAgent' always-available runtime

@@ -147,6 +147,120 @@ creative-video-suite 的产物分两层：
 
 **与 `project.json.stages_completed` 关系**：写入时机与 assets 阶段落盘同步；不强制每次 video 阶段都 update `view_status`，但 video 阶段首次使用某产品时应落 `project.json.notes.video_segments[<segment>]` 包含 `product_ref_url` 字段。
 
+### 2.2 `notes.video_segments[].required_assets[]` 子对象（分镜资产清单，2026-09-09 加）
+
+`required_assets[]` 是每个 video segment 依赖资产的**结构化清单**——把分镜表（`03_storyboard.md`）里 inline 的 `@图1` / `@图2` / 首帧 / 尾帧拆成 JSON 数组，video 阶段 4 步硬门控 pre-flight 第 4 项必读（详见 `references/mcp-usage-guide.md §3.4`）。
+
+**为什么需要**：
+- 单 segment 视频生成依赖 N 类资产（角色 / 场景 / 道具 / 关键帧 / 产品图 / brand-refs），缺一个就视频生成失败或产物与分镜设计漂移
+- 现有机制只在 `03_storyboard.md` 里 inline 描述分镜，AI video 阶段需要手工 grep 每个 segment 行提取 asset 引用 → 易遗漏 + 跨 session 续跑时读 markdown 重 parse 慢
+- 拆分到 `notes.video_segments[<id>].required_assets[]` 后，video 阶段 `cat project.json` 一次拿到全部分镜资产状态
+- **2026-09-09 补**：除"产物指针"（asset_path / asset_url），`required_assets[]` 还必带 **recipe 三件套**（`generation_prompt` / `mcp_tool_name` / `tool_params`）——记录"这个 asset 是怎么生成的"，跨 session 续跑 / 重生成 / widget 展示生成历史 / 用户审视 prompt 质量都靠它。无 recipe = "图还在但怎么再出一张"无答案 = 续跑失败 / 重生成 prompt 全靠 AI 重新摸索 = 风格漂移 + 耗时翻倍。
+
+**schema**：
+
+```json
+{
+  "notes": {
+    "video_segments": {
+      "segment-01": {
+        "status": "in-progress",
+        "started_at": "2026-09-09T11:00:00Z",
+        "required_assets": [
+          {
+            "asset_id": "char-linyuan",
+            "asset_type": "character",
+            "asset_path": "04_assets/characters/林远/林远_设定.png",
+            "asset_status": "ready",
+            "asset_url": "https://cos-platform-outputs.agnes-ai.cn/.../linyuan.png",
+            "generation_prompt": "写实电影风格，35 岁中国男性，林远，西装革履，正面半身像，<style_anchor>",
+            "mcp_tool_name": "mcp__multimedia-creator__agnes25_image_generate",
+            "tool_params": {"model": "agnes-image-2.5-flash", "size": "2K", "ratio": "9:16"},
+            "generated_attempt": 0,
+            "generated_at": "2026-09-09T10:00:00Z",
+            "asset_url_consumed": []
+          },
+          {
+            "asset_id": "scene-office",
+            "asset_type": "scene",
+            "asset_path": "04_assets/scenes/林远办公室/林远办公室_全景.png",
+            "asset_status": "ready",
+            "asset_url": "https://cos-platform-outputs.agnes-ai.cn/.../office.png",
+            "generation_prompt": "写实电影风格，<style_anchor>，现代都市高级办公室落地窗夜景，全景俯拍",
+            "mcp_tool_name": "mcp__multimedia-creator__agnes25_image_generate",
+            "tool_params": {"model": "agnes-image-2.5-flash", "size": "2K", "ratio": "9:16"},
+            "generated_attempt": 1,
+            "generated_at": "2026-09-09T10:05:00Z",
+            "asset_url_consumed": []
+          },
+          {
+            "asset_id": "kf-seg01-start",
+            "asset_type": "keyframe",
+            "asset_path": "05_keyframes/episode-01/segment-01/SEG01_START.png",
+            "asset_status": "ready",
+            "asset_url": "https://cos-platform-outputs.agnes-ai.cn/.../seg01-start.png",
+            "generation_prompt": "写实电影风格，<style_anchor>，林远站在办公室窗前，背对镜头望向城市夜景，medium shot",
+            "mcp_tool_name": "mcp__multimedia-creator__agnes25_image_generate",
+            "tool_params": {"model": "agnes-image-2.5-flash", "size": "1K", "ratio": "9:16"},
+            "generated_attempt": 0,
+            "generated_at": "2026-09-09T11:00:00Z",
+            "asset_url_consumed": []
+          },
+          {
+            "asset_id": "kf-seg01-end",
+            "asset_type": "keyframe",
+            "asset_path": "05_keyframes/episode-01/segment-01/SEG01_END.png",
+            "asset_status": "missing",
+            "asset_url": null,
+            "generation_prompt": "写实电影风格，<style_anchor>，林远转身面对镜头，表情凝重，close-up",
+            "mcp_tool_name": "mcp__multimedia-creator__agnes25_image_generate",
+            "tool_params": {"model": "agnes-image-2.5-flash", "size": "1K", "ratio": "9:16"},
+            "generated_attempt": null,
+            "generated_at": null,
+            "asset_url_consumed": []
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+**字段说明**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `asset_id` | string | ✅ | 资产唯一标识（kebab-case + 类型前缀：`char-` / `scene-` / `prop-` / `kf-` / `prod-` / `brand-`）。AI 跨阶段续跑引用锚点。 |
+| `asset_type` | enum | ✅ | 6 选 1：`"character"`（角色）/ `"scene"`（场景）/ `"prop"`（道具）/ `"keyframe"`（关键帧）/ `"product"`（产品图）/ `"brand"`（brand-refs logo / IP）。**与 4 路 asset 来源决策表 §5 一一对应**。 |
+| `asset_path` | string (workspace-relative) | ✅ | 资产本地副本路径，`<workspace>/creative-video-suite/<project>/` 开头。**drama 跨集场景**支持跨 episode path（如 `05_keyframes/episode-02/segment-05/SEG05_END.png` 作为 episode-03 segment-01 的 first_frame）。 |
+| `asset_status` | enum | ✅ | 资产状态四态：`"pending"`（未生成）/ `"generating"`（MCP 调起中）/ `"ready"`（已生成 + 落盘）/ `"missing"`（生成失败 + 不重试 / 用户主动跳过）。**命名与 §3.3 video_segment status 四态（pending / in-progress / completed / failed）刻意不同**：`generating` vs `in-progress` 区分"asset 本身在生成"和"video segment 在生成"，避免术语混淆。 |
+| `asset_url` | string (HTTPS URL, optional) | ❌ | 资产 HTTPS URL（CDN / AGNES_OUTPUT）。`video_generate.images[]` / `first_frame` / `last_frame` 实际读的字段（沿用 `3eba012` video_generate HTTPS-only 铁律，0 `img.remit.ee`）。`asset_status !== "ready"` 时为 `null`。 |
+| `generation_prompt` | string (optional) | ❌ | 生成该 asset 用的完整 prompt（中文，沿用 §MCP 调用前 5 步硬门控"中文 prompt 铁律"）。**`asset_status` 任意值都建议保留**——missing/pending 时记录"原计划怎么生成"，跨 session 续跑可直接复读 + 复用模板。Widget 可显示"该 asset 用的 prompt"，方便用户审视生成 recipe。 |
+| `mcp_tool_name` | enum (optional) | ❌ | 生成该 asset 的 MCP 工具名（6 选 1 主用 `multimedia-creator` 三件套：`mcp__multimedia-creator__agnes25_image_generate` / `mcp__multimedia-creator__agnes25_image_edit` / `mcp__multimedia-creator__agnes25_video_generate`）。与 `generation_prompt` + `tool_params` 一起构成**生成 recipe 三件套**——跨 session 续跑直接复读即可重生成。 |
+| `tool_params` | object (optional) | ❌ | 传给 MCP 工具的 params（JSON 化），如 `{"model":"agnes-image-2.5-flash","size":"2K","ratio":"9:16","mode":"text"}` / `{"model":"agnes-video-2.5-flash","mode":"keyframe","first_frame":"<url>","seconds":"5","aspect_ratio":"9:16"}`。keyframe 类 asset 的 `first_frame` URL 应回指同一 segment 上一个 keyframe asset 的 `asset_url`，构成 keyframe 链。 |
+| `generated_attempt` | number (optional) | ❌ | 失败重试计数：`0` = 首次即成功；`1` / `2` = 第 1 / 第 2 次重试成功（沿用 §3 失败重试铁律"单次工具调用最多 2 retries"共 3 attempt）；`null` = 未生成（asset_status 为 pending / generating / missing）。widget 可显示"这个 asset 重试 N 次才成功"提示，引导用户审视 prompt 质量。 |
+| `generated_at` | string (ISO timestamp, optional) | ❌ | 资产生成完成时间；用于诊断 stale URL（CDN purge / 失效）。`asset_status !== "ready"` 时为 `null`。 |
+| `asset_url_consumed` | array<string> | ❌ | 消费记录：每个元素 = 1 个 segment-XX video 的 video_url（video 阶段 post-call 时 push）。**不**写 asset_status，保持 ready 不变。Widget 可基于此字段显示"asset 被哪些 segment 消费"链路。 |
+
+**写侧契约**（frame 阶段末尾）：
+
+- drama：每个 segment 的关键帧生成完成 → frame 阶段末尾**立即**写 `notes.video_segments[<id>].required_assets[]`，含所有 4-5 类资产（character / scene / prop / keyframe + 可选 product）
+- commercial 3 路：根据 type 写不同 asset_type 集合（详见 §5 决策表）
+- asset_status 由 AI 在写入时根据资产目录文件存在性判断：`existsSync(asset_path) === true` → `"ready"`，否则根据上游 stage 状态判断 `pending` / `generating` / `missing`
+- **recipe 三件套必填**：写 `required_assets[]` 每个 entry 时 `generation_prompt` / `mcp_tool_name` / `tool_params` 三件套**必填**（不论 asset_status 是 ready / pending / missing / generating）——recipe 是"计划 + 产物指针"，与 status 解耦。`generated_attempt` 在成功后回写（首成功 = 0，重试成功 = 1/2），pending/missing 时为 null。
+
+**读侧契约**（video 阶段 pre-flight）：
+
+- **必读**：每段 video_generate 调用前**必须**遍历 `required_assets[]`，任意元素 `asset_status !== "ready"` → 停下问用户补生成
+- **video_generate 输入**：从 `required_assets[]` 提取 `asset_type === "keyframe"` 的元素的 `asset_url`（按 first_frame / last_frame 角色分发），其余 `asset_type` 的 `asset_url` 汇集到 `images[]` 参数（按 `mcp-usage-guide.md §1` 输入源拆分铁律：video_generate 字段只接 HTTPS URL）
+
+**为什么是单一权威**（与 §2.1 product_metadata 同模式）：
+- 双源风险（新建独立 `<project>/notes/segment-XX-assets.json`）易与 `project.json.notes` 不同步 → 跨 session 续跑哪边是真？哪边过期？
+- 扩展 `project.json.notes.video_segments[].required_assets[]` 与现有 `video_segments[].status` / `product_metadata` / `product_image_gate` 子对象同源结构
+- AI 续跑第一件事 `cat project.json` 看断点已经覆盖这个字段（output-conventions.md §6 续跑逻辑）
+
+**与 `project.json.stages_completed` 关系**：写时机 = frame 阶段末尾（关键帧全部生成完成时）；与 §3 落盘时机表 frame 行新加列 `notes.video_segments[].required_assets[] 同步落盘` 联动。
+
 **`type` 取值决定产物形态**：
 - `drama`：完整 5 阶段（planner → script → storyboard → assets → frame → video）
 - `ugc`：planner → storyboard（轻量）→ assets（产品图）→ video
@@ -159,14 +273,14 @@ creative-video-suite 的产物分两层：
 
 ## 3. 落盘时机与门控
 
-| 阶段完成 | 落盘什么 | 路径 | 门控 | widget emit |
-|---|---|---|---|---|
-| **planner** | `01_planner.md`（项目 brief + 风格锚点 + 路线选择 + 项目名确认）+ `project.json`（新建） | `<project>/01_planner.md` + `project.json` | 用户确认项目名 + type + style_anchor + aspect_ratio | **planner-meta-card** |
-| **script** | `02_script.md` | `<project>/02_script.md` | 用户确认剧本 | **scriptwriter-summary-card** |
-| **storyboard** | `03_storyboard.md`（含分镜表 + 符号规则 + 运镜） | `<project>/03_storyboard.md` | 用户确认分镜 | **storyboard-shot-table** |
-| **assets** | 每个角色 / 场景 / 道具生成后立刻落盘（不等全部完成）；阶段末落盘资产清单 `04_assets/<type>/<name>/assets.md` | `<project>/04_assets/...` | 用户确认资产验收表（每张"已生成"才进 frame 阶段） | **assets-image-gallery**（追加模式：每张图生成后立即 emit） |
-| **frame** | 每个关键帧生成后立刻落盘；阶段末落盘 `05_keyframes/frames-index.md` | `<project>/05_keyframes/...` | 用户确认关键帧 | **frame-keyframe-grid**（追加模式：每张关键帧生成后立即 emit） |
-| **video** | 每个 segment 视频 `cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制到本地 + 写 `segment-XX.md` 元数据 | `<project>/06_videos/...` | 用户确认视频 + update `project.json.current_stage` | **video-segment-list**（追加模式：每段视频生成后立即 emit；失败段显示 ⚠️ 占位） |
+| 阶段完成 | 落盘什么 | 路径 | 门控 | widget emit | notes 同步落盘 |
+|---|---|---|---|---|---|
+| **planner** | `01_planner.md`（项目 brief + 风格锚点 + 路线选择 + 项目名确认）+ `project.json`（新建） | `<project>/01_planner.md` + `project.json` | 用户确认项目名 + type + style_anchor + aspect_ratio | **planner-meta-card** | `project.json` 首次创建（schema 见 §2） |
+| **script** | `02_script.md` | `<project>/02_script.md` | 用户确认剧本 | **scriptwriter-summary-card** | `notes.summary` 更新（剧情核心摘要） |
+| **storyboard** | `03_storyboard.md`（含分镜表 + 符号规则 + 运镜） | `<project>/03_storyboard.md` | 用户确认分镜 | **storyboard-shot-table** | — |
+| **assets** | 每个角色 / 场景 / 道具生成后立刻落盘（不等全部完成）；阶段末落盘资产清单 `04_assets/<type>/<name>/assets.md` | `<project>/04_assets/...` | 用户确认资产验收表（每张"已生成"才进 frame 阶段） | **assets-image-gallery**（追加模式：每张图生成后立即 emit） | 涉及产品 → 写 `notes.product_metadata.<产品名>`（§2.1 schema） |
+| **frame** | 每个关键帧生成后立刻落盘；阶段末落盘 `05_keyframes/frames-index.md` | `<project>/05_keyframes/...` | 用户确认关键帧 | **frame-keyframe-grid**（追加模式：每张关键帧生成后立即 emit） | **每 segment 末尾写 `notes.video_segments[<id>].required_assets[]`**（§2.2 schema；含所有 4-5 类资产 status + path + url） |
+| **video** | 每个 segment 视频 `cmd_workspace_copy_paths` 从 `AGNES_OUTPUT_DIR` 复制到本地 + 写 `segment-XX.md` 元数据 | `<project>/06_videos/...` | 用户确认视频 + update `project.json.current_stage` | **video-segment-list**（追加模式：每段视频生成后立即 emit；失败段显示 ⚠️ 占位） | 4 步硬门控（§3.4）pre-flight 第 4 项读 `required_assets[]` 全 ready + post-call 写 `required_assets[].asset_url_consumed[]` |
 
 **门控 = AND**：用户确认 AND 落盘成功 AND widget emit，三件事都做完才能进入下一阶段。**禁止**"口头确认 + 不落盘就推进" / "落盘但 widget 没 emit 就推进"。Widget HTML 模板 + 占位符替换规则见 `references/widget-templates.md`。
 
@@ -206,6 +320,35 @@ prompt_ref: "<workspace>/creative-video-suite/gufeng-drama-ep01-20260908/05_keyf
 | **ugc** | `06_videos/segment-XX.md` + `06_videos/segment-XX-script.md`（**口播台词**） | 完整分镜表 + 口播视频 | style_ref 来源（强门控,见 `SKILL.md` 视觉风格选择）；口播原文进入 `{具体台词}`；重点花字走 `emphasis_text` 不入视频 prompt |
 | **marketing** | `04_assets/product-refs/<产品名>.png`（**产品参考图**） | 完整分镜表 + 视频；**不**生成分镜图、不调 image_edit | `product_ref` 必传 + 卖点锁定；15s 结构 `0-2s hook / 2-5s 揭示 / 5-10s 证明 / 10-13s 结果 / 13-15s packshot hold`；旁白走 `voiceover_scene_map` |
 | **corporate** | `04_assets/brand-refs/<资产名>.png`（**logo / IP / 品牌资产**） + `06_videos/narration.md`（**完整旁白稿**） | 完整分镜表 + 视频；默认带旁白 | 4 类必填信息（企业信息 / 宣传文案 / 品牌资产 / 旁白）；任何一类缺失必须补问 |
+
+### 5.1 `notes.video_segments[].required_assets[]` 4 路来源决策表（2026-09-09 加）
+
+**为什么需要**：4 路（drama / ugc / marketing / corporate）asset 来源差异巨大——drama 5 类全要 / marketing 只 1 类产品图 / corporate 2 类（brand-refs + 关键帧）。frame 阶段末尾写 `required_assets[]` 时 AI 必须按 type 决定 asset_type 集合，写少了 video 阶段 pre-flight 第 4 项会漏 check，写多了硬凑（keyframe 在 marketing 没需求 → 写空）。
+
+**决策表**（4 行 × 6 列，行 = project.json.type，列 = 6 类 asset，✅ = 该 type 该类资产必含 / △ = 可选 / 空 = 该 type 不需要该类）：
+
+| project.json.type | character（角色） | scene（场景） | prop（道具） | keyframe（关键帧） | product（产品图） | brand（brand-refs） |
+|---|---|---|---|---|---|---|
+| **drama** | ✅ | ✅ | ✅ | ✅ | △（仅当涉及品牌植入 / 产品道具） | — |
+| **ugc** | △（仅当真人口播 / 多人出镜） | △（仅当需要场景背景） | △（仅当涉及产品） | — | ✅（主图必传，§2.1 product_metadata） | — |
+| **marketing** | — | — | △（仅当涉及产品配件） | — | ✅（主图必传，§2.1 product_metadata，video 阶段读 `primary_url` / `multiview_grid_url`） | — |
+| **corporate** | — | — | — | ✅（如分了镜；不分镜 → 空） | — | ✅（logo / IP / 品牌资产必传） |
+
+**判定细则**：
+
+- ✅ = 该 type **默认必含**，frame 阶段末尾写 `required_assets[]` 时**必须**列出至少 1 个此类型元素
+- △ = 该 type **条件性必含**——根据具体需求判断是否有；AI 在 frame 阶段末尾**应主动评估**是否需要（不要省略写"理论上可以要"）
+- — = 该 type **不需要**该类资产，frame 阶段末尾写 `required_assets[]` 时**不要**列出此类型元素（避免 video 阶段 pre-flight 第 4 项误以为有）
+
+**drama 的特例**：drama 5 类全 ✅，但 `product` 是 △（drama 涉及品牌植入 / 产品道具才需要，如古装剧道具奶茶杯）。AI 在 storyboard 阶段看到分镜表提到具体产品/品牌名时才在 required_assets 写 product 类型；否则不写。
+
+**ugc 的特例**：3 类 △ 是同一判断标准——"该 segment 是否需要人/场景/产品出现？"。单人口播对镜头 → 只 1 个 character 元素（speaker 设定图）；产品种草视频 → 1 个 product 元素 + 1 个 prop 元素（产品本体）。AI 按 segment 维度判断，不按项目维度一刀切。
+
+**marketing 的特例**：**不生成分镜图**（output-conventions.md §5 marketing 既有约束），所以 `keyframe` 列空。`character` / `scene` 也空——marketing 默认走 product 主图 + `images[]` references，**不**走人物/场景 ref。
+
+**corporate 的特例**：`brand-refs` 必传（output-conventions.md §5 corporate 既有 4 类必填信息"品牌资产"）；`keyframe` △（如分了镜 → 必含，如不分镜直接 corporate 风格 prompt → 空）。AI 看分镜表是否生成决定。
+
+**为什么是单一权威**：与 §2.1 product_metadata / §2.2 required_assets 同源——单一表 + 4 行决策 + frame 阶段末尾按表写盘，避免 AI 自由组合 asset_type 集合导致跨 4 路漂移。
 
 **drama 与 commercial 共用顶层**（`<workspace>/creative-video-suite/<project>/`）；不分子目录（`drama/` / `commercial/`），**靠 `project.json.type` 区分**——因为跨 session 续跑只看 `type`，不强求路径区分。
 
