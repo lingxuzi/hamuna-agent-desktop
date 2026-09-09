@@ -327,6 +327,24 @@ TVC 或高端企业片通常保持相对一致的主场景、光线和视觉世�
 - [ ] **发型 / 妆容**：3 角色特定 + 同一角色跨镜字面一致
 - [ ] **身份锚点**：3 角色 `person_identity_seed` + `person_identity_anchor` × 3 每段逐字复用 + `@person_ref/@imageN` 跨镜复用
 
+### 5 维度 if-then 三段式(触发条件 / 一线修复 / 仍失败兜底)
+
+1. **表情基线(3 角色差异化)**:if 镜头 1 董事长 `leader_expression=威严+沉稳` / 员工 `employee_expression=专注+协作` / 客户 `customer_expression=信任+满意` → then 同一角色镜头 2-N MUST 同表情基线 → 仍失败兜底:每段 prompt 头部逐字复用对应角色的 `*_expression` + `@person_ref/@imageN` 强制跨镜复用,禁止员工表情跑董事长调性
+2. **光线方向**:if 镜头 1 `light_direction=室内自然光` + 与 `visual_world` 锁定的视觉世界一致 → then 镜头 2-N MUST 同光线 → 仍失败兜底:`visual_world` 强制锁光线方向,跨场景变化显式标注 `scene_transition_anchor`(办公室→工厂→实验室→门店)
+3. **服装(角色特定)**:if 镜头 1 董事长西装 / 员工工服 / 客户商务装 → then 同一角色镜头 2-N MUST 同服装 → 仍失败兜底:`person_identity_seed` 强制 `服装=角色特定`,跨角色服装差异化(董事长西装 ≠ 员工工服 ≠ 客户商务装),禁止错位
+4. **发型 / 妆容**:if 镜头 1 董事长商务发型+商务妆容 / 员工干练发型+职业淡妆 / 客户商务发型+商务妆容 → then 同一角色镜头 2-N MUST 同发型同妆容 → 仍失败兜底:`person_identity_seed` 强制 `发型+妆容` 字段,每段 prompt 头部逐字复用,禁止漂移到休闲发型
+5. **身份锚点(3 角色分别锁)**:if segment 1 完整 `person_identity_anchor` × 3(董事长/员工/客户分别锁脸型/工服/表情基线)+ `@person_ref/@imageN` 跨镜复用 → then segment 2-N 每段 MUST 锁定"该段出现的所有角色"的身份锚点 → 仍失败兜底:每段 prompt 头部强制注入对应角色的 `person_identity_anchor`,不允许只写"董事长继续出镜"
+
+### 5 反模式正例对比表(消歧义锚点)
+
+| # | 反模式 | ✗ 错例 | ✓ 正例 |
+|---|---|---|---|
+| 1 | 多角色表情基线混淆 | 董事长威严 → 员工专注 → 客户信任 错乱调用 | 董事长 `leader_expression=威严+沉稳` / 员工 `employee_expression=专注+协作` / 客户 `customer_expression=信任+满意` 各角色锁定 |
+| 2 | 跨镜头光线漂移 | 镜头 1 室内自然光 → 镜头 5 品牌色光 | 镜头 1-N 全部 `light_direction=室内自然光` + `visual_world` 锁视觉世界;跨场景 `scene_transition_anchor` |
+| 3 | 多角色服装错位 | 董事长穿工服 / 员工穿西装 | 董事长西装 / 员工工服 / 客户商务装 各角色锁定 + 跨角色服装差异化 |
+| 4 | 多角色发型 / 妆容漂移 | 董事长商务发型 → 镜头 5 休闲发型 | 董事长商务发型+商务妆容 / 员工干练发型+职业淡妆 / 客户商务发型+商务妆容 各角色锁定 |
+| 5 | 多角色身份锚点不逐字复用 | 镜头 1 董事长完整 `person_identity_anchor` → 镜头 5 只写"董事长继续出镜" | 每段 prompt 头部逐字复用对应角色的 `person_identity_anchor` + `@person_ref/@imageN` 跨镜复用 |
+
 ### 与 SKILL.md 顶层铁律联动
 
 - 顶层铁律 = 硬门控入口（5 维铁律 + if-then + 5 反模式 + 5 正例对比 + 静默自检清单）— **人物一致性 5 维度是顶层「视觉连续」在 Corporate 多角色的特异展开**

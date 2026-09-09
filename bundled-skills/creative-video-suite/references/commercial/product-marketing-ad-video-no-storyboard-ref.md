@@ -276,6 +276,24 @@ Seedance prompt 内部按信息类型使用固定符号，避免模型误解。
 - [ ] **发型 / 妆容**:同段内字面一致,跨段允许变化但显式标注 `time_anchor`
 - [ ] **身份锚点**:`model_identity_seed` + `model_identity_anchor` 每段逐字复用
 
+### 5 维度 if-then 三段式(触发条件 / 一线修复 / 仍失败兜底)
+
+1. **表情基线**:if 镜头 1 `model_appeal_baseline=认真展示` → then 同段内镜头 2-4 MUST 同表情基线 → 仍失败兜底:重新生成同段内 2-4 镜,prompt 头部逐字复用 `model_appeal_baseline` + 显式标注 `time_anchor` 跨段变化
+2. **光线方向**:if 镜头 1 `light_direction=室内柔光` + 与 `Static Description` 锁定光源一致 → then 同段内镜头 2-4 MUST 同光线 → 仍失败兜底:`Static Description` 强制锁光源,跨场景变化显式标注 `scene_transition_anchor`
+3. **服装**:if 镜头 1 模特服装锁基底(高端品牌精致套装 / 生活方式休闲装 / 美妆轻职业装) → then 同段内镜头 2-4 MUST 同服装 → 仍失败兜底:`model_identity_seed` 加 `服装基底+品牌色材质`,强制同段内不可换;跨段换装显式标注 `costume_change_anchor`,12 秒内最多 2 次
+4. **发型 / 妆容**:if 镜头 1 模特发型锁基底(精致盘发 / 柔顺长发 / 商务短发)+ 妆容锁基底(精致底妆 + 品牌色调眼妆) → then 同段内镜头 2-4 MUST 同发型同妆容 → 仍失败兜底:`model_identity_seed` 强制 `发型基底+妆容基底`,每段 prompt 头部逐字复用,跨段变化显式标注 `time_anchor`
+5. **身份锚点**:if segment 1 完整 `model_identity_anchor`(脸型/眼型/颧骨/鼻型/服饰品牌色/模特人种/年龄段)+ `model_lock`(产品演示专注表情基线) → then segment 2-N MUST 逐字复用 → 仍失败兜底:每段 prompt 头部强制注入 `model_identity_anchor`,不允许只写"模特继续出镜"
+
+### 5 反模式正例对比表(消歧义锚点)
+
+| # | 反模式 | ✗ 错例 | ✓ 正例 |
+|---|---|---|---|
+| 1 | 同段内表情漂移 | 镜头 1 认真展示 → 镜头 2 惊喜大叫 → 镜头 3 疲惫感 | 同段内镜头 1-4 全部 `model_appeal_baseline=认真展示`;跨段显式标注 `time_anchor` 变化 |
+| 2 | 同段内光线漂移 | 镜头 1 室内柔光 → 镜头 2 顶光硬光 → 镜头 3 侧光逆光 | 同段内镜头 1-4 全部 `light_direction=室内柔光` + `Static Description` 锁光源;跨场景 `scene_transition_anchor` |
+| 3 | 同段内服装漂移 / 跨段换装过频 | 镜头 1 精致套装 → 镜头 2 睡衣(同段)/ 每段都换装(跨段) | 同段内镜头 1-4 全部精致套装;跨段最多 2 次换装 + `costume_change_anchor` 标注 |
+| 4 | 同段内发型 / 妆容漂移 | 镜头 1 精致盘发精致妆 → 镜头 2 散发素颜 | 同段内镜头 1-4 全部 `model_identity_seed={发型=精致盘发, 妆容=精致底妆+品牌色调眼妆}` |
+| 5 | 身份锚点首次写但后续段不复制 | segment 1 完整 `model_identity_anchor` → segment 2 只写"模特继续出镜" | segment 1-N 全部 prompt 头部逐字复用 `model_identity_anchor` + `model_lock` |
+
 ### 与 SKILL.md 顶层铁律联动
 
 - 顶层铁律 = 硬门控入口(5 维铁律 + if-then + 5 反模式 + 5 正例对比 + 静默自检清单)— **人物一致性 5 维度是顶层「视觉连续」在 Marketing 模特的特异展开**

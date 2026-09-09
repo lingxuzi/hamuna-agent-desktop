@@ -201,6 +201,24 @@ anti_same_face_line: This creator uses a distinct facial-structure template, not
 - [ ] **发型 / 妆容**：8 值正向抽值 + 妆容基底锁定 + 跨镜字面一致
 - [ ] **身份锚点**：`creator_identity_seed` + `identity_anchor` 每段逐字复用，`used_creator_profiles` 维护
 
+### 5 维度 if-then 三段式（触发条件 / 一线修复 / 仍失败兜底）
+
+1. **表情基线**：if 镜头 1 自然微笑 + 视线正对镜头 → then 镜头 2-4 MUST 同表情基线（`appeal_baseline` 字面一致） → 仍失败兜底：重新生成 segment 2-4，prompt 头部逐字复用 `appeal_baseline` + `persona_product_fit`，强制覆盖
+2. **光线方向**：if 镜头 1 `light_direction=右前方柔光` + `light_layers=明亮自然窗光` → then 镜头 2-4 MUST 同光线方向 + 同色温 → 仍失败兜底：在 `light_direction` 字段强制锁方向，每段 prompt 头部逐字复用，不允许顶光 / 逆光漂移
+3. **服装**：if 镜头 1 主播上衣从色板正向选择（雾霾蓝 / 砖红 / 墨绿 / 酒红 / 灰紫 / 牛仔蓝 / 炭灰黑 / 橄榄绿 / 海军蓝 / 珊瑚粉 / 薄荷绿） → then 镜头 2-4 MUST 同色 + 同材质 → 仍失败兜底：`creator_identity_seed` 加 `服装主色=雾霾蓝+材质=针织`，强制色板正向选择，禁止漂移到色板外颜色
+4. **发型 / 妆容**：if 镜头 1 `creator_identity_seed` 锁发色发型（深棕长直 / 黑色高马尾 / 栗棕微卷 / 酒红波浪 / 深黑短发 / 红棕锁骨发 / 利落黑色短发 / 深棕侧分短发）+ 妆容（淡妆基底 / 护肤美妆主播精致）→ then 镜头 2-4 MUST 同发型同妆容 → 仍失败兜底：`creator_identity_seed` 强制 `发色发型+妆容` 字段，每段 prompt 头部逐字复用，禁止漂移到其他发型或换浓妆
+5. **身份锚点**：if segment 1 完整 `identity_anchor`（模板骨架 + 性别审美分支 + 发色发型 + 色板上衣 + 场景穿搭）→ then segment 2-4 MUST 逐字复用 `identity_anchor`（不只是"主播继续出镜"） → 仍失败兜底：在 segment header 强制注入 `identity_anchor` 字段，每段 prompt 头部逐字复制 + `creator_identity_seed` 全程锁定 `used_creator_profiles` 不得共享 > 3 主特征
+
+### 5 反模式正例对比表（消歧义锚点）
+
+| # | 反模式 | ✗ 错例 | ✓ 正例 |
+|---|---|---|---|
+| 1 | 表情跨镜头漂移 | 镜头 1 自然微笑 → 镜头 2 严肃凝视 → 镜头 3 疲惫感 | 镜头 1-4 全部 `appeal_baseline` 自然微笑 + 视线正对镜头 |
+| 2 | 跨镜头光线漂移 | 镜头 1 右前柔光 → 镜头 2 顶光硬光 → 镜头 3 侧光逆光 | 镜头 1-4 全部 `light_direction=右前方柔光` + `light_layers=明亮自然窗光` |
+| 3 | 跨镜头服装漂移 | 镜头 1 雾霾蓝 → 镜头 2 白色 T 恤 → 镜头 3 黑色 | 镜头 1-4 全部上衣=雾霾蓝（色板正向选择）+ 同材质 |
+| 4 | 跨镜头发型 / 妆容漂移 | 镜头 1 深棕长直淡妆 → 镜头 2 黑色马尾浓妆 | 镜头 1-4 全部 `creator_identity_seed={发色发型=深棕长直, 妆容=淡妆}` |
+| 5 | 身份锚点首次写但后续段不复制 | segment 1 完整 `identity_anchor` → segment 2 只写"主播继续出镜" | segment 1-4 全部 prompt 头部逐字复用 `identity_anchor` + `creator_identity_seed` |
+
 ### 与 SKILL.md 顶层铁律联动
 
 - 顶层铁律 = 硬门控入口（5 维铁律 + if-then + 5 反模式 + 5 正例对比 + 静默自检清单）— **人物一致性 5 维度是顶层「视觉连续」在 UGC 主播的特异展开**
