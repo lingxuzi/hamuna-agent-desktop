@@ -244,8 +244,8 @@
 
 #### TODO #111 — hamuna_helper: 跨服务 MCP 工具路由 · agnes-video-25（ADMIN_AGENT_VERSION 24→25）✅ DONE
 （落地详见 §0 narrative + commits `931f5ef` feat + `7ff921f` chore；ADMIN_AGENT_VERSION "24"→"25" 手动 bump，HamunaAgent 0.3.108→0.3.109→0.3.110 由 bump-on-commit.mjs 自动 +2 触发）
-#### TODO #112 — 已安装 desktop 应用文件路径全集审计 🔄
-**触发**：用户报"评估 desktop 应用安装后各个种类文件的真实路径并记录到 snapshot 中"——按"单一权威 + cross-link"模式：`specs/tech_docs/install_paths.md` 新建（28 类 × 三平台 + 来源 + 写时机 + 迁移历史），snapshot.md §2.3 加紧凑速查表 cross-link。**关键**：(1) 单一权威 = `app_dirs::hamuna_data_dir()`；(2) AGNES_OUTPUT_DIR 在 `$HOME/HamunaAgent/agnes-output/`（MCP 自控）；(3) 外部凭据 `~/.claude/` `~/.codex/` `~/.gemini/` 不在 `~/.hamuna/`；(4) macOS 系统日志 `~/Library/Logs/com.hamuna.app/HamunaAgent.log` 由 tauri-plugin-log 管；(5) Workspace 用户 UI 选定 + Tauri fs scope `$HOME/.hamuna/**` 之外。**待 commit**：2 文件。**遗留**：(a) install_paths.md 草稿**未**审阅；(b) `specs/CLAUDE.md` 必读清单加一行**未**完成；(c) 路径变更必须**同时**更新 install_paths.md + snapshot.md §2.3。
+#### TODO #112 — 已安装 desktop 应用文件路径全集审计 ✅ DONE
+（落地详见 §2.3 + `specs/tech_docs/install_paths.md` + commit `0a6d583`；216 行新文件，10 节（0 三平台对照 / 1 App bundle 19 项 / 2 Tauri resource_dir 6 类 / 3 用户运行时 32 子项 / 4 Workspace / 5 MCP 自控 / 6 外部凭据 / 7 Platform 日志 / 8 关键决策 10 条 / 9 改动路径同步清单 / 10 已知遗留）。**关键决策**：(1) 单一权威 = `app_dirs::hamuna_data_dir()`；(2) AGNES_OUTPUT_DIR 在 `$HOME/HamunaAgent/agnes-output/`（MCP 自控，**不**在 `~/.hamuna/`）；(3) 外部凭据 `~/.claude/` `~/.codex/` `~/.gemini/` 不在 `~/.hamuna/`；(4) macOS 系统日志双轨（`tauri-plugin-log` 管 `~/Library/Logs/com.hamuna.app/HamunaAgent.log` + `~/.hamuna/logs/unified-*.log`）；(5) Workspace 用户 UI 选定 + Tauri fs scope `$HOME/.hamuna/**` 之外 + `validate_workspace_root` chokepoint。**遗留**：(a) `specs/CLAUDE.md` 必读清单加 install_paths.md 一行 — TODO 已知，独立 commit 补；(b) 跨语言 sync check lint（path-safety.ts vs commands.rs）暂未实现 — PRD 0.2.15 §7.2 已有 TODO，独立 PR；(c) snapshot §2.3 + install_paths.md 双写风险 — 无 lint 拦截）
 
 ### 3.2 P3 多 Key Fallback Pipeline（新）🔄
 
