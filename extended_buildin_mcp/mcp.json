@@ -26,8 +26,10 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
+        "--refresh-package",
+        "agnes-video-25-mcp",
         "--from",
-        "agnes-video-25-mcp==0.1.4",
+        "agnes-video-25-mcp",
         "agnes-video-25-mcp"
       ],
       "env": {
@@ -36,7 +38,7 @@
         "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1",
         "AGNES_OUTPUT_DIR": "~/HamunaAgent/agnes-output"
       },
-      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。UV_INDEX_URL 强制 PyPI 官方源（绕开开发机/用户机器设的清华镜像，刚 publish 的包清华镜像可能未同步）；uvx --from 拉 agnes-video-25-mcp==0.1.4（首次 10-30s，后续命中 ~/.cache/uv 毫秒）。bundled uvx 版本由 scripts/download_uv.ps1 锁在 0.5.11（最后兼容 --from 老语法的 0.5.x patch），sidecar `agent-session.ts` 把 bundled uvx 目录 prepend 进 MCP spawn env 的 PATH，`.mcp.json` 仍写 `command: 'uvx'` 不暴露机器路径。AGNES_OUTPUT_DIR 用 `~` 路径，依赖 sidecar `buildMcpSubprocessEnv` 注入 HOME/USERPROFILE（macOS/Linux → HOME；Windows → USERPROFILE，server.py `Path.expanduser` 三平台都识别 HOME）。0.1.4 起支持 AGNES_API_KEYS 多 key fallback：逗号分隔，撞 429 quota / 503 短冷却自动切下一个 key；401 永久禁用。AGNES_API_KEY 单值仍兼容（向后兼容路径）。",
+      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。UV_INDEX_URL 强制 PyPI 官方源（绕开开发机/用户机器设的清华镜像，刚 publish 的包清华镜像可能未同步）。**Version policy**（v0.1.5+ 起）：`uvx --refresh-package agnes-video-25-mcp --from agnes-video-25-mcp` — 每次 MCP spawn 强制从 PyPI re-resolve（去 0.1.4 pin，自动 upgrade 到 latest）。⚠️ **副作用**：每次 spawn ~100-500ms PyPI round-trip + PyPI rate-limit 高频撞（>100 req/min 警戒）+ 上游 breaking change 自动传染 + 网络抖动/PyPI 故障 → MCP spawn 失败转 AI 端 hard error（pin 模式下无此问题）；回滚改回 `uvx --from agnes-video-25-mcp==<ver>` 即可。bundled uvx 版本由 scripts/download_uv.ps1 锁在 0.5.11（最后兼容 --from + --refresh-package 的 0.5.x patch，已 strings 验过 bundled uvx.exe 含 REFRESH_PACKAGE 字面量），sidecar `agent-session.ts` 把 bundled uvx 目录 prepend 进 MCP spawn env 的 PATH，`.mcp.json` 仍写 `command: 'uvx'` 不暴露机器路径。AGNES_OUTPUT_DIR 用 `~` 路径，依赖 sidecar `buildMcpSubprocessEnv` 注入 HOME/USERPROFILE（macOS/Linux → HOME；Windows → USERPROFILE，server.py `Path.expanduser` 三平台都识别 HOME）。0.1.4+ 支持 AGNES_API_KEYS 多 key fallback：逗号分隔，撞 429 quota / 503 短冷却自动切下一个 key；401 永久禁用。AGNES_API_KEY 单值仍兼容（向后兼容路径）。",
       "enabled": true
     }
   ]
