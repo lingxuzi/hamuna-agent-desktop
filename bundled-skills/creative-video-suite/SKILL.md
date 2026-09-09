@@ -1,6 +1,6 @@
 ---
 name: creative-video-suite
-version: "7"
+version: "8"
 description: 综合剧情视频创作套件（drama + commercial），由 short-drama 与企业宣传两条路径组成，专攻有完整故事线的剧情内容（短剧/微电影/动画/动态漫/预告片）。视频生成走 multimedia-creator MCP（agnes-image-2.5-flash + agnes-video-2.5-flash）。用户在 planner / assets 阶段可选 6 个视觉风格预设（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），全局风格锚点一字不变贯穿 5 阶段；commercial 分支 style_ref 是强门控，未提供则追问。适用于 5 阶段剧情流水线、UGC口播、企业宣传片。
 ---
 
@@ -98,7 +98,18 @@ description: 综合剧情视频创作套件（drama + commercial），由 short-
 3. ❌ 用户未上传产品图时擅自调 `image_edit(image_paths=[])` 或无 image_paths 调 `image_generate`
 4. ❌ 用户上传过 A 产品图但当前任务复用 B 品牌 → 不问用户直接用旧 A 产品图作 `image_paths`（跨界复用 = 产品身份漂移）
 
+**4 反模式正例对比（消歧义锚点）**：
+
+| 场景 | 上传产品图 | 当前任务品牌 | 动作 | 理由 |
+|---|---|---|---|---|
+| ✓ 任务匹配 | A 品牌手机 `<Picture 1>` | A 品牌手机广告 | `image_edit(image_paths=[A品牌图])` | 同品牌 → 产品身份一致 |
+| ✗ 跨界复用 | A 品牌手机 `<Picture 1>` | B 品牌手机广告 | **不**复用 A 图,stop 问用户上传 B 品牌图 | 产品身份漂移,违反反模式 4 |
+| ✗ 跨界偷渡 | A 品牌手机 `<Picture 1>` | "iPhone 风格"概念广告 | stop 问用户上传 iPhone 真实产品图,或走显式 ack 降级 | prompt 含品牌名 → 必走 stop 问 |
+| ✗ 上传错位 | A 品牌手机（用户上传到 `<workspace>/.../04_assets/characters/` 而非 `product-refs/`） | A 品牌手机广告 | stop 问用户重传到 `product-refs/`（路径白名单硬约束） | 路径白名单是产品图参考唯一合规来源 |
+
 **路径白名单（产品图参考唯一合规来源）**：`<workspace>/.../04_assets/product-refs/<产品名>.{jpg,png}`（用户上传）。**不**接受 `05_keyframes/`、`04_assets/characters/`、`04_assets/scenes/`、`04_assets/props/` 下的 PNG 作产品图参考输入。
+
+**目录骨架预创建（消除"路径白名单存在但子目录不存在"兜底盲区）**：用户上传产品图前 **MUST** 确认 `<workspace>/.../04_assets/product-refs/` 目录骨架存在；不存在 → 调 `cmd_workspace_copy_paths`（或显式 `mkdir -p` via Rust `commands::create_workspace_dir`）预创建，再请用户上传。判定方法：`lstatSync` + `existsSync` 双探（symlink 不跟随，pit-of-success 红线「fs-utils」）。如用户已上传到错误子目录（`characters/` / `scenes/` / `props/`）→ 不擅自 mv，stop 问用户重传或显式 ack "我帮你从 X 移到 product-refs"。
 
 **cross-link**：本章与上一段「🔒 产品参考图硬门控」硬禁令 ③ / 工具边界表 image_generate 行 / `references/drama/assets.md`「产品图强制门控」段联动执行；任何一处冲突以本章为准。
 
