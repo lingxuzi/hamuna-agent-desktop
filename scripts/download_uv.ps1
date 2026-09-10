@@ -97,23 +97,18 @@ if (-not $Force -and -not $Version -and (Test-Path $Marker) -and (Test-Path $Tar
 }
 
 if (-not $Version) {
-    Write-Info "Querying latest uv release from $ReleaseApiBase/latest..."
-    try {
-        # GitHub API needs a User-Agent (otherwise 403).
-        $headers = @{ 'User-Agent' = 'hamuna-download-uv' }
-        $latest = Invoke-RestMethod -Uri "$ReleaseApiBase/latest" -Headers $headers -TimeoutSec 30 -ErrorAction Stop
-        # Astral tags use plain semver (no v-prefix).
-        $Version = 0.11.33
-    } catch {
-        Write-Err "Failed to query GitHub Releases API: $($_.Exception.Message)"
-        Write-Err "  URL: $ReleaseApiBase/latest"
-        Write-Err "  Check network / rate limits / pin -Version <tag>."
-        exit 1
-    }
-    if (-not $Version) {
-        Write-Err "GitHub response missing tag_name"
-        exit 1
-    }
+    # Pinned default — do NOT auto-track Astral latest (which as of 2026-09
+    # is 0.12.x and tightens `--default-index` semantics that may not be
+    # compatible with the bundled mcp.json `--from <pkg> <cmd>` shape).
+    # Bump here after manually verifying spawn compatibility; the
+    # TODO #122 narrative in snapshot.md tracks the rationale.
+    #
+    # NOTE: this MUST be a string literal. A bare numeric literal like
+    # `0.11.33` silently coerces to $null on PowerShell's numeric parser
+    # (it sees `0.11` as decimal, then `.33` as property access, throws
+    # away the value) and the script then bails with the misleading
+    # "GitHub response missing tag_name" error.
+    $Version = "0.11.33"
 }
 $Version = $Version.Trim()
 
