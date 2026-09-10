@@ -6,6 +6,7 @@
  */
 
 import { existsSync } from 'fs';
+import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -264,13 +265,15 @@ export function getBundledCusePath(): string | null {
  * plain PATH lookup, and so the spawn path doesn't need to think about the
  * uv→uvx trampoline.
  *
- * Layout (Tauri 2 NSIS empirically places single-file .exe bundle.resources
- * entries at the install-dir ROOT, while sibling entries like server-dist.js
- * land in `resources/` — observed in 2026-09-08 installed build):
- *   - Windows prod: <install-dir>/uvx.exe  (preferred — confirmed in installed builds)
- *                   <install-dir>/resources/uvx.exe  (fallback if Tauri layout changes)
- *   - macOS/Linux: returns null (Homebrew / system packages are the convention)
- *   - Dev: walk up from scriptDir to find `src-tauri/resources/uvx.exe`
+ * Probe order (Windows):
+ *   1. <install-dir>/uvx.exe                            (Tauri 2 NSIS preferred — confirmed in 0.3.136+ installed builds)
+ *   2. <install-dir>/resources/uvx.exe                  (fallback if NSIS layout changes)
+ *   3. ~/.hamuna/bin/uvx.exe                            (mcp-bundled-seed.ts copies here on startup; covers
+ *                                                        older installs where install-dir uvx.exe is missing or
+ *                                                        if the user manually removed bundled resources)
+ *   4. <walk-up>/src-tauri/resources/uvx.exe            (dev box)
+ *
+ * macOS/Linux: returns null (Homebrew / system packages are the convention).
  *
  * Always returns the path to uvx.exe, or null if not present.
  */
@@ -289,6 +292,17 @@ export function getBundledUvPath(): string | null {
   const nestedBin = resolve(scriptDir, 'uvx.exe');
   if (existsSync(nestedBin)) return nestedBin;
 
+  // Production (user dir fallback): mcp-bundled-seed.ts copies the bundled uvx
+  // here on every sidecar startup. Covers the gap where install-dir uvx.exe is
+  // missing (older releases without the bundle.resources entry, partial
+  // upgrades, anti-virus quarantine of the install dir, etc.). The user dir
+  // path is stable across reinstalls and is on the user PATH via the CLI shim
+  // registration in system_binary.rs (only relevant for new shells — the
+  // Sidecar spawn path prepends the explicit directory instead of relying on
+  // PATH inheritance).
+  const homeBin = getUserHomeBinUvxPath();
+  if (homeBin && existsSync(homeBin)) return homeBin;
+
   // Development: walk up from scriptDir to find src-tauri/resources/uvx.exe
   let dir = scriptDir;
   for (let i = 0; i < 6; i++) {
@@ -298,6 +312,23 @@ export function getBundledUvPath(): string | null {
   }
 
   return null;
+}
+
+/**
+ * Resolve `~/.hamuna/bin/uvx.exe` lazily — Sidecar startup is hot-path,
+ * and a static `import { homedir } from 'node:os'` is fine here because
+ * `homedir()` only resolves on the first call (cached internally by Node),
+ * and the user dir fallback is probe slot #3 of 4 — most calls short-circuit
+ * on slots 1 or 2 before reaching this.
+ */
+function getUserHomeBinUvxPath(): string | null {
+  try {
+    const home = homedir();
+    if (!home) return null;
+    return join(home, '.hamuna', 'bin', 'uvx.exe');
+  } catch {
+    return null;
+  }
 }
 
 /**
