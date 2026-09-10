@@ -767,7 +767,18 @@ Section UvxFallback
     ; a `uvx` trampoline alongside `uv`, so a successful install
     ; unblocks MCP spawns of `uvx --from <pkg> <cmd>` without
     ; needing a GitHub release direct fetch.
-    ExecWait '"$4" -m pip install --user --index-url https://pypi.tuna.tsinghua.edu.cn/simple --upgrade uv' $1
+    ;
+    ; Pinned to uv==0.11.33 to match the rationale chain in commits
+    ; 197837b / 4812fbe / 37a7f21 (and snapshot TODO #122 / #125): the
+    ; 0.12.x line tightened `uvx --from` parsing and breaks the
+    ; multimedia-creator MCP spawn in extended_buildin_mcp/mcp.json
+    ; (`--from agnes-video-25-mcp==<pin> agnes-video-25-mcp`).
+    ; Without this pin, `--upgrade uv` would walk the user to the
+    ; latest PyPI release (currently 0.12.12) on every fresh install
+    ; and silently break uvx-driven MCPs. Bump this pin together
+    ; with TODO #122 / #125 (and verify against the multimedia-creator
+    ; spawn below); do NOT auto-track.
+    ExecWait '"$4" -m pip install --user --index-url https://pypi.tuna.tsinghua.edu.cn/simple --upgrade uv==0.11.33' $1
     ${If} $1 == 0
       DetailPrint "$(uvxFallbackSuccess)"
       ; Persist Scripts dir on HKCU\Environment\Path so future Sidecar
