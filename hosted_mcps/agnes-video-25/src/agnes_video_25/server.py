@@ -987,7 +987,8 @@ def _image_generate_impl(
     prompt: str, *,
     model: str = DEFAULT_IMAGE_MODEL,
     size: str = DEFAULT_IMAGE_SIZE, ratio: str = DEFAULT_IMAGE_RATIO,
-    image_paths: list[str] | None = None,
+    # 0.1.8: 同步 MCP 入口的 dict 兼容，让跨函数调用类型一致
+    image_paths: list[str] | dict[str, Any] | None = None,
     mask_path: str | None = None,
     n: int | None = None,
     return_base64: bool = False,
@@ -1090,7 +1091,10 @@ async def agnes25_image_generate(
     prompt: str, *,
     model: str = DEFAULT_IMAGE_MODEL,
     size: str = DEFAULT_IMAGE_SIZE, ratio: str = DEFAULT_IMAGE_RATIO,
-    image_paths: list[str] | None = None,
+    # 0.1.8: 接受 list | dict | None，让 Pydantic 不在 schema 层拒绝 Claude Code MCP
+    # 客户端把数组包装成 {"item": [...]} dict 的输入。运行时 _coerce_image_paths_input
+    # 会把 dict 拆回 list。CHANGELOG 0.1.8 记录 trade-off。
+    image_paths: list[str] | dict[str, Any] | None = None,
     mask_path: str | None = None,
     n: int | None = None,
     return_base64: bool = False,
@@ -1103,6 +1107,10 @@ async def agnes25_image_generate(
     Text-to-image by default. Pass ``image_paths`` (local paths or URLs) to do
     image-to-image; pass ``mask_path`` for inpainting. ``extra_body`` is merged
     into the request's ``extra_body`` envelope — use it for advanced flags.
+
+    Note: ``image_paths`` accepts ``list[str]`` (preferred) or ``dict`` (fallback
+    for clients that wrap arrays as ``{"item": [...]}``). The dict form is
+    normalized to a list before use. See CHANGELOG 0.1.8.
     """
     return await asyncio.to_thread(
         _image_generate_impl, prompt,

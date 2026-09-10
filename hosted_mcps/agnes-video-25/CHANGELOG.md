@@ -6,6 +6,27 @@ Package: `agnes-video-25-mcp` · PyPI: https://pypi.org/project/agnes-video-25-m
 
 ---
 
+## [0.1.8] — 2026-09-11
+
+### Fixed
+
+- **`agnes25_image_generate` schema now accepts `image_paths` as `list[str] | dict | None`** (was `list[str] | None`):
+  - 0.1.7's defensive in-function guard (`_coerce_image_paths_input`) was unreachable when FastMCP / Pydantic v2 rejected dict inputs at the schema layer (the symptom: Pydantic `Input should be a valid list [type=list_type, input_value={'item': [...]}, input_type=dict]` for Claude Code MCP clients wrapping arrays as `{item: [...]}`).
+  - 0.1.8 widens the **schema-layer** type to `list[str] | dict[str, Any] | None` so dict inputs reach the function body, where `_coerce_image_paths_input` already unwraps them.
+  - Both the `@mcp.tool()` entry point (`agnes25_image_generate`) and the internal `_image_generate_impl` carry the wider type to keep cross-call types consistent.
+
+### Trade-offs (carry-over from 0.1.7, now reachable)
+
+- **JSON schema for the tool now lists `image_paths` as `oneOf: [array<string>, object, null]`** instead of `array<string> | null`. Other MCP clients consuming the schema may need to handle the new `object` case (most will fall through to runtime type errors if they send a non-list non-dict shape, which is no worse than today).
+- **`_coerce_image_paths_input` single-key unwrap is still type-unsafe**: passing `{"foo": ["bar"]}` will silently be "fixed" into `["bar"]`. Caller-side discipline remains the safe path; this trade-off is now reachable in practice.
+
+### Migration from 0.1.7
+
+- Callers should continue to pass `list[str]` (preferred). The dict form is a fallback for clients that wrap arrays.
+- Tool consumers reading the JSON schema will see `image_paths` listed as `oneOf`; update accordingly.
+
+---
+
 ## [0.1.7] — 2026-09-11
 
 ### Changed
@@ -97,4 +118,6 @@ First PyPI release.
 [0.1.3]: https://pypi.org/project/agnes-video-25-mcp/0.1.3/
 [0.1.5]: https://pypi.org/project/agnes-video-25-mcp/0.1.5/
 [0.1.6]: https://pypi.org/project/agnes-video-25-mcp/0.1.6/
+[0.1.7]: https://pypi.org/project/agnes-video-25-mcp/0.1.7/
+[0.1.8]: https://pypi.org/project/agnes-video-25-mcp/0.1.8/
 [0.1.7]: https://pypi.org/project/agnes-video-25-mcp/0.1.7/
