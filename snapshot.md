@@ -231,6 +231,9 @@
 #### TODO #3 — 预先存在的 unit test 失败（与 dev 启动修复无关）
 `widgetSandboxHtml.test.ts` 等 6 个 unit test 在 master `5c92cd8` 同样失败；**待独立排期**。
 
+#### TODO #131 — agnes-video-25 v0.1.7：`_coerce_image_paths_input` helper（user 拍板 trade-off）✅ DONE
+**触发**：用户报 `mcp__multimedia-creator__agnes25_image_generate` 的 `image_paths` 数组"含中文路径 + 长度 3 时 7/7 失败 + 被序列化为 `{item: [...]}` dict 触发 Pydantic validation error"。grlling 揭示报告与事实 4 处矛盾（报告长度 3 vs 实际数据长度 2 / JSON 本身合法 / 无 Pydantic error 原文 / 无调用方信息）。用户拍板 "现状直接 commit + publish，承担权衡"，绕过 grillng 接受 trade-off 修复。**改动 4 文件**（+198 -6）：(1) `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` 抽 helper `_coerce_image_paths_input(value)` 处理 `list[str] | dict | None` → `list[str] | None`（`{"item":[...]}` 解包 + `{key:[list]}` 单键解包 + 其它原样返回），`_image_generate_impl` 入口调它；(2) `hosted_mcps/agnes-video-25/pyproject.toml` 0.1.6 → 0.1.7；(3) `hosted_mcps/agnes-video-25/CHANGELOG.md` 新增 `[0.1.7]` 段（trade-off 已知风险完整记录）+ **retroactive** `[0.1.6]` 段（§3.2 P3 Step 3 当时漏写，content 重建自 commit `d2403e6` multi-key cooldown state 持久化 + 30s 窗口 reason split）；(4) `hosted_mcps/agnes-video-25/tests/test_image_paths_dict_tolerance.py` 新增 10/10 self-check 覆盖 helper。**PyPI 发布**：`uv build` + `twine upload --repository pypi`（`uv publish` 走 trusted publishing 失败，twine 走 `~/.pypirc` token）。**verify**：`pip install --dry-run agnes-video-25-mcp==0.1.7` + sha256 比对（本地 `e80a58ed...` = PyPI simple API `e80a58ed...` 完全一致）。**意外副作用**：`twine upload dist/*` 因 `dist/` 残留 0.1.5 + 0.1.6 旧 artifact 把旧版本也试图重传 —— PyPI 静默拒绝同 version 重传（不更新 upload_time），无害。**后续 follow-up**：(a) schema 层 BeforeValidator 归一化（架构正确做法，user 拍板 0.1.7 暂不上）+ (b) `bundled-skills/creative-video-suite/references/agnes-ai-api.md` §5.5 narrative 此前误写 "image_generate schema 不含 image_paths" 待独立 commit 修。
+
 ### 3.2 P3 多 Key Fallback Pipeline（新）🔄
 **目标**：让 `agnes-video-25-mcp` server 在 `AGNES_API_KEY` daily quota 撞顶（429）时自动切换备用 key。解决 2026-09-08 UGC 2nd 跑 5 个 key 撞 daily quota → 17h 阻塞问题。
 
@@ -257,7 +260,7 @@
 
 ### 3.4 已落地（仅指针，detail 见 §4 + git log）
 
-- #29 tvc-director chatui 渲染层对齐 v0.9 / #97 hosted_mcps/agnes-video-25/ 7 tools / #14 TypeGraph 重构 KB / #16 fresh install kb-relations poller / #12 skill 安装 `/skillname` unknown command 修复 / #98 30s TVC e2e v9 PASS / #99 v10 60s lifestyle TVC PASS / #100 v11 60s TVC ⚠ 部分通过 / #101 v12 60s TVC ⚠ 条件1 PASS / #102 v13 1x5 reference mode ❌ FAIL / #103 creative-video-suite 全量迁移 ✅ DONE / #104 1st UGC 5 段 60s ✅ DONE + URL 复用铁律 / #107 多视角产品图 / #108 视频时长边界 / #111 helper agnes-video-25 路由 / #112 install_paths.md / #113 auto-bump pin / #114 video 轮询 + 串行 / #115 version 文件残留 / #116 SKILL frontmatter auto-bump / #117 required_assets 硬门控 / #118 storyboard JSON schema / #119 model agnes-video-2.5-flash 锁死 / #120 creative-ad-director skill / #121 Windows install MCP auto-merge + uvx PATH（pip-only 落地）/ #122 bundled uv 0.5.11 → 0.11.33 重 pin / #123 getBundledUvPath slot 3 / #124 hidesDefaultArgs / #125 download_uv.ps1 字符串字面量 / #126 install-time `pip install uv` pin 0.11.33 / #127 windows-release.yml install-time smoke test / #128 pip mirror 清华 → 阿里 + PyPI fallback
+- #29 tvc-director chatui 渲染层对齐 v0.9 / #97 hosted_mcps/agnes-video-25/ 7 tools / #14 TypeGraph 重构 KB / #16 fresh install kb-relations poller / #12 skill 安装 `/skillname` unknown command 修复 / #98 30s TVC e2e v9 PASS / #99 v10 60s lifestyle TVC PASS / #100 v11 60s TVC ⚠ 部分通过 / #101 v12 60s TVC ⚠ 条件1 PASS / #102 v13 1x5 reference mode ❌ FAIL / #103 creative-video-suite 全量迁移 ✅ DONE / #104 1st UGC 5 段 60s ✅ DONE + URL 复用铁律 / #107 多视角产品图 / #108 视频时长边界 / #111 helper agnes-video-25 路由 / #112 install_paths.md / #113 auto-bump pin / #114 video 轮询 + 串行 / #115 version 文件残留 / #116 SKILL frontmatter auto-bump / #117 required_assets 硬门控 / #118 storyboard JSON schema / #119 model agnes-video-2.5-flash 锁死 / #120 creative-ad-director skill / #121 Windows install MCP auto-merge + uvx PATH（pip-only 落地）/ #122 bundled uv 0.5.11 → 0.11.33 重 pin / #123 getBundledUvPath slot 3 / #124 hidesDefaultArgs / #125 download_uv.ps1 字符串字面量 / #126 install-time `pip install uv` pin 0.11.33 / #127 windows-release.yml install-time smoke test / #128 pip mirror 清华 → 阿里 + PyPI fallback / #131 agnes-video-25 v0.1.7 `_coerce_image_paths_input` helper (user 拍板 trade-off)
 
 ---
 
@@ -266,6 +269,7 @@
 | Commit | 摘要 |
 |--------|------|
 | `<pending>` | **ci(windows): cache npm in windows-release.yml to skip ~2m51s cold npm ci on subsequent releases (snapshot TODO #129, 1 文件 / +5 -0)** |
+| `c008edc` | **fix(agnes-video-25): tolerate dict-shaped image_paths (user trade-off) + vendor 0.1.7 PyPI publish + bump mcp.json pin (snapshot TODO #131, vendor 4 文件 + extended_buildin_mcp/mcp.json 1 文件)** |
 | `<pending>` | **fix(install): switch pip mirror to Aliyun with PyPI fallback (清华源 2026-09-10 timeout, snapshot TODO #128, 2 文件 / +15 -2)** |
 | `<pending>` | **ci(windows): gate R2 upload on install-time smoke (verifies NSIS UvxFallback lands uv==0.11.33 + uvx --from works, snapshot TODO #127, 1 文件 / +108 -0)** |
 | `<pending>` | **fix(install): pin install-time uv to ==0.11.33 to avoid 0.12.x `uvx --from` tightening (rationale chain 197837b/4812fbe/37a7f21, snapshot TODO #126, 2 文件 / +12 -1)** |
