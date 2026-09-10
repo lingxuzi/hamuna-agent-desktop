@@ -778,7 +778,20 @@ Section UvxFallback
     ; and silently break uvx-driven MCPs. Bump this pin together
     ; with TODO #122 / #125 (and verify against the multimedia-creator
     ; spawn below); do NOT auto-track.
-    ExecWait '"$4" -m pip install --user --index-url https://pypi.tuna.tsinghua.edu.cn/simple --upgrade uv==0.11.33' $1
+    ;
+    ; Mirror chain: primary Aliyun (https://mirrors.aliyun.com/pypi/simple/)
+    ; for southern-China / Telecom users, fallback to PyPI official
+    ; (https://pypi.org/simple) if Aliyun is down or 0.11.33 hasn't
+    ; synced yet. Switched off Tsinghua (https://pypi.tuna.tsinghua.edu.cn)
+    ; on 2026-09-10 — the Tsinghua mirror was observed returning
+    ; timeouts for fresh installs (snapshot TODO #128). DO NOT fall
+    ; back to Tsinghua here: if both Aliyun and PyPI fail the user
+    ; has a real network problem, not a mirror preference.
+    ExecWait '"$4" -m pip install --user --index-url https://mirrors.aliyun.com/pypi/simple/ --upgrade uv==0.11.33' $1
+    ${If} $1 != 0
+      DetailPrint "Aliyun PyPI mirror failed (exit $1); falling back to PyPI official"
+      ExecWait '"$4" -m pip install --user --index-url https://pypi.org/simple --upgrade uv==0.11.33' $1
+    ${EndIf}
     ${If} $1 == 0
       DetailPrint "$(uvxFallbackSuccess)"
       ; Persist Scripts dir on HKCU\Environment\Path so future Sidecar
