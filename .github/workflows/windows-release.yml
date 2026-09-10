@@ -103,7 +103,7 @@ jobs:
       - name: Download uvx
         shell: pwsh
         run: |
-          & ./scripts/download_uv.ps1
+          & ./scripts/download_uv.ps1 -Force
           if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "download_uv.ps1 failed" }
 
       - name: Download Git installer
