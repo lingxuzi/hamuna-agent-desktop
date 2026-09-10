@@ -6,6 +6,52 @@ Package: `agnes-video-25-mcp` · PyPI: https://pypi.org/project/agnes-video-25-m
 
 ---
 
+## [0.1.7] — 2026-09-11
+
+### Changed
+
+- **`agnes25_image_generate` accepts `image_paths` as `list[str]` or `dict` form**:
+  - Defensive normalization at the top of `_image_generate_impl`: if the caller passes a `dict` instead of a list (reported by the user as "MCP 客户端把 image_paths 数组包装成 `{"item": [...]}` dict 的 bug"), extract the underlying list.
+    - `{"item": [list]}` → unwrap to `[list]`.
+    - `{key: [list]}` (single-key dict whose value is a list) → unwrap to `[list]`.
+  - `list` inputs are unaffected (early-return path).
+
+### ⚠️ Known limitations of 0.1.7 (deliberate trade-offs — user拍板)
+
+- **Fix not verified against a real Pydantic error**: the bug report ("长度 3 + 中文路径 7/7 失败 + 序列化为 {item: [...]} dict + Pydantic validation error") was never reproduced with a ground-truth payload. The user's own example payload had `image_paths` as a valid `[...]` list (length 2, not 3). The fix may be **unreachable** if FastMCP / Pydantic v2 validates the function signature strictly (the `isinstance(image_paths, dict)` check sits *inside* the function body and would never run if the schema rejects dicts before the call).
+- **`len(dict) == 1` fallback is type-unsafe**: if a caller accidentally passes `{"foo": ["bar"]}` it will silently be "fixed" into `image_paths = ["bar"]`. Silent data corruption is worse than a loud Pydantic error.
+- **No e2e validation of MCP client-side dict emission**: we did not confirm that any real MCP client actually emits dicts in place of arrays for `image_paths`. If the report is unfounded, this is dead defensive code.
+- **Proper fix would change the schema layer**, not the function body: either `image_paths: list[str] | dict | None` + a Pydantic `BeforeValidator` that normalizes dict → list, or fix the caller. User chose the cheaper in-function guard accepting the above trade-offs.
+
+### Migration from 0.1.6
+
+- Callers should continue to pass `list[str]`. The dict form is a fallback only.
+- If your MCP client is the source of dict-shaped `image_paths`, please file an issue there — the proper fix is caller-side, not server-side.
+
+---
+
+## [0.1.6] — 2026-09-09
+
+> Note: this entry was retroactively added to vendor `CHANGELOG.md` on 2026-09-11 — `§3.2 P3 Step 3` published v0.1.6 to PyPI on 2026-09-09T16:24:15/18Z but the vendor changelog file was not updated. Content reconstructed from commit `d2403e6`.
+
+### Changed
+
+- **Multi-key cooldown state persisted + 30s window reason split** (commit `d2403e6`):
+  - `_KEY_POOL_STATE_DIR` env override for persisted state directory.
+  - `AGNES_KEY_POOL_STATE_DIR` configurable.
+  - Cooldown completion refreshes `last_429_at=0`.
+  - Atomic `tmp + rename` writes for state file.
+  - 30-second sliding-window reason split (429 quota vs 503 short cooldown vs 401 permanent ban).
+  - Single chokepoint in `_request_json` — multi-key fallback machinery continues to gate every request through that one path.
+
+### Compatibility
+
+- Backward compatible at the API surface (tool names + JSON schemas unchanged).
+- Backward compatible at the env surface: `AGNES_API_KEY` still works; `AGNES_API_KEYS` continues to be opt-in.
+- Behavior change (carried over from 0.1.5): default video model is `agnes-video-2.5-flash`, not `agnes-video-2.5`.
+
+---
+
 ## [0.1.5] — 2026-09-09
 
 ### Changed
@@ -50,3 +96,5 @@ First PyPI release.
 
 [0.1.3]: https://pypi.org/project/agnes-video-25-mcp/0.1.3/
 [0.1.5]: https://pypi.org/project/agnes-video-25-mcp/0.1.5/
+[0.1.6]: https://pypi.org/project/agnes-video-25-mcp/0.1.6/
+[0.1.7]: https://pypi.org/project/agnes-video-25-mcp/0.1.7/

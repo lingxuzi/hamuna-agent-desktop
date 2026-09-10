@@ -896,6 +896,36 @@ def _img_normalize_inputs(
     return out_images, out_mask
 
 
+def _coerce_image_paths_input(
+    value: list[str] | dict[str, Any] | None,
+) -> list[str] | None:
+    """Tolerate dict-shaped ``image_paths`` emitted by some MCP clients.
+
+    0.1.7 user-拍板 trade-off — see CHANGELOG for full context.
+
+    Unwrap rules:
+      - ``{"item": [list]}`` → return the inner list (the symptom in the bug report).
+      - Single-key dict whose only value is a list → return that list.
+      - Everything else (None, real list, dict that doesn't match) → return unchanged.
+
+    Caveats:
+      - FastMCP / Pydantic v2 may validate the function signature *before* this
+        runs; under strict schema mode a dict input would be rejected upstream
+        and this helper would never be reached. 0.1.7 accepts that risk.
+      - The single-key unwrap is type-unsafe: a caller passing ``{"foo": ["bar"]}``
+        will silently be "fixed" into ``["bar"]``. Caller-side discipline is the
+        long-term fix; this is the cheapest server-side mitigation.
+    """
+    if isinstance(value, dict):
+        if "item" in value and isinstance(value["item"], list):
+            return value["item"]
+        if len(value) == 1:
+            only = next(iter(value.values()))
+            if isinstance(only, list):
+                return only
+    return value
+
+
 def _img_validate_size_ratio(size: str, ratio: str) -> dict[str, Any] | None:
     if size not in IMAGE_SIZES:
         return _error("invalid_size", f"size must be one of {sorted(IMAGE_SIZES)}.",
@@ -974,6 +1004,11 @@ def _image_generate_impl(
     err = _img_validate_size_ratio(size, ratio)
     if err:
         return err
+
+    # 2026-09-11: 兼容 Claude Code MCP 客户端把 image_paths 数组包装成
+    # {"item": [...]} dict 的 bug。list 输入路径完全不受影响。
+    # 详细 trade-off 见 CHANGELOG 0.1.7 + helper 注释。
+    image_paths = _coerce_image_paths_input(image_paths)
 
     images, mask = _img_normalize_inputs(image_paths, mask_path)
     extra: dict[str, Any] = {}
