@@ -243,6 +243,85 @@ describe('parseExtendedBuiltinMcpConfig', () => {
   });
 });
 
+describe('parseExtendedBuiltinMcpConfig — hidesDefaultArgs', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('parses hidesDefaultArgs: true and exposes it on the server', () => {
+    const result = parseExtendedBuiltinMcpConfig(
+      JSON.stringify({
+        version: 1,
+        servers: [
+          {
+            id: 'multimedia-creator',
+            type: 'stdio',
+            command: 'uvx',
+            args: ['--from', 'pkg', 'cmd'],
+            hidesDefaultArgs: true,
+          },
+        ],
+      }),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].hidesDefaultArgs).toBe(true);
+  });
+
+  it('defaults hidesDefaultArgs to false when the field is absent', () => {
+    const result = parseExtendedBuiltinMcpConfig(
+      JSON.stringify({
+        version: 1,
+        servers: [{ id: 'plain', command: 'echo' }],
+      }),
+    );
+    expect(result[0].hidesDefaultArgs).toBe(false);
+  });
+
+  it('coerces non-boolean truthy values to false (poisoned-bundle guard)', () => {
+    // Anything that isn't strictly `true` falls through to false. This is
+    // a display-time filter; we never want a stray "1" or "yes" string to
+    // silently turn on a hide that the UI then has to special-case.
+    const result = parseExtendedBuiltinMcpConfig(
+      JSON.stringify({
+        version: 1,
+        servers: [
+          { id: 'a', command: 'echo', hidesDefaultArgs: 1 },
+          { id: 'b', command: 'echo', hidesDefaultArgs: 'true' },
+          { id: 'c', command: 'echo', hidesDefaultArgs: 'yes' },
+          { id: 'd', command: 'echo', hidesDefaultArgs: {} },
+          { id: 'e', command: 'echo', hidesDefaultArgs: null },
+        ],
+      }),
+    );
+    for (const s of result) {
+      expect(s.hidesDefaultArgs).toBe(false);
+    }
+  });
+
+  it('preserves hidesDefaultArgs for http/sse entries (not stdio-only)', () => {
+    const result = parseExtendedBuiltinMcpConfig(
+      JSON.stringify({
+        version: 1,
+        servers: [
+          {
+            id: 'remote',
+            type: 'http',
+            url: 'https://example.com/mcp',
+            hidesDefaultArgs: true,
+          },
+        ],
+      }),
+    );
+    expect(result[0].hidesDefaultArgs).toBe(true);
+  });
+});
+
 describe('parseExtendedBuiltinMcpConfig — ${bundled:REL_PATH} placeholder', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
 

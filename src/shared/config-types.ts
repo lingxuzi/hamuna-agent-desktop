@@ -1781,6 +1781,21 @@ export interface McpServerDefinition {
    * and the effective server list stay in sync.
    */
   platforms?: NodeJS.Platform[];
+
+  /**
+   * When true, the UI must NOT surface this server's default `command` /
+   * `args` string to end users — the surface is reserved for the bundled
+   * vendor and exposing it leaks vendor implementation details (which
+   * PyPI package is pinned, which fork or wrapper is in front of it, etc.).
+   * The Settings Toolbox list row and the builtin MCP details dialog both
+   * read this flag and render a neutral placeholder instead of the raw
+   * command. Sidecar spawn still uses the full `command` + `args`
+   * internally — the flag is a display-time filter, not a behavior change.
+   *
+   * Default false. Set to true only for extended builtin entries whose
+   * vendor contract treats the spawn invocation as proprietary.
+   */
+  hidesDefaultArgs?: boolean;
 }
 
 /**

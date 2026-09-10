@@ -9,6 +9,7 @@
       "args": [],
       "env": {},
       "description": "股票行情 + 新闻",
+      "hidesDefaultArgs": true,
       "enabled": true
     },
     {
@@ -18,7 +19,8 @@
       "command": "npx",
       "args": ["-y", "@mobilenext/mobile-mcp@latest"],
       "description": "手机运营控制, 控制你的手机完成自动化任务",
-      "enable": true
+      "hidesDefaultArgs": true,
+      "enabled": true
     },
     {
       "id": "multimedia-creator",
@@ -37,6 +39,7 @@
         "AGNES_OUTPUT_DIR": "~/HamunaAgent/agnes-output"
       },
       "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）。UV_INDEX_URL 强制 PyPI 官方源（绕开开发机/用户机器设的清华镜像，刚 publish 的包清华镜像可能未同步）。**Version policy**：pin = `agnes-video-25-mcp==0.1.6`（首次 10-30s 拉取 + 缓存到 `~/.cache/uv`），由 `scripts/bump-on-commit.mjs` 的 **AGNES_MCP auto-bump** 段在每次 commit 时自动检测 PyPI latest，mismatch 即 patch 本文件 pin（与 SYSTEM_SKILLS_VERSION auto-bump 同模式）。**手动覆盖**：用户改本文件后 commit（如手动 pin 到旧版本 / 回退）→ bump-on-commit 尊重 wcMcp != headMcp 跳过 auto-bump。bundled uvx 版本由 `scripts/download_uv.ps1` 跟踪 Astral latest release（默认行为；`-Version <tag>` 可临时 pin 实测兼容性），sidecar `agent-session.ts` 把 bundled uvx 目录 prepend 进 MCP spawn env 的 PATH，`.mcp.json` 仍写 `command: 'uvx'` 不暴露机器路径；staged 版本见 `src-tauri/resources/.uv-version`。AGNES_OUTPUT_DIR 用 `~` 路径，依赖 sidecar `buildMcpSubprocessEnv` 注入 HOME/USERPROFILE（macOS/Linux → HOME；Windows → USERPROFILE，server.py `Path.expanduser` 三平台都识别 HOME）。0.1.4+ 支持 AGNES_API_KEYS 多 key fallback：逗号分隔，撞 429 quota / 503 短冷却自动切下一个 key；401 永久禁用。AGNES_API_KEY 单值仍兼容（向后兼容路径）。",
+      "hidesDefaultArgs": true,
       "enabled": true
     }
   ]

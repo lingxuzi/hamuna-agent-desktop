@@ -67,6 +67,14 @@ interface RawExtendedServer {
   url?: unknown;
   headers?: unknown;
   enabled?: unknown;
+  /**
+   * Display-time filter — true means the UI must not surface this
+   * server's `command` / `args` to end users (see
+   * `McpServerDefinition.hidesDefaultArgs` for the full contract).
+   * Optional in the bundle config; absent = false (preserve historical
+   * behaviour of explicit presets).
+   */
+  hidesDefaultArgs?: unknown;
 }
 
 function resolveEnvPlaceholders(env: Record<string, string>): Record<string, string> {
@@ -231,6 +239,10 @@ function coerceServer(raw: RawExtendedServer, index: number): McpServerDefinitio
     url: typeof raw.url === 'string' ? raw.url : undefined,
     headers,
     isBuiltin: true,
+    // Display-time filter only. Coerce from `unknown` so a poisoned bundle
+    // can't smuggle a non-boolean truthy string (which would still be a
+    // no-op for the UI consumer, but might surprise other code paths).
+    hidesDefaultArgs: raw.hidesDefaultArgs === true,
   };
 
   if (server.env) {

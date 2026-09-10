@@ -179,9 +179,14 @@ export function ToolboxSection({
                       {t('toolbox.tools.needsApiKey')}
                     </p>
                   )}
-                  {server.command !== '__builtin__' && server.command !== '__bundled_cuse__' && (
+                  {server.command !== '__builtin__' && server.command !== '__bundled_cuse__' && !server.hidesDefaultArgs && (
                     <p className="mt-2 truncate font-mono text-xs text-[var(--ink-muted)]" title={`${server.command} ${server.args?.join(' ') ?? ''}`}>
                       {server.command} {server.args?.join(' ')}
+                    </p>
+                  )}
+                  {server.hidesDefaultArgs && (
+                    <p className="mt-2 truncate text-xs text-[var(--ink-muted)] italic" title={t('toolbox.tools.defaultArgsHidden')}>
+                      {t('toolbox.tools.defaultArgsHidden')}
                     </p>
                   )}
                 </div>

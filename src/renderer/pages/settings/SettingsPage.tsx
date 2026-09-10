@@ -5454,7 +5454,9 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
           : tSettings('toolbox.dialogs.builtinMcp.serviceUrl')}
         </label>
         <div className="rounded-lg bg-[var(--paper-inset)] px-3 py-2 font-mono text-xs text-[var(--ink-muted)]">
-         {builtinMcpSettings.server.type === 'stdio'
+         {builtinMcpSettings.server.hidesDefaultArgs
+          ? tSettings('toolbox.tools.defaultArgsHidden')
+          : builtinMcpSettings.server.type === 'stdio'
           // Replace the __bundled_* sentinel with its display name so users
           // see "cuse mcp ..." rather than "__bundled_cuse__ mcp ...".
           ? `${builtinMcpSettings.server.command === '__bundled_cuse__' ? 'cuse' : builtinMcpSettings.server.command} ${(getPresetMcpServer(builtinMcpSettings.server.id)?.args ?? []).join(' ')}`

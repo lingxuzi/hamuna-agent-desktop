@@ -1486,7 +1486,8 @@
       "settings": "设置",
       "enabling": "启用中...",
       "enabled": "已启用",
-      "clickToEnable": "点击启用"
+      "clickToEnable": "点击启用",
+      "defaultArgsHidden": "默认命令（供应商私有）"
     },
     "dialogs": {
       "vision": {

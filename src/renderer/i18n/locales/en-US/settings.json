@@ -1486,7 +1486,8 @@
       "settings": "Settings",
       "enabling": "Enabling...",
       "enabled": "Enabled",
-      "clickToEnable": "Click to enable"
+      "clickToEnable": "Click to enable",
+      "defaultArgsHidden": "Default command (vendor private)"
     },
     "dialogs": {
       "vision": {
