@@ -266,7 +266,7 @@ import { ensureImBridgeToolSurface } from './tools/im-bridge-tools';
 import { normalizeHostInteractionCapability } from './host-interaction';
 import { getBuiltinMcpInstance } from './tools/builtin-mcp-registry';
 import { loadExtendedBuiltinMcpServers } from './utils/extended-builtin-mcp';
-import { seedBundledExtendedMcpServers, seedBundledUvToHamunaBin } from './mcp-bundled-seed';
+import { seedBundledExtendedMcpServers } from './mcp-bundled-seed';
 // NOTE: builtin MCP META is auto-registered when agent-session.ts side-effect-imports
 // './tools/builtin-mcp-meta'. No duplicate import needed here.
 
@@ -9677,13 +9677,6 @@ description: >
       // Runs after skill-seed so the user's first MCP list is the bundled list,
       // not the empty preset catalogue.
       seedBundledExtendedMcpServers();
-
-      // Copy bundled uvx.exe to ~/.hamuna/bin/uvx.exe so the MCP stdio spawn
-      // path resolves `uvx` via the user PATH (CLI shim already registers
-      // ~/.hamuna/bin on Windows). The install-dir is not on PATH for NSIS
-      // / .app bundle layouts, so without this copy spawn fails ENOENT even
-      // though getBundledUvPath() reports the binary is present.
-      seedBundledUvToHamunaBin();
 
       // #296 — install the backend auto-title trigger into the turn-hooks slot
       // BEFORE any turn can complete (initializeAgent / pre-warm run below).

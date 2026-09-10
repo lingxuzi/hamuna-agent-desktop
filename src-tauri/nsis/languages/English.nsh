@@ -41,3 +41,10 @@ LangString pythonInstallSuccess ${LANG_ENGLISH} "Python 3.12 installed successfu
 LangString pythonInstallError ${LANG_ENGLISH} "Error: Python 3.12 installation failed with code $1"
 LangString pythonAlreadyInstalled ${LANG_ENGLISH} "Python 3.12 already installed, skipping"
 LangString pythonAbortError ${LANG_ENGLISH} "Failed to install Python 3.12. Some MCP servers that require Python (uvx, etc.) may not work until you install it manually: https://www.python.org/downloads/"
+
+; uvx installation — installs `uv` (which ships a `uvx` trampoline) via
+; pip from the Tsinghua PyPI mirror. Avoids GitHub release direct fetch
+; (slower from China, sometimes blocked) and keeps the bundle lean.
+LangString uvxFallbackInstalling ${LANG_ENGLISH} "Installing uv via pip (Tsinghua mirror)..."
+LangString uvxFallbackSuccess ${LANG_ENGLISH} "uv installed via pip (uvx trampoline on PATH)"
+LangString uvxFallbackError ${LANG_ENGLISH} "uv pip install failed with code $1 (MCPs needing Python may not launch)"

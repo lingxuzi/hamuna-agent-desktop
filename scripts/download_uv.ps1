@@ -1,32 +1,34 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Track the latest Astral uv Windows release and stage it as
-    src-tauri\resources\uvx.exe so the Windows installer can bundle it via
-    bundle.resources. Default behavior fetches the newest published release;
-    pass -Version only for temporary compatibility testing.
+    [DEPRECATED 2026-09-10 — Windows install switched to pip-only.]
+
+    Legacy: track an Astral uv Windows release and stage it as
+    src-tauri\resources\uvx.exe so the Tauri installer could bundle it via
+    bundle.resources. Kept for dev-box offline testing only.
 
 .DESCRIPTION
-    HamunaAgent bundles uv (which provides uvx) on Windows so MCP servers
-    declared with `command: 'uvx'` work out-of-the-box. Astral publishes a
-    single self-contained binary:
-        https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip
+    Windows install no longer bundles uvx.exe — the NSIS installer now does
+    `pip install --user uv` (Tsinghua mirror) and registers the resulting
+    Scripts dir on HKCU\Environment\Path via uvx-path-setup.ps1
+    (see TODO #121 / snapshot.md §3.1).
 
-    By default we pull the latest tag, fetch its `.sha256` sidecar from the
-    same release, and extract `uv.exe` as `uvx.exe` (the install hook is
-    uvx-shaped, not uv-shaped). The resolved version is written to
-    `src-tauri\resources\.uv-version` for `getBundledUvPath` to read as a
-    freshness marker. SHA-256 verification reuses Astral's GitHub sidecar
-    file — same trust model as cuse's R2 sidecar.
+    This script is retained as a dev-box convenience: offline testing
+    (no PyPI access), or reproducing the v0.12.3 → v0.11.33 pin data
+    correction. CI does NOT call it (the Download uvx step in
+    .github/workflows/windows-release.yml was removed in the pip-only flip).
 
-    Pass `-Version <tag>` to pin a specific release (use case: verify the
-    bundled copy against a known-good version before bumping the default).
-    Production install path is always latest — no version is hardcoded in
-    this script or the Tauri bundle config.
+    Pass `-Version <tag>` to pin a specific release. The default follows
+    Astral's `latest` tag; that is **not** the production install path —
+    production install resolves uv via pip at first launch.
+
+    Sidecar uvx resolution is handled by
+    `src/server/utils/runtime.ts::findPipInstalledUvxScriptsDir()`.
 
 .EXAMPLE
+    # Deprecated default — do not use in CI
     .\scripts\download_uv.ps1                  # Track latest Astral uv release
-    .\scripts\download_uv.ps1 -Version 0.11.33 # Pin for temporary compatibility check (overrides default)
+    .\scripts\download_uv.ps1 -Version 0.11.33 # Pin for offline dev-box testing
     .\scripts\download_uv.ps1 -Force           # Re-download latest even if marker matches
     .\scripts\download_uv.ps1 -Clean           # Remove existing uvx.exe + marker
 #>

@@ -6,7 +6,6 @@
  */
 
 import { existsSync } from 'fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -259,76 +258,39 @@ export function getBundledCusePath(): string | null {
 }
 
 /**
- * Get the absolute path to the bundled uvx (Astral uv) binary.
- * Windows-only — uv ships as a single self-contained binary that we rename
- * to `uvx.exe` so MCP servers declared with `command: 'uvx'` find it via
- * plain PATH lookup, and so the spawn path doesn't need to think about the
- * uv→uvx trampoline.
+ * Locate the per-user pip-installed `uvx.exe` Scripts directory on Windows.
+ * The HamunaAgent NSIS installer runs `pip install --user uv` (via
+ * Section UvxFallback in installer.nsi), which PEP 370 places at
+ * `%APPDATA%\Roaming\Python\Python<major><minor>\Scripts\`. That path is
+ * NOT on the system PATH by default — the installer also calls
+ * `uvx-path-setup.ps1` to register it on HKCU\Environment\Path. This
+ * helper exists as a last-resort probe for the Sidecar's MCP spawn path
+ * (agent-session.ts) to prepend the dir when the inherited PATH doesn't
+ * yet reflect the installer write (first launch before Sidecar restart,
+ * or anti-virus / Defender that delayed the env refresh).
  *
- * Probe order (Windows):
- *   1. <install-dir>/uvx.exe                            (Tauri 2 NSIS preferred — confirmed in 0.3.136+ installed builds)
- *   2. <install-dir>/resources/uvx.exe                  (fallback if NSIS layout changes)
- *   3. ~/.hamuna/bin/uvx.exe                            (mcp-bundled-seed.ts copies here on startup; covers
- *                                                        older installs where install-dir uvx.exe is missing or
- *                                                        if the user manually removed bundled resources)
- *   4. <walk-up>/src-tauri/resources/uvx.exe            (dev box)
- *
- * macOS/Linux: returns null (Homebrew / system packages are the convention).
- *
- * Always returns the path to uvx.exe, or null if not present.
+ * Returns null on non-Windows (macOS/Linux rely on Homebrew / system uv
+ * and don't need a probe) or when the dir is not present (user hasn't
+ * run pip install yet).
  */
-export function getBundledUvPath(): string | null {
+export function findPipInstalledUvxScriptsDir(): string | null {
   if (!isWindows()) return null;
 
-  const scriptDir = getScriptDir();
+  // PEP 370 default per-user site on Windows is %APPDATA%\Python\PythonXY
+  // for the SITE-PACKAGES and a sibling `Scripts\` for entry-point
+  // trampolines. We check both %APPDATA%\Roaming (the modern default)
+  // and %LOCALAPPDATA% (older Python + virtualenv layouts) so we cover
+  // any Python distribution the installer might have landed.
+  const candidates: string[] = [];
+  const roaming = process.env.APPDATA;          // %APPDATA%\Roaming\Python\Python312\Scripts
+  if (roaming) candidates.push(resolve(roaming, 'Python', 'Python312', 'Scripts'));
+  const localApp = process.env.LOCALAPPDATA;    // %LOCALAPPDATA%\Programs\Python\Python312\Scripts
+  if (localApp) candidates.push(resolve(localApp, 'Programs', 'Python', 'Python312', 'Scripts'));
 
-  // Production (preferred): Tauri 2 NSIS places uvx.exe flat at install-dir root.
-  // scriptDir is <install-dir>/resources/, so we walk one level up.
-  const rootBin = resolve(scriptDir, '..', 'uvx.exe');
-  if (existsSync(rootBin)) return rootBin;
-
-  // Production (fallback): if Tauri's layout ever changes to nest all
-  // bundle.resources under `resources/`, this catches it without breaking prod.
-  const nestedBin = resolve(scriptDir, 'uvx.exe');
-  if (existsSync(nestedBin)) return nestedBin;
-
-  // Production (user dir fallback): mcp-bundled-seed.ts copies the bundled uvx
-  // here on every sidecar startup. Covers the gap where install-dir uvx.exe is
-  // missing (older releases without the bundle.resources entry, partial
-  // upgrades, anti-virus quarantine of the install dir, etc.). The user dir
-  // path is stable across reinstalls and is on the user PATH via the CLI shim
-  // registration in system_binary.rs (only relevant for new shells — the
-  // Sidecar spawn path prepends the explicit directory instead of relying on
-  // PATH inheritance).
-  const homeBin = getUserHomeBinUvxPath();
-  if (homeBin && existsSync(homeBin)) return homeBin;
-
-  // Development: walk up from scriptDir to find src-tauri/resources/uvx.exe
-  let dir = scriptDir;
-  for (let i = 0; i < 6; i++) {
-    const devBin = resolve(dir, 'src-tauri', 'resources', 'uvx.exe');
-    if (existsSync(devBin)) return devBin;
-    dir = dirname(dir);
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'uvx.exe'))) return dir;
   }
-
   return null;
-}
-
-/**
- * Resolve `~/.hamuna/bin/uvx.exe` lazily — Sidecar startup is hot-path,
- * and a static `import { homedir } from 'node:os'` is fine here because
- * `homedir()` only resolves on the first call (cached internally by Node),
- * and the user dir fallback is probe slot #3 of 4 — most calls short-circuit
- * on slots 1 or 2 before reaching this.
- */
-function getUserHomeBinUvxPath(): string | null {
-  try {
-    const home = homedir();
-    if (!home) return null;
-    return join(home, '.hamuna', 'bin', 'uvx.exe');
-  } catch {
-    return null;
-  }
 }
 
 /**

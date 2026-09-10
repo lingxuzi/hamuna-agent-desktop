@@ -728,6 +728,64 @@ Section PythonInstall
   python_done:
 SectionEnd
 
+; HamunaAgent: uvx fallback — pip-only install (Windows install no
+; longer bundles uvx.exe; see TODO #121). Resolves the user's
+; environment by `pip install uv` from the Tsinghua PyPI mirror
+; (https://pypi.tuna.tsinghua.edu.cn/simple) — uv's PyPI package ships
+; a `uvx` trampoline alongside `uv`, so a successful install unblocks
+; MCP spawns of `uvx ddg-search` / `uvx --from agnes-video-25-mcp
+; agnes-video-25-mcp` without needing the GitHub release direct fetch
+; (which is unreliable behind the GFW for 0.11.x).
+;
+; Skipped entirely in update mode: upgrade flows should rely on the
+; already-registered HKCU\Environment\Path from the previous install,
+; not silently re-fetch (idempotent — pip --upgrade is also a no-op if
+; up to date).
+;
+; Sidecar uvx resolution after install is handled by
+; `src/server/utils/runtime.ts::findPipInstalledUvxScriptsDir()`
+; (probes %APPDATA%\Roaming\Python\Python312\Scripts and
+; %LOCALAPPDATA%\Programs\Python\Python312\Scripts — both are PEP 370
+; per-user pip targets).
+Section UvxFallback
+  ${If} $UpdateMode <> 1
+    DetailPrint "$(uvxFallbackInstalling)"
+    ; Find python.exe — Python 3.12 section above should have just
+    ; installed it to %LocalAppData%\Programs\Python\Python312\python.exe,
+    ; but a user with an existing Python install elsewhere may have a
+    ; `python` on PATH. Probe both.
+    StrCpy $4 ""
+    ${If} ${FileExists} "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
+      StrCpy $4 "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
+    ${Else}
+      ; Fallback: rely on PATH resolution via cmd.exe.
+      StrCpy $4 "python"
+    ${EndIf}
+    ; Use --user so the install doesn't need admin rights, and pin
+    ; to the index-url explicitly so users behind the great firewall
+    ; don't hang on the default pypi.org. The `uv` PyPI package ships
+    ; a `uvx` trampoline alongside `uv`, so a successful install
+    ; unblocks MCP spawns of `uvx --from <pkg> <cmd>` without
+    ; needing a GitHub release direct fetch.
+    ExecWait '"$4" -m pip install --user --index-url https://pypi.tuna.tsinghua.edu.cn/simple --upgrade uv' $1
+    ${If} $1 == 0
+      DetailPrint "$(uvxFallbackSuccess)"
+      ; Persist Scripts dir on HKCU\Environment\Path so future Sidecar
+      ; restarts find `uvx` via system PATH (the per-user pip target
+      ; lives under PEP 370's %APPDATA%\Roaming\Python\Python312\Scripts,
+      ; which is NOT on PATH by default — we have to register it).
+      ; PowerShell script is staged alongside the main exe by Tauri's
+      ; bundle.resources entry (see tauri.windows.conf.json).
+      nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\uvx-path-setup.ps1" "$4"'
+    ${Else}
+      DetailPrint "$(uvxFallbackError)"
+      ; Best-effort, don't abort — MCPs that don't need Python still work.
+    ${EndIf}
+  ${EndIf}
+
+  uvx_done:
+SectionEnd
+
 Section Install
   SetOutPath $INSTDIR
 

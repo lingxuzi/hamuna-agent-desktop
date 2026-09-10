@@ -6,7 +6,7 @@
       "../src-tauri/resources/vcruntime140_1.dll": "vcruntime140_1.dll",
       "../extended_buildin_mcp": "extended_buildin_mcp",
       "../src-tauri/resources/python-3.12.7-amd64.exe": "python-installer.exe",
-      "../src-tauri/resources/uvx.exe": "uvx.exe"
+      "../src-tauri/nsis/uvx-path-setup.ps1": "uvx-path-setup.ps1"
     },
     "windows": {
       "nsis": {

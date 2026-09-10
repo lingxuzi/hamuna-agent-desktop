@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
+import { join, resolve } from 'path';
 import { createRequire } from 'module';
 import { query, getSessionMessages as sdkGetSessionMessages, forkSession as sdkForkSession, deleteSession as sdkDeleteSession, type Query, type SDKUserMessage, type AgentDefinition, type HookInput, type HookJSONOutput, type PreToolUseHookInput, type PostToolUseHookInput, type PermissionRequestHookInput, type SlashCommand as SdkSlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import {
@@ -3612,20 +3612,17 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
       // can work around downstream proxy parser bugs for a specific MCP.
       const mcpEnv = buildMcpSubprocessEnv(process.env, server.env);
 
-      // Bundled uvx PATH injection. Windows installer ships uvx.exe next to
-      // hamuna.exe (see `runtime.ts::getBundledUvPath`); when the user hasn't
-      // installed uv system-wide we prepend the bundled uvx dir to PATH so the
-      // SDK's PATH-based spawn (`command: 'uvx'`) resolves to the bundled copy
-      // without rewriting `command` to an absolute path. One resolution at
-      // spawn, one env write, one log line — no "search everywhere" feel.
+      // uvx PATH injection. The Windows installer no longer bundles a
+      // uvx.exe — it runs `pip install --user uv` (see Section UvxFallback
+      // in installer.nsi) and registers the resulting Scripts dir on
+      // HKCU\Environment\Path so future Sidecar restarts find `uvx` via
+      // system PATH. The probe below is a last-resort fallback for the
+      // edge case where the user just installed and is launching MCPs
+      // BEFORE Sidecar has restarted (inherited PATH still predates the
+      // HKCU write — Windows only refreshes for newly-spawned procs).
       //
-      // Bundled uv version tracks the latest Astral release by default;
-      // `scripts/download_uv.ps1` queries `releases/latest` and stages
-      // `src-tauri/resources/uvx.exe` + writes the resolved tag to
-      // `.uv-version` (read by `getBundledUvPath` as a freshness marker).
-      // `--from <pkg> <cmd>` legacy args in `.mcp.json` /
-      // `extended_buildin_mcp/mcp.json` are tested against the staged binary
-      // in CI — see scripts/download_uv.ps1 SYNOPSIS before bumping.
+      // macOS/Linux rely on Homebrew / system uv being on PATH; this
+      // probe returns null there and we just hope PATH already has it.
       //
       // Python (python / python3) does NOT get this fallback — the installer
       // runs the official Python 3.12 installer which registers python.exe on
@@ -3633,18 +3630,17 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
       // `command_not_found` and the existing runtimeError / runtimeDownloadHint
       // UX kicks in.
       if (command === 'uvx') {
-        const { getBundledUvPath } = await import('./utils/runtime');
-        const bundled = getBundledUvPath();
-        if (bundled) {
-          const uvDir = dirname(bundled);
+        const { findPipInstalledUvxScriptsDir } = await import('./utils/runtime');
+        const scriptsDir = findPipInstalledUvxScriptsDir();
+        if (scriptsDir) {
           const delimiter = process.platform === 'win32' ? ';' : ':';
-          mcpEnv.PATH = `${uvDir}${delimiter}${mcpEnv.PATH}`;
-          console.log(`[agent] MCP ${server.id}: bundled uvx dir prepended to PATH (${uvDir})`);
+          mcpEnv.PATH = `${scriptsDir}${delimiter}${mcpEnv.PATH}`;
+          console.log(`[agent] MCP ${server.id}: pip-installed uvx dir prepended to PATH (${scriptsDir})`);
         } else {
-          // No bundled fallback (macOS/Linux, or Windows setup skipped download_uv.ps1).
-          // Surface a clear hint instead of silently letting PATH spawn fail with
-          // `command_not_found` — users otherwise think the app is broken.
-          console.warn(`[agent] MCP ${server.id}: no bundled uvx found; falling back to PATH. Install uv (https://docs.astral.sh/uv/) or run scripts/download_uv.ps1 on Windows dev.`);
+          // macOS/Linux rely on system uv; Windows users without pip-installed
+          // uv (very rare — installer runs pip unconditionally) get a clear
+          // hint instead of a silent `command_not_found`.
+          console.warn(`[agent] MCP ${server.id}: no uvx on PATH and no pip-installed copy found. Install uv (https://docs.astral.sh/uv/) or reinstall HamunaAgent so the installer can run pip for you.`);
         }
       }
 

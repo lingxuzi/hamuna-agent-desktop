@@ -40,4 +40,10 @@ LangString pythonInstalling ${LANG_SIMPCHINESE} "正在安装 Python 3.12 (仅�
 LangString pythonInstallSuccess ${LANG_SIMPCHINESE} "Python 3.12 安装成功"
 LangString pythonInstallError ${LANG_SIMPCHINESE} "错误：Python 3.12 安装失败, 错误代码: $1"
 LangString pythonAlreadyInstalled ${LANG_SIMPCHINESE} "已检测到 Python 3.12, 跳过安装"
+
+; uvx 安装 — 通过清华 PyPI 镜像安装 `uv` (内含 uvx trampoline)。
+; 避开 GitHub release 直拉（中国大陆访问 GitHub release 慢且偶发被墙）。
+LangString uvxFallbackInstalling ${LANG_SIMPCHINESE} "正在通过 pip 安装 uv (清华镜像)..."
+LangString uvxFallbackSuccess ${LANG_SIMPCHINESE} "uv 已通过 pip 安装完成 (uvx 已在 PATH)"
+LangString uvxFallbackError ${LANG_SIMPCHINESE} "uv pip 安装失败, 错误代码: $1 (依赖 Python 的 MCP 可能无法启动)"
 LangString pythonAbortError ${LANG_SIMPCHINESE} "Python 3.12 安装失败！需要 Python 的 MCP 服务 (如 uvx) 可能无法运行, 请手动安装: https://www.python.org/downloads/"
