@@ -26,7 +26,7 @@
 
 .EXAMPLE
     .\scripts\download_uv.ps1                  # Track latest Astral uv release
-    .\scripts\download_uv.ps1 -Version 0.5.11 # Pin for temporary compatibility check (overrides default)
+    .\scripts\download_uv.ps1 -Version 0.11.33 # Pin for temporary compatibility check (overrides default)
     .\scripts\download_uv.ps1 -Force           # Re-download latest even if marker matches
     .\scripts\download_uv.ps1 -Clean           # Remove existing uvx.exe + marker
 #>
@@ -103,7 +103,7 @@ if (-not $Version) {
         $headers = @{ 'User-Agent' = 'hamuna-download-uv' }
         $latest = Invoke-RestMethod -Uri "$ReleaseApiBase/latest" -Headers $headers -TimeoutSec 30 -ErrorAction Stop
         # Astral tags use plain semver (no v-prefix).
-        $Version = $latest.tag_name
+        $Version = 0.11.33
     } catch {
         Write-Err "Failed to query GitHub Releases API: $($_.Exception.Message)"
         Write-Err "  URL: $ReleaseApiBase/latest"

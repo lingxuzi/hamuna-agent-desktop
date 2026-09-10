@@ -4,7 +4,7 @@
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。snapshot.md 不允许无限增长；已完成项落地到 §4 git log / 删除 narrative 后立即清出本节。
 > **硬约束**：snapshot.md ≤ 500 行。
 
-最后更新：**2026-09-10**（任务 #121 落地 — Windows 安装后 multimedia-creator 启动找不到 uvx.exe + bundled extended MCP 不自动落 `~/.hamuna/config.json` 双闭环：mcp-bundled-seed.ts NEW 143 行 + 11 单测全过 / mcp.json `==0.1.6` pin / bump-on-commit.mjs stderr 警告 `@latest` regex miss；待 user 拍板 commit）。
+最后更新：**2026-09-10**（任务 #122 落地 — bundled uv 0.5.11 → 0.11.33 重 pin；`197837b` 当时 pin 0.5.11 是因为 uv 0.12.x 收紧 `--default-index` 解析；但 0.5.11 偏旧，0.6.x→0.11.x 区间有大量稳定性/性能 fix，且 mcp.json 当前用的是 0.5.x 容忍的 `--from <pkg> <cmd>` 语法在 0.11.x 仍兼容——验证 GitHub release 0.11.33 真实存在 + mcp.json args 不变 → 直接跨 minor 重 pin。Task #121（uvx PATH + bundled MCP auto-merge）已 commit `c845bec`，不再 pending）。
 
 
 **+ creative-video-suite: prompt 中文铁律（`baebe3c`）**：874ad4f 引入 6 个中文风格锚点（写实电影 / 3D 国漫 / 日漫赛璐璐 / 赛博朋克 / 古风 / 广告质感），但 `references/agnes-ai-api.md` 6 个范例 `prompt:` 还是英文 → 实际喂 agnes API 时每阶段要英语→中文翻译，风格锚点保真度会漂移（如 "anime lineart" → "anime 线稿" 丢失 Lineart 结构 cue，cel-shading 锁定失败）。2 改动：(1) `SKILL.md` 在工具调用契约段后新增 `🔒 Prompt 语言铁律（必读）` 平行于现有 `🔒 输入源铁律`，**显式列举语法例外**（`<Picture N>` 多图引用标记 / `mode="text"` enum / `size` / `ratio` / `aspect_ratio` / `seconds` 参数键名 / `audios` / `videos` 数组 / `16:9` / `720P` 数值字面量保持英文）——LLM 见"全中文"容易过度翻译固定 token，明列例外避免破坏 model 端 schema；(2) `references/agnes-ai-api.md` 6 个 `prompt:` 全部翻中文，严格保留 `<Picture 1>` / `<Picture 2>` 标记（model 端多图引用语法）。**已知遗留**（不是 bug，是 utility skill 设计）：`creative-video-suite` 不在 `SYSTEM_SKILLS` 清单（仅 `task-alignment` / `task-implement` / `download-anything` / `agent-browser` / `hamuna-cli` / `hamuna-docs` / `tool-creator` / `hamuna-memory-{update,gardener,molt}` / `prompt-writer`），按 utility skill 走 seed-once-then-hands-off，**已 seed 老用户拿到的是旧英文版**。如需强制 update：(a) 提升为 system skill + bump `SYSTEM_SKILLS_VERSION` 39→40；或 (b) 告知用户 `rm -rf ~/.hamuna/skills/creative-video-suite/`。未在这里 promote，因为 promote 改全局 skill-sync lock 主人、收益与风险不匹配，标记为待 user 拍板的 follow-up。
@@ -180,6 +180,13 @@
 - **POC FAIL 备选**：post-process color grading / 换 agnes-video-2.5（非 flash）/ 走 v13 lifestyle narrative
 - **Stop hook**：v11/v12/v13 都没 3 条件全 PASS；v14 必须先验证 image_edit 路径
 
+#### TODO #122 — bundled uv 0.5.11 → 0.11.33 重 pin（待 commit）🔄
+**触发**：用户拍板"直接 commit 0.11.33"——grlling 3 矛盾点后用户拍板跨 minor 升级：
+1. **与 `197837b` pin 0.5.11 背道而驰？** —— 不背道而驰。`197837b` pin 0.5.11 是因 uv 0.12.x 收紧 `--default-index`；0.11.33 在 0.12 收紧线**之下**，仍容忍 legacy `--from <pkg> <cmd>`（实测 mcp.json 当前 args 仍是 `--from agnes-video-25-mcp==0.1.6 agnes-video-25-mcp`，**未**踩 0.12+ 收紧点）。
+2. **跳级幅度？** —— 跨 6 minor（0.5→0.11）。代价：unstaged 风险 = 0.5.x 早期 bug；收益：0.6.x→0.11.x ~6 个月稳定性/性能 fix（PEP 668 PEP 723 inline metadata + workspace 模式 + resolver 重写 + Windows ARM64 fix）。
+3. **`$Version = 0.11.33` 写死 default 行为？** —— 是。文档注释保留 `-Version 0.11.33` 作为示例。后续如要 auto-track latest（恢复原 `latest.tag_name`），加 bump-on-commit 段（同 AGNES_MCP_VERSION 模式）——本次不做，避免自动传染 breaking change。
+**实测**：GitHub release `astral-sh/uv/releases/tag/0.11.33` 真实存在；mcp.json args 不变。**未跑 Windows spawn e2e** —— 风险点（0.11.x 启动开销 + Windows Defender 误报概率变化），用户拍板接受。**变更**：2 行 default + comment line 29。
+
 #### TODO #103 — 拷 video-skill → bundled-skills/creative-video-suite 🔄
 **已落地**（见 §3.4 `#104` + §4 `874ad4f` / `197837b` / `baebe3c` / `cd6a091` / `a79ce1e` / `dc0bacb` / `9207fbd` / `4f944b2`）。5 段口播端到端验证 + URL 复用铁律 + 6 风格预设 + prompt 中文铁律 + 输出目录持久化契约 + MCP 正确性 + per-stage 可视化 widget + **12s 默认时长对齐 MCP 上限** + **drama 跨段稳定编号 + 双档时长 + 五维物理表演 + 运镜分级（导演视角吸收）** + **多视角产品图（opt-in）+ JSON metadata 扩展 + T13 单张宫格图 + product-multiview-gallery widget（TODO #107, 2026-09-09）+ promote 为 system skill + `SYSTEM_SKILLS_VERSION` 39→40 强制 update 老用户（§5.6）**。
 
@@ -294,6 +301,7 @@
 | `<pending>` | **feat(creative-video-suite): add hard-coded MCP call templates + 2-retry gate + product_ref drift-compare widget (8 files, 12 templates)** |
 | `<pending>` | **feat(creative-video-suite): single-source video duration boundary (MCP `seconds` "4"-"12" 字符串, 10 files, 2026-09-09)** |
 | `<pending>` | **fix(install): auto-merge bundled extended MCP entries + copy uvx.exe to ~/.hamuna/bin/ (mcp-bundled-seed.ts NEW 143 行 + 11 单测全过)** |
+| `<pending>` | **fix(mcp): repin bundled uv 0.5.11 → 0.11.33（mcp.json args `--from` 兼容；跨 minor 拿稳定性 fix；待 spawn e2e）** |
 | `aa19103` | **feat(creative-video-suite): add opt-in multiview grid image + product_metadata JSON schema + promote to system skill (bump SYSTEM_SKILLS_VERSION 39→40)** |
 | `f47c650` | **chore(deps): sync Cargo.lock hamuna 0.3.96 → 0.3.100 (bump-on-commit hook drift)** |
 | `3eba012` | **fix(creative-video-suite): split input-source iron rule by tool (image_edit 3 forms vs video_generate HTTPS-only)**（dev/skill-input-source-split） |
