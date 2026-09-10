@@ -52,6 +52,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          # Cache npm to skip the ~2m51s `npm ci` cold-run on subsequent releases.
+          # Key is auto-derived from package-lock.json hash; cache misses once on
+          # first run, hits on every release that doesn't touch package-lock.
+          # Independent of the existing Swatinem/rust-cache step (separate store).
+          cache: 'npm'
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
