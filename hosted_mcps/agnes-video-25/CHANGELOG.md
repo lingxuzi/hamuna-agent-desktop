@@ -6,6 +6,72 @@ Package: `agnes-video-25-mcp` · PyPI: https://pypi.org/project/agnes-video-25-m
 
 ---
 
+## [0.2.0] — 2026-09-11
+
+### Added
+
+- **`agnes-video-v2.0` model whitelist + parameter translation**:
+  - `MODELS` set now includes `MODEL_V2_NAME = "agnes-video-v2.0"`. Callers may
+    explicitly pass `model="agnes-video-v2.0"` to `agnes25_video_generate`.
+  - **Input surface unchanged**: callers still pass the unified
+    `mode` (`text` / `keyframe` / `reference`), `seconds`, `size`,
+    `aspect_ratio`, `first_frame` / `last_frame`, `images` / `audios` /
+    `videos` fields. The server translates them into v2.0's protocol fields
+    inside `_build_payload`.
+  - **v2.0 protocol mapping**:
+    - `mode="text"` → no `mode` field; v2.0 defaults to text-to-video.
+    - `mode="keyframe"` → `extra_body.mode = "keyframes"` +
+      `extra_body.image = [first_frame, last_frame]` (filtered to non-empty).
+    - `mode="reference"` → rejected with `reference_mode_unsupported` (v2.0
+      docs do not expose `images[]` / `audios[]` / `videos[]` arrays).
+    - `seconds` string → `num_frames` (snapped to the docs-legal set
+      `[81, 121, 241, 441]`) + fixed `frame_rate: 24`.
+    - `size` + `aspect_ratio` → `width` + `height` ints (16-multiple aligned).
+  - **Per-model validation** (`_validate_request`):
+    - v2.0 size set = `{480p, 720p, 1080p}` (lowercase `p`, per docs).
+    - v2.0 aspect_ratio set = `{16:9, 9:16, 1:1, 4:3, 3:4}` (5 ratios — v2.0
+      docs do **not** list `21:9`).
+    - Reject uppercase `720P` for v2.0 (use lowercase `720p`).
+    - Reject `mode="reference"` for v2.0 with `reference_mode_unsupported`.
+
+### Compatibility
+
+- **Backward compatible at the API surface**: tool names + JSON schemas for
+  the existing `mode` / `seconds` / `size` / `aspect_ratio` / media fields are
+  unchanged. New behavior only activates when caller passes
+  `model="agnes-video-v2.0"`.
+- **Backward compatible at the env surface**: `AGNES_API_KEY` and
+  `AGNES_API_KEYS` unchanged.
+- **No automatic fallback**: v2.0 is **whitelist-only**. Callers must opt in
+  explicitly. This preserves the existing "no MCP-side fallback" rule in
+  `bundled-skills/creative-video-suite` (TODO #119 + §5.2).
+
+### Scope-out (deliberate)
+
+- **No caller-facing fields for v2.0-only knobs** (`negative_prompt`,
+  `num_inference_steps`, etc.). v2.0 docs support these, but exposing them
+  would break the "input surface unchanged" contract. Add a follow-up if a
+  caller surfaces a real need.
+- **Skill-side red lines unchanged**:
+  `bundled-skills/creative-video-suite/references/agnes-ai-api.md:261` still
+  lists `agnes-video-v2.0` under "已下线，禁止再使用"; the 9 MCP call templates
+  still hard-code `model="agnes-video-2.5-flash"`. v2.0 is reachable only via
+  explicit non-skill callers until a future session reopens §5.2.
+
+### Tests
+
+- `tests/test_v2_model_whitelist.py` — 42 assertions covering whitelist
+  surface, `seconds` → `num_frames` snap (4 → 81 / 5 → 121 / 8 → 241 /
+  12 → 241 / 18 → 441), aspect_ratio + size → (width, height) int
+  conversion, text-mode payload shape (no `extra_body`, no `seconds`,
+  no `mode`), keyframe-mode payload (`extra_body.image` + `extra_body.mode`),
+  2.5-flash regression guard, and validation rejections
+  (`reference_mode_unsupported`, uppercase `720P`, 21:9).
+- Existing `test_image_paths_dict_tolerance.py` (10/10) and
+  `test_key_pool_cooldown.py` (6/6) pass unchanged.
+
+---
+
 ## [0.1.8] — 2026-09-11
 
 ### Fixed
@@ -120,4 +186,4 @@ First PyPI release.
 [0.1.6]: https://pypi.org/project/agnes-video-25-mcp/0.1.6/
 [0.1.7]: https://pypi.org/project/agnes-video-25-mcp/0.1.7/
 [0.1.8]: https://pypi.org/project/agnes-video-25-mcp/0.1.8/
-[0.1.7]: https://pypi.org/project/agnes-video-25-mcp/0.1.7/
+[0.2.0]: https://pypi.org/project/agnes-video-25-mcp/0.2.0/

@@ -242,7 +242,9 @@
 #### TODO #133 — 工具箱 stdio MCP 启动握手校验 (`/api/mcp/enable`) ✅ DONE
 **触发**：用户报"在工具箱里激活要确保 mcp 服务可以正常启动，目前不是"。`/api/mcp/enable` 三 stdio 分支（generic `which` / npx builtin `--help` warmup / `__bundled_cuse__` binary-existence check）只做浅校验，从不起进程验证 MCP protocol。坏 MCP（binary 在但 init 崩 / 不说 MCP 协议 / bash 引号错位 / 缺 runtime dep）能过 enable，首 turn 才暴露，误导用户"已启用"。**方案**（plan `/home/hmcz/.claude/plans/mossy-dreaming-dewdrop.md`）：抽 `transformMcpServerForSpawn(server)`（NEW `src/server/mcp/mcp-server-transform.ts`）从 `agent-session.ts::buildSdkMcpServers:3472-3713` 的 5 个 inlined 块（cuse sentinel / npx resolve / `buildMcpSubprocessEnv` / uvx PATH / playwright arg），SDK 装配 + 新 validator 共用单一变换源（refactor -80 行，零行为变更已验证）；新 `validateStdioStartup({command,args,env,parentSignal,timeoutMs:15s})`（NEW `src/server/mcp/mcp-startup-validator.ts`）用 `@modelcontextprotocol/sdk@1.29.0` `StdioClientTransport` + `Client.connect()` 真跑 `initialize` JSON-RPC 握手，never-throws 返回 discriminated union → 复用现有 `McpEnableErrorType` enum（`command_not_found` 给 ENOENT，`runtime_error` 给 timeout/JSON-RPC 错误）。cancel + timeout 用 `utils/cancellation.ts::withAbortSignal` + `withBoundedTimeout(close, 2s)` 兜底 subprocess 收尸（防止 SDK subprocess 拒 SIGTERM 时 hang）。`parentSignal` 透传 `request.signal` 让关闭 Settings 面板中途取消 killing child。**接入点**（`src/server/index.ts:4717+` / `4968+` / `5112+` 三分支）：generic 替换 `which`；npx builtin 在 `--help` warmup **之后**追加 handshake（warmup 留作 cache prefetch 不删，避免首次 turn 5-30s 退化）；`__bundled_cuse__` 替换 binary-existence check（fast-fail 仍走 `transformMcpServerForSpawn` 返回 null 的早退路径）。**响应 payload 加性扩展**：`{ success, serverInfo?: { name, version }, handshakeMs? }` — 前端忽略新字段。**测试**（全绿）：9 unit (`mcp-startup-validator.unit.test.ts` mock SDK) + 3 integration (`mcp-startup-validator.integration.test.ts` 用 `__tests__/fixtures/delayed-mcp-server.mjs` 真 spawn)。**scope-out 留 follow-up**：(a) `handleMcpTest` (CLI `hamuna mcp test`) — 暂时不动；(b) `tools/list` 深度验证（捕获 "protocol OK 但 tool 注册崩"）；(c) SSE/HTTP 分支的 `request.signal` 缺口（用本地 AbortController）；(d) 跨 `index.ts:4772` (`'0.1.29'`) / `admin-api.ts:676` (`'1.0'`) 的 `clientInfo.version` 不一致（建议提常量到 shared）。**版本流转**：跟分支末尾 commit。**分支**：`feature/mcp-stdio-startup-validation`（master 不直接 commit）。
 
-### 3.2 P3 多 Key Fallback Pipeline（新）🔄
+#### TODO #134 — agnes-video-25 v0.2.0：agnes-video-v2.0 模型白名单 + 参数转义 🔄
+**触发**：用户要求"agnes-video-25 mcp 增加支持 agnes video 2.0 模型" + 4 轮 grlling 拍板：(1) model ID = `agnes-video-v2.0`（带 v，docs URL `wiki.agnes-ai.com/zh-Hans/docs/agnes-video-v20` 中 model 字段实际就是这个名字——不是 `agnes-video-2.0` 也不是 `agnes-video-v20` URL slug）；(2) 仅白名单（caller 显式 `model="agnes-video-v2.0"`），不加 MCP server 端自动降级；(3) 仅 MCP server 改动，`bundled-skills/creative-video-suite` 红线（TODO #119 + §5.2 "禁止 fallback"）保持；(4) **接口输入参数不变**——v2.0 模型加入参数转义，`mode/seconds/size/first_frame/last_frame/images[]` 字段语义保持，server 内部映射到 v2.0 协议（`mode:"ti2vid"/"keyframes"` + `extra_body.image:[url1,url2]` + `height/width` + `num_frames` + `frame_rate:24`）。**协议差异 vs 现状**：(a) v2.0 size 集合 `{480p,720p,1080p}`（小写 p）vs 2.5-flash `{720P}`（大写 P）；(b) v2.0 aspect_ratio 5 个（`16:9/9:16/1:1/4:3/3:4`，**无 21:9**）vs 2.5-flash 6 个（含 21:9）；(c) v2.0 `mode="reference"` 不支持（v2.0 不接 `images[]/audios[]/videos[]`），命中返 `reference_mode_unsupported` 错误（类比 2.5-flash 的 `videos_unsupported` 模式）；(d) `seconds` 字符串 → `num_frames` 8 倍数 snap 到 `{81,121,241,441}` + `frame_rate=24` 固定。**改动计划**：4 文件（`server.py` + `tests/test_v2_model_whitelist.py` + `pyproject.toml` 0.1.8→0.2.0 + `CHANGELOG.md`）+ 文档（`README.md` / `SKILL.md` 更新描述与能力一致，仍标 hosted_mcps 内部文件）。`extended_buildin_mcp/mcp.json` 的 `multimedia-creator` pin 由 `scripts/bump-on-commit.mjs::AGNES_MCP_VERSION auto-bump` 在 PyPI 0.2.0 publish 后下个 commit 自动 patch。**scope-out 留 follow-up**：(a) caller 显式传 `negative_prompt` / `num_inference_steps` 等 v2.0 独有字段（v2.0 docs 支持，server 未暴露——保持"接口输入参数不变"约束）；(b) creative-video-suite 红线 §5.2 决策同步（用户拍板暂不动）；(c) vendor 0.1.6/0.1.7/0.1.8 → 0.2.0 同步（vendor 即本地，同一文件改动 = 已自动同步；TODO #21 follow-up 仍待清理）。
+
 **目标**：让 `agnes-video-25-mcp` server 在 `AGNES_API_KEY` daily quota 撞顶（429）时自动切换备用 key。解决 2026-09-08 UGC 2nd 跑 5 个 key 撞 daily quota → 17h 阻塞问题。
 
 **Spec 已落地**：`.pavo-research/agnes-multi-key-fallback-spec.md`（~230 行，4 点核心：向后兼容 / in-memory KeyState 状态机 / 入口收敛到 `_request_json` 改 1 处 / 10 个单测 case）。
@@ -268,7 +270,7 @@
 
 ### 3.4 已落地（仅指针，detail 见 §4 + git log）
 
-- #29 tvc-director chatui 渲染层对齐 v0.9 / #97 hosted_mcps/agnes-video-25/ 7 tools / #14 TypeGraph 重构 KB / #16 fresh install kb-relations poller / #12 skill 安装 `/skillname` unknown command 修复 / #98 30s TVC e2e v9 PASS / #99 v10 60s lifestyle TVC PASS / #100 v11 60s TVC ⚠ 部分通过 / #101 v12 60s TVC ⚠ 条件1 PASS / #102 v13 1x5 reference mode ❌ FAIL / #103 creative-video-suite 全量迁移 ✅ DONE / #104 1st UGC 5 段 60s ✅ DONE + URL 复用铁律 / #107 多视角产品图 / #108 视频时长边界 / #111 helper agnes-video-25 路由 / #112 install_paths.md / #113 auto-bump pin / #114 video 轮询 + 串行 / #115 version 文件残留 / #116 SKILL frontmatter auto-bump / #117 required_assets 硬门控 / #118 storyboard JSON schema / #119 model agnes-video-2.5-flash 锁死 / #120 creative-ad-director skill / #121 Windows install MCP auto-merge + uvx PATH（pip-only 落地）/ #122 bundled uv 0.5.11 → 0.11.33 重 pin / #123 getBundledUvPath slot 3 / #124 hidesDefaultArgs / #125 download_uv.ps1 字符串字面量 / #126 install-time `pip install uv` pin 0.11.33 / #127 windows-release.yml install-time smoke test / #128 pip mirror 清华 → 阿里 + PyPI fallback / #131 agnes-video-25 v0.1.7 `_coerce_image_paths_input` helper (user 拍板 trade-off) / #132 v0.1.8 schema 放宽让 helper 可达
+- #29 tvc-director chatui 渲染层对齐 v0.9 / #97 hosted_mcps/agnes-video-25/ 7 tools / #14 TypeGraph 重构 KB / #16 fresh install kb-relations poller / #12 skill 安装 `/skillname` unknown command 修复 / #98 30s TVC e2e v9 PASS / #99 v10 60s lifestyle TVC PASS / #100 v11 60s TVC ⚠ 部分通过 / #101 v12 60s TVC ⚠ 条件1 PASS / #102 v13 1x5 reference mode ❌ FAIL / #103 creative-video-suite 全量迁移 ✅ DONE / #104 1st UGC 5 段 60s ✅ DONE + URL 复用铁律 / #107 多视角产品图 / #108 视频时长边界 / #111 helper agnes-video-25 路由 / #112 install_paths.md / #113 auto-bump pin / #114 video 轮询 + 串行 / #115 version 文件残留 / #116 SKILL frontmatter auto-bump / #117 required_assets 硬门控 / #118 storyboard JSON schema / #119 model agnes-video-2.5-flash 锁死 / #120 creative-ad-director skill / #121 Windows install MCP auto-merge + uvx PATH（pip-only 落地）/ #122 bundled uv 0.5.11 → 0.11.33 重 pin / #123 getBundledUvPath slot 3 / #124 hidesDefaultArgs / #125 download_uv.ps1 字符串字面量 / #126 install-time `pip install uv` pin 0.11.33 / #127 windows-release.yml install-time smoke test / #128 pip mirror 清华 → 阿里 + PyPI fallback / #131 agnes-video-25 v0.1.7 `_coerce_image_paths_input` helper (user 拍板 trade-off) / #132 v0.1.8 schema 放宽让 helper 可达 / #134 agnes-video-25 v0.2.0 `agnes-video-v2.0` 白名单 + 参数转义
 
 ---
 
@@ -277,6 +279,7 @@
 | Commit | 摘要 |
 |--------|------|
 | `<pending>` | **ci(windows): cache npm in windows-release.yml to skip ~2m51s cold npm ci on subsequent releases (snapshot TODO #129, 1 文件 / +5 -0)** |
+| `<see git log --grep="agnes-video-v2.0">` | **feat(agnes-video-25): add agnes-video-v2.0 model whitelist with parameter translation (v0.2.0, snapshot TODO #134, 8 文件 / +1 新 test_v2_model_whitelist.py 42/42 + 0 回归; PyPI 0.2.0 sha256 verified @ 2026-09-11T15:35:04Z; hash 留 git log 维护 — 避免 §4 与 amend 循环漂移)** |
 | `c008edc` | **fix(agnes-video-25): tolerate dict-shaped image_paths (user trade-off) + vendor 0.1.7 PyPI publish + bump mcp.json pin (snapshot TODO #131, vendor 4 文件 + extended_buildin_mcp/mcp.json 1 文件)** |
 | `f65a609` | **fix(agnes-video-25): widen image_paths schema to make 0.1.7 helper reachable (v0.1.8) + vendor publish + bump mcp.json pin (snapshot TODO #132, vendor 3 文件 + extended_buildin_mcp/mcp.json 1 文件)** |
 | `<pending>` | **fix(install): switch pip mirror to Aliyun with PyPI fallback (清华源 2026-09-10 timeout, snapshot TODO #128, 2 文件 / +15 -2)** |
@@ -350,19 +353,18 @@
 
 ### 5.2 决策待定（2026-09-08）
 
-- **creative-video-suite 模型 fallback 策略**（**用户拍板：暂不动**）：
-  - 用户原话："agnes-video-25 默认视频模型 agnes-video-2.5-flash fallback agnes-video-2.0；默认图像模型 agnes-image-2.5-flash fallback agnes-image-2.1-flash"
-  - **矛盾点 1（已上线红线冲突）**：`bundled-skills/creative-video-suite/references/agnes-ai-api.md:261` 写明"旧版本（v2.0）模型 `agnes-video-v2.0` / `agnes-image-2.0-flash` / `agnes-image-2.1-flash` 已全部下线，禁止再使用"——用户给的 fallback 模型名正落在"已下线"清单
-  - **矛盾点 2（重试铁律冲突）**：commit `ac7da54` 的 mcp-call-templates.md §4.1 重试铁律明确"禁止简化 prompt / 禁止删 ref / 禁止降级 mode"——与"fallback 时 prompt + images[] 可调"语义重叠但边界不同（重试 vs fallback）
-  - **现状铁律保持**：model 锁定 2.5-flash 系列 + 2 次重试（**retry 期间 0 微调**，按 attempt 1 原样）+ 不得 fallback（mode / prompt / images[] / size / seconds / aspect_ratio 全部冻结）+ attempt 4 停下交用户
+- **creative-video-suite 模型 fallback 策略**（**2026-09-11 用户拍板：仅 MCP server 加 agnes-video-v2.0 白名单**）：
+  - 用户原话："agnes-video-25 mcp 增加支持 agnes video 2.0 模型" + 4 轮 grlling 拍板
+  - **已落地范围**（TODO #134）：MCP server 加 `agnes-video-v2.0` 白名单 + 参数转义层；接口输入参数不变；caller 显式 `model="agnes-video-v2.0"` 才走 v2.0 路径；不引入 MCP server 端自动降级（不违反"禁止 fallback"铁律）
+  - **skill 端红线保持**：`bundled-skills/creative-video-suite/references/agnes-ai-api.md:261` "v2.0 已下线"段不删 + 9 个模板硬编码 `model="agnes-video-2.5-flash"` 不动 + §5.2 "禁止 fallback"铁律不删 + TODO #119 锁死不松。**矛盾妥协**：MCP 端"available" vs skill 端"never call"——caller 必须显式且非 skill 自动调用才走 v2.0；creative-video-suite skill 永不自调 v2.0
   - **未来 fallback 边界预案**（仅备忘，等下次会话明确再启动）：
     - 触发：2.5-flash 失败 2 次后切换到 fallback 模型
     - fallback 时允许：prompt 微调 / images[] 微调
     - fallback 时禁止：mode / size / seconds / aspect_ratio / 工具切换
   - **潜在下一动作**（用户未确认，不动）：
-    - 选项 a：MCP server 端重新支持 v2.0 / v2.1-flash → 删 agnes-ai-api.md:261 "已下线"段 + 9 个文件补 model= 字段和 fallback 策略
-    - 选项 b：fallback 升级到 2.5-pro 系列（更稳定但更慢/更贵）→ 同上但 fallback 模型名不同
-    - 选项 c：保持现状不动
+    - 选项 a：skill 端放宽"v2.0 已下线"红线（creative-video-suite / tvc-director 接受 v2.0 fallback 路径）
+    - 选项 b：MCP server 端自动降级（v2.0 作为 2.5-flash 失败的自动 fallback）
+    - 选项 c：保持现状（仅 MCP 白名单，skill 端永不调用）
 
 ### 5.5 输入源铁律按工具拆分（2026-09-08 落地，commit `3eba012` on `dev/skill-input-source-split`）✅
 

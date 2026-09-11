@@ -1,6 +1,6 @@
 [project]
 name = "agnes-video-25-mcp"
-version = "0.1.8"
+version = "0.2.0"
 description = "MCP server wrapping Agnes Video 2.5 / 2.5 Flash with reference-mode support (mode=text|keyframe|reference, images/audio/video references)"
 readme = "README.md"
 requires-python = ">=3.10"

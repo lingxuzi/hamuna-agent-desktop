@@ -1,16 +1,16 @@
 # Agnes Video 2.5 MCP Service
 
-Standalone MCP server wrapping **Agnes Video 2.5** and **Agnes Video 2.5 Flash** with first-class `reference` mode support (image / audio / video reference via `images[]` / `audios[]` / `videos[]` arrays and `<Picture N>` / `<Audio N>` / `<Video N>` prompt placeholders).
+Standalone MCP server wrapping **Agnes Video 2.5**, **Agnes Video 2.5 Flash**, and **Agnes Video v2.0** (whitelist, since v0.2.0). First-class `reference` mode support (image / audio / video reference via `images[]` / `audios[]` / `videos[]` arrays and `<Picture N>` / <Audio N>` / `<Video N>` prompt placeholders) is available on 2.5 / 2.5 Flash; v2.0 uses its own protocol (`ti2vid` / `keyframes` + `extra_body.image[]`) which the server translates transparently — callers keep the unified input shape.
 
-This service is **independent** of `hosted_mcps/agnes-mcp-studio/` (which targets the legacy `agnes-video-v2.0` model). Run it alongside or replace — both can coexist.
+This service is **independent** of `hosted_mcps/agnes-mcp-studio/` (which targets the legacy `agnes-video-v2.0` model via the older `ti2vid` / `keyframes` API). Run it alongside or replace — both can coexist.
 
 ## When to use this service
 
 | Need | Use this service | Use `agnes-mcp-studio` |
 |---|---|---|
-| Reference-mode video (images / audios as visual + audio anchors) | ✅ | ❌ (only `extra_body.image` keyframes) |
-| First / last frame control (`first_frame` / `last_frame`) | ✅ | ❌ (only `mode="ti2vid"` + `mode="keyframes"`) |
-| Legacy v2.0 model (back-compat with existing pipelines) | ❌ | ✅ |
+| Reference-mode video (images / audios as visual + audio anchors) | ✅ (2.5 / 2.5 Flash) | ❌ (only `extra_body.image` keyframes) |
+| First / last frame control (`first_frame` / `last_frame`) | ✅ (2.5 / 2.5 Flash / v2.0) | ✅ (raw `ti2vid` / `keyframes`) |
+| Legacy v2.0 model (back-compat with existing pipelines) | ✅ (0.2.0+ whitelist; unified inputs) | ✅ (raw v2.0 protocol) |
 | Image generation (text-to-image, image edit, 2.5-flash) | ✅ | ✅ (parallel surface) |
 
 ## Install

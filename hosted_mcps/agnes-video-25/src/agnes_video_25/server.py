@@ -37,6 +37,11 @@ mcp = FastMCP("Agnes Video 2.5 MCP")
 DEFAULT_BASE_URL = "https://api.agnes-ai.cn/v1"
 DEFAULT_MODEL = "agnes-video-2.5-flash"
 DEFAULT_FLASH_MODEL = "agnes-video-2.5-flash"
+# 2026-09-11: v0.2.0 adds agnes-video-v2.0 whitelist. v2.0 has a different
+# protocol (ti2vid/keyframes + extra_body.image + height/width + num_frames +
+# frame_rate) — we translate the unified `mode/seconds/size/first_frame/...`
+# inputs into v2.0's field set in _build_payload. See CHANGELOG 0.2.0 + TODO #134.
+MODEL_V2_NAME = "agnes-video-v2.0"
 DEFAULT_SIZE = "720P"
 DEFAULT_ASPECT = "16:9"
 DEFAULT_SECONDS = "5"
@@ -50,13 +55,31 @@ DEFAULT_IMAGE_RATIO = "1:1"
 IMAGE_RATIOS = {"1:1", "3:4", "4:3", "16:9", "9:16", "2:3", "3:2", "21:9"}
 IMAGE_SIZES = {"1K", "2K", "3K", "4K"}
 
-MODELS = {DEFAULT_MODEL, DEFAULT_FLASH_MODEL}
+MODELS = {DEFAULT_MODEL, DEFAULT_FLASH_MODEL, MODEL_V2_NAME}
 MODES = {"text", "keyframe", "reference"}
 ASPECT_RATIOS = {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16"}
+# v2.0 docs (wiki.agnes-ai.com/.../agnes-video-v20) list only 5 ratios (no 21:9).
+ASPECT_RATIOS_V2 = {"16:9", "9:16", "1:1", "4:3", "3:4"}
 SIZES_2_5 = {"720P", "1080P", "1K", "2K"}
 SIZES_FLASH = {"720P"}
-IMAGE_LIMITS = {DEFAULT_MODEL: 8, DEFAULT_FLASH_MODEL: 5}
-AUDIO_LIMITS = {DEFAULT_MODEL: 8, DEFAULT_FLASH_MODEL: 3}
+# v2.0 docs use lowercase 'p' and three presets (480p/720p/1080p).
+SIZES_V2 = {"480p", "720p", "1080p"}
+IMAGE_LIMITS = {DEFAULT_MODEL: 8, DEFAULT_FLASH_MODEL: 5, MODEL_V2_NAME: 0}
+AUDIO_LIMITS = {DEFAULT_MODEL: 8, DEFAULT_FLASH_MODEL: 3, MODEL_V2_NAME: 0}
+# v2.0 docs: num_frames <= 441, must follow 8x rule. Legal examples: 81/121/241/441.
+# frame_rate is fixed at 24 (v2.0 docs default; we don't expose it).
+_V2_LEGAL_NUM_FRAMES = (81, 121, 241, 441)
+_V2_FRAME_RATE = 24
+# Map size preset → height in pixels (v2.0 takes height/width ints, not size str).
+_V2_SIZE_TO_HEIGHT = {"480p": 480, "720p": 720, "1080p": 1080}
+# v2.0 docs list 5 aspect ratios (no 21:9).
+_V2_ASPECT_RATIO_PARTS = {
+    "16:9": (16, 9),
+    "9:16": (9, 16),
+    "1:1": (1, 1),
+    "4:3": (4, 3),
+    "3:4": (3, 4),
+}
 
 _WINDOWS_RESERVED_STEMS = {
     "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
@@ -571,13 +594,23 @@ def _validate_request(
     if mode not in MODES:
         return _error("invalid_mode", f"mode must be one of {sorted(MODES)}.",
                       details={"got": mode})
-    valid_sizes = SIZES_FLASH if model == DEFAULT_FLASH_MODEL else SIZES_2_5
+    # Per-model allowed sets (size + aspect_ratio) — v2.0 has its own presets.
+    if model == MODEL_V2_NAME:
+        valid_sizes = SIZES_V2
+        valid_aspects = ASPECT_RATIOS_V2
+    elif model == DEFAULT_FLASH_MODEL:
+        valid_sizes = SIZES_FLASH
+        valid_aspects = ASPECT_RATIOS
+    else:
+        valid_sizes = SIZES_2_5
+        valid_aspects = ASPECT_RATIOS
     if size not in valid_sizes:
         return _error("invalid_size", f"size must be one of {sorted(valid_sizes)} for {model}.",
                       details={"got": size, "allowed": sorted(valid_sizes)})
-    if aspect_ratio not in ASPECT_RATIOS:
-        return _error("invalid_aspect_ratio", f"aspect_ratio must be one of {sorted(ASPECT_RATIOS)}.",
-                      details={"got": aspect_ratio})
+    if aspect_ratio not in valid_aspects:
+        return _error("invalid_aspect_ratio",
+                      f"aspect_ratio must be one of {sorted(valid_aspects)} for {model}.",
+                      details={"got": aspect_ratio, "allowed": sorted(valid_aspects)})
 
     if mode == "keyframe":
         if not first_frame and not last_frame:
@@ -594,6 +627,13 @@ def _validate_request(
         if videos and model == DEFAULT_FLASH_MODEL:
             return _error("videos_unsupported",
                           "videos reference is not supported on agnes-video-2.5-flash.")
+        # v2.0 docs only support mode="ti2vid" / "keyframes"; the unified
+        # `reference` mode (images[]/audios[]/videos[]) has no v2.0 mapping.
+        if model == MODEL_V2_NAME:
+            return _error("reference_mode_unsupported",
+                          "agnes-video-v2.0 uses mode='ti2vid' / 'keyframes' with "
+                          "extra_body.image[]. Use mode='text' or mode='keyframe' "
+                          "with first_frame/last_frame instead.")
         img_limit = IMAGE_LIMITS[model]
         aud_limit = AUDIO_LIMITS[model]
         for field, values, limit in (("images", images, img_limit),
@@ -607,6 +647,96 @@ def _validate_request(
             return _error("media_in_text_mode",
                           "text mode does not accept first_frame/last_frame/images/audios/videos.")
     return None
+
+
+def _v2_seconds_to_num_frames(seconds: str) -> int:
+    """Snap seconds string → nearest v2.0-legal num_frames (8x rule, ≤441)."""
+    try:
+        s = float(seconds)
+    except (TypeError, ValueError):
+        s = 5.0
+    target = s * _V2_FRAME_RATE
+    return min(_V2_LEGAL_NUM_FRAMES, key=lambda n: abs(n - target))
+
+
+def _v2_aspect_to_width_height(size: str, aspect_ratio: str) -> tuple[int, int]:
+    """Compute v2.0 (width, height) ints from size preset + aspect_ratio.
+
+    Width is computed from height (480/720/1080) and the ratio parts, then
+    rounded down to the nearest multiple of 16 for codec alignment. Height is
+    already a multiple of 16 from the presets.
+    """
+    height = _V2_SIZE_TO_HEIGHT[size]
+    w_part, h_part = _V2_ASPECT_RATIO_PARTS[aspect_ratio]
+    width = round(height * w_part / h_part)
+    width = max(16, (width // 16) * 16)
+    height = (height // 16) * 16
+    return width, height
+
+
+def _build_payload(
+    *,
+    model: str,
+    prompt: str,
+    mode: str,
+    seconds: str,
+    size: str,
+    aspect_ratio: str,
+    seed: int | None,
+    first_frame: str | None,
+    last_frame: str | None,
+    images: list[str] | None,
+    audios: list[str] | None,
+    videos: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    if model == MODEL_V2_NAME:
+        # v2.0 protocol: ti2vid/keyframes + extra_body.image + height/width +
+        # num_frames + frame_rate. Caller's unified inputs are translated here.
+        width, height = _v2_aspect_to_width_height(size, aspect_ratio)
+        payload: dict[str, Any] = {
+            "model": MODEL_V2_NAME,
+            "prompt": prompt,
+            "height": height,
+            "width": width,
+            "num_frames": _v2_seconds_to_num_frames(seconds),
+            "frame_rate": _V2_FRAME_RATE,
+        }
+        if seed is not None:
+            payload["seed"] = seed
+        if mode == "keyframe":
+            keyframes = [u for u in (first_frame, last_frame) if u]
+            if keyframes:
+                payload["extra_body"] = {
+                    "image": keyframes,
+                    "mode": "keyframes",
+                }
+        # mode="text" → no extra_body; v2.0 defaults to text-to-video.
+        # mode="reference" → rejected by _validate_request (defensive no-op).
+        return payload
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "mode": mode,
+        "seconds": seconds,
+        "size": size,
+        "aspect_ratio": aspect_ratio,
+    }
+    if seed is not None:
+        payload["seed"] = seed
+    if mode == "keyframe":
+        if first_frame:
+            payload["first_frame"] = first_frame
+        if last_frame:
+            payload["last_frame"] = last_frame
+    elif mode == "reference":
+        if images:
+            payload["images"] = images
+        if audios:
+            payload["audios"] = audios
+        if videos:
+            payload["videos"] = videos
+    return payload
 
 
 def _safe_name(prefix: str, suffix: str) -> str:

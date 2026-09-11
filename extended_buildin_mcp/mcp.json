@@ -29,7 +29,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "agnes-video-25-mcp==0.1.8",
+        "agnes-video-25-mcp==0.2.0",
         "agnes-video-25-mcp"
       ],
       "env": {
@@ -38,7 +38,7 @@
         "AGNES_BASE_URL": "https://api.agnes-ai.cn/v1",
         "AGNES_OUTPUT_DIR": "~/HamunaAgent/agnes-output"
       },
-      "description": "Agnes Video 2.5 / 2.5 Flash（reference / keyframe / text 三模式）+ Agnes Image 2.5 Flash（text-to-image / img2img）",
+      "description": "Agnes Video 2.5 / 2.5 Flash / v2.0（whitelist + 参数转义）+ Agnes Image 2.5 Flash（text-to-image / img2img）",
       "hidesDefaultArgs": true,
       "enabled": true
     }

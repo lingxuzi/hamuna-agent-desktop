@@ -1,18 +1,18 @@
 ---
 name: agnes-video-25-generation
-description: Use only when the user explicitly asks to generate videos or images via Agnes Video 2.5 / 2.5 Flash (keyframe control or image / audio / video reference) or Agnes Image 2.5 Flash. Do not trigger for the legacy agnes-video-v2.0 model, generic video / image generation, or non-Agnes vendors.
+description: Use when the user explicitly asks to generate videos or images via Agnes Video 2.5 / 2.5 Flash (keyframe control or image / audio / video reference), Agnes Video v2.0 (whitelist, since 0.2.0), or Agnes Image 2.5 Flash. Do not trigger for generic video / image generation or non-Agnes vendors.
 ---
 
 # Agnes Video 2.5 Generation
 
-Use the `agnes_video_25` MCP server. If its tools are unavailable, ask the user to check the MCP configuration. Never activate without both the Video 2.5 keyword and a video-generation intent.
+Use the `agnes_video_25` MCP server. If its tools are unavailable, ask the user to check the MCP configuration. Never activate without both the Video 2.5 (or v2.0) keyword and a video-generation intent.
 
 ## Workflow
 
 1. Resolve the prompt language.
 2. Pick the model and mode that match the request.
-3. For video references, the server auto-resolves local paths / data URIs to HTTPS URLs via `img.remit.ee` (see Reference media resolution). No manual upload needed.
-4. Build the prompt with `<Picture N>` / `<Audio N>` / `<Video N>` placeholders when using reference mode.
+3. For video references on 2.5 / 2.5 Flash, the server auto-resolves local paths / data URIs to HTTPS URLs via `img.remit.ee` (see Reference media resolution). No manual upload needed.
+4. Build the prompt with `<Picture N>` / `<Audio N>` / `<Video N>` placeholders when using `mode="reference"` (2.5 / 2.5 Flash only).
 5. Submit, then poll or wait; present `local_path` and `video_url` on success.
 
 ## Tool selection
@@ -21,19 +21,20 @@ Use the `agnes_video_25` MCP server. If its tools are unavailable, ask the user 
 |---|---|---|
 | Pure text-to-video | `agnes25_video_generate` | `mode="text"` |
 | Start/end frame control | `agnes25_video_generate` | `mode="keyframe"`, `first_frame`, `last_frame` |
-| Image / audio / video reference | `agnes25_video_generate` | `mode="reference"`, `images`, `audios`, `videos` |
+| Image / audio / video reference (2.5 / 2.5 Flash only) | `agnes25_video_generate` | `mode="reference"`, `images`, `audios`, `videos` |
 | Text-to-image (default) | `agnes25_image_generate` | `prompt`, `size`, `ratio` |
 | Image-to-image / inpaint | `agnes25_image_edit` | `image_paths` (required), `mask_path?` |
 | Upload local file → HTTPS URL | `agnes25_upload_image` | `path` (absolute local file path) |
 
 ## Model matrix
 
-| Model | `mode` | Multi-image cap | size |
-|---|---|---|---|
-| `agnes-video-2.5` | `text` / `keyframe` / `reference` | images ≤ 8, audios ≤ 8, videos ≤ 1 | 720P / 1080P / 1K / 2K |
-| `agnes-video-2.5-flash` | `text` / `keyframe` / `reference` | images ≤ 5, audios ≤ 3, **no videos** | 720P only |
+| Model | `mode` | Multi-image cap | size | aspect_ratio |
+|---|---|---|---|---|
+| `agnes-video-2.5` | `text` / `keyframe` / `reference` | images ≤ 8, audios ≤ 8, videos ≤ 1 | 720P / 1080P / 1K / 2K | 21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16 |
+| `agnes-video-2.5-flash` | `text` / `keyframe` / `reference` | images ≤ 5, audios ≤ 3, **no videos** | 720P only | 21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16 |
+| `agnes-video-v2.0` (0.2.0+) | `text` / `keyframe` only (**no `reference`**) | — | `480p` / `720p` / `1080p` (lowercase `p`) | 16:9 / 9:16 / 1:1 / 4:3 / 3:4 (**no 21:9**) |
 
-`aspect_ratio` ∈ {`21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`}; `seconds` ∈ `"4"`–`"12"` (default `"5"`).
+`seconds` ∈ `"4"`–`"12"` (default `"5"`) is the unified input on all models; the server translates to v2.0's `num_frames` (snapped to `{81, 121, 241, 441}`) + fixed `frame_rate: 24` when `model="agnes-video-v2.0"`.
 
 ## Reference mode contract
 
