@@ -4715,9 +4715,10 @@ async function main() {
           // the generic `which` preflight below (which would fail with a
           // sentinel-leaking "命令 __bundled_cuse__ 未找到" error).
           if (server.command === '__bundled_cuse__') {
-            const { getBundledCusePath } = await import('./utils/runtime');
-            const cusePath = getBundledCusePath();
-            if (!cusePath) {
+            const { transformMcpServerForSpawn } = await import('./mcp/mcp-server-transform');
+            const { validateStdioStartup } = await import('./mcp/mcp-startup-validator');
+            const transformed = await transformMcpServerForSpawn(server);
+            if (!transformed.spawn) {
               return jsonResponse({
                 success: false,
                 error: {
@@ -4727,8 +4728,25 @@ async function main() {
                 },
               });
             }
-            console.log(`[api/mcp/enable] Bundled cuse: ${server.id} — resolved to ${cusePath}`);
-            return jsonResponse({ success: true });
+            console.log(`[api/mcp/enable] Bundled cuse: ${server.id} — resolved to ${transformed.spawn.command}, running handshake…`);
+            const result = await validateStdioStartup({
+              command: transformed.spawn.command,
+              args: transformed.spawn.args,
+              env: transformed.spawn.env,
+              serverId: server.id,
+              parentSignal: request.signal,
+            });
+            if (!result.ok) {
+              return jsonResponse({
+                success: false,
+                error: result.error,
+              });
+            }
+            return jsonResponse({
+              success: true,
+              ...(result.serverInfo ? { serverInfo: result.serverInfo } : {}),
+              handshakeMs: result.handshakeMs,
+            });
           }
 
           // SSE/HTTP types: validate remote URL is reachable and protocol matches
@@ -5106,44 +5124,84 @@ async function main() {
                   },
                 });
               }
-              return jsonResponse({ success: true });
+
+              // Warmup passed: now do the actual MCP handshake to verify
+              // the package's entrypoint speaks the MCP protocol. This is
+              // the protection layer the old `npx --help` preflight missed
+              // — a package can successfully print `--help` but still
+              // crash on `initialize` (e.g. missing runtime dep).
+              const { transformMcpServerForSpawn } = await import('./mcp/mcp-server-transform');
+              const { validateStdioStartup } = await import('./mcp/mcp-startup-validator');
+              const transformed = await transformMcpServerForSpawn(server);
+              if (!transformed.spawn) {
+                console.warn(`[api/mcp/enable] ${server.id}: ${transformed.skipReason}; skipping post-warmup handshake.`);
+                return jsonResponse({ success: true });
+              }
+              console.log(`[api/mcp/enable] ${server.id}: post-warmup handshake → ${transformed.spawn.command} ${transformed.spawn.args.join(' ')}`);
+              const result = await validateStdioStartup({
+                command: transformed.spawn.command,
+                args: transformed.spawn.args,
+                env: transformed.spawn.env,
+                serverId: server.id,
+                parentSignal: request.signal,
+              });
+              if (!result.ok) {
+                return jsonResponse({
+                  success: false,
+                  error: result.error,
+                });
+              }
+              return jsonResponse({
+                success: true,
+                ...(result.serverInfo ? { serverInfo: result.serverInfo } : {}),
+                handshakeMs: result.handshakeMs,
+              });
             }
 
-            // Custom MCP or non-npx command → check if command exists in user's shell PATH
-            const { spawn } = await import('child_process');
-            const { getShellEnv } = await import('./utils/shell');
-            const checkCmd = process.platform === 'win32' ? 'where' : 'which';
+            // Custom MCP or non-npx command → spawn the subprocess and run
+            // a real `initialize` MCP handshake. The old `which <command>`
+            // preflight only checked binary existence, which passed through
+            // broken wrappers (bash quoting, misconfigured envs, etc.).
+            const { transformMcpServerForSpawn } = await import('./mcp/mcp-server-transform');
+            const { validateStdioStartup } = await import('./mcp/mcp-startup-validator');
 
-            return new Promise<Response>((resolve) => {
-              const proc = spawn(checkCmd, [command], { stdio: 'ignore', env: getShellEnv() });
-
-              proc.on('error', () => {
-                resolve(jsonResponse({
-                  success: false,
-                  error: {
-                    type: 'command_not_found',
-                    command,
-                    message: `命令 "${command}" 未找到`,
-                    ...getCommandDownloadInfo(command),
-                  }
-                }));
+            const transformed = await transformMcpServerForSpawn(server);
+            if (!transformed.spawn) {
+              // Sentinel or platform mismatch (e.g. __bundled_cuse__ on Linux).
+              // Preserve today's command_not_found UX so existing Settings UI
+              // surfaces the same hint text.
+              console.warn(`[api/mcp/enable] ${server.id}: ${transformed.skipReason}; skipping handshake.`);
+              return jsonResponse({
+                success: false,
+                error: {
+                  type: 'command_not_found',
+                  command,
+                  message: `命令 "${command}" 未找到 (${transformed.skipReason ?? 'transform failed'})`,
+                  ...getCommandDownloadInfo(command),
+                },
               });
-
-              proc.on('close', (code) => {
-                if (code === 0) {
-                  resolve(jsonResponse({ success: true }));
-                } else {
-                  resolve(jsonResponse({
-                    success: false,
-                    error: {
-                      type: 'command_not_found',
-                      command,
-                      message: `命令 "${command}" 未找到`,
-                      ...getCommandDownloadInfo(command),
-                    }
-                  }));
-                }
+            }
+            console.log(`[api/mcp/enable] ${server.id}: handshake → ${transformed.spawn.command} ${transformed.spawn.args.join(' ')}`);
+            const result = await validateStdioStartup({
+              command: transformed.spawn.command,
+              args: transformed.spawn.args,
+              env: transformed.spawn.env,
+              serverId: server.id,
+              parentSignal: request.signal,
+            });
+            if (!result.ok) {
+              return jsonResponse({
+                success: false,
+                error: {
+                  ...result.error,
+                  ...getCommandDownloadInfo(command),
+                },
               });
+            }
+            return jsonResponse({
+              success: true,
+              ...(result.serverInfo ? { serverInfo: result.serverInfo } : {}),
+              handshakeMs: result.handshakeMs,
             });
           }
 

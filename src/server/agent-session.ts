@@ -18,7 +18,7 @@ import { evaluateSkillReload, type SkillReloadResult } from './utils/skill-reloa
 // type without importing the utils module directly.
 export type { SkillReloadResult } from './utils/skill-reload';
 export { evaluateSkillReload } from './utils/skill-reload';
-import { resolveNpxMcpInvocation } from './utils/mcp-command';
+import { transformMcpServerForSpawn } from './mcp/mcp-server-transform';
 import { getCrossPlatformEnv } from './utils/platform';
 import { ensureDirSync } from './utils/fs-utils';
 import { getHamunaAgentNpmGlobalBinDir, getHamunaAgentNpmGlobalPrefix, scrubHamunaAgentNpmPrefixEnv } from './utils/npm-prefix-env';
@@ -77,7 +77,6 @@ import {
   initializeProxyStateFromCurrentSettings,
   setProcessProxyConfig,
 } from './proxy-state';
-import { buildMcpSubprocessEnv } from './session-core/mcp-env-policy';
 import { resolveManagedOAuthCredential, type ManagedOAuthPurpose } from './utils/management-api-client';
 // Phase E (PRD 0.2.7): the sidecar file watcher (`file-watcher.ts` →
 // SSE `workspace:files-changed`) is removed. The renderer subscribes to
@@ -173,7 +172,6 @@ import type { ImagePayload, ResolvedImagePayload } from './runtimes/types';
 import { messageAttachmentsFromImagePayloads, resolveImagePayloads } from './runtimes/image-payload';
 import { buildBuiltinMediaAttachments, saveExtractedToolResultAttachments } from './runtimes/builtin-media-attachments';
 import {
-  getHamunaAgentUserDir,
   trySyncProjectUserConfigFiles,
   type ProjectUserConfigSyncOptions,
 } from './utils/project-user-config-sync';
@@ -3570,96 +3568,12 @@ async function buildSdkMcpServers(): Promise<Record<string, McpServerEntry>> {
     }
 
     if (server.type === 'stdio' && server.command) {
-      let command = server.command;
-      // Defensive: args may be non-array (e.g. boolean `true`) due to CLI parsing bugs or manual config edits
-      let args = [...(Array.isArray(server.args) ? server.args : [])];
-
-      // Sentinel: bundled cuse (computer-use) binary — resolve to the
-      // platform-specific path shipped in the app bundle. If the binary is
-      // missing (unsupported platform, or a dev build without the binary
-      // downloaded yet), skip the MCP with a warning rather than crashing
-      // the session.
-      if (command === '__bundled_cuse__') {
-        const { getBundledCusePath } = await import('./utils/runtime');
-        const cusePath = getBundledCusePath();
-        if (!cusePath) {
-          console.warn(`[agent] MCP ${server.id}: bundled cuse binary not found (platform=${process.platform}); skipping. Run scripts/download_cuse.sh to install.`);
-          continue;
-        }
-        command = cusePath;
-        console.log(`[agent] MCP ${server.id}: resolved to bundled cuse at ${cusePath}`);
+      const transformed = await transformMcpServerForSpawn(server);
+      if (!transformed.spawn) {
+        console.warn(`[agent] MCP ${server.id}: ${transformed.skipReason}; skipping.`);
+        continue;
       }
-
-      // Bundled uvx fallback: runs after `mcpEnv` is built below — see
-      // "Bundled uvx PATH injection" block post-mcpEnv construction.
-
-
-      // For npx commands: prefer system npx → bundled Node.js npx → bun x
-      // System Node.js is maintained by the user's package manager, more reliable than our bundled npm.
-      // Bundled Node.js serves as fallback for users who don't have Node.js installed.
-      if (command === 'npx') {
-        const invocation = resolveNpxMcpInvocation(args, {
-          pinPresetPackages: server.isBuiltin === true,
-        });
-        command = invocation.command;
-        args = invocation.args;
-        console.log(`[agent] MCP ${server.id}: resolved npx via ${invocation.source} (${command})`);
-      }
-
-      // Build MCP config with proxy env inherited from parent Sidecar.
-      // MCP subprocesses need outbound proxy inheritance, while localhost still
-      // needs NO_PROXY protection. Per-server env has final authority so users
-      // can work around downstream proxy parser bugs for a specific MCP.
-      const mcpEnv = buildMcpSubprocessEnv(process.env, server.env);
-
-      // uvx PATH injection. The Windows installer no longer bundles a
-      // uvx.exe — it runs `pip install --user uv` (see Section UvxFallback
-      // in installer.nsi) and registers the resulting Scripts dir on
-      // HKCU\Environment\Path so future Sidecar restarts find `uvx` via
-      // system PATH. The probe below is a last-resort fallback for the
-      // edge case where the user just installed and is launching MCPs
-      // BEFORE Sidecar has restarted (inherited PATH still predates the
-      // HKCU write — Windows only refreshes for newly-spawned procs).
-      //
-      // macOS/Linux rely on Homebrew / system uv being on PATH; this
-      // probe returns null there and we just hope PATH already has it.
-      //
-      // Python (python / python3) does NOT get this fallback — the installer
-      // runs the official Python 3.12 installer which registers python.exe on
-      // PATH. If PATH doesn't have it (very old install), spawn fails with
-      // `command_not_found` and the existing runtimeError / runtimeDownloadHint
-      // UX kicks in.
-      if (command === 'uvx') {
-        const { findPipInstalledUvxScriptsDir } = await import('./utils/runtime');
-        const scriptsDir = findPipInstalledUvxScriptsDir();
-        if (scriptsDir) {
-          const delimiter = process.platform === 'win32' ? ';' : ':';
-          mcpEnv.PATH = `${scriptsDir}${delimiter}${mcpEnv.PATH}`;
-          console.log(`[agent] MCP ${server.id}: pip-installed uvx dir prepended to PATH (${scriptsDir})`);
-        } else {
-          // macOS/Linux rely on system uv; Windows users without pip-installed
-          // uv (very rare — installer runs pip unconditionally) get a clear
-          // hint instead of a silent `command_not_found`.
-          console.warn(`[agent] MCP ${server.id}: no uvx on PATH and no pip-installed copy found. Install uv (https://docs.astral.sh/uv/) or reinstall HamunaAgent so the installer can run pip for you.`);
-        }
-      }
-
-      // Playwright MCP: two user-selectable modes (configured in Settings UI):
-      // - Isolated (--isolated): concurrent browser sessions, storage-state for login
-      // - Persistent (--user-data-dir): full profile, single-session only
-      // Backend just respects the args and injects --storage-state when applicable.
-      if (server.id === 'playwright') {
-        const hasIsolated = args.includes('--isolated');
-
-        // In isolated mode, inject --storage-state if file exists (for login state reuse)
-        if (hasIsolated) {
-          const storageStatePath = join(getHamunaAgentUserDir(), 'browser-storage-state.json');
-          if (existsSync(storageStatePath) && !args.some((a: string) => a.startsWith('--storage-state'))) {
-            args.push(`--storage-state=${storageStatePath}`);
-            console.log(`[agent] MCP playwright: injecting storage-state from ${storageStatePath}`);
-          }
-        }
-      }
+      const { command, args, env: mcpEnv } = transformed.spawn;
 
       // Log full command for debugging (after Playwright arg rewrite so logs show actual args)
       console.log(`[agent] MCP ${server.id}: ${command} ${args.join(' ')}`);
