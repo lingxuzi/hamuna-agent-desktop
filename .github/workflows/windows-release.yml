@@ -160,6 +160,31 @@ jobs:
       - name: Build frontend
         run: npm run build:web
 
+      # Sync the pinned agnes-video-25-mcp version from its pyproject.toml
+      # into the NSIS installer's `!define` placeholder (snapshot TODO #135).
+      # Single source of truth = hosted_mcps/agnes-video-25/pyproject.toml::
+      # version — the install-time wheel prefetch
+      # (Section HostedMcpPrefetch + hosted-mcp-prefetch.ps1) must match the
+      # pin in extended_buildin_mcp/mcp.json's `uvx --from` so the prefetched
+      # wheel is exactly what MCP spawns later resolve to. Drift is gated by
+      # the install-time smoke test (next step, assert 6/3).
+      - name: Sync agnes-video-25-mcp pin to installer.nsi
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $toml = Get-Content "hosted_mcps/agnes-video-25/pyproject.toml" -Raw
+          $ver = ($toml | Select-String -Pattern '(?m)^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          if (-not $ver) { throw "could not parse version from pyproject.toml" }
+          Write-Host ">>> Pinned agnes-video-25-mcp version: $ver"
+          $path = "src-tauri/nsis/installer.nsi"
+          $content = Get-Content $path -Raw
+          $updated = $content -replace '(?m)^!define\s+AGNES_VIDEO_25_MCP_VERSION\s+"[^"]*"', "!define AGNES_VIDEO_25_MCP_VERSION `"$ver`""
+          if ($updated -eq $content) {
+            throw "no !define AGNES_VIDEO_25_MCP_VERSION placeholder found in $path — placeholder syntax may have drifted; check installer.nsi header"
+          }
+          Set-Content -Path $path -Value $updated -NoNewline
+          Write-Host ">>> Sed-injected AGNES_VIDEO_25_MCP_VERSION=$ver into installer.nsi"
+
       # ============================================================
       # 4. Tauri release build
       # ============================================================
@@ -289,14 +314,37 @@ jobs:
           $env:Path = (Split-Path $uvxExe -Parent) + ";" + $env:Path
           $env:UV_INDEX_URL = "https://pypi.org/simple"
           $env:AGNES_API_KEY = "smoke-test-dummy"
-          $smokeOut = & uvx --from agnes-video-25-mcp==0.1.6 agnes-video-25-mcp --help 2>&1
+          $smokeOut = & uvx --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help 2>&1
           $smokeCode = $LASTEXITCODE
           if ($smokeCode -ne 0) {
             Write-Host "--- uvx --from smoke output ---"
             Write-Host $smokeOut
-            throw "`uvx --from agnes-video-25-mcp==0.1.6 agnes-video-25-mcp --help` exited $smokeCode — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real"
+            throw "`uvx --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help` exited $smokeCode — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real"
           }
           Write-Host ">>> uvx --from multimedia-creator MCP smoke OK"
+
+          # Assert 5/3 (TODO #135 — hosted-mcp-prefetch.ps1 ran and cached
+          # the wheel into per-user site-packages). If the install-time
+          # prefetch regressed (mirror chain drift, soft-fail swallowed a
+          # real install-time failure, version pin drifted from
+          # pyproject.toml), `pip show agnes-video-25-mcp` will not see the
+          # wheel, and the first user video request will fall through to
+          # the live PyPI fetch — exactly the slow path we're trying to
+          # avoid.
+          $pipShowAgnes = & $python -m pip show agnes-video-25-mcp 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            throw "`pip show agnes-video-25-mcp` failed (exit $LASTEXITCODE): $pipShowAgnes — install-time Section HostedMcpPrefetch did not cache the wheel"
+          }
+          $agnesVer = ($pipShowAgnes | Select-String -Pattern "^Version:\s*(.+)$").Matches[0].Groups[1].Value
+          # Re-read pyproject.toml here so the smoke test stays correct if
+          # the version drifts in a future release — no literal pin in
+          # the workflow file.
+          $expectedVer = (Get-Content "hosted_mcps/agnes-video-25/pyproject.toml" -Raw |
+            Select-String -Pattern '(?m)^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          if ($agnesVer -ne $expectedVer) {
+            throw "agnes-video-25-mcp version pin mismatch: expected $expectedVer (from pyproject.toml), got $agnesVer — sync step or installer.nsi Section HostedMcpPrefetch are misaligned"
+          }
+          Write-Host ">>> pip-installed agnes-video-25-mcp = $agnesVer"
 
           # Cleanup so a follow-up local run on this runner finds nothing
           # leaked. Use the bundled uninstaller; NSIS /S is silent.

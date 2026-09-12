@@ -47,6 +47,15 @@ ${StrLoc}
 !define COPYRIGHT "{{copyright}}"
 !define OUTFILE "{{out_file}}"
 !define ARCH "{{arch}}"
+
+; HamunaAgent: pinned agnes-video-25-mcp version for install-time wheel prefetch.
+; Single source of truth = hosted_mcps/agnes-video-25/pyproject.toml::version.
+; windows-release.yml "Sync agnes-video-25-mcp pin to installer.nsi" step
+; (snapshot TODO #135) sed-replaces the placeholder with the real version
+; before `tauri build` invokes makensis, so this literal matches the wheel
+; on PyPI that `extended_buildin_mcp/mcp.json` will then `uvx --from`.
+; Drift is gated by windows-release.yml step 4b smoke test (assert 6/3).
+!define AGNES_VIDEO_25_MCP_VERSION "__AGNES_VIDEO_25_MCP_VERSION__"
 !define ADDITIONALPLUGINSPATH "{{additional_plugins_path}}"
 !define ALLOWDOWNGRADES "{{allow_downgrades}}"
 !define DISPLAYLANGUAGESELECTOR "{{display_language_selector}}"
@@ -728,6 +737,44 @@ Section PythonInstall
   python_done:
 SectionEnd
 
+; HamunaAgent: hosted MCP wheel prefetch (snapshot TODO #135). Runs
+; immediately after Section PythonInstall (NOT inside Section UvxFallback)
+; so the wheel lands in PEP 370 user-site-packages the moment Python is
+; available — `uvx --from agnes-video-25-mcp` MCP spawns from then on
+; hit the cache instead of doing a live PyPI fetch on first user turn.
+;
+; Inline ExecWait (no separate PowerShell script) by user request:
+; "setup 安装完python之后直接pip 安装" — matches the §UvxFallback uv-install
+; pattern verbatim, soft-fail (no abort on failure; just DetailPrint
+; warning + Sidecar retries on first spawn via the existing uvx --from
+; path). Version is sed-injected from pyproject.toml::version by
+; windows-release.yml "Sync agnes-video-25-mcp pin" step.
+;
+; Mirror chain rationale: matches §UvxFallback (TODO #128) — primary
+; Aliyun for southern-China / Telecom users, fallback PyPI official,
+; Tsinghua **NOT** in the chain (observed timeout 2026-09-10).
+Section HostedMcpPrefetch
+  ${If} $UpdateMode <> 1
+    StrCpy $4 ""
+    ${If} ${FileExists} "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
+      StrCpy $4 "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
+    ${Else}
+      StrCpy $4 "python"
+    ${EndIf}
+    DetailPrint "Prefetching agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION} wheel (best-effort)"
+    ExecWait '"$4" -m pip install --user --index-url https://mirrors.aliyun.com/pypi/simple/ --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
+    ${If} $1 != 0
+      DetailPrint "Aliyun PyPI mirror failed (exit $1); falling back to PyPI official"
+      ExecWait '"$4" -m pip install --user --index-url https://pypi.org/simple --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
+    ${EndIf}
+    ${If} $1 == 0
+      DetailPrint "Hosted MCP wheel prefetch OK (agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION})"
+    ${Else}
+      DetailPrint "Hosted MCP wheel prefetch failed (exit $1) — Sidecar will retry on first spawn"
+    ${EndIf}
+  ${EndIf}
+SectionEnd
+
 ; HamunaAgent: uvx fallback — pip-only install (Windows install no
 ; longer bundles uvx.exe; see TODO #121). Resolves the user's
 ; environment by `pip install uv` from the Tsinghua PyPI mirror
@@ -806,8 +853,6 @@ Section UvxFallback
       ; Best-effort, don't abort — MCPs that don't need Python still work.
     ${EndIf}
   ${EndIf}
-
-  uvx_done:
 SectionEnd
 
 Section Install
