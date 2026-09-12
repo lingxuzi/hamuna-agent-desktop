@@ -615,51 +615,9 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
   getVersion().then(setAppVersion).catch(() => setAppVersion('unknown'));
  }, []);
 
- // QR code URL for user community section
- // Tauri: Downloads on first launch and caches locally, CDN in browser
- const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
- const [qrCodeLoading, setQrCodeLoading] = useState(false);
  const [logExporting, setLogExporting] = useState(false);
  const [showBugReport, setShowBugReport] = useState(false);
  const helperAgentDefaults = useHelperAgentModelDefaults();
-
- // Load QR code when entering about section
- useEffect(() => {
-  if (activeSection !== 'about') return;
-
-  let cancelled = false;
-  setQrCodeLoading(true);
-
-  if (isTauriEnvironment()) {
-   // Tauri mode: Call backend API to download & cache QR code
-   // The API downloads from CDN on first call, then serves from cache
-   apiGetJson<{ success: boolean; dataUrl?: string }>('/api/assets/qr-code')
-    .then(result => {
-     if (cancelled) return;
-     if (result.success && result.dataUrl) {
-      setQrCodeDataUrl(result.dataUrl);
-     }
-    })
-    .catch((error) => {
-     if (cancelled) return;
-     console.error('[Settings] Failed to load QR code:', error);
-     // Silently fail - QR code section will remain hidden
-    })
-    .finally(() => {
-     if (!cancelled) setQrCodeLoading(false);
-    });
-  } else {
-   // Browser mode: Direct CDN URL
-   setQrCodeDataUrl('https://download.hamuna.io/assets/feedback_qr_code.png');
-   setQrCodeLoading(false);
-  }
-
-  return () => {
-   cancelled = true;
-   setQrCodeDataUrl(null); // 统一清理，避免内存泄漏
-   setQrCodeLoading(false);
-  };
- }, [activeSection]);
 
 
  // Collect React and Rust logs for Settings page (since we don't have TabProvider)

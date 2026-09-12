@@ -95,12 +95,15 @@ export default function ForceUpdateModal({
 
   // Refs so the stable `useEffect` keydown handler reads the latest props
   // without rebuilding on every render — see react_stability_rules Rule 3.
+  // Synchronized inside useEffect (not during render) per react-hooks/refs.
   const updatingRef = useRef(updating);
-  updatingRef.current = updating;
   const onUpdateRef = useRef(onUpdate);
-  onUpdateRef.current = onUpdate;
   const onQuitRef = useRef(onQuit);
-  onQuitRef.current = onQuit;
+  useEffect(() => {
+    updatingRef.current = updating;
+    onUpdateRef.current = onUpdate;
+    onQuitRef.current = onQuit;
+  }, [updating, onUpdate, onQuit]);
 
   const handleUpdate = useCallback(() => {
     if (updatingRef.current) return;

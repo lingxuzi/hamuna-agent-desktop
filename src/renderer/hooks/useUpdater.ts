@@ -346,6 +346,7 @@ export function useUpdater(): UseUpdaterResult {
   }, ac.signal);
 
   return () => ac.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- toast comes from useToast() hook with stable identity across renders; re-binding would churn the listenWithCleanup subscriptions for no benefit
  }, []);
 
  // Windows: check for pending update on disk at startup

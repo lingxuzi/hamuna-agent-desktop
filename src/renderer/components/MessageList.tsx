@@ -258,15 +258,20 @@ const MessageList = memo(function MessageList({
   const liveHeightEstimateSeed = heightEstimateSeed?.length === messages.length ? heightEstimateSeed : undefined;
 
   // Random "苦思冥想中…" line — pick once per streaming turn, not per message.
-  // Deps intentionally `[isLoading, t]`: re-randomize only at the loading
-  // boundary so the line stays stable while characters stream in. Re-randomizing
-  // every message used to flip `streamingStatusMessage`'s identity and cascade
-  // into a FooterComponent rebuild → Virtuoso footer remount → StatusTimer
-  // reset its `setInterval` mid-stream.
-  const streamingStatusMessage = useMemo(
-    () => getRandomStreamingMessage(t),
-    [isLoading, t]
+  // Re-randomize only at the loading boundary (isLoading flips) so the line
+  // stays stable while characters stream in. Re-randomizing every message used
+  // to flip `streamingStatusMessage`'s identity and cascade into a
+  // FooterComponent rebuild → Virtuoso footer remount → StatusTimer reset
+  // its `setInterval` mid-stream. Implemented via useState + useEffect (not
+  // useMemo with intentional deps) so the dependency is honest: useEffect
+  // runs when `[isLoading, t]` change, and useState holds the value stable
+  // between those boundaries.
+  const [streamingStatusMessage, setStreamingStatusMessage] = useState(() =>
+    getRandomStreamingMessage(t)
   );
+  useEffect(() => {
+    setStreamingStatusMessage(getRandomStreamingMessage(t));
+  }, [isLoading, t]);
 
   // ExitPlanMode
   const exitPlanModeAnchorId = useMemo(() => {
