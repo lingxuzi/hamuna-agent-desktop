@@ -117,8 +117,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path src-tauri/resources -Force | Out-Null
-          Copy-Item "$env:SystemRoot\System32\vcruntime140.dll" "src-tauri/resources/" -Force
-          Copy-Item "$env:SystemRoot\System32\vcruntime140_1.dll" "src-tauri/resources/" -Force
+          # Join-Path + single-quoted path: PowerShell 7.4+ strict escape
+          # validation rejects unknown backslash escapes inside double-quoted
+          # strings (e.g. `\S`, `\v` in `\System32\`), so the path literal
+          # must NOT live inside a double-quoted expandable string.
+          Copy-Item (Join-Path $env:SystemRoot 'System32\vcruntime140.dll') "src-tauri/resources/" -Force
+          Copy-Item (Join-Path $env:SystemRoot 'System32\vcruntime140_1.dll') "src-tauri/resources/" -Force
 
       # ============================================================
       # 3. 构建前端 / 后端产物
@@ -252,7 +256,9 @@ jobs:
             Where-Object { $_.Name -notmatch "portable" } | Select-Object -First 1
           if (-not $nsisExe) { throw "NSIS installer not found — build failed" }
 
-          $testDir = "C:\HamunaAgent-Test"
+          # single-quoted: PS 7.4+ strict escape rejects `\H` in a
+          # double-quoted literal; no variable expansion needed here.
+          $testDir = 'C:\HamunaAgent-Test'
           if (Test-Path $testDir) {
             $prevUninst = Join-Path $testDir "Uninstall.exe"
             if (Test-Path $prevUninst) { Start-Process -FilePath $prevUninst -ArgumentList "/S" -Wait | Out-Null }
@@ -266,7 +272,12 @@ jobs:
 
           # PythonInstall (NSIS §PythonInstall, 689-729): per-user 3.12.7 lands at
           # %LOCALAPPDATA%\Programs\Python\Python312\python.exe with PrependPath=1.
-          $python = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+          # Join-Path + single-quoted path: the trailing `Programs\Python\...`
+          # segment contains `\P` which PS 7.4+ strict escape rejects inside
+          # double-quoted strings. Expand `$env:LOCALAPPDATA` as the parent
+          # (outside any literal), then concatenate the literal segment via
+          # Join-Path so backslashes stay literal.
+          $python = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
           if (-not (Test-Path $python)) { throw "Python not installed at $python — Section PythonInstall didn't run" }
 
           # UvxFallback (NSIS §UvxFallback, 750-798): pip-only path.
@@ -275,7 +286,7 @@ jobs:
           # exercises the actual compatibility surface).
           $pipShow = & $python -m pip show uv 2>&1
           if ($LASTEXITCODE -ne 0) { throw "`pip show uv` failed: $pipShow" }
-          $uvVersion = ($pipShow | Select-String -Pattern "^Version:\s*(.+)$").Matches[0].Groups[1].Value
+          $uvVersion = ($pipShow | Select-String -Pattern '^Version:\s*(.+)$').Matches[0].Groups[1].Value
           if ($uvVersion -ne "0.11.33") { throw "uv version pin failed: expected 0.11.33, got $uvVersion" }
           Write-Host ">>> pip-installed uv = $uvVersion"
 
@@ -283,8 +294,8 @@ jobs:
           # `findPipInstalledUvxScriptsDir` (src/server/utils/runtime.ts:276)
           # probes — if it lands elsewhere, sidecar resolution silently fails.
           $uvxPaths = @(
-            (Join-Path $env:APPDATA "Roaming\Python\Python312\Scripts\uvx.exe"),
-            (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\Scripts\uvx.exe")
+            (Join-Path $env:APPDATA 'Roaming\Python\Python312\Scripts\uvx.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\Scripts\uvx.exe')
           )
           $uvxExe = $uvxPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $uvxExe) { throw "uvx.exe not found in PEP 370 candidate paths: $($uvxPaths -join '; ')" }
@@ -296,11 +307,11 @@ jobs:
           # also does. Missing → next-run user gets a different PATH than the
           # installer just produced, classic "works on first launch, broken
           # after restart" trap.
-          $regPath = (Get-ItemProperty -Path "HKCU:\Environment" -Name "Path" -ErrorAction SilentlyContinue).Path
-          if (-not $regPath -or $regPath -notlike "*Python312\Scripts*") {
-            throw "HKCU\Environment\Path not updated by uvx-path-setup.ps1 (got: '$regPath')"
+          $regPath = (Get-ItemProperty -Path 'HKCU:\Environment' -Name 'Path' -ErrorAction SilentlyContinue).Path
+          if (-not $regPath -or $regPath -notlike '*Python312\Scripts*') {
+            throw 'HKCU\Environment\Path not updated by uvx-path-setup.ps1 (got: ''' + $regPath + ''')'
           }
-          Write-Host ">>> HKCU\Environment\Path contains Scripts dir"
+          Write-Host '>>> HKCU\Environment\Path contains Scripts dir'
 
           # Assert 4/3 (the one that actually validates the 0.12.x --from
           # rationale): invoke `uvx --from <pkg> <cmd>` exactly as
@@ -319,7 +330,7 @@ jobs:
           if ($smokeCode -ne 0) {
             Write-Host "--- uvx --from smoke output ---"
             Write-Host $smokeOut
-            throw "`uvx --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help` exited $smokeCode — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real"
+            throw '`uvx --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help` exited ' + $smokeCode + ' — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real'
           }
           Write-Host ">>> uvx --from multimedia-creator MCP smoke OK"
 
@@ -333,16 +344,16 @@ jobs:
           # avoid.
           $pipShowAgnes = & $python -m pip show agnes-video-25-mcp 2>&1
           if ($LASTEXITCODE -ne 0) {
-            throw "`pip show agnes-video-25-mcp` failed (exit $LASTEXITCODE): $pipShowAgnes — install-time Section HostedMcpPrefetch did not cache the wheel"
+            throw '`pip show agnes-video-25-mcp` failed (exit ' + $LASTEXITCODE + '): ' + $pipShowAgnes + ' — install-time Section HostedMcpPrefetch did not cache the wheel'
           }
-          $agnesVer = ($pipShowAgnes | Select-String -Pattern "^Version:\s*(.+)$").Matches[0].Groups[1].Value
+          $agnesVer = ($pipShowAgnes | Select-String -Pattern '^Version:\s*(.+)$').Matches[0].Groups[1].Value
           # Re-read pyproject.toml here so the smoke test stays correct if
           # the version drifts in a future release — no literal pin in
           # the workflow file.
           $expectedVer = (Get-Content "hosted_mcps/agnes-video-25/pyproject.toml" -Raw |
             Select-String -Pattern '(?m)^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
           if ($agnesVer -ne $expectedVer) {
-            throw "agnes-video-25-mcp version pin mismatch: expected $expectedVer (from pyproject.toml), got $agnesVer — sync step or installer.nsi Section HostedMcpPrefetch are misaligned"
+            throw 'agnes-video-25-mcp version pin mismatch: expected ' + $expectedVer + ' (from pyproject.toml), got ' + $agnesVer + ' — sync step or installer.nsi Section HostedMcpPrefetch are misaligned'
           }
           Write-Host ">>> pip-installed agnes-video-25-mcp = $agnesVer"
 
@@ -360,9 +371,11 @@ jobs:
       - name: Install rclone
         shell: pwsh
         run: |
-          $zip = "$env:TEMP\rclone.zip"
+          # Join-Path + single-quoted literal: PS 7.4+ strict escape rejects
+          # `\r` in a double-quoted expandable string.
+          $zip = Join-Path $env:TEMP 'rclone.zip'
           Invoke-WebRequest -Uri "https://downloads.rclone.org/rclone-current-windows-amd64.zip" -OutFile $zip -UseBasicParsing
-          $dir = "$env:TEMP\rclone"
+          $dir = Join-Path $env:TEMP 'rclone'
           if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
           Expand-Archive -Path $zip -DestinationPath $dir -Force
           $exe = Get-ChildItem -Path $dir -Recurse -Filter "rclone.exe" | Select-Object -First 1
