@@ -290,20 +290,35 @@ jobs:
           if ($uvVersion -ne "0.11.33") { throw "uv version pin failed: expected 0.11.33, got $uvVersion" }
           Write-Host ">>> pip-installed uv = $uvVersion"
 
-          # Assert 2/3: uvx.exe landed in one of the two PEP 370 paths that
+          # Assert 2/3: uv.exe landed in one of the two PEP 370 paths that
           # `findPipInstalledUvxScriptsDir` (src/server/utils/runtime.ts:276)
           # probes — if it lands elsewhere, sidecar resolution silently fails.
-          $uvxPaths = @(
-            (Join-Path $env:APPDATA 'Roaming\Python\Python312\Scripts\uvx.exe'),
-            (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\Scripts\uvx.exe')
+          #
+          # **Why uv.exe and not uvx.exe**: uv 0.11.33 is a maturin Rust
+          # binary wheel with NO `[project.scripts]` entry_points — the wheel
+          # only ships `uv.exe`. `uvx` on PyPI / docs.astral.sh is just an
+          # alias for `uv tool run` (same binary, different argv[0]). So
+          # `pip install --user uv` never produces `uvx.exe`, and probing
+          # for it always misses. TODO #139 still owes us a production-side
+          # rewrite of mcp-server-transform.ts (spawn `uv tool run` instead
+          # of `uvx`); for now the CI smoke-test exercises the same command
+          # shape directly so the assertion is meaningful.
+          $uvPaths = @(
+            # `$env:APPDATA` already ends in `\AppData\Roaming`, so the child
+            # is `Python\…` not `Roaming\Python\…` (Join-Path does NOT
+            # de-duplicate the trailing segment — verified on runner output
+            # 2026-09-13: candidate 1 was
+            # `…\AppData\Roaming\Roaming\Python\…\uvx.exe` and missed).
+            (Join-Path $env:APPDATA 'Python\Python312\Scripts\uv.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\Scripts\uv.exe')
           )
-          $uvxExe = $uvxPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $uvxExe) { throw "uvx.exe not found in PEP 370 candidate paths: $($uvxPaths -join '; ')" }
-          Write-Host ">>> uvx.exe at: $uvxExe"
+          $uvExe = $uvPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $uvExe) { throw "uv.exe not found in PEP 370 candidate paths: $($uvPaths -join '; ')" }
+          Write-Host ">>> uv.exe at: $uvExe"
 
           # Assert 3/3: HKCU\Environment\Path was registered by
           # uvx-path-setup.ps1 (paired with Section UvxFallback) so a fresh
-          # shell can find uvx without the AppLayer env-wrangling the sidecar
+          # shell can find uv without the AppLayer env-wrangling the sidecar
           # also does. Missing → next-run user gets a different PATH than the
           # installer just produced, classic "works on first launch, broken
           # after restart" trap.
@@ -314,25 +329,27 @@ jobs:
           Write-Host '>>> HKCU\Environment\Path contains Scripts dir'
 
           # Assert 4/3 (the one that actually validates the 0.12.x --from
-          # rationale): invoke `uvx --from <pkg> <cmd>` exactly as
-          # extended_buildin_mcp/mcp.json does for the multimedia-creator MCP.
-          # If uv 0.12.x (without the 0.11.33 pin) ever reaches an end user,
-          # THIS is the call that breaks. We stage AGNES_API_KEY to a dummy
-          # value so server start prints `--help` cleanly without hitting the
-          # real API — `uvx --from ... <cmd> --help` is the canonical smoke
-          # for "uvx can resolve and bootstrap the wheel" without needing
-          # credentials or network egress.
-          $env:Path = (Split-Path $uvxExe -Parent) + ";" + $env:Path
+          # rationale): invoke `uv tool run --from <pkg> <cmd>` — the modern
+          # spelling of the legacy `uvx --from <pkg> <cmd>`. uv 0.11.33
+          # does not ship a uvx.exe, so this is what every MCP spawn that
+          # wants `uvx` semantics actually runs against. If uv 0.12.x
+          # (without the 0.11.33 pin) ever reaches an end user, THIS is
+          # the call that breaks. We stage AGNES_API_KEY to a dummy value
+          # so server start prints `--help` cleanly without hitting the
+          # real API — `uv tool run --from ... <cmd> --help` is the
+          # canonical smoke for "uv tool run can resolve and bootstrap the
+          # wheel" without needing credentials or network egress.
+          $env:Path = (Split-Path $uvExe -Parent) + ";" + $env:Path
           $env:UV_INDEX_URL = "https://pypi.org/simple"
           $env:AGNES_API_KEY = "smoke-test-dummy"
-          $smokeOut = & uvx --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help 2>&1
+          $smokeOut = & uv tool run --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help 2>&1
           $smokeCode = $LASTEXITCODE
           if ($smokeCode -ne 0) {
-            Write-Host "--- uvx --from smoke output ---"
+            Write-Host "--- uv tool run --from smoke output ---"
             Write-Host $smokeOut
-            throw '`uvx --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help` exited ' + $smokeCode + ' — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real'
+            throw '`uv tool run --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help` exited ' + $smokeCode + ' — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real'
           }
-          Write-Host ">>> uvx --from multimedia-creator MCP smoke OK"
+          Write-Host ">>> uv tool run --from multimedia-creator MCP smoke OK"
 
           # Assert 5/3 (TODO #135 — hosted-mcp-prefetch.ps1 ran and cached
           # the wheel into per-user site-packages). If the install-time
