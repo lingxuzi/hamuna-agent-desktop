@@ -743,6 +743,14 @@ SectionEnd
 ; available — `uvx --from agnes-video-25-mcp` MCP spawns from then on
 ; hit the cache instead of doing a live PyPI fetch on first user turn.
 ;
+; **Runs on both fresh install AND upgrade** (no `$UpdateMode <> 1` guard,
+; unlike §PythonInstall / §UvxFallback). Upgrade users previously kept
+; whatever `agnes-video-25-mcp` they had on first install, never picking
+; up the new pin from `hosted_mcps/agnes-video-25/pyproject.toml::version`
+; that windows-release.yml syncs in — so vendor 0.2.0 changes never
+; reached installed users. Removing the guard lets `pip install --user
+; --upgrade` bump the wheel to the current pin on every install run.
+;
 ; Inline ExecWait (no separate PowerShell script) by user request:
 ; "setup 安装完python之后直接pip 安装" — matches the §UvxFallback uv-install
 ; pattern verbatim, soft-fail (no abort on failure; just DetailPrint
@@ -754,24 +762,22 @@ SectionEnd
 ; Aliyun for southern-China / Telecom users, fallback PyPI official,
 ; Tsinghua **NOT** in the chain (observed timeout 2026-09-10).
 Section HostedMcpPrefetch
-  ${If} $UpdateMode <> 1
-    StrCpy $4 ""
-    ${If} ${FileExists} "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
-      StrCpy $4 "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
-    ${Else}
-      StrCpy $4 "python"
-    ${EndIf}
-    DetailPrint "Prefetching agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION} wheel (best-effort)"
-    ExecWait '"$4" -m pip install --user --index-url https://mirrors.aliyun.com/pypi/simple/ --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
-    ${If} $1 != 0
-      DetailPrint "Aliyun PyPI mirror failed (exit $1); falling back to PyPI official"
-      ExecWait '"$4" -m pip install --user --index-url https://pypi.org/simple --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
-    ${EndIf}
-    ${If} $1 == 0
-      DetailPrint "Hosted MCP wheel prefetch OK (agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION})"
-    ${Else}
-      DetailPrint "Hosted MCP wheel prefetch failed (exit $1) — Sidecar will retry on first spawn"
-    ${EndIf}
+  StrCpy $4 ""
+  ${If} ${FileExists} "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
+    StrCpy $4 "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
+  ${Else}
+    StrCpy $4 "python"
+  ${EndIf}
+  DetailPrint "Prefetching agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION} wheel (best-effort)"
+  ExecWait '"$4" -m pip install --user --index-url https://mirrors.aliyun.com/pypi/simple/ --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
+  ${If} $1 != 0
+    DetailPrint "Aliyun PyPI mirror failed (exit $1); falling back to PyPI official"
+    ExecWait '"$4" -m pip install --user --index-url https://pypi.org/simple --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
+  ${EndIf}
+  ${If} $1 == 0
+    DetailPrint "Hosted MCP wheel prefetch OK (agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION})"
+  ${Else}
+    DetailPrint "Hosted MCP wheel prefetch failed (exit $1) — Sidecar will retry on first spawn"
   ${EndIf}
 SectionEnd
 
