@@ -181,15 +181,23 @@ export const CODEX_SUBSCRIPTION_PROVIDER_ID = 'codex-sub';
 export const XAI_SUBSCRIPTION_PROVIDER_ID = 'xai-sub';
 export const XAI_SUBSCRIPTION_API_BASE_URL = 'https://api.x.ai/v1';
 
+/** 中国广电 Token 平台（宁夏广电）：机器码自动注册 + 余额计费的 LLM provider。
+ *  LLM 走 Anthropic 原生协议，账务（注册/查余额/充值）走独立 REST 接口。 */
+export const NXGD_PROVIDER_ID = 'nxgd';
+export const NXGD_LLM_BASE_URL = 'https://ai-models.cloudwasu.cn';
+export const NXGD_BILLING_BASE_URL = 'https://nxgd.ai-models.cloudwasu.cn';
+
 export type BuiltinSubscriptionProviderId =
   | typeof SUBSCRIPTION_PROVIDER_ID
-  | typeof XAI_SUBSCRIPTION_PROVIDER_ID;
+  | typeof XAI_SUBSCRIPTION_PROVIDER_ID
+  | typeof NXGD_PROVIDER_ID;
 
 export function isBuiltinSubscriptionProviderId(
   providerId: string | null | undefined,
 ): providerId is BuiltinSubscriptionProviderId {
   return providerId === SUBSCRIPTION_PROVIDER_ID
-    || providerId === XAI_SUBSCRIPTION_PROVIDER_ID;
+    || providerId === XAI_SUBSCRIPTION_PROVIDER_ID
+    || providerId === NXGD_PROVIDER_ID;
 }
 
 type ProviderOrderable = {
@@ -344,7 +352,8 @@ export type ProviderExecution =
 export type SubscriptionAuthPolicy =
   | { kind: 'sdk-native' }
   | { kind: 'host-managed-oauth' }
-  | { kind: 'runtime-managed' };
+  | { kind: 'runtime-managed' }
+  | { kind: 'host-managed-auto-register' };
 
 /** Non-secret reference carried by builtin ProviderEnv for host-owned OAuth. */
 export type ManagedProviderCredential = {
@@ -1280,6 +1289,25 @@ export function applyManagedCodexProviderReadiness(
 }
 
 export const PRESET_PROVIDERS: Provider[] = [
+  {
+    id: NXGD_PROVIDER_ID,
+    name: '广电 (云广智能)',
+    subtitle: '机器码自动注册 · 余额计费',
+    vendor: '宁夏广电',
+    cloudProvider: '广电云',
+    type: 'subscription',
+    subscriptionAuth: { kind: 'host-managed-auto-register' },
+    primaryModel: 'claude-sonnet-5',
+    isBuiltin: true,
+    enabled: true,
+    modelListUrl: `${NXGD_LLM_BASE_URL}/v1/models`,
+    config: {
+      baseUrl: NXGD_LLM_BASE_URL,
+      timeout: 60_000,
+    },
+    modelAliases: { ...ANTHROPIC_ALIASES },
+    models: ANTHROPIC_MODELS,
+  },
   {
     id: 'anthropic-sub',
     name: 'Anthropic (订阅)',

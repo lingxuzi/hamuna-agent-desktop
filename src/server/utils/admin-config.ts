@@ -38,7 +38,9 @@ import {
   withManagedCodexProviderCatalog,
   XAI_SUBSCRIPTION_API_BASE_URL,
   XAI_SUBSCRIPTION_PROVIDER_ID,
+  NXGD_PROVIDER_ID,
 } from '../../shared/config-types';
+import { getNxgdApiKeySync } from '../nxgd-auth';
 import { isRuntimeBackedProvider, managedCodexProviderPermissionToRuntimePermission } from '../../shared/providerExecution';
 import type { AgentConfig, ChannelConfig } from '../../shared/types/agent';
 import {
@@ -875,14 +877,32 @@ export function resolveProviderEnv(
 
   // Anthropic subscription remains SDK-native. Grok subscription is builtin
   // too, but its OAuth grant is owned by Rust and referenced here without a
-  // bearer so the Bridge can resolve it per request.
+  // bearer so the Bridge can resolve it per request. 广电 (nxgd) is
+  // host-managed but its bearer comes from a server-side auto-register flow,
+  // not the OAuth grant path — handled by the dedicated branch below.
   const subscriptionAuth = provider.subscriptionAuth as SubscriptionAuthPolicy | undefined;
   const subscriptionAuthKind = provider.type === 'subscription'
     ? subscriptionAuth?.kind
     : undefined;
   const isManagedOauth = subscriptionAuthKind === 'host-managed-oauth';
-  if (provider.type === 'subscription' && !isManagedOauth) return undefined;
+  const isAutoRegister = subscriptionAuthKind === 'host-managed-auto-register';
+  if (provider.type === 'subscription' && !isManagedOauth && !isAutoRegister) return undefined;
   if (isManagedOauth && providerId !== XAI_SUBSCRIPTION_PROVIDER_ID) return undefined;
+
+  // 广电：机器码驱动的自动注册；apiKey 由 server 端 nxgd-auth.ts 模块管理。
+  // 启动时已 preload 到 module-level 缓存（见 preloadNxgdAuth），sync 读即可。
+  if (isAutoRegister && providerId === NXGD_PROVIDER_ID) {
+    const nxgdKey = getNxgdApiKeySync();
+    if (!nxgdKey) return undefined;
+    const providerConfig = (provider.config ?? {}) as Record<string, unknown>;
+    return {
+      providerId,
+      providerName: typeof provider.name === 'string' ? provider.name : providerId,
+      baseUrl: providerConfig.baseUrl ? String(providerConfig.baseUrl) : undefined,
+      apiKey: nxgdKey,
+      authType: 'api_key',
+    };
+  }
 
   // Get API key from config. PRD 0.2.9 — also reject whitespace-only keys
   // (Codex review): a value like `"  "` is truthy and would silently be

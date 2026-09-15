@@ -279,6 +279,32 @@
         "verification_error": "Grok model or protocol verification failed. Try again"
       }
     },
+    "nxgd": {
+      "description": "Machine-code auto-registration · pay-as-you-go balance · low-balance reminder under ¥5",
+      "reconnect": "Refresh connection",
+      "status": {
+        "idle": "Not connected",
+        "registering": "Auto-registering…",
+        "registered": "Connected",
+        "lowBalance": "Low balance",
+        "error": "Connection failed"
+      },
+      "balance": {
+        "refresh": "Refresh balance"
+      },
+      "recharge": {
+        "title": "Top up",
+        "subtitle": "Pick an amount and complete payment",
+        "confirm": "Confirm top-up",
+        "custom": "Custom amount",
+        "customPlaceholder": "0.1 ~ 5000",
+        "failed": "Failed to create order. Try again later.",
+        "iframeHint": "After paying, the browser will redirect to Alipay. You can close this window if it already did.",
+        "modal": {
+          "later": "Later"
+        }
+      }
+    },
     "managedCodex": {
       "settingsTitle": "Codex Subscription Settings",
       "settingsDescription": "Use a ChatGPT Codex subscription account",

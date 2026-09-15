@@ -70,6 +70,8 @@ tantivy = "0.22"
 tantivy-jieba = "0.11"
 notify-debouncer-full = "0.6"
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+# 硬件指纹第二因子：网卡 MAC 地址（en0 / 第一块物理网卡），OS 重装不变
+mac_address = "1.1"
 trash = "5.2.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 sha2 = "0.10"

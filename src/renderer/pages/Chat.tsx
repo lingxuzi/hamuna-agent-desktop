@@ -68,7 +68,7 @@ import { isDebugMode } from '@/utils/debug';
 import { getChannelTypeLabel } from '@/utils/taskCenterUtils';
 import { appendCronPromptToDraft } from '@/utils/cronComposerRecovery';
 import { launchSupportDiagnostics } from '@/utils/supportDiagnostics';
-import { CODEX_SUBSCRIPTION_PROVIDER_ID, type PermissionMode, type McpServerDefinition, type McpEnableError, type Provider, getEffectiveModelAliases } from '@/config/types';
+import { CODEX_SUBSCRIPTION_PROVIDER_ID, NXGD_PROVIDER_ID, type PermissionMode, type McpServerDefinition, type McpEnableError, type Provider, getEffectiveModelAliases } from '@/config/types';
 import { syncMcpServerNames } from '@/components/tools/toolBadgeConfig';
 import {
   getAllMcpServers,
@@ -141,6 +141,8 @@ import {
   shouldSessionSnapshotUseProviderPicker,
 } from '@/utils/sessionSnapshotProviderProjection';
 import { coerceRuntimeBirthPermissionMode } from '../../shared/runtimeBirthFields';
+import NxgdRechargeModal from '@/components/NxgdRechargeModal';
+import { useNxgdBalanceGuard } from '@/hooks/useNxgdBalanceGuard';
 // CronTaskConfig type is used via useCronTask hook
 
 import { getRichDocKind, isPreviewable, type RichDocKind } from '../../shared/fileTypes';
@@ -580,6 +582,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     selectedProviderAvailable,
     fallbackProvider,
   });
+  const nxgdGuard = useNxgdBalanceGuard(currentProvider?.id === NXGD_PROVIDER_ID);
   const currentProviderForHistory = sessionSnapshotOwnsConfig
     ? selectedProviderExact
     : currentProvider;
@@ -3684,6 +3687,11 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
       return false;
     }
 
+    // 广电：余额 < 5 元时弹充值 modal，不发送（pit-of-success: 阻止 silent failure）。
+    if (currentProviderRef.current?.id === NXGD_PROVIDER_ID && await nxgdGuard.check()) {
+      return false;
+    }
+
     // Cross-runtime guard: session was created by external runtime (Codex/CC) but
     // current runtime is builtin. Show confirm dialog instead of sending directly.
     if (isCrossRuntimeSession) {
@@ -4882,6 +4890,12 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
 
   return (
     <div className="relative flex h-full flex-row overflow-hidden overscroll-none bg-[var(--paper-elevated)] text-[var(--ink)]">
+      <NxgdRechargeModal
+        open={nxgdGuard.showModal}
+        balance={nxgdGuard.balance ?? 0}
+        onClose={nxgdGuard.hide}
+        onPaid={nxgdGuard.hide}
+      />
       {/* Left side: chat area (+ side workspace when wide) */}
       <div
         className={`relative flex min-w-0 flex-row overflow-hidden ${!isDraggingSplit ? 'transition-[width] duration-300 ease-in-out' : ''}`}

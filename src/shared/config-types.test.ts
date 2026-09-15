@@ -408,10 +408,10 @@ describe('Managed Codex provider readiness', () => {
     const catalog = withManagedCodexProviderCatalog(PRESET_PROVIDERS, DEFAULT_CONFIG);
 
     expect(catalog.slice(0, 4).map(provider => provider.id)).toEqual([
+      'nxgd',
       SUBSCRIPTION_PROVIDER_ID,
       CODEX_SUBSCRIPTION_PROVIDER_ID,
       XAI_SUBSCRIPTION_PROVIDER_ID,
-      'anthropic-api',
     ]);
   });
 

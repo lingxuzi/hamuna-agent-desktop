@@ -24,6 +24,7 @@ import ProxyScopeDialog from '@/components/ProxyScopeDialog';
 import WorkspaceConfigPanel from '@/components/WorkspaceConfigPanel';
 import ModelManagementPanel from '@/components/ModelManagementPanel';
 import GrokSubscriptionProvider from '@/components/GrokSubscriptionProvider';
+import NxgdSubscriptionProvider from '@/components/NxgdSubscriptionProvider';
 import SubscriptionProviderCardContent from '@/components/SubscriptionProviderCardContent';
 import { discoverGrokModels } from '@/config/services/grokSubscriptionService';
 import UsageStatsPanel from '@/components/UsageStatsPanel';
@@ -31,6 +32,7 @@ import {
  getEffectiveModelAliases,
  CODEX_SUBSCRIPTION_PROVIDER_ID,
  XAI_SUBSCRIPTION_PROVIDER_ID,
+ NXGD_PROVIDER_ID,
  normalizeDisabledProviderIds,
  normalizeProviderOrder,
  splitProviderModelInput,
@@ -4059,7 +4061,9 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
 
           {/* Subscription type - show status */}
           {provider.type === 'subscription' && (
-           provider.id === XAI_SUBSCRIPTION_PROVIDER_ID
+           provider.id === NXGD_PROVIDER_ID
+            ? <NxgdSubscriptionProvider />
+            : provider.id === XAI_SUBSCRIPTION_PROVIDER_ID
             ? <GrokSubscriptionProvider
              onAuthChanged={async () => {
               await refreshConfig();

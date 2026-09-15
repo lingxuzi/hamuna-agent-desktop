@@ -1085,5 +1085,11 @@
         "19": "Taking your question seriously..."
       }
     }
+  },
+  "nxgd": {
+    "modal": {
+      "title": "Insufficient balance — please top up",
+      "subtitle": "Current balance ¥{{balance}}. Top up to continue the conversation."
+    }
   }
 }

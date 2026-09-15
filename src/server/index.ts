@@ -689,6 +689,8 @@ import type { AgentConfig } from '../shared/types/agent';
 import type { SessionMetadata } from './types/session';
 import { createConcreteProviderRoute, isConcreteProviderRoute, type ProviderRoute } from '../shared/providerRoute';
 import { initLogger, getLoggerDiagnostics, withLogContext, setStdioBrokenProbe } from './logger';
+import { ensureRegistered, preloadNxgdAuth } from './nxgd-auth';
+import { createRechargeOrder, fetchBalance, getNxgdAuthState, refreshNxgdAuth } from './nxgd-auth';
 // `isStdioBroken` / `markStdioBroken` are defined above (in the crash-
 // diagnostics block) and consumed by `setStdioBrokenProbe` below to wire
 // the logger's safe-write wrapper to the stdio-state bit.
@@ -2231,6 +2233,12 @@ async function main() {
   setStdioBrokenProbe(isStdioBroken, markStdioBroken);
   initLogger(getClients);
   startupBeacon('initLogger done — switching to console.log');
+
+  // 广电：启动时同步读持久化 apiKey 填好 in-memory 缓存；后台异步触发首次注册。
+  preloadNxgdAuth();
+  void ensureRegistered().catch((err: unknown) => {
+    startupBeacon(`nxgd ensureRegistered threw: ${String(err)}`);
+  });
 
   // Store sidecar port BEFORE initializeAgent() so that:
   //   1. pre-warm's buildClaudeSessionEnv() reads the correct sidecarPort
@@ -4509,6 +4517,51 @@ async function main() {
             error: error instanceof Error ? error.message : 'Grok verification failed',
           }, 500);
         }
+      }
+
+      // ===== nxgd (中国广电 Token 平台) 账务接口 =====
+      // 全部 endpoint 共享 ensureRegistered：首次启动后台注册中或失败 → 503。
+      if (pathname === '/api/nxgd/auth/state' && request.method === 'GET') {
+        // 总是先确保已注册（后台 fire-and-forget 已启动；这里是兜底）。
+        const state = await ensureRegistered();
+        return jsonResponse(state);
+      }
+
+      if (pathname === '/api/nxgd/auth/refresh' && request.method === 'POST') {
+        const state = await refreshNxgdAuth();
+        return jsonResponse(state);
+      }
+
+      if (pathname === '/api/nxgd/balance' && request.method === 'GET') {
+        const state = await ensureRegistered();
+        if (!state.registered) {
+          return jsonResponse({ error: 'nxgd-not-registered', state }, 503);
+        }
+        const snap = await fetchBalance();
+        if (!snap) {
+          return jsonResponse({ error: 'balance-unavailable', state }, 502);
+        }
+        return jsonResponse({
+          balance: snap.balance,
+          usedBalance: snap.usedBalance,
+          status: snap.status,
+          lastCheckedAt: snap.lastCheckedAt,
+          lowBalance: snap.balance < 5,
+        });
+      }
+
+      if (pathname === '/api/nxgd/recharge' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({})) as { amount?: number };
+        const amount = Number(body.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return jsonResponse({ error: 'invalid-amount' }, 400);
+        }
+        const result = await createRechargeOrder(amount);
+        if (!result) {
+          const state = getNxgdAuthState();
+          return jsonResponse({ error: 'recharge-failed', state }, 502);
+        }
+        return jsonResponse(result);
       }
 
       // GET /api/subscription/status - Check Anthropic local subscription status

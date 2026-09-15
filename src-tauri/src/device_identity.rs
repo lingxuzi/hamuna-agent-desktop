@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +32,7 @@ fn get_or_create_device_id_at(device_id_file: PathBuf) -> Result<String, String>
                 return Ok(id);
             }
 
-            let new_id = uuid::Uuid::new_v4().to_string();
+            let new_id = compute_hardware_fingerprint();
             if let Some(parent) = device_id_file.parent() {
                 fs::create_dir_all(parent).map_err(crate::utils::file_lock::FileLockError::Io)?;
             }
@@ -124,6 +125,42 @@ fn os_version() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// 机器码 = SHA256("{主网卡 MAC}|{主机名}|{platform}") → 前 16 hex
+///
+/// 三因子拼接，OS 重装保持稳定（MAC 写入网卡固件，主机名通常在系统设置
+/// 或路由器层，platform 区分 macOS / Windows / Linux 避免跨平台 MAC 同号
+/// 撞码）。任一因子取不到时该字段为空串；空字段会让不同机器偶然撞码，
+/// 但服务器端机器码定位错误的影响仅限「该用户被另一个用户充值」——
+/// 按产品决策这是 acceptable risk。
+///
+/// 注：sysinfo 0.33 没暴露 `System::unique_id()`（仅 Windows Cpu 上有），
+/// 所以走 MAC + hostname + 平台三因子。MAC 在 NIC 固件层、hostname 在系统
+/// 安装时设置，重装一般不变；如未来需要更强唯一性可加 `machine-uid` crate。
+fn compute_hardware_fingerprint() -> String {
+    let mac = get_primary_mac_address().unwrap_or_default();
+    let host_name = normalize_device_name(sysinfo::System::host_name()).unwrap_or_default();
+    let platform = platform_identifier();
+
+    let combined = format!("{mac}|{host_name}|{platform}");
+    let hash = Sha256::digest(combined.as_bytes());
+    hex_encode(&hash[..8])
+}
+
+fn get_primary_mac_address() -> Option<String> {
+    mac_address::get_mac_address()
+        .ok()
+        .flatten()
+        .map(|mac| mac.to_string())
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        s.push_str(&format!("{byte:02x}"));
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Barrier};
@@ -158,5 +195,30 @@ mod tests {
                 .trim(),
             ids[0]
         );
+    }
+
+    #[test]
+    fn hardware_fingerprint_is_16_hex_chars() {
+        let fp = compute_hardware_fingerprint();
+        assert_eq!(fp.len(), 16, "fingerprint must be 16 hex chars");
+        assert!(
+            fp.chars().all(|c| c.is_ascii_hexdigit()),
+            "fingerprint must be hex: {fp}"
+        );
+    }
+
+    #[test]
+    fn hardware_fingerprint_is_stable_across_calls() {
+        let a = compute_hardware_fingerprint();
+        let b = compute_hardware_fingerprint();
+        let c = compute_hardware_fingerprint();
+        assert_eq!(a, b);
+        assert_eq!(b, c);
+    }
+
+    #[test]
+    fn hex_encode_round_trip() {
+        assert_eq!(hex_encode(&[0x00, 0xff, 0xab]), "00ffab");
+        assert_eq!(hex_encode(&[]), "");
     }
 }

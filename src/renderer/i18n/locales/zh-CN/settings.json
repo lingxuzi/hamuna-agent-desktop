@@ -279,6 +279,32 @@
         "verification_error": "Grok 模型或协议验证失败，请重试"
       }
     },
+    "nxgd": {
+      "description": "机器码自动注册 · 余额计费 · 余额 < 5 元时弹窗提醒",
+      "reconnect": "刷新连接",
+      "status": {
+        "idle": "未连接",
+        "registering": "正在自动注册…",
+        "registered": "已连接",
+        "lowBalance": "余额不足",
+        "error": "连接失败"
+      },
+      "balance": {
+        "refresh": "刷新余额"
+      },
+      "recharge": {
+        "title": "充值",
+        "subtitle": "选择金额并完成支付",
+        "confirm": "确认充值",
+        "custom": "自定义金额",
+        "customPlaceholder": "0.1 ~ 5000 元",
+        "failed": "创建订单失败，请稍后再试",
+        "iframeHint": "支付完成后浏览器会跳转到支付宝收银台；如已跳转可关闭此窗口。",
+        "modal": {
+          "later": "稍后"
+        }
+      }
+    },
     "managedCodex": {
       "settingsTitle": "Codex 订阅设置",
       "settingsDescription": "使用 ChatGPT Codex 订阅账户",
