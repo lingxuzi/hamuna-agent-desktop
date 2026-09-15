@@ -281,7 +281,6 @@
     },
     "nxgd": {
       "description": "机器码自动注册 · 余额计费 · 余额 < 5 元时弹窗提醒",
-      "reconnect": "刷新连接",
       "status": {
         "idle": "未连接",
         "registering": "正在自动注册…",

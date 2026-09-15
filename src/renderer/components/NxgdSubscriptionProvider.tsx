@@ -1,19 +1,16 @@
 /**
  * 广电 (云广智能) — Settings 卡片。
- * 视觉壳复用 `SubscriptionProviderCardContent`；充值表单复用 `NxgdRechargeForm`。
+ * 视觉壳复用 `SubscriptionProviderCardContent`。
  *
- * 状态机：自动注册 → 余额展示 → 余额 < 5元时高亮「充值」按钮。
- * 用户可手动「刷新余额」或「刷新连接」（强制重新注册）。
+ * 卡片只读 + 「刷新余额」按钮：API key 是机器码自动注册并写盘，用户无需输入。
+ * 充值入口在 Chat 端 — `NxgdRechargeModal` 在余额 < 5 元时自动弹出。
  */
-import { Loader2, RefreshCw, Wallet, AlertCircle } from 'lucide-react';
+import { Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-import { apiGetJson, apiPostJson } from '@/api/apiFetch';
-import OverlayBackdrop from './OverlayBackdrop';
+import { apiGetJson } from '@/api/apiFetch';
 import SubscriptionProviderCardContent from './SubscriptionProviderCardContent';
-import NxgdRechargeForm from './nxgd/NxgdRechargeForm';
 
 interface NxgdAuthState {
   status: 'idle' | 'registering' | 'registered' | 'error';
@@ -37,8 +34,6 @@ export default function NxgdSubscriptionProvider() {
   const [auth, setAuth] = useState<NxgdAuthState | null>(null);
   const [balance, setBalance] = useState<NxgdBalanceResponse | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [rechargeOpen, setRechargeOpen] = useState(false);
 
   // 挂载时拉一次 auth state + balance
   useEffect(() => {
@@ -65,23 +60,6 @@ export default function NxgdSubscriptionProvider() {
     } finally {
       setLoadingBalance(false);
     }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await apiPostJson('/api/nxgd/auth/refresh', {});
-      await loadAuth();
-      await loadBalance();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleRechargeCompleted = () => {
-    // 用户支付完 → 关闭 modal + 刷新余额
-    setRechargeOpen(false);
-    void loadBalance();
   };
 
   // --- render ---
@@ -115,72 +93,28 @@ export default function NxgdSubscriptionProvider() {
   })();
 
   return (
-    <>
-      <SubscriptionProviderCardContent
-        description={t('providers.nxgd.description')}
-        status={
-          <span className="flex items-center gap-2 font-mono text-xs">{statusBadge}</span>
-        }
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={() => { void loadBalance(); }}
-              disabled={loadingBalance}
-              title={t('providers.nxgd.balance.refresh')}
-              aria-label={t('providers.nxgd.balance.refresh')}
-              className="rounded-lg p-1.5 text-[var(--ink-muted)] hover:bg-[var(--paper-inset)] hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${loadingBalance ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              title={t('providers.nxgd.reconnect')}
-              className="rounded-lg p-1.5 text-[var(--ink-muted)] hover:bg-[var(--paper-inset)] hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-50"
-            >
-              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setRechargeOpen(true)}
-              disabled={!auth?.registered}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                balance?.lowBalance
-                  ? 'bg-[var(--error)] text-[var(--error-fg)] hover:opacity-90'
-                  : 'bg-[var(--button-primary-bg)] text-[var(--button-primary-text)] hover:bg-[var(--button-primary-bg-hover)]'
-              }`}
-            >
-              <Wallet className="h-3.5 w-3.5" />
-              {t('providers.nxgd.recharge.title')}
-            </button>
-          </>
-        }
-        error={
-          auth?.error ? (
-            <p className="break-words text-xs text-[var(--error)]">{auth.error}</p>
-          ) : undefined
-        }
-      />
-
-      {rechargeOpen && createPortal(
-        <OverlayBackdrop onClose={() => setRechargeOpen(false)} className="z-[200] overflow-y-auto px-4 py-8">
-          <div className="w-full max-w-md rounded-2xl bg-[var(--paper-elevated)] p-6 shadow-2xl">
-            <h2 className="mb-1 text-lg font-semibold text-[var(--ink)]">
-              {t('providers.nxgd.recharge.title')}
-            </h2>
-            <p className="mb-4 text-sm text-[var(--ink-muted)]">
-              {t('providers.nxgd.recharge.subtitle')}
-            </p>
-            <NxgdRechargeForm
-              onCompleted={handleRechargeCompleted}
-              onCancel={() => setRechargeOpen(false)}
-            />
-          </div>
-        </OverlayBackdrop>,
-        document.body,
-      )}
-    </>
+    <SubscriptionProviderCardContent
+      description={t('providers.nxgd.description')}
+      status={
+        <span className="flex items-center gap-2 font-mono text-xs">{statusBadge}</span>
+      }
+      actions={
+        <button
+          type="button"
+          onClick={() => { void loadBalance(); }}
+          disabled={loadingBalance}
+          title={t('providers.nxgd.balance.refresh')}
+          aria-label={t('providers.nxgd.balance.refresh')}
+          className="rounded-lg p-1.5 text-[var(--ink-muted)] hover:bg-[var(--paper-inset)] hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${loadingBalance ? 'animate-spin' : ''}`} />
+        </button>
+      }
+      error={
+        auth?.error ? (
+          <p className="break-words text-xs text-[var(--error)]">{auth.error}</p>
+        ) : undefined
+      }
+    />
   );
 }

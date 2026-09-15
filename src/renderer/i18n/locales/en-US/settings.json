@@ -281,7 +281,6 @@
     },
     "nxgd": {
       "description": "Machine-code auto-registration · pay-as-you-go balance · low-balance reminder under ¥5",
-      "reconnect": "Refresh connection",
       "status": {
         "idle": "Not connected",
         "registering": "Auto-registering…",
