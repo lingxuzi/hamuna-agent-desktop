@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { sendLog } from './logger';
 import { withFileLock } from './utils/file-lock';
 import { cancellableFetch } from './utils/cancellation';
-import { NXGD_BILLING_BASE_URL } from '../shared/config-types';
+import { NXGD_BILLING_BASE_URL, NXGD_LLM_BASE_URL } from '../shared/config-types';
 
 const AUTH_FILE = join(homedir(), '.hamuna', 'nxgd-auth.json');
 const AUTH_LOCK = AUTH_FILE + '.lock';
@@ -35,6 +35,8 @@ export interface NxgdAuthState {
   status: NxgdAuthStatus;
   /** 是否已完成注册（apiKey 已落盘或内存） */
   registered: boolean;
+  /** 平台返回的数字用户 ID（注册时 `data.user.id`）— 用于充值页面对账 */
+  userId: number | null;
   /** 余额缓存，单位元；未拉过为 null */
   balance: number | null;
   usedBalance: number | null;
@@ -47,6 +49,7 @@ export interface NxgdAuthState {
 interface PersistedAuth {
   apiKey: string;
   code: string;
+  userId: number;
   registeredAt: number;
 }
 
@@ -73,6 +76,7 @@ let cachedBalance: BalanceSnapshot | null = null;
 let currentState: NxgdAuthState = {
   status: 'idle',
   registered: false,
+  userId: null,
   balance: null,
   usedBalance: null,
   balanceCheckedAt: null,
@@ -115,6 +119,7 @@ async function readPersistedAuth(): Promise<PersistedAuth | null> {
         return {
           apiKey: parsed.apiKey,
           code: parsed.code,
+          userId: typeof parsed.userId === 'number' ? parsed.userId : 0,
           registeredAt: typeof parsed.registeredAt === 'number' ? parsed.registeredAt : 0,
         };
       } catch (err) {
@@ -187,7 +192,7 @@ export async function ensureRegistered(): Promise<NxgdAuthState> {
       const persisted = cachedAuth ?? (await readPersistedAuth());
       if (persisted) {
         cachedAuth = persisted;
-        updateState({ status: 'registered', registered: true, error: null });
+        updateState({ status: 'registered', registered: true, userId: persisted.userId || null, error: null });
         return persisted;
       }
 
@@ -198,7 +203,7 @@ export async function ensureRegistered(): Promise<NxgdAuthState> {
         return null;
       }
 
-      const resp = await postNxgd<{ user: unknown; apiKeyName: string; apiKey: string }>(
+      const resp = await postNxgd<{ user: { id?: number }; apiKeyName: string; apiKey: string }>(
         '/api/open/customer/register',
         { code: deviceId },
         REGISTER_TIMEOUT_MS,
@@ -213,12 +218,13 @@ export async function ensureRegistered(): Promise<NxgdAuthState> {
       const next: PersistedAuth = {
         apiKey: resp.data.apiKey,
         code: deviceId,
+        userId: typeof resp.data.user?.id === 'number' ? resp.data.user.id : 0,
         registeredAt: Date.now(),
       };
       await writePersistedAuth(next);
       cachedAuth = next;
-      updateState({ status: 'registered', registered: true, error: null });
-      logNxgd('info', 'register succeeded');
+      updateState({ status: 'registered', registered: true, userId: next.userId || null, error: null });
+      logNxgd('info', 'register succeeded', { userId: next.userId });
       return next;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -247,6 +253,42 @@ export async function getNxgdApiKey(): Promise<string | null> {
   return cachedAuth?.apiKey ?? null;
 }
 
+/** 幂等重拉 apiKey — 调 register 同 code 拿当前有效 token（可能与磁盘一致，也可能上游已轮换）。
+ *  用于上游 LLM endpoint 返 401 时自动恢复；register 本身是幂等的（重复调返既有令牌）。 */
+export async function refreshNxgdApiKey(): Promise<string | null> {
+  const deviceId = readDeviceId();
+  if (!deviceId) {
+    logNxgd('warn', 'refreshNxgdApiKey: no device_id');
+    return cachedAuth?.apiKey ?? null;
+  }
+  try {
+    const resp = await postNxgd<{ user: { id?: number }; apiKeyName: string; apiKey: string }>(
+      '/api/open/customer/register',
+      { code: deviceId },
+      REGISTER_TIMEOUT_MS,
+    );
+    if (resp.code !== 200 || !resp.data?.apiKey) {
+      logNxgd('warn', 'refreshNxgdApiKey: register failed', { code: resp.code, message: resp.message });
+      return cachedAuth?.apiKey ?? null;
+    }
+    const rotated = resp.data.apiKey !== cachedAuth?.apiKey;
+    const next: PersistedAuth = {
+      apiKey: resp.data.apiKey,
+      code: deviceId,
+      userId: typeof resp.data.user?.id === 'number' ? resp.data.user.id : (cachedAuth?.userId ?? 0),
+      registeredAt: cachedAuth?.registeredAt ?? Date.now(),
+    };
+    await writePersistedAuth(next);
+    cachedAuth = next;
+    updateState({ status: 'registered', registered: true, userId: next.userId || null, error: null });
+    logNxgd('info', 'refreshNxgdApiKey ok', { rotated, userId: next.userId });
+    return next.apiKey;
+  } catch (err) {
+    logNxgd('error', 'refreshNxgdApiKey threw', { err: err instanceof Error ? err.message : String(err) });
+    return cachedAuth?.apiKey ?? null;
+  }
+}
+
 /** 同步读缓存（启动时已 preload）。null 表示尚未注册。 */
 export function getNxgdApiKeySync(): string | null {
   return cachedAuth?.apiKey ?? null;
@@ -265,9 +307,10 @@ export function preloadNxgdAuth(): void {
     cachedAuth = {
       apiKey: parsed.apiKey,
       code: parsed.code,
+      userId: typeof parsed.userId === 'number' ? parsed.userId : 0,
       registeredAt: typeof parsed.registeredAt === 'number' ? parsed.registeredAt : 0,
     };
-    updateState({ status: 'registered', registered: true, error: null });
+    updateState({ status: 'registered', registered: true, userId: cachedAuth.userId, error: null });
   } catch (err) {
     // 读失败不阻断 — 由 ensureRegistered 后续触发重新注册
     logNxgd('warn', 'preload auth failed', { err: String(err) });
@@ -363,6 +406,7 @@ export async function refreshNxgdAuth(): Promise<NxgdAuthState> {
   updateState({
     status: 'idle',
     registered: false,
+    userId: null,
     balance: null,
     usedBalance: null,
     balanceCheckedAt: null,
@@ -376,4 +420,128 @@ export async function isLowBalance(): Promise<boolean> {
   const snap = await fetchBalance();
   if (!snap) return false; // 拉不到不阻断（fail-soft）
   return snap.balance < LOW_BALANCE_THRESHOLD;
+}
+
+// --- model list ------------------------------------------------------------
+
+interface NxgdModelEntity {
+  id: string;
+  displayName?: string;
+  createdAt?: string;
+}
+
+interface NxgdModelsResponse {
+  data: NxgdModelEntity[];
+  has_more?: boolean;
+}
+
+/** 拉广电可用模型列表（调 /v1/models with Authorization: Bearer, 24h 内存缓存）。
+ *  失败 / 无 apiKey 返 null（Settings 卡片显示空列表 + 「稍后重试」）。
+ *  上游 429 时进入冷却期（默认 60s），期间不再发起请求，直接返缓存。 */
+let cachedModels: { models: NxgdModelEntity[]; checkedAt: number } | null = null;
+const MODELS_CACHE_MS = 24 * 60 * 60 * 1000;
+let rateLimitedUntil = 0; // 上游 429 时设到这里；期间 fetchModels 直接返缓存，不再撞墙
+
+/** 给 endpoint 用的「最后一次成功的 models 缓存快照」，方便 502 时透传给 renderer。 */
+export function getCachedNxgdModelsSnapshot(): NxgdModelEntity[] | null {
+  return cachedModels?.models ?? null;
+}
+
+/** 给 endpoint 用的「是否处于上游 429 冷却期」标志 + 剩余秒数（renderer UI 用来显示「稍后重试」倒计时）。 */
+export function getNxgdModelsCooldown(): { cooling: boolean; secondsLeft: number } {
+  const secondsLeft = Math.max(0, Math.ceil((rateLimitedUntil - Date.now()) / 1000));
+  return { cooling: secondsLeft > 0, secondsLeft };
+}
+
+/** 构造 /v1/models 请求的 fetch opts。401 retry 复用，避免 headers 漂移。 */
+function buildModelsRequestOpts(apiKey: string): Parameters<typeof cancellableFetch>[1] {
+  return {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'anthropic-version': '2023-06-01',
+    },
+  };
+}
+
+export async function fetchModels(forceRefresh = false): Promise<NxgdModelEntity[] | null> {
+  if (!forceRefresh && cachedModels && Date.now() - cachedModels.checkedAt < MODELS_CACHE_MS) {
+    return cachedModels.models;
+  }
+
+  // 冷却期内不发起请求，避免继续撞 429
+  if (Date.now() < rateLimitedUntil) {
+    logNxgd('warn', 'fetchModels: in rate-limit cooldown, returning cache');
+    return cachedModels?.models ?? null;
+  }
+
+  // 走 getNxgdApiKey — 复用 ensureRegistered / preload 路径，确保从缓存或磁盘拿到真实可用 key
+  const apiKey = await getNxgdApiKey();
+  if (!apiKey) {
+    logNxgd('warn', 'fetchModels: no apiKey (register first)', {
+      cachedAuthExists: cachedAuth !== null,
+      cachedAuthHasKey: cachedAuth ? Boolean(cachedAuth.apiKey) : false,
+    });
+    return cachedModels?.models ?? null;
+  }
+
+  // 上游用 Authorization: Bearer，不是 Anthropic 原生 x-api-key
+  const url = `${NXGD_LLM_BASE_URL}/v1/models?limit=100`;
+  logNxgd('info', 'fetchModels: requesting', {
+    url,
+    apiKeyPrefix: apiKey.slice(0, 7),
+  });
+
+  try {
+    let currentKey = apiKey;
+    let resp = await cancellableFetch(url, buildModelsRequestOpts(currentKey), {
+      timeoutMs: BALANCE_TIMEOUT_MS,
+    });
+
+    // 上游 401：register 是幂等的，重调拿当前有效 apiKey（可能上游已轮换），用新 key 重试一次。
+    // 仍 401 则返回缓存（fetchModels 永抛不出，caller 拿到 null 由 renderer 兜底）。
+    if (resp.status === 401) {
+      logNxgd('warn', 'fetchModels upstream 401 — refreshing apiKey and retrying');
+      const rotatedKey = await refreshNxgdApiKey();
+      if (rotatedKey && rotatedKey !== currentKey) {
+        currentKey = rotatedKey;
+        resp = await cancellableFetch(url, buildModelsRequestOpts(currentKey), {
+          timeoutMs: BALANCE_TIMEOUT_MS,
+        });
+      } else {
+        logNxgd('warn', 'fetchModels 401 refresh returned same/null key; skipping retry', {
+          rotated: rotatedKey !== currentKey,
+        });
+      }
+    }
+
+    if (resp.status === 429) {
+      // 上游限流：尊重 Retry-After（秒），缺失则默认 60s。期间不撞墙
+      const retryAfter = Number(resp.headers.get('retry-after')) || 60;
+      rateLimitedUntil = Date.now() + retryAfter * 1000;
+      logNxgd('warn', 'fetchModels upstream 429 — entering cooldown', {
+        retryAfterSeconds: retryAfter,
+        cooldownUntil: new Date(rateLimitedUntil).toISOString(),
+      });
+      return cachedModels?.models ?? null;
+    }
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      const snippet = body.slice(0, 200);
+      logNxgd('warn', 'fetchModels upstream non-OK', {
+        status: resp.status,
+        bodySnippet: snippet,
+      });
+      return cachedModels?.models ?? null;
+    }
+    const body = (await resp.json()) as NxgdModelsResponse;
+    const models = Array.isArray(body.data) ? body.data : [];
+    cachedModels = { models, checkedAt: Date.now() };
+    logNxgd('info', 'fetchModels ok', { count: models.length });
+    return models;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logNxgd('error', 'fetchModels threw', { err: msg });
+    return cachedModels?.models ?? null;
+  }
 }

@@ -199,3 +199,130 @@ describe('nxgd-auth', () => {
     expect(await mod.isLowBalance()).toBe(true);
   });
 });
+
+describe('nxgd-auth refresh + 401 recovery', () => {
+  it('refreshNxgdApiKey: 调幂等 register 拿新 key → 写盘 + 更新缓存', async () => {
+    mockFetch
+      // ensureRegistered 期间 register 拿旧 key
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: { id: 7 }, apiKeyName: 'm', apiKey: 'sk-initial' } }),
+      })
+      // refreshNxgdApiKey 期间 register 返新 key（上游已轮换）
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: { id: 7 }, apiKeyName: 'm', apiKey: 'sk-rotated' } }),
+      });
+
+    const mod = await import('./nxgd-auth');
+    mod.preloadNxgdAuth();
+    await mod.ensureRegistered();
+    expect(mod.getNxgdApiKeySync()).toBe('sk-initial');
+
+    const newKey = await mod.refreshNxgdApiKey();
+    expect(newKey).toBe('sk-rotated');
+    expect(mod.getNxgdApiKeySync()).toBe('sk-rotated');
+
+    // 写盘验证
+    const { existsSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const persistedPath = join(tmpHome, '.hamuna', 'nxgd-auth.json');
+    expect(existsSync(persistedPath)).toBe(true);
+    const parsed = JSON.parse(readFileSync(persistedPath, 'utf-8'));
+    expect(parsed.apiKey).toBe('sk-rotated');
+    expect(parsed.userId).toBe(7);
+    expect(parsed.code).toBe('machine-abc-123');
+  });
+
+  it('refreshNxgdApiKey: 注册失败 → 返旧 key 不抛（fail-soft）', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-prior' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 500, message: 'rate limited', data: null }),
+      });
+
+    const mod = await import('./nxgd-auth');
+    mod.preloadNxgdAuth();
+    await mod.ensureRegistered();
+    expect(mod.getNxgdApiKeySync()).toBe('sk-prior');
+
+    const newKey = await mod.refreshNxgdApiKey();
+    expect(newKey).toBe('sk-prior');
+    expect(mod.getNxgdApiKeySync()).toBe('sk-prior'); // 失败时保留旧 key
+  });
+
+  it('refreshNxgdApiKey: 网络异常 → 返旧 key 不抛', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-prior' } }),
+      })
+      .mockRejectedValueOnce(new Error('network down'));
+
+    const mod = await import('./nxgd-auth');
+    mod.preloadNxgdAuth();
+    await mod.ensureRegistered();
+    const newKey = await mod.refreshNxgdApiKey();
+    expect(newKey).toBe('sk-prior');
+    expect(mod.getNxgdApiKeySync()).toBe('sk-prior');
+  });
+
+  it('fetchModels 401 → refresh 拿新 key → 重试成功', async () => {
+    mockFetch
+      // 1. ensureRegistered: register 拿旧 key
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: { id: 1 }, apiKeyName: 'm', apiKey: 'sk-old' } }),
+      })
+      // 2. fetchModels 第一次: 401 (key 失效)
+      .mockResolvedValueOnce({ ok: false, status: 401, headers: { get: () => null } })
+      // 3. refreshNxgdApiKey: register 返轮换后的新 key
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: { id: 1 }, apiKeyName: 'm', apiKey: 'sk-new' } }),
+      })
+      // 4. fetchModels 重试: 200 + models
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: [{ id: 'claude-sonnet-5' }, { id: 'claude-haiku-5' }] }),
+      });
+
+    const mod = await import('./nxgd-auth');
+    mod.preloadNxgdAuth();
+    await mod.ensureRegistered();
+
+    const models = await mod.fetchModels(true);
+    expect(models).toHaveLength(2);
+    expect(models?.[0].id).toBe('claude-sonnet-5');
+    expect(mod.getNxgdApiKeySync()).toBe('sk-new'); // key 已自动轮换
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('fetchModels 401 → refresh 返同 key（上游未轮换）→ 不重试 → 返 null', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-stale' } }),
+      })
+      .mockResolvedValueOnce({ ok: false, status: 401, headers: { get: () => null } })
+      // refresh 返同 key：模拟上游 register 返既有 token，但 token 实际已被上游吊销（奇怪但可能）
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-stale' } }),
+      });
+    // 没有第 4 次 mock — refresh 返同 key → 不重试 → resp 仍 401 → 走 !resp.ok → 返 cachedModels null
+
+    const mod = await import('./nxgd-auth');
+    mod.preloadNxgdAuth();
+    await mod.ensureRegistered();
+
+    const models = await mod.fetchModels(true);
+    expect(models).toBeNull();
+    expect(mod.getNxgdApiKeySync()).toBe('sk-stale'); // key 没换
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+});
