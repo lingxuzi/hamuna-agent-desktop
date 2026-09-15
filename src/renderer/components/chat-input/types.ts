@@ -76,6 +76,10 @@ export interface SimpleChatInputProps {
   workspaceMcpEnabled?: string[];
   globalMcpEnabled?: string[];
   mcpServers?: Array<{ id: string; name: string; description?: string }>;
+  /** MCP ids currently mid-handshake via /api/mcp/enable (PRD TODO #143 v3).
+   *  While in this set, the corresponding toggle button is disabled so the
+   *  user can't re-fire a probe against the same MCP. */
+  pendingEnableMcpIds?: ReadonlySet<string>;
   onWorkspaceMcpToggle?: (serverId: string, enabled: boolean) => void;
   officialTools?: readonly OfficialToolDefinition[];
   workspaceOfficialToolEnabled?: OfficialToolId[];

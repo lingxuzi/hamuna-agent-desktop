@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronRight, ChevronUp, Gauge, Loader, Paperclip, Plus, Send, Square, X, FileText, AtSign, Wrench, Timer, Settings2 } from 'lucide-react';
+import { AlertCircle, ChevronRight, ChevronUp, Gauge, Loader, Loader2, Paperclip, Plus, Send, Square, X, FileText, AtSign, Wrench, Timer, Settings2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -114,6 +114,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
   inputRef,
   workspaceMcpEnabled = [],
   globalMcpEnabled = [],
+  pendingEnableMcpIds,
   officialTools = [],
   workspaceOfficialToolEnabled = [],
   globalOfficialToolEnabled = [],
@@ -1928,6 +1929,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
                         .filter(s => !isExternalRuntime && globalMcpEnabled.includes(s.id))
                         .map((server) => {
                           const isEnabled = workspaceMcpEnabled.includes(server.id);
+                          const isPending = pendingEnableMcpIds?.has(server.id) ?? false;
                           return (
                             <div
                               key={server.id}
@@ -1957,17 +1959,45 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
                               </button>
                               <button
                                 type="button"
+                                disabled={isPending}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (isPending) return;
                                   onWorkspaceMcpToggle?.(server.id, !isEnabled);
                                 }}
-                                className={`relative ml-2 inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors hover:opacity-80 focus:outline-none ${isEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--line-strong)]'
-                                  }`}
+                                // PRD TODO #143 v3 — handshake loading state: track switches
+                                // to info/60 and a centered spinning Loader2 overlays the
+                                // thumb until /api/mcp/enable resolves (3-15s). The thumb
+                                // stays in its off position (we never call enable on an
+                                // already-enabled id) and is faded out so the spinner is
+                                // the only motion the user sees.
+                                className={`relative ml-2 inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:cursor-wait ${
+                                  isPending
+                                    ? 'bg-[var(--info)]/60'
+                                    : isEnabled
+                                      ? 'cursor-pointer bg-[var(--accent)] hover:opacity-80'
+                                      : 'cursor-pointer bg-[var(--line-strong)] hover:opacity-80'
+                                }`}
+                                aria-label={
+                                  isPending
+                                    ? t('input.mcpTogglePending')
+                                    : isEnabled
+                                      ? t('input.mcpToggleOn')
+                                      : t('input.mcpToggleOff')
+                                }
                               >
                                 <span
                                   className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-[var(--toggle-thumb)] shadow-sm ring-0 transition-transform ${isEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                                    }`}
+                                    } ${isPending ? 'opacity-0' : ''}`}
                                 />
+                                {isPending && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                                  >
+                                    <Loader2 className="h-3 w-3 animate-spin text-[var(--toggle-thumb)]" />
+                                  </span>
+                                )}
                               </button>
                             </div>
                           );

@@ -116,6 +116,12 @@ export interface TabState {
      */
     contextUsage: ContextUsage | null;
     /**
+     * PRD TODO #143 — Chat 顶部 MCP 健康指示器用的快照。
+     * Set on `chat:mcp-status-update` SSE 广播（任何 tab 触发 `/api/mcp/recheck`
+     * 都会推到所有 tab），initial fetch 走 `GET /api/mcp/status`。
+     * Null = 尚未拉到（首屏 chip 不渲染）。
+     */
+    /**
      * Runtime-native plan/todo snapshot (Codex `turn/plan/updated` today).
      * Transient UI state only; ordinary chat history remains the source for
      * persisted builtin TodoWrite / Task tool todos.

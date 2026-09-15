@@ -68,7 +68,7 @@ import { isDebugMode } from '@/utils/debug';
 import { getChannelTypeLabel } from '@/utils/taskCenterUtils';
 import { appendCronPromptToDraft } from '@/utils/cronComposerRecovery';
 import { launchSupportDiagnostics } from '@/utils/supportDiagnostics';
-import { CODEX_SUBSCRIPTION_PROVIDER_ID, type PermissionMode, type McpServerDefinition, type Provider, getEffectiveModelAliases } from '@/config/types';
+import { CODEX_SUBSCRIPTION_PROVIDER_ID, type PermissionMode, type McpServerDefinition, type McpEnableError, type Provider, getEffectiveModelAliases } from '@/config/types';
 import { syncMcpServerNames } from '@/components/tools/toolBadgeConfig';
 import {
   getAllMcpServers,
@@ -2152,6 +2152,10 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   const [workspaceMcpEnabled, setWorkspaceMcpEnabled] = useState<string[]>(
     currentAgent?.mcpEnabledServers ?? currentProject?.mcpEnabledServers ?? []
   );
+  // PRD TODO #143 v3 — MCP ids currently mid-handshake via /api/mcp/enable.
+  // Used by the Chat input MCP toggle to block re-clicks during the probe
+  // window (3-15s). Set membership drives `disabled` on the toggle button.
+  const [pendingEnableMcpIds, setPendingEnableMcpIds] = useState<ReadonlySet<string>>(() => new Set());
 
   // PRD 0.2.17 — Claude plugin per-workspace enable state. Init from Agent
   // (preferred) or Project. Layer 1 (global visibility) is applied later
@@ -2640,24 +2644,79 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // (2) project + agent so FUTURE new sessions inherit the user's latest choice (PRD
   //     v0.1.69 §4.3 rule 2: "写 Session + 向上写 Agent"). For unlocked/IM this is also
   //     the live-follow source, so the single write covers both roles.
+  //
+  // PRD TODO #143 v3 — enabling path runs /api/mcp/enable first (real MCP
+  // `initialize` handshake via `validateStdioStartup`). If the handshake fails
+  // (binary missing, network down, missing API key, etc.) we keep
+  // workspaceMcpEnabled = false so the UI toggle stays OFF — there is no
+  // "enabled but not connected" grey state. Mirrors Settings page
+  // `handleMcpToggle` so both entry points agree on what "enabled" means.
   const handleWorkspaceMcpToggle = useCallback(async (serverId: string, enabled: boolean) => {
     if (guardCronConfigMutation()) return;
-    const newEnabled = enabled
-      ? [...workspaceMcpEnabled, serverId]
-      : workspaceMcpEnabled.filter(id => id !== serverId);
 
-    setWorkspaceMcpEnabled(newEnabled);
-
-    // PRD 0.2.7: persistTabConfigChange now also handles the sidecar push
-    // (via the helper's `pushMcpToSidecar` callback) so this site is just a
-    // single delegate call — disk dual-write + live MCP swap on the running
-    // session in one transaction. Pre-PRD-0.2.7 the duplicate `apiPost`
-    // here ran AFTER persist and left the helper's plumbing as dead code.
-    const persisted = await persistTabConfigChange({ mcpEnabledServers: newEnabled });
-    if (!persisted) {
-      setWorkspaceMcpEnabled(workspaceMcpEnabled);
+    // Disabling: no handshake, just remove from the list.
+    if (!enabled) {
+      const newEnabled = workspaceMcpEnabled.filter(id => id !== serverId);
+      setWorkspaceMcpEnabled(newEnabled);
+      const persisted = await persistTabConfigChange({ mcpEnabledServers: newEnabled });
+      if (!persisted) {
+        setWorkspaceMcpEnabled(workspaceMcpEnabled);
+      }
+      return;
     }
-  }, [workspaceMcpEnabled, persistTabConfigChange, guardCronConfigMutation]);
+
+    // Enabling: real handshake via /api/mcp/enable first.
+    const server = mcpServers.find(s => s.id === serverId);
+    if (!server) {
+      toast.error(t('shell.toasts.mcpServerNotFound', { id: serverId }));
+      return;
+    }
+    // Block re-click during in-flight handshake (3-15s window).
+    if (pendingEnableMcpIds.has(serverId)) return;
+    setPendingEnableMcpIds(prev => {
+      const next = new Set(prev);
+      next.add(serverId);
+      return next;
+    });
+
+    try {
+      const result = await apiPost<{ success: boolean; error?: McpEnableError }>(
+        '/api/mcp/enable',
+        { server },
+      );
+      if (!result?.success) {
+        toast.error(
+          result?.error?.message
+            ?? t('shell.toasts.mcpEnableFailed', { name: server.name }),
+        );
+        return;
+      }
+      const newEnabled = [...workspaceMcpEnabled, serverId];
+      setWorkspaceMcpEnabled(newEnabled);
+      // PRD 0.2.7: persistTabConfigChange now also handles the sidecar push
+      // (via the helper's `pushMcpToSidecar` callback) so this site is just a
+      // single delegate call — disk dual-write + live MCP swap on the running
+      // session in one transaction.
+      const persisted = await persistTabConfigChange({ mcpEnabledServers: newEnabled });
+      if (!persisted) {
+        setWorkspaceMcpEnabled(workspaceMcpEnabled);
+      }
+    } catch (err) {
+      toast.error(
+        t('shell.toasts.mcpEnableFailed', {
+          name: server.name,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    } finally {
+      setPendingEnableMcpIds(prev => {
+        if (!prev.has(serverId)) return prev;
+        const next = new Set(prev);
+        next.delete(serverId);
+        return next;
+      });
+    }
+  }, [workspaceMcpEnabled, mcpServers, pendingEnableMcpIds, apiPost, persistTabConfigChange, guardCronConfigMutation, toast, t]);
 
   // PRD 0.2.17 — Claude plugin per-workspace toggle. Mirrors MCP exactly:
   // optimistic local update + dual-write via persistTabConfigChange (which
@@ -5216,6 +5275,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
             workspaceMcpEnabled={workspaceMcpEnabled}
             globalMcpEnabled={globalMcpEnabled}
             mcpServers={mcpServers}
+            pendingEnableMcpIds={pendingEnableMcpIds}
             onWorkspaceMcpToggle={handleWorkspaceMcpToggle}
             officialTools={OFFICIAL_TOOLS}
             workspaceOfficialToolEnabled={workspaceOfficialToolEnabled}
