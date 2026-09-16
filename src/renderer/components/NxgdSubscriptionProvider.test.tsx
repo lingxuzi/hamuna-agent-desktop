@@ -87,12 +87,14 @@ describe('NxgdSubscriptionProvider', () => {
     });
   });
 
-  it('点 ¥50 → POST 返回 payFormHtml → iframe 渲染 payFormHtml 原样（不自动提交）+ 显式「去支付宝支付」按钮存在', async () => {
+  it('点 ¥50 → POST 返回 payFormHtml → 订单摘要 + iframe 只读预览 + 「去支付宝支付」按钮（iframe 内不放原始 payFormHtml，防上游 auto-submit）', async () => {
     mockGet
       .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
       .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
 
-    const payFormHtml = '<form action="https://alipay.com"><input name="out_trade_no" value="RC001"/></form>';
+    // 上游 payFormHtml 含 <script>form.submit()</script> —— 真实 Alipay 标准 PC 收银台常带这段，
+    // 是 #146 v3 auto-submit 的真实根因（不是我们 wrapper 的问题）。修复要求：不嵌入原始 payFormHtml。
+    const payFormHtml = '<form action="https://openapi.alipay.com/gateway.do" method="post"><input name="out_trade_no" value="RC001"/><input name="total_amount" value="50.00"/><script>document.forms[0].submit();</script></form>';
     mockPost.mockResolvedValueOnce({ orderNo: 'RC001', payFormHtml, expiresAt: '2026-09-15T12:00:00' });
 
     renderProvider();
@@ -107,12 +109,23 @@ describe('NxgdSubscriptionProvider', () => {
       const iframe = document.querySelector('iframe[srcdoc]');
       expect(iframe).toBeTruthy();
       const srcdoc = iframe?.getAttribute('srcdoc') ?? '';
-      // 原始 payFormHtml 必须原样保留，让用户能看到订单字段
-      expect(srcdoc).toBe(payFormHtml);
-      // 不要 auto-submit：iframe 内若自动跳到 alipay.com，原 form HTML 来不及看清
-      expect(srcdoc).not.toMatch(/<script>[\s\S]*?\.submit\(\)/);
-      // 显式「去支付宝支付」按钮必须可见，用户点它才跳收银台
-      expect(screen.getByRole('button', { name: /去支付宝支付|Go to Alipay/i })).toBeTruthy();
+      // iframe 必须是 parsed 后的只读预览，**不能**直接嵌入原始 payFormHtml
+      expect(srcdoc).not.toContain(payFormHtml);
+      expect(srcdoc).not.toContain('form.submit');
+      // 预览 HTML 含所有解析后的 form 字段
+      expect(srcdoc).toContain('out_trade_no');
+      expect(srcdoc).toContain('RC001');
+      expect(srcdoc).toContain('total_amount');
+      expect(srcdoc).toContain('50.00');
+      // sandbox 禁了 allow-scripts（不再需要 iframe 内 JS 跑）
+      expect(iframe?.getAttribute('sandbox')).toBe('allow-forms allow-same-origin');
+      // 订单摘要可见（orderNo / 金额 / 过期时间）
+      expect(screen.getByText('RC001')).toBeTruthy();
+      expect(screen.getByText('¥50.00')).toBeTruthy();
+      // 「去支付宝支付」按钮必须可见且可点（parsedPayForm 成功解析时不禁用）
+      const goPay = screen.getByRole('button', { name: /去支付宝支付|Go to Alipay/i });
+      expect(goPay).toBeTruthy();
+      expect(goPay).not.toBeDisabled();
     });
   });
 
