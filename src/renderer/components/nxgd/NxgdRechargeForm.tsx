@@ -3,9 +3,8 @@
  * 内含：金额选择（10/30/50/100/200 预设 + 自定义）+ 调 /api/nxgd/recharge
  * 拿到 payFormHtml 后嵌入 sandboxed iframe。
  *
- * 不在 module 顶层副作用 — 等用户点「确认充值」才发请求。
+ * 自动提交：预设金额点击立即提交；自定义金额 onBlur / Enter 提交。无显式「确认充值」按钮。
  */
-import { Loader2, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -20,6 +19,8 @@ interface RechargeResult {
 }
 
 export interface NxgdRechargeFormProps {
+  /** 平台返回的数字用户 ID（注册时 `data.user.id`）— 充值时展示供用户对账 */
+  userId?: number | null;
   /** 充值完成后回调（用于刷新余额或关闭 modal） */
   onCompleted?: (order: RechargeResult) => void;
   /** 取消回调（modal 用 — 让父组件关闭弹窗） */
@@ -29,6 +30,7 @@ export interface NxgdRechargeFormProps {
 }
 
 export default function NxgdRechargeForm({
+  userId,
   onCompleted,
   onCancel,
   cancelLabel,
@@ -49,8 +51,10 @@ export default function NxgdRechargeForm({
     setError(null);
     try {
       const result = await apiPostJson<RechargeResult>('/api/nxgd/recharge', { amount: effectiveAmount });
+      // 注意：不在这里同步调 onCompleted —— 父级 handler 通常会立即关 modal，
+      // 导致 React 在 commit iframe DOM 之前就把分支卸载，payFormHtml 永远不显示。
+      // 用户明示「完成本轮流程」（点 iframe 分支的「稍后」）时再通知父级。
       setOrder(result);
-      onCompleted?.(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('providers.nxgd.recharge.failed'));
     } finally {
@@ -66,15 +70,21 @@ export default function NxgdRechargeForm({
           {t('providers.nxgd.recharge.iframeHint')}
         </p>
         <iframe
-          title={t('providers.nxgd.recharge.confirm')}
+          title={t('providers.nxgd.recharge.iframeTitle')}
           srcDoc={order.payFormHtml}
           sandbox="allow-forms allow-scripts allow-same-origin"
           className="h-64 w-full rounded-lg border border-[var(--line)] bg-white"
         />
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end">
           <button
             type="button"
-            onClick={onCancel}
+            onClick={() => {
+              // 用户明示「完成本轮流程」：通知父级关闭 + 刷新余额。
+              // 父级两个调用方（Settings / Chat）的 onCompleted 语义都是「关闭 + 可选 refresh」，
+              // 同时再调 onCancel 仅在父级 onCancel 与 onCompleted 不一致时有副作用 —— 当前两者都是 close，安全双发。
+              onCompleted?.(order);
+              onCancel?.();
+            }}
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink-muted)] hover:bg-[var(--paper)] hover:text-[var(--ink)]"
           >
             {t('providers.nxgd.recharge.modal.later')}
@@ -86,12 +96,17 @@ export default function NxgdRechargeForm({
 
   return (
     <div className="space-y-4">
+      {userId != null && userId > 0 && (
+        <p className="font-mono text-xs text-[var(--ink-subtle)]">
+          {t('providers.nxgd.recharge.userId', { id: userId })}
+        </p>
+      )}
       <div className="grid grid-cols-5 gap-2">
         {PRESET_AMOUNTS.map((preset) => (
           <button
             key={preset}
             type="button"
-            onClick={() => { setAmount(preset); setCustomAmount(''); }}
+            onClick={() => { setAmount(preset); setCustomAmount(''); void submit(); }}
             disabled={paying}
             className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${
               amount === preset && !customAmount
@@ -114,6 +129,8 @@ export default function NxgdRechargeForm({
           step={0.01}
           value={customAmount}
           onChange={(e) => setCustomAmount(e.target.value)}
+          onBlur={() => { if (valid && !paying) void submit(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && valid && !paying) void submit(); }}
           placeholder={t('providers.nxgd.recharge.customPlaceholder')}
           disabled={paying}
           className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
@@ -124,7 +141,7 @@ export default function NxgdRechargeForm({
         <p className="break-words text-xs text-[var(--error)]">{error}</p>
       )}
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end">
         {onCancel && (
           <button
             type="button"
@@ -135,15 +152,6 @@ export default function NxgdRechargeForm({
             {cancelLabel ?? t('providers.nxgd.recharge.modal.later')}
           </button>
         )}
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!valid || paying}
-          className="flex items-center gap-1.5 rounded-lg bg-[var(--button-primary-bg)] px-3 py-1.5 text-sm font-medium text-[var(--button-primary-text)] hover:bg-[var(--button-primary-bg-hover)] disabled:cursor-wait disabled:opacity-60"
-        >
-          {paying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
-          {t('providers.nxgd.recharge.confirm')}
-        </button>
       </div>
     </div>
   );

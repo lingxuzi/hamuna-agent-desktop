@@ -295,10 +295,12 @@
         "title": "Top up",
         "subtitle": "Pick an amount and complete payment",
         "confirm": "Confirm top-up",
+        "userId": "User ID: {{id}}",
         "custom": "Custom amount",
         "customPlaceholder": "0.1 ~ 5000",
         "failed": "Failed to create order. Try again later.",
         "iframeHint": "After paying, the browser will redirect to Alipay. You can close this window if it already did.",
+        "iframeTitle": "Alipay checkout",
         "modal": {
           "later": "Later"
         }

@@ -295,10 +295,12 @@
         "title": "充值",
         "subtitle": "选择金额并完成支付",
         "confirm": "确认充值",
+        "userId": "用户ID：{{id}}",
         "custom": "自定义金额",
         "customPlaceholder": "0.1 ~ 5000 元",
         "failed": "创建订单失败，请稍后再试",
         "iframeHint": "支付完成后浏览器会跳转到支付宝收银台；如已跳转可关闭此窗口。",
+        "iframeTitle": "支付宝收银台",
         "modal": {
           "later": "稍后"
         }
