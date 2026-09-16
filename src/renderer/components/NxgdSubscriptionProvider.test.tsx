@@ -87,7 +87,7 @@ describe('NxgdSubscriptionProvider', () => {
     });
   });
 
-  it('点 ¥50 → POST 返回 payFormHtml → iframe DOM 渲染（回归 bug #146：修复前 submit 同步调 onCompleted 导致 modal 在 iframe commit 前卸载）', async () => {
+  it('点 ¥50 → POST 返回 payFormHtml → iframe DOM 渲染 + auto-submit 脚本注入（API 规范要求）', async () => {
     mockGet
       .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
       .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
@@ -103,11 +103,15 @@ describe('NxgdSubscriptionProvider', () => {
     const preset50 = await waitFor(() => screen.getByRole('button', { name: '¥50' }));
     fireEvent.click(preset50);
 
-    // jsdom 不执行 sandbox 内部脚本，只验 iframe 元素 + srcDoc 落到 srcdoc 属性
+    // jsdom 不执行 sandbox 内部脚本，只验 iframe 元素 + srcDoc 含 payFormHtml 原样 + auto-submit 脚本
     await waitFor(() => {
       const iframe = document.querySelector('iframe[srcdoc]');
       expect(iframe).toBeTruthy();
-      expect(iframe?.getAttribute('srcdoc')).toBe(payFormHtml);
+      const srcdoc = iframe?.getAttribute('srcdoc') ?? '';
+      expect(srcdoc).toContain(payFormHtml); // 原始 payFormHtml 必须原样保留
+      // API 规范（广电token平台API接口.md §309-323）要求自动提交 form：payFormHtml 只含裸 <form> 无 submit 按钮，
+      // 客户端必须注入 script 调 form.submit() 触发跳转，否则用户卡在 form HTML 上无法付款。
+      expect(srcdoc).toMatch(/<script>[\s\S]*?form[\s\S]*?\.submit\(\)/);
     });
   });
 

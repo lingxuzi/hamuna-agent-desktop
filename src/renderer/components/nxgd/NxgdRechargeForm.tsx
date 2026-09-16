@@ -63,7 +63,13 @@ export default function NxgdRechargeForm({
   };
 
   if (order) {
-    // 拿到 payFormHtml → 嵌入 iframe；支付宝 form 提交后浏览器自动跳转收银台
+    // 拿到 payFormHtml → 嵌入 iframe，并按 API 规范自动提交。
+    // 规范（docs/广电token平台API接口.md §309-323）明示 payFormHtml 只含 <form action="..."> 裸 markup，
+    // 没有 submit 按钮，客户端必须注入 script 调 form.submit() 触发跳转。
+    // 包到 <div id="alipay-wap-pay"> 里 + 同源 script 调 .submit()，与官方示例一致。
+    // sandbox 保持 allow-forms allow-scripts allow-same-origin（pit-of-success：allow-top-navigation 禁，
+    // 否则 iframe 能把整个 app 跳到 alipay.com — 让支付流程留在 iframe 内即可）。
+    const iframeSrcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><div id="alipay-wap-pay">${order.payFormHtml}</div><script>document.querySelector('#alipay-wap-pay form').submit();</script></body></html>`;
     return (
       <div className="space-y-3">
         <p className="text-sm text-[var(--ink-muted)]">
@@ -71,7 +77,7 @@ export default function NxgdRechargeForm({
         </p>
         <iframe
           title={t('providers.nxgd.recharge.iframeTitle')}
-          srcDoc={order.payFormHtml}
+          srcDoc={iframeSrcDoc}
           sandbox="allow-forms allow-scripts allow-same-origin"
           className="h-64 w-full rounded-lg border border-[var(--line)] bg-white"
         />
