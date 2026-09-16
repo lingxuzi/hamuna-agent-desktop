@@ -1,11 +1,13 @@
 /**
  * 广电充值表单 — Settings 卡片 + Chat 余额不足弹窗共用。
  * 内含：金额选择（10/30/50/100/200 预设 + 自定义）+ 调 /api/nxgd/recharge
- * 拿到 payFormHtml 后嵌入 sandboxed iframe。
+ * 拿到 payFormHtml 后嵌入 sandboxed iframe，由用户点「去支付宝支付」按钮手动提交。
  *
- * 自动提交：预设金额点击立即提交；自定义金额 onBlur / Enter 提交。无显式「确认充值」按钮。
+ * 提交：预设金额点击立即提交；自定义金额 onBlur / Enter 提交。无显式「确认充值」按钮。
+ * payFormHtml 仅含裸 <form action="..."> + hidden inputs（API 规范示例无 submit 按钮），
+ * 客户端必须自己触发 submit（用户点击我们注入的按钮 → 调 iframe.contentDocument.querySelector('form').submit()）。
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { apiPostJson } from '@/api/apiFetch';
@@ -41,6 +43,7 @@ export default function NxgdRechargeForm({
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<RechargeResult | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const effectiveAmount = customAmount ? Number(customAmount) : amount;
   const valid = Number.isFinite(effectiveAmount) && effectiveAmount >= 0.1 && effectiveAmount <= 5000;
@@ -62,26 +65,42 @@ export default function NxgdRechargeForm({
     }
   };
 
+  // 手动提交 iframe 内的支付宝 form。
+  // sandbox 包含 allow-same-origin → 父 frame 可访问 iframe.contentDocument。
+  // 不 auto-submit 是有意的：auto-submit 让 iframe 立刻跳到 alipay.com，原 form HTML 来不及看清，
+  // 且小尺寸 iframe 渲染 Alipay 收银台 UX 差；让用户明确点击「去支付宝支付」再跳转。
+  const submitIframeForm = () => {
+    const doc = iframeRef.current?.contentDocument;
+    const form = doc?.querySelector('form');
+    if (!form) return;
+    form.submit();
+  };
+
   if (order) {
-    // 拿到 payFormHtml → 嵌入 iframe，并按 API 规范自动提交。
-    // 规范（docs/广电token平台API接口.md §309-323）明示 payFormHtml 只含 <form action="..."> 裸 markup，
-    // 没有 submit 按钮，客户端必须注入 script 调 form.submit() 触发跳转。
-    // 包到 <div id="alipay-wap-pay"> 里 + 同源 script 调 .submit()，与官方示例一致。
-    // sandbox 保持 allow-forms allow-scripts allow-same-origin（pit-of-success：allow-top-navigation 禁，
-    // 否则 iframe 能把整个 app 跳到 alipay.com — 让支付流程留在 iframe 内即可）。
-    const iframeSrcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><div id="alipay-wap-pay">${order.payFormHtml}</div><script>document.querySelector('#alipay-wap-pay form').submit();</script></body></html>`;
+    // payFormHtml 仅含裸 <form action="..."> + hidden inputs（API 规范 §292 示例无 submit 按钮），
+    // 原样嵌入 iframe 让用户看到 form 字段（订单号 / 金额 / sign 等）。
+    // sandbox 保持 allow-forms allow-scripts allow-same-origin（pit-of-success：
+    // allow-top-navigation 禁 —— 否则 iframe 能把整个 app 跳到 alipay.com）。
     return (
       <div className="space-y-3">
         <p className="text-sm text-[var(--ink-muted)]">
           {t('providers.nxgd.recharge.iframeHint')}
         </p>
         <iframe
+          ref={iframeRef}
           title={t('providers.nxgd.recharge.iframeTitle')}
-          srcDoc={iframeSrcDoc}
+          srcDoc={order.payFormHtml}
           sandbox="allow-forms allow-scripts allow-same-origin"
           className="h-64 w-full rounded-lg border border-[var(--line)] bg-white"
         />
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={submitIframeForm}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--accent)] hover:bg-[var(--paper-inset)]"
+          >
+            {t('providers.nxgd.recharge.modal.goPay')}
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -93,7 +112,7 @@ export default function NxgdRechargeForm({
             }}
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink-muted)] hover:bg-[var(--paper)] hover:text-[var(--ink)]"
           >
-            {t('providers.nxgd.recharge.modal.later')}
+            {cancelLabel ?? t('providers.nxgd.recharge.modal.later')}
           </button>
         </div>
       </div>

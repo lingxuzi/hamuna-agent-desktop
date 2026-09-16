@@ -299,10 +299,11 @@
         "custom": "Custom amount",
         "customPlaceholder": "0.1 ~ 5000",
         "failed": "Failed to create order. Try again later.",
-        "iframeHint": "The form will auto-submit and redirect to Alipay checkout. Complete payment there, then return here and click \"Later\" to close.",
-        "iframeTitle": "Alipay checkout",
+        "iframeHint": "Recharge order created (valid for 5 minutes). The panel below shows the payment form preview — verify the order details, then click \"Go to Alipay\" to open the checkout. After paying, return here and click \"Later\" to close.",
+        "iframeTitle": "Alipay payment form",
         "modal": {
-          "later": "Later"
+          "later": "Later",
+          "goPay": "Go to Alipay"
         }
       }
     },

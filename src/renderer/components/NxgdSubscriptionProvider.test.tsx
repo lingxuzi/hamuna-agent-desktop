@@ -87,7 +87,7 @@ describe('NxgdSubscriptionProvider', () => {
     });
   });
 
-  it('点 ¥50 → POST 返回 payFormHtml → iframe DOM 渲染 + auto-submit 脚本注入（API 规范要求）', async () => {
+  it('点 ¥50 → POST 返回 payFormHtml → iframe 渲染 payFormHtml 原样（不自动提交）+ 显式「去支付宝支付」按钮存在', async () => {
     mockGet
       .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
       .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
@@ -103,15 +103,16 @@ describe('NxgdSubscriptionProvider', () => {
     const preset50 = await waitFor(() => screen.getByRole('button', { name: '¥50' }));
     fireEvent.click(preset50);
 
-    // jsdom 不执行 sandbox 内部脚本，只验 iframe 元素 + srcDoc 含 payFormHtml 原样 + auto-submit 脚本
     await waitFor(() => {
       const iframe = document.querySelector('iframe[srcdoc]');
       expect(iframe).toBeTruthy();
       const srcdoc = iframe?.getAttribute('srcdoc') ?? '';
-      expect(srcdoc).toContain(payFormHtml); // 原始 payFormHtml 必须原样保留
-      // API 规范（广电token平台API接口.md §309-323）要求自动提交 form：payFormHtml 只含裸 <form> 无 submit 按钮，
-      // 客户端必须注入 script 调 form.submit() 触发跳转，否则用户卡在 form HTML 上无法付款。
-      expect(srcdoc).toMatch(/<script>[\s\S]*?form[\s\S]*?\.submit\(\)/);
+      // 原始 payFormHtml 必须原样保留，让用户能看到订单字段
+      expect(srcdoc).toBe(payFormHtml);
+      // 不要 auto-submit：iframe 内若自动跳到 alipay.com，原 form HTML 来不及看清
+      expect(srcdoc).not.toMatch(/<script>[\s\S]*?\.submit\(\)/);
+      // 显式「去支付宝支付」按钮必须可见，用户点它才跳收银台
+      expect(screen.getByRole('button', { name: /去支付宝支付|Go to Alipay/i })).toBeTruthy();
     });
   });
 
