@@ -618,6 +618,26 @@ for TARGET in "${BUILD_TARGETS[@]}"; do
     echo -e "  ${CYAN}填充 tsx-runtime (darwin-${NODE_TARGET_ARCH})...${NC}"
     npm run build:tsx-runtime -- darwin "$NODE_TARGET_ARCH"
 
+    # ---- Stage Python runtime + uv + agnes-video-25-mcp wheel ----
+    # mirrors CI 的 5 个 step (mac-release.yml step 7.5). DMG 没有 install-time
+    # hook → python-build-standalone + uv (pip install) + agnes wheel 必须在
+    # build 时打进 Contents/Resources/. per-target loop 按 $NODE_TARGET_ARCH
+    # 选对的那一份 (Both 模式两次 build 各打自己 arch 的 Resources/).
+    echo -e "  ${CYAN}Stage Python runtime (darwin-${NODE_TARGET_ARCH})...${NC}"
+    "${PROJECT_DIR}/scripts/download_python_mac.sh" "$NODE_TARGET_ARCH"
+
+    echo -e "  ${CYAN}Install uv into bundled Python (darwin-${NODE_TARGET_ARCH})...${NC}"
+    "${PROJECT_DIR}/scripts/install_uv.sh" "$NODE_TARGET_ARCH"
+
+    echo -e "  ${CYAN}Stage agnes-video-25-mcp wheel (darwin-${NODE_TARGET_ARCH})...${NC}"
+    "${PROJECT_DIR}/scripts/stage_agnes_mcp.sh" "$NODE_TARGET_ARCH"
+
+    echo -e "  ${CYAN}Sign Python + uv + agnes wheel binaries (darwin-${NODE_TARGET_ARCH})...${NC}"
+    "${PROJECT_DIR}/scripts/sign_python_runtime.sh" "$NODE_TARGET_ARCH"
+
+    echo -e "  ${CYAN}Smoke-test Python + uv + agnes chain (darwin-${NODE_TARGET_ARCH})...${NC}"
+    python3 "${PROJECT_DIR}/scripts/stage_mac_runtime.py" --arch "$NODE_TARGET_ARCH"
+
     # ---- 签名 tsx-runtime 内的 esbuild 原生二进制 ----
     # esbuild 是 Go 静态编译，没有 JIT 需求；跟 ripgrep / sharp 一样只要
     # `--options runtime --timestamp`，不需要 entitlements。

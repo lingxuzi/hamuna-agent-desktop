@@ -8,6 +8,8 @@
  *  - `npx` → system npx → bundled Node.js npx → bun x (via `resolveNpxMcpInvocation`)
  *  - env assembly (proxy + NO_PROXY enforcement via `buildMcpSubprocessEnv`)
  *  - `uvx` PATH injection on Windows (last-resort probe for pip-installed uvx)
+ *  - macOS bundled Python + agnes-video-25-mcp PATH injection (DMG has no install-time hook;
+ *    build-time staging under `src-tauri/resources/{python,hosted-mcps/agnes-video-25-mcp}-<arch>/`)
  *  - Playwright `--isolated` arg → `--storage-state=<userdir>/browser-storage-state.json`
  *
  * `__builtin__` (in-process) is intentionally NOT routed through this helper —
@@ -24,7 +26,12 @@ import type { McpServerDefinition } from '../../shared/config-types';
 import { buildMcpSubprocessEnv } from '../session-core/mcp-env-policy';
 import { resolveNpxMcpInvocation } from '../utils/mcp-command';
 import { getHamunaAgentUserDir } from '../utils/project-user-config-sync';
-import { findPipInstalledUvxScriptsDir, getBundledCusePath } from '../utils/runtime';
+import {
+  findPipInstalledUvxScriptsDir,
+  getBundledAgnesMcpBinDirs,
+  getBundledCusePath,
+  getBundledPythonBinDir,
+} from '../utils/runtime';
 
 export interface SpawnShape {
   command: string;
@@ -97,6 +104,37 @@ export async function transformMcpServerForSpawn(
     if (scriptsDir) {
       const delimiter = process.platform === 'win32' ? ';' : ':';
       env.PATH = `${scriptsDir}${delimiter}${env.PATH}`;
+    }
+  }
+
+  // macOS: prepend bundled Python + agnes-video-25-mcp bin dirs to PATH.
+  // DMG 没有 install-time hook, build-time staging 把 python-build-standalone
+  // + uv (pip install --target) 产物打进 Contents/Resources/. MCP subprocess
+  // 通过 PATH 查找 `agnes-video-25-mcp` (用户拍板 mcp.json 维持 bare `command`).
+  //
+  // 注入两条路径:
+  //   - python-<arch>/bin            → `python` / `python3`, `pip` (transitively uv via `python -m uv`)
+  //   - hosted-mcps/agnes-video-25-mcp-<arch>/bin → `agnes-video-25-mcp` console script
+  //
+  // arch 注入两个 (arm64 + x64) 而非 process.arch 一个, 覆盖 rosetta / universal
+  // 二进制启动场景; 与 build_macos.sh 双 arch ship 策略对齐. 不存在的路径
+  // 由 helper 内部 existsSync 过滤, 不会污染 PATH.
+  //
+  // 只对 macOS 注入 (Linux 端未来跟 macOS 同款 build 模式时再扩). Windows
+  // 由 NSIS §UvxFallback 走自己的 install-time hook, 此处不动.
+  if (process.platform === 'darwin') {
+    const delimiter = ':';
+    const prepend: string[] = [];
+    // host arch 优先, 这样 PATH 查找走最匹配的 binary
+    const hostArch: 'arm64' | 'x64' = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const otherArch: 'arm64' | 'x64' = hostArch === 'arm64' ? 'x64' : 'arm64';
+    for (const arch of [hostArch, otherArch]) {
+      const pyDir = getBundledPythonBinDir(arch);
+      if (pyDir) prepend.push(pyDir);
+    }
+    prepend.push(...getBundledAgnesMcpBinDirs());
+    if (prepend.length > 0) {
+      env.PATH = `${prepend.join(delimiter)}${delimiter}${env.PATH}`;
     }
   }
 

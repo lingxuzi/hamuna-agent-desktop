@@ -4,9 +4,10 @@
  * 不拦截 Cmd+W / F5（用户可能想关掉去看 Settings 用法）。
  */
 import { createPortal } from 'react-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { apiGetJson } from '@/api/apiFetch';
 import OverlayBackdrop from './OverlayBackdrop';
 import NxgdRechargeForm from './nxgd/NxgdRechargeForm';
 
@@ -20,6 +21,7 @@ export interface NxgdRechargeModalProps {
 
 export default function NxgdRechargeModal({ open, balance, onClose, onPaid }: NxgdRechargeModalProps) {
   const { t } = useTranslation('chat');
+  const [userId, setUserId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -33,6 +35,16 @@ export default function NxgdRechargeModal({ open, balance, onClose, onPaid }: Nx
     return () => window.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
+  // 弹窗打开时拉一次 auth state（拿用户 ID 展示）
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void apiGetJson<{ userId: number | null }>('/api/nxgd/auth/state')
+      .then((state) => { if (!cancelled) setUserId(state.userId ?? null); })
+      .catch(() => { /* 静默 — userId 不显示不影响流程 */ });
+    return () => { cancelled = true; };
+  }, [open]);
+
   if (!open) return null;
 
   return createPortal(
@@ -45,6 +57,7 @@ export default function NxgdRechargeModal({ open, balance, onClose, onPaid }: Nx
           {t('nxgd.modal.subtitle', { balance: balance.toFixed(2) })}
         </p>
         <NxgdRechargeForm
+          userId={userId}
           onCompleted={onPaid ? () => onPaid() : undefined}
           onCancel={onClose}
         />

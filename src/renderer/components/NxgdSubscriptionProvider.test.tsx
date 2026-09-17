@@ -8,9 +8,13 @@ import { i18n } from '@/i18n';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
+const mockOpenExternal = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/api/apiFetch', () => ({
   apiGetJson: (...args: unknown[]) => mockGet(...args),
   apiPostJson: (...args: unknown[]) => mockPost(...args),
+}));
+vi.mock('@/utils/openExternal', () => ({
+  openExternal: (...args: unknown[]) => mockOpenExternal(...args),
 }));
 
 import NxgdSubscriptionProvider from './NxgdSubscriptionProvider';
@@ -26,6 +30,7 @@ function renderProvider() {
 beforeEach(() => {
   mockGet.mockReset();
   mockPost.mockReset();
+  mockOpenExternal.mockClear();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -68,12 +73,12 @@ describe('NxgdSubscriptionProvider', () => {
     });
   });
 
-  it('充值按钮点击 → 弹出表单 → 点 ¥50 预设 → 自动提交 POST /api/nxgd/recharge', async () => {
+  it('充值按钮点击 → 弹出表单 → 点 ¥50 预设不自动提交，需点「去支付」才 POST', async () => {
     mockGet
       .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
       .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
 
-    mockPost.mockResolvedValueOnce({ orderNo: 'RC001', payFormHtml: '<form action="https://alipay.com"></form>', expiresAt: '2026-09-15T12:00:00' });
+    mockPost.mockResolvedValueOnce({ orderNo: 'RC001', checkoutUrl: 'https://example.com/checkout', expiresAt: '2026-09-15T12:00:00' });
 
     renderProvider();
     await waitFor(() => screen.getByText('¥10.00'));
@@ -81,21 +86,27 @@ describe('NxgdSubscriptionProvider', () => {
 
     const preset50 = await waitFor(() => screen.getByRole('button', { name: '¥50' }));
     fireEvent.click(preset50);
+
+    // v7 user 拍板「不要用户选了金额自动跳转」：点预设只切 selected 视觉，不 POST
+    expect(mockPost).not.toHaveBeenCalled();
+
+    // 点「去支付」按钮才真正提交
+    const goPay = screen.getByRole('button', { name: /去支付|Go to pay/i });
+    fireEvent.click(goPay);
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith('/api/nxgd/recharge', expect.objectContaining({ amount: 50 }));
     });
   });
 
-  it('点 ¥50 → POST 返回 payFormHtml → 订单摘要 + iframe 只读预览 + 「去支付宝支付」按钮（iframe 内不放原始 payFormHtml，防上游 auto-submit）', async () => {
+  it('点 ¥50 → 「去支付」 → POST 返回 checkoutUrl → 订单摘要 + 自动打开收银台 URL + 「重新打开」兜底按钮', async () => {
     mockGet
       .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
       .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
 
-    // 上游 payFormHtml 含 <script>form.submit()</script> —— 真实 Alipay 标准 PC 收银台常带这段，
-    // 是 #146 v3 auto-submit 的真实根因（不是我们 wrapper 的问题）。修复要求：不嵌入原始 payFormHtml。
-    const payFormHtml = '<form action="https://openapi.alipay.com/gateway.do" method="post"><input name="out_trade_no" value="RC001"/><input name="total_amount" value="50.00"/><script>document.forms[0].submit();</script></form>';
-    mockPost.mockResolvedValueOnce({ orderNo: 'RC001', payFormHtml, expiresAt: '2026-09-15T12:00:00' });
+    // v7：选金额（preset/custom）不直接跳，必须点「去支付」才 POST + openExternal。
+    const checkoutUrl = 'https://openapi.alipay.com/gateway.do?out_trade_no=RC001&total=50.00';
+    mockPost.mockResolvedValueOnce({ orderNo: 'RC001', checkoutUrl, expiresAt: '2026-09-15T12:00:00' });
 
     renderProvider();
     await waitFor(() => screen.getByText('¥10.00'));
@@ -105,27 +116,59 @@ describe('NxgdSubscriptionProvider', () => {
     const preset50 = await waitFor(() => screen.getByRole('button', { name: '¥50' }));
     fireEvent.click(preset50);
 
+    // 1. 点「去支付」才 POST + openExternal
+    fireEvent.click(screen.getByRole('button', { name: /去支付|Go to pay/i }));
+
     await waitFor(() => {
-      const iframe = document.querySelector('iframe[srcdoc]');
-      expect(iframe).toBeTruthy();
-      const srcdoc = iframe?.getAttribute('srcdoc') ?? '';
-      // iframe 必须是 parsed 后的只读预览，**不能**直接嵌入原始 payFormHtml
-      expect(srcdoc).not.toContain(payFormHtml);
-      expect(srcdoc).not.toContain('form.submit');
-      // 预览 HTML 含所有解析后的 form 字段
-      expect(srcdoc).toContain('out_trade_no');
-      expect(srcdoc).toContain('RC001');
-      expect(srcdoc).toContain('total_amount');
-      expect(srcdoc).toContain('50.00');
-      // sandbox 禁了 allow-scripts（不再需要 iframe 内 JS 跑）
-      expect(iframe?.getAttribute('sandbox')).toBe('allow-forms allow-same-origin');
-      // 订单摘要可见（orderNo / 金额 / 过期时间）
+      // 自动调 openExternal 打开收银台
+      expect(mockOpenExternal).toHaveBeenCalledWith(checkoutUrl);
+      // 订单摘要可见
       expect(screen.getByText('RC001')).toBeTruthy();
       expect(screen.getByText('¥50.00')).toBeTruthy();
-      // 「去支付宝支付」按钮必须可见且可点（parsedPayForm 成功解析时不禁用）
-      const goPay = screen.getByRole('button', { name: /去支付宝支付|Go to Alipay/i });
-      expect(goPay).toBeTruthy();
-      expect(goPay).not.toBeDisabled();
+      // 「重新打开」兜底按钮可见
+      const reopen = screen.getByRole('button', { name: /重新打开支付页面|Reopen checkout page/i });
+      expect(reopen).toBeTruthy();
+    });
+
+    // 点「重新打开」再次调 openExternal 兜底
+    fireEvent.click(screen.getByRole('button', { name: /重新打开支付页面|Reopen checkout page/i }));
+    await waitFor(() => {
+      expect(mockOpenExternal).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('点「自定义」→ 输入框可见 → 输入金额 → 点「去支付」 → POST + openExternal', async () => {
+    mockGet
+      .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
+      .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
+
+    const checkoutUrl = 'https://openapi.alipay.com/gateway.do?out_trade_no=RC002&total=88.88';
+    mockPost.mockResolvedValueOnce({ orderNo: 'RC002', checkoutUrl, expiresAt: '2026-09-15T12:00:00' });
+
+    renderProvider();
+    await waitFor(() => screen.getByText('¥10.00'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Top up|充值/i }));
+
+    // 点「自定义」按钮 → 显示输入框（之前 6 个按钮都在，默认 preset mode）
+    fireEvent.click(screen.getByRole('button', { name: /^自定义$|^Custom$/ }));
+
+    // 1. 输入框可见（input[type=number]）
+    const input = await waitFor(() => document.querySelector('input[type="number"]') as HTMLInputElement);
+    expect(input).toBeTruthy();
+
+    // 2. 切到 custom 模式后点预设不再有效；点「去支付」必须用输入金额
+    expect(mockPost).not.toHaveBeenCalled();
+
+    // 3. 输入金额 88.88
+    fireEvent.change(input, { target: { value: '88.88' } });
+
+    // 4. 点「去支付」
+    fireEvent.click(screen.getByRole('button', { name: /去支付|Go to pay/i }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/api/nxgd/recharge', expect.objectContaining({ amount: 88.88 }));
+      expect(mockOpenExternal).toHaveBeenCalledWith(checkoutUrl);
     });
   });
 
@@ -142,6 +185,56 @@ describe('NxgdSubscriptionProvider', () => {
 
     await waitFor(() => {
       expect(screen.getByText('¥25.00')).toBeTruthy();
+    });
+  });
+
+  it('POST /api/nxgd/recharge 返服务端 message → 显示真因（i18n fallback 兜底）', async () => {
+    mockGet
+      .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
+      .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
+
+    // v10: 服务端 index.ts:4560-4568 失败路径返 502 + { error: 'recharge-failed', message: '...' }，
+    // apiFetch.ts::buildApiError 把 message 挂到 Error.serverMessage（code 走 err.message）。
+    // 用户应看到 serverMessage 真因（不是 i18n 兜底），且裸 code 不显示。
+    mockPost.mockRejectedValueOnce(
+      Object.assign(new Error('recharge-failed'), { serverMessage: 'recharge failed (code 403): upstream rejected' }),
+    );
+
+    renderProvider();
+    await waitFor(() => screen.getByText('¥10.00'));
+    fireEvent.click(screen.getByRole('button', { name: /Top up|充值/i }));
+
+    const preset50 = await waitFor(() => screen.getByRole('button', { name: '¥50' }));
+    fireEvent.click(preset50);
+    fireEvent.click(screen.getByRole('button', { name: /去支付|Go to pay/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/recharge failed \(code 403\)/)).toBeTruthy();
+      expect(screen.queryByText('recharge-failed')).toBeNull();
+    });
+  });
+
+  it('POST /api/nxgd/recharge 返 serverMessage 为空 → fallback i18n 文案', async () => {
+    mockGet
+      .mockResolvedValueOnce({ status: 'registered', registered: true, balance: 10, usedBalance: 0, balanceCheckedAt: Date.now(), error: null })
+      .mockResolvedValueOnce({ balance: 10, usedBalance: 0, status: 1, lastCheckedAt: Date.now(), lowBalance: false });
+
+    // serverMessage 缺失 / undefined 时走 i18n 兜底；旧 case 的"裸 code 永不出现"契约仍要保。
+    mockPost.mockRejectedValueOnce(
+      Object.assign(new Error('recharge-failed'), { serverMessage: undefined }),
+    );
+
+    renderProvider();
+    await waitFor(() => screen.getByText('¥10.00'));
+    fireEvent.click(screen.getByRole('button', { name: /Top up|充值/i }));
+
+    const preset50 = await waitFor(() => screen.getByRole('button', { name: '¥50' }));
+    fireEvent.click(preset50);
+    fireEvent.click(screen.getByRole('button', { name: /去支付|Go to pay/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/创建订单失败|Failed to create order/)).toBeTruthy();
+      expect(screen.queryByText('recharge-failed')).toBeNull();
     });
   });
 });

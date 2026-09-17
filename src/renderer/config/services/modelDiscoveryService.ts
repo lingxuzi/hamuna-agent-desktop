@@ -83,8 +83,13 @@ export function parseModelsResponse(body: unknown): DiscoveredModel[] {
 
   let rawModels: unknown[] = [];
 
+  // Format C: top-level array — some endpoints (and our own /api/nxgd/models
+  // envelope after unwrapping `resp.models`) return the model list directly.
+  if (Array.isArray(body)) {
+    rawModels = body;
+  }
   // Format A: OpenAI — { object: "list", data: [...] }
-  if (obj.object === 'list' && Array.isArray(obj.data)) {
+  else if (obj.object === 'list' && Array.isArray(obj.data)) {
     rawModels = obj.data;
   }
   // Format B: Anthropic — { data: [...], has_more } where items have type: "model"

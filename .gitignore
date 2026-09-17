@@ -74,6 +74,18 @@ src-tauri/resources/python-3.12.7-amd64.exe
 src-tauri/resources/python-3.12.7-amd64.exe.sha256
 src-tauri/resources/.python-installer-version
 src-tauri/resources/python312/
+# macOS Python + uv + agnes wheel staging (build-time, downloaded by
+# scripts/download_python_mac.sh + install_uv.sh + stage_agnes_mcp.sh).
+# Bundled into HamunaAgent.app/Contents/Resources/ via tauri.conf.json
+# bundle.resources — the staging dirs themselves stay untracked.
+src-tauri/resources/python-arm64/*
+!src-tauri/resources/python-arm64/.gitkeep
+src-tauri/resources/python-x64/*
+!src-tauri/resources/python-x64/.gitkeep
+src-tauri/resources/hosted-mcps/agnes-video-25-mcp-arm64/*
+!src-tauri/resources/hosted-mcps/agnes-video-25-mcp-arm64/.gitkeep
+src-tauri/resources/hosted-mcps/agnes-video-25-mcp-x64/*
+!src-tauri/resources/hosted-mcps/agnes-video-25-mcp-x64/.gitkeep
 
 # Test coverage
 coverage/

@@ -62,7 +62,8 @@ interface BalanceSnapshot {
 
 interface RechargeResult {
   orderNo: string;
-  payFormHtml: string;
+  /** 上游返的支付收银台 URL（用户在 OS 默认浏览器/Tauri shell.open 完成付款） */
+  checkoutUrl: string;
   expiresAt: string;
 }
 

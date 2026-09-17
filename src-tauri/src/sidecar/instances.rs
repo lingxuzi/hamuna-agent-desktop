@@ -184,6 +184,30 @@ pub fn start_tab_sidecar<R: Runtime>(
     cmd.env("PIP_INDEX_URL", "https://mirrors.aliyun.com/pypi/simple");
     cmd.env("UV_INDEX_URL", "https://pypi.tuna.tsinghua.edu.cn/simple");
 
+    // Pin uv to the bundled Python (macOS DMG has no install-time hook; uv
+    // would otherwise auto-download a portable Python on first MCP spawn).
+    // Why env var instead of PATH mutation: Sidecar itself doesn't call
+    // python / uv, only MCP child processes do. PATH mutation would pollute
+    // terminal child spawns (pit-of-success "env injection scope" — keep
+    // tightly scoped to consumers). UV_PYTHON + UV_PYTHON_PREFERENCE direct
+    // uv to the bundled interpreter without affecting other spawns.
+    //
+    // macOS-only: Windows installer relies on NSIS §PythonBootstrap for the
+    // per-user Python install, and Linux doesn't bundle Python (Homebrew /
+    // system python expected). Path resolves to a per-arch dir matching
+    // build_macos.sh 双 arch ship strategy.
+    #[cfg(target_os = "macos")]
+    {
+        let bundled_arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+            let py_dir = resource_dir.join(format!("python-{bundled_arch}"));
+            if py_dir.is_dir() {
+                cmd.env("UV_PYTHON", &py_dir);
+                cmd.env("UV_PYTHON_PREFERENCE", "only-system");
+            }
+        }
+    }
+
     // Inject management API port for Bun→Rust IPC (v0.1.21)
     let mgmt_port = crate::management_api::get_management_port();
     if mgmt_port > 0 {

@@ -1,78 +1,38 @@
 /**
  * 广电充值表单 — Settings 卡片 + Chat 余额不足弹窗共用。
- * 内含：金额选择（10/30/50/100/200 预设 + 自定义）+ 调 /api/nxgd/recharge
- * 拿到 payFormHtml 后**解析**出 action/method/inputs，渲染到 iframe 作为只读预览，
- * 真正提交的 form 在用户点「去支付宝支付」时由 JS 动态构建到 iframe.contentDocument 内，
- * 再调 submit() —— iframe 跳到 alipay.com 收银台，用户在 iframe 内付款。
+ * 内含：金额选择（10/30/50/100/200 预设 + 「自定义」按钮）+ 显式「去支付」按钮
+ * 点「去支付」后调 /api/nxgd/recharge 拿 checkoutUrl，openExternal 走系统默认浏览器打开
+ * （Tauri shell.open / 浏览器模式 window.open fallback）。user 在 OS 浏览器完成支付后
+ * 回 app 点「稍后」即可。
  *
- * 为何不直接 srcDoc={payFormHtml}：
- *  - 只含 <form action="..."> + hidden inputs，没有可见内容，原样嵌入 iframe 也是空白
- *  - 上游（Alipay 标准 PC 收银台）常在 payFormHtml 内嵌 `<script>form.submit()</script>`，
- *    用 srcDoc 会立即 auto-submit 跳走，user 看不到表单 + iframe 跳到浏览器收银台
- * 解析 + 重构表单既给 user 可视预览，也彻底切断上游的 auto-submit。
+ * 为何要显式「去支付」按钮（不在 preset 点击时自动跳）：
+ *  - user 拍板"不要用户选了金额自动跳转" —— 选金额 ≠ 确认支付，避免误触
+ *  - 选金额 → 看一眼 → 点「去支付」→ 跳浏览器，三步走符合支付 UX 惯例（淘宝 / 微信支付同款）
  *
- * 提交：预设金额点击立即提交；自定义金额 onBlur / Enter 提交。无显式「确认充值」按钮。
+ * 为何不用内嵌 iframe：
+ *  - 上游（v6 起）直接返 `checkoutUrl` 收银台 URL，**不再**返 payFormHtml —— 旧 iframe 流
+ *    (v1~v5: srcDoc 渲染 payFormHtml + sandbox 阻断 auto-submit) 完全废弃
+ *  - 走系统浏览器而非内嵌：user 已有支付 cookie / 密码管理器 / 多端一致体验；
+ *    内嵌 iframe 反而要解决 sandbox + 跨域 cookie + 支付宝风控
+ *
+ * 「预设 vs 自定义」互斥：点 ¥X 预设 → 进入 preset mode；点「自定义」→ 进入 custom mode
+ * 且下方显示输入框；切换 mode 时另一边选择清空。
  */
-import { useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { apiPostJson } from '@/api/apiFetch';
+import { openExternal } from '@/utils/openExternal';
 
 const PRESET_AMOUNTS = [10, 30, 50, 100, 200] as const;
 
 interface RechargeResult {
   orderNo: string;
-  payFormHtml: string;
+  checkoutUrl: string;
   expiresAt: string;
 }
 
-interface ParsedPayForm {
-  action: string;
-  method: string;
-  /** form 内 <input name value> 对，去除 name 为空者 */
-  inputs: Array<{ name: string; value: string }>;
-}
-
-/** 用 DOMParser 解 payFormHtml —— 跨浏览器安全（Chromium/WebKit 都内置 DOMParser）。 */
-function parsePayFormHtml(html: string): ParsedPayForm | null {
-  try {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const form = doc.querySelector('form');
-    if (!form) return null;
-    const inputs = Array.from(form.querySelectorAll('input'))
-      .map((el) => ({
-        name: el.getAttribute('name') ?? '',
-        value: el.getAttribute('value') ?? '',
-      }))
-      .filter((i) => i.name.length > 0);
-    return {
-      action: form.getAttribute('action') ?? '',
-      method: (form.getAttribute('method') ?? 'POST').toUpperCase(),
-      inputs,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** HTML attribute 转义 —— form 字段值可能含 `"` `<` `>` 等（极少但 sign 值里有 `&`）。 */
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/** 把解析出的 form fields 渲染成可读表格（iframe 内容）。 */
-function buildPreviewHtml(parsed: ParsedPayForm): string {
-  const rows = parsed.inputs.map(({ name, value }) =>
-    `<tr><td>${escapeAttr(name)}</td><td>${escapeAttr(value)}</td></tr>`,
-  ).join('');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body{margin:0;padding:8px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;background:#fafafa;color:#333;}
-table{width:100%;border-collapse:collapse;}
-td{padding:4px 6px;border-bottom:1px solid #eee;word-break:break-all;vertical-align:top;}
-td:first-child{color:#666;width:32%;font-family:ui-monospace,Menlo,monospace;}
-caption{font-size:10px;color:#999;padding-bottom:6px;text-align:left;caption-side:top;}
-</style></head><body><table><caption>支付表单字段（只读预览 · ${parsed.inputs.length} 项）</caption>${rows}</table></body></html>`;
-}
+type Mode = 'preset' | 'custom';
 
 export interface NxgdRechargeFormProps {
   /** 平台返回的数字用户 ID（注册时 `data.user.id`）— 充值时展示供用户对账 */
@@ -92,66 +52,55 @@ export default function NxgdRechargeForm({
   cancelLabel,
 }: NxgdRechargeFormProps) {
   const { t } = useTranslation('settings');
+  const [mode, setMode] = useState<Mode>('preset');
   const [amount, setAmount] = useState<number>(50);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<RechargeResult | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  const effectiveAmount = customAmount ? Number(customAmount) : amount;
+  const effectiveAmount = mode === 'custom' ? Number(customAmount) : amount;
   const valid = Number.isFinite(effectiveAmount) && effectiveAmount >= 0.1 && effectiveAmount <= 5000;
 
-  // 解析 payFormHtml —— 只算一次，结果 memo 避免重渲染重复 parse
-  const parsedPayForm = useMemo(
-    () => (order ? parsePayFormHtml(order.payFormHtml) : null),
-    [order],
-  );
+  // 调系统默认浏览器打开收银台（Tauri shell.open / 浏览器模式 window.open fallback）。
+  // 失败时不抛 — user 可以再点「重新打开支付页面」按钮兜底（popup blocker 场景）。
+  const openCheckout = (url: string) => { void openExternal(url); };
 
-  const submit = async () => {
+  // 显式「去支付」点击 → POST → setOrder → 打开收银台。选金额（preset 点击 / custom 输入）
+  // 不再触发任何自动提交，符合 user 拍板的"选金额 ≠ 确认支付"。
+  const handleGoPay = async () => {
     if (!valid || paying) return;
     setPaying(true);
     setError(null);
     try {
       const result = await apiPostJson<RechargeResult>('/api/nxgd/recharge', { amount: effectiveAmount });
-      // 注意：不在这里同步调 onCompleted —— 父级 handler 通常会立即关 modal，
-      // 导致 React 在 commit iframe DOM 之前就把分支卸载，payFormHtml 永远不显示。
-      // 用户明示「完成本轮流程」（点 iframe 分支的「稍后」）时再通知父级。
+      // 不在这里同步调 onCompleted —— 父级 handler 通常会立即关 modal，
+      // 导致 React 在 commit 当前分支之前就把分支卸载，order summary 永远不显示。
+      // 用户明示「完成本轮流程」（点「稍后」）时再通知父级。
       setOrder(result);
+      openCheckout(result.checkoutUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('providers.nxgd.recharge.failed'));
+      // 服务端返 `{ error, message, status }`（`src/server/index.ts:4553-4568`）：
+      //  - err.message = code（如 'recharge-failed'）—— `apiFetch.ts::buildApiError` 注入
+      //  - err.serverMessage = 服务端真实原因（如 "recharge failed (code 403)" / "fetch failed"）
+      // 优先级：serverMessage > i18n fallback；裸 code 单独显示对用户 / 排查都没价值，
+      // serverMessage 才有"为什么失败"信息。i18n 仅在 serverMessage 缺失时兜底。
+      const code = err instanceof Error ? err.message : '';
+      const serverMessage = err && typeof err === 'object' && 'serverMessage' in err
+        ? (err as { serverMessage?: string }).serverMessage : undefined;
+      const fallback = t('providers.nxgd.recharge.failed');
+      setError(serverMessage?.trim() || fallback);
+      // code 留作 console 日志用于排查（不显示给用户）
+      console.error('[nxgd] recharge failed', { code, serverMessage });
     } finally {
       setPaying(false);
     }
   };
 
-  // 手动提交：在 iframe.contentDocument 里动态构建一个**纯净的** form（无 auto-submit script，
-  // 无原始 payFormHtml 任何 markup），再调 .submit() —— iframe 跳到 alipay.com。
-  // sandbox 包含 allow-forms（form submit）+ allow-same-origin（父 frame 可访问 contentDocument 注入节点），
-  // 不加 allow-scripts（我们不需要在 iframe 内跑 JS）+ 不加 allow-top-navigation
-  // （pit-of-success 红线 —— 否则 form submit 跳走的是整个 app 窗口，不是 iframe）。
-  const submitIframeForm = () => {
-    if (!parsedPayForm) return;
-    const doc = iframeRef.current?.contentDocument;
-    if (!doc) return;
-    const form = doc.createElement('form');
-    form.method = parsedPayForm.method;
-    form.action = parsedPayForm.action;
-    for (const { name, value } of parsedPayForm.inputs) {
-      const input = doc.createElement('input');
-      input.type = 'hidden';
-      input.name = name;
-      input.value = value;
-      form.appendChild(input);
-    }
-    doc.body.appendChild(form);
-    form.submit();
-  };
-
   if (order) {
     return (
       <div className="space-y-3">
-        {/* 订单摘要：orderNo / 金额 / 过期时间 —— 给用户可视锚点，不依赖 iframe 也能核对 */}
+        {/* 订单摘要：orderNo / 金额 / 过期时间 —— 给用户可视锚点，不依赖外部浏览器也能核对 */}
         <div className="rounded-lg border border-[var(--line)] bg-[var(--paper-inset)] px-3 py-2 text-xs">
           <div className="flex justify-between gap-3">
             <span className="text-[var(--ink-muted)]">{t('providers.nxgd.recharge.summary.orderNo')}</span>
@@ -168,31 +117,16 @@ export default function NxgdRechargeForm({
         </div>
 
         <p className="text-sm text-[var(--ink-muted)]">
-          {t('providers.nxgd.recharge.iframeHint')}
+          {t('providers.nxgd.recharge.openedHint')}
         </p>
-
-        {/* iframe 仅渲染只读预览（parsedPayForm 决定的 key-value 表），不嵌入原始 payFormHtml
-            —— 切断上游可能的 auto-submit script，也给用户可见的字段核对界面 */}
-        {parsedPayForm ? (
-          <iframe
-            ref={iframeRef}
-            title={t('providers.nxgd.recharge.iframeTitle')}
-            srcDoc={buildPreviewHtml(parsedPayForm)}
-            sandbox="allow-forms allow-same-origin"
-            className="h-40 w-full rounded-lg border border-[var(--line)] bg-white"
-          />
-        ) : (
-          <p className="text-xs text-[var(--error)]">{t('providers.nxgd.recharge.parseFailed')}</p>
-        )}
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={submitIframeForm}
-            disabled={!parsedPayForm}
-            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => openCheckout(order.checkoutUrl)}
+            className="rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-1.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--paper-inset)]"
           >
-            {t('providers.nxgd.recharge.modal.goPay')}
+            {t('providers.nxgd.recharge.reopen')}
           </button>
           <button
             type="button"
@@ -217,15 +151,15 @@ export default function NxgdRechargeForm({
           {t('providers.nxgd.recharge.userId', { id: userId })}
         </p>
       )}
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-6 gap-2">
         {PRESET_AMOUNTS.map((preset) => (
           <button
             key={preset}
             type="button"
-            onClick={() => { setAmount(preset); setCustomAmount(''); void submit(); }}
+            onClick={() => { setMode('preset'); setAmount(preset); }}
             disabled={paying}
             className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${
-              amount === preset && !customAmount
+              mode === 'preset' && amount === preset
                 ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
                 : 'border-[var(--line)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--paper-inset)]'
             }`}
@@ -233,31 +167,44 @@ export default function NxgdRechargeForm({
             ¥{preset}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => { setMode('custom'); setCustomAmount(''); }}
+          disabled={paying}
+          className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${
+            mode === 'custom'
+              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+              : 'border-[var(--line)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--paper-inset)]'
+          }`}
+        >
+          {t('providers.nxgd.recharge.custom')}
+        </button>
       </div>
 
-      <label className="block">
-        <span className="text-xs text-[var(--ink-muted)]">{t('providers.nxgd.recharge.custom')}</span>
-        <input
-          type="number"
-          inputMode="decimal"
-          min={0.1}
-          max={5000}
-          step={0.01}
-          value={customAmount}
-          onChange={(e) => setCustomAmount(e.target.value)}
-          onBlur={() => { if (valid && !paying) void submit(); }}
-          onKeyDown={(e) => { if (e.key === 'Enter' && valid && !paying) void submit(); }}
-          placeholder={t('providers.nxgd.recharge.customPlaceholder')}
-          disabled={paying}
-          className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
-        />
-      </label>
+      {mode === 'custom' && (
+        <label className="block">
+          <span className="text-xs text-[var(--ink-muted)]">{t('providers.nxgd.recharge.custom')}</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0.1}
+            max={5000}
+            step={0.01}
+            value={customAmount}
+            onChange={(e) => setCustomAmount(e.target.value)}
+            placeholder={t('providers.nxgd.recharge.customPlaceholder')}
+            disabled={paying}
+            autoFocus
+            className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
+          />
+        </label>
+      )}
 
       {error && (
         <p className="break-words text-xs text-[var(--error)]">{error}</p>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         {onCancel && (
           <button
             type="button"
@@ -268,6 +215,14 @@ export default function NxgdRechargeForm({
             {cancelLabel ?? t('providers.nxgd.recharge.modal.later')}
           </button>
         )}
+        <button
+          type="button"
+          onClick={handleGoPay}
+          disabled={!valid || paying}
+          className="rounded-lg bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {t('providers.nxgd.recharge.modal.goPay')}
+        </button>
       </div>
     </div>
   );

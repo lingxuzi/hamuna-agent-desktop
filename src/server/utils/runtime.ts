@@ -294,6 +294,63 @@ export function findPipInstalledUvxScriptsDir(): string | null {
 }
 
 /**
+ * Default arch for resolving bundled darwin runtime dirs. We default to the
+ * current process arch so callers don't have to plumb it everywhere; the
+ * Sidecar's MCP spawn path also probes the other arch for rosetta / universal
+ * binary launches (see `getBundledAgnesMcpBinDirs` below).
+ */
+export function defaultBundledArch(): 'arm64' | 'x64' {
+  return process.arch === 'arm64' ? 'arm64' : 'x64';
+}
+
+/**
+ * Get the absolute path to the bundled Python (python-build-standalone) bin
+ * directory for a given darwin arch. MCP spawn prepends this to PATH so
+ * `python -m uv` and `pip` resolve to our bundled Python instead of any
+ * system install the user happens to have.
+ *
+ * Layout: `src-tauri/resources/python-<arch>/bin/` (production + dev both
+ * via `getBundledResourcePath`).
+ *
+ * Returns null on non-macOS or when the staging dir is missing.
+ */
+export function getBundledPythonBinDir(arch: 'arm64' | 'x64' = defaultBundledArch()): string | null {
+  if (process.platform !== 'darwin') return null;
+  return getBundledResourcePath(`python-${arch}/bin`);
+}
+
+/**
+ * Get the absolute path to the bundled agnes-video-25-mcp wheel's bin dir
+ * (where pip's console_scripts entry point `agnes-video-25-mcp` lives) for
+ * a given darwin arch. Prepending this to PATH lets the MCP server spawn
+ * `command: "agnes-video-25-mcp"` (bare) without writing a wrapper script
+ * (user 拍板: ship pip install --target 产物, 不写 wrapper).
+ *
+ * Returns null on non-macOS or when the staging dir is missing.
+ */
+export function getBundledAgnesMcpBinDir(arch: 'arm64' | 'x64' = defaultBundledArch()): string | null {
+  if (process.platform !== 'darwin') return null;
+  return getBundledResourcePath(`hosted-mcps/agnes-video-25-mcp-${arch}/bin`);
+}
+
+/**
+ * Return both arm64 and x64 bundled darwin bin dirs (whichever are present
+ * on disk) so the MCP spawn path can prepend both — covers rosetta launches
+ * and matches build_macos.sh 双 arch ship 策略 (两个 arch 都 ship).
+ *
+ * Returns an empty array on non-macOS or when nothing is bundled.
+ */
+export function getBundledAgnesMcpBinDirs(): string[] {
+  if (process.platform !== 'darwin') return [];
+  const out: string[] = [];
+  for (const arch of ['arm64', 'x64'] as const) {
+    const dir = getBundledAgnesMcpBinDir(arch);
+    if (dir) out.push(dir);
+  }
+  return out;
+}
+
+/**
  * Resolve an arbitrary resource that's bundled under `src-tauri/resources/`
  * (per `tauri.conf.json > bundle.resources`). The Tauri build copies each
  * entry to a path relative to the sidecar's `scriptDir` in production; in

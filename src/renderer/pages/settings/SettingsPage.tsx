@@ -27,6 +27,7 @@ import GrokSubscriptionProvider from '@/components/GrokSubscriptionProvider';
 import NxgdSubscriptionProvider from '@/components/NxgdSubscriptionProvider';
 import SubscriptionProviderCardContent from '@/components/SubscriptionProviderCardContent';
 import { discoverGrokModels } from '@/config/services/grokSubscriptionService';
+import { discoverNxgdModels } from '@/config/services/nxgdSubscriptionService';
 import UsageStatsPanel from '@/components/UsageStatsPanel';
 import {
  getEffectiveModelAliases,
@@ -90,7 +91,6 @@ import { getPlatform } from '@/analytics/device';
 import { shortenPathForDisplay } from '@/utils/pathDetection';
 import type { LogEntry } from '@/types/log';
 import BugReportOverlay from '@/components/BugReportOverlay';
-import SettingsHelperInbox from '@/components/SettingsHelperInbox';
 import ShortcutRecorder from '@/components/ShortcutRecorder';
 import { VISIBLE_APP_SHORTCUTS } from '@/utils/appShortcuts';
 import { shouldDebounceAutoVerify } from '@/utils/apiKeyAutoVerify';
@@ -3956,17 +3956,6 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
     {/* Providers section uses wider layout */}
     {activeSection === 'providers' && (
      <div className="mx-auto max-w-4xl px-8 py-8">
-      {showAiInstallButton && (
-       <SettingsHelperInbox
-        providers={providers}
-        apiKeys={apiKeys}
-        providerVerifyStatus={providerVerifyStatus}
-        appVersion={appVersion}
-        initialProviderId={helperAgentDefaults.initialProviderId}
-        initialModel={helperAgentDefaults.initialModel}
-        onModelChange={helperAgentDefaults.onModelChange}
-       />
-      )}
       <div className="mb-8 flex items-center justify-between">
        <h2 className="text-lg font-semibold text-[var(--ink)]">{tSettings('providers.title')}</h2>
        <div className="flex items-center gap-2">
@@ -7665,7 +7654,9 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
      discoveryAction={managingProvider.id === XAI_SUBSCRIPTION_PROVIDER_ID
       && providerVerifyStatus[XAI_SUBSCRIPTION_PROVIDER_ID]?.status === 'valid'
       ? discoverGrokModels
-      : undefined}
+      : managingProvider.id === NXGD_PROVIDER_ID
+        ? discoverNxgdModels
+        : undefined}
      discoveryUnavailableMessage={managingProvider.id === XAI_SUBSCRIPTION_PROVIDER_ID
       && providerVerifyStatus[XAI_SUBSCRIPTION_PROVIDER_ID]?.status !== 'valid'
       ? tSettings('providers.grok.loginToDiscover')

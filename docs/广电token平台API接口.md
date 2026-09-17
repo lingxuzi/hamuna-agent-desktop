@@ -1,4 +1,4 @@
-# 客户开放接口文档(免 Token 鉴权)
+# 客户充值开放接口文档(免 Token)
 
 ## 文档信息
 
@@ -6,32 +6,26 @@
 |---|---|
 | 文档版本 | 1.0.0 |
 | 适用对象 | 宁夏广电客户对接 |
-| 接口根地址 | 按部署环境配置,例如 `http://<网关域名>:8080` |
-| 鉴权方式 | **无需 Token**(JWT 与 API Key 均不需要),接口按 IP 限流防刷 |
+| 访问域名 | `https://nxgd.ai-models.cloudwasu.cn` |
+| 鉴权方式 | **无需 Token**(独立开放接口,仅按 IP 限流防刷) |
+| 支付宝商户 | 宁夏广电专属商户(与主站商户独立) |
 
 ## 接入约定
 
 | 项目 | 要求 |
 |---|---|
 | 请求格式 | `Content-Type: application/json` |
-| 响应格式 | 统一返回 `code`、`message`、`data` 三个字段,`code = 200` 表示业务处理成功 |
-| 鉴权 | 两个接口均在 `SecurityConfig` 中 `permitAll()`,不经过 JWT 鉴权链路 |
-| 限流 | 每个接口按客户端 IP 限流,60 秒内最多 5 次;Redis 故障时限流自动放行 |
+| 响应格式 | 统一返回 `code`、`message`、`data`,code=200 表示成功 |
+| 鉴权 | 接口在网关白名单中,不需要 JWT 或 API Key |
+| 限流 | 按客户端 IP 限流,60 秒内最多 5 次 |
 
 ### 统一响应字段
 
-| 字段 | 类型 | 说明 | 示例 |
-|---|---|---|---|
-| `code` | integer | 业务状态码,200 表示成功 | `200` |
-| `message` | string | 响应消息 | `"success"` |
-| `data` | object / array | 响应数据,失败时为 `null` | `{...}` |
-
-## 接口清单
-
-| 方法 | 路径 | 接口说明 | 是否需要 Token |
-|---|---|---|---|
-| `POST` | `/api/open/customer/register` | 客户开通注册(按客户编码创建账号) | 否 |
-| `GET` | `/api/open/customer/balances` | 查询宁夏广电租户下所有用户余额 | 否 |
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `code` | integer | 业务状态码,200 表示成功 |
+| `message` | string | 响应消息 |
+| `data` | object | 响应数据,失败时为 null |
 
 ---
 
@@ -248,10 +242,142 @@ curl "http://<网关域名>:8080/api/open/customer/balances"
 2. **余额口径**:`balance` 为可用余额,`usedBalance` 为累计消费金额,单位均为元;空值按 `0` 返回。
 3. **限流**:按 IP 限流,60 秒内最多 5 次,超限返回"查询过于频繁,请稍后再试"。
 
+
+## 客户充值(支付宝)
+
+### 基本信息
+
+| 项目 | 内容 |
+|---|---|
+| 请求方法 | `POST` |
+| 请求路径 | `/api/open/customer/recharge` |
+| 是否需要 Token | 否 |
+| 接口说明 | 按客户编码定位账号,创建支付宝充值订单,返回支付宝支付表单 HTML |
+
+### 请求参数
+
+| 字段 | 类型 | 必填 | 说明 | 示例 |
+|---|---|---|---|---|
+| `code` | string | 是 | 客户编码(开通时使用的 username) | `"NXGD001"` |
+| `amount` | number | 是 | 充值金额(元),范围 0.1 ~ 5000 | `100.00` |
+
+请求示例:
+
+```json
+{
+  "code": "NXGD001",
+  "amount": 100.00
+}
+```
+
+```bash
+curl -X POST "https://nxgd.ai-models.cloudwasu.cn/api/open/customer/recharge" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "NXGD001", "amount": 100.00}'
+```
+
+### 成功响应
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `code` | integer | 200 表示成功 |
+| `message` | string | `"success"` |
+| `data` | object | 订单与支付信息 |
+
+#### data 字段结构
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `orderNo` | string | 充值订单号(如 `RC20260911...`) |
+| `payFormHtml` | string | 支付宝电脑网站支付表单 HTML,客户端渲染/自动提交后跳转支付宝收银台 |
+| `expiresAt` | string | 订单过期时间(默认下单后 5 分钟) |
+
+成功响应示例:
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "orderNo": "RC20260911123045001",
+    "payFormHtml": "<form name=\"punchout_form\" method=\"post\" action=\"https://openapi.alipay.com/gateway.do?charset=utf-8&...\">...</form>",
+    "expiresAt": "2026-09-11T12:35:45"
+  }
+}
+```
+
+#### payFormHtml 使用方式
+
+把 `payFormHtml` 直接写入客户页面,并自动提交:
+
+```html
+<!-- 服务端/前端将接口返回的 payFormHtml 嵌入页面后自动提交 -->
+<div id="alipay-wap-pay" style="display:none">
+  ${payFormHtml}
+</div>
+<script>
+  document.querySelector('#alipay-wap-pay form').submit();
+</script>
+```
+
+提交后浏览器会跳转到支付宝收银台,客户完成付款。
+
+### 失败响应
+
+| code | message | 说明 |
+|---|---|---|
+| 400 | 编码不能为空 | 未传 `code` |
+| 400 | 金额不能为空 / 金额格式不正确 | `amount` 缺失或非法 |
+| 400 | 充值金额需在 0.1 ~ 5000 元之间 | 超出范围 |
+| 400 | 客户不存在: xxx | 该编码未开通(先调用 `/api/open/customer/register`) |
+| 400 | 客户编码不属于宁夏广电租户 | 编码对应账号不属于宁夏广电 |
+| 400 | 当前存在待支付订单,请先取消支付或继续完成支付 | 上一单未支付/未关闭 |
+| 500 | 充过于频繁,请稍后再试 | 触发 IP 限流(60 秒 5 次) |
+
+失败响应示例:
+
+```json
+{
+  "code": 400,
+  "message": "客户不存在: NXGD001",
+  "data": null
+}
+```
+
 ---
 
-## 鉴权与限流说明
+## 支付结果与到账
 
-- 两个接口路径已配置在 `SecurityConfig.java` 的 `permitAll()` 白名单中,请求无需携带 `Authorization` 头或 `sk-` API Key。
-- 接口内部通过 `RateLimitService` 按客户端 IP 限流(取 `X-Forwarded-For` 首个 IP,其次 `X-Real-IP`,最后直连 IP),防止刷接口。
-- Redis 异常时限流自动放行,不影响正常业务。
+1. 客户在支付宝完成付款后,支付宝异步回调 `https://nxgd.ai-models.cloudwasu.cn/api/pay/alipay/notify`,系统自动把金额加到客户账号余额;
+2. 到账一般几秒内完成,客户用**自己的编码**查询余额确认:
+
+```bash
+# 客户只查自己的余额(传 code)
+curl "https://nxgd.ai-models.cloudwasu.cn/api/open/customer/balances?code=NXGD001"
+```
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "username": "NXGD001",
+    "balance": 100.00,
+    "usedBalance": 20.00,
+    "status": 1
+  }
+}
+```
+
+`balance` 增加即代表充值已到账。编码不存在时返回 `客户不存在: xxx`。
+
+3. 订单 5 分钟未支付自动过期;过期后如需再充,重新调用充值接口即可。
+
+## 配合使用的开放接口
+
+| 接口 | 说明 |
+|---|---|
+| `POST /api/open/customer/register` | 客户开通注册(按编码创建账号) |
+| `GET /api/open/customer/balances?code=客户编码` | 查询**该客户**的余额(客户自助) |
+| `GET /api/open/customer/balances` | 查询宁夏广电租户下全部客户余额(平台方对账用,客户侧不建议使用) |
+| `POST /api/open/customer/recharge` | 客户充值(支付宝) |

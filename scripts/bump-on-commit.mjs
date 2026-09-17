@@ -155,16 +155,19 @@ try {
   process.stderr.write(`[bump-on-commit] SKILL_VERSION bump 失败，跳过: ${err.message}\n`);
 }
 
-// ---- AGNES_MCP_VERSION auto-bump（PyPI latest → mcp.json pin） ----
+// ---- AGNES_MCP_VERSION auto-bump（PyPI latest → hosted_mcps/.../pyproject.toml pin） ----
 // 背景：multimedia-creator MCP（extended_buildin_mcp/mcp.json）依赖 agnes-video-25-mcp PyPI 包，
-// 原始 pin ==0.1.4；用户拍板「Build-time / pre-commit hook auto-bump」——每次 commit 查 PyPI latest，
-// mismatch 则 patch mcp.json 的 --from arg；与 SYSTEM_SKILLS_VERSION auto-bump 同模式。
+// user 拍板 mcp.json 维持 bare `command` 不持 pin (我们 ship `pip install --target` 产物,
+// 不写 wrapper script, MCP spawn 靠 PATH 查找). pin 单一事实源改为
+// hosted_mcps/agnes-video-25/pyproject.toml::version (与 windows NSIS 同款).
+// 每次 commit 查 PyPI latest, mismatch 则 patch pyproject.toml.
 //
 // 跳过条件：
 //  1. CI（GITHUB_ACTIONS=true）—— 上文已 process.exit(0) 提前 return
-//  2. 用户主动改 mcp.json（wcMcp !== headMcp）——尊重用户的 pin 手动选择 / 回退
+//  2. 用户主动改 pyproject（wcPy !== headPy）——尊重用户的 pin 手动选择 / 回退
 //  3. PyPI 不可达 / 超时（5s AbortSignal.timeout）——不阻塞 commit，stderr 告警即可
-//  4. mcp.json 未匹配 pin 格式（regex miss）——大概率是用户手改了结构，跳过
+//  4. pyproject.toml 不存在（rare, hosted_mcps 还没 checkout）——静默跳过
+//  5. pyproject version 字段未匹配（regex miss）——大概率是用户手改了结构，跳过
 //
 // 为什么用 top-level await：fetch 是 async API；.mjs 在 Node 13+ 支持 top-level await，
 // 项目 Node v24 满足。整段包 try/catch，任何子步骤失败都只 stderr 不 exit(1)。
@@ -172,9 +175,10 @@ try {
 // 代价：开发者必须 commit 才会触发 → 老用户必须升级 App 才拿到新 pin（与 system skill 模式一致）。
 //   如需"已安装用户也 auto-upgrade"，需要走 App 启动期 check + ~/.hamuna/ mirror（更重，本任务不做）。
 try {
-  const wcMcp = readFileSync('extended_buildin_mcp/mcp.json', 'utf8');
-  const headMcp = execSync('git show HEAD:extended_buildin_mcp/mcp.json', { encoding: 'utf8' });
-  if (wcMcp === headMcp) {
+  const PYPROJECT_PATH = 'hosted_mcps/agnes-video-25/pyproject.toml';
+  const wcPy = readFileSync(PYPROJECT_PATH, 'utf8');
+  const headPy = execSync(`git show HEAD:${PYPROJECT_PATH}`, { encoding: 'utf8' });
+  if (wcPy === headPy) {
     const resp = await fetch('https://pypi.org/pypi/agnes-video-25-mcp/json', {
       signal: AbortSignal.timeout(5000),
     });
@@ -183,33 +187,26 @@ try {
     } else {
       const data = await resp.json();
       const latest = data.info.version;
-      const pinMatch = wcMcp.match(/agnes-video-25-mcp==(\d+\.\d+\.\d+)/);
+      const pinMatch = wcPy.match(/^version\s*=\s*"([^"]+)"/m);
       if (!pinMatch) {
-        // mcp.json args 字段未使用 `==X.Y.Z` pin 形式（很可能用了
-        // `@latest`），auto-bump 无法生效。stderr 警告 + 列出 PyPI
-        // latest 让作者拍板改 pin —— 旧行为是静默 skip，结果 fdd624e
-        // 后 description 文本与 args 字段漂移、PyPI 一 publish breaking
-        // change 已装用户立刻拉炸。
-        const hasLatest = /agnes-video-25-mcp@latest/.test(wcMcp);
+        // pyproject.toml version 字段未匹配（格式漂移）, 静默跳过, 不阻塞 commit.
         process.stderr.write(
-          `[bump-on-commit] mcp.json 未匹配 pin 格式 agnes-video-25-mcp==X.Y.Z${
-            hasLatest ? ' (当前用 @latest, auto-bump 不会生效)' : ''
-          }, 跳过. PyPI latest=${latest}, 请手动 pin.`,
+          `[bump-on-commit] ${PYPROJECT_PATH} 未匹配 version 字段, 跳过 AGNES_MCP auto-bump (PyPI latest=${latest})\n`,
         );
-        process.stderr.write('\n');
       } else if (pinMatch[1] !== latest) {
-        const newMcp = wcMcp.replace(
-          /agnes-video-25-mcp==\d+\.\d+\.\d+/,
-          `agnes-video-25-mcp==${latest}`,
+        const newPy = wcPy.replace(
+          /^version\s*=\s*"\d+\.\d+\.\d+"/m,
+          `version = "${latest}"`,
         );
-        writeFileSync('extended_buildin_mcp/mcp.json', newMcp);
-        execSync('git add extended_buildin_mcp/mcp.json', { stdio: 'inherit', cwd: process.cwd() });
-        process.stderr.write(`[bump-on-commit] AGNES_MCP auto-bumped: ${pinMatch[1]} → ${latest}\n`);
+        writeFileSync(PYPROJECT_PATH, newPy);
+        execSync(`git add ${PYPROJECT_PATH}`, { stdio: 'inherit', cwd: process.cwd() });
+        process.stderr.write(`[bump-on-commit] AGNES_MCP auto-bumped: ${pinMatch[1]} → ${latest} (in ${PYPROJECT_PATH})\n`);
       }
       // else: pinMatch[1] === latest, 已是最新, 静默跳过
     }
   }
-  // else: wcMcp !== headMcp, 用户主动改过, 尊重
+  // else: wcPy !== headPy, 用户主动改过, 尊重
 } catch (err) {
-  process.stderr.write(`[bump-on-commit] AGNES_MCP check 失败, 跳过: ${err.message}\n`);
+  // ENOENT (pyproject 缺失) 走这里. 静默跳过, 不阻塞 commit.
+  process.stderr.write(`[bump-on-commit] AGNES_MCP check 跳过: ${err.message.split('\n')[0]}\n`);
 }

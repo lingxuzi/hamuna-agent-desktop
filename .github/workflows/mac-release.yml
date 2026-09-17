@@ -205,6 +205,38 @@ jobs:
         run: npm run build:tsx-runtime -- darwin arm64
 
       # ============================================================
+      # 7.5. Stage Python + uv + agnes-video-25-mcp wheel (darwin-arm64)
+      #
+      # Why here (between tsx-runtime and Claude SDK staging): all three
+      # blocks stage resources into src-tauri/resources/, so grouping
+      # them makes the resource-vs-runtime split visible. Mirrors windows
+      # §PythonBootstrap + §UvxFallback + §HostedMcpPrefetch but at
+      # build time — DMG has no install-time hook to ship these
+      # post-install, so they MUST land in Contents/Resources/ at build.
+      #
+      # Why five separate steps (not one composite script):
+      #  - each step's failure is independently re-runnable from CI logs
+      #  - smoke test step gates the bundle, same shape as signing + notarize
+      #  - signing is separate from staging so re-signs don't re-download
+      # ============================================================
+      - name: Stage Python runtime (darwin-arm64)
+        run: bash scripts/download_python_mac.sh arm64
+
+      - name: Install uv into bundled Python (darwin-arm64)
+        run: bash scripts/install_uv.sh arm64
+
+      - name: Stage agnes-video-25-mcp wheel (darwin-arm64)
+        run: bash scripts/stage_agnes_mcp.sh arm64
+
+      - name: Sign Python + uv + agnes wheel binaries (darwin-arm64)
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign_python_runtime.sh arm64
+
+      - name: Smoke-test Python + uv + agnes wheel chain (darwin-arm64)
+        run: python3 scripts/stage_mac_runtime.py --arch arm64
+
+      # ============================================================
       # 7. Stage Claude SDK native binary
       #
       # SDK 0.2.113+ 不再 ship cli.js/sdk.mjs/vendor，改为 per-platform native binary。

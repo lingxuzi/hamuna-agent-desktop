@@ -1,0 +1,92 @@
+{
+  "skill_name": "marketing-ad-creator",
+  "evals": [
+    {
+      "id": 1,
+      "name": "商品展示·美妆 hero shot",
+      "prompt": "做一个 Charlotte Ruby 雾面口红 30s 商品展示广告，淘宝详情页用，调性高级奢华",
+      "expected_output": "路由 §3 商品展示 → 5 阶段 SOP → 拼接表 12s+12s+6s → hero shot 强制规则（先 image_generate + keyframe mode + ≥4s）→ 风格 luxury-product-photography → 字幕永远后处理（drawtext）→ BGM 三段（鼓点+轻快+品牌 jingle）→ 失败模式 #4/#14 已规避",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "电商种草·美妆日常 vlog",
+      "prompt": "做一个完美日记动物眼影盘 30s 抖音种草广告，日常 vlog 风格，目标 95 后女生",
+      "expected_output": "路由 §4 电商种草 → 5 阶段 SOP → 拼接表 12s+12s+6s → 1-2 使用场景限制（不做反转/逆袭/复仇）→ 风格 urban-daily-vlog → BGM 轻快+温暖+推荐 → 涂抹 ≥4s → 字幕永远后处理",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "游戏买量·SLG CG 写实",
+      "prompt": "做一个三国 SLG 手游 30s 买量广告，CG 写实风格，抖音投放，3 秒必须抓眼球",
+      "expected_output": "路由 §5 游戏买量 → 子类型 CG 写实（game-cg-realistic）→ 前 3 秒 hook 选'大场面战斗 hook' → 拼接表 12s+12s+6s → 节奏密度 ≥1 切点/秒 → BGM 史诗鼓点 + 战场喊杀声 → 视觉冲击力 > 剧情 → 礼包 CTA → 字幕永远后处理",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "路由排除·短剧带货（不归本 skill）",
+      "prompt": "做一个霸总短剧带货脚本，30s，女主重生复仇+完美日记动物眼影盘",
+      "expected_output": "明确路由到 short-drama-ad-creator（不归本 skill）→ 不输出 §3-§6 任一 SOP → 说明路由依据（含'霸总/重生'等短剧关键词触发自动排除）",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "电商种草·人物角色 + 具象场景（含资产优先规范）",
+      "prompt": "做一个美妆博主'小美'30s 抖音种草广告，推介完美日记动物眼影盘，卧室梳妆台场景，自然光 vlog 风格，目标 95 后女生",
+      "expected_output": "路由 §4 电商种草 → §2.6 资产优先规范触发（人物 ✓ + 场景 ✓）→ 跑角色 identity master 9 字段 + 场景 identity 6 字段 + 三视图 + 多镜头组 → 段拼接 12+12+6 → BGM 轻快+温暖 → 涂抹 ≥4s → 字幕永远后处理 → 含场景锁定指令 → 引用 references/adcraft-assets.md",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "商品展示·3C 赛博朋克 36s（含 hero shot + 视觉风格创新）",
+      "prompt": "做一个小米 14 Ultra 36s 商品展示广告，抖音投放，赛博朋克风格叠加（雨夜+霓虹+全息），卖点：徕卡光学",
+      "expected_output": "路由 §3 商品展示 → 5 阶段 SOP → 拼接表 12s × 3（替代旧 30s）→ hero shot 强制 4 步 → tech-cyberpunk 风格库 + 创新叠加 → 字幕 4 句（含价格 CTA）→ BGM 三段 → 失败模式 #4 已规避",
+      "files": ["marketing-ad-skill/outputs/xiaomi14u_cyberpunk_36s/final_36s_with_subtitle.mp4"]
+    },
+    {
+      "id": 7,
+      "name": "品牌宣传·新茶饮国潮东方 36s（含 §6.4 不显示价格）",
+      "prompt": "做一个茶百道·竹荞乌龙 36s 品牌宣传广告，抖音/快手投放，国潮东方风格，东方意境品牌精神",
+      "expected_output": "路由 §6 品牌宣传 → 5 阶段 SOP → 拼接表 12s × 3 → 国潮东方风格（national-trend-oriental）→ BGM 古筝+笛子+琵琶 → 字幕 4 句（**CTA 不显示价格 · §6.4 铁律**）→ 仅 logo + 品牌精神",
+      "files": ["marketing-ad-skill/outputs/chabaidao_zhuyeqingolong_36s/final_36s_with_subtitle.mp4"]
+    },
+    {
+      "id": 8,
+      "name": "商品展示·3C 多角色 36s（漫步者耳机 · 11 Agent 实测）",
+      "prompt": "做一个漫步者 Lolli Pro 3 主动降噪耳机 36s 商品展示广告，3 角色（林小溪+江屿+小胖）+ 2 场景（办公室+公寓客厅），剧情：通勤痛点+同事推荐+卖点拆解+闺蜜收尾+CTA",
+      "expected_output": "路由 §3 商品展示（3C 数码子类）→ §2.7 走 11 Agent 编排（≥3 角色触发）→ Round 1 Director（含 product_design）→ Round 1.5 World Setting（5 要素 + continuity_for_assets）→ Round 2a Script（女主名/对手戏关系）→ Round 2b Character+Scene+Prop 串行（**#8B-1 禁止 3 件套完全并行**）→ Round 3 Storyboard+BGM 并行 → Round 3.5 Video Direction（每段 6 字段 + continuity_handoffs）→ Round 4 Video Generation（image_generate ×14 + video_generate ×3）→ drawtext 4 句字幕后处理 → 引用 references/world-setting.md + video-direction.md + protected-fields.md + adcraft-boundaries.md",
+      "files": [
+        "marketing-ad-skill/outputs/multichar_3c_36s/videos/final_36s_with_subtitle.mp4",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_director.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_world_setting.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_script.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_character.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_scene.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_prop.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_storyboard.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_bgm.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_video_direction.json",
+        "marketing-ad-skill/outputs/multichar_3c_36s/json/agent_video.json"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "游戏买量·二次元卡牌/动作 36s（星云纪元 · 11 Agent 实测）",
+      "prompt": "做一个虚构二次元动作手游 '星云纪元' 36s 买量广告，3 角色（星野遥 5 星剑士 + 夜凛 5 星法师 + BOSS 厄夜 6 星反派）+ 2 场景（召唤祭坛 + 浮空战场），剧情：抽卡 hook + 传说角色登场 + 4K 60 帧卖点 + 4 人联机共斗 + BOSS 战 + 礼包 CTA",
+      "expected_output": "路由 §5 游戏买量（二次元卡牌/动作子类）→ §2.7 走 11 Agent 编排（≥3 角色触发）→ Round 1 Director（hero product + 抽卡/联机/BOSS 3 段叙事）→ Round 1.5 World Setting（7 魔法系统 + 3-6 星稀有度 + continuity_for_assets）→ Round 2a Script（5 段叙事弧 + 情绪曲线）→ Round 2b Character+Scene+Prop 串行（**#8B-1 禁止 3 件套完全并行**）→ Round 3 Storyboard+BGM 并行 → Round 3.5 Video Direction（每段 6 字段 + continuity_handoffs 道具/光线显式反差锚定）→ Round 4 Video Generation（image_generate ×15 + video_generate ×3，**#8B-2 修正 reference mode 改 keyframe mode 解决 harness 序列化问题**）→ drawtext 4 句字幕后处理（0-2.5s/8-10.5s/20-22.5s/33-36s）→ 视觉风格 anime-game-pv（vivid color + cel shading）",
+      "files": [
+        "marketing-ad-skill/outputs/game_anime_36s/videos/final_36s_with_subtitle.mp4",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_director.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_world_setting.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_script.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_character.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_scene.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_prop.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_storyboard.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_bgm.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_video_direction.json",
+        "marketing-ad-skill/outputs/game_anime_36s/json/agent_video.json"
+      ]
+    }
+  ]
+}

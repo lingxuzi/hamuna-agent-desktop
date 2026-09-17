@@ -296,12 +296,11 @@
         "subtitle": "Pick an amount and complete payment",
         "confirm": "Confirm top-up",
         "userId": "User ID: {{id}}",
-        "custom": "Custom amount",
+        "custom": "Custom",
         "customPlaceholder": "0.1 ~ 5000",
         "failed": "Failed to create order. Try again later.",
-        "iframeHint": "Below is a read-only preview of the payment form fields. Click \"Go to Alipay\" to open the Alipay checkout in a new window. After paying, return here and click \"Later\" to close.",
-        "iframeTitle": "Payment form preview",
-        "parseFailed": "Failed to parse the payment form. Please retry or contact support.",
+        "openedHint": "The checkout page has opened in a new window. Please complete payment in your browser, then return here and click \"Later\" to close.",
+        "reopen": "Reopen checkout page",
         "summary": {
           "orderNo": "Order no.",
           "amount": "Amount",
@@ -309,7 +308,7 @@
         },
         "modal": {
           "later": "Later",
-          "goPay": "Go to Alipay"
+          "goPay": "Go to pay"
         }
       }
     },

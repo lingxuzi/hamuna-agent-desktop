@@ -715,6 +715,24 @@ fn create_new_session_sidecar<R: Runtime>(
     // Apply proxy policy: user proxy / inherit system / protect localhost (pit-of-success)
     proxy_config::apply_to_subprocess(&mut cmd);
 
+    // macOS: pin uv to bundled Python (mirrors instances.rs global sidecar
+    // block). UV_PYTHON env tells `uv` / `uvx` which interpreter to use,
+    // bypassing uv's own portable-Python download. PATH injection happens
+    // downstream in mcp-server-transform.ts (Sidecar's MCP spawn) — keeping
+    // uv discovery here lets non-PATH callers (uvx direct, scripts) still
+    // resolve to the bundled interpreter.
+    #[cfg(target_os = "macos")]
+    {
+        let bundled_arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+            let py_dir = resource_dir.join(format!("python-{bundled_arch}"));
+            if py_dir.is_dir() {
+                cmd.env("UV_PYTHON", &py_dir);
+                cmd.env("UV_PYTHON_PREFERENCE", "only-system");
+            }
+        }
+    }
+
     // Inject management API port for Bun→Rust IPC (v0.1.21)
     let mgmt_port = crate::management_api::get_management_port();
     if mgmt_port > 0 {

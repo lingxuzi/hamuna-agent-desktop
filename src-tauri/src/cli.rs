@@ -170,6 +170,46 @@ fn find_node_binary() -> Option<PathBuf> {
     None
 }
 
+/// Find the bundled Python 3.12 (python-build-standalone) for the current
+/// build target arch. macOS DMG ships this under Contents/Resources/
+/// python-<arch>/bin/python3 — Windows / Linux installers do NOT bundle
+/// Python (Windows uses NSIS §PythonBootstrap to install the official
+/// python.org distribution; Linux relies on system / Homebrew python).
+///
+/// Used by CLI subcommands that need to invoke python / pip / uv on the
+/// user's behalf (e.g. python-based agent skills). The MCP spawn path
+/// resolves Python via PATH injection in mcp-server-transform.ts — this
+/// helper exists for CLI commands that want an absolute path to spawn.
+///
+/// Returns None on non-macOS or when the bundled python is missing
+/// (callers fall back to system python3 / uv, same fail-soft as node lookup).
+#[cfg(target_os = "macos")]
+pub fn find_python_executable() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+
+    let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+
+    // macOS: Contents/MacOS/app → Contents/Resources/python-<arch>/bin/python3
+    let macos_py = dir
+        .parent()
+        .map(|p| p.join("Resources").join(format!("python-{arch}")).join("bin").join("python3"))
+        .unwrap_or_else(|| {
+            dir.join("Resources")
+                .join(format!("python-{arch}"))
+                .join("bin")
+                .join("python3")
+        });
+    if macos_py.exists() {
+        return Some(macos_py);
+    }
+
+    // Dev: src-tauri/resources/python-<arch>/bin/python3 (cargo run from project root)
+    // We can't reliably walk up here without the same heuristics as
+    // find_node_binary; CLI mode is release-only so the prod path always wins.
+    None
+}
+
 /// Find the CLI script at ~/.hamuna/bin/hamuna.
 /// This script is synced from src/cli/ by cmd_sync_cli.
 fn find_cli_script() -> Option<PathBuf> {

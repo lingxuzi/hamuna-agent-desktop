@@ -24,6 +24,7 @@ import {
   splitProviderModelInput,
   withManagedCodexRuntimeModels,
   withManagedCodexProviderCatalog,
+  withNxgdDiscoveredModels,
 } from './config-types';
 import managedCodexRuntimeLock from './managed-codex-runtime.json';
 
@@ -514,5 +515,86 @@ describe('Managed Codex provider readiness', () => {
 
     expect(providers[0].enabled).toBe(false);
     expect(providers[0].runtimeReady).toBe(true);
+  });
+});
+
+// withNxgdDiscoveredModels — overlays runtime-discovered model entities onto
+// the built-in nxgd (中国广电) provider so the Chat UI's model selector
+// populates without the user having to open Settings → Manage Models first.
+// Locks in: (a) dedup by model id, (b) primaryModel pinning when the preset
+// primary is not in the discovered list, (c) passthrough when no discovered
+// models arrive (so the user-customized empty list is preserved).
+describe('nxgd preset', () => {
+  const nxgdProvider = PRESET_PROVIDERS.find(provider => provider.id === 'nxgd')!;
+
+  it('collapses modelAliases to the upstream-real model id (not Claude ids)', () => {
+    // All 4 aliases must point at the same upstream-real id. If split,
+    // resolveSessionModelAliases() preserves the table verbatim and SDK
+    // subagents end up dispatching `claude-fable-5` etc. to nxgd upstream,
+    // which only serves `deepseek-v4-flash-0731` → 404.
+    expect(nxgdProvider.modelAliases).toEqual({
+      fable: 'deepseek-v4-flash-0731',
+      opus: 'deepseek-v4-flash-0731',
+      sonnet: 'deepseek-v4-flash-0731',
+      haiku: 'deepseek-v4-flash-0731',
+    });
+  });
+});
+
+describe('withNxgdDiscoveredModels', () => {
+  const nxgdProvider = PRESET_PROVIDERS.find(provider => provider.id === 'nxgd')!;
+
+  it('fills the preset nxgd provider with discovered models', () => {
+    const providers = withNxgdDiscoveredModels(PRESET_PROVIDERS, [
+      { model: 'deepseek-v4-flash-0731', modelName: 'DeepSeek V4 Flash', modelSeries: 'claude', source: 'discovered' },
+    ]);
+
+    const after = providers.find(provider => provider.id === 'nxgd')!;
+    expect(after.models.map(m => m.model)).toEqual(['deepseek-v4-flash-0731']);
+    expect(after.primaryModel).toBe('deepseek-v4-flash-0731');
+  });
+
+  it('pins the preset primaryModel when it is in the discovered list', () => {
+    const providers = withNxgdDiscoveredModels([{ ...nxgdProvider, primaryModel: 'deepseek-v4-flash-0731' }], [
+      { model: 'deepseek-v4-flash-0731', modelName: 'DeepSeek V4 Flash', modelSeries: 'claude', source: 'discovered' },
+      { model: 'qwen3-max', modelName: 'Qwen3 Max', modelSeries: 'claude', source: 'discovered' },
+    ]);
+
+    expect(providers[0].primaryModel).toBe('deepseek-v4-flash-0731');
+    expect(providers[0].models.map(m => m.model)).toEqual(['deepseek-v4-flash-0731', 'qwen3-max']);
+  });
+
+  it('dedupes by model id when preset and discovered lists overlap', () => {
+    const providers = withNxgdDiscoveredModels([
+      {
+        ...nxgdProvider,
+        models: [{ model: 'shared', modelName: 'Preset', modelSeries: 'claude', source: 'preset' }],
+      },
+    ], [
+      { model: 'shared', modelName: 'Discovered', modelSeries: 'claude', source: 'discovered' },
+      { model: 'fresh', modelName: 'Fresh', modelSeries: 'claude', source: 'discovered' },
+    ]);
+
+    // Preset entry wins (added first, dedup keeps the first occurrence).
+    expect(providers[0].models).toHaveLength(2);
+    expect(providers[0].models.map(m => m.model)).toEqual(['shared', 'fresh']);
+    expect(providers[0].models[0].source).toBe('preset');
+  });
+
+  it('leaves the provider untouched when no discovered models arrive', () => {
+    const providers = withNxgdDiscoveredModels(PRESET_PROVIDERS, undefined);
+    const after = providers.find(provider => provider.id === 'nxgd')!;
+    expect(after).toBe(nxgdProvider); // same reference
+    expect(after.models).toEqual(nxgdProvider.models);
+  });
+
+  it('does not touch non-nxgd providers', () => {
+    const anthropicSub = PRESET_PROVIDERS.find(provider => provider.id === SUBSCRIPTION_PROVIDER_ID)!;
+    const providers = withNxgdDiscoveredModels(PRESET_PROVIDERS, [
+      { model: 'deepseek-v4-flash-0731', modelName: 'DeepSeek', modelSeries: 'claude', source: 'discovered' },
+    ]);
+
+    const after = providers.find(provider => provider.id === SUBSCRIPTION_PROVIDER_ID)!;
+    expect(after).toBe(anthropicSub); // same reference — untouched
   });
 });

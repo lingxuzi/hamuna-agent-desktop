@@ -1241,6 +1241,46 @@ export function withManagedCodexProviderCatalog(
 }
 
 /**
+ * Overlay auto-discovered nxgd (中国广电 Token 平台) models onto the
+ * built-in provider. The preset ships with `models: []` so the Chat UI's
+ * model selector stays empty until either (a) the user opens Settings →
+ * Manage Models and runs a discovery manually, or (b) ConfigProvider has
+ * mounted and successfully fetched the upstream model list from
+ * `/api/nxgd/models`.
+ *
+ * - Empty / undefined runtime models → leave provider unchanged
+ *   (preserves the user-customized empty list)
+ * - Discovered models → replace provider.models (dedup by `model` id),
+ *   also pin primaryModel to the first entry when the preset primary
+ *   (`deepseek-v4-flash-0731`) isn't in the discovered list — keeps the
+ *   selector pointing at a real, selectable id.
+ *
+ * Called BEFORE `mergePresetCustomModels` so user-added models override
+ *   the auto-discovered defaults cleanly via the standard preset/custom
+ *   merge path.
+ */
+export function withNxgdDiscoveredModels(
+  providers: readonly Provider[],
+  discovered: readonly ModelEntity[] | undefined,
+): Provider[] {
+  if (!discovered || discovered.length === 0) return providers as Provider[];
+  return providers.map(provider => {
+    if (provider.id !== NXGD_PROVIDER_ID) return provider;
+    const seen = new Set<string>();
+    const merged: ModelEntity[] = [];
+    for (const m of [...provider.models, ...discovered]) {
+      if (seen.has(m.model)) continue;
+      seen.add(m.model);
+      merged.push(m);
+    }
+    const primaryModel = merged.some(m => m.model === provider.primaryModel)
+      ? provider.primaryModel
+      : (merged[0]?.model ?? provider.primaryModel);
+    return { ...provider, models: merged, primaryModel };
+  });
+}
+
+/**
  * Apply user additions/removals to bundled provider model catalogs.
  * Kept in shared because provider selection and Admin/CLI validation must
  * consume the same effective model set.
@@ -1297,7 +1337,9 @@ export const PRESET_PROVIDERS: Provider[] = [
     cloudProvider: '广电云',
     type: 'subscription',
     subscriptionAuth: { kind: 'host-managed-auto-register' },
-    primaryModel: 'claude-sonnet-5',
+    // primaryModel pin 上游真实 model id；models 留空由 Model Management Panel
+    // discovery 首次填充（不再用 ANTHROPIC_MODELS 占位误导用户）。
+    primaryModel: 'deepseek-v4-flash-0731',
     isBuiltin: true,
     enabled: true,
     modelListUrl: `${NXGD_LLM_BASE_URL}/v1/models`,
@@ -1305,8 +1347,17 @@ export const PRESET_PROVIDERS: Provider[] = [
       baseUrl: NXGD_LLM_BASE_URL,
       timeout: 60_000,
     },
-    modelAliases: { ...ANTHROPIC_ALIASES },
-    models: ANTHROPIC_MODELS,
+    // nxgd 上游是广电自有 LLM (目前仅 deepseek-v4-flash-0731)，不接受 Claude id。
+    // 全 4 个 alias 折叠到单 model → `resolveSessionModelAliases` 检测到 collapsed table
+    // 会自动 redirect 到 Chat 里 user 实际选的 model，SDK subagent (Task/Explore/...)
+    // 跟着 user 选择走，而不是固定走 claude-fable-5。
+    modelAliases: {
+      fable: 'deepseek-v4-flash-0731',
+      opus: 'deepseek-v4-flash-0731',
+      sonnet: 'deepseek-v4-flash-0731',
+      haiku: 'deepseek-v4-flash-0731',
+    },
+    models: [],
   },
   {
     id: 'anthropic-sub',

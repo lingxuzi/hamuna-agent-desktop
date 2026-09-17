@@ -178,7 +178,7 @@ describe('nxgd-auth', () => {
     mockFetch
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-r' } }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: 200, message: 'success', data: { username: 'm', balance: 0, usedBalance: 0, status: 1 } }) })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: 200, message: 'success', data: { orderNo: 'RC001', payFormHtml: '<form/>', expiresAt: '2026-09-15T12:00:00' } }) });
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: 200, message: 'success', data: { orderNo: 'RC001', checkoutUrl: 'https://alipay.com/checkout', expiresAt: '2026-09-15T12:00:00' } }) });
 
     const mod = await import('./nxgd-auth');
     mod.preloadNxgdAuth();
