@@ -16,6 +16,7 @@ const MANAGED_CODEX_RUNTIME_LOCK_PATH: &str = "../src/shared/managed-codex-runti
 fn main() {
     expose_managed_codex_runtime_lock();
     expose_space_build_env();
+    refresh_system_skills_const();
     // Layer A+: managed_codex.rs uses option_env!() for these. Without the
     // rerun-if-env-changed hints, changing them and re-running cargo build
     // would NOT trigger a recompile, so the build would still bake in the
@@ -23,6 +24,39 @@ fn main() {
     println!("cargo:rerun-if-env-changed=RUNTIME_SETS_BASE_URL");
     println!("cargo:rerun-if-env-changed=DOWNLOAD_HOST");
     tauri_build::build()
+}
+
+/// SYSTEM_SKILLS is auto-derived from bundled-skills/ by
+/// scripts/generate-system-skills.mjs. Re-emit on any change in the dir or
+/// the generator itself; spawn node so a bare `cargo build` (no npm hooks)
+/// still produces a fresh generated file. The npm `prebuild:*` / `pretest` /
+/// `prelint` hooks are the primary path; this is the safety net for direct
+/// cargo invocations.
+fn refresh_system_skills_const() {
+    let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .expect("CARGO_MANIFEST_DIR is required");
+    let repo_root = manifest_dir
+        .parent()
+        .expect("repo root")
+        .to_path_buf();
+    let bundled_skills_dir = repo_root.join("bundled-skills");
+    let generator_script = repo_root.join("scripts/generate-system-skills.mjs");
+
+    println!("cargo:rerun-if-changed={}", bundled_skills_dir.display());
+    println!("cargo:rerun-if-changed={}", generator_script.display());
+
+    let status = std::process::Command::new("node")
+        .arg(&generator_script)
+        .current_dir(&repo_root)
+        .status();
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => panic!("generate-system-skills exited {s}"),
+        Err(error) => panic!(
+            "failed to spawn generate-system-skills: {error}. Node.js is required for the Rust build."
+        ),
+    }
 }
 
 fn expose_managed_codex_runtime_lock() {

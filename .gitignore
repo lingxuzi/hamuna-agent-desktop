@@ -127,3 +127,10 @@ hamuna_files/
 .tokensave/
 outputs/
 reference_videos/
+
+# Generated from bundled-skills/ by scripts/generate-system-skills.mjs
+# (run via npm prebuild:* / pretest / prelint hooks and src-tauri/build.rs
+# for bare cargo invocations). Both files are git-ignored so the generator
+# is the single source of truth — do not hand-edit.
+src-tauri/src/system_skills.generated.rs
+src/shared/systemSkills.generated.ts

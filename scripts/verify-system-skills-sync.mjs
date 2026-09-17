@@ -5,17 +5,27 @@
  * Verify the bundled-skills filesystem and the SYSTEM_SKILLS / REQUIRED_SYSTEM_SKILLS
  * / PLATFORM_BLOCKED_SKILLS literals stay in lockstep across the codebase.
  *
- * Background — per commands.rs:1190-1207, adding a system skill touches:
- *   - bundled-skills/<name>/                                   (filesystem)
- *   - src-tauri/src/commands.rs::SYSTEM_SKILLS                          (Rust)
- *   - src/server/index.ts::SYSTEM_SKILLS                                 (Node)
- *   - src/shared/systemSkills.ts::SYSTEM_SKILLS_VERSION / REQUIRED_SYSTEM_SKILLS (TS canonical)
- *   - src-tauri/src/workspace_files/skills_config.rs::REQUIRED_SYSTEM_SKILLS    (Rust mirror)
- *   - src-tauri/src/commands.rs::is_skill_blocked_on_platform + src/server/utils/platform.ts::PLATFORM_BLOCKED_SKILLS (per-skill platform blocks)
+ * SYSTEM_SKILLS is auto-derived from `bundled-skills/<name>/SKILL.md` by
+ * `scripts/generate-system-skills.mjs` (invoked via npm `prebuild:*` /
+ * `pretest` / `prelint` hooks and `src-tauri/build.rs` for bare cargo).
+ * Both `src-tauri/src/system_skills.generated.rs` and
+ * `src/shared/systemSkills.generated.ts` are emitted by the same Node
+ * pass, so cross-language parity is impossible by construction — Check 1
+ * was deleted for that reason.
  *
- * Today these cross-language sync points rely on comment cross-references alone —
- * drift is silent. This script is the early-warning: every check here corresponds to
- * one of the documented "must keep in sync" contracts in the codebase.
+ * Remaining invariants this verifier enforces:
+ *   1. (removed — Rust ↔ Node parity is by-construction)
+ *   2. bundled-skills/ ↔ generated.ts + generated.rs sync (the generator
+ *      actually ran, so the Rust const / TS literal match the filesystem)
+ *   3. SYSTEM_SKILLS_VERSION parity (Rust `const` vs TS canonical)
+ *   4. REQUIRED_SYSTEM_SKILLS Rust ↔ TS parity
+ *   5. REQUIRED_SYSTEM_SKILLS ⊆ SYSTEM_SKILLS
+ *   6. Required skill names exist on disk
+ *   7. PLATFORM_BLOCKED_SKILLS Rust ↔ Node parity (with OS-name normalization)
+ *   8. Platform-blocked skill names exist on disk
+ *   9. generated files exist on disk (added — would otherwise be silent if
+ *      a contributor skipped `npm install`/`prebuild:*` and the generator
+ *      never ran)
  *
  * Wired into `npm run lint` (CI gate). Pure-Node, no external deps.
  */
@@ -142,11 +152,12 @@ function extractNodePlatformBlocks(content) {
 // --- Source files (must all exist) ---
 
 const files = {
-  commandsRs:     'src-tauri/src/commands.rs',
-  skillsConfigRs: 'src-tauri/src/workspace_files/skills_config.rs',
-  indexTs:        'src/server/index.ts',
-  sharedSkillsTs: 'src/shared/systemSkills.ts',
-  platformTs:     'src/server/utils/platform.ts',
+  commandsRs:             'src-tauri/src/commands.rs',
+  generatedRs:            'src-tauri/src/system_skills.generated.rs',
+  generatedTs:            'src/shared/systemSkills.generated.ts',
+  skillsConfigRs:         'src-tauri/src/workspace_files/skills_config.rs',
+  sharedSkillsTs:         'src/shared/systemSkills.ts',
+  platformTs:             'src/server/utils/platform.ts',
 };
 
 const missingFiles = Object.entries(files)
@@ -160,8 +171,9 @@ if (missingFiles.length) {
 }
 
 const cmd            = readText(files.commandsRs);
+const generatedRs    = readText(files.generatedRs);
+const generatedTs    = readText(files.generatedTs);
 const skillsConfig   = readText(files.skillsConfigRs);
-const indexTs        = readText(files.indexTs);
 const sharedSkillsTs = readText(files.sharedSkillsTs);
 const platformTs     = readText(files.platformTs);
 
@@ -174,14 +186,20 @@ const bundledSkillFolders = (() => {
     .sort();
 })();
 
-const systemSkillsRust      = extractArrayStrings(cmd, 'SYSTEM_SKILLS')      ?? [];
-const systemSkillsNode      = extractArrayStrings(indexTs, 'SYSTEM_SKILLS')   ?? [];
-const sysVersionRust        = extractStringConstant(cmd, 'SYSTEM_SKILLS_VERSION');
-const sysVersionTs          = extractStringConstant(sharedSkillsTs, 'SYSTEM_SKILLS_VERSION');
-const requiredTs            = extractArrayStrings(sharedSkillsTs, 'REQUIRED_SYSTEM_SKILLS') ?? [];
-const requiredRust          = extractArrayStrings(skillsConfig, 'REQUIRED_SYSTEM_SKILLS')     ?? [];
-const platformBlocksRust    = extractRustPlatformBlocks(cmd, 'is_skill_blocked_on_platform');
-const platformBlocksNode    = extractNodePlatformBlocks(platformTs);
+const bundledWithSkillMd = bundledSkillFolders.filter((name) =>
+  existsSync(join(repoRoot, 'bundled-skills', name, 'SKILL.md')),
+);
+
+// SYSTEM_SKILLS is auto-derived; read it from the generated files instead
+// of parsing hand-maintained constants (which no longer exist).
+const systemSkillsRust = extractArrayStrings(generatedRs, 'SYSTEM_SKILLS') ?? [];
+const systemSkillsNode = extractArrayStrings(generatedTs, 'SYSTEM_SKILLS') ?? [];
+const sysVersionRust   = extractStringConstant(cmd, 'SYSTEM_SKILLS_VERSION');
+const sysVersionTs     = extractStringConstant(sharedSkillsTs, 'SYSTEM_SKILLS_VERSION');
+const requiredTs       = extractArrayStrings(sharedSkillsTs, 'REQUIRED_SYSTEM_SKILLS') ?? [];
+const requiredRust     = extractArrayStrings(skillsConfig, 'REQUIRED_SYSTEM_SKILLS')     ?? [];
+const platformBlocksRust = extractRustPlatformBlocks(cmd, 'is_skill_blocked_on_platform');
+const platformBlocksNode = extractNodePlatformBlocks(platformTs);
 
 // --- Checks ---
 
@@ -201,38 +219,32 @@ function setsEqual(a, b) {
   return true;
 }
 
-// 1. SYSTEM_SKILLS Rust <-> Node parity.
+// 2. bundled-skills/<name>/SKILL.md ↔ generated.ts and generated.rs sync.
+// (Replaces the old Check 2, which only checked that every SYSTEM_SKILLS
+// name existed on disk. Now also catches "added a directory but forgot to
+// run the generator" and "removed a directory but the stale generated
+// file was kept around".)
 {
-  if (setsEqual(systemSkillsRust, systemSkillsNode)) {
-    console.log(`  [ok] SYSTEM_SKILLS parity (Rust <-> Node, ${systemSkillsRust.length} entries)`);
-  } else {
-    const { onlyA, onlyB } = setDiff(systemSkillsRust, systemSkillsNode);
-    fail(
-      'SYSTEM_SKILLS drift between Rust and Node',
-      [
-        '  Rust only (src-tauri/src/commands.rs):  ' + (onlyA.length ? onlyA.join(', ') : '(none)'),
-        '  Node only (src/server/index.ts):        ' + (onlyB.length ? onlyB.join(', ') : '(none)'),
-        '',
-        '  The contract is documented at:',
-        '    - src-tauri/src/commands.rs:1204-1207 ("To add a new system skill")',
-        '    - src/server/index.ts:1353-1360 (System skills block comment)',
-        '  Update both files to the same set.',
-      ].join('\n'),
-    );
-  }
-}
+  const expected = [...bundledWithSkillMd].sort();
+  const missingInGen = expected.filter((n) => !systemSkillsRust.includes(n) || !systemSkillsNode.includes(n));
+  const extraInGen = [...new Set([...systemSkillsRust, ...systemSkillsNode])]
+    .filter((n) => !expected.includes(n));
 
-// 2. Every SYSTEM_SKILLS name must exist on disk.
-{
-  const union = new Set([...systemSkillsRust, ...systemSkillsNode]);
-  const missing = [...union].filter((n) => !bundledSkillFolders.includes(n));
-  if (missing.length === 0) {
-    console.log(`  [ok] all SYSTEM_SKILLS names exist on disk (${union.size} folders)`);
+  if (missingInGen.length === 0 && extraInGen.length === 0) {
+    console.log(`  [ok] bundled-skills/ ↔ generated sync (${expected.length} entries)`);
   } else {
-    fail(
-      'SYSTEM_SKILLS references missing folders',
-      missing.map((m) => `  bundled-skills/${m}/ does not exist — remove the listing or create the folder with SKILL.md`).join('\n'),
-    );
+    const lines = [];
+    if (missingInGen.length) {
+      lines.push('  Present in bundled-skills/ but missing from generated:');
+      for (const name of missingInGen) lines.push(`    - ${name}`);
+      lines.push('  → run `npm run generate:system-skills`');
+    }
+    if (extraInGen.length) {
+      lines.push('  In generated but no bundled-skills/<name>/SKILL.md on disk:');
+      for (const name of extraInGen) lines.push(`    - ${name}`);
+      lines.push('  → remove the directory or regenerate (the directory must ship a SKILL.md)');
+    }
+    fail('bundled-skills/ ↔ SYSTEM_SKILLS drift', lines.join('\n'));
   }
 }
 
@@ -356,12 +368,33 @@ function setsEqual(a, b) {
   }
 }
 
+// 9. Both generated files exist on disk. (By Check 1 mirror, both files
+// are emitted by a single Node pass over the same source; if either is
+// missing, the generator didn't run at all — caught separately from
+// Check 2's drift check so a missing file doesn't masquerade as a sync
+// failure.)
+{
+  const rsExists = existsSync(join(repoRoot, files.generatedRs));
+  const tsExists = existsSync(join(repoRoot, files.generatedTs));
+  if (rsExists && tsExists) {
+    console.log(`  [ok] generated SYSTEM_SKILLS files exist (rs + ts)`);
+  } else {
+    const missing = [];
+    if (!rsExists) missing.push(files.generatedRs);
+    if (!tsExists) missing.push(files.generatedTs);
+    fail(
+      'SYSTEM_SKILLS generated files missing',
+      missing.map((m) => `  - ${m}\n  → run \`npm run generate:system-skills\``).join('\n'),
+    );
+  }
+}
+
 // --- Summary ---
 
 console.log('');
 if (failures.length === 0) {
   console.log(
-    `[ok] verify-skills-sync: ${bundledSkillFolders.length} bundled-skills folders, ` +
+    `[ok] verify-skills-sync: ${bundledWithSkillMd.length} bundled-skills with SKILL.md, ` +
       `${systemSkillsRust.length} system, ${requiredTs.length} required, all in lockstep.`,
   );
   process.exit(0);

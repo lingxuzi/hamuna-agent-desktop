@@ -1297,10 +1297,24 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // need version-gated force-overwrite, same pattern as ADMIN_AGENT
 // and CLI above.
 //
-// To add a new system skill: put the folder in bundled-skills/, append
-// its name to SYSTEM_SKILLS below, and bump SYSTEM_SKILLS_VERSION. The
-// matching exclusion list in src/server/index.ts::seedBundledSkills
-// MUST be kept in sync (comment there points back here).
+// To add a new system skill: drop the directory in `bundled-skills/`
+// (must contain a SKILL.md). The list is auto-derived at build time by
+// `scripts/generate-system-skills.mjs` (also wired into npm
+// `prebuild:server` / `prebuild:web` / `pretest` / `prelint` hooks and
+// `src-tauri/build.rs` as the bare-cargo fallback). Both
+// `src-tauri/src/system_skills.generated.rs` and
+// `src/shared/systemSkills.generated.ts` are regenerated before every
+// build/test/lint pass, so the Rust `const SYSTEM_SKILLS: &[&str]` and the
+// Node `SYSTEM_SKILLS: readonly string[]` cannot drift.
+//
+// To remove a system skill: remove its directory from `bundled-skills/`.
+// On the next launch the orphan cleanup pass detects the snapshot/dir
+// mismatch and hard-deletes the user's copy (see
+// `cmd_sync_system_skills_blocking`). No version bump or code edit
+// required.
+//
+// SYSTEM_SKILLS_VERSION is independent — bump it only when SKILL.md
+// *content* changes that must overwrite on every existing install.
 
 const SYSTEM_SKILLS_VERSION: &str = "55";
 
@@ -1310,66 +1324,19 @@ const SYSTEM_SKILLS_VERSION: &str = "55";
 /// operation so a Runtime can never scan a half-replaced directory tree.
 static SYSTEM_SKILLS_SYNC_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 
-/// Skills that ship with the app and MUST stay at the bundled version —
-/// the app's flows depend on them, users are not meant to customise.
-/// Keep in sync with the exclusion list in Bun's `seedBundledSkills()`.
-const SYSTEM_SKILLS: &[&str] = &[
-    "task-alignment",
-    "task-implement",
-    // v10: ultra-research removed — not generic enough to ship as system
-    // skill. Existing installs retain the dir at ~/.hamuna/skills/
-    // ultra-research/ until the user deletes it (no orphan cleanup logic).
-    "download-anything",
-    // v8: agent-browser promoted from utility → system skill. The CLI is
-    // no longer bundled with the app; the SKILL.md teaches AI to self-install
-    // on first use with a command-local npm prefix. Existing users
-    // need the updated SKILL.md to land or their AI will hit `command not
-    // found` after upgrading. The install uses command-local npm_config_prefix
-    // so it lands under ~/.hamuna/npm-global without leaking prefix env to
-    // every shell. System-skill status forces the overwrite.
-    "agent-browser",
-    // v9: hamuna-cli promoted from helper-bundled skill (was at
-    // bundled-agents/hamuna_helper/.claude/skills/self-config/) to a
-    // global system skill. Every AI session inside HamunaAgent — Chat / IM Bot
-    // / Cron / Helper — should be able to drive the product's own
-    // capabilities (cron, task center, MCP, Provider, channels, plugins,
-    // skills, Cloud Space, widgets) through the CLI. SKILL.md changes track CLI surface
-    // changes, so it must force-overwrite on version bumps.
-    "hamuna-cli",
-    // v35: product-use knowledge shared by every HamunaAgent session. It owns
-    // stable user-facing concepts, feature relationships, prerequisites and
-    // expected behaviour; live state/actions stay in hamuna-cli and the
-    // helper-local support skill owns diagnosis.
-    "hamuna-docs",
-    // v18: tool-creator — meta-skill for the CLI tool registry (PRD 0.2.36
-    // cli_first_tool_registry). Teaches AI to author standards-compliant
-    // Agent-CLI tools (tool.json + entry + readme/--help contract) and
-    // register them via `hamuna tool add`. System skill because its
-    // contract must track the registry's server-side validation (800-char
-    // description cap, reserved names) in lockstep.
-    "tool-creator",
-    // v33: HamunaAgent memory maintenance skills. These are managed flow
-    // targets, so their bundled contracts must stay in lockstep with the
-    // hidden scheduler, injected-turn prompt, and rule-substrate templates.
-    "hamuna-memory-update",
-    "hamuna-memory-gardener",
-    "hamuna-memory-molt",
-    // v29: prompt-writer promoted from utility → system skill. It is pure
-    // methodology (no product-surface coupling), but as a utility skill the
-    // seed-once path meant existing installs never received content
-    // improvements. System status trades user customisation (overwritten on
-    // every version bump) for keeping the methodology current.
-    "prompt-writer",
-    // v40: creative-video-suite promoted from utility → system skill. Its
-    // SKILL.md + references/ encode a multi-stage pipeline (planner →
-    // scriptwriter → storyboard → assets → frame → video) with hard MCP
-    // call templates and product-image gates. The 2026-09-09 update added
-    // T13 (multiview grid) plus a project.json product_metadata schema;
-    // existing installs must receive these in lockstep or downstream
-    // video generation will silently fall back to the legacy single-view
-    // path and ignore the metadata extension.
-    "creative-video-suite",
-];
+// Skills that ship with the app and MUST stay at the bundled version —
+// the app's flows depend on them, users are not meant to customise.
+//
+// Derived at build time from `bundled-skills/<name>/SKILL.md` and emitted
+// to `system_skills.generated.rs`. `include!` keeps it a real `const` so the
+// existing `.iter().copied() / for x in / includes()` callsites stay
+// untouched. The Node mirror lives at
+// `src/shared/systemSkills.generated.ts` and is also emitted by the same
+// generator — cross-language drift is ruled out by both targets being
+// produced by a single Node pass over the same filesystem.
+// NOTE: line comment (not `///`) — rustdoc refuses doc comments on
+// macro invocations.
+include!("system_skills.generated.rs");
 
 /// Skills unavailable on certain platforms due to upstream bugs.
 /// MUST stay in sync with `src/server/utils/platform.ts::PLATFORM_BLOCKED_SKILLS`.
@@ -1935,31 +1902,36 @@ mod system_skills_tests {
     }
 
     #[test]
-    fn rust_and_node_system_skill_lists_match() {
-        let node = include_str!("../../src/server/index.ts");
-        let body = node
-            .split_once("const SYSTEM_SKILLS: readonly string[] = [")
-            .expect("Node SYSTEM_SKILLS declaration")
-            .1
-            .split_once("];")
-            .expect("Node SYSTEM_SKILLS terminator")
-            .0;
-        let node_skills: Vec<&str> = body
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                let rest = line.strip_prefix('\'')?;
-                rest.split_once('\'').map(|(name, _)| name)
+    fn system_skills_matches_bundled_skills_with_skill_md() {
+        // SYSTEM_SKILLS is auto-derived from bundled-skills/ by
+        // scripts/generate-system-skills.mjs. The Rust and Node targets are
+        // both emitted by the same Node pass, so cross-language parity is
+        // by-construction (verify-system-skills-sync.mjs still reads the
+        // generated files to catch a missing regen). This test asserts the
+        // single remaining invariant: the bundled Rust const exactly matches
+        // the directories present in bundled-skills/ that ship a SKILL.md.
+        let bundled_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("repo root")
+            .join("bundled-skills");
+        let mut actual: Vec<String> = fs::read_dir(&bundled_dir)
+            .expect("bundled-skills/ exists")
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_type()
+                    .map(|kind| kind.is_dir())
+                    .unwrap_or(false)
             })
+            .filter(|entry| entry.path().join("SKILL.md").is_file())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
             .collect();
-
-        assert_eq!(node_skills, SYSTEM_SKILLS);
-
-        let shared_contract = include_str!("../../src/shared/systemSkills.ts");
-        assert!(shared_contract.contains(&format!(
-            "export const SYSTEM_SKILLS_VERSION = '{}';",
-            SYSTEM_SKILLS_VERSION
-        )));
+        actual.sort();
+        let expected: Vec<String> = SYSTEM_SKILLS.iter().map(|name| (*name).to_string()).collect();
+        assert_eq!(
+            actual, expected,
+            "bundled-skills/ ↔ SYSTEM_SKILLS drift; rerun `npm run generate:system-skills`"
+        );
     }
 
     #[test]

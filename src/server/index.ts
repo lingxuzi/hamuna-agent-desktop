@@ -1382,55 +1382,22 @@ function resolveBundledSkillsDir(): string | null {
   return null;
 }
 
-/**
- * System skills — owned by the app, version-gated by the Rust side
- * (`SYSTEM_SKILLS` + `SYSTEM_SKILLS_VERSION` in `src-tauri/src/commands.rs`).
- * These are skipped by `seedBundledSkills` below because their lifecycle
- * is "force-overwrite on every version bump", not "seed once then leave
- * alone". Keep this list in sync with the Rust constant — a mismatch
- * would either double-seed (harmless but confusing logs) or skip a
- * genuine user skill named identically.
- */
-const SYSTEM_SKILLS: readonly string[] = [
-  'task-alignment',
-  'task-implement',
-  // v10: ultra-research removed — not generic enough.
-  'download-anything',
-  // v8: see commands.rs::SYSTEM_SKILLS — agent-browser promoted to system
-  // skill so existing users get the updated command-local npm self-install
-  // SKILL.md after the bundled CLI is removed.
-  'agent-browser',
-  // v9: hamuna-cli — global skill that exposes the entire `hamuna`
-  // CLI surface (cron / task / mcp / model / agent / runtime / skill /
-  // plugin / widget / im / config) to every AI session in the product.
-  // Force-synced because SKILL.md must track CLI changes in lockstep.
-  'hamuna-cli',
-  // v35: stable product-use knowledge and expected-behaviour contract for
-  // every HamunaAgent session. Live operations remain in hamuna-cli.
-  'hamuna-docs',
-  // v18: tool-creator — meta-skill for the CLI tool registry (PRD 0.2.36).
-  // Teaches AI to author standards-compliant Agent-CLI tools and register
-  // them via `hamuna tool add`. Force-synced because its contract (eight
-  // rules / description cap / readme template) must track registry
-  // validation in lockstep.
-  'tool-creator',
-  // v33: hidden memory-maintenance flows target these skills by exact name.
-  // Force-sync so the injected prompt, managed tasks, and skill workflow stay
-  // consistent across app upgrades.
-  'hamuna-memory-update',
-  'hamuna-memory-gardener',
-  'hamuna-memory-molt',
-  // v29: prompt-writer promoted from utility → system skill so content
-  // improvements reach existing installs (seed-once never updates).
-  'prompt-writer',
-  // v40: creative-video-suite promoted from utility → system skill. Its
-  // SKILL.md / references encode the drama 5-stage pipeline + commercial
-  // 3-branch gates; the 2026-09-09 update added T13 (multiview grid) and
-  // the project.json product_metadata schema. Existing installs must
-  // receive these in lockstep or downstream video generation will
-  // silently fall back to the legacy single-view path.
-  'creative-video-suite',
-];
+// System skills — owned by the app, version-gated by the Rust side
+// (`SYSTEM_SKILLS` + `SYSTEM_SKILLS_VERSION` in `src-tauri/src/commands.rs`).
+// The list itself is auto-derived from `bundled-skills/<name>/SKILL.md` by
+// `scripts/generate-system-skills.mjs` and re-exported from shared/ — both
+// the Rust and Node targets are emitted by the same Node pass, so cross-
+// language drift is impossible by construction.
+//
+// These are skipped by `seedBundledSkills` below because their lifecycle
+// is "force-overwrite on every version bump", not "seed once then leave
+// alone".
+import { SYSTEM_SKILLS } from '../shared/systemSkills';
+// Wrapped in `Set<string>` so `has(arbitrary_string)` accepts arbitrary
+// folder names from `readdir` without the TS literal-union narrow that
+// `as const` triggers on `Array#includes`. Authoritative list still lives
+// in `SYSTEM_SKILLS` (see `src/shared/systemSkills.generated.ts`).
+const SYSTEM_SKILLS_SET: ReadonlySet<string> = new Set<string>(SYSTEM_SKILLS);
 
 /**
  * Seed bundled skills to ~/.hamuna/skills/ on first launch.
@@ -1477,7 +1444,7 @@ export function seedBundledSkills(): void {
 
     let changed = false;
     for (const folder of bundledFolders) {
-      if (SYSTEM_SKILLS.includes(folder)) {
+      if (SYSTEM_SKILLS_SET.has(folder)) {
         // Owned by Rust version gate — skip silently.
         continue;
       }
@@ -1580,7 +1547,7 @@ export function seedBundledSkills(): void {
     const remainingSeeded: string[] = [];
     let removedCount = 0;
     for (const folder of config.seeded) {
-      if (SYSTEM_SKILLS.includes(folder)) {
+      if (SYSTEM_SKILLS_SET.has(folder)) {
         remainingSeeded.push(folder);
         continue;
       }
@@ -1637,7 +1604,7 @@ export function seedBundledSkills(): void {
       // skill no longer exists, so disabling it has nothing to act on.
       // Keep only entries that still resolve to a bundled/system skill.
       config.disabled = config.disabled.filter(
-        (n) => bundledFolderSet.has(n) || SYSTEM_SKILLS.includes(n),
+        (n) => bundledFolderSet.has(n) || SYSTEM_SKILLS_SET.has(n),
       );
       changed = true;
     }
@@ -5951,7 +5918,7 @@ async function main() {
 
                 const content = readFileSync(skillMdPath, 'utf-8');
                 const { name, description, author } = parseSkillFrontmatter(content);
-                const systemOwned = scopeType === 'user' && SYSTEM_SKILLS.includes(folder.name);
+                const systemOwned = scopeType === 'user' && SYSTEM_SKILLS_SET.has(folder.name);
                 const required = scopeType === 'user' && isRequiredSystemSkill(folder.name);
                 skills.push({
                   name: name || folder.name,
