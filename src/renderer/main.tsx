@@ -1,3 +1,5 @@
+import './utils/timezone-init'; // 强制全 app 时区 = Asia/Shanghai —— 必须最先 import，先于任何 Intl / Date.toLocale* 用法
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
