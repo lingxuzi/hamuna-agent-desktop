@@ -1,0 +1,525 @@
+name: macOS Release
+
+# 手动触发：编译 macOS ARM64 (Apple Silicon) → Developer ID 签名 + Apple 公证 →
+# 上传 Cloudflare R2 → 自动 bump 版本号并回写仓库。
+#
+# 与 windows-release.yml 对称：同样 workflow_dispatch + bump + R2 + commit/tag/push 模式，
+# 跨平台发布脚本是同一套结构，便于 cron / on-call 时心智一致。
+#
+# 不自动写 CHANGELOG（与本地 pre_release 的人工流程分开），发版后人工补。
+#
+# Why ARM64-only: GitHub-hosted `macos-latest` runner 是 Apple Silicon（M1+），native build
+# arm64 零交叉编译成本。Intel Mac 用户占比 <5%，保留本地 `./build_macos.sh` 双架构选项；
+# workflow 端不重复此能力（Intel 路径可直接改 `target:` + `node --arch` 复刻，无新抽象必要）。
+#
+# Why 不调 ./build_macos.sh：build_macos.sh 是交互式（架构菜单 / .env 警告 / 同步确认 / 末段发布
+# 提示），workflow 不能 answer prompts。R2 上传和 commit/tag/push 这两步在脚本里是 read -p 后的
+# 后续动作，workflow 必须自己跑——把 5 个 read -p 都改成 CI=1 守卫能给脚本加 50+ 行耦合，
+# 但维护性更差（脚本逻辑要分本地/无 TTY 两路）。直接内联步骤更直观。
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: '版本号提升类型（bump 后会自动 commit + tag + push）'
+        required: true
+        type: choice
+        default: 'patch'
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac-arm64:
+    name: Build macOS ARM64 → R2
+    runs-on: macos-latest
+
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      # R2 默认值；可用 secrets.R2_BUCKET 覆盖（真实 bucket 是 hamuna-agent）
+      R2_BUCKET: ${{ secrets.R2_BUCKET || 'hamuna-agent' }}
+      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL || 'https://download.hamuna.io' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          # Cache npm to skip the ~2m51s `npm ci` cold-run on subsequent releases.
+          # Key is auto-derived from package-lock.json hash; cache misses once on
+          # first run, hits on every release that doesn't touch package-lock.
+          # Independent of the existing Swatinem/rust-cache step (separate store).
+          cache: 'npm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: rustfmt, clippy
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ============================================================
+      # 1. Bump 版本号（package.json 单一数据源；version 钩子同步
+      #    tauri.conf.json + Cargo.toml）。.npmrc 已设 git-tag-version=false，
+      #    此步只改文件、不 commit/tag。
+      # ============================================================
+      - name: Bump version
+        id: bump
+        run: |
+          npm version ${{ github.event.inputs.bump }} --no-git-tag-version
+          ver=$(node -p "require('./package.json').version")
+          echo "VERSION=$ver" >> "$GITHUB_ENV"
+          echo "Bumped to $ver"
+
+      # ============================================================
+      # 2. TypeScript 类型检查
+      #
+      # Why 在 CI 跑（windows-release.yml 不跑，因为它只在 on-call 发版时手触；
+      # mac 这边多 1m30s typecheck 换零回归 build-time type error 的回报是值得的
+      # —— 本地 typecheck 通常在发版前 1-2 周就过了，期间 branch 可能又合了别的东西）。
+      # ============================================================
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      # ============================================================
+      # 3. Apple Developer ID 证书导入到临时 keychain
+      #
+      # Why 临时 keychain：runner 的 login.keychain 在每次 job 重新 provisioning，
+      # 默认 ACL 阻止 codesign 读私钥。建一个 6 小时 lockout 的独立 keychain + 加到
+      # search list 是 Apple 官方推荐做法（见 apple-actions/import-codesign-certs
+      # 的同款实现，但这里手写以减少外部 action 依赖 + 与 release.yml 的旧 pattern 对齐）。
+      # ============================================================
+      - name: Import Apple Developer ID certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euxo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 24)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # 把临时 keychain 加到 search list 头部，否则 codesign 看不到它
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # 允许 codesign 在无 UI 提示下使用私钥（默认 ACL 阻止）
+          security set-key-partition-list -S apple-tool:,apple: -s "$KEYCHAIN_PATH"
+
+          echo ">>> Apple Developer ID certificate imported"
+
+      # ============================================================
+      # 4. Stage Apple API key (.p8) for notarization
+      #
+      # Why 单独步骤：notarytool 用 App Store Connect API key 比 altool (APPLE_ID/PASSWORD)
+      # 更稳定（Apple 已弃用 altool）。.p8 必须在 $HOME/.appstoreconnect/private_keys/ 下，
+      # 且文件名必须匹配 AuthKey_<KEY_ID>.p8 —— Tauri / notarytool 按此约定读取。
+      # ============================================================
+      - name: Stage Apple API key (.p8) for notarization
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euxo pipefail
+          if [ -z "$APPLE_API_KEY" ]; then
+            echo "::error::APPLE_API_KEY secret not set — notarization will fail"
+            exit 1
+          fi
+          if [ -z "$APPLE_API_KEY_ID" ]; then
+            echo "::error::APPLE_API_KEY_ID env var not set"
+            exit 1
+          fi
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$APPLE_API_KEY" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8"
+          echo ">>> API key staged at AuthKey_${APPLE_API_KEY_ID}.p8"
+
+      # ============================================================
+      # 5. 下载 gitignored 构建资源（复用仓库内无交互脚本）
+      #
+      # - download_nodejs.sh --target arm64：把 darwin-arm64 node 二进制
+      #   拉到 src-tauri/resources/nodejs/，Tauri 把整个目录打进 .app 的 Resources/
+      # - download_cuse.sh：从 R2 拉 cuse-<triple> 二进制到 src-tauri/binaries/
+      #   （cuse 私有仓库 release.yml 自动构建并发到 GH Release，维护者再跑
+      #   HamunaAgent-Cuse/publish_r2.sh 镜像到 R2 → 此脚本从 R2 公网拉，无需 gh CLI）。
+      # ============================================================
+      - name: Download Node.js runtime (bundled, arm64)
+        run: bash scripts/download_nodejs.sh --target arm64
+
+      - name: Download cuse binary
+        run: bash scripts/download_cuse.sh
+
+      # ============================================================
+      # 6. 构建前端 / 后端产物
+      # ============================================================
+      - name: Build server / bridge / cli
+        run: |
+          npm run build:server
+          npm run build:bridge
+          npm run build:cli
+
+      - name: Build tsx-runtime (darwin-arm64)
+        run: npm run build:tsx-runtime -- darwin arm64
+
+      # ============================================================
+      # 7. Stage Claude SDK native binary
+      #
+      # SDK 0.2.113+ 不再 ship cli.js/sdk.mjs/vendor，改为 per-platform native binary。
+      # `@anthropic-ai/claude-agent-sdk-darwin-arm64` 是 optionalDependencies，
+      # npm ci 已经在 host arch 上装好。直接拷 + 验证完整性（lipo 必需 arch）。
+      #
+      # 验证是必须的：build_macos.sh 实战中遇到过 truncated Mach-O（curl 半路断），
+      # ljqx0 后能过 `file` 但 codesign 报 "main executable failed strict validation"
+      # —— 把失败推到 build 后比 build 前更难 debug（公证 API 错误信息模糊）。
+      # ============================================================
+      - name: Stage Claude SDK native binary (darwin-arm64)
+        run: |
+          set -euxo pipefail
+          SDK_SRC="node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude"
+          SDK_DEST="src-tauri/resources/claude-agent-sdk"
+
+          if [ ! -f "$SDK_SRC" ]; then
+            echo "::error::Claude SDK binary not found at $SDK_SRC"
+            exit 1
+          fi
+
+          # lipo 必须报 arm64，否则 cross-arch 污染会导致公证失败
+          ARCHES=$(lipo -archs "$SDK_SRC" 2>/dev/null || true)
+          if [[ " $ARCHES " != *" arm64 "* ]]; then
+            echo "::error::Claude SDK binary arch mismatch: expected arm64, got ${ARCHES:-unknown}"
+            exit 1
+          fi
+
+          # Mach-O load commands 必须完整（truncated 文件能过 lipo 但过不了 codesign）
+          if ! otool -l "$SDK_SRC" >/dev/null 2>&1; then
+            echo "::error::Claude SDK binary Mach-O load commands unreadable"
+            exit 1
+          fi
+          if otool -l "$SDK_SRC" 2>&1 | grep -q "past end of file"; then
+            echo "::error::Claude SDK binary truncated: Mach-O load commands point past EOF"
+            exit 1
+          fi
+
+          rm -rf "$SDK_DEST"
+          mkdir -p "$SDK_DEST"
+          cp "$SDK_SRC" "$SDK_DEST/claude"
+          chmod +x "$SDK_DEST/claude"
+          echo ">>> Claude SDK darwin-arm64 staged and validated"
+
+      # ============================================================
+      # 8. Pre-install sharp (darwin-arm64 only)
+      #
+      # Why arm64-only: mac-release workflow 只 build 一个 arch（Apple Silicon）。
+      # build_macos.sh 的 Both 模式才会装 arm64 + x64 两套。
+      # npm optionalDependencies 默认只装 host arch，无需 --force。
+      # ============================================================
+      - name: Pre-install sharp (darwin-arm64)
+        run: |
+          set -euxo pipefail
+          SHARP_DIR="src-tauri/resources/sharp-runtime"
+          rm -rf "$SHARP_DIR"
+          mkdir -p "$SHARP_DIR"
+          echo '{"name":"sharp-runtime","private":true,"version":"1.0.0","dependencies":{"sharp":"0.34.5"}}' > "$SHARP_DIR/package.json"
+          (cd "$SHARP_DIR" && npm install --no-audit --no-fund --no-save --ignore-scripts)
+          (cd "$SHARP_DIR" && npm install --no-save --no-audit --no-fund --ignore-scripts \
+            @img/sharp-darwin-arm64@0.34.5 @img/sharp-libvips-darwin-arm64@1.2.4)
+
+          # 验证 native binary + libvips dylib 都在
+          SHARP_NODE="$SHARP_DIR/node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64.node"
+          SHARP_DYLIB_DIR="$SHARP_DIR/node_modules/@img/sharp-libvips-darwin-arm64/lib"
+          if [ ! -f "$SHARP_NODE" ]; then
+            echo "::error::sharp-darwin-arm64.node missing"
+            exit 1
+          fi
+          if [ ! -d "$SHARP_DYLIB_DIR" ] || [ -z "$(ls "$SHARP_DYLIB_DIR"/*.dylib 2>/dev/null)" ]; then
+            echo "::error::sharp-libvips-darwin-arm64 dylib missing"
+            exit 1
+          fi
+          echo ">>> sharp darwin-arm64 staged and validated"
+
+      - name: Build frontend
+        run: npm run build:web
+
+      # ============================================================
+      # 9. 签名 Mach-O binaries（公证前置步骤）
+      #
+      # Apple 公证要求每个 bundle 内的 native binary 都签名 + hardened runtime，
+      # 否则 notarytool 报 "The binary is not signed with a valid Developer ID"。
+      #
+      # 涵盖：externalBin (cuse)、vendor (ripgrep)、sharp (.node + .dylib)、
+      # tsx-runtime/esbuild、Node.js binary、Claude SDK native binary。
+      #
+      # 复刻 build_macos.sh 的签名循环（line 350-449），但去掉了交互式 ARCH 选择和
+      # 进度打印。entitlements 跟主 app 一致 → 子进程继承主 app TCC 权限
+      # （Screen Recording / Accessibility / AppleEvents）。
+      # ============================================================
+      - name: Sign externalBin (cuse)
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euxo pipefail
+          EXTBIN_DIR="src-tauri/binaries"
+          FAILED=0
+          for bin in "${EXTBIN_DIR}"/*-apple-darwin; do
+            if [ -f "$bin" ]; then
+              echo ">>> Signing $(basename "$bin")"
+              xattr -d com.apple.quarantine "$bin" 2>/dev/null || true
+              if ! codesign --force --options runtime --timestamp \
+                  --entitlements "src-tauri/Entitlements.plist" \
+                  --sign "$APPLE_SIGNING_IDENTITY" "$bin"; then
+                echo "::error::Failed to sign $(basename "$bin")"
+                FAILED=$((FAILED + 1))
+              fi
+            fi
+          done
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED externalBin signing failures"
+            exit 1
+          fi
+
+      - name: Sign vendor binaries (ripgrep)
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euxo pipefail
+          VENDOR_DIR="src-tauri/resources/claude-agent-sdk/vendor"
+          SIGNED=0
+          FAILED=0
+          while IFS= read -r binary; do
+            if codesign --force --options runtime --timestamp \
+                --sign "$APPLE_SIGNING_IDENTITY" "$binary" 2>/dev/null; then
+              SIGNED=$((SIGNED + 1))
+            else
+              echo "::warning::Failed to sign vendor binary: $binary"
+              FAILED=$((FAILED + 1))
+            fi
+          done < <(find "$VENDOR_DIR" -type f \( -name "*.node" -o -name "rg" \) -path "*darwin*" 2>/dev/null)
+          echo ">>> Vendor binaries signed: $SIGNED ok, $FAILED failed (warnings only — vendor binaries are optional)"
+
+      - name: Sign sharp native binaries
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euxo pipefail
+          SHARP_DIR="src-tauri/resources/sharp-runtime"
+          SIGNED=0
+          FAILED=0
+          while IFS= read -r binary; do
+            if codesign --force --options runtime --timestamp \
+                --sign "$APPLE_SIGNING_IDENTITY" "$binary" 2>/dev/null; then
+              SIGNED=$((SIGNED + 1))
+            else
+              echo "::error::Failed to sign sharp binary: $binary"
+              FAILED=$((FAILED + 1))
+            fi
+          done < <(find "$SHARP_DIR/node_modules/@img" -type f \( -name "*.node" -o -name "*.dylib" \) 2>/dev/null)
+          if [ "$FAILED" -gt 0 ]; then exit 1; fi
+          if [ "$SIGNED" -eq 0 ]; then echo "::error::No sharp binaries signed"; exit 1; fi
+          echo ">>> sharp binaries signed: $SIGNED"
+
+      - name: Sign tsx-runtime esbuild + Node.js + Claude native binary
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euxo pipefail
+          # tsx-runtime esbuild (无 JIT 需求，不需要 entitlements)
+          TSX_RUNTIME_DIR="src-tauri/resources/tsx-runtime"
+          while IFS= read -r binary; do
+            xattr -d com.apple.quarantine "$binary" 2>/dev/null || true
+            codesign --force --options runtime --timestamp \
+              --sign "$APPLE_SIGNING_IDENTITY" "$binary" 2>/dev/null
+          done < <(find "$TSX_RUNTIME_DIR/node_modules" -type f -path "*/bin/esbuild" 2>/dev/null)
+
+          # Node.js binary (需要 entitlements：JIT)
+          NODE_BINARY="src-tauri/resources/nodejs/bin/node"
+          if [ -f "$NODE_BINARY" ]; then
+            xattr -d com.apple.quarantine "$NODE_BINARY" 2>/dev/null || true
+            codesign --force --options runtime --timestamp \
+              --entitlements "src-tauri/Entitlements.plist" \
+              --sign "$APPLE_SIGNING_IDENTITY" "$NODE_BINARY"
+          fi
+
+          # Claude SDK native binary (需要 entitlements：内嵌 Bun runtime 的 allow-jit)
+          CLAUDE_DEST="src-tauri/resources/claude-agent-sdk/claude"
+          if [ -f "$CLAUDE_DEST" ]; then
+            xattr -d com.apple.quarantine "$CLAUDE_DEST" 2>/dev/null || true
+            codesign --force --options runtime --timestamp \
+              --entitlements "src-tauri/Entitlements.plist" \
+              --sign "$APPLE_SIGNING_IDENTITY" "$CLAUDE_DEST"
+          fi
+
+          echo ">>> tsx-runtime + node + claude signed"
+
+      # ============================================================
+      # 10. Tauri release build (DMG + 自动签名 + 公证)
+      #
+      # Why 不显式调 notarytool：Tauri 的 macOS bundler 在 `tauri build` 末尾自动
+      # 调用 notarytool（按 APPLE_API_KEY_* env var 走 App Store Connect API 路径），
+      # 把 .app → .dmg → 上传 notary → 等回执 → staple。手动拆这步会让两边状态
+      # 不一致（build 成功但公证失败的 .app 残留在 bundle 目录，下次 build 误用）。
+      # ============================================================
+      - name: Build Tauri app (DMG + signing + notarization)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euxo pipefail
+          npm run tauri:build -- --target aarch64-apple-darwin
+
+      # ============================================================
+      # 11. Smoke-test (gates the upload)
+      #
+      # Why 比 windows 简单：macOS 自带 codesign verify / spctl assess，零成本
+      # 测两个最常见的 macOS 发布失败模式：
+      #   - codesign 链断了（签名被 -f 覆盖时偶发，验证 deploy 端完整性）
+      #   - notarization 没成功（spctl 是 Gatekeeper 评估，notary 失败会拒）
+      # 失败立刻 hard fail，否则 R2 上传的 dmg 是坏的用户装不上。
+      # ============================================================
+      - name: Smoke-test signing + notarization
+        run: |
+          set -euxo pipefail
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_PATH=$(find "$BUNDLE_DIR/macos" -name "*.app" | head -1)
+          DMG_PATH=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" | head -1)
+          TAR_GZ_PATH=$(find "$BUNDLE_DIR/macos" -name "*.app.tar.gz" ! -name "*.sig" | head -1)
+          SIG_PATH=$(find "$BUNDLE_DIR/macos" -name "*.app.tar.gz.sig" | head -1)
+
+          if [ -z "$APP_PATH" ]; then echo "::error::.app not found"; exit 1; fi
+          if [ -z "$DMG_PATH" ]; then echo "::error::.dmg not found"; exit 1; fi
+          if [ -z "$TAR_GZ_PATH" ]; then echo "::error::.app.tar.gz not found"; exit 1; fi
+          if [ -z "$SIG_PATH" ]; then echo "::error::.app.tar.gz.sig not found (TAURI_SIGNING_PRIVATE_KEY unset?)"; exit 1; fi
+
+          # codesign chain verify (deploy-side integrity)
+          if ! codesign --verify --deep --strict "$APP_PATH"; then
+            echo "::error::codesign verify failed for $APP_PATH"
+            exit 1
+          fi
+          echo ">>> codesign verify passed"
+
+          # Gatekeeper notarization check
+          if ! spctl --assess --type exec "$APP_PATH"; then
+            echo "::error::Gatekeeper assessment failed (notarization incomplete?)"
+            exit 1
+          fi
+          echo ">>> Gatekeeper assessment passed (notarized + stapled)"
+
+      # ============================================================
+      # 12. 上传到 Cloudflare R2（rclone；与 publish_release.sh 一致）
+      # ============================================================
+      - name: Install rclone
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP"
+          # macOS ARM runner → osx-arm64 zip（universal 也行但更大）
+          curl -fsSLO https://downloads.rclone.org/rclone-current-osx-arm64.zip
+          unzip -o rclone-current-osx-arm64.zip
+          RCLONE_DIR=$(find . -maxdepth 1 -type d -name "rclone-*" | head -1)
+          mkdir -p "$HOME/.ci"
+          cp "$RCLONE_DIR/rclone" "$HOME/.ci/rclone"
+          chmod +x "$HOME/.ci/rclone"
+          rm -rf "$RCLONE_DIR" rclone-current-osx-arm64.zip
+
+          # rclone 配置：无 BOM（rclone 拒收 BOM），凭证走 env var 不落盘
+          mkdir -p "$HOME/.config/rclone"
+          printf '%s\n' \
+            '[r2]' \
+            'type = s3' \
+            'provider = Cloudflare' \
+            'env_auth = true' \
+            "endpoint = https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            'acl = private' \
+            > "$HOME/.config/rclone/rclone.conf"
+
+          echo ">>> rclone ready at $HOME/.ci/rclone"
+
+      - name: Upload to R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euxo pipefail
+          RCLONE="$HOME/.ci/rclone"
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" | head -1)
+          TAR_GZ=$(find "$BUNDLE_DIR/macos" -name "*.app.tar.gz" ! -name "*.sig" | head -1)
+          SIG=$(find "$BUNDLE_DIR/macos" -name "*.app.tar.gz.sig" | head -1)
+
+          if [ -z "$DMG" ] || [ -z "$TAR_GZ" ] || [ -z "$SIG" ]; then
+            echo "::error::missing build artifacts (dmg/tar.gz/sig)"
+            exit 1
+          fi
+
+          # 上传 DMG / tar.gz / sig（tar.gz + sig 用架构后缀避免与未来 Intel 版本覆盖）
+          $RCLONE copy "$DMG" "r2:${R2_BUCKET}/releases/v${VERSION}/" --s3-no-check-bucket
+          $RCLONE copyto "$TAR_GZ" "r2:${R2_BUCKET}/releases/v${VERSION}/HamunaAgent_${VERSION}_aarch64.app.tar.gz" --s3-no-check-bucket
+          $RCLONE copyto "$SIG" "r2:${R2_BUCKET}/releases/v${VERSION}/HamunaAgent_${VERSION}_aarch64.app.tar.gz.sig" --s3-no-check-bucket
+
+          # 生成 update manifest（Tauri Updater v2 单平台格式）
+          # Why 单行 printf：YAML block scalar (`run: |`) 内的 heredoc + 行首 `{`
+          # 会让 YAML parser 把 `{` 当 inline flow mapping 起点报错（实测 line 489）。
+          # printf 整行 JSON + 跨行 `\`，单引号包住避免 shell 展开 ${} 同时避开 YAML。
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          SIGNATURE=$(cat "$SIG")
+          MANIFEST_DIR=$(mktemp -d)
+          DMG_BASENAME=$(basename "$DMG")
+
+          # darwin-aarch64.json — Tauri updater 读取这个
+          printf '{"version":"%s","notes":"HamunaAgent v%s","pub_date":"%s","signature":"%s","url":"%s/releases/v%s/HamunaAgent_%s_aarch64.app.tar.gz"}\n' \
+            "$VERSION" "$VERSION" "$PUB_DATE" "$SIGNATURE" "$DOWNLOAD_BASE_URL" "$VERSION" "$VERSION" \
+            > "$MANIFEST_DIR/darwin-aarch64.json"
+
+          # latest.json — website 下载页读这个
+          printf '{"version":"%s","pub_date":"%s","release_notes":"HamunaAgent v%s","downloads":{"mac_arm64":{"name":"Apple Silicon","url":"%s/releases/v%s/%s"}}}\n' \
+            "$VERSION" "$PUB_DATE" "$VERSION" "$DOWNLOAD_BASE_URL" "$VERSION" "$DMG_BASENAME" \
+            > "$MANIFEST_DIR/latest.json"
+
+          $RCLONE copy "$MANIFEST_DIR/" "r2:${R2_BUCKET}/update/" --s3-no-check-bucket
+          rm -rf "$MANIFEST_DIR"
+
+          echo ">>> R2 upload complete: v${VERSION}"
+          echo ">>>   updater: ${DOWNLOAD_BASE_URL}/update/darwin-aarch64.json"
+          echo ">>>   website: ${DOWNLOAD_BASE_URL}/update/latest.json"
+
+      # ============================================================
+      # 13. 回写仓库：commit + tag + push（workflow_dispatch 不会循环触发）
+      # ============================================================
+      - name: Commit and push version bump
+        run: |
+          set -euxo pipefail
+          echo "Pushing v$VERSION tag + version-bump commit"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          # 若构建意外改了其他文件（如 bundled dist），一并纳入避免污染
+          git status --short
+          if git diff --cached --quiet; then
+            echo "No version changes to commit — version bump may have already been committed"
+          else
+            git commit -m "v${VERSION}" -m "chore(release): bump to v${VERSION} via mac-release workflow"
+            git tag "v${VERSION}"
+            git push origin HEAD --tags
+          fi
