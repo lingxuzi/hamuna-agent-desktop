@@ -1302,7 +1302,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // matching exclusion list in src/server/index.ts::seedBundledSkills
 // MUST be kept in sync (comment there points back here).
 
-const SYSTEM_SKILLS_VERSION: &str = "54";
+const SYSTEM_SKILLS_VERSION: &str = "55";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -1548,6 +1548,94 @@ fn sync_system_skills_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<b
             .map_err(|e| format!("version write failed: {}", e))?;
     }
 
+    // === Orphan cleanup pass (task #155) ===
+    //
+    // Bundled system skills that were removed from `SYSTEM_SKILLS` in a later
+    // release leave behind a `~/.hamuna/skills/<name>/` dir. Per design
+    // ("bundled-skills == system skills, fully synced"), hard-delete those
+    // copies on every successful sync.
+    //
+    // The tracker is `~/.hamuna/.system-skills-snapshot.json` (separate from
+    // `.system-skills-version`, which only gates the version stamp). The
+    // snapshot records the *previous* `SYSTEM_SKILLS` list; any name that is
+    // (a) in that snapshot, (b) NOT in the current `SYSTEM_SKILLS`, and
+    // (c) present on disk under `~/.hamuna/skills/` is a bundled-originated
+    // orphan → remove.
+    //
+    // Names that are NOT in the snapshot are user-installed (manual `mkdir`
+    // or `hamuna skill add`); we never touch those. A missing/corrupt
+    // snapshot file is treated as "no orphans to consider" (conservative —
+    // avoids wiping user content on first launch after an upgrade from a
+    // pre-#155 build).
+    let orphan_snapshot = read_system_skills_snapshot(&hamuna_dir);
+    let mut removed_orphans: Vec<String> = Vec::new();
+    let mut failed_orphans: Vec<String> = Vec::new();
+    let bundled_set: std::collections::HashSet<&str> = SYSTEM_SKILLS.iter().copied().collect();
+    if let Ok(snapshot) = orphan_snapshot {
+        if let Ok(entries) = fs::read_dir(&skills_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy().to_string();
+                // Skip dotfiles (`.system-skills-version`, `.system-skills-snapshot.json`).
+                if name_str.starts_with('.') {
+                    continue;
+                }
+                // Still in current SYSTEM_SKILLS → keep.
+                if bundled_set.contains(name_str.as_str()) {
+                    continue;
+                }
+                // Not in previous snapshot → user-installed → preserve.
+                if !snapshot.skills.iter().any(|s| s == &name_str) {
+                    continue;
+                }
+                // Bundled-originated orphan: was in snapshot, not in current
+                // SYSTEM_SKILLS, present on disk → remove.
+                let path = entry.path();
+                // Pit-of-success: symlink_metadata does NOT follow symlinks,
+                // so a dangling link (Node-side broken-symlink hazard) is
+                // still detected and removed here.
+                match fs::symlink_metadata(&path) {
+                    Ok(_) => match fs::remove_dir_all(&path) {
+                        Ok(_) => {
+                            ulog_info!(
+                                "[system-skills] Removed orphan: {}",
+                                name_str
+                            );
+                            removed_orphans.push(name_str);
+                        }
+                        Err(e) => {
+                            ulog_warn!(
+                                "[system-skills] Failed to remove orphan {}: {}",
+                                name_str,
+                                e
+                            );
+                            failed_orphans.push(name_str);
+                        }
+                    },
+                    Err(e) => {
+                        ulog_warn!(
+                            "[system-skills] symlink_metadata({}) failed: {}",
+                            path.display(),
+                            e
+                        );
+                        failed_orphans.push(name_str);
+                    }
+                }
+            }
+        }
+    }
+    // Always refresh the snapshot to reflect the current SYSTEM_SKILLS list,
+    // even when nothing was removed. A missing file is the same as "never
+    // tracked anything", which on the next launch would skip cleanup — so we
+    // persist the current set to bootstrap the tracker on the first run after
+    // #155 ships.
+    if let Err(e) = write_system_skills_snapshot(&hamuna_dir, SYSTEM_SKILLS) {
+        ulog_warn!(
+            "[system-skills] failed to write .system-skills-snapshot.json: {}",
+            e
+        );
+    }
+
     ulog_info!(
         "[system-skills] Synced v{} (complete={}) — ok: {:?}, missing: {:?}, incomplete: {:?}, platform-skipped: {:?}",
         SYSTEM_SKILLS_VERSION,
@@ -1590,6 +1678,58 @@ fn all_installed_system_skills_complete(skills_dir: &Path) -> bool {
     SYSTEM_SKILLS.iter().all(|name| {
         is_skill_blocked_on_platform(name) || skill_dir_is_complete(&skills_dir.join(name))
     })
+}
+
+/// Snapshot of which skills were last force-synced by `sync_system_skills_blocking`.
+/// Lives at `~/.hamuna/.system-skills-snapshot.json` and is updated on every
+/// successful sync. The orphan-cleanup pass compares this list against the
+/// current `SYSTEM_SKILLS` constant: any name in the snapshot that is no
+/// longer a system skill AND is present on disk is a bundled-originated
+/// orphan → remove.
+///
+/// Distinct from `.system-skills-version` (a single string stamp): the version
+/// only gates the *force-overwrite* fast-path; the snapshot gates
+/// *orphan-cleanup* decisions. They live in different files because they
+/// have different shapes (string vs JSON array) and different write
+/// triggers.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SystemSkillsSnapshot {
+    /// Mirrors `SYSTEM_SKILLS_VERSION` at the time of the last write — for
+    /// debugging only, the orphan decision is driven by the `skills` list.
+    version: String,
+    skills: Vec<String>,
+}
+
+/// Read the system-skills snapshot, or return an error if the file is
+/// missing/corrupt. Callers treat any error as "no prior snapshot" →
+/// skip cleanup (conservative: avoids wiping user content on first launch
+/// after a pre-#155 build).
+fn read_system_skills_snapshot(hamuna_dir: &Path) -> Result<SystemSkillsSnapshot, String> {
+    let path = hamuna_dir.join(".system-skills-snapshot.json");
+    let raw = fs::read_to_string(&path).map_err(|e| format!("read snapshot: {}", e))?;
+    serde_json::from_str(&raw).map_err(|e| format!("parse snapshot: {}", e))
+}
+
+/// Persist the current `SYSTEM_SKILLS` set as the new snapshot. A best-
+/// effort write — on failure the next launch's cleanup simply has no prior
+/// snapshot and skips the pass (the failure is logged so it's visible in
+/// the unified log).
+fn write_system_skills_snapshot(
+    hamuna_dir: &Path,
+    skills: &[&str],
+) -> Result<(), String> {
+    let snapshot = SystemSkillsSnapshot {
+        version: SYSTEM_SKILLS_VERSION.to_string(),
+        skills: skills.iter().map(|s| s.to_string()).collect(),
+    };
+    let json = serde_json::to_string_pretty(&snapshot)
+        .map_err(|e| format!("serialize snapshot: {}", e))?;
+    let path = hamuna_dir.join(".system-skills-snapshot.json");
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).map_err(|e| format!("write tmp: {}", e))?;
+    // Atomic rename: a crash mid-write leaves the old snapshot intact
+    // (or no file, on first launch — both safe; cleanup just skips).
+    fs::rename(&tmp, &path).map_err(|e| format!("rename snapshot: {}", e))
 }
 
 /// Sync one system skill `src` → `dst`. Refuses to clear an existing good
@@ -1671,10 +1811,12 @@ fn merge_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
 mod system_skills_tests {
     use super::{
         all_installed_system_skills_complete, ensure_system_skills_installation_current_at,
-        is_skill_blocked_on_platform, skill_dir_is_complete, sync_one_system_skill,
-        SystemSkillSync, ADMIN_AGENT_VERSION, CLI_VERSION, SYSTEM_SKILLS, SYSTEM_SKILLS_VERSION,
+        is_skill_blocked_on_platform, read_system_skills_snapshot, skill_dir_is_complete,
+        sync_one_system_skill, SystemSkillSync, SystemSkillsSnapshot, ADMIN_AGENT_VERSION,
+        CLI_VERSION, SYSTEM_SKILLS, SYSTEM_SKILLS_VERSION,
     };
     use std::fs;
+    use std::path::Path;
 
     // Issue #321: a Windows install shipped some system-skill source dirs
     // empty (no SKILL.md). The old sync removed the user's good copy, merged
@@ -1975,6 +2117,119 @@ mod system_skills_tests {
             !dst.join("stale.txt").exists(),
             "wholesale replace drops stale files"
         );
+    }
+
+    // === task #155: orphan cleanup pass ===
+
+    /// Build a `SystemSkillsSnapshot` JSON on disk (mirrors the production
+    /// write path's shape so the read path can parse it back).
+    fn write_snapshot_for_test(
+        hamuna_dir: &Path,
+        version: &str,
+        skills: &[&str],
+    ) {
+        let snapshot = SystemSkillsSnapshot {
+            version: version.to_string(),
+            skills: skills.iter().map(|s| s.to_string()).collect(),
+        };
+        let json = serde_json::to_string_pretty(&snapshot).unwrap();
+        fs::write(hamuna_dir.join(".system-skills-snapshot.json"), json).unwrap();
+    }
+
+    /// Lay down a fake `skills/<name>/SKILL.md` tree.
+    fn install_fake_skill(skills_dir: &Path, name: &str) {
+        let d = skills_dir.join(name);
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("SKILL.md"), "x").unwrap();
+    }
+
+    #[test]
+    fn orphan_removal_targets_only_names_in_snapshot_but_not_in_current_system_skills() {
+        // Simulate: prior release shipped ["task-alignment", "fake-orphan"];
+        // the current release drops "fake-orphan" from SYSTEM_SKILLS. User
+        // has all three on disk + a `mycustom` user-installed dir.
+        // Expect: fake-orphan removed (in snapshot, not in current
+        // SYSTEM_SKILLS), task-alignment kept (still in current
+        // SYSTEM_SKILLS), mycustom kept (not in snapshot = user-installed).
+        //
+        // We can't drive `sync_system_skills_blocking` directly (it needs
+        // an AppHandle), so we simulate the orphan pass by writing a
+        // snapshot, then calling only the helpers the pass uses
+        // (read_system_skills_snapshot + the same iteration logic).
+        let tmp = tempfile::tempdir().unwrap();
+        let hamuna_dir = tmp.path();
+        let skills_dir = hamuna_dir.join("skills");
+        fs::create_dir_all(&skills_dir).unwrap();
+
+        for name in ["task-alignment", "fake-orphan", "mycustom"] {
+            install_fake_skill(&skills_dir, name);
+        }
+        write_snapshot_for_test(hamuna_dir, "55", &["task-alignment", "fake-orphan"]);
+
+        // Run the same per-entry decision the orphan pass runs.
+        let snapshot =
+            read_system_skills_snapshot(hamuna_dir).expect("snapshot should parse");
+        let bundled: std::collections::HashSet<&str> =
+            SYSTEM_SKILLS.iter().copied().collect();
+        let mut to_remove: Vec<String> = Vec::new();
+        for entry in fs::read_dir(&skills_dir).unwrap().flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy().to_string();
+            if name_str.starts_with('.') {
+                continue;
+            }
+            if bundled.contains(name_str.as_str()) {
+                continue;
+            }
+            if !snapshot.skills.iter().any(|s| s == &name_str) {
+                continue;
+            }
+            to_remove.push(name_str);
+        }
+        for n in &to_remove {
+            fs::remove_dir_all(skills_dir.join(n)).unwrap();
+        }
+
+        // fake-orphan removed; task-alignment + mycustom kept.
+        assert!(
+            !skills_dir.join("fake-orphan").exists(),
+            "fake-orphan is bundled-originated orphan → removed"
+        );
+        assert!(
+            skills_dir.join("task-alignment").exists(),
+            "task-alignment still in SYSTEM_SKILLS → kept"
+        );
+        assert!(
+            skills_dir.join("mycustom").exists(),
+            "mycustom not in snapshot → user-installed → preserved"
+        );
+    }
+
+    #[test]
+    fn orphan_cleanup_skips_passes_when_snapshot_missing_or_corrupt() {
+        // Pre-#155 installs have no snapshot file. Cleanup must skip (NOT
+        // wipe user content) rather than treating every name as orphan.
+        let tmp = tempfile::tempdir().unwrap();
+        let hamuna_dir = tmp.path();
+        let skills_dir = hamuna_dir.join("skills");
+        fs::create_dir_all(&skills_dir).unwrap();
+        install_fake_skill(&skills_dir, "mycustom");
+
+        // Missing snapshot → read_system_skills_snapshot returns Err;
+        // the production pass bails on Err and skips the iteration.
+        let result = read_system_skills_snapshot(hamuna_dir);
+        assert!(result.is_err(), "missing snapshot must be reported as error");
+        assert!(skills_dir.join("mycustom").exists(), "user skill untouched");
+
+        // Corrupt snapshot → also an error, also skip.
+        fs::write(
+            hamuna_dir.join(".system-skills-snapshot.json"),
+            "not-json {",
+        )
+        .unwrap();
+        let result = read_system_skills_snapshot(hamuna_dir);
+        assert!(result.is_err(), "corrupt snapshot must be reported as error");
+        assert!(skills_dir.join("mycustom").exists(), "user skill untouched");
     }
 }
 

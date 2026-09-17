@@ -1295,6 +1295,16 @@ function readSkillsConfig(): SkillsConfig {
   return defaults;
 }
 
+// Test seam: re-export the module-private helpers so unit tests can drive
+// seedBundledSkills without round-tripping through the public surface.
+// Kept at the call site rather than the definition site to minimize diff
+// noise vs. the original file layout.
+export const __testing = {
+  readSkillsConfig,
+  writeSkillsConfig,
+  resolveBundledSkillsDir,
+};
+
 function writeSkillsConfig(config: SkillsConfig): void {
   const configPath = getSkillsConfigPath();
   try {
@@ -1433,8 +1443,21 @@ const SYSTEM_SKILLS: readonly string[] = [
  * would be harmless (Rust always wins, ordering-wise) but we'd log a
  * "skipped existing folder" every boot, and the `config.seeded` array
  * would grow stale entries users don't recognise.
+ *
+ * Three responsibilities, in this order:
+ *   1. Seed every bundled utility skill not yet on disk (add path).
+ *   2. Re-seed broken symlinks so the bundled copy can land.
+ *   3. Remove bundled-originated orphans: names in `config.seeded` that
+ *      are no longer in `bundled-skills/` (i.e. removed from the source
+ *      in a later release) AND are not in `SYSTEM_SKILLS` (Rust owns
+ *      those) AND are not `isSkillBlockedOnPlatform` (e.g. agent-browser
+ *      on Windows — user's old copy stays valid). Names NOT in
+ *      `config.seeded` are user-installed (manual `mkdir` or
+ *      `hamuna skill add`) and are never touched.
+ *
+ * Exported for unit tests (see `src/server/index.unit.test.ts`).
  */
-function seedBundledSkills(): void {
+export function seedBundledSkills(): void {
   try {
     const bundledDir = resolveBundledSkillsDir();
     if (!bundledDir) {
@@ -1511,8 +1534,16 @@ function seedBundledSkills(): void {
       }
       // Skip if destination already exists (don't overwrite user's custom content)
       if (dstExists) {
-        config.seeded.push(folder);
-        changed = true;
+        // Pre-#155 bug: this push was unconditional, so a folder already
+        // tracked in `config.seeded` got re-pushed every boot, leaving
+        // duplicates. The dedup matters for orphan cleanup below — a
+        // duplicate would still resolve to the same disk path, but the
+        // membership check `!bundledFolderSet.has(folder)` would be
+        // ambiguous if the same name appeared twice.
+        if (!config.seeded.includes(folder)) {
+          config.seeded.push(folder);
+          changed = true;
+        }
         console.log(`[seed] Skipped existing folder: ${folder}`);
         continue;
       }
@@ -1524,7 +1555,90 @@ function seedBundledSkills(): void {
         continue;
       }
 
-      config.seeded.push(folder);
+      if (!config.seeded.includes(folder)) {
+        config.seeded.push(folder);
+        changed = true;
+      }
+    }
+
+    // === Orphan cleanup pass ===
+    // bundled-originated names that are no longer in `bundledFolders`
+    // (i.e. the source skill was removed in a later release) get hard-
+    // deleted from `~/.hamuna/skills/<name>/`. The membership invariant:
+    //   * `config.seeded` is the implicit "this was bundled at some
+    //     point" tracker (pre-#155 it only grew; now it is also pruned
+    //     here).
+    //   * `SYSTEM_SKILLS` names are owned by Rust; Node must skip them
+    //     even if a regression makes them disappear from `bundled-skills/`.
+    //   * Names blocked on the current platform (e.g. agent-browser on
+    //     Windows) are kept — `seedBundledSkills` itself skips them in
+    //     the main loop, so removing their user copies would be a silent
+    //     downgrade.
+    //   * Names NOT in `config.seeded` are user-installed and are
+    //     never touched.
+    const bundledFolderSet = new Set(bundledFolders);
+    const remainingSeeded: string[] = [];
+    let removedCount = 0;
+    for (const folder of config.seeded) {
+      if (SYSTEM_SKILLS.includes(folder)) {
+        remainingSeeded.push(folder);
+        continue;
+      }
+      if (bundledFolderSet.has(folder)) {
+        remainingSeeded.push(folder);
+        continue;
+      }
+      if (isSkillBlockedOnPlatform(folder)) {
+        remainingSeeded.push(folder);
+        continue;
+      }
+      const dst = join(userSkillsDir, folder);
+      if (!existsSync(dst)) {
+        // Already gone — quietly drop from `seeded`.
+        removedCount++;
+        continue;
+      }
+      // pit-of-success: lstatSync + existsSync guard mirrors the broken-
+      // symlink handling at line 1496-1513 — without it Node v24 throws
+      // a JS-uncatchable C++ exception from std::filesystem::equivalent
+      // and the whole sidecar aborts.
+      let dstLstat: ReturnType<typeof lstatSync> | null = null;
+      try {
+        dstLstat = lstatSync(dst);
+      } catch {
+        // Cannot even stat — leave the entry; next launch will retry.
+        remainingSeeded.push(folder);
+        continue;
+      }
+      if (dstLstat.isSymbolicLink() && !existsSync(dst)) {
+        // Broken symlink at the orphan path — unlink it (don't recurse).
+        try {
+          unlinkSync(dst);
+          console.log(`[seed] Removed broken-symlink orphan: ${folder}`);
+        } catch {
+          remainingSeeded.push(folder);
+          continue;
+        }
+        removedCount++;
+        continue;
+      }
+      try {
+        rmSync(dst, { recursive: true, force: false });
+        console.log(`[seed] Removed orphaned bundled skill: ${folder}`);
+        removedCount++;
+      } catch (err) {
+        console.warn(`[seed] Failed to remove orphan ${folder}, keeping entry:`, err);
+        remainingSeeded.push(folder);
+      }
+    }
+    if (removedCount > 0) {
+      config.seeded = remainingSeeded;
+      // Stale `disabled` entries pointing at orphans are useless: the
+      // skill no longer exists, so disabling it has nothing to act on.
+      // Keep only entries that still resolve to a bundled/system skill.
+      config.disabled = config.disabled.filter(
+        (n) => bundledFolderSet.has(n) || SYSTEM_SKILLS.includes(n),
+      );
       changed = true;
     }
 
