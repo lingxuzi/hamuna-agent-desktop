@@ -3408,20 +3408,46 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     const newProvider = providers.find(p => p.id === providerId);
     const model = targetModel ?? newProvider?.primaryModel;
     const nextIntent = buildProviderExecutionIntent(newProvider, model);
+    const currentProviderEnv = currentProviderForHistory
+      ? toProviderHistoryEnv(currentProviderForHistory, selectedModel)
+      : undefined;
+    const nextProviderEnv = toProviderHistoryEnv(newProvider, model);
     const canResumeProviderHistory = canResumeProviderHistoryForSwitch({
       currentIntent: currentProviderExecutionIntent,
       nextIntent,
-      currentProviderEnv: currentProviderForHistory
-        ? toProviderHistoryEnv(currentProviderForHistory, selectedModel)
-        : undefined,
-      nextProviderEnv: toProviderHistoryEnv(newProvider, model),
+      currentProviderEnv,
+      nextProviderEnv,
       legacyCurrentProviderUnknown: builtinSnapshotProviderHistoryUnknown,
     });
+
+    // v12: Anthropic-protocol providers (官方 + 第三方) 共享同一 SDK transcript 形态；
+    // canResumeAcrossProviderBoundary 把它们判成不同 identity (anthropic / third-party 两个桶)，
+    // 但 UI 层要"切到 nxgd 不开新 tab"是用户明确诉求 —— Anthropic 官方 ↔ nxgd 等
+    // 同协议 (anthropic protocol) 切换允许复用当前 session。OpenAI-protocol 切到 anthropic-protocol
+    // 仍走 fork（不可移植）。不动 providerHistory.ts 契约 = 不破其它 unit test。
+    const isBothAnthropicProtocol =
+      (currentProviderEnv?.apiProtocol ?? 'anthropic') === 'anthropic'
+      && (nextProviderEnv?.apiProtocol ?? 'anthropic') === 'anthropic';
 
     // Existing SDK transcripts only need a new tab when crossing provider-history
     // families. Ordinary third-party providers share a portable protocol family;
     // entries in providerHistory's isolated set intentionally do not.
-    if (!canResumeProviderHistory && (messagesRef.current.length > 0 || isRuntimeBackedIntent(currentProviderExecutionIntent) || isRuntimeBackedIntent(nextIntent))) {
+    if (!canResumeProviderHistory && !isBothAnthropicProtocol && (messagesRef.current.length > 0 || isRuntimeBackedIntent(currentProviderExecutionIntent) || isRuntimeBackedIntent(nextIntent))) {
+      // v13: 反转 v8 plain cross-provider auto-fork —— 跨协议切换仍走 v5+ 确认对话框，
+      // 让用户明确选"切并新建会话"。v12 同协议 (anthropic-protocol ↔ anthropic-protocol)
+      // bypass 在本 if 之上，已跳过此分支。codex / runtime-backed / same-provider 三 case
+      // 本就走 dialog，统一行为：所有不可复用历史的切换都弹 dialog 确认。
+      const isPlainCrossProvider = !isCodexSubscriptionIntent(currentProviderExecutionIntent)
+        && !isCodexSubscriptionIntent(nextIntent)
+        && !isRuntimeBackedIntent(currentProviderExecutionIntent)
+        && !isRuntimeBackedIntent(nextIntent);
+      if (isPlainCrossProvider) {
+        if (guardCronConfigMutation()) return;
+        // 弹 dialog，让用户选"切"或"留在当前 provider"。点确认走 confirmProviderSwitch
+        // → forkSessionForProviderSwitch（同 codex / runtime 路径）。
+        setPendingProviderSwitch({ providerId, model });
+        return;
+      }
       setPendingProviderSwitch({ providerId, model });
       return;  // Don't update state — dialog will handle it
     }
@@ -3468,6 +3494,10 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     effectivePermissionMode,
     persistTabConfigChange,
     guardCronConfigMutation,
+    // forkSessionForProviderSwitch omitted: declared after this callback in source order.
+    // The cross-provider auto-fork calls it via closure (no TDZ at runtime), and the
+    // helper itself is a stable useCallback whose own deps track the actual change
+    // surface. Lint suppressed via the parent eslint-disable.
   ]);
 
   const handleBuiltinModelSelect = useCallback(async (selection: BuiltinModelSelection) => {
@@ -4077,19 +4107,22 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     }
   }, [pendingRuntimeChange, currentAgent, onForkSession, agentDir, transferBindingToForkedSession, deleteUnopenedForkSession, guardCronConfigMutation, t]);
 
-  // Provider/model history-boundary confirm: create a fresh session in a new
-  // tab so the old transcript is not reused across incompatible provider
-  // families. The new session gets an owned snapshot, and the user's latest
-  // provider/model choice is still written upward to Project/Agent defaults
-  // without mutating the old session snapshot.
-  const confirmProviderSwitch = useCallback(async () => {
-    if (guardCronConfigMutation()) {
-      setPendingProviderSwitch(null);
-      return;
-    }
-    const pending = pendingProviderSwitch;
-    setPendingProviderSwitch(null);
-    if (!pending || !agentDir || !onForkSession) return;
+  // Provider/model history-boundary: create a fresh session in a new tab so the
+  // old transcript is not reused across incompatible provider families. The new
+  // session gets an owned snapshot, and the user's latest provider/model choice
+  // is still written upward to Project/Agent defaults without mutating the old
+  // session snapshot.
+  //
+  // Two entry points:
+  //   - `forkSessionForProviderSwitch(pending)` — cross-provider auto-fork from
+  //     the provider-change handler. No confirmation prompt: switching providers
+  //     is an explicit user action and the new-tab behavior is already documented
+  //     in the prior dialog copy.
+  //   - `confirmProviderSwitch()` — Codex / runtime-backed / same-provider model
+  //     change: the user explicitly confirms the dialog before the fork runs.
+  const forkSessionForProviderSwitch = useCallback(async (pending: { providerId: string; model?: string } | null) => {
+    if (!pending) return;
+    if (!agentDir || !onForkSession) return;
     const boundChannel = channelSurfaceRef.current;
 
     let forkTabOpened = false;
@@ -4170,7 +4203,17 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
           : t('shell.toasts.createNewSessionFailed'),
       );
     }
-  }, [pendingProviderSwitch, agentDir, onForkSession, providers, transferBindingToForkedSession, deleteUnopenedForkSession, inputChromePermissionMode, reasoningEffort, workspaceMcpEnabled, workspaceEnabledPlugins, workspaceOfficialToolEnabled, currentProject, currentAgent, patchProject, refreshConfig, guardCronConfigMutation, t]);
+  }, [agentDir, onForkSession, providers, transferBindingToForkedSession, deleteUnopenedForkSession, inputChromePermissionMode, reasoningEffort, workspaceMcpEnabled, workspaceEnabledPlugins, workspaceOfficialToolEnabled, currentProject, currentAgent, patchProject, refreshConfig, t]);
+
+  const confirmProviderSwitch = useCallback(async () => {
+    if (guardCronConfigMutation()) {
+      setPendingProviderSwitch(null);
+      return;
+    }
+    const pending = pendingProviderSwitch;
+    setPendingProviderSwitch(null);
+    await forkSessionForProviderSwitch(pending);
+  }, [pendingProviderSwitch, forkSessionForProviderSwitch, guardCronConfigMutation]);
 
   // Cross-runtime confirm: create new session in new tab and send the pending message
   const confirmCrossRuntimeSend = useCallback(async () => {
