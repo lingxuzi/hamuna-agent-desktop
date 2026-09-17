@@ -11,6 +11,23 @@ import { getGlobalServerUrlWithWait, proxyFetch } from './tauriClient';
 import { isTauriEnvironment } from '@/utils/browserMock';
 
 /**
+ * 把服务端 `{ error, message }` 失败响应包装成 Error：
+ *  - Error.message 保持原 code 字符串（向后兼容：既有 grep / catch 习惯不动）
+ *  - Error.serverMessage 是服务端 `message` 字段（人类可读原因，如 "recharge failed (code 403)"
+ *    / "fetch failed"），消费者想看真因时自行读 `err.serverMessage`，不想看时忽略即可
+ *  - 不想污染 Error.prototype 把 serverMessage 做成每个实例 ad-hoc 字段
+ */
+function buildApiError(errorData: unknown, status: number, statusPrefix = 'HTTP'): Error & { serverMessage?: string; isApiError?: boolean } {
+  const code = (errorData as { error?: string }).error || `${statusPrefix} ${status}`;
+  const err = new Error(code) as Error & { serverMessage?: string; isApiError?: boolean };
+  err.serverMessage = (errorData as { message?: string }).message;
+  // isApiError 标志：让 apiGetJson 的 catch 块能区分"buildApiError 自己 throw 的"和"JSON.parse 失败的"，
+  // 避免 serverMessage === undefined 时被误判吞掉。
+  err.isApiError = true;
+  return err;
+}
+
+/**
  * Fetch from API endpoint, handling both browser and Tauri modes
  * Uses the global Sidecar for API calls (suitable for Settings page)
  * Will wait for global sidecar to be ready before making requests
@@ -41,7 +58,7 @@ export async function apiPostJson<T>(endpoint: string, data: unknown): Promise<T
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error((errorData as { error?: string }).error || `HTTP ${response.status}`);
+        throw buildApiError(errorData, response.status);
     }
 
     return response.json();
@@ -62,8 +79,11 @@ export async function apiGetJson<T>(endpoint: string): Promise<T> {
         });
         try {
             const errorData = JSON.parse(responseText);
-            throw new Error((errorData as { error?: string }).error || `HTTP ${response.status}`);
-        } catch {
+            throw buildApiError(errorData, response.status);
+        } catch (e) {
+            if (e instanceof Error && (e as { isApiError?: boolean }).isApiError) {
+                throw e; // 已是 buildApiError 产物，原样透传
+            }
             throw new Error(`HTTP ${response.status}: ${responseText.slice(0, 100)}`);
         }
     }
@@ -96,7 +116,7 @@ export async function apiPostFormData<T>(endpoint: string, formData: FormData): 
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error((errorData as { error?: string }).error || `HTTP ${response.status}`);
+        throw buildApiError(errorData, response.status);
     }
 
     return response.json();
@@ -114,7 +134,7 @@ export async function apiPutJson<T>(endpoint: string, data: unknown): Promise<T>
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error((errorData as { error?: string }).error || `HTTP ${response.status}`);
+        throw buildApiError(errorData, response.status);
     }
 
     return response.json();
@@ -130,7 +150,7 @@ export async function apiDelete<T>(endpoint: string): Promise<T> {
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error((errorData as { error?: string }).error || `HTTP ${response.status}`);
+        throw buildApiError(errorData, response.status);
     }
 
     return response.json();
