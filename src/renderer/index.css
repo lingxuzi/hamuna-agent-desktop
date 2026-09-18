@@ -118,6 +118,15 @@
   }
 }
 
+/* Wizard step body enter — 180ms opacity + 0.98→1 scale, ease-out-quart。
+   比 popoverIn（0.95）更弱，匹配 wizard 卡片视觉权重；不加 translateY
+   是 step body 已浮在 wizard 卡片内部不需要位移提示。DESIGN 红线
+   ≤200ms / 无弹跳（Design.md L98 + DESIGN-LANGUAGE.md:48）。 */
+@keyframes wizard-step-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 /* Toast slide-down animation */
 @keyframes slideDown {
   from {

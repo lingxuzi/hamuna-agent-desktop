@@ -480,3 +480,69 @@ describe('wizard step 2 model picker', () => {
     expect(list.className).toContain('overflow-y-auto');
   });
 });
+
+describe('wizard animation', () => {
+  beforeEach(() => {
+    apiPostJson.mockClear();
+    openExternal.mockClear();
+    discoverNxgdModels.mockReset();
+    discoverNxgdModels.mockResolvedValue([
+      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
+    ]);
+    getNxgdAuthState.mockReset();
+    getNxgdAuthState.mockResolvedValue({ status: 'registered', registered: true, setup: false });
+  });
+
+  test('expanded 卡片含 popoverIn 180ms ease-out-quart + motion-reduce fallback', async () => {
+    const { container } = render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    // expanded 卡片是 role="dialog"
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.className).toContain('animate-[popoverIn_180ms_cubic-bezier(0.25,1,0.5,1)_both]');
+    expect(dialog.className).toContain('motion-reduce:animate-none');
+    expect(container).toBeTruthy();
+  });
+
+  test('step body 含 wizard-step-in 180ms ease-out-quart + motion-reduce fallback', async () => {
+    render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    const stepBody = screen.getByTestId('nxgd-wizard-step-body');
+    expect(stepBody.className).toContain('animate-[wizard-step-in_180ms_cubic-bezier(0.25,1,0.5,1)_both]');
+    expect(stepBody.className).toContain('motion-reduce:animate-none');
+
+    // step 切到 2 → key={step} 触发 remount，新 step body 仍含同一 className
+    fireEvent.click(screen.getByText('wizard.step1.cta'));
+    await screen.findByTestId('nxgd-wizard-model-list');
+    const stepBody2 = screen.getByTestId('nxgd-wizard-step-body');
+    expect(stepBody2.className).toContain('animate-[wizard-step-in_180ms_cubic-bezier(0.25,1,0.5,1)_both]');
+  });
+
+  test('pill 态不加入场动画（保持低优先通知语义）', () => {
+    const { container } = render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        onClose={vi.fn()}
+      />,
+    );
+    const complementary = screen.getByRole('complementary');
+    expect(complementary.className).not.toContain('animate-[');
+    expect(complementary.className).not.toContain('motion-reduce:animate-none');
+    expect(container).toBeTruthy();
+  });
+});

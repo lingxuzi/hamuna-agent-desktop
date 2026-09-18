@@ -239,7 +239,7 @@ export default function NxgdOnboardingWizard({
       </div>
     ) : (
       <div
-        className="absolute bottom-6 right-6 w-[420px] max-w-[calc(100vw-3rem)] rounded-lg border border-[var(--line)] bg-[var(--paper-elevated)] p-6 shadow-md"
+        className="absolute bottom-6 right-6 w-[420px] max-w-[calc(100vw-3rem)] rounded-lg border border-[var(--line)] bg-[var(--paper-elevated)] p-6 shadow-md motion-reduce:animate-none animate-[popoverIn_180ms_cubic-bezier(0.25,1,0.5,1)_both]"
         role="dialog"
         aria-modal="false"
       aria-labelledby="nxgd-onboarding-title"
@@ -260,7 +260,11 @@ export default function NxgdOnboardingWizard({
 
       <ProgressDots current={step} />
 
-      <div className="mt-4 text-sm leading-relaxed text-[var(--ink-muted)]" key={step}>
+      <div
+        key={step}
+        data-testid="nxgd-wizard-step-body"
+        className="mt-4 text-sm leading-relaxed text-[var(--ink-muted)] motion-reduce:animate-none animate-[wizard-step-in_180ms_cubic-bezier(0.25,1,0.5,1)_both]"
+      >
         {step === 1 && t('wizard.step1.body')}
         {step === 2 && (
           <div>
