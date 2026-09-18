@@ -2064,6 +2064,11 @@ export const DEFAULT_CONFIG: AppConfig = {
     enabled: true,
     accelerator: 'CmdOrCtrl+Shift+M',
   },
+  // 新装默认仅启用 nxgd（云广智能）；其余 18 个预设供应商通过 Settings → 启用和排序对话框手动启用。
+  // 派生自 PRESET_PROVIDERS 而非硬编码 18 个 id，加新预设时自动包含，避免 drift。
+  disabledProviderIds: PRESET_PROVIDERS
+    .map(provider => provider.id)
+    .filter(id => id !== NXGD_PROVIDER_ID),
 };
 
 /** Default accelerator string for the global summon shortcut (PRD 0.2.16).

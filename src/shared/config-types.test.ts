@@ -6,10 +6,12 @@ import {
   CODEX_SUBSCRIPTION_PROVIDER_ID,
   MANAGED_CODEX_PROVIDER,
   MANAGED_CODEX_REQUIRED_RUNTIME,
+  NXGD_PROVIDER_ID,
   PRESET_PROVIDERS,
   SUBSCRIPTION_PROVIDER_ID,
   XAI_SUBSCRIPTION_PROVIDER_ID,
   applyManagedCodexProviderReadiness,
+  applyProviderEnablementAndOrder,
   getEffectiveModelAliases,
   getManagedCodexProviderReadiness,
   isManagedCodexRequiredRuntimeInstalled,
@@ -596,5 +598,62 @@ describe('withNxgdDiscoveredModels', () => {
 
     const after = providers.find(provider => provider.id === SUBSCRIPTION_PROVIDER_ID)!;
     expect(after).toBe(anthropicSub); // same reference — untouched
+  });
+});
+
+// 新装默认仅启用 nxgd；其余 18 个预设 provider 标记 disabled，由用户在 Settings → 启用和排序对话框手动启用。
+// 单一真相源 = disabledProviderIds；PRESET_PROVIDERS 字面量保持不变，applyProviderEnablementAndOrder 派生 enabled。
+describe('default provider enablement', () => {
+  it('DEFAULT_CONFIG.disabledProviderIds 包含所有非 nxgd 预设 id，长度 = PRESET_PROVIDERS - 1', () => {
+    const nonNxgdPresetIds = PRESET_PROVIDERS
+      .map(provider => provider.id)
+      .filter(id => id !== NXGD_PROVIDER_ID);
+    expect(DEFAULT_CONFIG.disabledProviderIds).toEqual(nonNxgdPresetIds);
+    expect(DEFAULT_CONFIG.disabledProviderIds).toHaveLength(PRESET_PROVIDERS.length - 1);
+  });
+
+  it('DEFAULT_CONFIG.disabledProviderIds 不包含 nxgd', () => {
+    expect(DEFAULT_CONFIG.disabledProviderIds).not.toContain(NXGD_PROVIDER_ID);
+  });
+
+  it('applyProviderEnablementAndOrder 用 DEFAULT_CONFIG 派生 → 18 个非 nxgd disabled + nxgd enabled', () => {
+    const derived = applyProviderEnablementAndOrder(
+      PRESET_PROVIDERS,
+      { providerOrder: [], disabledProviderIds: DEFAULT_CONFIG.disabledProviderIds },
+    );
+    const byId = new Map(derived.map(provider => [provider.id, provider]));
+    for (const provider of derived) {
+      if (provider.id === NXGD_PROVIDER_ID) {
+        expect(provider.enabled).not.toBe(false); // 启用
+      } else {
+        expect(provider.enabled).toBe(false); // 停用
+      }
+    }
+    expect(byId.get(NXGD_PROVIDER_ID)).toBeDefined();
+  });
+
+  it('老用户路径：磁盘 disabledProviderIds:[] 覆盖默认 → 全部 enabled', () => {
+    const derived = applyProviderEnablementAndOrder(
+      PRESET_PROVIDERS,
+      { providerOrder: [], disabledProviderIds: [] },
+    );
+    const disabledCount = derived.filter(provider => provider.enabled === false).length;
+    expect(disabledCount).toBe(0);
+  });
+
+  it('老用户显式部分禁用：disabledProviderIds:[anthropic-sub] → 仅 anthropic-sub disabled + 其余全 enabled', () => {
+    const somePresetId = PRESET_PROVIDERS
+      .map(provider => provider.id)
+      .find(id => id !== NXGD_PROVIDER_ID)!;
+    const derived = applyProviderEnablementAndOrder(
+      PRESET_PROVIDERS,
+      { providerOrder: [], disabledProviderIds: [somePresetId] },
+    );
+    const target = derived.find(provider => provider.id === somePresetId);
+    expect(target?.enabled).toBe(false);
+    const others = derived.filter(provider => provider.id !== somePresetId);
+    for (const provider of others) {
+      expect(provider.enabled).not.toBe(false);
+    }
   });
 });
