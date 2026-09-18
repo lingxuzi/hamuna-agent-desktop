@@ -44,6 +44,13 @@ export interface NxgdAuthState {
   balanceCheckedAt: number | null;
   /** 最近一次错误信息（注册失败 / 余额拉取失败） */
   error: string | null;
+  /**
+   * 用户是否已完成 first-run wizard（看到 step 5「去 Chat」或点了稍后再说）。
+   * 与 `providerVerifyStatus['nxgd']`（cache of /models 200）解耦 —— cache 不能
+   * 充当"用户是否看过 wizard"的权威信号（manual rm nxgd-auth.json 不清 cache）。
+   * 单一权威：wizard 完成时写 true，下次启动 gate 读这个字段判断是否弹。
+   */
+  setup: boolean;
 }
 
 interface PersistedAuth {
@@ -51,6 +58,8 @@ interface PersistedAuth {
   code: string;
   userId: number;
   registeredAt: number;
+  /** first-run wizard 是否已走完（见 NxgdAuthState.setup） */
+  setup?: boolean;
 }
 
 interface BalanceSnapshot {
@@ -82,6 +91,7 @@ let currentState: NxgdAuthState = {
   usedBalance: null,
   balanceCheckedAt: null,
   error: null,
+  setup: false,
 };
 
 // --- helpers ---------------------------------------------------------------
@@ -122,6 +132,7 @@ async function readPersistedAuth(): Promise<PersistedAuth | null> {
           code: parsed.code,
           userId: typeof parsed.userId === 'number' ? parsed.userId : 0,
           registeredAt: typeof parsed.registeredAt === 'number' ? parsed.registeredAt : 0,
+          setup: parsed.setup === true,
         };
       } catch (err) {
         logNxgd('warn', 'read persisted auth failed', { err: String(err) });
@@ -193,7 +204,7 @@ export async function ensureRegistered(): Promise<NxgdAuthState> {
       const persisted = cachedAuth ?? (await readPersistedAuth());
       if (persisted) {
         cachedAuth = persisted;
-        updateState({ status: 'registered', registered: true, userId: persisted.userId || null, error: null });
+        updateState({ status: 'registered', registered: true, userId: persisted.userId || null, error: null, setup: persisted.setup === true });
         return persisted;
       }
 
@@ -221,10 +232,11 @@ export async function ensureRegistered(): Promise<NxgdAuthState> {
         code: deviceId,
         userId: typeof resp.data.user?.id === 'number' ? resp.data.user.id : 0,
         registeredAt: Date.now(),
+        setup: false,
       };
       await writePersistedAuth(next);
       cachedAuth = next;
-      updateState({ status: 'registered', registered: true, userId: next.userId || null, error: null });
+      updateState({ status: 'registered', registered: true, userId: next.userId || null, error: null, setup: false });
       logNxgd('info', 'register succeeded', { userId: next.userId });
       return next;
     } catch (err) {
@@ -247,7 +259,7 @@ export async function getNxgdApiKey(): Promise<string | null> {
   const persisted = await readPersistedAuth();
   if (persisted) {
     cachedAuth = persisted;
-    updateState({ status: 'registered', registered: true, error: null });
+    updateState({ status: 'registered', registered: true, error: null, setup: persisted.setup === true });
     return persisted.apiKey;
   }
   await ensureRegistered();
@@ -278,6 +290,7 @@ export async function refreshNxgdApiKey(): Promise<string | null> {
       code: deviceId,
       userId: typeof resp.data.user?.id === 'number' ? resp.data.user.id : (cachedAuth?.userId ?? 0),
       registeredAt: cachedAuth?.registeredAt ?? Date.now(),
+      setup: cachedAuth?.setup === true,
     };
     await writePersistedAuth(next);
     cachedAuth = next;
@@ -310,8 +323,9 @@ export function preloadNxgdAuth(): void {
       code: parsed.code,
       userId: typeof parsed.userId === 'number' ? parsed.userId : 0,
       registeredAt: typeof parsed.registeredAt === 'number' ? parsed.registeredAt : 0,
+      setup: parsed.setup === true,
     };
-    updateState({ status: 'registered', registered: true, userId: cachedAuth.userId, error: null });
+    updateState({ status: 'registered', registered: true, userId: cachedAuth.userId, error: null, setup: cachedAuth.setup === true });
   } catch (err) {
     // 读失败不阻断 — 由 ensureRegistered 后续触发重新注册
     logNxgd('warn', 'preload auth failed', { err: String(err) });
@@ -320,6 +334,28 @@ export function preloadNxgdAuth(): void {
 
 /** renderer 可见的当前状态快照。 */
 export function getNxgdAuthState(): NxgdAuthState {
+  return currentState;
+}
+
+/**
+ * 标记用户已走完 first-run wizard。把 `setup: true` 落盘到 nxgd-auth.json，
+ * 让 gate 看到「已完成首启」并停止弹 wizard。幂等 —— 重复调用是 no-op。
+ *
+ * 返回更新后的 state（renderer 拿到 state 立即关 wizard）。
+ */
+export async function markNxgdSetupDone(): Promise<NxgdAuthState> {
+  await ensureRegistered();
+  if (currentState.setup === true && cachedAuth?.setup === true) {
+    return currentState;
+  }
+  if (!cachedAuth) {
+    return currentState;
+  }
+  const next: PersistedAuth = { ...cachedAuth, setup: true };
+  await writePersistedAuth(next);
+  cachedAuth = next;
+  updateState({ setup: true });
+  logNxgd('info', 'first-run wizard setup marked done');
   return currentState;
 }
 
@@ -446,6 +482,13 @@ let rateLimitedUntil = 0; // 上游 429 时设到这里；期间 fetchModels 直
 /** 给 endpoint 用的「最后一次成功的 models 缓存快照」，方便 502 时透传给 renderer。 */
 export function getCachedNxgdModelsSnapshot(): NxgdModelEntity[] | null {
   return cachedModels?.models ?? null;
+}
+
+/** 同上 + 透传 checkedAt（renderer UI 渲染 stale-cache banner 计算 "N 秒前更新"）。
+ *  502 + cached fallback 路径专用。 */
+export function getCachedNxgdModelsSnapshotWithCheckedAt(): { models: NxgdModelEntity[]; checkedAt: number } | null {
+  if (!cachedModels) return null;
+  return { models: cachedModels.models, checkedAt: cachedModels.checkedAt };
 }
 
 /** 给 endpoint 用的「是否处于上游 429 冷却期」标志 + 剩余秒数（renderer UI 用来显示「稍后重试」倒计时）。 */

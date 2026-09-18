@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HamunaAgent",
-  "version": "0.3.180",
+  "version": "0.3.181",
   "identifier": "com.hamuna.app",
   "build": {
     "frontendDist": "../dist",

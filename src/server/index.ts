@@ -690,7 +690,7 @@ import type { SessionMetadata } from './types/session';
 import { createConcreteProviderRoute, isConcreteProviderRoute, type ProviderRoute } from '../shared/providerRoute';
 import { initLogger, getLoggerDiagnostics, withLogContext, setStdioBrokenProbe } from './logger';
 import { ensureRegistered, preloadNxgdAuth } from './nxgd-auth';
-import { createRechargeOrder, fetchBalance, fetchModels, getCachedNxgdModelsSnapshot, getNxgdAuthState, getNxgdModelsCooldown, refreshNxgdAuth } from './nxgd-auth';
+import { createRechargeOrder, fetchBalance, fetchModels, getCachedNxgdModelsSnapshotWithCheckedAt, getNxgdAuthState, getNxgdModelsCooldown, markNxgdSetupDone, refreshNxgdAuth } from './nxgd-auth';
 // `isStdioBroken` / `markStdioBroken` are defined above (in the crash-
 // diagnostics block) and consumed by `setStdioBrokenProbe` below to wire
 // the logger's safe-write wrapper to the stdio-state bit.
@@ -4613,6 +4613,16 @@ async function main() {
         return jsonResponse(state);
       }
 
+      if (pathname === '/api/nxgd/auth/setup' && request.method === 'POST') {
+        // wizard 走完 → 把 nxgd-auth.json::setup 写 true。保证 ensureRegistered
+        // 之前我们就有有效 apiKey（写盘覆盖要可靠），失败返 503。
+        const state = await markNxgdSetupDone();
+        if (!state.registered) {
+          return jsonResponse({ error: 'nxgd-not-registered', state }, 503);
+        }
+        return jsonResponse(state);
+      }
+
       if (pathname === '/api/nxgd/balance' && request.method === 'GET') {
         const state = await ensureRegistered();
         if (!state.registered) {
@@ -4648,6 +4658,7 @@ async function main() {
       // GET /api/nxgd/models — fetch upstream model list (server holds apiKey).
       // `fetchModels()` handles 24h cache, 401→refresh→retry once, 429 cooldown.
       // Endpoint only translates its `null` returns into the right HTTP shape.
+      // 429 / 502 都透传 checkedAt（renderer 渲染 stale-cache banner 用）。
       if (pathname === '/api/nxgd/models' && request.method === 'GET') {
         const state = await ensureRegistered();
         if (!state.registered) {
@@ -4655,15 +4666,25 @@ async function main() {
         }
         const models = await fetchModels();
         const { cooling, secondsLeft } = getNxgdModelsCooldown();
+        const cacheSnap = getCachedNxgdModelsSnapshotWithCheckedAt();
         if (!models && cooling) {
           return jsonResponse(
-            { error: 'rate-limited', retryAfterSeconds: secondsLeft, models: getCachedNxgdModelsSnapshot() },
+            {
+              error: 'rate-limited',
+              retryAfterSeconds: secondsLeft,
+              models: cacheSnap?.models ?? null,
+              checkedAt: cacheSnap?.checkedAt,
+            },
             429,
           );
         }
         if (!models) {
           return jsonResponse(
-            { error: 'models-unavailable', cached: getCachedNxgdModelsSnapshot() },
+            {
+              error: 'models-unavailable',
+              cached: cacheSnap?.models ?? null,
+              checkedAt: cacheSnap?.checkedAt,
+            },
             502,
           );
         }

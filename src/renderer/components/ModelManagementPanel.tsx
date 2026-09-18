@@ -28,6 +28,7 @@ import {
   synthesizeModalitiesFromDiscovered,
   type DiscoveredModel,
 } from '@/config/services/modelDiscoveryService';
+import type { NxgdDiscoveryResult } from '@/config/services/nxgdSubscriptionService';
 import { atomicModifyConfig, rebuildAndPersistAvailableProviders } from '@/config/configService';
 import OverlayBackdrop from '@/components/OverlayBackdrop';
 import { ModalityBadges } from '@/components/ModalityBadges';
@@ -42,7 +43,7 @@ interface ModelManagementPanelProps {
   onUpdateCustomProvider?: (provider: Provider) => Promise<void>;
   onSetPrimaryModel: (providerId: string, modelId: string) => Promise<void>;
   onRefresh: () => Promise<void>;
-  discoveryAction?: () => Promise<DiscoveredModel[]>;
+  discoveryAction?: () => Promise<DiscoveredModel[] | NxgdDiscoveryResult>;
   discoveryUnavailableMessage?: string;
 }
 
@@ -132,7 +133,9 @@ export default function ModelManagementPanel({
         ? await discoveryAction()
         : await fetchProviderModels(provider, apiKey);
       if (!isMountedRef.current || thisId !== fetchIdRef.current) return;
-      setDiscoveredModels(result);
+      // Compatible with legacy caller shape (DiscoveredModel[]) and new shape
+      // (NxgdDiscoveryResult — used by nxgd so the wizard can render a stale-cache banner).
+      setDiscoveredModels(Array.isArray(result) ? result : result.models);
     } catch (e) {
       if (!isMountedRef.current || thisId !== fetchIdRef.current) return;
       const structuredMessage = e && typeof e === 'object' && 'message' in e

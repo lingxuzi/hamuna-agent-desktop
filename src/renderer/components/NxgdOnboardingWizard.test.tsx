@@ -29,10 +29,16 @@ vi.mock('@/utils/openExternal', () => ({
 }));
 
 const discoverNxgdModels = vi.fn();
-vi.mock('@/config/services/nxgdSubscriptionService', () => ({
-  discoverNxgdModels: (...args: unknown[]) => discoverNxgdModels(...args),
-  getNxgdAuthState: (...args: unknown[]) => getNxgdAuthState(...args),
-}));
+vi.mock('@/config/services/nxgdSubscriptionService', async () => {
+  const actual = await vi.importActual<typeof import('@/config/services/nxgdSubscriptionService')>(
+    '@/config/services/nxgdSubscriptionService',
+  );
+  return {
+    discoverNxgdModels: (...args: unknown[]) => discoverNxgdModels(...args),
+    getNxgdAuthState: (...args: unknown[]) => getNxgdAuthState(...args),
+    NxgdDiscoveryError: actual.NxgdDiscoveryError,
+  };
+});
 const getNxgdAuthState = vi.fn();
 
 const auth = { status: 'registered' as const, registered: true, setup: false };
@@ -45,9 +51,10 @@ describe('NxgdOnboardingWizard', () => {
     apiPostJson.mockResolvedValue({ checkoutUrl: 'https://pay.example/c/abc' });
     discoverNxgdModels.mockReset();
     // 默认：discovery 返 primaryModel 单选 —— 旧测试期望列表 ≥ 1。
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [{ id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' }],
+      checkedAt: undefined,
+    });
     getNxgdAuthState.mockReset();
     getNxgdAuthState.mockResolvedValue({ status: 'registered', registered: true, setup: false });
   });
@@ -354,10 +361,13 @@ describe('wizard step 2 model picker', () => {
   });
 
   test('discovery 返 N 个 model → step 2 渲染 N 个候选卡，默认选 primaryModel', async () => {
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
-      { id: 'qwen3-max', displayName: 'Qwen3 Max' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [
+        { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
+        { id: 'qwen3-max', displayName: 'Qwen3 Max' },
+      ],
+      checkedAt: undefined,
+    });
     render(
       <NxgdOnboardingWizard
         auth={auth}
@@ -395,10 +405,13 @@ describe('wizard step 2 model picker', () => {
   });
 
   test('用户选非默认 model → 关闭 wizard → 调 onPinModel with 选中的 id + displayName', async () => {
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
-      { id: 'qwen3-max', displayName: 'Qwen3 Max' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [
+        { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
+        { id: 'qwen3-max', displayName: 'Qwen3 Max' },
+      ],
+      checkedAt: undefined,
+    });
     const onPinModel = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
     render(
@@ -420,10 +433,13 @@ describe('wizard step 2 model picker', () => {
   });
 
   test('用户没改默认选 → 关闭 wizard → 调 onPinModel with primaryModel', async () => {
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
-      { id: 'qwen3-max', displayName: 'Qwen3 Max' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [
+        { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
+        { id: 'qwen3-max', displayName: 'Qwen3 Max' },
+      ],
+      checkedAt: undefined,
+    });
     const onPinModel = vi.fn().mockResolvedValue(undefined);
     render(
       <NxgdOnboardingWizard
@@ -442,9 +458,10 @@ describe('wizard step 2 model picker', () => {
   });
 
   test('wizard 没传 onPinModel → 关闭不抛', async () => {
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [{ id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' }],
+      checkedAt: undefined,
+    });
     render(
       <NxgdOnboardingWizard
         auth={auth}
@@ -460,11 +477,14 @@ describe('wizard step 2 model picker', () => {
   });
 
   test('discovery 返多 model → 列表容器 max-h + overflow-y-auto，避免 N 多时撑爆 wizard', async () => {
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
-      { id: 'qwen3-max', displayName: 'Qwen3 Max' },
-      { id: 'kimi-k2', displayName: 'Kimi K2' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [
+        { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
+        { id: 'qwen3-max', displayName: 'Qwen3 Max' },
+        { id: 'kimi-k2', displayName: 'Kimi K2' },
+      ],
+      checkedAt: undefined,
+    });
     render(
       <NxgdOnboardingWizard
         auth={auth}
@@ -486,9 +506,10 @@ describe('wizard animation', () => {
     apiPostJson.mockClear();
     openExternal.mockClear();
     discoverNxgdModels.mockReset();
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [{ id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' }],
+      checkedAt: undefined,
+    });
     getNxgdAuthState.mockReset();
     getNxgdAuthState.mockResolvedValue({ status: 'registered', registered: true, setup: false });
   });
@@ -573,8 +594,10 @@ describe('wizard step 2 discovery error', () => {
     // 等错误条出现 + candidate 列表渲染 primaryModel fallback
     const errorBanner = await screen.findByTestId('nxgd-wizard-discovery-error');
     expect(errorBanner).toBeTruthy();
-    expect(errorBanner.textContent).toContain('wizard.step2.errorTitle');
-    expect(errorBanner.textContent).toContain('upstream 503');
+    // wizard 用结构化 NxgdDiscoveryError.network 分流 → i18n key 渲染。
+    // message params 由 mock t 不解析（vi.mock 返回 key 字面量），
+    // 所以 message 透传行为靠 nxgdSubscriptionService 单测覆盖（regex 抽 message）。
+    expect(errorBanner.textContent).toContain('wizard.step2.errorNetwork.title');
 
     const retryBtn = screen.getByTestId('nxgd-wizard-discovery-retry');
     expect(retryBtn).toBeTruthy();
@@ -594,9 +617,10 @@ describe('wizard step 2 discovery error', () => {
     // 第一次 reject，第二次 resolve（模拟 retry 后网络恢复）
     discoverNxgdModels
       .mockRejectedValueOnce(new Error('upstream 503'))
-      .mockResolvedValueOnce([
-        { id: 'qwen3-max', displayName: 'Qwen3 Max' },
-      ]);
+      .mockResolvedValueOnce({
+        models: [{ id: 'qwen3-max', displayName: 'Qwen3 Max' }],
+        checkedAt: undefined,
+      });
     render(
       <NxgdOnboardingWizard
         auth={auth}
@@ -622,9 +646,10 @@ describe('wizard step 2 discovery error', () => {
   });
 
   test('discovery 成功 → 不渲染错误条（online happy path）', async () => {
-    discoverNxgdModels.mockResolvedValue([
-      { id: 'qwen3-max', displayName: 'Qwen3 Max' },
-    ]);
+    discoverNxgdModels.mockResolvedValue({
+      models: [{ id: 'qwen3-max', displayName: 'Qwen3 Max' }],
+      checkedAt: undefined,
+    });
     render(
       <NxgdOnboardingWizard
         auth={auth}
@@ -637,5 +662,61 @@ describe('wizard step 2 discovery error', () => {
     fireEvent.click(screen.getByText('wizard.step1.cta'));
     await screen.findByText('Qwen3 Max');
     expect(screen.queryByTestId('nxgd-wizard-discovery-error')).toBeNull();
+  });
+
+  test('discovery 限流 → 错误条用 rate-limit i18n key', async () => {
+    // NxgdDiscoveryError(rate-limit) 是 wizard structured 分流的关键分支：
+    // en-US user 不再看到 hardcoded 中文「上游限流」。
+    const { NxgdDiscoveryError } = await import('@/config/services/nxgdSubscriptionService');
+    discoverNxgdModels.mockRejectedValueOnce(
+      new NxgdDiscoveryError({ kind: 'rate-limit', retryAfterSeconds: 30 }),
+    );
+    render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        primaryModelLabel="DeepSeek V4 Flash"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    fireEvent.click(screen.getByText('wizard.step1.cta'));
+
+    const errorBanner = await screen.findByTestId('nxgd-wizard-discovery-error');
+    expect(errorBanner.textContent).toContain('wizard.step2.errorRateLimited.title');
+    // 仍然显示 retry 按钮（用户按 N 秒后点）
+    expect(screen.getByTestId('nxgd-wizard-discovery-retry')).toBeTruthy();
+    // candidate 列表 fallback 到 primaryModel（CTA 仍可推进）
+    expect(await screen.findAllByTestId('nxgd-wizard-model-card')).toHaveLength(1);
+  });
+
+  test('discovery 陈旧数据 → 渲染 warning banner（无 retry 按钮）+ candidate 列表展示 cached models', async () => {
+    // server 端 502 + cached 路径返 { models, checkedAt } —— wizard 不 throw，
+    // 仍展示 cached models 但加 warning 提示「上次 N 秒前更新」。
+    discoverNxgdModels.mockResolvedValueOnce({
+      models: [{ id: 'qwen3-max', displayName: 'Qwen3 Max' }],
+      checkedAt: Date.now() - 600, // 600 秒前
+    });
+    render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        primaryModelLabel="DeepSeek V4 Flash"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    fireEvent.click(screen.getByText('wizard.step1.cta'));
+
+    // candidate 列表展示 cached models（陈旧但可用）
+    await screen.findByText('Qwen3 Max');
+    // warning banner 用 stale testid，无 retry 按钮
+    const staleBanner = screen.getByTestId('nxgd-wizard-discovery-stale');
+    expect(staleBanner.textContent).toContain('wizard.step2.warningStale.title');
+    expect(staleBanner.textContent).toContain('wizard.step2.warningStale.body');
+    expect(screen.queryByTestId('nxgd-wizard-discovery-error')).toBeNull();
+    expect(screen.queryByTestId('nxgd-wizard-discovery-retry')).toBeNull();
   });
 });

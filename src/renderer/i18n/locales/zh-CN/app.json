@@ -938,8 +938,19 @@
       "modelBadge": "中文友好 · 速度优先",
       "loading": "加载可用模型…",
       "cta": "使用此模型",
-      "errorTitle": "获取最新模型列表失败",
-      "errorRetry": "重试"
+      "errorRetry": "重试",
+      "errorRateLimited": {
+        "title": "上游限流",
+        "body": "请在 {{seconds}} 秒后点重试"
+      },
+      "errorNetwork": {
+        "title": "获取最新模型列表失败",
+        "body": "{{message}}"
+      },
+      "warningStale": {
+        "title": "数据可能不是最新",
+        "body": "上次更新于 {{age}} 秒前，可继续使用"
+      }
     },
     "step3": {
       "title": "看看余额",

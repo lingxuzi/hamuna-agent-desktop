@@ -938,8 +938,19 @@
       "modelBadge": "Chinese-friendly · speed-first",
       "loading": "Loading available models…",
       "cta": "Use this model",
-      "errorTitle": "Failed to fetch latest model list",
-      "errorRetry": "Retry"
+      "errorRetry": "Retry",
+      "errorRateLimited": {
+        "title": "Upstream rate-limited",
+        "body": "Please retry in {{seconds}} seconds"
+      },
+      "errorNetwork": {
+        "title": "Failed to fetch latest model list",
+        "body": "{{message}}"
+      },
+      "warningStale": {
+        "title": "Data may be stale",
+        "body": "Last updated {{age}} seconds ago, still usable"
+      }
     },
     "step3": {
       "title": "Check your balance",

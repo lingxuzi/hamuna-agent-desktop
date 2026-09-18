@@ -15,12 +15,16 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
 import { useCloseLayer } from '@/hooks/useCloseLayer';
 import { apiPostJson } from '@/api/apiFetch';
 import { openExternal } from '@/utils/openExternal';
-import { discoverNxgdModels } from '@/config/services/nxgdSubscriptionService';
+import {
+  discoverNxgdModels,
+  NxgdDiscoveryError,
+  type NxgdDiscoveryResult,
+} from '@/config/services/nxgdSubscriptionService';
 import OverlayBackdrop from './OverlayBackdrop';
 
 const NXGD_RED = '#C8401B';
@@ -87,9 +91,14 @@ export default function NxgdOnboardingWizard({
   // step 2 自 fetch：discovery 失败 fallback 到 primaryModel 单选（仍可推进）
   const [candidates, setCandidates] = useState<CandidateModel[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
-  // discovery 失败错误条 + retry：null = 无错误。Error.message 原文透传（不 i18n
-  // 详情避免翻译语义错位）；title 走 i18n `wizard.step2.errorTitle`。
-  const [candidatesError, setCandidatesError] = useState<string | null>(null);
+  // discovery 错误条（kind + i18n params）；null = 无错误。结构化错误来自
+  // NxgdDiscoveryError.detail.kind，wizard 据此渲染「限流 / 网络失败」三类。
+  const [candidatesError, setCandidatesError] = useState<
+    { i18nKey: string; params?: Record<string, string | number> } | null
+  >(null);
+  // 陈旧数据 warning banner（502 + cached 路径不 throw，返 stale result）：
+  // 仍展示 cached models 但提示「数据 N 秒前更新」，无 retry 按钮。
+  const [candidatesStale, setCandidatesStale] = useState<{ ageSeconds: number } | null>(null);
   // discovery retry trigger：retry 必须 bump 它让 useEffect deps 变化重跑。
   // retryDiscovery 自身依赖 setRetryCounter（dispatch 稳），不依赖 state。
   const [retryCounter, setRetryCounter] = useState(0);
@@ -106,10 +115,10 @@ export default function NxgdOnboardingWizard({
     let cancelled = false;
     setCandidatesLoading(true);
     discoverNxgdModels()
-      .then((models) => {
+      .then((result: NxgdDiscoveryResult) => {
         if (cancelled) return;
-        const list: CandidateModel[] = models.length > 0
-          ? models.map(m => ({ id: m.id, displayName: m.displayName ?? m.id }))
+        const list: CandidateModel[] = result.models.length > 0
+          ? result.models.map(m => ({ id: m.id, displayName: m.displayName ?? m.id }))
           : [{ id: primaryModel, displayName: primaryModelLabel ?? primaryModel }];
         setCandidates(list);
         // 默认选 primaryModel（若在列表中）；否则选第一个
@@ -117,25 +126,60 @@ export default function NxgdOnboardingWizard({
           ? primaryModel
           : list[0].id;
         setPickedModelId(defaultPick);
+        // 陈旧数据：server 端 502 + cached 路径不 throw，返 { models, checkedAt }
+        // 让 wizard 渲染 stale banner + 仍展示 cached models
+        if (result.checkedAt !== undefined) {
+          const ageSeconds = Math.max(0, Math.floor((Date.now() - result.checkedAt) / 1000));
+          setCandidatesStale({ ageSeconds });
+        } else {
+          setCandidatesStale(null);
+        }
+        setCandidatesError(null);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         console.warn('[nxgd-wizard] discover failed, falling back to primaryModel', err);
+        // fallback primaryModel（保证 CTA 可推进）
         setCandidates([{ id: primaryModel, displayName: primaryModelLabel ?? primaryModel }]);
         setPickedModelId(primaryModel);
-        // 暴露错误条 + retry；fallback primaryModel 让 user 仍可推进
+        setCandidatesStale(null);
+
+        // 结构化错误分流：限流 vs 网络失败分别走不同 i18n 文案
+        if (err instanceof NxgdDiscoveryError) {
+          if (err.detail.kind === 'rate-limit') {
+            setCandidatesError({
+              i18nKey: 'wizard.step2.errorRateLimited',
+              params: { seconds: err.detail.retryAfterSeconds },
+            });
+            return;
+          }
+          // kind === 'network'
+          setCandidatesError({
+            i18nKey: 'wizard.step2.errorNetwork',
+            params: { message: err.detail.message },
+          });
+          return;
+        }
+        // 兜底（非结构化 Error — 与 #165 旧实现兼容）
         const msg = err instanceof Error ? err.message : String(err);
-        setCandidatesError(msg || 'unknown');
+        setCandidatesError({
+          i18nKey: 'wizard.step2.errorNetwork',
+          params: { message: msg || 'unknown' },
+        });
       })
       .finally(() => { if (!cancelled) setCandidatesLoading(false); });
     return () => { cancelled = true; };
+    // candidates.length / candidatesLoading intentionally omitted: gating
+    // condition (line above) must not retrigger fetch on user-driven state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, primaryModel, primaryModelLabel, retryCounter]);
 
-  // discovery retry：清 error + 清 candidates + 重置 loading + bump retryCounter
+  // discovery retry：清 error + stale + 清 candidates + 重置 loading + bump retryCounter
   // 让 useEffect 重跑（deps 含 retryCounter）。原始 useEffect 的 deps 只看
   // expanded/primaryModel，retry 不改它们，必须有独立 trigger。
   const retryDiscovery = useCallback(() => {
     setCandidatesError(null);
+    setCandidatesStale(null);
     setCandidates([]);
     setCandidatesLoading(false);
     setRetryCounter(c => c + 1);
@@ -298,8 +342,10 @@ export default function NxgdOnboardingWizard({
                 <div className="flex items-start gap-2">
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--error)]" aria-hidden />
                   <div className="flex-1">
-                    <p className="font-medium text-[var(--ink)]">{t('wizard.step2.errorTitle')}</p>
-                    <p className="mt-0.5 break-words text-[var(--ink-muted)]">{candidatesError}</p>
+                    <p className="font-medium text-[var(--ink)]">{t(`${candidatesError.i18nKey}.title`)}</p>
+                    <p className="mt-0.5 break-words text-[var(--ink-muted)]">
+                      {t(`${candidatesError.i18nKey}.body`, candidatesError.params ?? {})}
+                    </p>
                   </div>
                 </div>
                 <button
@@ -311,6 +357,21 @@ export default function NxgdOnboardingWizard({
                   <RefreshCw className="size-3" aria-hidden />
                   {t('wizard.step2.errorRetry')}
                 </button>
+              </div>
+            )}
+            {candidatesStale && !candidatesError && (
+              <div
+                className="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--paper-inset)] px-3 py-2 text-xs"
+                data-testid="nxgd-wizard-discovery-stale"
+                role="status"
+              >
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[var(--warning)]" aria-hidden />
+                <div className="flex-1">
+                  <p className="font-medium text-[var(--ink)]">{t('wizard.step2.warningStale.title')}</p>
+                  <p className="mt-0.5 break-words text-[var(--ink-muted)]">
+                    {t('wizard.step2.warningStale.body', { age: candidatesStale.ageSeconds })}
+                  </p>
+                </div>
               </div>
             )}
             {candidatesLoading ? (
