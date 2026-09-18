@@ -546,3 +546,96 @@ describe('wizard animation', () => {
     expect(container).toBeTruthy();
   });
 });
+
+describe('wizard step 2 discovery error', () => {
+  beforeEach(() => {
+    apiPostJson.mockClear();
+    openExternal.mockClear();
+    discoverNxgdModels.mockReset();
+    getNxgdAuthState.mockReset();
+    getNxgdAuthState.mockResolvedValue({ status: 'registered', registered: true, setup: false });
+  });
+
+  test('discovery 失败 → 错误条 + retry 按钮可见，CTA 不 disabled，candidate 列表仍含 primaryModel fallback', async () => {
+    discoverNxgdModels.mockRejectedValueOnce(new Error('upstream 503'));
+    render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        primaryModelLabel="DeepSeek V4 Flash"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    fireEvent.click(screen.getByText('wizard.step1.cta'));
+
+    // 等错误条出现 + candidate 列表渲染 primaryModel fallback
+    const errorBanner = await screen.findByTestId('nxgd-wizard-discovery-error');
+    expect(errorBanner).toBeTruthy();
+    expect(errorBanner.textContent).toContain('wizard.step2.errorTitle');
+    expect(errorBanner.textContent).toContain('upstream 503');
+
+    const retryBtn = screen.getByTestId('nxgd-wizard-discovery-retry');
+    expect(retryBtn).toBeTruthy();
+    expect(retryBtn.textContent).toContain('wizard.step2.errorRetry');
+
+    // candidate 列表 fallback 到 primaryModel
+    const cards = await screen.findAllByTestId('nxgd-wizard-model-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].textContent).toContain('deepseek-v4-flash-0731');
+
+    // CTA 不 disabled（wizard 仍可推进）
+    const cta = screen.getByText('wizard.step2.cta') as HTMLButtonElement;
+    expect(cta.disabled).toBe(false);
+  });
+
+  test('点 retry → 错误条消失，candidate 列表更新为 retry 后的真实 discovery', async () => {
+    // 第一次 reject，第二次 resolve（模拟 retry 后网络恢复）
+    discoverNxgdModels
+      .mockRejectedValueOnce(new Error('upstream 503'))
+      .mockResolvedValueOnce([
+        { id: 'qwen3-max', displayName: 'Qwen3 Max' },
+      ]);
+    render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        primaryModelLabel="DeepSeek V4 Flash"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    fireEvent.click(screen.getByText('wizard.step1.cta'));
+    await screen.findByTestId('nxgd-wizard-discovery-error');
+
+    // 点 retry
+    fireEvent.click(screen.getByTestId('nxgd-wizard-discovery-retry'));
+
+    // 等错误条消失 + candidate 列表更新
+    await waitFor(() => {
+      expect(screen.queryByTestId('nxgd-wizard-discovery-error')).toBeNull();
+    });
+    await screen.findByText('Qwen3 Max');
+    expect(discoverNxgdModels).toHaveBeenCalledTimes(2);
+  });
+
+  test('discovery 成功 → 不渲染错误条（online happy path）', async () => {
+    discoverNxgdModels.mockResolvedValue([
+      { id: 'qwen3-max', displayName: 'Qwen3 Max' },
+    ]);
+    render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    fireEvent.click(screen.getByText('wizard.step1.cta'));
+    await screen.findByText('Qwen3 Max');
+    expect(screen.queryByTestId('nxgd-wizard-discovery-error')).toBeNull();
+  });
+});

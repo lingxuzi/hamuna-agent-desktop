@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 import { useCloseLayer } from '@/hooks/useCloseLayer';
 import { apiPostJson } from '@/api/apiFetch';
@@ -86,6 +87,12 @@ export default function NxgdOnboardingWizard({
   // step 2 自 fetch：discovery 失败 fallback 到 primaryModel 单选（仍可推进）
   const [candidates, setCandidates] = useState<CandidateModel[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
+  // discovery 失败错误条 + retry：null = 无错误。Error.message 原文透传（不 i18n
+  // 详情避免翻译语义错位）；title 走 i18n `wizard.step2.errorTitle`。
+  const [candidatesError, setCandidatesError] = useState<string | null>(null);
+  // discovery retry trigger：retry 必须 bump 它让 useEffect deps 变化重跑。
+  // retryDiscovery 自身依赖 setRetryCounter（dispatch 稳），不依赖 state。
+  const [retryCounter, setRetryCounter] = useState(0);
   const [pickedModelId, setPickedModelId] = useState<string>(primaryModel);
   const step5ButtonRef = useRef<HTMLButtonElement | null>(null);
   // step 2 列表可能 N>5（上游多 model），滚动容器 + 每个 card 的 ref 用于 picked
@@ -116,10 +123,23 @@ export default function NxgdOnboardingWizard({
         console.warn('[nxgd-wizard] discover failed, falling back to primaryModel', err);
         setCandidates([{ id: primaryModel, displayName: primaryModelLabel ?? primaryModel }]);
         setPickedModelId(primaryModel);
+        // 暴露错误条 + retry；fallback primaryModel 让 user 仍可推进
+        const msg = err instanceof Error ? err.message : String(err);
+        setCandidatesError(msg || 'unknown');
       })
       .finally(() => { if (!cancelled) setCandidatesLoading(false); });
     return () => { cancelled = true; };
-  }, [expanded, primaryModel, primaryModelLabel]);
+  }, [expanded, primaryModel, primaryModelLabel, retryCounter]);
+
+  // discovery retry：清 error + 清 candidates + 重置 loading + bump retryCounter
+  // 让 useEffect 重跑（deps 含 retryCounter）。原始 useEffect 的 deps 只看
+  // expanded/primaryModel，retry 不改它们，必须有独立 trigger。
+  const retryDiscovery = useCallback(() => {
+    setCandidatesError(null);
+    setCandidates([]);
+    setCandidatesLoading(false);
+    setRetryCounter(c => c + 1);
+  }, []);
 
   // custom 金额校验：NaN / 0 / 负 / 越界 → 按钮 disabled
   const parsedCustom = Number.parseFloat(customAmount);
@@ -269,6 +289,30 @@ export default function NxgdOnboardingWizard({
         {step === 2 && (
           <div>
             <p className="mb-3">{t('wizard.step2.body')}</p>
+            {candidatesError && (
+              <div
+                className="mb-2 flex items-center justify-between gap-2 rounded-md border border-[var(--line)] bg-[var(--paper-inset)] px-3 py-2 text-xs"
+                data-testid="nxgd-wizard-discovery-error"
+                role="alert"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--error)]" aria-hidden />
+                  <div className="flex-1">
+                    <p className="font-medium text-[var(--ink)]">{t('wizard.step2.errorTitle')}</p>
+                    <p className="mt-0.5 break-words text-[var(--ink-muted)]">{candidatesError}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={retryDiscovery}
+                  data-testid="nxgd-wizard-discovery-retry"
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent-warm-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+                >
+                  <RefreshCw className="size-3" aria-hidden />
+                  {t('wizard.step2.errorRetry')}
+                </button>
+              </div>
+            )}
             {candidatesLoading ? (
               <p className="text-xs text-[var(--ink-muted)]" data-testid="nxgd-wizard-candidates-loading">
                 {t('wizard.step2.loading')}

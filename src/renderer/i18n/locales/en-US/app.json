@@ -937,7 +937,9 @@
       "body": "We'll start with this model — Chinese-friendly and fast, great for most daily tasks.",
       "modelBadge": "Chinese-friendly · speed-first",
       "loading": "Loading available models…",
-      "cta": "Use this model"
+      "cta": "Use this model",
+      "errorTitle": "Failed to fetch latest model list",
+      "errorRetry": "Retry"
     },
     "step3": {
       "title": "Check your balance",
