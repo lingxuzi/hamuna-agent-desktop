@@ -3,6 +3,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import NxgdOnboardingWizard from './NxgdOnboardingWizard';
 
+// jsdom 不实现 scrollIntoView；wizard step 2 scroll-into-view effect 需要它。
+// no-op polyfill；测试只关心 effect 跑了不抛，不关心滚动结果。
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -451,5 +457,26 @@ describe('wizard step 2 model picker', () => {
     fireEvent.click(screen.getByText('wizard.step1.cta'));
     await screen.findAllByTestId('nxgd-wizard-model-card');
     expect(() => fireEvent.keyDown(window, { key: 'Escape' })).not.toThrow();
+  });
+
+  test('discovery 返多 model → 列表容器 max-h + overflow-y-auto，避免 N 多时撑爆 wizard', async () => {
+    discoverNxgdModels.mockResolvedValue([
+      { id: 'deepseek-v4-flash-0731', displayName: 'DeepSeek V4 Flash' },
+      { id: 'qwen3-max', displayName: 'Qwen3 Max' },
+      { id: 'kimi-k2', displayName: 'Kimi K2' },
+    ]);
+    render(
+      <NxgdOnboardingWizard
+        auth={auth}
+        balance={balance}
+        primaryModel="deepseek-v4-flash-0731"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('wizard.pillCta'));
+    fireEvent.click(screen.getByText('wizard.step1.cta'));
+    const list = await screen.findByTestId('nxgd-wizard-model-list');
+    expect(list.className).toContain('max-h-72');
+    expect(list.className).toContain('overflow-y-auto');
   });
 });
