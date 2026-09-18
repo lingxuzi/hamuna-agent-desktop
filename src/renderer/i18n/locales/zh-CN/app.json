@@ -922,5 +922,51 @@
     "delete": "删除",
     "deleteTitle": "删除对话",
     "deleteMessage": "确定要删除「{{title}}」吗？此操作不可撤销。"
+  },
+  "wizard": {
+    "pill": "广电（云广智能）已就位",
+    "pillCta": "选择第一个模型",
+    "laterCta": "稍后再说",
+    "step1": {
+      "title": "你的 AI 助手已就位",
+      "body": "机器码已自动开好广电账号，无需输入密码。点「开始」走完 5 步即可开聊。",
+      "cta": "开始"
+    },
+    "step2": {
+      "title": "选择第一个模型",
+      "body": "默认使用下面这个模型 — 中文友好、响应快，适合大多数日常任务。",
+      "modelBadge": "中文友好 · 速度优先",
+      "loading": "加载可用模型…",
+      "cta": "使用此模型"
+    },
+    "step3": {
+      "title": "看看余额",
+      "body": "按 token 计费，余额低于 ¥5 时弹窗提醒。",
+      "registered": "账号已就位",
+      "loading": "账号准备中…",
+      "cta": "继续"
+    },
+    "step4": {
+      "title": "想多充一点？",
+      "body": "选「不充」即可开聊，余额低于 ¥5 时再弹窗提醒。",
+      "options": {
+        "none": "不充",
+        "30": "¥30",
+        "100": "¥100",
+        "custom": "自定义"
+      },
+      "customHint": "金额",
+      "customPlaceholder": "0.1 - 5000",
+      "cta": "去支付",
+      "ctaLoading": "正在跳转…",
+      "ctaSkip": "跳过",
+      "errorFallback": "跳转支付失败，请稍后重试。"
+    },
+    "step5": {
+      "title": "可以开聊了",
+      "body": "模型与余额都已就绪。新对话将使用你刚选择的模型。",
+      "cta": "去 Chat",
+      "meta": "稍后可在 Settings → 广电调整模型与余额。"
+    }
   }
 }

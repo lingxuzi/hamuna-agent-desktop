@@ -23,7 +23,6 @@ import {
     getManagedCodexProviderReadiness,
     shouldAutoUpdateManagedCodexRuntime,
     withManagedCodexProviderCatalog,
-    withNxgdDiscoveredModels,
 } from './types';
 import type { RuntimeModelInfo } from '../../shared/types/runtime';
 import type { AgentConfig } from '../../shared/types/agent';
@@ -35,8 +34,7 @@ import {
     ensureManagedCodexProviderDevGateDefault,
     mergePresetCustomModels,
 } from './services/appConfigService';
-import { discoverNxgdModels } from './services/nxgdSubscriptionService';
-import { toModelEntity } from './services/modelDiscoveryService';
+import { getNxgdAuthState } from './services/nxgdSubscriptionService';
 import {
     getAllProviders,
     loadApiKeys as loadApiKeysService,
@@ -249,7 +247,6 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     const [projects, setProjects] = useState<Project[]>([]);
     const [rawProviders, setRawProviders] = useState<Provider[]>(PRESET_PROVIDERS);
     const [managedCodexRuntimeModels, setManagedCodexRuntimeModels] = useState<RuntimeModelInfo[]>([]);
-    const [nxgdDiscoveredModels, setNxgdDiscoveredModels] = useState<ModelEntity[]>([]);
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [providerVerifyStatus, setProviderVerifyStatus] = useState<Record<string, ProviderVerifyStatus>>({});
     const [isLoading, setIsLoading] = useState(true);
@@ -261,8 +258,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     // Derived: merge preset custom models + apply user primary model overrides
     const providers = useMemo(() => {
         const catalog = withManagedCodexProviderCatalog(rawProviders, config, managedCodexRuntimeModels);
-        const withNxgd = withNxgdDiscoveredModels(catalog, nxgdDiscoveredModels);
-        const merged = mergePresetCustomModels(withNxgd, config.presetCustomModels, config.presetRemovedModels);
+        const merged = mergePresetCustomModels(catalog, config.presetCustomModels, config.presetRemovedModels);
         const providerOrderSettings = {
             providerOrder: config.providerOrder,
             disabledProviderIds: config.disabledProviderIds,
@@ -289,7 +285,6 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         config,
         rawProviders,
         managedCodexRuntimeModels,
-        nxgdDiscoveredModels,
     ]);
     const managedCodexReadiness = useMemo(
         () => getManagedCodexProviderReadiness(config),
@@ -509,33 +504,26 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         managedCodexModelListKey,
     ]);
 
-    // Auto-discover nxgd (中国广电) model list on mount so the Chat UI's
-    // model selector populates without the user having to open Settings →
-    // Manage Models → Refresh. The server endpoint returns 200/429/502 —
-    // 429 means upstream rate limit (caller throws), 502 with cached
-    // snapshot is already unwrapped to a non-empty list inside
-    // `discoverNxgdModels`. Anything else (network error, not-registered
-    // 503, parse failure) is logged + swallowed so a flaky upstream
-    // never blocks Chat; the user can still manually refresh via Settings.
-    // Lookup is keyed on rawProviders (not providers) so the catalog/merge
-    // pipeline that uses these entities doesn't observe its own output.
-    //
-    // Side effect on success: also stamps `verifyStatus[nxgd] = 'valid'`.
-    // Chat's subscription provider filter (`hasProviderRouteCredential`)
-    // gates on `verifyStatus[provider.id].status === 'valid'` for built-in
+    // Stamp `verifyStatus[nxgd] = 'valid'` once server-side nxgd auth is
+    // registered. Chat's subscription provider filter (`isProviderAvailable`)
+    // gates on `verifyStatus[nxgd].status === 'valid'` for built-in
     // subscription providers; nxgd is host-managed-auto-register (machine
     // code auto-registered, apiKey server-side only) so it never runs the
     // user-side `saveProviderVerifyStatus` that Grok triggers from OAuth.
-    // A successful `/api/nxgd/models` 200 is the strongest signal we have
-    // that registration is real + apiKey works → stamp it.
+    // The cheapest reliable signal is `/api/nxgd/auth/state` (server holds
+    // module-level preload state from `preloadNxgdAuth`). We don't auto-
+    // populate `provider.models` here — `models: []` is the preset's natural
+    // empty default; the user picks a model via Settings → Manage Models or
+    // the first-run wizard's step 2 picker, both of which write to
+    // `presetCustomModels[nxgd]` and stamp valid on the way out.
     useEffect(() => {
         const nxgdSource = rawProviders.find(provider => provider.id === 'nxgd');
-        if (!nxgdSource) return; // nxgd removed by user → nothing to discover
+        if (!nxgdSource) return; // nxgd removed by user → nothing to verify
         let cancelled = false;
-        discoverNxgdModels()
-            .then(async (discovered) => {
+        getNxgdAuthState()
+            .then(async (state) => {
                 if (cancelled) return;
-                setNxgdDiscoveredModels(discovered.map(d => toModelEntity(d, nxgdSource)));
+                if (!state.registered) return;
                 try {
                     await saveProviderVerifyStatusService('nxgd', 'valid');
                 } catch (err) {
@@ -544,8 +532,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
             })
             .catch((err) => {
                 if (cancelled) return;
-                console.warn('[nxgd] failed to auto-discover model list', err);
-                setNxgdDiscoveredModels([]);
+                console.warn('[nxgd] failed to read auth state', err);
             });
         return () => { cancelled = true; };
     }, [rawProviders]);

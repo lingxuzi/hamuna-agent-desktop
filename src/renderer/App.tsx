@@ -26,6 +26,11 @@ import LinkContextMenuProvider from '@/components/LinkContextMenuProvider';
 import TabBar from '@/components/TabBar';
 import TabProvider from '@/context/TabProvider';
 import type { AdoptMigratedSessionOptions } from '@/context/TabContext';
+import NxgdOnboardingWizard, {
+  type NxgdOnboardingAuthLite,
+  type NxgdOnboardingBalanceLite,
+} from '@/components/NxgdOnboardingWizard';
+import { useNxgdOnboardingGate } from '@/hooks/useNxgdOnboardingGate';
 import { useToast } from '@/components/Toast';
 import { useUpdater, type CheckUpdateResult } from '@/hooks/useUpdater';
 import { useTrayEvents } from '@/hooks/useTrayEvents';
@@ -421,7 +426,7 @@ export default function App() {
 
  // App config for tray behavior (shared via ConfigProvider — no CONFIG_CHANGED event needed)
  // Also get projects + CRUD actions for bug report (ensureSelfAwarenessWorkspace needs them)
- const { config, isLoading: configLoading, providers: appProviders, apiKeys: appApiKeys, providerVerifyStatus: appProviderVerifyStatus, projects: configProjects, addProject: configAddProject, patchProject: configPatchProject } = useConfig();
+ const { config, isLoading: configLoading, providers: appProviders, apiKeys: appApiKeys, providerVerifyStatus: appProviderVerifyStatus, projects: configProjects, addProject: configAddProject, patchProject: configPatchProject, savePresetCustomModels } = useConfig();
  const spaceBuildCapability = useSpaceBuildCapability(config.spaceEnvironment);
  const teamSpaceAvailable = spaceBuildCapability.available && config.teamSpaceEnabled === true;
 

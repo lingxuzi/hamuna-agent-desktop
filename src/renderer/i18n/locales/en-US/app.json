@@ -922,5 +922,51 @@
     "delete": "Delete",
     "deleteTitle": "Delete conversation",
     "deleteMessage": "Delete \"{{title}}\"? This cannot be undone."
+  },
+  "wizard": {
+    "pill": "China Radio/TV (Cloud Broad Intelligence) is ready",
+    "pillCta": "Pick your first model",
+    "laterCta": "Maybe later",
+    "step1": {
+      "title": "Your AI assistant is ready",
+      "body": "Your machine code has registered a China Radio/TV account automatically — no password needed. Walk through these 5 steps and start chatting.",
+      "cta": "Get started"
+    },
+    "step2": {
+      "title": "Pick your first model",
+      "body": "We'll start with this model — Chinese-friendly and fast, great for most daily tasks.",
+      "modelBadge": "Chinese-friendly · speed-first",
+      "loading": "Loading available models…",
+      "cta": "Use this model"
+    },
+    "step3": {
+      "title": "Check your balance",
+      "body": "You pay per token. We'll pop up a reminder when your balance drops below ¥5.",
+      "registered": "Account ready",
+      "loading": "Setting up account…",
+      "cta": "Continue"
+    },
+    "step4": {
+      "title": "Top up now?",
+      "body": "Skip if you want to start chatting — we'll remind you when balance drops below ¥5.",
+      "options": {
+        "none": "Skip",
+        "30": "¥30",
+        "100": "¥100",
+        "custom": "Custom"
+      },
+      "customHint": "Amount",
+      "customPlaceholder": "0.1 - 5000",
+      "cta": "Pay now",
+      "ctaLoading": "Redirecting…",
+      "ctaSkip": "Skip",
+      "errorFallback": "Couldn't open the payment site. Please try again."
+    },
+    "step5": {
+      "title": "Ready to chat",
+      "body": "Model and balance are set. New chats will use the model you just picked.",
+      "cta": "Open Chat",
+      "meta": "You can adjust the model and balance later in Settings → China Radio/TV."
+    }
   }
 }

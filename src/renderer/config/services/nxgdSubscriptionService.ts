@@ -11,6 +11,17 @@ interface NxgdModelsEnvelope {
   checkedAt: number;
 }
 
+export interface NxgdAuthLite {
+  status: 'idle' | 'registering' | 'registered' | 'error';
+  registered: boolean;
+  setup: boolean;
+}
+
+/** 读 server 端 nxgd auth 状态（用于 verifyStatus 信号源）。 */
+export async function getNxgdAuthState(): Promise<NxgdAuthLite> {
+  return apiGetJson<NxgdAuthLite>('/api/nxgd/auth/state');
+}
+
 /**
  * 调 `/api/nxgd/models` 拉广电可用模型。
  *
