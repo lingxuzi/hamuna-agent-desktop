@@ -454,6 +454,60 @@ export default function App() {
   }
  }, []);
 
+ // nxgd 首次启动向导 — 自管 auth/balance 状态。ConfigProvider 是 source of truth 但只覆盖 verified providers;
+ // nxgd 走独立 auto-register 路径, wizard 独立 fetch 最干净, server 1h TTL 缓存防抖动.
+ const [nxgdAuthForWizard, setNxgdAuthForWizard] = useState<NxgdOnboardingAuthLite | null>(null);
+ const [nxgdBalanceForWizard, setNxgdBalanceForWizard] = useState<NxgdOnboardingBalanceLite | null>(null);
+ useEffect(() => {
+  if (!isTauriEnvironment()) return;
+  let cancelled = false;
+  void apiGetJson<NxgdOnboardingAuthLite>('/api/nxgd/auth/state')
+    .then((s) => { if (!cancelled) setNxgdAuthForWizard({ status: s.status, registered: s.registered, setup: s.setup === true }); })
+    .catch(() => { /* swallow — wizard gated on status anyway */ });
+  void apiGetJson<NxgdOnboardingBalanceLite>('/api/nxgd/balance')
+    .then((b) => {
+      if (!cancelled) setNxgdBalanceForWizard({
+        balance: typeof b.balance === 'number' ? b.balance : null,
+        usedBalance: typeof b.usedBalance === 'number' ? b.usedBalance : null,
+      });
+    })
+    .catch(() => { /* swallow — balance step degrades gracefully to null */ });
+  return () => { cancelled = true; };
+ }, []);
+ const nxgdPrimaryModel = useMemo(
+   () => appProviders.find((p) => p.id === 'nxgd')?.primaryModel ?? 'deepseek-v4-flash-0731',
+   [appProviders],
+ );
+ const nxgdWizardGate = useNxgdOnboardingGate({
+   auth: nxgdAuthForWizard,
+ });
+ const [nxgdWizardVisible, setNxgdWizardVisible] = useState(false);
+ // 3s 延迟挂载 — 让 Chat / Settings 渲染完再淡入浮窗, 不抢用户首屏注意力.
+ useEffect(() => {
+  if (!nxgdWizardGate.show) {
+    setNxgdWizardVisible(false);
+    return;
+  }
+  const t = window.setTimeout(() => setNxgdWizardVisible(true), 3000);
+  return () => window.clearTimeout(t);
+ }, [nxgdWizardGate.show]);
+ const closeNxgdWizard = useCallback(() => {
+  setNxgdWizardVisible(false);
+ }, []);
+
+ // wizard step 2 让用户选 1 个 model 加入 presetCustomModels[nxgd]，避免空下拉。
+ // fire-and-forget 由 wizard 内部保证；这里只负责把 model 写成标准 ModelEntity 形态。
+ // source: 'manual' = user-authored entry（per `mergePresetCustomModels` 语义，
+ // manual entries 是显式 override，curated preset 字段不覆盖 user 填的）。
+ const pinNxgdModel = useCallback(async (modelId: string, displayName?: string) => {
+  await savePresetCustomModels('nxgd', [{
+    model: modelId,
+    modelName: displayName ?? modelId,
+    modelSeries: 'custom',
+    source: 'manual',
+  }]);
+ }, [savePresetCustomModels]);
+
  // Multi-tab state.
  //
  // Startup behaviour (Issue #309): boot is ALWAYS a clean new launcher — we no
@@ -3921,6 +3975,18 @@ export default function App() {
       initialModel={helperAgentDefaults.initialModel}
       onModelChange={helperAgentDefaults.onModelChange}
       assistantEntry="tab_top"
+     />
+    )}
+
+    {/* nxgd 首次启动向导 — 右下浮窗; 3s 延迟挂载避免抢首屏。step 4 选 ¥30
+        自直接调 /api/nxgd/recharge 跳浏览器, 不走 NxgdRechargeModal 中转。 */}
+    {nxgdWizardVisible && nxgdAuthForWizard && (
+     <NxgdOnboardingWizard
+      auth={nxgdAuthForWizard}
+      balance={nxgdBalanceForWizard}
+      primaryModel={nxgdPrimaryModel}
+      onClose={closeNxgdWizard}
+      onPinModel={pinNxgdModel}
      />
     )}
    </div>
