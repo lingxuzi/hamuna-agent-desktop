@@ -690,7 +690,7 @@ import type { SessionMetadata } from './types/session';
 import { createConcreteProviderRoute, isConcreteProviderRoute, type ProviderRoute } from '../shared/providerRoute';
 import { initLogger, getLoggerDiagnostics, withLogContext, setStdioBrokenProbe } from './logger';
 import { ensureRegistered, preloadNxgdAuth } from './nxgd-auth';
-import { createRechargeOrder, fetchBalance, getNxgdAuthState, refreshNxgdAuth } from './nxgd-auth';
+import { createRechargeOrder, fetchBalance, fetchModels, getCachedNxgdModelsSnapshot, getNxgdAuthState, getNxgdModelsCooldown, refreshNxgdAuth } from './nxgd-auth';
 // `isStdioBroken` / `markStdioBroken` are defined above (in the crash-
 // diagnostics block) and consumed by `setStdioBrokenProbe` below to wire
 // the logger's safe-write wrapper to the stdio-state bit.
@@ -4643,6 +4643,31 @@ async function main() {
           return jsonResponse({ error: 'recharge-failed', state }, 502);
         }
         return jsonResponse(result);
+      }
+
+      // GET /api/nxgd/models — fetch upstream model list (server holds apiKey).
+      // `fetchModels()` handles 24h cache, 401→refresh→retry once, 429 cooldown.
+      // Endpoint only translates its `null` returns into the right HTTP shape.
+      if (pathname === '/api/nxgd/models' && request.method === 'GET') {
+        const state = await ensureRegistered();
+        if (!state.registered) {
+          return jsonResponse({ error: 'nxgd-not-registered', state }, 503);
+        }
+        const models = await fetchModels();
+        const { cooling, secondsLeft } = getNxgdModelsCooldown();
+        if (!models && cooling) {
+          return jsonResponse(
+            { error: 'rate-limited', retryAfterSeconds: secondsLeft, models: getCachedNxgdModelsSnapshot() },
+            429,
+          );
+        }
+        if (!models) {
+          return jsonResponse(
+            { error: 'models-unavailable', cached: getCachedNxgdModelsSnapshot() },
+            502,
+          );
+        }
+        return jsonResponse({ models, checkedAt: Date.now() });
       }
 
       // GET /api/subscription/status - Check Anthropic local subscription status

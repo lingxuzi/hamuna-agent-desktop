@@ -8,39 +8,7 @@
 
 最后更新：**2026-09-18**（任务 #155 bundled-skills 孤儿硬删 — 已折叠到 §4 git log + 本节上方 #156 narrative "前置"段（v55 snapshot → orphan cleanup 触发）。详细 sub-fix 见 task narrative 已永久折叠。详见 `git log -1` 与 plan `/home/hmcz/.claude/plans/<prior>`）。
 
-最后更新：**2026-09-16**（任务 #154 v14 广电卡片不再一直显示错误 — 1 文件 / +4 -1；`NxgdSubscriptionProvider.tsx:135-141` 把 `auth?.error ? ... : undefined` 改 `auth?.error && auth.status === 'error' ? ... : undefined`；Card = auth 状态机展示，form = 单次操作错误展示，两者不重叠。typecheck + eslint 0 errors，NxgdSubscriptionProvider 9/9 0 回归）。
-
-最后更新：**2026-09-16**（任务 #153 v13 跨协议切换回到 v5+ 确认对话框 — 1 文件 / +8 -5；`Chat.tsx::handleProviderChange` trigger 内 `isPlainCrossProvider` 分支从 `void forkSessionForProviderSwitch(...)` 改 `setPendingProviderSwitch(...)`；v12 同协议 bypass 保留。typecheck + eslint 0 errors，providerHistory 9/9 + providerExecution 11/11 + optionResolve 58/58 0 回归）。
-
-最后更新：**2026-09-16**（任务 #152 v12 同协议 provider 切换复用当前 session — 1 文件 / +10 -5；`Chat.tsx::handleProviderChange` 加 `isBothAnthropicProtocol` bypass 跳过 auto-fork + dialog；不动 `canResumeAcrossProviderBoundary` 契约。typecheck + eslint 0 errors，providerHistory 9/9 + providerExecution 11/11 + optionResolve 58/58 0 回归）。
-
-最后更新：**2026-09-16**（任务 #151 v11 充值失败真因透出 — 4 文件 / +35 -8；`/api/nxgd/recharge` 502 响应扩 `{ error, message, status }` + 新 `buildApiError()` helper 包装 serverMessage + `NxgdRechargeForm` catch 优先级 `serverMessage.trim() || i18n fallback`。typecheck + eslint 0 errors，NxgdSubscriptionProvider 9/9 + nxgd-auth 16/16 + renderer utils 547/547 0 回归）。
-
-最后更新：**2026-09-16**（任务 #150 v10 全 app 时区强制 Asia/Shanghai — 3 文件 / +93 -1；`Intl.DateTimeFormat` 构造函数 monkey-patch + `AppDateTimeFormat` 子类注入 `timeZone: 'Asia/Shanghai'` default；`src/renderer/main.tsx` 顶部第 1 行 import './utils/timezone-init'`。typecheck + eslint 0 errors，timezone-init 4/4 + cronTaskI18n 3/3 + scheduleSummary 2/2 0 回归）。
-
-最后更新：**2026-09-16**（任务 #149 v9 nxgd 充值失败 i18n 映射 — **被 #151 取代**，仅留指针）。
-
-最后更新：**2026-09-16**（任务 #147 v3 nxgd 真正"零操作可用"收尾 — ConfigProvider mount 自动 fire `/api/nxgd/models` + `saveProviderVerifyStatusService('nxgd', 'valid')` + nxgd preset `modelAliases` collapsed 到 `deepseek-v4-flash-0731`；config-types.test 5 新 case = 49/49 全绿，typecheck + eslint 0 errors）。
-
-最后更新：**2026-09-16**（任务 #146 nxgd 充值 v7 显式「去支付」+ iframe 渲染两步修 — 3 文件 / +90 -38；`NxgdRechargeForm` 加 `mode: 'preset'|'custom'` state + 6 列按钮网格 + 「去支付」按钮；删 onBlur/Enter 自动提交；iframe 渲染时禁同步 `onCompleted`；i18n 加 `modal.goPay` + `iframeTitle`。typecheck + test:dom 7/7 + eslint 0 errors）。
-
-最后更新：**2026-09-16**（任务 #145 nxgd fetchModels 401 自动刷新 — 2 文件 / +132 -24；新增 `refreshNxgdApiKey()`（调幂等 register）+ `fetchModels` 401 → refresh → retry 1 次；fail-soft 返旧 key。nxgd-auth.unit.test 5 新 case = 16/16 全绿，typecheck 0 errors）。
-
-最后更新：**2026-09-15**（任务 #144 中国广电 Token 平台落地 — `nxgd` 排 PRESET_PROVIDERS[0]；复用 Anthropic provider 链路（apiProtocol='anthropic' + ANTHROPIC_BASE_URL=https://ai-models.cloudwasu.cn）；新 `SubscriptionAuthPolicy` kind `host-managed-auto-register`；`compute_hardware_fingerprint()` = MAC+host_name+platform → SHA256 前 16 hex；4 server endpoint + Settings 卡片 + Chat 余额不足 modal + 充值 form；typecheck 0 errors，nxgd-auth 11/11 + NxgdSubscriptionProvider 4/4 + device_identity 3/3 全绿；意外副作用：config-types.test catalog 期望 [nxgd, ...sub, ...]）。
-
-最后更新：**2026-09-15**（任务 #143 v3 微调 + 主改 — 微调：SimpleChatInput MCP toggle 加 Loader2 旋转 + 蓝色底 + `cursor-wait`，2 轮自修 bug（switch thumb 错位 + Loader2 几何中心跑偏）；主改：去 Chat 顶部 MCP chip，Chat 输入区 toggle 直接走 `/api/mcp/enable` handshake；删 5 文件 + 改 ~12 文件 + 中英 i18n 去 19 key；typecheck + eslint 0 errors）。
-
-最后更新：**2026-09-14**（任务 #142 落地 — NSIS `Section HostedMcpPrefetch` 删 `${If} $UpdateMode <> 1` 守卫，upgrade 模式也跑 `pip install --user --upgrade agnes-video-25-mcp==<pin>`；1 文件 / +24 -18；smoke test 未覆盖 /UPDATE 模式（TODO #127 follow-up））。
-
-最后更新：**2026-09-13**（任务 #141 落地 — `bundled-skills/hamuna-writing-system` darwin-skill v2.1 优化 9 维 62.3→71.3；SKILL.md frontmatter name typo 修正 + Runtime Badge 中立化 + 安装三层结构；dim8 full_test 完成 6 子 agent × 3 prompt = 71.3→72.4；utility skill 工作树 ?? → tracked；老 `hamuna-writer-system/` 留孤儿 utility seed-once-then-hands-off 不自动迁移）。
-
-最后更新：**2026-09-12**（任务 #135 + #137 + #136 + #138 + #139 + #140 落地 — NSIS install-time prefetch `agnes-video-25-mcp` wheel（4 人工 + 4 auto-bumped, smoke test assert 5/3 `pip show`）→ **#137** 删 4 个 broken 测试文件（消 6 TS2307）→ **#136** 清 master pre-existing 5 errors + 2 warnings blocking lint；**#138** GitHub Actions PS 7.5+ strict-escape 修双引号 string 内反斜杠 → `--no-verify` 跳过 bump 保 0.3.158；**#139** 揭露 uv PyPI wheel 不产 `uvx.exe`（uvx 是 `uv tool run` alias），smoke-test 改探 `uv.exe`，production-side `mcp-server-transform.ts` uvx→uv tool run 改造待 TODO；**#140** fix(server) seedBundledExtendedMcpServers 改 selective-merge（user `env`/`enabled` 保留，bundled product surface 全覆盖），10 unit test 全绿；v0.3.160 release → v0.3.161 hotfix 带 #140 出去）。
-
-最后更新：**2026-09-11**（任务 #133 落地 — 工具箱 stdio MCP 启动握手校验；`/api/mcp/enable` 三 stdio 分支替换浅校验为真 `initialize` MCP 握手；抽 `transformMcpServerForSpawn(server)` 让 SDK 装配 + validator 共用单一变换源（-80 行 refactor）；新 `validateStdioStartup()` never-throws；9 unit + 3 integration 全绿）。
-
-最后更新：**2026-09-10**（任务 #129 落地 — `windows-release.yml` step 4 `actions/setup-node@v4` 加 `cache: 'npm'`；1 文件 / +5 -0；`npm ci` cold 2m51s → 几秒级（warm cache hit）。TODO #130 (beforeBuildCommand 冗余去重) 暂不动留 follow-up）。
-
-最后更新：**2026-09-10**（任务 #124 + #125 + #121-pip-only 落地 — extended builtin MCP `hidesDefaultArgs?: boolean` 字段（27/27 单测）+ `download_uv.ps1` 字符串字面量 bug 修（`$Version = "0.11.33"`）+ 数据修正 commit `66c2dee`（uvx.exe 0.12.3 → 0.11.33 SHA256 c253ce86...）+ Windows install pip-only 去 bundled uvx.exe（git rm uvx.exe + .uv-version + NSIS `Section UvxFallback` 改为清华源 `pip install --user uv` + uvx-path-setup.ps1 写 HKCU\Environment\Path + findPipInstalledUvxScriptsDir 探两条候选 Scripts dir））。
+最后更新：**2026-09-16 ~ #141**（任务 #154 / #153 / #152 / #151 / #150 / #149 / #147 / #146 / #145 / #144 / #143 / #142 / #141 全部 DONE 折叠 — n 个 commit + ~2500 行 nxgd 落地 + Chat 跨协议 provider 切换 + 时区强制 + 充值 v1-v7 / 一律见 §4 git log 指针 + `git log --oneline -- src/server/nxgd-auth.ts`）。
 
 ---
 
@@ -175,6 +143,9 @@
 ## 3. 当前 TODO（按优先级 + 状态）
 
 ### 3.1 进行中
+
+#### TODO #157 — nxgd `/api/nxgd/models` 路由从未注册（hidden 404 bug）
+**触发**：用户问"广电供应商获取模型接口为何404" → 排查发现 `src/server/nxgd-auth.ts::fetchModels()` 函数早就实现（`NXGD_LLM_BASE_URL/v1/models?limit=100` + 24h 缓存 + 401→refresh→retry + 429 冷却 + 401/403/404/429 全部 fail-soft），但 `src/server/index.ts` 的 nxgd 路由块（line 4603-4646）只注册了 4 个端点：`/api/nxgd/{auth/state,auth/refresh,balance,recharge}`。前端 `discoverNxgdModels()`（ConfigProvider mount 自动 fire + Settings → Manage Models → Refresh）调 `/api/nxgd/models` → 路由表 miss → **永远 404** → `cachedMatch` 正则（`nxgdSubscriptionService.ts:33`）永不命中 → 空 array → Chat 模型选择为空。**修复**（1 文件 / +24 -1）：`src/server/index.ts:693` import 行加 `fetchModels, getCachedNxgdModelsSnapshot, getNxgdModelsCooldown`；recharge 路由之后插新 `GET /api/nxgd/models` handler，三态翻译：`null+未注册 → 503 { error, state }` / `null+429 冷却中 → 429 { error:'rate-limited', retryAfterSeconds, models }` / `null+其它失败 → 502 { error, cached }` / 成功 → `200 { models, checkedAt }`。**契约对齐**：`cached` + `retryAfterSeconds` envelope 字段名与 `nxgdSubscriptionService.ts:28-36` regex 完全对齐（fail-soft `cached` 降级 + 限流 `retryAfterSeconds` 显示「稍后重试」），由 endpoint 与 renderer regex 双向契约保证。**复用原则**：endpoint 只翻译 `null` → HTTP 状态，`fetchModels` 已有的 401 轮换 + 429 冷却 + 24h 缓存不动（避免重写已有单元测试覆盖的契约）。**验证**：`npm run typecheck` 0 errors + `npx vitest run --project unit -- src/server/nxgd-auth.unit.test.ts` 16/16 全绿（server-side `fetchModels` 0 改动，0 回归）；`widgetSandboxHtml.test.ts` 等 5 个 pre-existing failures 与本 fix 无关（TODO #3）。**scope-out 留 follow-up**：(a) 补 `/api/nxgd/models` HTTP endpoint 集成测试（mock fetchModels 5 路径 + envelope shape 锁，下次"忘了挂路由"会复现为红测试）；(b) `cached` envelope 是数组非字符串，前端 regex `\[.*?\]` 仍能 match 但 `cachedMatch` 内 `JSON.parse` 失败时静默吞原 error（nxgdSubscriptionService.ts:42-44）—— 当前 catch 路径走 throw 没问题，但 follow-up 可加 zod 校验 envelope shape 防 silent fallback；(c) `parseProviderError` (`provider-probe.ts:81`) 对 404 报"模型不存在或 API 地址错误"——这条信息在普通 provider 验证路径正确，但 nxgd 端点 404 = "我们路由表少挂一条" 而非"上游 404"，误报。**版本流转**：未 commit → patch bump-on-commit。
 
 #### TODO #147 — nxgd 模型发现 `parseModelsResponse` 不识别顶层数组（永远返 `[]`）✅ DONE
 **触发**：用户报"事实上目前广电卡片获取可用模型一直为空"。server 端 live 验证 (`scripts/test-nxgd-fetch-models-live.mjs`) 显示 `/v1/models` 200 + 1 model 正常，**根因在 renderer 端 parser 契约 gap**：`src/renderer/config/services/nxgdSubscriptionService.ts:24` `discoverNxgdModels()` server envelope `{ models: [...], checkedAt }` 解构后把 **`resp.models` 数组** 直接喂给 `parseModelsResponse`；但 `modelDiscoveryService.ts::parseModelsResponse` 只识别 wrapper 对象（Format A OpenAI `{ object:"list", data:[...] }` / Format B Anthropic `{ data:[...] }`），**不识别顶层数组** → 永远返 `[]` → Model Management 面板"Discover Models"区渲染空。**修复**（NEW `src/renderer/config/services/modelDiscoveryService.test.ts` 5 case + parser 加 Format C 分支 `Array.isArray(body) ? rawModels = body`）：覆盖顶层数组（nxgd unwrap 后）/ OpenAI wrapper（grok）/ Anthropic wrapper（fetchProviderModels）/ `null`+`undefined`+`{}`+未知 shape（不抛）/ `status:'Shutdown'` 过滤。**nxgd-auth.unit.test 16/16 不回归**（server 侧 0 改动）。2 文件 / +50 -1，`npm run typecheck` 0 errors + `test:unit` 5/5 新 + 16/16 nxgd-auth + `eslint` 0 errors。**scope-out**：Model Management Panel 顶部"Active Models"显示的是 `provider.models`（preset `ANTHROPIC_MODELS` 7 个 Claude model）— 这块永远非空与本 bug 无关不动；真实 dev 模式 UI 验证（Settings → 广电 → 管理模型 → 看 Discover 列表）留 user 实操。**版本流转**：未 commit → patch bump-on-commit。
@@ -335,6 +306,7 @@
 | Commit | 摘要 |
 |--------|------|
 | `<pending>` | **fix(nxgd): auto-refresh apiKey on 401 via idempotent register (snapshot TODO #145, 2 文件 / +132 -24; 新增 `refreshNxgdApiKey()` + `fetchModels` 401 → refresh → retry 一次；register 是幂等的，同 code 返既有/轮换 apiKey；5 新单测全绿 16/16)** |
+| `<pending>` | **fix(nxgd): register `GET /api/nxgd/models` HTTP endpoint that was never wired (snapshot TODO #157, 1 文件 / +24 -1; `src/server/index.ts:693` import + recharge 路由块后插新 handler；503 未注册 / 429 限流透 retryAfterSeconds / 502 透 cached snapshot envelope 与 renderer regex 双向契约锁；`fetchModels()` 0 改动复用 24h 缓存 + 401 轮换 + 429 冷却；typecheck 0 errors + nxgd-auth.unit 16/16 0 回归)** |
 | `aa281f3` | **refactor(nxgd): drop recharge affordance from Settings card — keep balance read-only (snapshot TODO #144 续, 4 文件 / +39 -115; 卡片只读 + 「刷新余额」按钮，充值流程移到 Chat 弹窗独占)** |
 | `d367d8d` | **feat(provider): integrate China Radio/TV Token Platform as built-in first-choice model provider (snapshot TODO #144, 20 文件 / +1392 -9)** |
 | `<pending>` | **ci(windows): cache npm in windows-release.yml to skip ~2m51s cold npm ci on subsequent releases (snapshot TODO #129, 1 文件 / +5 -0)** |
