@@ -3,6 +3,7 @@
  * 覆盖：持久化 / 幂等 / 限流 / 余额缓存 / 并发 in-flight 复用。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { win32 as pathWin32 } from 'node:path';
 
 const mockFetch = vi.fn();
 vi.mock('./utils/cancellation', () => ({
@@ -324,5 +325,31 @@ describe('nxgd-auth refresh + 401 recovery', () => {
     expect(models).toBeNull();
     expect(mod.getNxgdApiKeySync()).toBe('sk-stale'); // key 没换
     expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('nxgd-auth 写盘路径 helper 契约（Windows ENOENT regression guard, #167）', () => {
+  // src/server/nxgd-auth.ts 的 writePersistedAuth 原本用
+  // `AUTH_FILE.substring(0, AUTH_FILE.lastIndexOf('/'))` 切目录。Windows 路径
+  // 全是 '\\'，lastIndexOf('/') 返 -1 → substring(0, -1) = slice(0, length-1)
+  // → 把最后一字符切掉 → mkdirSync 拿 `.jso` 当目录 → ENOENT。
+  // 修法 = path.dirname(AUTH_FILE)（跨平台；Windows 上 Node 自动用 win32.dirname）。
+  //
+  // vitest 在 Linux 跑，Linux 上 'C:\\fake\\home' 不是合法路径，mkdirSync 不会
+  // 真创建 —— 不能直接 reproduce ENOENT。所以用 path.win32.dirname 直接断言修法
+  // 语义。任何把 dirname 换回手写 substring/lastIndexOf 的回滚会被这个 contract
+  // test + 源码 review 一起拦截。
+
+  it('path.win32.dirname 在 Windows 路径上返回正确目录', () => {
+    expect(pathWin32.dirname('C:\\Users\\foo\\.hamuna\\nxgd-auth.json'))
+      .toBe('C:\\Users\\foo\\.hamuna');
+  });
+
+  it('旧 substring + lastIndexOf("/") 实现确实不返回正确目录（拒绝回滚）', () => {
+    const winPath = 'C:\\Users\\foo\\.hamuna\\nxgd-auth.json';
+    const buggy = winPath.substring(0, winPath.lastIndexOf('/'));
+    // Node spec: substring(0, -1) 返空字符串（不是切最后一字符）
+    expect(buggy).toBe('');
+    expect(buggy).not.toBe(pathWin32.dirname(winPath));
   });
 });

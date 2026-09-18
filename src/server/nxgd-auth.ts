@@ -13,7 +13,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { sendLog } from './logger';
 import { withFileLock } from './utils/file-lock';
@@ -146,7 +146,7 @@ async function writePersistedAuth(auth: PersistedAuth): Promise<void> {
   await withFileLock(
     { lockPath: AUTH_LOCK, timeoutMs: 5_000, staleMs: 30_000 },
     async () => {
-      const dir = AUTH_FILE.substring(0, AUTH_FILE.lastIndexOf('/'));
+      const dir = dirname(AUTH_FILE);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2), 'utf-8');
     },
