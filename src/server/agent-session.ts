@@ -5816,6 +5816,20 @@ export function buildClaudeSessionEnv(
   // HamunaAgent manages its own telemetry; these external connections add startup latency
   // and can timeout in restricted network environments (e.g. China).
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
+  // 2026-09-20: opt out of adaptive thinking + experimental betas + telemetry, and
+  // strip DISABLE_AUTOUPDATER from host shell. NOT setting MAX_CONTEXT_TOKENS or
+  // DISABLE_1M_CONTEXT here — those break pre-existing contract tests for the
+  // 1M-eligible model registry (#392, #444) and must be set per-provider via
+  // applyContextWindowSuffix, not globally. Tool search stays on so subagents
+  // can still resolve tool ids without listing everything. DISABLE_AUTOUPDATER
+  // is a Claude Code CLI flag, not a desktop-app flag — strip it so a host shell
+  // export doesn't silently turn off sidecar subprocess upgrades.
+  env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING = '1';
+  env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS = '1';
+  env.ENABLE_TOOL_SEARCH = 'true';
+  env.CLAUDE_CODE_ENABLE_TELEMETRY = '0';
+  env.CLAUDE_CODE_ATTRIBUTION_HEADER = 'false';
+  delete env.DISABLE_AUTOUPDATER;
   // Disable SDK built-in cron tools (CronCreate/CronDelete/CronList).
   // HamunaAgent has its own persistent scheduled Task system (im-cron compatibility
   // tool → Rust TaskStore/TaskSchedulerController) with IM delivery and wall-clock scheduling.
