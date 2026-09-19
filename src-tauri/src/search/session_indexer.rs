@@ -409,24 +409,31 @@ impl SessionIndex {
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
 
+        // 2026-09-19: title change used to drop offset + call full_reindex_session,
+        // which deleted and re-added every historical message doc — 7 MB writing
+        // sessions took 16.5 minutes per title change (see `perf` traces with
+        // reason="title_changed_full_reindex"). Cost was wrong: we only need the
+        // dedicated <sessionId>_title doc to reflect the new title (handled by
+        // update_session_title_only); historical message docs use the *current*
+        // title at re-index time, which is good enough for search-time boost.
+        // Watcher also calls update_session_title_only on sessions.json changes,
+        // so the old path was double-covered and just expensive.
         if self
             .indexed_title_for_session(session_id)
             .as_deref()
             .is_some_and(|indexed_title| indexed_title != title)
         {
-            self.drop_session_offset(session_id);
-            if self.full_reindex_session(session_id, sessions_dir)? {
-                self.write_session_offset(session_id, to);
-            }
+            self.update_session_title_only(session_id, sessions_dir)?;
             emit_perf_trace(
                 PerfTrace::new(PerfTraceName::StorageIo, "search_reindex_incremental")
                     .duration_ms(elapsed_ms(trace_started))
                     .session_id(Some(session_id))
                     .size_bytes(to.saturating_sub(from))
                     .status("ok")
-                    .detail("reason", "title_changed_full_reindex"),
+                    .detail("reason", "title_changed_incremental_refresh"),
             );
-            return Ok(());
+            // Fall through to the normal incremental path below — message docs
+            // will be appended with the new title on each add_document.
         }
 
         let mut writer = self
@@ -1330,6 +1337,25 @@ mod tests {
         assert_eq!(result.hits[0].session_id, session_id);
     }
 
+    // 2026-09-19: title change contract was rewritten. Old behavior called
+    // full_reindex_session (16.5 minutes on a 7 MB writing session) to also
+    // update `f.title` on every historical message doc. New behavior only
+    // refreshes the `<sessionId>_title` doc + the message doc being appended;
+    // historical message docs keep their old title in the index.
+    //
+    // Product trade-off:
+    //  + title change drops from 16.5 min to < 1 sec on 7 MB sessions
+    //  + new title is fully searchable via the refreshed _title doc + new
+    //    appended message docs (search dedup is per-session_id)
+    //  - searching the OLD title still surfaces the historical m1 doc (its
+    //    f.title field is stale). For most users this is fine — search by
+    //    content, not by your own past titles. The title boost on the new
+    //    _title doc weights ranking correctly for the new title.
+    //
+    // To restore "old title invisible" semantics, you must run full_reindex
+    // (line 287); but that path is exactly what we are avoiding on title
+    // change. Don't add a per-doc update loop here — Tantivy has no in-place
+    // update and any delete+add loop degrades to O(N_messages) writes.
     #[test]
     fn incremental_reindex_refreshes_title_when_metadata_changes_with_append() {
         let temp = tempfile::tempdir().unwrap();
@@ -1352,8 +1378,17 @@ mod tests {
 
         index.reindex_session(session_id, &sessions_dir).unwrap();
 
+        // New title is reachable (m2 + refreshed _title doc both match, dedup
+        // by session_id → 1 unique session).
         assert_eq!(index.search("newtitleunique", 10).unwrap().total_count, 1);
-        assert_eq!(index.search("oldtitleunique", 10).unwrap().total_count, 0);
+        // Old title still surfaces historical m1 (trade-off; see test doc).
+        assert_eq!(index.search("oldtitleunique", 10).unwrap().total_count, 1);
+        // Appended m2 body content is searchable (regression guard).
+        assert_eq!(
+            index.search("appended title refresh body", 10).unwrap().total_count,
+            1,
+            "appended m2 content must be searchable"
+        );
     }
 
     #[test]
