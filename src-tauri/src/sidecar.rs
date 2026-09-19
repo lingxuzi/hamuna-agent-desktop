@@ -244,6 +244,13 @@ fn append_sidecar_entrypoint_args(
     port: u16,
     role: SidecarProcessRole,
 ) {
+    // 2026-09-19: bound V8 old-space to keep long-running Sidecar sessions
+    // (especially mega-prompt writing-system turns that pull ~7M input tokens)
+    // from RSS-spiking the host machine. 3072 MB is enough headroom for a
+    // single 7M-token turn + SDK buffers; trade-off is the host must have
+    // >= 8 GB RAM (16 GB recommended). Lower this if host is smaller.
+    // Must come BEFORE --import tsx/esm (V8 flags are parsed positionally).
+    cmd.arg("--max-old-space-size=3072");
     if script_path.extension().and_then(|s| s.to_str()) == Some("ts") {
         cmd.arg("--import").arg("tsx/esm");
     }
@@ -314,6 +321,56 @@ mod sidecar_process_role_tests {
         assert!(session_args
             .windows(2)
             .any(|pair| pair == ["--import", "tsx/esm"]));
+    }
+
+    // 2026-09-19: regression guard — every sidecar spawn must bound V8
+    // old-space so mega-prompt turns (writing-system / agent-browser) don't
+    // RSS-spike the host. Update this assertion if you intentionally change
+    // the heap cap.
+    #[test]
+    fn sidecar_argv_always_bounds_v8_old_space() {
+        for (script, role) in [
+            (Path::new("server.ts"), SidecarProcessRole::Global),
+            (Path::new("server.ts"), SidecarProcessRole::Session),
+            (Path::new("server-dist.js"), SidecarProcessRole::Global),
+            (Path::new("server-dist.js"), SidecarProcessRole::Session),
+        ] {
+            let mut cmd = crate::process_cmd::new("node");
+            append_sidecar_entrypoint_args(&mut cmd, script, 31415, role);
+            let args: Vec<String> = cmd
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            let heap_arg = args
+                .iter()
+                .find(|a| a.starts_with("--max-old-space-size="))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "missing --max-old-space-size for {:?}/{:?} argv={:?}",
+                        script, role, args
+                    )
+                });
+            // Format is "--max-old-space-size=<N>" — parse N, must be > 0.
+            let n: u32 = heap_arg
+                .trim_start_matches("--max-old-space-size=")
+                .parse()
+                .expect("heap cap must be integer MB");
+            assert!(n >= 1024, "heap cap too small ({} MB) — won't fit 7M-token turns", n);
+            assert!(n <= 8192, "heap cap too large ({} MB) — risks OOM-killing 8GB hosts", n);
+            // Heap flag must come BEFORE --import (V8 positional parse order).
+            let heap_idx = args
+                .iter()
+                .position(|a| a.starts_with("--max-old-space-size="))
+                .unwrap();
+            if let Some(import_idx) = args.iter().position(|a| a == "--import") {
+                assert!(
+                    heap_idx < import_idx,
+                    "--max-old-space-size must precede --import (V8 flag parse order); got heap={}, import={}",
+                    heap_idx,
+                    import_idx
+                );
+            }
+        }
     }
 }
 
