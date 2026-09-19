@@ -6,6 +6,54 @@ Package: `agnes-video-25-mcp` · PyPI: https://pypi.org/project/agnes-video-25-m
 
 ---
 
+## [0.2.1] — 2026-09-19
+
+### Fixed
+
+- **`agnes25_video_generate` reference mode harness dict-wrap bug**:
+  harness (Claude Code MCP client) was serializing single-element
+  `images=["<url>"]` (and `audios`, `videos`) as `{"item": "<url>"}` dicts.
+  Schema rejected the dict upstream with
+  `Input should be a valid list [type=list_type, input_value={'item': '...'}, input_type=dict]`,
+  blocking all reference-mode calls.
+
+  - **`images` / `audios` type**: extended from `list[str] | None` to
+    `list[str] | dict[str, Any] | None` (same trade-off 0.1.8 used for
+    `image_paths`).
+  - **`videos` type**: extended from `list[dict[str, Any]] | None` to
+    `list[dict[str, Any]] | dict[str, Any] | None` (mirror for dict payloads).
+  - **Runtime normalization**: added `_coerce_str_list_input` (alias of
+    `_coerce_image_paths_input`) and `_coerce_videos_input` helpers. Called
+    once at `_generate_impl` entry, BEFORE `_submit_impl` so the inner
+    payload stays canonical list shape.
+  - **New unwrap rule (also retrofitted on `_coerce_image_paths_input`)**:
+    `{"item": "<single string>"}` is now wrapped to `["<single string>"]`
+    (previously returned unchanged). This is the exact shape harness emits
+    for single-element arrays.
+
+### Compatibility
+
+- Backward compatible: callers that already pass `list` are unchanged.
+- The dict-form is **only** a fallback for harness-shaped inputs; it is
+  type-unsafe in one corner (single-key dicts whose value happens to be
+  a list will be silently unwrapped). Caller-side discipline remains the
+  long-term fix; this is the cheapest server-side mitigation.
+- FastMCP / Pydantic v2 may still validate the type hint before the
+  function body runs — the dict-form signature is what makes that
+  validation pass.
+
+### Tests
+
+- `tests/test_image_paths_dict_tolerance.py`: added case for
+  `{"item": "<single string>"}` → `["<single string>"]` (replaces the old
+  "return dict unchanged" assertion).
+- `tests/test_video_refs_dict_tolerance.py`: new file covering both
+  `_coerce_str_list_input` and `_coerce_videos_input` with 14 cases
+  (list pass-through, None, item-as-list, item-as-string, single-key,
+  multi-key, empty).
+
+---
+
 ## [0.2.0] — 2026-09-11
 
 ### Added

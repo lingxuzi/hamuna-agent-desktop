@@ -921,6 +921,13 @@ def _generate_impl(
     timeout_seconds: float = 600.0, poll_interval_seconds: float = 5.0,
     download: bool = True, output_filename: str | None = None,
 ) -> dict[str, Any]:
+    # 0.2.1: harness (Claude Code MCP client) sometimes serializes single-element
+    # array args as {"item": "<value>"} dicts. Schema already accepts dict, here
+    # we unwrap so the inner payload is the canonical list shape. CHANGELOG
+    # 0.2.1 documents the trade-off; long-term fix is caller-side discipline.
+    images = _coerce_str_list_input(images) if images is not None else None
+    audios = _coerce_str_list_input(audios) if audios is not None else None
+    videos = _coerce_videos_input(videos) if videos is not None else None
     submit = _submit_impl(
         prompt, model=model, mode=mode, seconds=seconds, size=size,
         aspect_ratio=aspect_ratio, seed=seed, first_frame=first_frame,
@@ -1035,6 +1042,9 @@ def _coerce_image_paths_input(
 
     Unwrap rules:
       - ``{"item": [list]}`` → return the inner list (the symptom in the bug report).
+      - ``{"item": "<single string>"}`` → return ``["<single string>"]`` (new in 0.2.1:
+        harness sometimes serializes a single-element ``["<url>"]`` as
+        ``{"item": "<url>"}`` instead of ``{"item": ["<url>"]}``).
       - Single-key dict whose only value is a list → return that list.
       - Everything else (None, real list, dict that doesn't match) → return unchanged.
 
@@ -1047,12 +1057,57 @@ def _coerce_image_paths_input(
         long-term fix; this is the cheapest server-side mitigation.
     """
     if isinstance(value, dict):
-        if "item" in value and isinstance(value["item"], list):
-            return value["item"]
+        if "item" in value:
+            inner = value["item"]
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, str):
+                return [inner]
         if len(value) == 1:
             only = next(iter(value.values()))
             if isinstance(only, list):
                 return only
+    return value
+
+
+def _coerce_str_list_input(
+    value: list[str] | dict[str, Any] | None,
+) -> list[str] | None:
+    """Same as :func:`_coerce_image_paths_input` — kept as a separate name for
+    video-tool call sites (``images`` / ``audios``) to make intent obvious at
+    the read site and to let the two helpers diverge later without rippling
+    type hints.
+
+    0.2.1: added to fix harness single-element dict-of-string bug for video
+    reference mode (images + audios fields), which image side already worked
+    around via _coerce_image_paths_input but the video type hint was still
+    ``list[str] | None`` so Pydantic rejected the dict upstream.
+    """
+    return _coerce_image_paths_input(value)
+
+
+def _coerce_videos_input(
+    value: list[dict[str, Any]] | dict[str, Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Tolerate dict-shaped ``videos`` from MCP clients.
+
+    0.2.1: mirror of _coerce_image_paths_input for the video-list payload.
+    Videos have shape ``[{"url": "..."}]`` not ``[str]`` so the unwrap must
+    preserve list-of-dict semantics.
+    """
+    if isinstance(value, dict):
+        if "item" in value:
+            inner = value["item"]
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, dict):
+                return [inner]
+        if len(value) == 1:
+            only = next(iter(value.values()))
+            if isinstance(only, list):
+                return only
+            if isinstance(only, dict):
+                return [only]
     return value
 
 
@@ -1200,12 +1255,18 @@ async def agnes25_video_generate(
     seconds: str = DEFAULT_SECONDS, size: str = DEFAULT_SIZE,
     aspect_ratio: str = DEFAULT_ASPECT, seed: int | None = None,
     first_frame: str | None = None, last_frame: str | None = None,
-    images: list[str] | None = None, audios: list[str] | None = None,
-    videos: list[dict[str, Any]] | None = None,
+    # 0.2.1: accept list | dict | None so Pydantic doesn't reject harness inputs
+    # that wrap single-element arrays as {"item": "<url>"} dicts. Image side
+    # already worked around this in 0.1.8 — apply the same trade-off here for
+    # video reference mode (images / audios / videos). Runtime normalization
+    # lives in _coerce_str_list_input / _coerce_videos_input.
+    images: list[str] | dict[str, Any] | None = None,
+    audios: list[str] | dict[str, Any] | None = None,
+    videos: list[dict[str, Any]] | dict[str, Any] | None = None,
     timeout_seconds: float = 600.0, poll_interval_seconds: float = 5.0,
     download: bool = True, output_filename: str | None = None,
 ) -> dict[str, Any]:
-    """Submit + wait combined. `mode` ∈ {text, keyframe, reference}; reference mode uses images[]/audios[]/videos[] with <Picture N> / <Audio N> / <Video N> placeholders."""
+    """Submit + wait combined. `mode` ∈ {text, keyframe, reference}; reference mode uses images[]/audios[]/videos[] with <Picture N> / <Audio N> / <Video N> placeholders. `images` / `audios` / `videos` accept list (preferred) or dict (fallback for harness clients that wrap arrays as ``{"item": [...]}``); see CHANGELOG 0.2.1."""
     return await asyncio.to_thread(
         _generate_impl, prompt,
         model=model, mode=mode, seconds=seconds, size=size, aspect_ratio=aspect_ratio,

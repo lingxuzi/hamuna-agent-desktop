@@ -57,9 +57,12 @@ def main() -> None:
     )
 
     _check(
-        'dict with "item" key + non-list value → return dict unchanged',
+        # 0.2.1: harness serializes single-element ["<url>"] as
+        # {"item": "<url>"} (a dict-of-string, NOT dict-of-list). The
+        # helper now unwraps the single string into a 1-element list.
+        'dict with "item" key + single-string value → wrap to 1-element list',
         _coerce_image_paths_input({"item": "/not-a-list"}),
-        {"item": "/not-a-list"},
+        ["/not-a-list"],
     )
 
     # --- single-key dict whose value IS a list: unwrap --------------------
