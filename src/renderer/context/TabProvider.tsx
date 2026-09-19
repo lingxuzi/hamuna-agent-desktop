@@ -85,6 +85,7 @@ import {
 } from '@/services/notificationService';
 import { setBackgroundTaskStatus, setBackgroundTaskDescription, getBackgroundTaskDescription, clearAllBackgroundTaskStatuses, registerBackgroundTask } from '@/utils/backgroundTaskStatus';
 import { countVisibleChatTimelineRows, shiftFirstItemIndexForVisiblePrepend } from '@/utils/chatTimelineRows';
+import { perfMark, perfMeasure } from '@/utils/perfMark';
 import {
     EMPTY_LIVE_REVISION_FENCE,
     beginLiveRevisionRestore,
@@ -1904,6 +1905,10 @@ export default function TabProvider({
                     console.log('[TabProvider] Skipping message-chunk (new session, stale event)');
                     break;
                 }
+                // TTFT end anchor — pairs with `chat_send` mark in Chat.tsx handleSendMessage.
+                // First chunk only: later chunks just flow through the normal append path.
+                perfMark('chat_first_token');
+                perfMeasure('chat_ttft', 'chat_send', 'chat_first_token');
 
                 const chunk = data as string;
 

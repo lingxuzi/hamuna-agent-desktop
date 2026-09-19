@@ -1,20 +1,32 @@
 /**
  * Markdown - Enhanced Markdown renderer for AI chat
- * 
+ *
  * Features:
  * - Syntax highlighted code blocks with copy button
  * - LaTeX math formulas (KaTeX)
  * - Mermaid diagrams
  * - GFM tables, task lists, strikethrough
  * - External links open in system browser
+ *
+ * perfMark note: Markdown.tsx streams one re-render per chunk during AI
+ * responses, so render duration is the load-bearing metric for layout-thrash
+ * assessment (and whether an incremental-patch approach is worth it). The
+ * pair uses useLayoutEffect (commit runs sync before it) + a single rAF
+ * before the done mark, so each pair is exactly one render's commit → paint.
+ * Earlier useEffect+cleanup measured the gap to the NEXT render's start,
+ * inflating streaming numbers by N (e.g. 97-char render logged 8.97s).
+ * Streaming vs settled responses use the same key, so
+ * `localStorage['hamuna:perf']='1'` lets you diff them in unified log.
  */
 
 import 'katex/dist/katex.min.css';
 
-import { Children, isValidElement, memo, useContext, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { Children, isValidElement, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
+
+import { perfMark } from '@/utils/perfMark';
 
 import CodeBlock from './markdown/CodeBlock';
 import InlineCode from './markdown/InlineCode';
@@ -789,6 +801,28 @@ const Markdown = memo(function Markdown({ children, compact = false, preserveNew
       ),
     };
   }, [basePath, workspacePath]);
+
+  // Layout-effect + rAF pair: capture single-render time (commit → paint),
+  // not cumulative across N chunks. Previous design used useEffect cleanup,
+  // but cleanup only fires on the NEXT effect, so start/done marks ended up
+  // N chunks apart (e.g. 97-char render reported 8.97s). Now start fires
+  // immediately, done after the next paint frame (rAF inside the effect),
+  // and a fresh render cancels the prior rAF so only the latest pair lands.
+  const pendingFrame = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    perfMark('markdown_render', { streaming, length: children.length });
+    const raf = requestAnimationFrame(() => {
+      pendingFrame.current = null;
+      perfMark('markdown_render_done');
+    });
+    pendingFrame.current = raf;
+    return () => {
+      if (pendingFrame.current !== null) {
+        cancelAnimationFrame(pendingFrame.current);
+        pendingFrame.current = null;
+      }
+    };
+  }, [processedContent, streaming, children]);
 
   return (
     <div className={`break-words ${compact ? 'text-sm' : 'text-base'}`}>

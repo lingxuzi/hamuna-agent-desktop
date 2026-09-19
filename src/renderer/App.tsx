@@ -70,7 +70,7 @@ import { persistOpenTabsDurable, loadAndClearOpenTabsDurable, clearOpenTabsDurab
 import { consumeCleanExitMarker } from '@/utils/lastExitMarker';
 import { tabContentKind, isRestoreAbandoned } from '@/utils/tabContentKind';
 import { runAfterNextPaint } from '@/utils/afterPaint';
-import { perfMark } from '@/utils/perfMark';
+import { perfMark, perfMeasure } from '@/utils/perfMark';
 import { RENDERER_PERF_PHASE } from '../shared/perfTrace';
 import type { ImageAttachment } from '@/components/SimpleChatInput';
 import { type CronRecoverySummaryPayload, type CronTaskRecoveredPayload, CRON_EVENTS } from '@/types/cronEvents';
@@ -2064,6 +2064,7 @@ export default function App() {
     // (React updated the DOM) and can't see how long the browser took to draw.
     requestAnimationFrame(() => requestAnimationFrame(() => {
      perfMark('chat_painted', { tabId: targetTabId });
+     perfMeasure('tab_click_to_painted', 'launch_start', 'chat_painted');
      console.log(`[App][launch] chat_painted target=${targetTabId} (browser painted the flip)`);
     }));
    }
