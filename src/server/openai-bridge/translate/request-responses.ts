@@ -85,18 +85,24 @@ export function translateRequestToResponses(
   if (options?.promptCacheKey) responsesReq.prompt_cache_key = options.promptCacheKey;
 
   // 5. Tools
-  // ponytail: OpenAI FunctionToolParam marks `strict: Required[Optional[bool]]`
-  // — strictly optional value but REQUIRED to be present on the wire. The
-  // OpenAI official schema lets providers omit it (lenient clients send
-  // `{type, name, description, parameters}` and are accepted), but strict
-  // proxies (Rust serde untagged enum — agnes) refuse to dispatch to the
-  // FunctionToolParam variant when `strict` is missing. Regression surfaced
-  // as `untagged enum ResponseInput at line 1 column 30555` — column falls
-  // inside the tools array, not input, because that is where serde gave up.
-  // Fix: emit `strict: false` (the historical default; newer OpenAI tools
-  // prefer `strict: true` with strict JSON-schema subsets, but flipping
-  // every Anthropic tool to strict mode is a separate, larger conversation
-  // — see `Models` providers' "JSON-schema subset compliance" docs).
+  // Function-tool fields are nested under `function:` — matches OpenAI's
+  // documented FunctionToolParam shape and `tools.ts::translateToolDefinitions`
+  // (chat-completions path). Strict untagged-enum deserializers (Rust serde
+  // — agnes) reject the flat shape with `Function tool must have a function
+  // definition` and then give up inside a long tool description string with
+  // `untagged enum ResponseInput at line 1 column N` (column 63453 fell
+  // inside EnterPlanMode.description in the 2026-09-20 regression — 115KB
+  // request body, 26 tools). OpenAI official / xAI / other lenient
+  // providers accept both shapes; the nested form is the documented one.
+  //
+  // ponytail: #325 — `strict` is `Required[Optional[bool]]` per OpenAI spec;
+  // strict proxies dispatch the FunctionToolParam variant only when it is
+  // present. We always emit `strict: false` (the historical default; newer
+  // OpenAI tools prefer `strict: true` with strict JSON-schema subsets, but
+  // flipping every Anthropic tool to strict mode is a separate, larger
+  // conversation — see `Models` providers' "JSON-schema subset compliance"
+  // docs). Lenient clients accept omission; emitting it costs nothing and
+  // saves strict providers from a 400.
   //
   // #325 — agnes's strict deserializer also chokes on long `description`
   // strings inside tool `parameters` JSON-schema (column 45371 fell inside
@@ -112,14 +118,16 @@ export function translateRequestToResponses(
   if (req.tools && req.tools.length > 0) {
     responsesReq.tools = req.tools.map(t => ({
       type: 'function' as const,
-      name: t.name,
-      description: t.description,
-      // JSON Schema tool parameters are always an object at the top level;
-      // the array branch of `stripSchemaDescriptions` only fires for nested
-      // positions (properties[].items / oneOf / anyOf / allOf), so the cast
-      // is sound.
-      parameters: stripSchemaDescriptions(t.input_schema) as Record<string, unknown> | undefined,
-      strict: false,
+      function: {
+        name: t.name,
+        description: t.description,
+        // JSON Schema tool parameters are always an object at the top level;
+        // the array branch of `stripSchemaDescriptions` only fires for nested
+        // positions (properties[].items / oneOf / anyOf / allOf), so the cast
+        // is sound.
+        parameters: stripSchemaDescriptions(t.input_schema) as Record<string, unknown> | undefined,
+        strict: false,
+      },
     }));
   }
 

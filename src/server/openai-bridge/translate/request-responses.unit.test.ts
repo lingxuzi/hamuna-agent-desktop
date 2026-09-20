@@ -287,8 +287,18 @@ describe('translateRequestToResponses — reasoning effort vocabulary', () => {
  * to be present. Without it, the body fails to deserialize at column 30555+
  * (inside tools array, despite outer error string claiming "untagged enum
  * ResponseInput").
+ *
+ * Bug F regression (2026-09-20): function-tool fields must be nested under
+ * `function:` to match OpenAI's documented FunctionToolParam shape and
+ * `tools.ts::translateToolDefinitions` (chat-completions path). Strict
+ * untagged-enum deserializers (Rust serde — agnes) reject the flat shape
+ * with `Function tool must have a function definition` and then give up
+ * inside a long tool description string with `untagged enum ResponseInput
+ * at line 1 column 63453` (column fell inside EnterPlanMode.description in
+ * a 213KB request body with 26 tools). Lenient providers accept either
+ * shape; nested is the documented one.
  */
-describe('translateRequestToResponses — function tool strict flag (Bug D)', () => {
+describe('translateRequestToResponses — function tool strict flag (Bug D) + nested shape (Bug F)', () => {
   const tools = [
     { name: 't1', description: 'first tool', input_schema: { type: 'object' } },
     { name: 't2', description: 'second tool', input_schema: { type: 'object' } },
@@ -299,7 +309,7 @@ describe('translateRequestToResponses — function tool strict flag (Bug D)', ()
     expect(out.tools).toBeDefined();
     expect(out.tools).toHaveLength(2);
     for (const t of out.tools!) {
-      expect(t.strict).toBe(false);
+      expect(t.function.strict).toBe(false);
       expect(t.type).toBe('function');
     }
   });
@@ -313,11 +323,30 @@ describe('translateRequestToResponses — function tool strict flag (Bug D)', ()
     const out = translateRequestToResponses({ ...baseReq, tools });
     expect(out.tools![0]).toMatchObject({
       type: 'function',
-      name: 't1',
-      description: 'first tool',
-      parameters: { type: 'object' },
-      strict: false,
+      function: {
+        name: 't1',
+        description: 'first tool',
+        parameters: { type: 'object' },
+        strict: false,
+      },
     });
+  });
+
+  it('does NOT emit name/description/parameters/strict at the top level of the tool object (Bug F)', () => {
+    // Regression guard: a previous shape had `name`/`description`/`parameters`/
+    // `strict` flat on the tool object. Strict untagged-enum deserializers
+    // (Rust serde — agnes) reject that with `Function tool must have a
+    // function definition`; lenient providers silently accept it but it's
+    // not the documented OpenAI shape. Pin the nested invariant.
+    const out = translateRequestToResponses({ ...baseReq, tools });
+    for (const t of out.tools!) {
+      expect(t).not.toHaveProperty('name');
+      expect(t).not.toHaveProperty('description');
+      expect(t).not.toHaveProperty('parameters');
+      expect(t).not.toHaveProperty('strict');
+      expect(t.function).toBeDefined();
+      expect(typeof t.function).toBe('object');
+    }
   });
 });
 
@@ -616,7 +645,7 @@ describe('stripSchemaDescriptions', () => {
       },
       { modelOverride: 'agnes-2.5-flash' },
     );
-    const params = wire.tools![0].parameters as Record<string, unknown>;
+    const params = wire.tools![0].function.parameters as Record<string, unknown>;
     const descProp = (
       (((params.properties as Record<string, unknown>).questions as Record<string, unknown>)
         .items as Record<string, unknown>).properties as Record<string, unknown>
@@ -626,7 +655,7 @@ describe('stripSchemaDescriptions', () => {
     // Object-valued description property definition must survive.
     expect(itemsProps.description).toEqual({ type: 'string' });
     // Top-level tool description is the LLM-facing annotation — kept.
-    expect(wire.tools![0].description).toBe('Use this tool when you need to ask the user clarifying questions.');
+    expect(wire.tools![0].function.description).toBe('Use this tool when you need to ask the user clarifying questions.');
     // None of the dropped string descriptions leak to the wire.
     const wireStr = JSON.stringify(wire);
     expect(wireStr).not.toContain('Display text (1-5 words).');
@@ -664,7 +693,7 @@ describe('translateRequestToResponses — tool schemas strip descriptions (Bug F
       ...baseReq,
       tools: [{ name: 't', description: 'tool-level description kept', input_schema: schemaWithDescriptions }],
     });
-    const params = out.tools![0].parameters as Record<string, unknown>;
+    const params = out.tools![0].function.parameters as Record<string, unknown>;
     expect('description' in params).toBe(false);
     const props = params.properties as Record<string, Record<string, unknown>>;
     expect('description' in props.question).toBe(false);
@@ -677,7 +706,7 @@ describe('translateRequestToResponses — tool schemas strip descriptions (Bug F
       ...baseReq,
       tools: [{ name: 't', description: 'kept verbatim', input_schema: { type: 'object' } }],
     });
-    expect(out.tools![0].description).toBe('kept verbatim');
+    expect(out.tools![0].function.description).toBe('kept verbatim');
   });
 
   it('emits an empty parameters object when input_schema is {} (input_schema is required)', () => {
@@ -685,6 +714,6 @@ describe('translateRequestToResponses — tool schemas strip descriptions (Bug F
       ...baseReq,
       tools: [{ name: 't', input_schema: {} }],
     });
-    expect(out.tools![0].parameters).toEqual({});
+    expect(out.tools![0].function.parameters).toEqual({});
   });
 });
