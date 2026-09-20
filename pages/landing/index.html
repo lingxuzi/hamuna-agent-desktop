@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title data-i18n="meta.title">hamuna — a desktop agent that runs on your machine</title>
+<meta name="description" data-i18n="meta.desc" content="A free AI assistant that lives on your Windows PC. Write, search, plan, crunch numbers, make images — just talk to it. Everything stays on your computer. Apache-2.0.">
+<style>
+/* ---------- tokens (aligned to src/renderer/theme/themes/hamuna-default.css) ---------- */
+:root {
+  /* surface — paper warm cream, 24px paper grid, gradient overlay */
+  --bg:            #faf6ee;
+  --bg-elevated:   #fffcf7;
+  --bg-inset:      #e8dccf;
+  --bg-overlay: linear-gradient(180deg, #fffcf7 0%, #faf6ee 40%, color-mix(in srgb, #faf6ee 86%, #e8dccf) 100%);
+
+  /* ink */
+  --fg:            #1c1612;
+  --fg-2:          #2e2825;
+  --dim:           #5d4f44;
+  --dim-2:         #9a8c80;
+  --ink-strong:    #0a0604;
+
+  /* line */
+  --line:        rgb(28 22 18 / 0.10);
+  --line-soft:   rgb(28 22 18 / 0.06);
+  --line-strong: rgb(28 22 18 / 0.18);
+
+  /* accent — single warm terracotta (--accent-warm) */
+  --accent:        #c26d3a;
+  --accent-hi:     #e18a58;
+  --accent-deep:   #8e4a26;
+  --accent-glow:   rgba(194,109,58,0.32);
+  --accent-on:     #ffffff;
+
+  /* paper grid texture — 24px, low alpha */
+  --paper-grid:   radial-gradient(rgb(28 22 18 / 0.08) 0.7px, transparent 0.7px);
+
+  /* fonts */
+  --font-sans:  'SF Pro Text', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-serif: 'Playfair Display', 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background-color: var(--bg);
+  background-image: var(--bg-overlay);
+  background-attachment: fixed;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* 24px paper grid — low alpha, mask faded top/bottom */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: var(--paper-grid);
+  background-size: 24px 24px;
+  opacity: 0.22;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 120px, #000 calc(100% - 120px), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 120px, #000 calc(100% - 120px), transparent 100%);
+}
+/* SVG turbulence noise — layered above grid for "real paper" feel */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.11  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 1 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px;
+  mix-blend-mode: multiply;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 80px, #000 calc(100% - 80px), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 80px, #000 calc(100% - 80px), transparent 100%);
+}
+body > * { position: relative; z-index: 1; }
+a { color: inherit; text-decoration: none; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+
+/* skip-link — visually hidden until keyboard focus */
+.skip-link {
+  position: absolute; top: -100px; left: 16px;
+  background: var(--ink-strong); color: var(--bg-elevated);
+  padding: 10px 16px; border-radius: 6px;
+  font-weight: 600; font-size: 14px;
+  z-index: 100; transition: top 120ms linear;
+}
+.skip-link:focus { top: 60px; }
+
+/* ---------- topbar ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 32px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(250, 246, 238, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 14px;
+  color: var(--fg-2);
+  position: sticky; top: 0; z-index: 50;
+}
+.topbar .brand { color: var(--fg); font-weight: 700; letter-spacing: -0.02em; display: inline-flex; align-items: center; gap: 8px; }
+.topbar .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(194,109,58,0.35); }
+.topbar nav { display: flex; gap: 28px; align-items: center; }
+.topbar nav a { transition: color 120ms linear; color: var(--fg-2); }
+.topbar nav a:hover { color: var(--accent); }
+.lang-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg-elevated);
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+  transition: color 120ms linear, border-color 120ms linear;
+}
+.lang-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.lang-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lang-toggle .sep { color: var(--dim-2); }
+.lang-toggle .on { color: var(--accent); font-weight: 700; }
+
+/* ---------- v5 hero: sans display title + inline number anchor (no Playfair italic word accent) ---------- */
+.hero {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 96px 32px 96px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 48px;
+  align-items: end;
+}
+.hero .left { min-width: 0; }
+.hero h1 {
+  font-family: var(--font-sans);
+  font-size: clamp(44px, 6.4vw, 92px);
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  color: var(--ink-strong);
+  max-width: 18ch;
+  margin-bottom: 28px;
+}
+.hero .tagline {
+  font-size: 19px;
+  color: var(--fg-2);
+  line-height: 1.55;
+  max-width: 56ch;
+  font-weight: 400;
+}
+
+/* ---------- number anchor: hero right column, no full-width hero bar ---------- */
+.number-anchor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+.number-anchor .v {
+  font-family: var(--font-sans);
+  font-size: clamp(40px, 4.8vw, 72px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--ink-strong);
+  font-variant-numeric: tabular-nums;
+}
+.number-anchor .v-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dim);
+  letter-spacing: 0.02em;
+}
+.number-anchor .v-sub + .v-sub::before {
+  content: "·";
+  margin: 0 8px;
+  color: var(--dim-2);
+}
+
+/* ---------- sections ---------- */
+.section { max-width: 720px; margin: 0 auto; padding: 96px 32px; }
+.section h2.label, .section .label { color: var(--dim); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; margin-bottom: 56px; }
+
+/* ---------- v5 caps: 11× (image + caption) in 2-col grid — zero card, zero shadow, zero hover lift ---------- */
+.section.cap-section { max-width: 1280px; }
+.caps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 64px;
+  row-gap: 80px;
+}
+.cap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+.cap .frame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-soft);
+}
+.cap .frame svg { display: block; width: 100%; height: 100%; }
+/* v5: cap.5 (video) is "the one memorable thing" — wider, deeper border, terracotta focus ring */
+.cap.feature {
+  grid-column: 1 / -1;
+}
+.cap.feature .frame {
+  aspect-ratio: 21 / 9;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 0 0 4px rgba(194, 109, 58, 0.06), 0 12px 36px -20px rgba(28, 22, 18, 0.20);
+}
+.cap.feature .name {
+  font-size: 32px;
+}
+.cap.feature .frame::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(194, 109, 58, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.cap .caption { display: flex; flex-direction: column; gap: 10px; }
+.cap .name {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink-strong);
+  line-height: 1.15;
+}
+.cap .words {
+  font-size: 16px;
+  color: var(--fg-2);
+  line-height: 1.6;
+  font-weight: 400;
+  max-width: 64ch;
+}
+
+/* ---------- mini-demo: SVG-internal motion, not scroll-triggered fades ----------
+   Goal: 11 caps get a small live signal that "this is a real product, not a
+   brochure". Animation lives inside the existing SVG so v5's "no card / no
+   shadow / no fade-up entrance" stays intact. prefers-reduced-motion fully
+   degrades to the static first frame (matches v5 baseline). */
+.cap-demo .cap-svg { transform-origin: center; transform-box: fill-box; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* gate: only animate when the cap is in viewport (JS toggles .in-view) */
+  .cap-demo:not(.in-view) .cap-svg,
+  .cap-demo:not(.in-view) .cap-svg * { animation-play-state: paused !important; }
+
+  /* ---------- cap 1: writing — caret sweep + body lines fill ---------- */
+  .cap1-typing .cap1-scan > rect:not(.cap1-caret) {
+    animation: cap1-row 3.2s ease-in-out infinite;
+  }
+  .cap1-typing .cap1-scan > rect:nth-child(2) { animation-delay: 0s; }
+  .cap1-typing .cap1-scan > rect:nth-child(3) { animation-delay: 0.15s; }
+  .cap1-typing .cap1-scan > rect:nth-child(4) { animation-delay: 0.30s; }
+  .cap1-typing .cap1-scan > rect:nth-child(5) { animation-delay: 0.45s; }
+  .cap1-typing .cap1-scan > rect:nth-child(6) { animation-delay: 0.60s; }
+  .cap1-typing .cap1-caret {
+    animation: cap1-caret 3.2s steps(40, end) infinite;
+  }
+  @keyframes cap1-caret {
+    0%   { width: 0; }
+    35%  { width: 292px; }
+    100% { width: 292px; }
+  }
+  @keyframes cap1-row {
+    0%   { width: 0; }
+    35%  { width: 292px; }
+    100% { width: 292px; }
+  }
+
+  /* ---------- cap 2: office files — highlight walks across 4 tiles ---------- */
+  .cap2-pulse .cap2-hl {
+    opacity: 0;
+    transform-origin: center;
+    animation: cap2-hl 4s ease-in-out infinite;
+  }
+  @keyframes cap2-hl {
+    0%, 100% { opacity: 0; transform: translateX(0)  scale(1); }
+    20%      { opacity: 1; transform: translateX(0)  scale(1.04); }
+    40%      { opacity: 0; transform: translateX(0)  scale(1); }
+    40.01%, 60% { opacity: 1; transform: translateX(86px)  scale(1.04); }
+    60.01%, 80% { opacity: 1; transform: translateX(172px) scale(0.96); }
+    80.01%,100% { opacity: 1; transform: translateX(172px) scale(0.96); }
+  }
+
+  /* ---------- cap 3: money — draw polyline + dot rides the head ---------- */
+  .cap3-draw .cap3-line { animation: cap3-draw 4s ease-out infinite; }
+  .cap3-draw .cap3-dot {
+    opacity: 0;
+    animation: cap3-dot 4s ease-out infinite;
+  }
+  @keyframes cap3-draw {
+    0%   { stroke-dashoffset: 100; }
+    70%  { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: 0; }
+  }
+  @keyframes cap3-dot {
+    0%, 60%  { opacity: 0; }
+    70%, 100%{ opacity: 0.85; }
+  }
+
+  /* ---------- cap 4: marketing — two panels swap emphasis ---------- */
+  .cap4-alt .cap4-panel-a { animation: cap4-a 3s ease-in-out infinite; }
+  .cap4-alt .cap4-panel-b { animation: cap4-b 3s ease-in-out infinite; }
+  @keyframes cap4-a {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+  @keyframes cap4-b {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+  }
+
+  /* ---------- cap 5: self-media — progress bar scrubs left→right and resets;
+     play triangle morphs to pause (two bars) mid-cycle to suggest playback. -- */
+  .cap5-play .cap5-progress > rect {
+    animation: cap5-scrub 4s ease-in-out infinite;
+  }
+  .cap5-play .cap5-progress > rect:nth-child(1) { animation-delay: 0s; }
+  .cap5-play .cap5-progress > rect:nth-child(2) { animation-delay: 0.12s; }
+  .cap5-play .cap5-tri {
+    transform-origin: 217px 90px;
+    animation: cap5-pulse 4s ease-in-out infinite;
+  }
+  @keyframes cap5-scrub {
+    0%   { width: 0; }
+    70%  { width: 260px; }
+    85%  { width: 260px; }
+    100% { width: 0; }
+  }
+  @keyframes cap5-pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.6; transform: scale(0.92); }
+  }
+
+  /* ---------- cap 6: web search — query types in, results fade in ---------- */
+  .cap6-search .cap6-input   { animation: cap6-q1 3.6s steps(28, end) infinite; }
+  .cap6-search .cap6-input2  { animation: cap6-q2 3.6s steps(24, end) infinite; }
+  .cap6-search .cap6-results { animation: cap6-r  3.6s ease-out infinite; }
+  @keyframes cap6-q1 {
+    0%   { width: 60px;  }
+    25%  { width: 180px; }
+    45%  { width: 240px; }
+    65%  { width: 120px; }
+    100% { width: 60px;  }
+  }
+  @keyframes cap6-q2 {
+    0%, 100% { opacity: 0.2; }
+    45%, 65% { opacity: 0.5; }
+  }
+  @keyframes cap6-r {
+    0%, 30%  { opacity: 0; transform: translateY(4px); }
+    45%, 90% { opacity: 1; transform: translateY(0); }
+    100%     { opacity: 0; transform: translateY(4px); }
+  }
+
+  /* ---------- cap 7: images & video — 5 tiles stagger in, hold, reset ---------- */
+  .cap7-tiles .cap7-tile {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: cap7-in 3.6s ease-out infinite;
+  }
+  .cap7-tiles .cap7-tile:nth-child(1) { animation-delay: 0s; }
+  .cap7-tiles .cap7-tile:nth-child(2) { animation-delay: 0.08s; }
+  .cap7-tiles .cap7-tile:nth-child(3) { animation-delay: 0.16s; }
+  .cap7-tiles .cap7-tile:nth-child(4) { animation-delay: 0.24s; }
+  .cap7-tiles .cap7-tile:nth-child(5) { animation-delay: 0.32s; }
+  @keyframes cap7-in {
+    0%        { opacity: 0; transform: scale(0.94); }
+    25%, 80%  { opacity: 1; transform: scale(1); }
+    100%      { opacity: 0; transform: scale(0.94); }
+  }
+
+  /* ---------- cap 8: code — single terracotta caret jumps between 4 lines;
+     the row it sits on brightens to faf6ee while the others dim. ---------- */
+  .cap8-scan .cap8-cursor {
+    animation: cap8-jump 3.2s steps(4, jump-none) infinite;
+  }
+  .cap8-scan .cap8-row { animation: cap8-row 3.2s steps(4, jump-none) infinite; }
+  .cap8-scan .cap8-row-1 { animation-delay: 0s;    }
+  .cap8-scan .cap8-row-2 { animation-delay: 0.8s;  }
+  .cap8-scan .cap8-row-3 { animation-delay: 1.6s;  }
+  .cap8-scan .cap8-row-4 { animation-delay: 2.4s;  }
+  @keyframes cap8-jump {
+    0%   { transform: translateY(0); }
+    25%  { transform: translateY(24px); }
+    50%  { transform: translateY(48px); }
+    75%  { transform: translateY(92px); }
+    100% { transform: translateY(0); }
+  }
+  @keyframes cap8-row {
+    0%, 24%, 100% { opacity: 0.35; }
+    2%, 22%       { opacity: 1; }
+  }
+
+  /* ---------- cap 9: automate — M/W/F circles + edges draw in sequence ---------- */
+  .cap9-cron .cap9-node,
+  .cap9-cron .cap9-edge {
+    animation: cap9-draw 3.2s ease-in-out infinite;
+  }
+  .cap9-cron .cap9-node:nth-of-type(1) { animation-delay: 0s; }
+  .cap9-cron .cap9-node:nth-of-type(2) { animation-delay: 0.3s; }
+  .cap9-cron .cap9-node:nth-of-type(3) { animation-delay: 0.6s; }
+  .cap9-cron .cap9-edge:nth-of-type(4) { animation-delay: 0.85s; }
+  .cap9-cron .cap9-edge:nth-of-type(5) { animation-delay: 1.1s; }
+  @keyframes cap9-draw {
+    0%   { stroke-dashoffset: 100; }
+    45%  { stroke-dashoffset: 0; }
+    65%  { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: 100; }
+  }
+
+  /* ---------- cap 10: learning — knowledge-graph growth:
+     core + 8 first-tier spokes stay lit; 8 second-tier leaf nodes fade in
+     one by one (staggered 0.4s) over a 6s cycle, hold briefly, then reset
+     to simulate the graph expanding as you learn. */
+  .cap10-pulse .cap10-core {
+    transform-origin: 160px 90px;
+    animation: cap10-core 6s ease-in-out infinite;
+  }
+  .cap10-pulse .cap10-spokes circle { opacity: 1; }
+  .cap10-pulse .cap10-leaf circle {
+    opacity: 0;
+    transform-origin: center;
+    animation: cap10-leaf 2.4s ease-out infinite;
+  }
+  .cap10-pulse .cap10-leaf circle:nth-child(1) { animation-delay: 0s; }
+  .cap10-pulse .cap10-leaf circle:nth-child(2) { animation-delay: 0.4s; }
+  .cap10-pulse .cap10-leaf circle:nth-child(3) { animation-delay: 0.8s; }
+  .cap10-pulse .cap10-leaf circle:nth-child(4) { animation-delay: 1.2s; }
+  .cap10-pulse .cap10-leaf circle:nth-child(5) { animation-delay: 1.6s; }
+  .cap10-pulse .cap10-leaf circle:nth-child(6) { animation-delay: 2.0s; }
+  .cap10-pulse .cap10-leaf circle:nth-child(7) { animation-delay: 2.4s; }
+  .cap10-pulse .cap10-leaf circle:nth-child(8) { animation-delay: 2.8s; }
+  @keyframes cap10-core {
+    0%, 100%   { transform: scale(1); }
+    50%        { transform: scale(1.35); }
+  }
+  /* Each leaf: 0→fade in (5%) → peak (15%) → hold (50%) → fade out (70%)
+     → empty rest. Cycle 2.4s + 0.4s stagger = at any moment roughly 3-5
+     leaves are visible at varying brightness, never "all on" or "all off". */
+  @keyframes cap10-leaf {
+    0%        { opacity: 0; transform: scale(0); }
+    5%        { opacity: 1; transform: scale(1.4); }
+    15%       { opacity: 1; transform: scale(1); }
+    50%       { opacity: 1; transform: scale(1); }
+    70%       { opacity: 0; transform: scale(0); }
+    100%      { opacity: 0; transform: scale(0); }
+  }
+
+  /* ---------- cap 11: daily helper — three cards cycle through "picked"
+     state (terracotta bg + cream text) on a 3-step stagger. */
+  .cap11-breathe .cap11-card-1 .cap11-bg,
+  .cap11-breathe .cap11-card-2 .cap11-bg,
+  .cap11-breathe .cap11-card-3 .cap11-bg {
+    animation: cap11-bg 3.6s ease-in-out infinite;
+  }
+  .cap11-breathe .cap11-card-1 .cap11-fg,
+  .cap11-breathe .cap11-card-2 .cap11-fg,
+  .cap11-breathe .cap11-card-3 .cap11-fg {
+    animation: cap11-fg 3.6s ease-in-out infinite;
+  }
+  .cap11-breathe .cap11-card-1 .cap11-bg,
+  .cap11-breathe .cap11-card-1 .cap11-fg { animation-delay: 0s; }
+  .cap11-breathe .cap11-card-2 .cap11-bg,
+  .cap11-breathe .cap11-card-2 .cap11-fg { animation-delay: 1.2s; }
+  .cap11-breathe .cap11-card-3 .cap11-bg,
+  .cap11-breathe .cap11-card-3 .cap11-fg { animation-delay: 2.4s; }
+  @keyframes cap11-bg {
+    0%, 33%, 100% { fill: #e8dccf; }
+    10%, 23%      { fill: #c26d3a; }
+  }
+  @keyframes cap11-fg {
+    0%, 33%, 100% { fill: #1c1612; }
+    10%, 23%      { fill: #faf6ee; }
+  }
+}
+
+/* Reduced-motion fallback is implicit: the @media block above only enables
+   the keyframes; without it, SVG children keep their inline attributes
+   (width=0 for cap1 scan rects, opacity=0 for cap2/cap3 highlight,
+   dashoffset=100 for cap3/cap9). That visually matches v5 first frame. */
+
+/* ---------- download CTA — sans, no arrow glyph ---------- */
+.dl-block {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+.dl-btn {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: var(--accent);
+  color: var(--accent-on);
+  border: 0;
+  padding: 24px 32px;
+  font-family: inherit;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background-color 150ms linear;
+  align-self: flex-start;
+}
+.dl-btn:hover { background: var(--accent-hi); }
+.dl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.dl-btn .l1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.dl-btn .l2 { font-size: 14px; opacity: 0.85; font-weight: 500; }
+
+.dl-meta { font-size: 14px; color: var(--dim); line-height: 1.8; }
+.dl-meta .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.dl-meta .row:first-child { border-top: 1px solid var(--line-soft); }
+.dl-meta .k { color: var(--dim); font-weight: 500; }
+.dl-meta .v { color: var(--fg); font-weight: 600; }
+.dl-meta .v.ok { color: #2d8a5e; }
+.dl-extra { margin-top: 8px; font-size: 14px; color: var(--dim); }
+.dl-extra a { color: var(--accent); border-bottom: 1px solid transparent; transition: border-color 120ms linear; }
+.dl-extra a:hover { border-color: var(--accent); }
+
+/* ---------- v5 closer: large sans closer as the page's closing beat ---------- */
+.closer {
+  padding: 144px 32px 96px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.closer h2 {
+  font-family: var(--font-sans);
+  font-size: clamp(56px, 8vw, 112px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.0;
+  color: var(--ink-strong);
+  margin-bottom: 40px;
+}
+.closer p { color: var(--fg-2); font-size: 18px; max-width: 56ch; line-height: 1.65; }
+@media (max-width: 560px) {
+  .closer p { font-size: 16px; max-width: 38ch; }
+}
+.closer p strong { color: var(--fg); font-weight: 700; }
+
+/* ---------- footer ---------- */
+.footer {
+  padding: 28px 32px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--dim);
+}
+.footer-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  align-items: center;
+}
+.footer a { transition: color 100ms linear; color: var(--dim); }
+.footer a:hover { color: var(--accent); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 960px) {
+  .hero { padding: 64px 24px 56px; grid-template-columns: 1fr; }
+  .number-anchor { align-items: flex-start; }
+  .section { padding: 72px 24px; }
+  .closer { padding: 80px 24px 48px; }
+  .caps { grid-template-columns: 1fr; column-gap: 0; row-gap: 56px; }
+  .cap.feature { grid-column: auto; }
+  .cap.feature .frame { aspect-ratio: 16 / 9; max-width: 560px; margin-inline: auto; }
+}
+@media (max-width: 560px) {
+  .topbar { padding: 14px 18px; }
+  .topbar nav { gap: 14px; font-size: 12px; }
+  .caps { row-gap: 48px; }
+  .cap .name { font-size: 24px; }
+  .cap.feature .name { font-size: 26px; }
+  /* cap.5 stays 21:9 — it's the visual anchor; cap with intrinsic 320x180 viewBox
+     shrinks cleanly to viewport without distortion. */
+  .cap.feature .frame { aspect-ratio: 21 / 9; max-width: 320px; }
+  .dl-btn { padding: 20px 24px; gap: 12px; row-gap: 4px; }
+  .dl-btn .l1 { font-size: 20px; }
+  .section { padding: 56px 18px; }
+  .closer { padding: 56px 18px 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+[lang="zh"] body { font-family: var(--font-sans); font-feature-settings: "palt" 1; }
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#caps">Skip to content</a>
+
+<header class="topbar">
+  <div class="brand"><span class="dot">●</span>hamuna</div>
+  <nav>
+    <a href="#caps" data-i18n="topbar.caps">what it does</a>
+    <a href="#get" data-i18n="topbar.get">download</a>
+    <button class="lang-toggle" id="lang-toggle" type="button" aria-label="switch language">
+      <span class="opt" data-opt="en">EN</span><span class="sep">/</span><span class="opt" data-opt="zh">中</span>
+    </button>
+  </nav>
+</header>
+
+<!-- ============== HERO ============== -->
+<section class="hero">
+  <div class="left">
+    <h1 data-i18n="hero.title">Run an AI assistant on your own computer.</h1>
+    <p class="tagline" data-i18n="hero.tag">search, write, plan, crunch numbers, make images — and talk to it like a friend. Everything stays on your PC.</p>
+  </div>
+  <div class="number-anchor">
+    <span class="v" data-i18n="hero.anchor.ver">v0.3.185</span>
+    <div>
+      <!--<span class="v-sub" data-i18n="hero.anchor.size">~92 MB</span>-->
+      <span class="v-sub" data-i18n="hero.anchor.sys">Windows 10 / 11</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CAPS ============== -->
+<main>
+<section class="section cap-section" id="caps" aria-labelledby="caps-label">
+  <h2 class="label" id="caps-label" data-i18n="caps.label">things people actually use it for</h2>
+  <div class="caps" role="list">
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap1-typing" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g fill="#1c1612" font-family="ui-monospace, monospace" font-size="9">
+          <rect x="14" y="14" width="60" height="10" rx="2" fill="#e8dccf"/>
+          <rect x="14" y="30" width="292" height="3" rx="1" fill="#1c1612" opacity="0.85"/>
+          <rect x="14" y="40" width="220" height="3" rx="1" fill="#1c1612" opacity="0.6"/>
+          <rect x="14" y="50" width="260" height="3" rx="1" fill="#1c1612" opacity="0.6"/>
+          <rect x="14" y="60" width="180" height="3" rx="1" fill="#1c1612" opacity="0.6"/>
+          <rect x="14" y="80" width="64" height="6" rx="1" fill="#c26d3a"/>
+          <g class="cap1-scan">
+            <rect class="cap1-caret" x="14" y="100" width="0" height="3" rx="1" fill="#1c1612" opacity="0.85"/>
+            <rect x="14" y="110" width="0" height="3" rx="1" fill="#1c1612" opacity="0.6"/>
+            <rect x="14" y="120" width="0" height="3" rx="1" fill="#1c1612" opacity="0.6"/>
+            <rect x="14" y="130" width="0" height="3" rx="1" fill="#1c1612" opacity="0.6"/>
+            <rect x="14" y="140" width="0" height="3" rx="1" fill="#1c1612" opacity="0.6"/>
+          </g>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.1.name">writing</div>
+        <div class="words" data-i18n="cap.1.words">drafts, blogs, essays, work reports. start a paragraph, get a whole article.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap2-pulse" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g>
+          <rect x="14" y="14" width="80" height="100" rx="4" fill="#e8dccf"/>
+          <rect x="100" y="14" width="80" height="100" rx="4" fill="#e8dccf"/>
+          <rect x="186" y="14" width="120" height="48" rx="4" fill="#e8dccf"/>
+          <rect x="186" y="68" width="120" height="46" rx="4" fill="#c26d3a" opacity="0.85"/>
+          <rect x="14" y="124" width="292" height="42" rx="4" fill="#1c1612" opacity="0.08"/>
+          <rect class="cap2-hl" x="14" y="14" width="80" height="100" rx="4" fill="none" stroke="#c26d3a" stroke-width="1.5"/>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.2.name">office files</div>
+        <div class="words" data-i18n="cap.2.words">Word, Excel, PPT, PDF. read them, edit them, make new ones.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap3-draw" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g stroke="#1c1612" fill="none" stroke-width="1.5" opacity="0.8">
+          <polyline class="cap3-line" points="14,140 50,120 80,128 110,90 140,96 170,72 200,80 230,55 260,68 290,40" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+          <line x1="14" y1="160" x2="306" y2="160" stroke="#1c1612" opacity="0.4"/>
+          <line x1="14" y1="40" x2="14" y2="160" stroke="#1c1612" opacity="0.4"/>
+        </g>
+        <g fill="#c26d3a" opacity="0.7">
+          <circle class="cap3-dot" cx="290" cy="40" r="3"/>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.3.name">money</div>
+        <div class="words" data-i18n="cap.3.words">stock charts, company filings, expense reports. numbers made simple.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap4-alt" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g fill="#1c1612">
+          <rect x="14" y="14" width="292" height="36" rx="4" fill="#1c1612"/>
+          <rect x="22" y="24" width="120" height="6" rx="1" fill="#faf6ee"/>
+          <rect x="22" y="36" width="60" height="3" rx="1" fill="#faf6ee" opacity="0.7"/>
+          <g class="cap4-panel-a">
+            <rect x="14" y="62" width="142" height="104" rx="4" fill="#e8dccf"/>
+            <rect x="22" y="72" width="80" height="4" rx="1" fill="#1c1612" opacity="0.7"/>
+            <rect x="22" y="82" width="120" height="2" rx="1" fill="#1c1612" opacity="0.45"/>
+            <rect x="22" y="88" width="100" height="2" rx="1" fill="#1c1612" opacity="0.45"/>
+            <rect x="22" y="94" width="120" height="2" rx="1" fill="#1c1612" opacity="0.45"/>
+          </g>
+          <g class="cap4-panel-b">
+            <rect x="164" y="62" width="142" height="104" rx="4" fill="#c26d3a" opacity="0.85"/>
+            <rect x="172" y="72" width="80" height="4" rx="1" fill="#faf6ee"/>
+            <rect x="172" y="82" width="120" height="2" rx="1" fill="#faf6ee" opacity="0.75"/>
+            <rect x="172" y="88" width="100" height="2" rx="1" fill="#faf6ee" opacity="0.75"/>
+            <rect x="172" y="94" width="120" height="2" rx="1" fill="#faf6ee" opacity="0.75"/>
+          </g>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.4.name">marketing</div>
+        <div class="words" data-i18n="cap.4.words">ads, social posts, campaign ideas. say what you want, get versions to pick from.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo feature" role="listitem">
+      <div class="frame"><svg class="cap-svg cap5-play" viewBox="0 0 420 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="420" height="180" fill="var(--ink-strong)"/>
+        <polygon class="cap5-tri" points="198,68 198,112 236,90" fill="#c26d3a"/>
+        <rect x="14" y="14" width="120" height="20" rx="4" fill="#faf6ee" opacity="0.85"/>
+        <g class="cap5-progress">
+          <rect x="14" y="156" width="0" height="3" rx="1" fill="#faf6ee" opacity="0.5"/>
+          <rect x="14" y="164" width="0" height="3" rx="1" fill="#faf6ee" opacity="0.35"/>
+        </g>
+        <g fill="#faf6ee" opacity="0.5">
+          <rect x="380" y="14" width="22" height="6" rx="1"/>
+          <rect x="380" y="24" width="14" height="4" rx="1"/>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.5.name">self-media</div>
+        <div class="words" data-i18n="cap.5.words">short videos, thumbnails, scripts. your channel, run faster.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap6-search" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g>
+          <rect x="14" y="14" width="292" height="32" rx="14" fill="#e8dccf"/>
+          <circle cx="30" cy="30" r="4" fill="none" stroke="#1c1612" stroke-width="1.5"/>
+          <line x1="33" y1="33" x2="38" y2="38" stroke="#1c1612" stroke-width="1.5"/>
+          <rect class="cap6-input" x="46" y="26" width="80" height="3" rx="1" fill="#1c1612" opacity="0.45"/>
+          <rect class="cap6-input2" x="46" y="33" width="60" height="3" rx="1" fill="#1c1612" opacity="0.45"/>
+          <g class="cap6-results" fill="none" stroke="#1c1612" stroke-width="1" opacity="0.7">
+            <rect x="14" y="58" width="142" height="100" rx="4"/>
+            <rect x="164" y="58" width="142" height="100" rx="4"/>
+            <rect x="22" y="68" width="120" height="3" fill="#1c1612" stroke="none" opacity="0.45"/>
+            <rect x="22" y="78" width="100" height="3" fill="#1c1612" stroke="none" opacity="0.45"/>
+            <rect x="22" y="98" width="60" height="40" fill="#c26d3a" stroke="none" opacity="0.7"/>
+            <rect x="172" y="68" width="120" height="3" fill="#1c1612" stroke="none" opacity="0.45"/>
+            <rect x="172" y="78" width="100" height="3" fill="#1c1612" stroke="none" opacity="0.45"/>
+          </g>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.6.name">web search</div>
+        <div class="words" data-i18n="cap.6.words">"look this up for me." real browser, real pages, real answers.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap7-tiles" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g fill="#c26d3a" opacity="0.9">
+          <rect class="cap7-tile" x="14" y="14" width="92" height="92" rx="4"/>
+          <rect class="cap7-tile" x="116" y="14" width="92" height="44" rx="4" fill="#e8dccf"/>
+          <rect class="cap7-tile" x="116" y="62" width="92" height="44" rx="4" fill="#1c1612" opacity="0.85"/>
+          <rect class="cap7-tile" x="14" y="116" width="60" height="50" rx="4" fill="#1c1612" opacity="0.55"/>
+          <rect class="cap7-tile" x="80" y="116" width="128" height="50" rx="4" fill="#c26d3a" opacity="0.55"/>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.7.name">images &amp; video</div>
+        <div class="words" data-i18n="cap.7.words">type a sentence, get a picture or a short clip. no design skills needed.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap8-scan" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--ink-strong)"/>
+        <g font-family="ui-monospace, monospace" font-size="9">
+          <g class="cap8-row cap8-row-1">
+            <rect x="14" y="14" width="120" height="3" fill="#faf6ee" opacity="0.7"/>
+            <rect x="14" y="26" width="100" height="3" fill="#faf6ee" opacity="0.4"/>
+          </g>
+          <g class="cap8-row cap8-row-2">
+            <rect x="26" y="38" width="180" height="3" fill="#faf6ee" opacity="0.7"/>
+            <rect x="14" y="50" width="80" height="3" fill="#faf6ee" opacity="0.4"/>
+          </g>
+          <g class="cap8-row cap8-row-3">
+            <rect x="26" y="62" width="140" height="3" fill="#faf6ee" opacity="0.7"/>
+            <rect x="14" y="74" width="220" height="3" fill="#faf6ee" opacity="0.4"/>
+            <rect x="14" y="86" width="60" height="3" fill="#faf6ee" opacity="0.4"/>
+          </g>
+          <g class="cap8-row cap8-row-4">
+            <rect x="26" y="106" width="160" height="3" fill="#faf6ee" opacity="0.7"/>
+            <rect x="14" y="118" width="120" height="3" fill="#faf6ee" opacity="0.4"/>
+            <rect x="14" y="130" width="180" height="3" fill="#faf6ee" opacity="0.4"/>
+          </g>
+          <rect class="cap8-cursor" x="14" y="14" width="6" height="3" fill="#c26d3a"/>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.8.name">code</div>
+        <div class="words" data-i18n="cap.8.words">build a small tool, fix a script, learn how something works.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap9-cron" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g fill="none" stroke="#1c1612" stroke-width="1.4">
+          <circle class="cap9-node" cx="60" cy="90" r="14" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+          <circle class="cap9-node" cx="160" cy="90" r="14" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+          <circle class="cap9-node" cx="260" cy="90" r="14" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+          <line class="cap9-edge" x1="74" y1="90" x2="146" y2="90" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+          <line class="cap9-edge" x1="174" y1="90" x2="246" y2="90" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+        </g>
+        <g fill="#c26d3a" font-family="ui-monospace, monospace" font-size="11" text-anchor="middle">
+          <text x="60" y="94">M</text>
+          <text x="160" y="94">W</text>
+          <text x="260" y="94">F</text>
+        </g>
+        <g fill="#1c1612" font-size="9" text-anchor="middle" opacity="0.55">
+          <text x="60" y="124">mon</text>
+          <text x="160" y="124">wed</text>
+          <text x="260" y="124">fri</text>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.9.name">automate</div>
+        <div class="words" data-i18n="cap.9.words">"every friday, send me a summary." it just happens.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap10-pulse" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g stroke="#1c1612" fill="none" stroke-width="1" opacity="0.5">
+          <circle cx="160" cy="90" r="60"/>
+          <circle cx="160" cy="90" r="40"/>
+          <circle cx="160" cy="90" r="20"/>
+        </g>
+        <g fill="#1c1612">
+          <circle class="cap10-core" cx="160" cy="90" r="6" fill="#c26d3a"/>
+          <g class="cap10-spokes">
+            <circle cx="160" cy="30" r="3"/>
+            <circle cx="160" cy="150" r="3"/>
+            <circle cx="100" cy="90" r="3"/>
+            <circle cx="220" cy="90" r="3"/>
+            <circle cx="115" cy="45" r="2.5"/>
+            <circle cx="205" cy="135" r="2.5"/>
+            <circle cx="115" cy="135" r="2.5"/>
+            <circle cx="205" cy="45" r="2.5"/>
+          </g>
+          <g class="cap10-leaf">
+            <circle cx="160" cy="14"  r="2"/>
+            <circle cx="160" cy="166" r="2"/>
+            <circle cx="84"  cy="90"  r="2"/>
+            <circle cx="236" cy="90"  r="2"/>
+            <circle cx="101" cy="31"  r="1.8"/>
+            <circle cx="219" cy="149" r="1.8"/>
+            <circle cx="101" cy="149" r="1.8"/>
+            <circle cx="219" cy="59"  r="1.8"/>
+          </g>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.10.name">learning</div>
+        <div class="words" data-i18n="cap.10.words">"teach me like i'm 12." break down a topic, quiz you, draw a map.</div>
+      </div>
+    </article>
+
+    <article class="cap cap-demo" role="listitem">
+      <div class="frame"><svg class="cap-svg cap11-breathe" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="320" height="180" fill="var(--bg-elevated)"/>
+        <g>
+          <g class="cap11-card cap11-card-1">
+            <rect class="cap11-bg" x="14" y="20" width="100" height="140" rx="4" fill="#e8dccf"/>
+            <rect class="cap11-fg" x="22" y="30" width="50" height="3" fill="#1c1612" opacity="0.6"/>
+            <rect class="cap11-fg" x="22" y="40" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+            <rect class="cap11-fg" x="22" y="46" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+            <rect class="cap11-fg" x="22" y="60" width="50" height="3" fill="#1c1612" opacity="0.6"/>
+            <rect class="cap11-fg" x="22" y="70" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+            <rect class="cap11-fg" x="22" y="76" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+          </g>
+          <g class="cap11-card cap11-card-2">
+            <rect class="cap11-bg" x="124" y="20" width="100" height="140" rx="4" fill="#e8dccf"/>
+            <rect class="cap11-fg" x="132" y="30" width="50" height="3" fill="#1c1612" opacity="0.6"/>
+            <rect class="cap11-fg" x="132" y="40" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+            <rect class="cap11-fg" x="132" y="46" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+            <rect class="cap11-fg" x="132" y="60" width="50" height="3" fill="#1c1612" opacity="0.6"/>
+            <rect class="cap11-fg" x="132" y="70" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+            <rect class="cap11-fg" x="132" y="76" width="80" height="2" fill="#1c1612" opacity="0.4"/>
+          </g>
+          <g class="cap11-card cap11-card-3">
+            <rect class="cap11-bg" x="234" y="20" width="72" height="140" rx="4" fill="#e8dccf"/>
+            <rect class="cap11-fg" x="242" y="30" width="50" height="3" fill="#1c1612" opacity="0.6"/>
+            <rect class="cap11-fg" x="242" y="40" width="50" height="2" fill="#1c1612" opacity="0.4"/>
+          </g>
+        </g>
+      </svg></div>
+      <div class="caption">
+        <div class="name" data-i18n="cap.11.name">daily helper</div>
+        <div class="words" data-i18n="cap.11.words">plan your week, draft an email, pick a gift. the small stuff adds up.</div>
+      </div>
+    </article>
+
+  </div>
+</section>
+
+<!-- ============== DOWNLOAD ============== -->
+<section class="section" id="get" aria-labelledby="get-label">
+  <h2 class="label" id="get-label" data-i18n="get.label">download</h2>
+  <div class="dl-block">
+    <a class="dl-btn" id="dl-btn" href="#" download>
+      <span class="l1" id="dl-label" data-i18n="dl.win.label">download for windows</span>
+      <span class="l2" id="dl-sub" data-i18n="dl.win.sub">direct download · no signup</span>
+    </a>
+    <div class="dl-meta">
+      <div class="row"><span class="k" data-i18n="dl.meta.k.ver">version</span><span class="v" id="dl-ver">v0.3.185</span></div>
+      <div class="row"><span class="k" data-i18n="dl.meta.k.sys">system</span><span class="v" data-i18n="dl.meta.v.win">Windows 10 / 11</span></div>
+      <div class="row"><span class="k" data-i18n="dl.meta.k.size">size</span><span class="v" id="dl-size">~92 MB</span></div>
+      <div class="row"><span class="k" data-i18n="dl.meta.k.chk">safe</span><span class="v ok" data-i18n="dl.meta.v.ok">no ads, no tracking</span></div>
+    </div>
+    <p class="dl-extra">
+      <span data-i18n="dl.extra.intro">windows 10 and 11. free, no account needed.</span>
+    </p>
+  </div>
+</section>
+
+<!-- ============== CLOSER ============== -->
+<section class="closer">
+  <h2 data-i18n="closer.h2">that's everything.</h2>
+  <p data-i18n="closer.p">it's free. it doesn't send your files anywhere. it runs on your pc, not in a browser tab. you can change it, copy it, or give it to a friend. <strong>windows 10 and 11</strong>. install it once, talk to it whenever.</p>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div data-i18n="footer.copy">© 2026 hamuna · free, open source</div>
+    <a href="mailto:hamuna.io@gmail.com" data-i18n="footer.contact">contact us</a>
+  </div>
+</footer>
+
+<script>
+/* ===== i18n dict ===== */
+const I18N = {
+  en: {
+    "meta.title":     "hamuna — a self-evolving AI assistant",
+    "meta.desc":      "A free AI assistant that lives on your Windows PC. Write, search, plan, crunch numbers, make images — just talk to it. Everything stays on your computer. Apache-2.0.",
+    "topbar.caps":    "what it does",
+    "topbar.get":     "download",
+    "hero.title":     "An AI assistant that grows with you.",
+    "hero.tag":       "Make videos, write, crunch investments — talk to it like a friend. Everything stays on your PC.",
+    "hero.anchor.ver":  "v0.3.185",
+    "hero.anchor.size": "~92 MB installer",
+    "hero.anchor.sys":  "Windows 10 / 11",
+    "caps.label":     "things people actually use it for",
+    "cap.1.name":     "writing",
+    "cap.1.words":    "Drafts, blogs, essays, weekly reports, work summaries. Open with one line — get back a whole article.",
+    "cap.2.name":     "office files",
+    "cap.2.words":    "Word, Excel, PowerPoint, PDF. Read them, edit them, build new ones.",
+    "cap.3.name":     "investing",
+    "cap.3.words":    "Stock charts, company filings, expense ledgers. Turn complex numbers into a clear picture — hand it a thesis and it drafts a strategy, then runs a backtest.",
+    "cap.4.name":     "marketing",
+    "cap.4.words":    "Ad copy, social posts, campaign plans, sales-driving videos. Tell it what you want — get back a few versions to pick from.",
+    "cap.5.name":     "creator channels",
+    "cap.5.words":    "Short videos, cover art, ready-to-shoot scripts. Your channel — run it faster.",
+    "cap.6.name":     "web search",
+    "cap.6.words":    "\"Look this up for me.\" It opens the page, reads it, brings back the answer.",
+    "cap.7.name":     "images and video",
+    "cap.7.words":    "One sentence gets you an image or a short clip. No design skills needed.",
+    "cap.8.name":     "code",
+    "cap.8.words":    "Build a small tool, fix a script, learn how something works.",
+    "cap.9.name":     "automation",
+    "cap.9.words":    "\"Send me a summary every Friday.\" It runs on schedule, hands you the result.",
+    "cap.10.name":    "learning",
+    "cap.10.words":   "\"Explain it like I'm twelve.\" Break it down, quiz you, draw a map of how it all fits.",
+    "cap.11.name":    "daily helper",
+    "cap.11.words":   "Plan your week, draft an email, pick a gift. The small things add up — and the time comes back.",
+    "get.label":      "download",
+    "dl.win.label":   "download for windows",
+    "dl.win.sub":     "direct download · no signup",
+    "dl.meta.k.ver":  "version",
+    "dl.meta.k.sys":  "system",
+    "dl.meta.k.lic":  "license",
+    "dl.meta.k.size": "size",
+    "dl.meta.k.chk":  "safe",
+    "dl.meta.v.win":  "Windows 10 / 11",
+    "dl.meta.v.free": "free, open source",
+    "dl.meta.v.ok":   "no ads, no tracking",
+    "dl.extra.intro": "For Windows 10 and 11. Free, no account required.",
+    "closer.h2":      "That's everything.",
+    "closer.p":       "It's free. Your files don't leave this machine. It runs on your PC, not in a browser tab. You can change it, copy it, give it to a friend. <strong>Windows 10 and 11</strong>. Install once — talk to it whenever.",
+    "footer.copy":    "© 2026 hamuna · free, open source",
+    "footer.contact": "contact us",
+  },
+  zh: {
+    "meta.title":     "hamuna — Self-Evolving Agent",
+    "meta.desc":      "hamuna 是免费、装在你电脑里的 AI 助手。写作、搜资料、做计划、算数据、出图——和它说句话就行。所有东西都留在你电脑里。",
+    "topbar.caps":    "它能做什么",
+    "topbar.get":     "下载",
+    "hero.title":     "一个自进化的AI助手。",
+    "hero.tag":       "做视频，写作，金融投资分析——和它说句话就行，像跟朋友聊天一样。所有东西都留在你电脑里。",
+    "hero.anchor.ver":  "v0.3.185",
+    "hero.anchor.size": "约 92 MB 安装包",
+    "hero.anchor.sys":  "Windows 10 / 11",
+    "caps.label":     "大家平时用它来做的事",
+    "cap.1.name":     "写作",
+    "cap.1.words":    "起草稿、写博客、写周报、写工作总结。开头一句话，它能给你整篇。",
+    "cap.2.name":     "办公文件",
+    "cap.2.words":    "Word、Excel、PPT、PDF，都能读、能改、能做。",
+    "cap.3.name":     "投资",
+    "cap.3.words":    "看股票、看财报、算账。复杂数字变简单，给一个想法，帮你生成策略，回测。",
+    "cap.4.name":     "自动化市场营销",
+    "cap.4.words":    "广告文案、社交媒体、推广方案，带货视频。说你要什么，它给你几版选。",
+    "cap.5.name":     "自媒体",
+    "cap.5.words":    "短视频、封面图、文案脚本。你的频道，跑得更快。",
+    "cap.6.name":     "上网查资料",
+    "cap.6.words":    "\"帮我查一下这个。\" 真浏览器、真网页、真答案。",
+    "cap.7.name":     "出图和视频",
+    "cap.7.words":    "一句话出图、出短视频。不需要会设计。",
+    "cap.8.name":     "写代码",
+    "cap.8.words":    "做小工具、改脚本、学原理。",
+    "cap.9.name":     "自动跑任务",
+    "cap.9.words":    "\"每周五给我发个总结。\" 它会自己办。",
+    "cap.10.name":    "学习",
+    "cap.10.words":   "\"用我听得懂的话给我讲讲。\" 拆开讲、出题考、出图示。",
+    "cap.11.name":    "日常帮手",
+    "cap.11.words":   "排日程、写邮件、挑礼物。小事省下来，时间就多了。",
+    "get.label":      "下载",
+    "dl.win.label":   "下载 Windows 版",
+    "dl.win.sub":     "免费安装包",
+    "dl.meta.k.ver":  "版本",
+    "dl.meta.k.sys":  "系统",
+    "dl.meta.k.lic":  "授权",
+    "dl.meta.k.size": "大小",
+    "dl.meta.k.chk":  "安全",
+    "dl.meta.v.win":  "Windows 10 / 11",
+    "dl.meta.v.free": "免费、开源",
+    "dl.meta.v.ok":   "无广告、不追踪",
+    "dl.extra.intro": "支持 Windows 10 和 11。免费，无需注册。",
+    "closer.h2":      "就这些。",
+    "closer.p":       "免费。文件不外传。装在你电脑上，不是一个网页标签。可以改、可以抄、可以送朋友。<strong>Windows 10 和 11</strong> 都能用。装一次，随时聊。",
+    "footer.copy":    "© 2026 hamuna · 免费、开源",
+    "footer.contact": "联系我们",
+  },
+};
+
+const STORAGE_KEY = "hamuna.lang";
+const supported = ["en", "zh"];
+function detectLang() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved && supported.includes(saved)) return saved;
+  const nav = (navigator.language || "en").toLowerCase();
+  if (nav.startsWith("zh")) return "zh";
+  return "en";
+}
+let cur = detectLang();
+
+function applyLang(lang) {
+  cur = lang;
+  document.documentElement.lang = lang;
+  const dict = I18N[lang];
+  if (!dict) return;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (dict[key] !== undefined) el.innerHTML = dict[key];
+  });
+  if (dict["meta.title"]) document.title = dict["meta.title"];
+  const meta = document.querySelector('meta[name="description"]');
+  if (meta && dict["meta.desc"]) meta.setAttribute("content", dict["meta.desc"]);
+  document.querySelectorAll(".lang-toggle .opt").forEach((el) => {
+    el.classList.toggle("on", el.getAttribute("data-opt") === lang);
+  });
+  wireDownloadCta();
+  localStorage.setItem(STORAGE_KEY, lang);
+}
+
+document.getElementById("lang-toggle").addEventListener("click", () => {
+  applyLang(cur === "en" ? "zh" : "en");
+});
+
+// Windows-only landing. CTA = direct installer URL on the same R2 public dev
+// bucket that Tauri updater reads from. Version + size are hard-coded from
+// the latest published `windows-x86_64.json`; bump them together at release.
+// R2 dev bucket does not set Access-Control-Allow-Origin, so a live `fetch()`
+// from the browser is impossible without a CORS proxy — runtime probe is
+// intentionally skipped, the link is static.
+const R2_BASE = "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev";
+const KNOWN_VERSION = "0.3.185";
+const KNOWN_INSTALLER = `https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev/releases/v0.3.185/HamunaAgent_0.3.185_x64-setup.exe`;
+const KNOWN_SIZE_MB = 240;
+
+function wireDownloadCta() {
+  const btn = document.getElementById("dl-btn");
+  if (btn) btn.href = KNOWN_INSTALLER;
+}
+
+// Apply known-good version + size on load so the page never shows the stale
+// fallback text once shipped.
+(function applyKnownRelease() {
+  const ver = "v" + KNOWN_VERSION;
+  const verEl = document.querySelector('[data-i18n="hero.anchor.ver"]');
+  if (verEl) verEl.textContent = ver;
+  const dlVerEl = document.getElementById("dl-ver");
+  if (dlVerEl) dlVerEl.textContent = ver;
+  const dlSizeEl = document.getElementById("dl-size");
+  if (dlSizeEl) dlSizeEl.textContent = `~${KNOWN_SIZE_MB} MB`;
+})();
+
+applyLang(cur);
+
+// ---- mini-demo: pause CSS animations outside the viewport so 11 infinite
+// loops don't burn CPU on a long landing page. Re-arm on entry. ----------
+(function initCapDemo() {
+  const caps = document.querySelectorAll(".cap-demo");
+  if (!caps.length) return;
+
+  // Respect the user's reduced-motion preference without depending on the
+  // CSS media query gating (which is independent of the IO).
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        e.target.classList.toggle("in-view", e.isIntersecting);
+      }
+    },
+    { rootMargin: "0px 0px -5% 0px", threshold: 0.05 },
+  );
+
+  caps.forEach((cap) => {
+    if (reduced) return; // leave .in-view unset → CSS gates stay paused
+    io.observe(cap);
+  });
+})();
+</script>
+
+</body>
+</html>
