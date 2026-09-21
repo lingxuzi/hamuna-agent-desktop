@@ -353,7 +353,7 @@ jobs:
           if ($smokeCode -ne 0) {
             Write-Host "--- uv tool run --from smoke output ---"
             Write-Host $smokeOut
-            throw "`uv tool run --from agnes-video-25-mcp==$expectedVer agnes-video-25-mcp --help` exited $smokeCode — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real"
+            throw "[uv tool run --from agnes-video-25-mcp==$expectedVer agnes-video-25-mcp --help] exited $smokeCode — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real"
           }
           Write-Host ">>> uv tool run --from multimedia-creator MCP smoke OK"
 
