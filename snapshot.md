@@ -324,6 +324,8 @@
 
 **P3 设计 4 关键点**：向后兼容 / KeyState 4 态状态机 / 入口收敛到 `_request_json` / 10 个单测 case。**4 个已记录但暂不实现的妥协**：in-memory 不持久化 / 401 不自我恢复 / 状态查询用提交成功那个 key / 429 reset 解析失败保守到下个 UTC 00:00。
 
+**0.2.3 round-robin 子条目（2026-09-21, snapshot 标注 · 非新 TODO）**：用户在 0.2.2 ship 后要求"mcp 加入在 fallback 基础上加入多 key 轮询"——grilling 揭示三义（round-robin / 叠加 fallback / 健康轮询），user 拍板**方案 B = round-robin 叠加 fallback**（首选轮询、撞墙 fallback 兜底）。改动：(a) 模块级 `_KEY_ROUND_ROBIN_COUNTER`（绝对值，非 modulo wrap）+ `idx = counter % len(healthy)`；(b) `_pick_key` 第一关：healthy 列表里轮询选下一个，跳过 cooldown；(c) `_load_key_pool` / `_persist_state` 把 counter 写到同一个 JSON 顶层 `_round_robin_counter` key，向后兼容旧文件（缺字段 → 0）；(d) fallback / cooldown / 30s 窗口 / `_mark_disabled` 全部 0 改动。**新增 4 个单测**（cycles / skips_cooldown / persists / mixed_health）+ 6 个旧单测全绿 = 10/10。**为什么不彻底替代 fallback**：现有 fallback 是"撞 429 才换"，适合"主+备"key 等级差异；round-robin 是"平等均摊"，两者语义不冲突——B 方案叠加而非替换，是 user 拍板选择。详细见 hosted_mcps/agnes-video-25/CHANGELOG `[0.2.3]` 段。
+
 ### 3.3 待办池
 
 #### TODO #185 — 工具箱默认 npx 工具在 Windows 打不开（bundled `nodejs/` 缺 `npx.cmd`）🚧

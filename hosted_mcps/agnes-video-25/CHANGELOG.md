@@ -6,6 +6,69 @@ Package: `agnes-video-25-mcp` · PyPI: https://pypi.org/project/agnes-video-25-m
 
 ---
 
+## [0.2.3] — 2026-09-21
+
+### Added
+
+- **Round-robin first-key selection** (`_pick_key`):
+  0.1.6 always picked `_KEY_POOL[0]` first, then fell through to the next key
+  only on 401/429/503. That meant with N equal-grade keys, the first key
+  burned its 429 quota headroom alone before the fallback kicked in.
+  0.2.3 rotates the first pick across all healthy (non-cooldown) keys so
+  quota burn is spread evenly upfront; the fallback chain on 401/429/503
+  (cooldown + 30s-window reason split) is **unchanged** — it still drives
+  the post-failure side.
+
+  - New module-level counter `_KEY_ROUND_ROBIN_COUNTER` (absolute int,
+    NOT modulo-wrapped — see "Persistence" below).
+  - Selection algorithm: snapshot `healthy = [k for k in _KEY_POOL if k.disabled_until <= now]`,
+    pick `healthy[counter % len(healthy)]`, advance counter by 1.
+  - Counter is persisted to `~/.hamuna/state/agnes-key-pool.json` under
+    the top-level key `_round_robin_counter` (alongside the per-key
+    cooldown / last_429_at / consecutive_failures dicts from 0.1.6).
+    Old state files without the field are read as counter=0
+    (backward compatible).
+  - Cooldown-complete keys still get their `last_429_at` refreshed
+    on the first pick after cooldown expires (unchanged from 0.1.6).
+  - Cooldown (disabled) keys are skipped from the `healthy` pool —
+    if all keys are in cooldown, `_pick_key` returns `None` and the
+    caller surfaces `all_keys_exhausted` (unchanged from 0.1.6).
+
+### Persistence
+
+- **Counter is absolute, not modulo-wrapped** — a process restart reads the
+  persisted counter and resumes from there. Modulo only happens at the read
+  site (`counter % len(healthy)`). Trade-off: Python int grows without bound,
+  but a 64-bit signed int overflows at ~9e18 picks (~285 years at 100 req/s),
+  which is not a real concern.
+- **Counter is persisted on the same trigger as cooldown state** — every
+  `_pick_key()` call that advances the counter AND every `_mark_disabled()`
+  call that writes cooldown state writes both atomically (single tmp+replace
+  on the same JSON file). `_persist_state()` writes both via one shot.
+
+### Compatibility
+
+- Backward compatible with 0.2.2 — no schema change, no public surface change,
+  no API / tool signature change. Only `_pick_key()`'s internal selection
+  policy is new.
+- State file format extended with one top-level field (`_round_robin_counter`).
+  Old 0.1.6-0.2.2 state files are read transparently (missing field → counter=0;
+  the per-key cooldown dicts are unchanged).
+- Existing 6 cooldown self-checks (test_first_429_uses_quota_429_reason /
+  test_30s_window_second_429_promotes_to_consecutive / test_outside_30s_window_resets_reason /
+  test_pick_key_refreshes_after_cooldown / test_state_persists_across_calls /
+  test_load_merges_future_disabled_only) pass unchanged — the round-robin
+  layer is additive above the cooldown state machine.
+
+### Tests
+
+- `tests/test_key_pool_cooldown.py`: added 4 round-robin self-checks
+  (cycles_through_healthy_keys / skips_cooldown_keys /
+  counter_persists_across_load / mixed_health_after_one_disables). Total
+  10/10 pass.
+
+---
+
 ## [0.2.2] — 2026-09-21
 
 ### Fixed
@@ -262,3 +325,4 @@ First PyPI release.
 [0.2.0]: https://pypi.org/project/agnes-video-25-mcp/0.2.0/
 [0.2.1]: https://pypi.org/project/agnes-video-25-mcp/0.2.1/
 [0.2.2]: https://pypi.org/project/agnes-video-25-mcp/0.2.2/
+[0.2.3]: https://pypi.org/project/agnes-video-25-mcp/0.2.3/

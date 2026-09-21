@@ -138,6 +138,13 @@ class _KeyState:
 _KEY_POOL: list[_KeyState] = []
 _KEY_POOL_LOCK = threading.Lock()
 _KEY_POOL_LOADED = False
+# 0.2.3: round-robin counter — first-available-key selection is no longer
+# always-key[0]; it cycles through healthy keys so 429 quota burns evenly
+# across the pool instead of hammering one key until it 429s. Fallback path
+# (cooldown + switch on 401/429/503) is unchanged; this only changes the
+# *first* pick. Persisted across restarts (same JSON file as disabled_until /
+# last_429_at) so a restart doesn't reset to key[0] and burn the same key.
+_KEY_ROUND_ROBIN_COUNTER: int = 0
 
 
 def _mask_key(raw: str) -> str:
@@ -174,11 +181,25 @@ def _load_persisted_state() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _get_round_robin_counter(persisted: dict[str, Any]) -> int:
+    """Read round-robin counter from persisted state (0.2.3+).
+    Returns 0 if missing or invalid — backward compatible with 0.1.4-0.2.2
+    state files that don't carry the counter.
+    """
+    raw = persisted.get("_round_robin_counter")
+    if not isinstance(raw, (int, float)):
+        return 0
+    n = int(raw)
+    return n if n >= 0 else 0
+
+
 def _persist_state() -> None:
     """Atomically write key pool state. Acquires _KEY_POOL_LOCK internally."""
     with _KEY_POOL_LOCK:
         path = _state_file()
-        payload: dict[str, dict[str, Any]] = {}
+        # payload is dict[str, Any] because 0.2.3 adds a global
+        # "_round_robin_counter" string-key alongside the per-key dict values.
+        payload: dict[str, Any] = {}
         for k in _KEY_POOL:
             payload[k.raw] = {
                 "disabled_until": k.disabled_until,
@@ -186,6 +207,9 @@ def _persist_state() -> None:
                 "last_429_at": k.last_429_at,
                 "consecutive_failures": k.consecutive_failures,
             }
+        # 0.2.3: round-robin counter is global (not per-key), lives at
+        # top level under a sentinel key to keep the per-key dict typed.
+        payload["_round_robin_counter"] = _KEY_ROUND_ROBIN_COUNTER
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(path.suffix + ".tmp")
@@ -214,6 +238,11 @@ def _load_key_pool() -> list[_KeyState]:
     if not keys:
         return keys
     persisted = _load_persisted_state()
+    # 0.2.3: hydrate round-robin counter from disk so a restart continues
+    # from where the previous process stopped (instead of resetting to key[0]
+    # and re-burning the same quota headroom).
+    global _KEY_ROUND_ROBIN_COUNTER
+    _KEY_ROUND_ROBIN_COUNTER = _get_round_robin_counter(persisted)
     now = time.time()
     for k in keys:
         ps = persisted.get(k.raw)
@@ -239,7 +268,22 @@ def _load_key_pool() -> list[_KeyState]:
 
 
 def _pick_key() -> _KeyState | None:
-    global _KEY_POOL_LOADED
+    """Select a healthy key for the next request.
+
+    0.2.3: round-robin among healthy (non-cooldown) keys. Fallback
+    semantics are unchanged: on 401/429/503 the caller (via _mark_disabled)
+    cooldown the offending key and the *next* _pick_key() call will skip
+    it. We do NOT touch the cooldown / last_429_at / disabled_until state
+    machine — round-robin only changes the *first pick*.
+
+    Selection algorithm:
+      1. Snapshot all healthy keys (disabled_until <= now).
+      2. If none healthy → return None (all_keys_exhausted path).
+      3. Pick index = counter % len(healthy); advance counter.
+      4. Cooldown-complete keys get their last_429_at refreshed (existing
+         behavior; preserved verbatim so we don't break the 30s window).
+    """
+    global _KEY_POOL_LOADED, _KEY_ROUND_ROBIN_COUNTER
     picked: _KeyState | None = None
     needs_persist = False
     with _KEY_POOL_LOCK:
@@ -247,14 +291,22 @@ def _pick_key() -> _KeyState | None:
             _KEY_POOL[:] = _load_key_pool()
             _KEY_POOL_LOADED = True
         now = time.time()
-        for k in _KEY_POOL:
-            if k.disabled_until <= now:
-                # Cooldown complete → refresh 429 allowance (key gets 2 fresh 429 chances).
+        healthy = [k for k in _KEY_POOL if k.disabled_until <= now]
+        if healthy:
+            # Cooldown-complete key refreshes its 429 allowance (unchanged
+            # from 0.1.6 — preserves the 30s-window semantics).
+            for k in healthy:
                 if k.last_429_at > 0.0:
                     k.last_429_at = 0.0
                     needs_persist = True
-                picked = k
-                break
+            # Counter is stored as an absolute value (NOT modulo len(healthy))
+            # so a process restart resumes from where it stopped. Modulo only
+            # happens at the read site (idx = counter % len(healthy)) and the
+            # write site advances by 1 — bounded only by Python int growth,
+            # which is fine in practice (a 64-bit signed int overflows at ~9e18).
+            idx = _KEY_ROUND_ROBIN_COUNTER % len(healthy)
+            picked = healthy[idx]
+            _KEY_ROUND_ROBIN_COUNTER = _KEY_ROUND_ROBIN_COUNTER + 1
     if needs_persist:
         _persist_state()
     return picked
