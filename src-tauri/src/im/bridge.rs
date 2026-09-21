@@ -1239,11 +1239,7 @@ mod tests {
                 .join("npm")
                 .join("bin")
                 .join("npm-cli.js");
-            if std::fs::create_dir_all(
-                npm_cli_path.parent().unwrap(),
-            )
-            .is_err()
-            {
+            if std::fs::create_dir_all(npm_cli_path.parent().unwrap()).is_err() {
                 return false;
             }
             std::fs::write(&npm_cli_path, b"").is_ok()
@@ -1349,8 +1345,12 @@ mod tests {
     #[test]
     fn npmrc_pins_registry_detects_explicit_registry_lines() {
         assert!(npmrc_pins_registry("registry=https://corp.example.com/"));
-        assert!(npmrc_pins_registry("  registry = https://corp.example.com/  "));
-        assert!(npmrc_pins_registry("proxy=http://x\nregistry=https://corp/"));
+        assert!(npmrc_pins_registry(
+            "  registry = https://corp.example.com/  "
+        ));
+        assert!(npmrc_pins_registry(
+            "proxy=http://x\nregistry=https://corp/"
+        ));
         // Case-insensitive key.
         assert!(npmrc_pins_registry("REGISTRY=https://corp/"));
     }
@@ -1373,13 +1373,17 @@ mod tests {
 
         // Home with a registry-pinning .npmrc → pinned.
         let pinned = tempfile::tempdir().expect("tempdir");
-        std::fs::write(pinned.path().join(".npmrc"), "registry=https://corp.example.com/\n")
-            .expect("write npmrc");
+        std::fs::write(
+            pinned.path().join(".npmrc"),
+            "registry=https://corp.example.com/\n",
+        )
+        .expect("write npmrc");
         assert!(user_pinned_npm_registry(Some(pinned.path())));
 
         // Home with an .npmrc that does NOT pin registry → not pinned.
         let other = tempfile::tempdir().expect("tempdir");
-        std::fs::write(other.path().join(".npmrc"), "proxy=http://proxy:8080\n").expect("write npmrc");
+        std::fs::write(other.path().join(".npmrc"), "proxy=http://proxy:8080\n")
+            .expect("write npmrc");
         assert!(!user_pinned_npm_registry(Some(other.path())));
     }
 
@@ -1926,10 +1930,7 @@ enum InstallerSource {
 /// **Always** Bundled-first. The previous implementation tried System first,
 /// which silently failed on fresh Windows machines with no Node in PATH and
 /// left the user waiting for a Bundled fallback that never ran (see TODO #17).
-fn choose_install_source(
-    bundled_available: bool,
-    system_available: bool,
-) -> Vec<InstallerSource> {
+fn choose_install_source(bundled_available: bool, system_available: bool) -> Vec<InstallerSource> {
     let mut order = Vec::new();
     if bundled_available {
         order.push(InstallerSource::Bundled);
@@ -2092,7 +2093,9 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
 
                 let npm_cli_str = npm_cli
                     .to_str()
-                    .ok_or_else(|| format!("npm-cli.js path contains invalid UTF-8: {:?}", npm_cli))?
+                    .ok_or_else(|| {
+                        format!("npm-cli.js path contains invalid UTF-8: {:?}", npm_cli)
+                    })?
                     .to_string();
 
                 // Prepend node binary's directory to PATH so postinstall scripts can find `node`.
@@ -2206,7 +2209,7 @@ pub async fn install_openclaw_plugin<R: tauri::Runtime>(
                         // Same npm 11+ git-dep refusal as the bundled branch.
                         "--allow-git=all",
                     ])
-                        .current_dir(&base_for_sys);
+                    .current_dir(&base_for_sys);
                     apply_proxy_env(&mut cmd);
                     cmd.output()
                 })

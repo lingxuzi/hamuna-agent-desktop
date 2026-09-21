@@ -25,7 +25,11 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { McpEnableError } from '../../shared/config-types';
 import { withAbortSignal, withBoundedTimeout } from '../utils/cancellation';
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+// Cold npx + Windows path resolve + cold `initialize` handshake can easily
+// run past 15s on a clean cache. 30s is the practical floor that covers
+// preset MCPs (playwright / mobile-control) without leaving users stuck in
+// a request that times out before the protocol exchange settles.
+const DEFAULT_TIMEOUT_MS = 30_000;
 // Bounded close: SDK subprocess can ignore SIGTERM forever (v0.2.x实战);
 // cap close() wait so the request thread doesn't block the HTTP loop.
 const CLOSE_TIMEOUT_MS = 2_000;
@@ -71,6 +75,11 @@ export async function validateStdioStartup(
 
   let transport: StdioClientTransport | null = null;
   let closeStarted = false;
+  // Bounded tail buffer of MCP subprocess stderr — populated by the data
+  // listener attached right after transport construction. Read in the
+  // failure path so /api/mcp/enable errors include the real reason
+  // (npm 404 / ENOTDIR / proxy error) instead of just `-32000`.
+  let stderrTail: string[] = [];
   // `closePromise` is only assigned once transport exists and start has been
   // called. Until then we have nothing to close. Typed loosely because
   // withBoundedTimeout returns `Promise<T | undefined>` and TS narrows
@@ -123,6 +132,31 @@ export async function validateStdioStartup(
           cwd: process.cwd(),
         });
 
+        // Drain MCP subprocess stderr to prevent pipe backpressure. The SDK
+        // routes `stderr: 'pipe'` through a PassThrough that nobody reads by
+        // default — once npx (or any preset) writes past the OS pipe buffer
+        // (~4KB on Windows, 64KB on POSIX), the child blocks on its next
+        // stderr write, the `initialize` handshake never completes, and the
+        // SDK surfaces "ConnectionClosed (-32000)" instead of the real failure
+        // (ENOTDIR / EPERM / cache miss). Attach before client.connect() so
+        // any stderr emitted during spawn is captured. Bounded buffer + log
+        // gives diagnostics without unbounded growth.
+        //
+        // The SDK's TS type declares `stderr: Stream | null`, but in pipe
+        // mode it always returns the PassThrough constructed in start()
+        // (stdio.js:60-62). Mock transports (e.g. unit tests) may not
+        // implement this getter; guard before subscribing.
+        const stderrStream = transport.stderr;
+        if (stderrStream) {
+          stderrStream.on('data', (chunk: Buffer | string) => {
+            const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+            stderrTail.push(text);
+            // Cap memory: keep only the tail. 32 lines covers most real
+            // failures (npm 404, ENOTDIR stack, proxy errors).
+            if (stderrTail.length > 32) stderrTail.shift();
+          });
+        }
+
         const client = new Client(
           { name: 'HamunaAgent', version: '0.1.29' },
           { capabilities: {} },
@@ -163,6 +197,14 @@ export async function validateStdioStartup(
           },
           (err: unknown) => {
             const error = classifyError(err, input.command);
+            // Append captured stderr tail (≤32 lines) so the toast surfaces
+            // the real failure (npm 404 / ENOTDIR / proxy error) rather than
+            // a bare -32000. Capped to keep the message UI-friendly.
+            const stderr = stderrTail.join('').trim();
+            if (stderr) {
+              const tail = stderr.length > 800 ? `${stderr.slice(-800)}…` : stderr;
+              error.message = `${error.message}\n\n${tail}`;
+            }
             return {
               ok: false as const,
               error,

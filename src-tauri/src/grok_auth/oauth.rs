@@ -13,7 +13,8 @@ use super::types::{
 };
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
-const GROK_OAUTH_USER_AGENT: &str = concat!("HamunaAgent/", env!("CARGO_PKG_VERSION"), " Grok OAuth");
+const GROK_OAUTH_USER_AGENT: &str =
+    concat!("HamunaAgent/", env!("CARGO_PKG_VERSION"), " Grok OAuth");
 
 #[derive(Debug, Deserialize)]
 struct DiscoveryDocument {

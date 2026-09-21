@@ -723,7 +723,11 @@ fn create_new_session_sidecar<R: Runtime>(
     // resolve to the bundled interpreter.
     #[cfg(target_os = "macos")]
     {
-        let bundled_arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+        let bundled_arch = if cfg!(target_arch = "aarch64") {
+            "arm64"
+        } else {
+            "x64"
+        };
         if let Ok(resource_dir) = app_handle.path().resource_dir() {
             let py_dir = resource_dir.join(format!("python-{bundled_arch}"));
             if py_dir.is_dir() {
@@ -749,10 +753,7 @@ fn create_new_session_sidecar<R: Runtime>(
         cmd.env("HAMUNA_RUNTIME_SOURCE", runtime_source);
     }
     let sidecar_generation = manager_guard.next_generation(session_id);
-    cmd.env(
-        "HAMUNA_SIDECAR_GENERATION",
-        sidecar_generation.to_string(),
-    );
+    cmd.env("HAMUNA_SIDECAR_GENERATION", sidecar_generation.to_string());
     let runtime_for_trace = resolved_identity.runtime.clone();
     let runtime_source_for_trace = resolved_identity.runtime_source_label().to_string();
 

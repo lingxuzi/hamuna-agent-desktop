@@ -164,7 +164,9 @@ pub fn t<'a>(key: &'a str, locale: SupportedLocale) -> &'a str {
         (SupportedLocale::EnUs, "tray.settings") => "Settings",
         (SupportedLocale::EnUs, "tray.forceWakeLock") => "Prevent computer sleep",
         (SupportedLocale::EnUs, "tray.exit") => "Quit",
-        (SupportedLocale::EnUs, "notification.sessionCompleteTitle") => "HamunaAgent - Task complete",
+        (SupportedLocale::EnUs, "notification.sessionCompleteTitle") => {
+            "HamunaAgent - Task complete"
+        }
         (SupportedLocale::EnUs, "notification.sessionCompleteBody") => "Please review the result",
         (SupportedLocale::EnUs, "notification.sessionStoppedTitle") => "HamunaAgent - Task stopped",
         (SupportedLocale::EnUs, "notification.sessionStoppedBody") => {

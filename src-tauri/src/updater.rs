@@ -1128,9 +1128,7 @@ fn get_updater_base_url() -> String {
         .ok()
         .map(|s| s.trim_end_matches('/').to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev".to_string()
-        })
+        .unwrap_or_else(|| "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev".to_string())
 }
 
 /// Get the update target string for the current platform
@@ -1262,7 +1260,10 @@ mod tests {
     #[test]
     fn parses_windows_updater_temp_dir_names() {
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-0.2.27-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-0.2.27-updater-abcd",
+                "HamunaAgent"
+            ),
             Some("0.2.27")
         );
         assert_eq!(
@@ -1282,7 +1283,10 @@ mod tests {
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-01.2.3-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-01.2.3-updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(
@@ -1290,15 +1294,24 @@ mod tests {
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-1.2.3--updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-1.2.3--updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-1.2.3+-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-1.2.3+-updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-1.2.3-01-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-1.2.3-01-updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(

@@ -198,7 +198,11 @@ pub fn start_tab_sidecar<R: Runtime>(
     // build_macos.sh 双 arch ship strategy.
     #[cfg(target_os = "macos")]
     {
-        let bundled_arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+        let bundled_arch = if cfg!(target_arch = "aarch64") {
+            "arm64"
+        } else {
+            "x64"
+        };
         if let Ok(resource_dir) = app_handle.path().resource_dir() {
             let py_dir = resource_dir.join(format!("python-{bundled_arch}"));
             if py_dir.is_dir() {
@@ -311,8 +315,12 @@ pub fn start_tab_sidecar<R: Runtime>(
             let reader = BufReader::new(stderr);
             for line in reader.lines().flatten() {
                 match classify_sidecar_stderr(&line) {
-                    SidecarStderrLevel::Info => ulog_info!("[sidecar-err][{}] {}", tab_id_clone, line),
-                    SidecarStderrLevel::Warn => ulog_warn!("[sidecar-err][{}] {}", tab_id_clone, line),
+                    SidecarStderrLevel::Info => {
+                        ulog_info!("[sidecar-err][{}] {}", tab_id_clone, line)
+                    }
+                    SidecarStderrLevel::Warn => {
+                        ulog_warn!("[sidecar-err][{}] {}", tab_id_clone, line)
+                    }
                     SidecarStderrLevel::Error => {
                         ulog_error!("[sidecar-err][{}] {}", tab_id_clone, line)
                     }
@@ -1017,7 +1025,10 @@ mod check_instance_not_replaced_tests {
         let result = check_instance_not_replaced(&mgr, "global", 31415);
         match result {
             Err(InstanceReplacedReason::DifferentPort(p)) => assert_eq!(p, 31416),
-            other => panic!("expected DifferentPort(31416), got {:?}", other.map(|_| "Ok")),
+            other => panic!(
+                "expected DifferentPort(31416), got {:?}",
+                other.map(|_| "Ok")
+            ),
         }
     }
 

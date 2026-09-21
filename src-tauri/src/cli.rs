@@ -188,12 +188,21 @@ pub fn find_python_executable() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
 
-    let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+    let arch = if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "x64"
+    };
 
     // macOS: Contents/MacOS/app → Contents/Resources/python-<arch>/bin/python3
     let macos_py = dir
         .parent()
-        .map(|p| p.join("Resources").join(format!("python-{arch}")).join("bin").join("python3"))
+        .map(|p| {
+            p.join("Resources")
+                .join(format!("python-{arch}"))
+                .join("bin")
+                .join("python3")
+        })
         .unwrap_or_else(|| {
             dir.join("Resources")
                 .join(format!("python-{arch}"))

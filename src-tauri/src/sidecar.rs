@@ -355,8 +355,16 @@ mod sidecar_process_role_tests {
                 .trim_start_matches("--max-old-space-size=")
                 .parse()
                 .expect("heap cap must be integer MB");
-            assert!(n >= 1024, "heap cap too small ({} MB) — won't fit 7M-token turns", n);
-            assert!(n <= 8192, "heap cap too large ({} MB) — risks OOM-killing 8GB hosts", n);
+            assert!(
+                n >= 1024,
+                "heap cap too small ({} MB) — won't fit 7M-token turns",
+                n
+            );
+            assert!(
+                n <= 8192,
+                "heap cap too large ({} MB) — risks OOM-killing 8GB hosts",
+                n
+            );
             // Heap flag must come BEFORE --import (V8 positional parse order).
             let heap_idx = args
                 .iter()

@@ -31,6 +31,11 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
   StdioClientTransport: class MockStdioTransport {
     pid: number | null = 12345;
+    // Use a getter so individual tests can swap `stderr` per-instance
+    // (instance fields would shadow a prototype getter).
+    get stderr() {
+      return { on: vi.fn() };
+    }
     constructor(_params: unknown) {}
     close = closeMock;
   },
@@ -133,6 +138,75 @@ describe('validateStdioStartup — error classification', () => {
     expect(result.error.type).toBe('runtime_error');
     expect(result.error.message).toContain('server boom');
     expect(closeMock).toHaveBeenCalled();
+  });
+
+  it('captures subprocess stderr and surfaces it in the error message', async () => {
+    // Regression for npx MCP -32000: the SDK PassThrough backed by
+    // `stderr: 'pipe'` is silently consumed by nobody, so once npx writes
+    // past the OS pipe buffer the child blocks on stderr, the handshake
+    // never completes, and the validator only sees a bare
+    // `Connection closed (-32000)`. The fix attaches a data listener that
+    // drains the tail; this test asserts the listener is wired and the
+    // captured bytes surface in the failure message.
+    const stderrOnMock = vi.fn();
+    const transportModule = await import('@modelcontextprotocol/sdk/client/stdio.js');
+    const RealMock = transportModule.StdioClientTransport as unknown as { prototype: { stderr: unknown } };
+    const originalDescriptor = Object.getOwnPropertyDescriptor(RealMock.prototype, 'stderr');
+    // Replace the default mock stderr with one that captures handlers.
+    const capturingStderr = {
+      on: (event: string, handler: (chunk: Buffer | string) => void) => {
+        stderrOnMock(event, handler);
+        // Synthesize one chunk to exercise the buffering path.
+        handler('npm ERR! 404 Not Found - @mobilenext/mobile-mcp@0.0.99\n');
+        return capturingStderr;
+      },
+    };
+    Object.defineProperty(RealMock.prototype, 'stderr', {
+      get: () => capturingStderr,
+      configurable: true,
+    });
+
+    try {
+      connectMock.mockRejectedValue(new Error('McpError: Connection closed (-32000)'));
+      const result = await validateStdioStartup(baseInput);
+
+      expect(stderrOnMock).toHaveBeenCalledWith('data', expect.any(Function));
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('expected ok=false');
+      expect(result.error.message).toContain('-32000');
+      expect(result.error.message).toContain('@mobilenext/mobile-mcp@0.0.99');
+    } finally {
+      // Restore the original `stderr` getter so subsequent tests see the
+      // default `on: vi.fn()` mock.
+      if (originalDescriptor) {
+        Object.defineProperty(RealMock.prototype, 'stderr', originalDescriptor);
+      } else {
+        delete (RealMock.prototype as Record<string, unknown>).stderr;
+      }
+    }
+  });
+
+  it('no-ops when transport.stderr is absent (mocked transports)', async () => {
+    const transportModule = await import('@modelcontextprotocol/sdk/client/stdio.js');
+    const RealMock = transportModule.StdioClientTransport as unknown as { prototype: { stderr: unknown } };
+    const originalDescriptor = Object.getOwnPropertyDescriptor(RealMock.prototype, 'stderr');
+    Object.defineProperty(RealMock.prototype, 'stderr', {
+      get: () => null,
+      configurable: true,
+    });
+
+    try {
+      connectMock.mockResolvedValue(undefined);
+      getServerVersionMock.mockReturnValue({ name: 'mock-mcp', version: '1.0.0' });
+      const result = await validateStdioStartup(baseInput);
+      expect(result.ok).toBe(true);
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(RealMock.prototype, 'stderr', originalDescriptor);
+      } else {
+        delete (RealMock.prototype as Record<string, unknown>).stderr;
+      }
+    }
   });
 
   it('transport.close failure does not surface (silently swallowed)', async () => {

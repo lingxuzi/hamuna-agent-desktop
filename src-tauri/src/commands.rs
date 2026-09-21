@@ -351,11 +351,9 @@ pub struct InitBundledWorkspaceResult {
 pub async fn cmd_initialize_bundled_workspace<R: Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<InitBundledWorkspaceResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        initialize_bundled_workspace_blocking(app_handle)
-    })
-    .await
-    .map_err(|e| format!("initialize-bundled-workspace task failed: {}", e))?
+    tauri::async_runtime::spawn_blocking(move || initialize_bundled_workspace_blocking(app_handle))
+        .await
+        .map_err(|e| format!("initialize-bundled-workspace task failed: {}", e))?
 }
 
 fn initialize_bundled_workspace_blocking<R: Runtime>(
@@ -1564,10 +1562,7 @@ fn sync_system_skills_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<b
                 match fs::symlink_metadata(&path) {
                     Ok(_) => match fs::remove_dir_all(&path) {
                         Ok(_) => {
-                            ulog_info!(
-                                "[system-skills] Removed orphan: {}",
-                                name_str
-                            );
+                            ulog_info!("[system-skills] Removed orphan: {}", name_str);
                             removed_orphans.push(name_str);
                         }
                         Err(e) => {
@@ -1681,10 +1676,7 @@ fn read_system_skills_snapshot(hamuna_dir: &Path) -> Result<SystemSkillsSnapshot
 /// effort write — on failure the next launch's cleanup simply has no prior
 /// snapshot and skips the pass (the failure is logged so it's visible in
 /// the unified log).
-fn write_system_skills_snapshot(
-    hamuna_dir: &Path,
-    skills: &[&str],
-) -> Result<(), String> {
+fn write_system_skills_snapshot(hamuna_dir: &Path, skills: &[&str]) -> Result<(), String> {
     let snapshot = SystemSkillsSnapshot {
         version: SYSTEM_SKILLS_VERSION.to_string(),
         skills: skills.iter().map(|s| s.to_string()).collect(),
@@ -1819,8 +1811,9 @@ mod system_skills_tests {
         assert!(bundled.contains("--max-executions <正整数>"));
 
         let memory_update = include_str!("../../bundled-skills/hamuna-memory-update/SKILL.md");
-        assert!(memory_update
-            .contains("仅当系统或用户明确指定完整名称 `hamuna-memory-update` 时使用"));
+        assert!(
+            memory_update.contains("仅当系统或用户明确指定完整名称 `hamuna-memory-update` 时使用")
+        );
         assert!(memory_update.contains("不要根据任务语义或相似表述自行触发"));
         assert!(memory_update.contains("错误的长期记忆通常比暂时缺失更有害"));
         assert!(memory_update.contains("无法说明未来判断或行动差异的信息，不写"));
@@ -1917,17 +1910,15 @@ mod system_skills_tests {
         let mut actual: Vec<String> = fs::read_dir(&bundled_dir)
             .expect("bundled-skills/ exists")
             .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry
-                    .file_type()
-                    .map(|kind| kind.is_dir())
-                    .unwrap_or(false)
-            })
+            .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
             .filter(|entry| entry.path().join("SKILL.md").is_file())
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
             .collect();
         actual.sort();
-        let expected: Vec<String> = SYSTEM_SKILLS.iter().map(|name| (*name).to_string()).collect();
+        let expected: Vec<String> = SYSTEM_SKILLS
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect();
         assert_eq!(
             actual, expected,
             "bundled-skills/ ↔ SYSTEM_SKILLS drift; rerun `npm run generate:system-skills`"
@@ -2095,11 +2086,7 @@ mod system_skills_tests {
 
     /// Build a `SystemSkillsSnapshot` JSON on disk (mirrors the production
     /// write path's shape so the read path can parse it back).
-    fn write_snapshot_for_test(
-        hamuna_dir: &Path,
-        version: &str,
-        skills: &[&str],
-    ) {
+    fn write_snapshot_for_test(hamuna_dir: &Path, version: &str, skills: &[&str]) {
         let snapshot = SystemSkillsSnapshot {
             version: version.to_string(),
             skills: skills.iter().map(|s| s.to_string()).collect(),
@@ -2139,10 +2126,8 @@ mod system_skills_tests {
         write_snapshot_for_test(hamuna_dir, "55", &["task-alignment", "fake-orphan"]);
 
         // Run the same per-entry decision the orphan pass runs.
-        let snapshot =
-            read_system_skills_snapshot(hamuna_dir).expect("snapshot should parse");
-        let bundled: std::collections::HashSet<&str> =
-            SYSTEM_SKILLS.iter().copied().collect();
+        let snapshot = read_system_skills_snapshot(hamuna_dir).expect("snapshot should parse");
+        let bundled: std::collections::HashSet<&str> = SYSTEM_SKILLS.iter().copied().collect();
         let mut to_remove: Vec<String> = Vec::new();
         for entry in fs::read_dir(&skills_dir).unwrap().flatten() {
             let name = entry.file_name();
@@ -2190,7 +2175,10 @@ mod system_skills_tests {
         // Missing snapshot → read_system_skills_snapshot returns Err;
         // the production pass bails on Err and skips the iteration.
         let result = read_system_skills_snapshot(hamuna_dir);
-        assert!(result.is_err(), "missing snapshot must be reported as error");
+        assert!(
+            result.is_err(),
+            "missing snapshot must be reported as error"
+        );
         assert!(skills_dir.join("mycustom").exists(), "user skill untouched");
 
         // Corrupt snapshot → also an error, also skip.
@@ -2200,7 +2188,10 @@ mod system_skills_tests {
         )
         .unwrap();
         let result = read_system_skills_snapshot(hamuna_dir);
-        assert!(result.is_err(), "corrupt snapshot must be reported as error");
+        assert!(
+            result.is_err(),
+            "corrupt snapshot must be reported as error"
+        );
         assert!(skills_dir.join("mycustom").exists(), "user skill untouched");
     }
 }

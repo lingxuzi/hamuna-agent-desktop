@@ -36,10 +36,7 @@ fn refresh_system_skills_const() {
     let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .expect("CARGO_MANIFEST_DIR is required");
-    let repo_root = manifest_dir
-        .parent()
-        .expect("repo root")
-        .to_path_buf();
+    let repo_root = manifest_dir.parent().expect("repo root").to_path_buf();
     let bundled_skills_dir = repo_root.join("bundled-skills");
     let generator_script = repo_root.join("scripts/generate-system-skills.mjs");
 
@@ -287,9 +284,7 @@ fn space_enabled_flag(value: &str) -> bool {
 
 fn normalize_space_base_url(key: &str, raw: &str) -> Result<String, String> {
     if raw.is_empty() {
-        return Err(format!(
-            "{key} is required when HAMUNA_SPACE_ENABLED=true"
-        ));
+        return Err(format!("{key} is required when HAMUNA_SPACE_ENABLED=true"));
     }
     let mut url = url::Url::parse(raw).map_err(|error| format!("Invalid {key}: {error}"))?;
     if url.scheme() != "https" {
