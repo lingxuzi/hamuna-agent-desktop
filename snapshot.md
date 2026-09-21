@@ -4,9 +4,11 @@
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。snapshot.md 不允许无限增长；已完成项落地到 §4 git log / 删除 narrative 后立即清出本节。
 > **硬约束**：snapshot.md ≤ 500 行。
 
-## §0 narrative 历史压缩锚点（2026-09-20 · snapshot 重整）
+## §0 narrative 历史压缩锚点（2026-09-21 · snapshot 增补）
 
 §0 之前累积的 3 段超长 narrative（#182 launcher mockup / #174-176 landing v5 全链路 / #166 wizard step 2）已折叠到下方一行锚点；详细设计取舍见 git log + 对应 spec：
+
+- **#187 MiniApp Desktop App PRD v0.3**（2026-09-21）— `specs/prd/miniapp.md` 680 行；**v0.3 反转 v0.2 决策**：v0.4.0 MVP = **Icon Design Demo** + **4 个新基础设施**（MiniApp Runner / FloatingMiniChat Bubble Claim / MiniApp Cowork Sidecar / MiniApp Worker Manager）+ `app.ai.chat` SSE relay。**架构同步 openbitfun**：独立 Scene Tab + Bubble Claim bridge + MiniApp 自有 Cowork Sidecar（owner = `miniapp-agent:<app_id>:<run_id>`，永不主动关）+ Node v24 `worker_threads` 沙箱（**不引 Bun**）。**Bridge API 完整对齐 openbitfun**：恢复 `app.ai.chat/cancel/contextFiles` + `app.agent.*` + `app.call` + `app.chat.claimComposer`；schema 新增 `permissions.agent/chat/node` 三块。**新增治理**：Cowork Sidecar 进程 ≤3 + LRU evict + abortPersistentSession 5 场景触发 + Worker Manager Rust 新模块。详见 §15 评审清单 8 项 + §11 红线 15 条 + §13 风险 14 项 + §14 scope-out 11 项。本地草稿，gitignore `specs/prd/` 不入库。
 - **#182 desktop launcher 风格 4 方案 HTML mockup v2**（2026-09-19）— 4 个 mockup（A Hallmark editorial / B Marquee hero / C Stacked index / D Card trio）用 hamuna theme token 重写，全 4 方案仍未拍板落地 Launcher.tsx；详见 `pages/launcher-mockups/option-{a,b,c,d}.html` + 截图自评。
 - **#174-176 landing v5 全链路**（2026-09-19）— v5 走"杂志感 + 长读节奏"，hero sans 92px + caps 2-col 11 段 + cap.5 21:9 视频锚点 + closer 112px；#175 landing 下载地址修正为 R2 prod `pub-xxx.r2.dev`（4 个 bug：NXDOMAIN endpoint / schema 解析 / wrong硬编版本 / R2 CORS） + `./bump_landing_version.{sh,ps1}` 脚本；#176 v5.1 caps 内 SVG mini-demo 10 段全 `prefers-reduced-motion` 降级 + IntersectionObserver `animation-play-state: running`；#177 en 文案重译 + #178 clarify 体检 + #179 audit P1（skip-link / `<main>` 包 `<section>` / SVG `var(--bg-elevated)` / responsive adapt） + #180 polish 7 处（--dim contrast 4.7→6.2 / caps.words 64ch / IO rootMargin / dl-btn `<a download>` / focus ring 0.6 / skip-link top:60 / 560px closer 38ch）。详见 `pages/landing/index.html` + 11 张截图 + `bump_landing_version.{sh,ps1}`。
 - **#166 wizard step 2 结构化错误路由 + 陈旧数据提示**（2026-09-18）— `NxgdDiscoveryResult` discriminated union + `NxgdDiscoveryError({ kind:'rate-limit'|'network' })` + 502 envelope 加 `checkedAt` + UI 加 `AlertTriangle` + 6 unit + 9 component testcase 全绿。详见 `src/server/nxgd-auth.ts` + `src/renderer/config/services/nxgdSubscriptionService.ts` + `NxgdOnboardingWizard.tsx`。
@@ -136,6 +138,12 @@
 ---
 
 ## 3. 当前 TODO（按优先级 + 状态）
+
+### 3.0 MiniApp 路线 🆕 PRD v0.3 反转待评审（2026-09-21）
+- **PRD**：`specs/prd/miniapp.md` v0.3（680 行，gitignore `specs/prd/` 不入库）— **用户拍板反转 v0.2**：MiniApp 承载垂直功能，v0.4.0 MVP = **Icon Design Demo** + **4 个新基础设施**（MiniApp Runner / FloatingMiniChat Bubble Claim / MiniApp Cowork Sidecar / MiniApp Worker Manager）+ `app.ai.chat` SSE relay。架构同步 openbitfun：独立 Scene Tab + Bubble Claim bridge + MiniApp 自有 Cowork Sidecar（永不主动关）+ Node v24 `worker_threads`（**不引 Bun**）。
+- **v0.3 反转 vs v0.2**：恢复 `app.ai.chat/cancel/contextFiles` + `app.agent.*` + `app.call` + `node.enabled` Worker；schema 新增 `permissions.agent/chat/node` 三块；Cowork Sidecar 进程 ≤3 + LRU evict + abortPersistentSession 5 场景 + Worker Manager Rust 新模块。**未决 9 项**（§13）：进程上限 3/5/8 / `MiniAppCoworkSession` 合并 vs 另起 / abort 加 `app.onUnload` / SSE 中断 retry / Bubble 双 MiniApp 抢占 UX / contextFiles 8 MiB / Worker require 上 VM 沙箱 / 4 周工期砍 demo / Sidecar Origin allowlist。
+- **2026-09-21 入口设计决策**（TODO #25）：本项目无 Scene 系统，PRD `openScene('miniapp:{appId}')` 落地 = **`Tab.view` 加 `'miniapp'`**（同 settings/taskcenter/space singleton 模式）。`tabId` 拼为 `miniapp:<appId>`（保留 appId 串语义可读）。MiniApp ↔ Chat **不共享 Tab**，通过独立 FloatingBubble + `claimComposer` 桥（同 openbitfun）。MiniApp Sidecar 是独立 hidden session + 独立 Cowork Sidecar 进程（PRD §6.1，进程数 ≤3 + LRU evict），与 Chat Sidecar 1:1 主线不冲突——**CLAUDE.md「Sidecar 1:1」原则放行第 2 类 = Cowork**。
+- **scope-out**（v0.3 §14，11 项）：不做 Marketplace server / 不调起 Chat Sidecar Session / 不做签名公证 / 不做 Plugin 嵌套 / 不做 Cloud Space / 不做 ai_context / 不做评分 / 不重写 bundled-agents / 不与 plugin-bridge 共享 / 不做 market_strict / 不引 Bun。**待评审** §15 8 项（Tech Lead / Security / Sidecar Owner / UX）。
 ### 3.1 进行中
 #### TODO #183 — hamuna-writing-system 正文写作接 human-writing 方法论 ✅ DONE（v1 双源并集）
 **触发**：user 拍板"双源并集"——hamuna 原违禁表 + human-writing 硬禁令并集，跑 human-writing 的 `scripts/check_prose.py` 副本兜底。**scope-out**：forum-prose.md / fiction.md / formats.md 散文方法论推迟（v2 follow-up）。**grllling 拍板**（3 处）：双源并集 vs 单源替换 / 复制而非 symlink / 「不仅…更是…」本地 absolute 段。**验证**：自写测试章节跑脚本翻案句 1 + 变形 2 + 名词化 2 + 黑话 4 + 硬停词 2 + 路标 2 + 中文冒号 1 + 英文冒号 8 + 破折号 2 + 禁用翻案句 1 + 3 需人工判断。**v1 落地**：4 文件（scripts/check_prose.py NEW 副本 + anti-ai-lexicon.md 顶部 ABSOLUTE 段 + SKILL.md 阶段三/四 3 处更新 + snapshot.md）。**后续**：TODO #184 v2 完全继承 + 删除 human-writing 独立 skill。**follow-up**：(a) playwright 端到端跑一次 wizard step 写作（dev 模式 mock chat 看反 AI 门禁真生效）；(b) forum-prose.md / fiction.md 散文方法是否后续真要引入（user 拍板递进测试，结果未到——已在 v2 落实）；(c) `human-writing` 升级到 1.2+ 时 `check_prose.py` 内部 HARD_JARGON / HARD_STOPS / CONTEXT_JARGON / LYRIC_WORDS 列表可能增删——v2 已本地化此风险归零。
@@ -277,6 +285,8 @@
 #### TODO #131 — agnes-video-25 v0.1.7：`_coerce_image_paths_input` helper（user 拍板 trade-off）✅ DONE
 **触发**：用户报 `mcp__multimedia-creator__agnes25_image_generate` 的 `image_paths` 数组"含中文路径 + 长度 3 时 7/7 失败 + 被序列化为 `{item: [...]}` dict 触发 Pydantic validation error"。grlling 揭示报告与事实 4 处矛盾（报告长度 3 vs 实际数据长度 2 / JSON 本身合法 / 无 Pydantic error 原文 / 无调用方信息）。用户拍板 "现状直接 commit + publish，承担权衡"，绕过 grillng 接受 trade-off 修复。**改动 4 文件**（+198 -6）：(1) `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` 抽 helper `_coerce_image_paths_input(value)` 处理 `list[str] | dict | None` → `list[str] | None`（`{"item":[...]}` 解包 + `{key:[list]}` 单键解包 + 其它原样返回），`_image_generate_impl` 入口调它；(2) `hosted_mcps/agnes-video-25/pyproject.toml` 0.1.6 → 0.1.7；(3) `hosted_mcps/agnes-video-25/CHANGELOG.md` 新增 `[0.1.7]` 段（trade-off 已知风险完整记录）+ **retroactive** `[0.1.6]` 段（§3.2 P3 Step 3 当时漏写，content 重建自 commit `d2403e6` multi-key cooldown state 持久化 + 30s 窗口 reason split）；(4) `hosted_mcps/agnes-video-25/tests/test_image_paths_dict_tolerance.py` 新增 10/10 self-check 覆盖 helper。**PyPI 发布**：`uv build` + `twine upload --repository pypi`（`uv publish` 走 trusted publishing 失败，twine 走 `~/.pypirc` token）。**verify**：`pip install --dry-run agnes-video-25-mcp==0.1.7` + sha256 比对（本地 `e80a58ed...` = PyPI simple API `e80a58ed...` 完全一致）。**意外副作用**：`twine upload dist/*` 因 `dist/` 残留 0.1.5 + 0.1.6 旧 artifact 把旧版本也试图重传 —— PyPI 静默拒绝同 version 重传（不更新 upload_time），无害。**后续 follow-up**：(a) schema 层 BeforeValidator 归一化（架构正确做法，user 拍板 0.1.7 暂不上）+ (b) `bundled-skills/creative-video-suite/references/agnes-ai-api.md` §5.5 narrative 此前误写 "image_generate schema 不含 image_paths" 待独立 commit 修。
 
+**0.2.2 缓解（2026-09-21, snapshot 标注 · 非新 TODO）**：用户报"harness 多次调用 agnes-video-25-mcp 传入多于一个 image url 出现嵌套 bug，愈发严重" → 根因 = helper 单层 unwrap，深度≥2 时返 dict，下游 `for v in values` 把 dict keys 当 URL 静默丢全部图片。0.2.2 把 `_coerce_image_paths_input` / `_coerce_str_list_input` / `_coerce_videos_input` 改成递归 unwrap（+ `id()` 自引用环检测 + 深度上限 8 防死循环），新增 8 个嵌套 regression case。**PyPI v0.2.2 已 ship**（whl sha256 `3faf46b3...`, tar.gz `06ef16ca...`，双源一致 @ 2026-09-21）。**架构正确做法（BeforeValidator）仍是 follow-up (a) 未偿还** —— 本次是 runtime mitigation，非 architecture reset；user 拍板按方案 C 走（保留 helper 作 defense-in-depth，不上 schema BeforeValidator）。详细见 hosted_mcps/agnes-video-25/CHANGELOG `[0.2.2]` 段。
+
 #### TODO #132 — agnes-video-25 v0.1.8：schema 层放宽 `image_paths: list[str] | dict | None`（让 0.1.7 helper 真正可达）✅ DONE
 **触发**：0.1.7 落地后已记录 "FastMCP / Pydantic v2 在 strict schema 模式下会在函数体前拦截 dict 输入，helper 不可达" trade-off（CHANGELOG 0.1.7 §Known limitations + TODO #131 narrative）。0.1.8 关闭这条 leak。**改动 3 文件**（+39 -8）：(1) `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` `_image_generate_impl` 与 `agnes25_image_generate` 两处签名 `image_paths: list[str] | None = None` → `list[str] | dict[str, Any] | None = None`，helper 保持不变（已 0.1.7 测试覆盖）；(2) `hosted_mcps/agnes-video-25/pyproject.toml` 0.1.7 → 0.1.8；(3) `hosted_mcps/agnes-video-25/CHANGELOG.md` 新增 `[0.1.8]` 段（schema-layer fix rationale + 残留 trade-off 链 + JSON schema 现列 `image_paths` 为 `oneOf: [array<string>, object, null]`）。**PyPI 发布**：`rm -rf dist/`（避免 0.1.7 时 `dist/*` wildcard 重传 0.1.5/0.1.6 的副作用）+ `uv build` + `twine upload --repository pypi dist/agnes_video_25_mcp-0.1.8-{py3-none-any.whl,tar.gz}` 显式指定两个文件避免 wildcards。**verify**：本地 whl sha256 `3ea01f906eb5ba75c295b4281826fc5cd5017b36fff422d2c31b397443b0c0f9` = PyPI simple API `3ea01f906eb5ba75c295b4281826fc5cd5017b36fff422d2c31b397443b0c0f9` 完全一致。**为什么 schema 放宽而不是 BeforeValidator**：MCP `@mcp.tool()` entry + `_image_generate_impl` 内部 helper 两边都要放宽才能让 dict 一路通过 → `list[str] | dict[str, Any] | None` 是最小改动；若只加 BeforeValidator 在 entry 层则内部 helper 仍见 `list[str]` 与 `_img_normalize_inputs(image_paths, ...)` 类型冲突。**残留 trade-off**：(a) single-key unwrap 仍 type-unsafe；(b) JSON schema 改 oneOf 消费方需 handle new object case；(c) bug 报告本身未经 Pydantic error 原文核实 —— helper 现在可达，但触发源未确认是 Claude Code 还是别的 MCP client。**后续 follow-up**：(1) bundled-skills/creative-video-suite §5.5 narrative 错误声明待修；(2) `findPipInstalledUvxScriptsDir` 之外的 Windows image_paths 中文路径 e2e（TODO #127 smoke test 涵盖的是 uvx 解析，不是 MCP tool surface）。
 
@@ -316,6 +326,9 @@
 
 ### 3.3 待办池
 
+#### TODO #185 — 工具箱默认 npx 工具在 Windows 打不开（bundled `nodejs/` 缺 `npx.cmd`）🚧
+**触发**：用户报"工具箱里默认的工具在 windows 下使用 npx 安装的都打不开" + 补充"测试了一下好像 windows 版本没有自动安装 npx"。**根因**：Windows bundled `<install-dir>/nodejs/` 缺 `npx.cmd` —— `scripts/download_nodejs.sh::download_windows()` (line 432-486) 应当准备 `node.exe` + `npm.cmd` + `npx.cmd` + `node_modules/` flat layout，但 `check_existing()` (line 180-230) 只校验 `node.exe` + version + platform + arch，**不校验 `npx.cmd` / `npm.cmd` 存在**；`download_windows` line 467 的 `cp ... 2>/dev/null || true` 静默吞错。**修复方向**（主线）：硬约束 check_existing 在 Windows 必须 `npx.cmd` + `npm.cmd` 都存在；去掉 `|| true`；脚本末尾加 `ls -la` 自检。**辅助**：`getSystemNpxPaths` 把 bundled 路径作为 first source。**验证**：本地 `bash scripts/download_nodejs.sh --windows x64` 跑出正确 flat layout；windows-release.yml smoke test (TODO #127) 加 1 段 assert `npx.cmd` 存在 + `npx --version` exit 0。**scope-out**：SDK StdioClientTransport / subprocess.ts::spawn / process_cmd.rs 全 0 改动；bundled Node v24.19.0 版本不动；macOS/Linux `bin/npx` shim 不动；`mobile-control` `npx -y @mobilenext/mobile-mcp@latest` 调用契约不动。**受影响**：`extended_buildin_mcp/mcp.json::mobile-control` + 所有用户手填 `command:"npx"` 的 stdio MCP。**下一步**：AskUserQuestion 让 user 拍板修哪边（脚本自检 + smoke vs 只改一边）。详细 5 候选根因 + 修复细节见 git log（commit 落地后补 commit hash）。
+
 #### TODO #17 — 2nd UGC 后半 5 段视频 🔄 quota-pending
 **触发**：TODO #104 1st UGC 成功后用户要求再跑一次端到端验证 URL 复用。**撞 429 daily quota**（request IDs: `20260908063506204136165EwLlEv8i` / `20260908064500904279309wqCF2qMO`），17h 24min 直至 2026-09-09 00:00 UTC 刷新。
 - **P3 落地后**用 2 个 key 重新跑（一个撞 1st quota，另一个备用）
@@ -324,13 +337,7 @@
 #### TODO #1 — `.dev-placeholder` 方案 ❌ 废弃
 已删；如未来 `tauri-build` 收紧校验目录非空，`beforeDevCommand` 才需补内容填充。
 
-### 3.4 已落地（仅指针，detail 见 §4 + git log）
-
-- #29 tvc-director chatui 渲染层对齐 v0.9 / #97 hosted_mcps/agnes-video-25/ 7 tools / #14 TypeGraph 重构 KB / #16 fresh install kb-relations poller / #12 skill 安装 `/skillname` unknown command 修复 / #98 30s TVC e2e v9 PASS / #99 v10 60s lifestyle TVC PASS / #100 v11 60s TVC ⚠ 部分通过 / #101 v12 60s TVC ⚠ 条件1 PASS / #102 v13 1x5 reference mode ❌ FAIL / #103 creative-video-suite 全量迁移 ✅ DONE / #104 1st UGC 5 段 60s ✅ DONE + URL 复用铁律 / #107 多视角产品图 / #108 视频时长边界 / #111 helper agnes-video-25 路由 / #112 install_paths.md / #113 auto-bump pin / #114 video 轮询 + 串行 / #115 version 文件残留 / #116 SKILL frontmatter auto-bump / #117 required_assets 硬门控 / #118 storyboard JSON schema / #119 model agnes-video-2.5-flash 锁死 / #120 creative-ad-director skill / #121 Windows install MCP auto-merge + uvx PATH（pip-only 落地）/ #122 bundled uv 0.5.11 → 0.11.33 重 pin / #123 getBundledUvPath slot 3 / #124 hidesDefaultArgs / #125 download_uv.ps1 字符串字面量 / #126 install-time `pip install uv` pin 0.11.33 / #127 windows-release.yml install-time smoke test / #128 pip mirror 清华 → 阿里 + PyPI fallback / #131 agnes-video-25 v0.1.7 helper (user 拍板 trade-off) / #132 v0.1.8 schema 放宽 / #134 agnes-video-v2.0 白名单 + 参数转义 / #135 install-time prefetch wheel / #145 nxgd 401 自愈 / #183 hamuna-writing-system 接 human-writing 硬门禁 / #184 完全继承 + 删除 human-writing 独立 skill
-
----
-
-## 4. 最近已完成（git log 指针）
+## 4\. 最近已完成（git log 指针）
 
 | Commit | 摘要 |
 |--------|------|
@@ -485,3 +492,7 @@
 **踩坑 — harness 拦截 grep 输出再次复发**：跑 vitest 时 harness 把含 ANSI 颜色码的输出截掉了 summary 部分（`harness 截 grep 输出再次复发`）。**修法**：vitest 结果重定向 `/tmp/vitest-out.txt` 再 grep，绕开 harness 输出截断。
 
 **踩坑 — harness 拦截 grep 输出**：复杂 bash 链 `echo X | grep Y | head -1` stdout 被 harness 完全屏蔽（"1 matches in 1F"）。**修法**：单 Bash 单行只做一件事，或直接 Read `/proc/<pid>/status` 用工具原生读文件路径。
+
+### 5.10 OpenBitFun 调研锚点（2026-09-21 · 借鉴素材）
+
+对照 `/home/hmcz/Projects/openbitfun`（v1.0.0 MIT，Tauri+Rust+React+pnpm，4 种 Harness + MiniApp + Relay）。**已展开**：`specs/prd/miniapp.md` v0.1 PRD（MiniApp 容器形态，照搬 openbitfun 4 文件契约 + 4 类权限 + Bridge API；明确不引入 openbitfun 的 `agent.*`）。**待评审**：Product Operation Registry（加速 `tech_docs/remote_surface_contract.md`）/ i18n contract 集中 + `i18n:audit` 门禁 / Target cache GC + release-fast profile / Plugin Host 4 阶复用规则复盘 plugin-bridge。**不借鉴**：6 层 Rust workspace（单 Desktop 不需要）、App Server wire 矩阵（Sidecar 1:1 是对的）、ACP / OpenCode / Codex adapter（走 SDK）、Sandbox / Computer Use（planned）。

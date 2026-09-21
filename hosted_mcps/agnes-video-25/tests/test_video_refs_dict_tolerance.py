@@ -95,6 +95,18 @@ def main() -> None:
         {},
     )
 
+    # --- 0.2.2 regression: harness / sub-agent multi-call nesting ------
+    _check(
+        "nested depth-2 dict with item → recursive unwrap",
+        _coerce_str_list_input({"item": {"item": ["https://x/a.png", "https://x/b.png"]}}),
+        ["https://x/a.png", "https://x/b.png"],
+    )
+    _check(
+        "nested depth-3 dict with item → recursive unwrap",
+        _coerce_str_list_input({"item": {"item": {"item": ["https://x/a.png"]}}}),
+        ["https://x/a.png"],
+    )
+
     print("\n=== _coerce_videos_input ===")
 
     # --- list-of-dict inputs: pass through -------------------------------
@@ -112,10 +124,11 @@ def main() -> None:
     )
 
     # --- the reported bug shape: {"item": {"url": "..."}} ----------------
+    # 0.2.2: now recursive — single-dict at leaf unwraps to the inner dict.
     _check(
-        'dict with "item" key + single-dict value → wrap to 1-element list',
+        'dict with "item" key + single-dict value → unwrap inner dict',
         _coerce_videos_input({"item": {"url": "https://x/v.mp4"}}),
-        [{"url": "https://x/v.mp4"}],
+        {"url": "https://x/v.mp4"},
     )
 
     _check(
@@ -131,11 +144,11 @@ def main() -> None:
         [{"url": "https://x/v.mp4"}],
     )
 
-    # --- single-key dict whose value IS a single-dict: wrap ---------------
+    # --- single-key dict whose value IS a single-dict: recursive unwrap ---
     _check(
-        "single-key dict whose value is a single dict → wrap to 1-element list",
+        "single-key dict whose value is a single dict → unwrap inner dict",
         _coerce_videos_input({"foo": {"url": "https://x/v.mp4"}}),
-        [{"url": "https://x/v.mp4"}],
+        {"url": "https://x/v.mp4"},
     )
 
     # --- multi-key dicts: pass through -----------------------------------
@@ -150,6 +163,18 @@ def main() -> None:
         "empty dict → return empty dict",
         _coerce_videos_input({}),
         {},
+    )
+
+    # --- 0.2.2 regression: harness / sub-agent multi-call nesting ------
+    _check(
+        "nested depth-2 dict with item → recursive unwrap",
+        _coerce_videos_input({"item": {"item": [{"url": "https://x/v.mp4"}, {"url": "https://x/w.mp4"}]}}),
+        [{"url": "https://x/v.mp4"}, {"url": "https://x/w.mp4"}],
+    )
+    _check(
+        "nested depth-3 dict with item → recursive unwrap",
+        _coerce_videos_input({"item": {"item": {"item": [{"url": "https://x/v.mp4"}]}}}),
+        [{"url": "https://x/v.mp4"}],
     )
 
     print("\n  All cases passed.")

@@ -1056,17 +1056,34 @@ def _coerce_image_paths_input(
         will silently be "fixed" into ``["bar"]``. Caller-side discipline is the
         long-term fix; this is the cheapest server-side mitigation.
     """
-    if isinstance(value, dict):
+    # 0.2.2: 递归 unwrap。harness / sub-agent 多次调用会逐层套 {"item": ...}，
+    # 单次 unwrap 在嵌套深度 ≥2 时返回 dict，后续 for v in values 静默把 dict
+    # keys 当 URL 喂下去，掩盖真实错误（"传入多于一个 url 愈发严重"的根因）。
+    # 深度上限 8 足够挡实际 harness 链路的累计嵌套，同时防恶意/异常输入死循环。
+    seen: set[int] = set()
+    while isinstance(value, dict) and id(value) not in seen:
+        seen.add(id(value))
+        if len(seen) > 8:
+            break
         if "item" in value:
             inner = value["item"]
             if isinstance(inner, list):
-                return inner
+                value = inner
+                continue
             if isinstance(inner, str):
                 return [inner]
+            if isinstance(inner, dict):
+                value = inner
+                continue
         if len(value) == 1:
             only = next(iter(value.values()))
             if isinstance(only, list):
-                return only
+                value = only
+                continue
+            if isinstance(only, dict):
+                value = only
+                continue
+        break
     return value
 
 
@@ -1094,20 +1111,31 @@ def _coerce_videos_input(
     0.2.1: mirror of _coerce_image_paths_input for the video-list payload.
     Videos have shape ``[{"url": "..."}]`` not ``[str]`` so the unwrap must
     preserve list-of-dict semantics.
+
+    0.2.2: recursive unwrap — same rationale as _coerce_image_paths_input.
     """
-    if isinstance(value, dict):
+    seen: set[int] = set()
+    while isinstance(value, dict) and id(value) not in seen:
+        seen.add(id(value))
+        if len(seen) > 8:
+            break
         if "item" in value:
             inner = value["item"]
             if isinstance(inner, list):
-                return inner
+                value = inner
+                continue
             if isinstance(inner, dict):
-                return [inner]
+                value = inner
+                continue
         if len(value) == 1:
             only = next(iter(value.values()))
             if isinstance(only, list):
-                return only
+                value = only
+                continue
             if isinstance(only, dict):
-                return [only]
+                value = only
+                continue
+        break
     return value
 
 

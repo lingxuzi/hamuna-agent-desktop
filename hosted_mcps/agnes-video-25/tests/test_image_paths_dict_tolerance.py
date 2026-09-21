@@ -105,7 +105,31 @@ def main() -> None:
         {},
     )
 
-    print("\n  All 10 cases passed.")
+    # --- 0.2.2 regression: harness / sub-agent multi-call nesting ------
+    # "传入多于一个 image url 愈发严重" 的根因：嵌套深度 ≥2 时单次 unwrap
+    # 返回 dict，下游 for v in values 把 dict keys 当 URL 静默丢失。
+    _check(
+        "nested depth-2 dict with item → recursive unwrap",
+        _coerce_image_paths_input({"item": {"item": ["/a.png", "/b.png"]}}),
+        ["/a.png", "/b.png"],
+    )
+    _check(
+        "nested depth-3 dict with item → recursive unwrap",
+        _coerce_image_paths_input({"item": {"item": {"item": ["/a.png", "/b.png"]}}}),
+        ["/a.png", "/b.png"],
+    )
+    _check(
+        "nested depth-2 single-key dict → recursive unwrap",
+        _coerce_image_paths_input({"foo": {"bar": ["/a.png"]}}),
+        ["/a.png"],
+    )
+    _check(
+        "nested depth-2 item + single string → wrap to 1-element list",
+        _coerce_image_paths_input({"item": {"item": "/a.png"}}),
+        ["/a.png"],
+    )
+
+    print("\n  All 14 cases passed.")
 
 
 if __name__ == "__main__":

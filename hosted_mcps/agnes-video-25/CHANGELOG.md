@@ -6,6 +6,31 @@ Package: `agnes-video-25-mcp` · PyPI: https://pypi.org/project/agnes-video-25-m
 
 ---
 
+## [0.2.2] — 2026-09-21
+
+### Fixed
+
+- **Recursive unwrap for harness-shaped multi-call nesting** (`_coerce_image_paths_input`, `_coerce_str_list_input`, `_coerce_videos_input`):
+  0.2.1's helpers unwrapped a single layer of `{"item": [...]}` only. When harness / sub-agent called the same tool multiple times and the upstream pipeline re-wrapped an already-normalized list (e.g. `{"item": {"item": ["url1", "url2"]}}`), the helper returned the outer dict unchanged. Downstream `for v in values` then iterated dict keys (`'item'`) and passed those as "URLs" to `_resolve_image_ref`, silently dropping every real image with `invalid_param` / `invalid_url`. The "more urls ⇒ worse" symptom was this depth-≥2 layer peeling off without any error trace linking back to nesting.
+
+  - All three helpers now loop while `value` is a dict and the unwrap rules still match (with `id(value)` cycle guard + depth cap of 8 to prevent malicious self-referential payloads from looping forever).
+  - New unwrap path inside the loop: when `inner` (or the single-key `only`) is itself a dict, the loop continues into it instead of breaking. This is what makes `{"item": {"item": [...]}}` collapse to the inner list.
+  - Backward compatible: every input shape 0.2.1 handled is handled identically; the recursive loop only reaches deeper layers that 0.2.1 returned as dicts.
+
+### Compatibility
+
+- Backward compatible with 0.2.1 — no schema change, no public surface change.
+- `len(dict) == 1` single-key unwrap rule remains in effect for the *first* matching layer (0.1.7 / 0.1.8 trade-off carried forward).
+- Type-unsafe single-key unwrap (TODO #131 follow-up (a)) is unchanged; **the architecturally correct fix (Pydantic `BeforeValidator` at the schema layer) remains the open follow-up**. 0.2.2 is a runtime mitigation, not the architecture reset.
+
+### Tests
+
+- `tests/test_image_paths_dict_tolerance.py`: added 4 nested cases (depth-2 `item`, depth-3 `item`, depth-2 single-key, depth-2 `item` + single string). Total 14/14 pass.
+- `tests/test_video_refs_dict_tolerance.py`: added 4 nested cases for `_coerce_str_list_input` (depth-2/3 `item`) and `_coerce_videos_input` (depth-2/3 `item`). Adjusted two existing case-test contracts from "single dict → wrap to 1-element list" to "single dict → unwrap inner dict" (this is the correct contract under recursive semantics — the list-wrap was a non-recursive quirk). Total 19/19 pass.
+- Self-ref and depth-cap guards verified ad-hoc (no test file added; covered by code-path assertion in the helpers' `seen` set + `len(seen) > 8` break).
+
+---
+
 ## [0.2.1] — 2026-09-19
 
 ### Fixed
@@ -235,3 +260,5 @@ First PyPI release.
 [0.1.7]: https://pypi.org/project/agnes-video-25-mcp/0.1.7/
 [0.1.8]: https://pypi.org/project/agnes-video-25-mcp/0.1.8/
 [0.2.0]: https://pypi.org/project/agnes-video-25-mcp/0.2.0/
+[0.2.1]: https://pypi.org/project/agnes-video-25-mcp/0.2.1/
+[0.2.2]: https://pypi.org/project/agnes-video-25-mcp/0.2.2/
