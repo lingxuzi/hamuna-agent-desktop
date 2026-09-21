@@ -218,9 +218,17 @@ impl SessionIndex {
             changed = true;
             // Pattern 3 §D.4 — record the byte offset reached so subsequent
             // watcher-triggered reindex calls can take the incremental path.
+            // The session writer may flush a partial line concurrently with
+            // our read, so `meta.len()` can point mid-line. Snap down to the
+            // previous `\n` so the next incremental parse starts on a line
+            // boundary (otherwise serde fails on the first segment every tick).
             let jsonl_path = sessions_dir.join(format!("{}.jsonl", session_id));
             if let Ok(meta) = jsonl_path.metadata() {
-                self.write_session_offset(session_id, meta.len());
+                let end = meta.len();
+                let aligned = snap_offset_back_to_line_start(&jsonl_path, end).unwrap_or(0);
+                if aligned > 0 {
+                    self.write_session_offset(session_id, aligned);
+                }
             }
         }
 
@@ -816,6 +824,31 @@ fn read_jsonl_range(path: &Path, from: u64, to: u64) -> Result<Vec<u8>, String> 
     Ok(bytes)
 }
 
+/// Return the largest offset `<= end` that lies on a JSONL line boundary
+/// (i.e. immediately after a `\n` byte). Used after a full reindex to
+/// snap a possibly-mid-line `meta.len()` down to a parseable start, so
+/// the next watcher tick takes the incremental path from a valid offset.
+fn snap_offset_back_to_line_start(path: &Path, end: u64) -> Result<u64, String> {
+    if end == 0 {
+        return Ok(0);
+    }
+    // Search a small trailing window — a partial line is bounded by the
+    // SDK's max-line cap (well under 64 KiB in normal sessions).
+    const WINDOW: u64 = 64 * 1024;
+    let scan_start = end.saturating_sub(WINDOW);
+    let bytes = read_jsonl_range(path, scan_start, end)?;
+    // Bytes are at absolute offsets `[scan_start, end)`. Find the last
+    // `\n` within this window; the offset AFTER it is line-aligned.
+    let last_newline_rel = bytes.iter().rposition(|&b| b == b'\n');
+    match last_newline_rel {
+        Some(rel) => Ok(scan_start + rel as u64 + 1),
+        // No newline in the trailing 64 KiB → the file is one giant
+        // unterminated line. Treat end as line-aligned and let the next
+        // incremental parse error out cleanly if it still is mid-line.
+        None => Ok(end),
+    }
+}
+
 /// Index a single session into the provided writer: its title (as a "title"
 /// doc) + every text-bearing message from its JSONL file.
 ///
@@ -1385,7 +1418,10 @@ mod tests {
         assert_eq!(index.search("oldtitleunique", 10).unwrap().total_count, 1);
         // Appended m2 body content is searchable (regression guard).
         assert_eq!(
-            index.search("appended title refresh body", 10).unwrap().total_count,
+            index
+                .search("appended title refresh body", 10)
+                .unwrap()
+                .total_count,
             1,
             "appended m2 content must be searchable"
         );
@@ -1571,5 +1607,32 @@ mod tests {
             index.search("stalecontentunique", 10).unwrap().total_count,
             0
         );
+    }
+
+    /// `snap_offset_back_to_line_start` is the safety net that prevents
+    /// mid-line offsets from breaking the next incremental reindex after a
+    /// full reindex races with a concurrent session write.
+    #[test]
+    fn snap_offset_back_to_line_start_alignment() {
+        let dir = std::env::temp_dir().join(format!("hamuna-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("session.jsonl");
+        // 3 complete lines + 7 bytes of a partial 4th line.
+        let bytes = b"line1\nline2\nline3\nPARTIA";
+        fs::write(&path, bytes).unwrap();
+
+        // Mid-line: snap down to after the last \n.
+        // "line1\nline2\nline3\nPARTIA" = 24 bytes; last \n at index 17 → aligned = 18.
+        let aligned = snap_offset_back_to_line_start(&path, bytes.len() as u64).unwrap();
+        assert_eq!(aligned, 18);
+
+        // Already aligned (right after "line1\n" = 6 bytes).
+        let already = snap_offset_back_to_line_start(&path, 6).unwrap();
+        assert_eq!(already, 6);
+
+        // Zero is always 0.
+        assert_eq!(snap_offset_back_to_line_start(&path, 0).unwrap(), 0);
+
+        fs::remove_dir_all(&dir).ok();
     }
 }
