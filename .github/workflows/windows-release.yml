@@ -342,12 +342,18 @@ jobs:
           $env:Path = (Split-Path $uvExe -Parent) + ";" + $env:Path
           $env:UV_INDEX_URL = "https://pypi.org/simple"
           $env:AGNES_API_KEY = "smoke-test-dummy"
-          $smokeOut = & uv tool run --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help 2>&1
+          # Read pinned agnes-video-25-mcp version from pyproject.toml once
+          # so the uv `--from` smoke and the `pip show` pin check below
+          # agree (assert 5/3 was failing when they drifted — installer.nsi
+          # Section HostedMcpPrefetch now also installs this exact pin).
+          $expectedVer = (Get-Content "hosted_mcps/agnes-video-25/pyproject.toml" -Raw |
+            Select-String -Pattern '(?m)^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $smokeOut = & uv tool run --from agnes-video-25-mcp==$expectedVer agnes-video-25-mcp --help 2>&1
           $smokeCode = $LASTEXITCODE
           if ($smokeCode -ne 0) {
             Write-Host "--- uv tool run --from smoke output ---"
             Write-Host $smokeOut
-            throw '`uv tool run --from agnes-video-25-mcp==0.2.0 agnes-video-25-mcp --help` exited ' + $smokeCode + ' — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real'
+            throw "`uv tool run --from agnes-video-25-mcp==$expectedVer agnes-video-25-mcp --help` exited $smokeCode — pin 0.11.33 may no longer be sufficient, or the 0.12.x --from rationale was never real"
           }
           Write-Host ">>> uv tool run --from multimedia-creator MCP smoke OK"
 
@@ -364,11 +370,8 @@ jobs:
             throw '`pip show agnes-video-25-mcp` failed (exit ' + $LASTEXITCODE + '): ' + $pipShowAgnes + ' — install-time Section HostedMcpPrefetch did not cache the wheel'
           }
           $agnesVer = ($pipShowAgnes | Select-String -Pattern '^Version:\s*(.+)$').Matches[0].Groups[1].Value
-          # Re-read pyproject.toml here so the smoke test stays correct if
-          # the version drifts in a future release — no literal pin in
-          # the workflow file.
-          $expectedVer = (Get-Content "hosted_mcps/agnes-video-25/pyproject.toml" -Raw |
-            Select-String -Pattern '(?m)^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          # Re-uses $expectedVer parsed above — single source of truth
+          # (pyproject.toml::version) so a drift only needs one edit.
           if ($agnesVer -ne $expectedVer) {
             throw 'agnes-video-25-mcp version pin mismatch: expected ' + $expectedVer + ' (from pyproject.toml), got ' + $agnesVer + ' — sync step or installer.nsi Section HostedMcpPrefetch are misaligned'
           }
