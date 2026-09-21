@@ -374,6 +374,39 @@ jobs:
           }
           Write-Host ">>> pip-installed agnes-video-25-mcp = $agnesVer"
 
+          # Assert 6/3 (TODO #185 — bundled `nodejs/` must contain npx.cmd /
+          # npm.cmd). These shims are how MCP servers spawned as `npx ...`
+          # (currently extended_buildin_mcp/mcp.json::mobile-control, plus
+          # anything a user adds through Tools) actually start. The
+          # install-time copy uses `cp ... || true` (with the missing-file
+          # branch now demoted to a hard error in scripts/download_nodejs.sh
+          # line 466-467 + check_existing line 227-236 rejecting partial
+          # caches), so a future regression would manifest here BEFORE the
+          # installer reaches R2.
+          $nodejsDir = Join-Path $testDir 'nodejs'
+          foreach ($shim in 'npx.cmd','npm.cmd') {
+            $shimPath = Join-Path $nodejsDir $shim
+            if (-not (Test-Path $shimPath)) {
+              throw 'bundled ' + $shimPath + ' missing — install-time nodejs/ tree is incomplete'
+            }
+          }
+          Write-Host ">>> bundled nodejs/npx.cmd + nodejs/npm.cmd present"
+
+          # Assert 7/3 (TODO #185 — file-exists is not enough; make sure the
+          # shim actually executes). MSYS bash on the runner occasionally
+          # produces zero-byte files when extraction hits long-path / `\\?\`
+          # edge cases. Without this guard a future regression could ship a
+          # npx.cmd that "exists" but never spawns.
+          $npxCmd = Join-Path $nodejsDir 'npx.cmd'
+          $npxOut = & $npxCmd --version 2>&1
+          $npxCode = $LASTEXITCODE
+          if ($npxCode -ne 0) {
+            Write-Host '--- npx.cmd --version output ---'
+            Write-Host $npxOut
+            throw 'bundled npx.cmd --version exited ' + $npxCode + ' — shim is corrupted or not a working Windows executable'
+          }
+          Write-Host ">>> bundled npx.cmd --version = $($npxOut.Trim())"
+
           # Cleanup so a follow-up local run on this runner finds nothing
           # leaked. Use the bundled uninstaller; NSIS /S is silent.
           $uninst = Join-Path $testDir "Uninstall.exe"

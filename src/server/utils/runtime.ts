@@ -108,7 +108,14 @@ function getSystemNpmPaths(): string[] {
 
 export function getSystemNpxPaths(): string[] {
   const exe = isWindows() ? 'npx.cmd' : 'npx';
-  return getSystemNodeDirs().map(d => resolve(d, exe));
+  const paths: string[] = [];
+  // Bundled Node takes priority over user-installed Node so MCP servers
+  // pinned to a bundled Node version don't drift when a user installs their
+  // own (potentially mismatched) Node.js — and so a missing system npx.cmd
+  // doesn't silently bypass the bundled one we shipped in the installer.
+  const bundledNodeDir = getBundledNodeDir();
+  if (bundledNodeDir) paths.push(resolve(bundledNodeDir, exe));
+  return paths.concat(getSystemNodeDirs().map(d => resolve(d, exe)));
 }
 
 /**
