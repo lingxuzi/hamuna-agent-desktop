@@ -66,9 +66,13 @@ export interface ResponsesInputFunctionCall {
 // and the corresponding unit test for the assistant-text-must-be-input_text
 // invariant. If we ever need a refusal block on the input side, that goes
 // through `ResponsesInputFunctionCallOutput` instead — not this type.
+/** Bridge-projected SDK cache intent onto the Responses wire. Only
+ *  `mode: 'explicit'` is currently emitted (see cache-semantics.ts). */
+export type ResponsesPromptCacheBreakpoint = { mode: 'explicit' };
+
 export type ResponsesInputContentPart =
-  | { type: 'input_text'; text: string }
-  | { type: 'input_image'; image_url: string; detail?: string };
+  | { type: 'input_text'; text: string; prompt_cache_breakpoint?: ResponsesPromptCacheBreakpoint }
+  | { type: 'input_image'; image_url: string; detail?: string; prompt_cache_breakpoint?: ResponsesPromptCacheBreakpoint };
 
 export interface ResponsesInputFunctionCallOutput {
   type: 'function_call_output';

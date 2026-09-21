@@ -2388,6 +2388,8 @@ async function main() {
         lookupBridge,
         disablePromptCacheKey,
         isPromptCacheKeyDisabled,
+        disablePromptCacheBreakpoints,
+        isPromptCacheBreakpointsDisabled,
       }] = await Promise.all([
         import('./openai-bridge'),
         import('./openai-bridge/bridge-registry'),
@@ -2439,6 +2441,8 @@ async function main() {
                     ...cfg.cacheAffinity,
                     promptCacheKeyDisabled: isPromptCacheKeyDisabled(token),
                     disablePromptCacheKey: () => disablePromptCacheKey(token),
+                    promptCacheBreakpointsDisabled: isPromptCacheBreakpointsDisabled(token),
+                    disablePromptCacheBreakpoints: () => disablePromptCacheBreakpoints(token),
                   }
                 : undefined,
             };

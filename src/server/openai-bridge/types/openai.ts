@@ -29,7 +29,7 @@ export type OpenAIMessage =
 
 export interface OpenAISystemMessage {
   role: 'system';
-  content: string;
+  content: string | OpenAITextContentPart[];
 }
 
 export interface OpenAIUserMessage {
@@ -39,7 +39,7 @@ export interface OpenAIUserMessage {
 
 export interface OpenAIAssistantMessage {
   role: 'assistant';
-  content: string | null;
+  content: string | OpenAITextContentPart[] | null;
   reasoning_content?: string;
   tool_calls?: OpenAIToolCall[];
 }
@@ -47,11 +47,21 @@ export interface OpenAIAssistantMessage {
 export interface OpenAIToolMessage {
   role: 'tool';
   tool_call_id: string;
-  content: string;
+  content: string | OpenAITextContentPart[];
 }
 
+/** Bridge-projected SDK cache intent onto the Chat Completions wire. Only
+ *  `mode: 'explicit'` is currently emitted (see cache-semantics.ts). */
+export type OpenAIPromptCacheBreakpoint = { mode: 'explicit' };
+
+export type OpenAITextContentPart = {
+  type: 'text';
+  text: string;
+  prompt_cache_breakpoint?: OpenAIPromptCacheBreakpoint;
+};
+
 export type OpenAIContentPart =
-  | { type: 'text'; text: string }
+  | OpenAITextContentPart
   | { type: 'image_url'; image_url: { url: string; detail?: string } };
 
 /** Gemini extension: thought_signature nested in extra_content for OpenAI-compatible format */

@@ -377,6 +377,217 @@ describe('OpenAI bridge Chat Completions prompt_cache_key', () => {
   });
 });
 
+describe('OpenAI bridge Responses prompt_cache_breakpoint projection', () => {
+  let fake: FakeUpstream | undefined;
+
+  afterEach(async () => {
+    await fake?.close();
+    fake = undefined;
+  });
+
+  const anthropicReqWithCacheMarker: AnthropicRequest = {
+    model: 'claude-sonnet-4-6',
+    system: [{ type: 'text', text: 'stable system prompt', cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: 'hello' }],
+    max_tokens: 32,
+  };
+
+  async function callBridgeWithMarker(upstream: UpstreamConfig, logger: ((msg: string) => void) | null = null): Promise<Response> {
+    const handler = createBridgeHandler({
+      getUpstreamConfig: async () => upstream,
+      logger,
+    });
+    return handler(new Request('http://127.0.0.1/bridge/test/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(anthropicReqWithCacheMarker),
+    }));
+  }
+
+  it('projects cache_control.ephemeral onto Responses wire as prompt_cache_breakpoint.explicit', async () => {
+    fake = await startFakeUpstream(() => ({ status: 200, body: okResponsesBody }));
+    const upstream: UpstreamConfig = {
+      providerId: 'responses-with-cache',
+      baseUrl: fake!.baseUrl,
+      apiKey: 'sk-test',
+      model: 'gpt-5.5',
+      upstreamFormat: 'responses',
+      cacheAffinity: { sessionId: 'raw-session-id', promptCacheKeyMode: 'session' },
+    };
+
+    const res = await callBridgeWithMarker(upstream);
+    expect(res.status).toBe(200);
+
+    expect(fake!.seen).toHaveLength(1);
+    const input = fake!.seen[0].body.input as Array<Record<string, unknown>>;
+    const systemItem = input.find((item) => item.role === 'system');
+    expect(systemItem).toBeDefined();
+    const parts = systemItem!.content as Array<Record<string, unknown>>;
+    expect(parts).toEqual([{
+      type: 'input_text',
+      text: 'stable system prompt',
+      prompt_cache_breakpoint: { mode: 'explicit' },
+    }]);
+  });
+
+  it('retries once without breakpoints and disables projection for the same bridge', async () => {
+    fake = await startFakeUpstream((_body, seen) => {
+      if (seen.length === 1) {
+        return {
+          status: 400,
+          body: { error: { message: 'unknown field: prompt_cache_breakpoint' } },
+        };
+      }
+      return { status: 200, body: okResponsesBody };
+    });
+
+    let disabled = false;
+    const logs: string[] = [];
+    const upstream: (() => UpstreamConfig) = () => ({
+      providerId: 'strict-responses-provider',
+      baseUrl: fake!.baseUrl,
+      apiKey: 'sk-test',
+      model: 'gpt-5.5',
+      upstreamFormat: 'responses',
+      cacheAffinity: {
+        sessionId: 'raw-session-id',
+        promptCacheKeyMode: 'session',
+        promptCacheBreakpointsDisabled: disabled,
+        disablePromptCacheBreakpoints: () => { disabled = true; },
+      },
+    });
+
+    expect((await callBridgeWithMarker(upstream(), (m) => logs.push(m))).status).toBe(200);
+    expect((await callBridgeWithMarker(upstream())).status).toBe(200);
+
+    expect(disabled).toBe(true);
+    expect(fake!.seen).toHaveLength(3);
+    // First request carries the breakpoint (rejected by upstream).
+    const firstInput = fake!.seen[0].body.input as Array<Record<string, unknown>>;
+    const firstSystem = firstInput.find((i) => i.role === 'system')!;
+    expect((firstSystem.content as Array<Record<string, unknown>>)[0].prompt_cache_breakpoint)
+      .toEqual({ mode: 'explicit' });
+    // Subsequent requests within this bridge must NOT carry any breakpoint markers.
+    for (const req of fake!.seen.slice(1)) {
+      const input = req.body.input as Array<Record<string, unknown>>;
+      const systemItem = input.find((i) => i.role === 'system');
+      if (!systemItem) continue;
+      const parts = systemItem.content as Array<Record<string, unknown>> | string;
+      if (typeof parts === 'string') continue;
+      for (const part of parts) {
+        expect(part.prompt_cache_breakpoint).toBeUndefined();
+      }
+    }
+    expect(logs.join('\n')).toContain('prompt_cache_breakpoint unsupported');
+  });
+});
+
+describe('OpenAI bridge Chat Completions prompt_cache_breakpoint projection', () => {
+  let fake: FakeUpstream | undefined;
+
+  afterEach(async () => {
+    await fake?.close();
+    fake = undefined;
+  });
+
+  const anthropicReqWithCacheMarker: AnthropicRequest = {
+    model: 'claude-sonnet-4-6',
+    messages: [{
+      role: 'user',
+      content: [{ type: 'text', text: 'stable user prompt', cache_control: { type: 'ephemeral' } }],
+    }],
+    max_tokens: 32,
+  };
+
+  async function callBridgeWithMarker(upstream: UpstreamConfig, logger: ((msg: string) => void) | null = null): Promise<Response> {
+    const handler = createBridgeHandler({
+      getUpstreamConfig: async () => upstream,
+      logger,
+    });
+    return handler(new Request('http://127.0.0.1/bridge/test/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(anthropicReqWithCacheMarker),
+    }));
+  }
+
+  it('projects cache_control.ephemeral onto Chat Completions wire as prompt_cache_breakpoint.explicit', async () => {
+    fake = await startFakeUpstream(() => ({ status: 200, body: okChatBody }));
+    const upstream: UpstreamConfig = {
+      providerId: 'chat-with-cache',
+      baseUrl: fake!.baseUrl,
+      apiKey: 'sk-test',
+      model: 'chat-model',
+      upstreamFormat: 'chat_completions',
+      cacheAffinity: { sessionId: 'raw-session-id', promptCacheKeyMode: 'session' },
+    };
+
+    const res = await callBridgeWithMarker(upstream);
+    expect(res.status).toBe(200);
+
+    expect(fake!.seen).toHaveLength(1);
+    const messages = fake!.seen[0].body.messages as Array<{ role: string; content: unknown }>;
+    const userMsg = messages.find((m) => m.role === 'user')!;
+    const parts = userMsg.content as Array<Record<string, unknown>>;
+    expect(parts).toEqual([{
+      type: 'text',
+      text: 'stable user prompt',
+      prompt_cache_breakpoint: { mode: 'explicit' },
+    }]);
+  });
+
+  it('retries once without breakpoints and disables projection for the same bridge', async () => {
+    fake = await startFakeUpstream((_body, seen) => {
+      if (seen.length === 1) {
+        return {
+          status: 400,
+          body: { error: { message: 'unknown field: prompt_cache_breakpoint' } },
+        };
+      }
+      return { status: 200, body: okChatBody };
+    });
+
+    let disabled = false;
+    const logs: string[] = [];
+    const upstream: (() => UpstreamConfig) = () => ({
+      providerId: 'strict-chat-provider',
+      baseUrl: fake!.baseUrl,
+      apiKey: 'sk-test',
+      model: 'chat-model',
+      upstreamFormat: 'chat_completions',
+      cacheAffinity: {
+        sessionId: 'raw-session-id',
+        promptCacheKeyMode: 'session',
+        promptCacheBreakpointsDisabled: disabled,
+        disablePromptCacheBreakpoints: () => { disabled = true; },
+      },
+    });
+
+    expect((await callBridgeWithMarker(upstream(), (m) => logs.push(m))).status).toBe(200);
+    expect((await callBridgeWithMarker(upstream())).status).toBe(200);
+
+    expect(disabled).toBe(true);
+    expect(fake!.seen).toHaveLength(3);
+    // First request carries the breakpoint (rejected).
+    const firstMessages = fake!.seen[0].body.messages as Array<{ role: string; content: unknown }>;
+    const firstUser = firstMessages.find((m) => m.role === 'user')!;
+    const firstParts = firstUser.content as Array<Record<string, unknown>>;
+    expect(firstParts[0].prompt_cache_breakpoint).toEqual({ mode: 'explicit' });
+    // Subsequent requests must NOT carry any breakpoint markers anywhere.
+    for (const req of fake!.seen.slice(1)) {
+      const msgs = req.body.messages as Array<{ role: string; content: unknown }>;
+      for (const m of msgs) {
+        if (Array.isArray(m.content)) {
+          for (const part of m.content as Array<Record<string, unknown>>) {
+            expect(part.prompt_cache_breakpoint).toBeUndefined();
+          }
+        }
+      }
+    }
+    expect(logs.join('\n')).toContain('prompt_cache_breakpoint unsupported');
+  });
+});
+
 describe('OpenAI bridge managed OAuth recovery', () => {
   let fake: FakeUpstream | undefined;
 

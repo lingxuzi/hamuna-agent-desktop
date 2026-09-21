@@ -1,5 +1,15 @@
 // Anthropic Messages API types (subset used by bridge)
 
+/**
+ * Anthropic SDK `cache_control` marker shape. The OpenAI Responses wire
+ * projection (see translate/cache-semantics.ts::projectPromptCacheBreakpoint)
+ * only honors `type: 'ephemeral'`; other values are silently dropped.
+ */
+export interface AnthropicCacheControl {
+  type: 'ephemeral';
+  ttl?: '5m' | '1h';
+}
+
 export interface AnthropicRequest {
   model: string;
   messages: AnthropicMessage[];
@@ -19,7 +29,7 @@ export interface AnthropicRequest {
 export type AnthropicSystemBlock = {
   type: 'text';
   text: string;
-  cache_control?: { type: string };
+  cache_control?: AnthropicCacheControl | null;
 };
 
 export type AnthropicMessage = {
@@ -37,6 +47,7 @@ export type AnthropicContentBlock =
 export interface AnthropicTextBlock {
   type: 'text';
   text: string;
+  cache_control?: AnthropicCacheControl | null;
 }
 
 export interface AnthropicImageBlock {
@@ -47,6 +58,7 @@ export interface AnthropicImageBlock {
     data?: string;
     url?: string;
   };
+  cache_control?: AnthropicCacheControl | null;
 }
 
 export interface AnthropicToolUseBlock {
@@ -57,6 +69,7 @@ export interface AnthropicToolUseBlock {
   // Note: thought_signature is intentionally NOT included here.
   // It's a Gemini-specific field that lives only on the OpenAI side (handler.ts cache).
   // Including it in Anthropic-format blocks pollutes the SDK transcript → API rejection. See: #68
+  cache_control?: AnthropicCacheControl | null;
 }
 
 export interface AnthropicToolResultBlock {
@@ -64,6 +77,7 @@ export interface AnthropicToolResultBlock {
   tool_use_id: string;
   content?: string | AnthropicToolResultContent[];
   is_error?: boolean;
+  cache_control?: AnthropicCacheControl | null;
 }
 
 export type AnthropicToolResultContent = {
@@ -84,7 +98,7 @@ export interface AnthropicToolDefinition {
   name: string;
   description?: string;
   input_schema: Record<string, unknown>;
-  cache_control?: { type: string };
+  cache_control?: AnthropicCacheControl | null;
 }
 
 export type AnthropicToolChoice =

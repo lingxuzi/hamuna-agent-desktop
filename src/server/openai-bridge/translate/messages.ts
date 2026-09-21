@@ -6,25 +6,44 @@ import type {
   AnthropicSystemBlock,
   AnthropicToolResultBlock,
 } from '../types/anthropic';
-import type { OpenAIMessage, OpenAIAssistantMessage, OpenAIContentPart } from '../types/openai';
+import type {
+  OpenAIMessage,
+  OpenAIAssistantMessage,
+  OpenAIContentPart,
+  OpenAITextContentPart,
+} from '../types/openai';
 import { translateImageBlock, type ToolImageSaver } from './multimodal';
+import { projectPromptCacheBreakpoint } from './cache-semantics';
 
-/** Convert Anthropic system + messages to OpenAI messages array */
+/** Convert Anthropic system + messages to OpenAI messages array.
+ *  When `promptCacheBreakpoints` is true, SDK `cache_control: { type: 'ephemeral' }`
+ *  markers are projected onto the wire as `prompt_cache_breakpoint: { mode: 'explicit' }`. */
 export function translateMessages(
   system: string | AnthropicSystemBlock[] | undefined,
   messages: AnthropicMessage[],
   thinkingEnabled = false,
   imageSaver?: ToolImageSaver,
+  promptCacheBreakpoints = false,
 ): OpenAIMessage[] {
   const result: OpenAIMessage[] = [];
 
   // 1. System prompt → system message
   if (system) {
-    const systemText = typeof system === 'string'
-      ? system
-      : system.map(b => b.text).join('\n\n');
-    if (systemText) {
-      result.push({ role: 'system', content: systemText });
+    if (typeof system === 'string') {
+      // Plain string system — no breakpoint possible (no block to attach to).
+      // When flag is false this is byte-identical to the previous emit shape.
+      if (system) {
+        result.push({ role: 'system', content: system });
+      }
+    } else {
+      const parts = systemToOpenAITextParts(system, promptCacheBreakpoints);
+      if (parts.length === 1 && !parts[0].prompt_cache_breakpoint) {
+        // No breakpoint in the array — collapse to the legacy string shape
+        // so the wire stays byte-identical to the pre-breakpoint emit.
+        result.push({ role: 'system', content: parts[0].text });
+      } else if (parts.length > 0) {
+        result.push({ role: 'system', content: parts });
+      }
     }
   }
 
@@ -55,9 +74,9 @@ export function translateMessages(
   // 3. Translate each message
   for (const msg of messages) {
     if (msg.role === 'user') {
-      translateUserMessage(msg, result, knownToolUseIds, imageSaver);
+      translateUserMessage(msg, result, knownToolUseIds, imageSaver, promptCacheBreakpoints);
     } else if (msg.role === 'assistant') {
-      translateAssistantMessage(msg, result, effectiveThinkingEnabled);
+      translateAssistantMessage(msg, result, effectiveThinkingEnabled, promptCacheBreakpoints);
     }
   }
 
@@ -69,8 +88,9 @@ function translateUserMessage(
   result: OpenAIMessage[],
   knownToolUseIds: Set<string>,
   imageSaver?: ToolImageSaver,
+  promptCacheBreakpoints = false,
 ): void {
-  // String content → simple user message
+  // String content → simple user message (no cache_control possible)
   if (typeof msg.content === 'string') {
     result.push({ role: 'user', content: msg.content });
     return;
@@ -94,30 +114,39 @@ function translateUserMessage(
     }
   }
 
-  // Emit tool messages first (OpenAI requires tool responses before next user message)
+  // Emit tool messages first (OpenAI requires tool responses before next user message).
+  // Each tool_result's own cache_control marker (if any) is projected onto the tool
+  // message's first text content part; absent marker → legacy string content shape.
   for (const tr of toolResults) {
-    result.push({
-      role: 'tool',
-      tool_call_id: tr.tool_use_id,
-      content: extractToolResultContent(tr, imageSaver),
-    });
+    const text = extractToolResultContent(tr, imageSaver);
+    const breakpoint = projectPromptCacheBreakpoint(promptCacheBreakpoints, tr.cache_control);
+    if (breakpoint && text) {
+      result.push({
+        role: 'tool',
+        tool_call_id: tr.tool_use_id,
+        content: [{ type: 'text', text, prompt_cache_breakpoint: breakpoint }],
+      });
+    } else {
+      result.push({ role: 'tool', tool_call_id: tr.tool_use_id, content: text });
+    }
   }
 
   // Convert orphan tool_results to user text (session rewind can leave orphan references)
   for (const tr of orphanToolResults) {
     const content = extractToolResultContent(tr, imageSaver);
     if (content) {
-      otherBlocks.push({
-        type: 'text',
-        text: `[Previous tool result]:\n${content}`,
-      });
+      otherBlocks.push({ type: 'text', text: `[Previous tool result]:\n${content}` });
     }
   }
 
-  // Emit remaining content as user message (if any)
+  // Emit remaining content as user message (if any). Only switch to the parts
+  // array shape if a content part actually carries a breakpoint — otherwise
+  // preserve the legacy single-string short form so the wire is byte-identical
+  // when projection is disabled or unused.
   if (otherBlocks.length > 0) {
-    const parts = convertToOpenAIParts(otherBlocks);
-    if (parts.length === 1 && parts[0].type === 'text') {
+    const parts = convertToOpenAIParts(otherBlocks, promptCacheBreakpoints);
+    const anyBreakpoint = parts.some(p => p.type === 'text' && p.prompt_cache_breakpoint);
+    if (parts.length === 1 && parts[0].type === 'text' && !anyBreakpoint) {
       result.push({ role: 'user', content: parts[0].text });
     } else if (parts.length > 0) {
       result.push({ role: 'user', content: parts });
@@ -125,13 +154,18 @@ function translateUserMessage(
   }
 }
 
-function translateAssistantMessage(msg: AnthropicMessage, result: OpenAIMessage[], thinkingEnabled: boolean): void {
+function translateAssistantMessage(
+  msg: AnthropicMessage,
+  result: OpenAIMessage[],
+  thinkingEnabled: boolean,
+  promptCacheBreakpoints = false,
+): void {
   if (typeof msg.content === 'string') {
     result.push({ role: 'assistant', content: msg.content });
     return;
   }
 
-  const textParts: string[] = [];
+  const textParts: OpenAITextContentPart[] = [];
   const thinkingParts: string[] = [];
   // Note: thought_signature is NOT included here. The bridge handler re-injects it from
   // its cache (handler.ts:106-138) after message translation. See: #68
@@ -139,7 +173,8 @@ function translateAssistantMessage(msg: AnthropicMessage, result: OpenAIMessage[
 
   for (const block of msg.content) {
     if (block.type === 'text') {
-      textParts.push(block.text);
+      const breakpoint = projectPromptCacheBreakpoint(promptCacheBreakpoints, block.cache_control);
+      textParts.push({ type: 'text', text: block.text, ...(breakpoint ? { prompt_cache_breakpoint: breakpoint } : {}) });
     } else if (block.type === 'tool_use') {
       toolCalls.push({
         id: block.id,
@@ -165,9 +200,14 @@ function translateAssistantMessage(msg: AnthropicMessage, result: OpenAIMessage[
   const needsReasoningContent = thinkingParts.length > 0
     || (thinkingEnabled && toolCalls.length > 0);
 
+  const hasBreakpoint = textParts.some(p => p.prompt_cache_breakpoint);
+
+  // Emit assistant content as a parts array only when at least one text part
+  // carries a breakpoint. Otherwise collapse to the legacy joined-string shape
+  // so the wire stays byte-identical to the pre-breakpoint emit.
   const assistantMsg: OpenAIAssistantMessage = {
     role: 'assistant',
-    content: textParts.length > 0 ? textParts.join('') : null,
+    content: hasBreakpoint ? textParts : (textParts.length > 0 ? textParts.map(p => p.text).join('') : null),
     ...(needsReasoningContent ? { reasoning_content: thinkingParts.join('\n') } : {}),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
   };
@@ -208,15 +248,25 @@ function extractToolResultContent(tr: AnthropicToolResultBlock, imageSaver?: Too
   return isError ? `<error>${text}</error>` : text;
 }
 
-function convertToOpenAIParts(blocks: AnthropicContentBlock[]): OpenAIContentPart[] {
+function convertToOpenAIParts(blocks: AnthropicContentBlock[], promptCacheBreakpoints = false): OpenAIContentPart[] {
   const parts: OpenAIContentPart[] = [];
   for (const block of blocks) {
     if (block.type === 'text') {
-      parts.push({ type: 'text', text: block.text });
+      const breakpoint = projectPromptCacheBreakpoint(promptCacheBreakpoints, block.cache_control);
+      parts.push({ type: 'text', text: block.text, ...(breakpoint ? { prompt_cache_breakpoint: breakpoint } : {}) });
     } else if (block.type === 'image') {
       parts.push(translateImageBlock(block));
     }
     // tool_use and tool_result are handled separately
+  }
+  return parts;
+}
+
+function systemToOpenAITextParts(system: AnthropicSystemBlock[], promptCacheBreakpoints: boolean): OpenAITextContentPart[] {
+  const parts: OpenAITextContentPart[] = [];
+  for (const block of system) {
+    const breakpoint = projectPromptCacheBreakpoint(promptCacheBreakpoints, block.cache_control);
+    parts.push({ type: 'text', text: block.text, ...(breakpoint ? { prompt_cache_breakpoint: breakpoint } : {}) });
   }
   return parts;
 }

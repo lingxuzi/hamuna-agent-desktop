@@ -153,6 +153,35 @@ function isUnsupportedPromptCacheKeyDescriptor(value: string): boolean {
     || /\b(?:additional|extra)\b.*\b(?:parameter|field|argument|property)\b.*\bprompt_cache_key\b/i.test(value);
 }
 
+// ponytail: kept inline (not refactored into shared schema-field descriptor)
+// until a third call site appears — CLAUDE.md §3 精准改动.
+function isUnsupportedPromptCacheBreakpointDescriptor(value: string): boolean {
+  return /\b(?:unknown|unsupported|unrecognized|unexpected)\b.*\b(?:parameter|field|argument|property)?\b.*\bprompt_cache_breakpoint\b/i.test(value)
+    || /\bprompt_cache_breakpoint\b.*\b(?:unknown|unsupported|unrecognized|unexpected|not supported)\b/i.test(value)
+    || /\b(?:additional|extra)\b.*\b(?:parameter|field|argument|property)\b.*\bprompt_cache_breakpoint\b/i.test(value);
+}
+
+/**
+ * Single-rule classifier for "upstream rejects explicit `prompt_cache_breakpoint`
+ * markers in this request". Whenever ANY 4xx mentions `prompt_cache_breakpoint`,
+ * the bridge downgrades for this token (sticky) and re-runs the translator
+ * without projection. Coarser than myagents' 3-branch classifier (`field` /
+ * `developer_role` / `content_shape`) — see plan; upgrade path documented in
+ * the project plan file.
+ */
+function isUnsupportedPromptCacheBreakpointError(status: number, body: string): boolean {
+  if (status !== 400 && status !== 422) return false;
+  const structured = extractUpstreamErrorFields(body);
+  const descriptor = [
+    structured?.message,
+    structured?.code,
+    structured?.type,
+  ].filter(Boolean).join(' ');
+  const haystack = descriptor || body;
+  return /prompt_cache_breakpoint/i.test(haystack)
+    && isUnsupportedPromptCacheBreakpointDescriptor(haystack);
+}
+
 /**
  * Some "responses"-format upstreams ship an incomplete Responses schema
  * (missing `function_call` / `function_call_output` input variants) and
@@ -382,6 +411,16 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
     const effectiveModelMapping = upstream.modelMapping ?? config.modelMapping;
     const upstreamFormat = isResponses ? 'responses' : 'chat_completions';
     const promptCacheKey = resolvePromptCacheKey(upstream, anthropicReq.model, upstreamFormat);
+    // Explicit cache breakpoint projection is gated on three things being true
+    // simultaneously: session-mode cache is on, we have a session id to anchor
+    // against, AND the registry hasn't sticky-downgraded this token for that
+    // provider. The flag is mutable so the retry block below can flip it off
+    // and re-run the translator without affecting the upstream.config snapshot.
+    let promptCacheBreakpointsEnabled =
+      upstream.cacheAffinity?.promptCacheKeyMode === 'session'
+      && Boolean(upstream.cacheAffinity.sessionId?.trim())
+      && !upstream.cacheAffinity.promptCacheBreakpointsDisabled;
+    let promptCacheBreakpointsRetryAttempted = false;
     const translatedReq = isResponses
       ? translateRequestToResponses(anthropicReq, {
           modelOverride: upstream.model,
@@ -389,6 +428,7 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           imageSaver,
           reasoningEffort: upstream.reasoningEffort,
           promptCacheKey,
+          promptCacheBreakpoints: promptCacheBreakpointsEnabled,
         })
       : translateRequest(anthropicReq, {
           modelMapping: effectiveModelMapping,
@@ -396,6 +436,7 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           imageSaver,
           reasoningEffort: upstream.reasoningEffort,
           promptCacheKey,
+          promptCacheBreakpoints: promptCacheBreakpointsEnabled,
         });
     const translatedModel = (translatedReq as { model: string }).model;
     if (upstream.reasoningEffort
@@ -643,6 +684,7 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
             imageSaver,
             reasoningEffort: upstream.reasoningEffort,
             promptCacheKey: resolvePromptCacheKey(upstream, anthropicReq.model, 'chat_completions'),
+            promptCacheBreakpoints: promptCacheBreakpointsEnabled,
           });
           if (upstream.reasoningEffort
               && !shouldSendProviderReasoningEffort(upstream.providerId, newReq.model, upstream.reasoningEffort)) {
@@ -674,6 +716,54 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           upstream.cacheAffinity?.disablePromptCacheKey?.();
           requestBody = stringifyWithoutPromptCacheKey(translatedReq);
           log(`[bridge] ${upstreamFormat} prompt_cache_key unsupported for provider=${upstream.providerId} endpoint=${hashForLog(upstreamUrl)}; disabled for this bridge`);
+          continue;
+        }
+
+        // Explicit cache breakpoint projection was rejected by the upstream.
+        // Sticky-disable for this token and re-translate without projection.
+        // Mirrors the chat_completions fallback above — hamuna has no
+        // translateForAttempt() closure, so we inline the re-translation
+        // (reasoning_effort + max_output_tokens normalization is duplicated
+        // here because requestBody is rebuilt from translatedReq).
+        const canRetryWithoutPromptCacheBreakpoints =
+          !promptCacheBreakpointsRetryAttempted
+          && promptCacheBreakpointsEnabled
+          && Boolean(upstream.cacheAffinity?.disablePromptCacheBreakpoints)
+          && isUnsupportedPromptCacheBreakpointError(status, errBody);
+        if (canRetryWithoutPromptCacheBreakpoints) {
+          promptCacheBreakpointsRetryAttempted = true;
+          promptCacheBreakpointsEnabled = false;
+          upstream.cacheAffinity?.disablePromptCacheBreakpoints?.();
+          const newReq = isResponses
+            ? translateRequestToResponses(anthropicReq, {
+                modelOverride: upstream.model,
+                modelMapping: effectiveModelMapping,
+                imageSaver,
+                reasoningEffort: upstream.reasoningEffort,
+                promptCacheKey,
+                promptCacheBreakpoints: false,
+              })
+            : translateRequest(anthropicReq, {
+                modelMapping: effectiveModelMapping,
+                modelOverride: upstream.model,
+                imageSaver,
+                reasoningEffort: upstream.reasoningEffort,
+                promptCacheKey,
+                promptCacheBreakpoints: false,
+              });
+          if (upstream.reasoningEffort
+              && !shouldSendProviderReasoningEffort(upstream.providerId, newReq.model, upstream.reasoningEffort)) {
+            delete (newReq as OpenAIRequest & { reasoning_effort?: string }).reasoning_effort;
+          }
+          const retryTokenCap = upstream.maxOutputTokens ?? config.maxOutputTokens;
+          if (retryTokenCap) {
+            const paramName = upstream.maxOutputTokensParamName ?? 'max_tokens';
+            (newReq as OpenAIRequest & { [key: string]: unknown })[paramName] = retryTokenCap;
+          }
+          (translatedReq as { model: string }).model = newReq.model;
+          Object.assign(translatedReq as object, newReq as object);
+          requestBody = JSON.stringify(translatedReq);
+          log(`[bridge] ${upstreamFormat} prompt_cache_breakpoint unsupported for provider=${upstream.providerId} endpoint=${hashForLog(upstreamUrl)}; disabled for this bridge`);
           continue;
         }
 
