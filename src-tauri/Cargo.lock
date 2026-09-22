@@ -2456,7 +2456,7 @@ dependencies = [
 
 [[package]]
 name = "hamuna"
-version = "0.3.205"
+version = "0.3.207"
 dependencies = [
  "active-win-pos-rs 0.11.0",
  "axum",
