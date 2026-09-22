@@ -20,7 +20,7 @@
  * duplicated transformation into this helper instead of copy-pasting.
  */
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 import type { McpServerDefinition } from '../../shared/config-types';
 import { buildMcpSubprocessEnv } from '../session-core/mcp-env-policy';
@@ -75,6 +75,12 @@ export async function transformMcpServerForSpawn(
     command = cusePath;
   }
 
+  // Build MCP config with proxy env inherited from parent Sidecar.
+  // MCP subprocesses need outbound proxy inheritance, while localhost still
+  // needs NO_PROXY protection. Per-server env has final authority so users
+  // can work around downstream proxy parser bugs for a specific MCP.
+  const env = buildMcpSubprocessEnv(process.env, server.env);
+
   // For npx commands: prefer system npx → bundled Node.js npx → bun x.
   // System Node.js is maintained by the user's package manager, more reliable
   // than our bundled npm. Bundled Node.js serves as fallback.
@@ -84,13 +90,23 @@ export async function transformMcpServerForSpawn(
     });
     command = invocation.command;
     args = invocation.args;
+    // Prepend the directory holding the resolved npx shim so the shim
+    // itself can locate `node.exe` on Windows. `npx.cmd` is a one-line
+    // Node launcher — if the Sidecar's inherited PATH omits the bundled
+    // node dir (e.g. when launched by Tauri without an explicit shell
+    // PATH), Windows cmd reports `node is not recognized as an internal
+    // or external command` and the spawn fails before any handshake
+    // attempt. The injected dir is the same one `resolveNpxMcpInvocation`
+    // just selected, so bundled vs system npx both get the right node.
+    // De-dup against the existing PATH to keep env size bounded.
+    const npxDir = dirname(command);
+    const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+    const sep = process.platform === 'win32' ? ';' : ':';
+    const currentPath = env[pathKey] || '';
+    if (!currentPath.split(sep).includes(npxDir)) {
+      env[pathKey] = `${npxDir}${sep}${currentPath}`;
+    }
   }
-
-  // Build MCP config with proxy env inherited from parent Sidecar.
-  // MCP subprocesses need outbound proxy inheritance, while localhost still
-  // needs NO_PROXY protection. Per-server env has final authority so users
-  // can work around downstream proxy parser bugs for a specific MCP.
-  const env = buildMcpSubprocessEnv(process.env, server.env);
 
   // uvx PATH injection (Windows only). The Windows installer no longer bundles
   // a uvx.exe — it runs `pip install --user uv` and registers the resulting
