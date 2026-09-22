@@ -5186,12 +5186,10 @@ async function main() {
 
               const warmupCmd = invocation.command;
               const warmupArgs = [...invocation.args, '--help'];
-              const npxDir = dirname(warmupCmd);
-              const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
-              const sep = process.platform === 'win32' ? ';' : ':';
-              if (!(baseEnv[pathKey] || '').split(sep).includes(npxDir)) {
-                baseEnv[pathKey] = npxDir + sep + (baseEnv[pathKey] || '');
-              }
+              // PATH is already rebuilt by `getShellEnv()` (bundled Node, system
+              // Node, ~/.hamuna/bin, Git, etc. — see utils/shell.ts). On Windows
+              // the resolver hands back `node.exe` + `npx-cli.js` directly so
+              // even a bare npx command would resolve without a PATH prepend.
               console.log(`[api/mcp/enable] Warming up via ${invocation.source} npx: ${warmupArgs.join(' ')}`);
 
               const handle = wrappedSpawn([warmupCmd, ...warmupArgs], {

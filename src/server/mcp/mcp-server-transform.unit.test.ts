@@ -101,13 +101,12 @@ describe('transformMcpServerForSpawn — macOS PATH injection', () => {
     expect(path.indexOf(PY_X64)).toBeLessThan(path.indexOf(PY_ARM));
   });
 
-  it('on non-darwin (e.g. linux), PATH is unchanged for agnes command', async () => {
+  it('on non-darwin (e.g. linux), PATH starts with the platform-rebuilt fallback (not raw parentEnv.PATH)', async () => {
     Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
     Object.defineProperty(process, 'arch', { value: 'x64', configurable: true });
     vi.mocked(getBundledPythonBinDir).mockReturnValue(null);
     vi.mocked(getBundledAgnesMcpBinDirs).mockReturnValue([]);
 
-    const originalPath = process.env.PATH ?? '';
     const result = await transformMcpServerForSpawn({
       id: 'multimedia-creator',
       name: 'multimedia-creator',
@@ -118,7 +117,14 @@ describe('transformMcpServerForSpawn — macOS PATH injection', () => {
       env: {},
     });
 
-    expect(result.spawn!.env.PATH).toBe(originalPath);
+    const pathStr = result.spawn!.env.PATH;
+    // The PATH now comes from getShellPath() which prepends platform fallback
+    // (homebrew, /usr/bin, bundled node, etc.) so an MCP child spawned by a
+    // Sidecar launched without a login shell PATH can still find binaries.
+    expect(pathStr).toBeTruthy();
+    expect(pathStr.split(':')[0]).toMatch(/opt\/homebrew|usr\/local|usr\/bin|bin/);
+    // Inherited PATH is preserved at the tail.
+    expect(pathStr.endsWith(process.env.PATH ?? '')).toBe(true);
   });
 
   it('skips missing staging dirs (helper returns null) without breaking PATH', async () => {
@@ -161,14 +167,10 @@ describe('transformMcpServerForSpawn — macOS PATH injection', () => {
   });
 });
 
-describe('transformMcpServerForSpawn — npx PATH injection', () => {
+describe('transformMcpServerForSpawn — npx resolution', () => {
   const originalPlatform = process.platform;
 
   beforeEach(() => {
-    // Real getBundledNodeDir() output drives the resolved npx path; we don't
-    // need to mock it because the helper falls back to PATH lookups when
-    // bundled node isn't staged (CI dev box has staged node, but the test
-    // asserts the prepend behaviour, not the resolution source).
     vi.mocked(getBundledPythonBinDir).mockReset().mockReturnValue(null);
     vi.mocked(getBundledAgnesMcpBinDirs).mockReset().mockReturnValue([]);
   });
@@ -177,8 +179,23 @@ describe('transformMcpServerForSpawn — npx PATH injection', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
   });
 
-  it('prepends the resolved npx dir to PATH so the .cmd shim can locate node.exe', async () => {
+  it('on win32 spawns the resolved command verbatim (resolver hands back node.exe+npx-cli.js)', async () => {
+    // The Windows-npx strategy (node.exe + npx-cli.js) is asserted in
+    // utils/mcp-command.unit.test.ts; here we only need to confirm transform
+    // does not re-introduce a .cmd shim via PATH prepend. We mock the
+    // resolver to return a known node.exe path so the assertion is stable
+    // across dev boxes (which may or may not have a staged Win node).
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const spy = vi.spyOn(
+      await import('../utils/mcp-command'),
+      'resolveNpxMcpInvocation',
+    );
+    spy.mockReturnValue({
+      command: 'C:\\staged\\node\\node.exe',
+      args: ['C:\\staged\\node\\node_modules\\npm\\bin\\npx-cli.js', '-y', '@mobilenext/mobile-mcp@latest'],
+      source: 'bundled',
+    });
+
     const result = await transformMcpServerForSpawn({
       id: 'mobile-control',
       name: 'mobile-control',
@@ -189,30 +206,15 @@ describe('transformMcpServerForSpawn — npx PATH injection', () => {
       env: {},
     });
 
-    expect(result.spawn!.command).toMatch(/npx\.cmd$/);
-    const npxDir = result.spawn!.command.replace(/[\\/]npx\.cmd$/, '');
-    // Windows helper writes `Path` (cmd.exe's casing); POSIX keeps `PATH`.
-    // The contract is: npxDir is the FIRST entry so the .cmd shim resolves
-    // its sibling node.exe before any other PATH node. We split on both
-    // separators so the test is platform-agnostic.
-    const envPath = result.spawn!.env.Path ?? result.spawn!.env.PATH ?? '';
-    const firstSegment = envPath.split(/[;:]/)[0];
-    expect(firstSegment).toBe(npxDir);
-    // And it's only present once — de-dup against inherited PATH.
-    const occurrences = envPath.split(/[;:]/).filter((seg) => seg === npxDir).length;
-    expect(occurrences).toBe(1);
+    expect(result.spawn!.command.toLowerCase()).toMatch(/node\.exe$/);
+    expect(result.spawn!.command.toLowerCase()).not.toMatch(/npx\.cmd$/);
+    expect(result.spawn!.args[0]).toMatch(/npx-cli\.js$/);
+    expect(result.spawn!.args.slice(1)).toEqual(['-y', '@mobilenext/mobile-mcp@latest']);
+    spy.mockRestore();
   });
 
-  it('does not duplicate the npx dir when it is already on PATH', async () => {
+  it('on darwin keeps the direct npx binary (no shim layer to bypass)', async () => {
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-    // resolveNpxMcpInvocation picks the first existing path from
-    // getSystemNpxPaths(); on the dev box the bundled node bin dir is
-    // prepended there, so feeding it back through the transform must NOT
-    // produce a doubled entry. We construct the test by writing the
-    // resolved path into a synthetic PATH before calling the transform
-    // — but transform reads env from buildMcpSubprocessEnv(process.env,
-    // server.env) which spreads process.env. Easier: just assert the
-    // resolved command's dir is present exactly once at the head of PATH.
     const result = await transformMcpServerForSpawn({
       id: 'mobile-control',
       name: 'mobile-control',
@@ -223,9 +225,7 @@ describe('transformMcpServerForSpawn — npx PATH injection', () => {
       env: {},
     });
 
-    const npxDir = result.spawn!.command.replace(/\/npx$/, '');
-    const pathStr = result.spawn!.env.PATH ?? '';
-    const occurrences = pathStr.split(':').filter((seg) => seg === npxDir).length;
-    expect(occurrences).toBe(1);
+    expect(result.spawn!.command).toMatch(/npx$/);
+    expect(result.spawn!.args).toEqual(['-y', '@mobilenext/mobile-mcp@latest']);
   });
 });

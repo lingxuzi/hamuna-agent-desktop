@@ -4,14 +4,12 @@
 > 维护规则：每次会话开始 / 任何文件改动后 MUST 更新本文件。snapshot.md 不允许无限增长；已完成项落地到 §4 git log / 删除 narrative 后立即清出本节。
 > **硬约束**：snapshot.md ≤ 500 行。
 
-## §0 narrative 历史压缩锚点（2026-09-21 · snapshot 增补）
+## §0 narrative 历史压缩锚点（2026-09-22 · snapshot 增补）
 
-§0 之前累积的 3 段超长 narrative（#182 launcher mockup / #174-176 landing v5 全链路 / #166 wizard step 2）已折叠到下方一行锚点；详细设计取舍见 git log + 对应 spec：
+§0 之前累积的 4 段超长 narrative（#182 launcher / #174-176 landing v5 / #166 wizard step 2）已折叠到下方一行锚点；详细设计取舍见 git log + 对应 spec：
 
-- **#187 MiniApp Desktop App PRD v0.3**（2026-09-21）— `specs/prd/miniapp.md` 680 行；**v0.3 反转 v0.2 决策**：v0.4.0 MVP = **Icon Design Demo** + **4 个新基础设施**（MiniApp Runner / FloatingMiniChat Bubble Claim / MiniApp Cowork Sidecar / MiniApp Worker Manager）+ `app.ai.chat` SSE relay。**架构同步 openbitfun**：独立 Scene Tab + Bubble Claim bridge + MiniApp 自有 Cowork Sidecar（owner = `miniapp-agent:<app_id>:<run_id>`，永不主动关）+ Node v24 `worker_threads` 沙箱（**不引 Bun**）。**Bridge API 完整对齐 openbitfun**：恢复 `app.ai.chat/cancel/contextFiles` + `app.agent.*` + `app.call` + `app.chat.claimComposer`；schema 新增 `permissions.agent/chat/node` 三块。**新增治理**：Cowork Sidecar 进程 ≤3 + LRU evict + abortPersistentSession 5 场景触发 + Worker Manager Rust 新模块。详见 §15 评审清单 8 项 + §11 红线 15 条 + §13 风险 14 项 + §14 scope-out 11 项。本地草稿，gitignore `specs/prd/` 不入库。
-- **#182 desktop launcher 风格 4 方案 HTML mockup v2**（2026-09-19）— 4 个 mockup（A Hallmark editorial / B Marquee hero / C Stacked index / D Card trio）用 hamuna theme token 重写，全 4 方案仍未拍板落地 Launcher.tsx；详见 `pages/launcher-mockups/option-{a,b,c,d}.html` + 截图自评。
-- **#174-176 landing v5 全链路**（2026-09-19）— v5 走"杂志感 + 长读节奏"，hero sans 92px + caps 2-col 11 段 + cap.5 21:9 视频锚点 + closer 112px；#175 landing 下载地址修正为 R2 prod `pub-xxx.r2.dev`（4 个 bug：NXDOMAIN endpoint / schema 解析 / wrong硬编版本 / R2 CORS） + `./bump_landing_version.{sh,ps1}` 脚本；#176 v5.1 caps 内 SVG mini-demo 10 段全 `prefers-reduced-motion` 降级 + IntersectionObserver `animation-play-state: running`；#177 en 文案重译 + #178 clarify 体检 + #179 audit P1（skip-link / `<main>` 包 `<section>` / SVG `var(--bg-elevated)` / responsive adapt） + #180 polish 7 处（--dim contrast 4.7→6.2 / caps.words 64ch / IO rootMargin / dl-btn `<a download>` / focus ring 0.6 / skip-link top:60 / 560px closer 38ch）。详见 `pages/landing/index.html` + 11 张截图 + `bump_landing_version.{sh,ps1}`。
-- **#166 wizard step 2 结构化错误路由 + 陈旧数据提示**（2026-09-18）— `NxgdDiscoveryResult` discriminated union + `NxgdDiscoveryError({ kind:'rate-limit'|'network' })` + 502 envelope 加 `checkedAt` + UI 加 `AlertTriangle` + 6 unit + 9 component testcase 全绿。详见 `src/server/nxgd-auth.ts` + `src/renderer/config/services/nxgdSubscriptionService.ts` + `NxgdOnboardingWizard.tsx`。
+- **#187 MiniApp Desktop App PRD v0.3**（2026-09-21）— `specs/prd/miniapp.md` 680 行；**v0.3 反转 v0.2 决策**：v0.4.0 MVP = **Icon Design Demo** + **4 个新基础设施**（MiniApp Runner / FloatingMiniChat Bubble Claim / MiniApp Cowork Sidecar / MiniApp Worker Manager）+ `app.ai.chat` SSE relay。**架构同步 openbitfun**：独立 Scene Tab + Bubble Claim bridge + MiniApp 自有 Cowork Sidecar（owner = `miniapp-agent:<app_id>:<run_id>`，永不主动关）+ Node v24 `worker_threads` 沙箱（**不引 Bun**）。**Bridge API 完整对齐 openbitfun**：恢复 `app.ai.chat/cancel/contextFiles` + `app.agent.*` + `app.call` + `app.chat.claimComposer`；schema 新增 `permissions.agent/chat/node` 三块。详见 §15 评审清单 8 项 + §11 红线 15 条 + §13 风险 14 项 + §14 scope-out 11 项。本地草稿，gitignore `specs/prd/` 不入库。
+- **#182/#174-176/#166** — launcher 4 风格 mockup（A Hallmark / B Marquee / C Stacked / D Card）+ landing v5 全链路（hero 92px + caps 2-col 11 段 + 21:9 视频锚点 + R2 prod endpoint 修正 + a11y P1 audit + polish 7 处）+ wizard step 2 结构化错误路由（`NxgdDiscoveryResult` discriminated union + 502 envelope `checkedAt`）。详见 `pages/launcher-mockups/` + `pages/landing/index.html` + `bundled-skills/hamuna-writing-system/`。
 
 ## 1. 模块状态总览
 
@@ -328,8 +326,18 @@
 
 ### 3.3 待办池
 
-#### TODO #185 — 工具箱默认 npx 工具在 Windows 打不开（bundled `nodejs/` 缺 `npx.cmd`）🚧
-**触发**：用户报"工具箱里默认的工具在 windows 下使用 npx 安装的都打不开" + 补充"测试了一下好像 windows 版本没有自动安装 npx"。**根因**：Windows bundled `<install-dir>/nodejs/` 缺 `npx.cmd` —— `scripts/download_nodejs.sh::download_windows()` (line 432-486) 应当准备 `node.exe` + `npm.cmd` + `npx.cmd` + `node_modules/` flat layout，但 `check_existing()` (line 180-230) 只校验 `node.exe` + version + platform + arch，**不校验 `npx.cmd` / `npm.cmd` 存在**；`download_windows` line 467 的 `cp ... 2>/dev/null || true` 静默吞错。**修复方向**（主线）：硬约束 check_existing 在 Windows 必须 `npx.cmd` + `npm.cmd` 都存在；去掉 `|| true`；脚本末尾加 `ls -la` 自检。**辅助**：`getSystemNpxPaths` 把 bundled 路径作为 first source。**验证**：本地 `bash scripts/download_nodejs.sh --windows x64` 跑出正确 flat layout；windows-release.yml smoke test (TODO #127) 加 1 段 assert `npx.cmd` 存在 + `npx --version` exit 0。**scope-out**：SDK StdioClientTransport / subprocess.ts::spawn / process_cmd.rs 全 0 改动；bundled Node v24.19.0 版本不动；macOS/Linux `bin/npx` shim 不动；`mobile-control` `npx -y @mobilenext/mobile-mcp@latest` 调用契约不动。**受影响**：`extended_buildin_mcp/mcp.json::mobile-control` + 所有用户手填 `command:"npx"` 的 stdio MCP。**下一步**：AskUserQuestion 让 user 拍板修哪边（脚本自检 + smoke vs 只改一边）。详细 5 候选根因 + 修复细节见 git log（commit 落地后补 commit hash）。
+#### TODO #185 — 工具箱默认 npx 工具在 Windows 打不开（bundled `nodejs/` 缺 `npx.cmd`）✅ DONE（根因 2 + MyAgents Win 策略）
+**触发**：用户报"工具箱里默认的工具在 windows 下使用 npx 安装的都打不开" + "windows 更新完还是那个问题 node is not recognized"。v1 落地（`275d80b`）修 `scripts/download_nodejs.sh::check_existing()`；实测仍 `node is not recognized`。**两个根因**：(a) Windows `npx.cmd` 是 one-line Node launcher，cmd.exe 解析要 `node` 在 PATH 上；Tauri 启动 Sidecar 不继承 login shell PATH 时直接失败。(b) `transformMcpServerForSpawn` 用 `buildMcpSubprocessEnv` 透传 raw `parentEnv.PATH`，而 prewarm 路径走 `getShellEnv()` 重建（bundled Node + `~/.hamuna/bin` + Git + NVM/fnm/volta + homebrew）—— SDK assembly / startup validator / runtime spawn 全走 raw parentEnv = 同一 npx 在不同路径能 / 不能启动。
+
+**对照 MyAgents 调研**（2026-09-22 拍板）：MyAgents Win 策略**完全不用 .cmd shim**，`resolveNpxMcpInvocation` Win 分支返回 `{ command: node.exe, args: [node_modules/npm/bin/npx-cli.js, -y, ...] }`，npx-cli.js 是 npm 内置直接走 `node.exe`；我们原 Win 返回 `npx.cmd` 依赖 PATH 找 node = 脆弱链。
+
+**修法**（4 文件 + 1 新测试）：(1) `src/server/utils/mcp-command.ts::resolveNpxMcpInvocation` Win 改走 `resolveWindowsNodeNpxInvocation`（找 node.exe + `node_modules/npm/bin/npx-cli.js`），POSX 保持直调；找不到完整 Node + npxCli 对时 throw `NpxMcpResolutionError`；**根本消除 .cmd shim 层**。(2) `src/server/mcp/mcp-server-transform.ts::env[pathKey] = getShellPath()` —— transform 与 prewarm 共享同一 PATH 重建（bundled Node 在 PATH 头部）；删 `1008c11` 的 npx-dir prepend；`env.PATH =` (uvx / macOS prepended) 改 `env[pathKey] =` 统一大小写防 Win `Path`/`PATH` 双键。(3) `src/server/index.ts:5183-5194` 删 prewarm 的 npx-dir prepend（`getShellEnv()` 已含 bundled Node）。(4) `src/server/utils/mcp-command.unit.test.ts` NEW 5 case：Win system/bundled/win-throw/POSX/`-y` 去重。
+
+**测试**（全绿）：mcp-command 5/5 + mcp-server-transform 7/7 + mcp-startup-validator 11/11 + mcp-env-policy 5/5 不回归 + integration 43/43 (348 tests) + classification 206 server tests + typecheck 0 + eslint 0。**pre-existing 5 failed 不增不减**（analytics/theme×2/widgetSandbox/playwright-bash）。
+
+**scope-out**：不删 `1008c11` 提交（同方向早期 attempt 留 git 历史）；不改 MyAgents `buildSessionExecutablePath` 整体搬迁（带 `~/.myagents/bin` 产品路径与我们 `~/.hamuna/bin` 不一致，只复刻模式 + 节点）；`buildMcpSubprocessEnv` 的 `if (parentEnv.PATH && env.PATH === undefined)` fallback 保留；`findPipInstalledUvxScriptsDir` / `agent-session.ts` uvx spawn 0 改动；不加 Win node shim 镜像（bundled node v24.19.0 npm CLI 已含 npx-cli.js，零新增资源）。
+
+**版本流转**：patch bump-on-commit。**follow-up**：(a) 真实 Windows GUI 端到端验证（user 重装 v0.3.205）；(b) `agent-session.ts::buildSdkMcpServers` 是否也走 transform（已走 ✓）。
 
 #### TODO #17 — 2nd UGC 后半 5 段视频 🔄 quota-pending
 **触发**：TODO #104 1st UGC 成功后用户要求再跑一次端到端验证 URL 复用。**撞 429 daily quota**（request IDs: `20260908063506204136165EwLlEv8i` / `20260908064500904279309wqCF2qMO`），17h 24min 直至 2026-09-09 00:00 UTC 刷新。
@@ -382,16 +390,7 @@
 | `368ee90` | **fix(attachments) override `source` to inline_base64 when rebasing attachment_ref** |
 | `079c96f` | **docs(tvc-director) switch video model agnes-video-2.5 → agnes-video-2.5-flash** |
 | `7191b91` | **fix(tvc-director) video prompt must reference both `<Picture 1>` (grid) and `<Picture 2>` (product)** |
-| `ea9b524` | **fix(attachments) rebase workspace attachment_ref previews to data URLs at send time** |
-| `51f3f98` | **feat(attachments) trash workspace file when an image attachment is removed** |
-| `c70fd60` | **fix(attachments) replace `node:path.join` with renderer-safe `joinWorkspacePath`** |
-| `0f1073e` | **feat(tvc-director) enforce strict tool contract** |
-| `db191e2` | **fix(tvc-director) align SKILL.md to agnes-video-25-mcp v0.1.3 tool surface** |
-| `220abea` | **fix(tvc-director) anchor storyboard objects via physics + layout hard constraints** |
-| `1d6743a` | **test(tvc-director) validate spec portability with afternoon_tea archetype + 2 PNG renders** |
-| `014453d` | **feat(tvc-director) add canonical morning-rush fixture as future-spec baseline** |
-| `4b5c90c` | **feat(mcp) introduce agnes-video-25 + unify media MCP under id="multimedia-creator"** |
-| `7f8c60d` | **feat(extended-builtin-mcp) add `${bundled:REL_PATH}` placeholder for portable MCP args** |
+更早完成（#11—#28 / #29 / #97 / #14 / #16 / #12 / #17—#21 / 60s TVC 迭代 v9—v12 / `220abea` `0f1073e` `c70fd60` `51f3f98` `ea9b524` `db191e2` `1d6743a` `014453d` `4b5c90c` `7f8c60d`）：`git log --oneline --grep="..."` 或 `git show <commit>`。
 
 更早完成（#11—#28 / #29 / #97 / #14 / #16 / #12 / #17—#21 / 60s TVC 迭代 v9—v12）：`git log --oneline --grep="..."` 或 `git show <commit>`。
 

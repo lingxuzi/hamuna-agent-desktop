@@ -20,12 +20,13 @@
  * duplicated transformation into this helper instead of copy-pasting.
  */
 import { existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { join } from 'path';
 
 import type { McpServerDefinition } from '../../shared/config-types';
 import { buildMcpSubprocessEnv } from '../session-core/mcp-env-policy';
 import { resolveNpxMcpInvocation } from '../utils/mcp-command';
 import { getHamunaAgentUserDir } from '../utils/project-user-config-sync';
+import { getShellPath } from '../utils/shell';
 import {
   findPipInstalledUvxScriptsDir,
   getBundledAgnesMcpBinDirs,
@@ -79,33 +80,29 @@ export async function transformMcpServerForSpawn(
   // MCP subprocesses need outbound proxy inheritance, while localhost still
   // needs NO_PROXY protection. Per-server env has final authority so users
   // can work around downstream proxy parser bugs for a specific MCP.
-  const env = buildMcpSubprocessEnv(process.env, server.env);
+  //
+  // PATH starts from `getShellPath()` — the platform-rebuilt PATH the Sidecar
+  // also uses for itself (bundled Node, system Node, ~/.hamuna/bin, npm
+  // global, Git, homebrew, NVM/fnm/volta, etc.). This matches what the
+  // prewarm path in `/api/mcp/enable` already does, so an npx MCP enabled
+  // via warmup and the same MCP spawned by the SDK both see identical
+  // binary resolution. Bare inherited `process.env.PATH` is unreliable
+  // when the Sidecar is launched by Tauri without a login shell.
+  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+  const env: Record<string, string> = buildMcpSubprocessEnv(process.env, server.env);
+  env[pathKey] = getShellPath();
 
   // For npx commands: prefer system npx → bundled Node.js npx → bun x.
-  // System Node.js is maintained by the user's package manager, more reliable
-  // than our bundled npm. Bundled Node.js serves as fallback.
+  // On Windows the resolver returns `node.exe` + `npx-cli.js` directly,
+  // bypassing the .cmd shim entirely (so PATH needs no node-dir prepend —
+  // getShellPath() already puts bundled Node first). POSIX keeps the
+  // direct `npx` binary.
   if (command === 'npx') {
     const invocation = resolveNpxMcpInvocation(args, {
       pinPresetPackages: server.isBuiltin === true,
     });
     command = invocation.command;
     args = invocation.args;
-    // Prepend the directory holding the resolved npx shim so the shim
-    // itself can locate `node.exe` on Windows. `npx.cmd` is a one-line
-    // Node launcher — if the Sidecar's inherited PATH omits the bundled
-    // node dir (e.g. when launched by Tauri without an explicit shell
-    // PATH), Windows cmd reports `node is not recognized as an internal
-    // or external command` and the spawn fails before any handshake
-    // attempt. The injected dir is the same one `resolveNpxMcpInvocation`
-    // just selected, so bundled vs system npx both get the right node.
-    // De-dup against the existing PATH to keep env size bounded.
-    const npxDir = dirname(command);
-    const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
-    const sep = process.platform === 'win32' ? ';' : ':';
-    const currentPath = env[pathKey] || '';
-    if (!currentPath.split(sep).includes(npxDir)) {
-      env[pathKey] = `${npxDir}${sep}${currentPath}`;
-    }
   }
 
   // uvx PATH injection (Windows only). The Windows installer no longer bundles
@@ -119,7 +116,7 @@ export async function transformMcpServerForSpawn(
     const scriptsDir = findPipInstalledUvxScriptsDir();
     if (scriptsDir) {
       const delimiter = process.platform === 'win32' ? ';' : ':';
-      env.PATH = `${scriptsDir}${delimiter}${env.PATH}`;
+      env[pathKey] = `${scriptsDir}${delimiter}${env[pathKey]}`;
     }
   }
 
@@ -150,7 +147,7 @@ export async function transformMcpServerForSpawn(
     }
     prepend.push(...getBundledAgnesMcpBinDirs());
     if (prepend.length > 0) {
-      env.PATH = `${prepend.join(delimiter)}${delimiter}${env.PATH}`;
+      env[pathKey] = `${prepend.join(delimiter)}${delimiter}${env[pathKey]}`;
     }
   }
 
