@@ -362,13 +362,11 @@
 | `f65a609` | **fix(agnes-video-25): widen image_paths schema to make 0.1.7 helper reachable (v0.1.8) + vendor publish + bump mcp.json pin (snapshot TODO #132, vendor 3 文件 + extended_buildin_mcp/mcp.json 1 文件)** |
 | `<pending>` | **feat(bundled-skills): hamuna-writing-system 接 human-writing 硬门禁（阶段三 CHECKPOINT + 阶段四门禁 1 双源并集 + anti-ai-lexicon 顶部 ABSOLUTE 段 + scripts/check_prose.py 副本，TODO #183，4 文件 / +76 -4）** |
 | `<pending>` | **feat(bundled-skills): hamuna-writing-system 完全继承 human-writing 方法论 + 删除 human-writing 独立 skill（5 references 全量搬迁 + prose-methods.md 散文主干合订 + SKILL.md 文体分流 CHECKPOINT + §反例 #7 翻转 + anti-ai-lexicon 改本词典 + check_prose.py 回归用例，TODO #184，9 文件 / 1 删除）** |
+| `b63c915` | **fix(mcp): win32 npx bypasses .cmd shim; transform PATH rebuilt via getShellPath (snapshot TODO #185, 6 文件 / +252 -82; MyAgents Win 策略复刻 — node.exe + node_modules/npm/bin/npx-cli.js 直调，根除 npx.cmd shim 在无 login shell PATH 的 Tauri Sidecar 下"node is not recognized"；`getShellPath()` 替换 raw parentEnv.PATH，transform 与 prewarm 共享同一 PATH 重建；5/5+7/7+11/11+5/5+integration 43/43+classification 206+typecheck 0+eslint 0)** |
 | `<pending>` | **fix(install): switch pip mirror to Aliyun with PyPI fallback (清华源 2026-09-10 timeout, snapshot TODO #128, 2 文件 / +15 -2)** |
-| `<pending>` | **chore(perf): sidecar cold-start bench (scripts/bench_sidecar_cold_start.mjs; P50 475ms / P95 480ms / N=10 linux-x64 / 健康阈值 800ms 内 / 报告 tmp/bench-cold-start-2026-09-18T14-43-10-449Z.md; 下游流式 patch + perf 仪表前置依据)** |
 | `<pending>` | **ci(windows): gate R2 upload on install-time smoke (verifies NSIS UvxFallback lands uv==0.11.33 + uvx --from works, snapshot TODO #127, 1 文件 / +108 -0)** |
 | `<pending>` | **fix(install): pin install-time uv to ==0.11.33 to avoid 0.12.x `uvx --from` tightening (rationale chain 197837b/4812fbe/37a7f21, snapshot TODO #126, 2 文件 / +12 -1)** |
 | `<pending>` | **feat(install): pip-only uvx on Windows (remove bundled uvx.exe, NSIS Section UvxFallback → pip install --user uv from Tsinghua mirror + uvx-path-setup.ps1 HKCU\Environment\Path 持久化, 6 文件 / -48MB bundle)** |
-| `<pending>` | **fix(uvx): pin 0.11.33 as string literal + drop broken GitHub API auto-track (download_uv.ps1 bare-numeric bug 修复)** |
-| `<pending>` | **fix(uv): replace stale bundled uvx.exe 0.12.3 → 0.11.33 (SHA256 c253ce86...; 数据修正，与脚本修复同时提交)** |
 | `e01778f` | v0.3.144 |
 | `f4b6bcd` | docs(snapshot): closeout #125 (download_uv.ps1 string literal pin) |
 | `37a7f21` | fix(uv): pin 0.11.33 as string literal + drop broken GitHub API auto-track |
