@@ -6,6 +6,7 @@ import type { BridgeConfig } from '../types/bridge';
 import type { ToolImageSaver } from './multimodal';
 import { stripModelSuffix } from '../../../shared/contextUsage';
 import { projectPromptCacheBreakpoint } from './cache-semantics';
+import { ensureObjectParameters } from './tools';
 
 
 export interface TranslateRequestResponsesOptions {
@@ -130,7 +131,14 @@ export function translateRequestToResponses(
         // the array branch of `stripSchemaDescriptions` only fires for nested
         // positions (properties[].items / oneOf / anyOf / allOf), so the cast
         // is sound.
-        parameters: stripSchemaDescriptions(t.input_schema) as Record<string, unknown> | undefined,
+        parameters: ensureObjectParameters(
+          // ponytail: server tools (web_search / web_fetch / …) emit undefined
+          // input_schema; strip passes it through. ensureObjectParameters
+          // guarantees a non-empty object so the wire payload keeps the
+          // OpenAI-required `parameters` field and strict upstream
+          // deserializers don't reject with `missing field 'parameters'`.
+          stripSchemaDescriptions(t.input_schema) as Record<string, unknown> | undefined,
+        ),
         strict: false,
       },
     }));

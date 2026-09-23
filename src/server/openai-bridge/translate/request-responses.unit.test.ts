@@ -709,11 +709,28 @@ describe('translateRequestToResponses — tool schemas strip descriptions (Bug F
     expect(out.tools![0].function.description).toBe('kept verbatim');
   });
 
-  it('emits an empty parameters object when input_schema is {} (input_schema is required)', () => {
+  it('emits an empty parameters object when input_schema is {} (user-authored "no parameters" tool)', () => {
     const out = translateRequestToResponses({
       ...baseReq,
       tools: [{ name: 't', input_schema: {} }],
     });
     expect(out.tools![0].function.parameters).toEqual({});
+  });
+
+  // #189 — server-side tools (web_search / web_fetch / code_execution / …)
+  // ship from SDK 0.3.201 with `input_schema` undefined. Wire payload MUST
+  // still carry `parameters` or strict upstream deserializers (Rust serde
+  // untagged enum — agnes) reject with 400 `missing field 'parameters'`.
+  // Regression: req=4ca8e7bc 2026-09-23.
+  it('falls back to {type:"object",properties:{}} when input_schema is undefined (server tool, #189)', () => {
+    const out = translateRequestToResponses({
+      ...baseReq,
+      tools: [{ name: 'web_search' } as never],
+    });
+    expect(out.tools![0].function.name).toBe('web_search');
+    expect(out.tools![0].function.parameters).toEqual({ type: 'object', properties: {} });
+    // JSON-round-trip invariant: `parameters` is present in the wire body.
+    const wire = JSON.stringify({ tools: out.tools });
+    expect(wire).toContain('"parameters"');
   });
 });

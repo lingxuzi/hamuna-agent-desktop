@@ -97,7 +97,14 @@ export interface AnthropicThinkingBlock {
 export interface AnthropicToolDefinition {
   name: string;
   description?: string;
-  input_schema: Record<string, unknown>;
+  // Server-side tools (web_search / web_fetch / code_execution / …) carry no
+  // client input schema. SDK 0.3.201 emits them with `input_schema` undefined;
+  // translators MUST fall back to an empty object schema so the wire payload
+  // keeps the OpenAI-required `parameters` field and strict upstream
+  // deserializers (Rust serde untagged enum — agnes) don't reject with 400
+  // `tools[0].function: missing field 'parameters'`. Regression: req=4ca8e7bc
+  // 2026-09-23.
+  input_schema?: Record<string, unknown>;
   cache_control?: AnthropicCacheControl | null;
 }
 
