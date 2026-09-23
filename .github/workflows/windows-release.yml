@@ -410,6 +410,22 @@ jobs:
           }
           Write-Host ">>> bundled npx.cmd --version = $($npxOut.Trim())"
 
+          # Assert 8/3 (TODO #187 — shim-less npx path needs npx-cli.js too).
+          # v0.3.207's `resolveWindowsNodeNpxInvocation` spawns `node.exe
+          # node_modules/npm/bin/npx-cli.js` directly to bypass the .cmd shim
+          # (cmd.exe reports `node is not recognized` when PATH misses
+          # node.exe). If `npx-cli.js` is missing or stale in the bundled
+          # tree, MCP warmup falls back to throwing `NpxMcpResolutionError`
+          # — but on the upgrade path (TODO #187) the old partial tree can
+          # leave `node.exe` fresh + `npx-cli.js` absent, producing the same
+          # user-facing symptom of "node not found". Catch it at install
+          # time, not at the first MCP spawn in production.
+          $npxCliJs = Join-Path $nodejsDir 'node_modules/npm/bin/npx-cli.js'
+          if (-not (Test-Path $npxCliJs)) {
+            throw 'bundled ' + $npxCliJs + ' missing — v0.3.207 shim-less npx resolver needs npx-cli.js next to node.exe; install-time nodejs/ tree is incomplete'
+          }
+          Write-Host ">>> bundled nodejs/node_modules/npm/bin/npx-cli.js present"
+
           # Cleanup so a follow-up local run on this runner finds nothing
           # leaked. Use the bundled uninstaller; NSIS /S is silent.
           $uninst = Join-Path $testDir "Uninstall.exe"
