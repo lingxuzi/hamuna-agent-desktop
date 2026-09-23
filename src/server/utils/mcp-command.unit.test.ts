@@ -9,7 +9,6 @@ vi.mock('./runtime', async (importOriginal) => {
     ...actual,
     getBundledNodeDir: vi.fn(),
     getBundledNodePath: vi.fn(),
-    getBundledRuntimePath: vi.fn(),
     getSystemNpxPaths: vi.fn(() => []),
     getSystemNodeDirs: vi.fn(() => []),
     findExistingPath: vi.fn(() => null),
@@ -21,7 +20,6 @@ import {
   findExistingPath,
   getBundledNodeDir,
   getBundledNodePath,
-  getBundledRuntimePath,
   getSystemNodeDirs,
   getSystemNpxPaths,
 } from './runtime';
@@ -50,7 +48,6 @@ describe('resolveNpxMcpInvocation', () => {
     vi.mocked(findExistingPath).mockReset().mockReturnValue(null);
     vi.mocked(getBundledNodeDir).mockReset().mockReturnValue(null);
     vi.mocked(getBundledNodePath).mockReset().mockReturnValue(null);
-    vi.mocked(getBundledRuntimePath).mockReset().mockReturnValue('node');
     vi.mocked(getSystemNpxPaths).mockReset().mockReturnValue([]);
     vi.mocked(getSystemNodeDirs).mockReset().mockReturnValue([]);
   });
@@ -97,7 +94,7 @@ describe('resolveNpxMcpInvocation', () => {
     vi.mocked(getSystemNpxPaths).mockReturnValue([join(incompleteDir, 'npx.cmd')]);
 
     expect(() => resolveNpxMcpInvocation(['package-name'])).toThrow(
-      'No complete Windows Node.js distribution with npm/bin/npx-cli.js was found for MCP startup',
+      'No usable Node.js / npx was found for MCP startup',
     );
   });
 
@@ -120,5 +117,31 @@ describe('resolveNpxMcpInvocation', () => {
     const invocation = resolveNpxMcpInvocation(['package-name']);
 
     expect(invocation.args).toEqual(['-y', 'package-name']);
+  });
+
+  it('does not double-add -y when caller passed --yes (long form)', () => {
+    // npm <7 / explicit long form should be treated equivalently to -y so we
+    // don't produce `npx -y --yes <pkg>` argv noise.
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
+    vi.mocked(findExistingPath).mockReturnValue('/usr/local/bin/npx');
+
+    const invocation = resolveNpxMcpInvocation(['--yes', 'package-name']);
+
+    expect(invocation.args).toEqual(['--yes', 'package-name']);
+  });
+
+  it('on darwin throws NpxMcpResolutionError when no system npx and no bundled Node (mirrors win32 branch)', () => {
+    // Previously the POSIX branch silently returned `resolve('.', 'npx')` =
+    // `<cwd>/npx` which never exists, producing ENOENT at spawn with no
+    // diagnostic. Mirror the win32 throw so callers get one actionable error
+    // regardless of platform.
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
+    vi.mocked(findExistingPath).mockReturnValue(null);
+    vi.mocked(getSystemNpxPaths).mockReturnValue([]);
+    vi.mocked(getBundledNodeDir).mockReturnValue(null);
+
+    expect(() => resolveNpxMcpInvocation(['package-name'])).toThrow(
+      'No usable Node.js / npx was found for MCP startup',
+    );
   });
 });

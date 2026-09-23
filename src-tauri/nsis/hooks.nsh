@@ -30,6 +30,23 @@
   ; Legacy cleanup: remove orphaned bun.exe from pre-0.2.0 installs (Bun→Node migration,
   ; v0.2.0). Recent builds bundle Node, not Bun; this just sweeps any ancient leftover.
   Delete "$INSTDIR\bun.exe"
+
+  ; Upgrade-path cleanup for bundled nodejs/ (TODO #187).
+  ; Older installers (pre-v0.3.205) staged a partial nodejs/ tree — `node.exe`
+  ; without `npm.cmd` / `npx.cmd` / the matching `node_modules/`. NSIS's
+  ; `File /a` overwrites files by name but does NOT remove files that were
+  ; present on disk and absent from the new resource map, so upgrading from
+  ; such a build leaves a mixed-validity tree: `node.exe` is fresh, but
+  ; `npm.cmd` / `npx.cmd` / `node_modules/npm/bin/npx-cli.js` may be missing or
+  ; stale. Result on first MCP spawn: sidecar's `cmd_probe_provider_network`
+  ; reports `node is not recognized` because the .cmd shim can't find its
+  ; node_modules sibling, even though `node.exe` itself is reachable.
+  ;
+  ; Wipe the whole tree so Section Install's `File /a` lays down the v0.3.205+
+  ; complete distribution (npm.cmd + npx.cmd + node_modules/) on top of a known-
+  ; empty directory. /REBOOTOK lets pending file handles defer the delete to
+  ; next boot rather than failing the install outright.
+  RMDir /REBOOTOK "$INSTDIR\nodejs"
 !macroend
 
 ; REMOVED (v0.3.18): easy_tdx vendored package + easy-tdx-mcp console script.

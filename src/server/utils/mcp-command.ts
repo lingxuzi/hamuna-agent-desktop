@@ -5,7 +5,6 @@ import { pinPresetMcpPackageVersions } from '../../shared/mcpPackages';
 import {
   findExistingPath,
   getBundledNodeDir,
-  getBundledRuntimePath,
   getBundledNodePath,
   getSystemNodeDirs,
   getSystemNpxPaths,
@@ -19,7 +18,7 @@ export interface ResolvedNpxMcpInvocation {
 
 export class NpxMcpResolutionError extends Error {
   constructor() {
-    super('No complete Windows Node.js distribution with npm/bin/npx-cli.js was found for MCP startup');
+    super('No usable Node.js / npx was found for MCP startup. On Windows this means the bundled nodejs/ tree is incomplete (npm.cmd + npx.cmd + node_modules/npm/bin/npx-cli.js are required); on macOS/Linux install Node.js 20+ so `npx` is on PATH. If you just upgraded HamunaAgent on Windows, fully uninstall the previous version (Control Panel → Programs) and reinstall — see snapshot TODO #187.');
     this.name = 'NpxMcpResolutionError';
   }
 }
@@ -59,7 +58,11 @@ export function resolveNpxMcpInvocation(
   const normalizedArgs = options.pinPresetPackages
     ? pinPresetMcpPackageVersions(args)
     : [...args];
-  const withYes = normalizedArgs.includes('-y') ? normalizedArgs : ['-y', ...normalizedArgs];
+  // Recognize both `-y` (npm 7+ short) and `--yes` (npm <7 / explicit long) as
+  // pre-existing auto-confirm flags so we don't prepend `-y` and produce
+  // `npx -y --yes <pkg>` (npx tolerates the duplicate but it's noise on argv).
+  const hasYes = normalizedArgs.includes('-y') || normalizedArgs.includes('--yes');
+  const withYes = hasYes ? normalizedArgs : ['-y', ...normalizedArgs];
 
   if (process.platform === 'win32') {
     // Bundled first — installer guarantees a complete Node distribution with
@@ -94,10 +97,11 @@ export function resolveNpxMcpInvocation(
     };
   }
 
-  const runtimePath = getBundledRuntimePath();
-  return {
-    command: resolve(dirname(runtimePath), 'npx'),
-    args: withYes,
-    source: 'runtime-sibling',
-  };
+  // POSIX path mirrors Windows: refuse to return a relative / non-existent
+  // `npx` path that would fail silently at spawn (ENOENT). `getBundledRuntimePath`
+  // // Already RETURNS the string literal `'node'` as a last-resort PATH fallback,
+  // // and `dirname('node')` resolves to '.' (current working directory) where
+  // // there's no `npx`. Throwing here gives the caller a single, actionable
+  // // error matching the Windows branch — same bug class, same fix.
+  throw new NpxMcpResolutionError();
 }
