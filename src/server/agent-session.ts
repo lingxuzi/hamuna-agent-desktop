@@ -10697,6 +10697,16 @@ async function startStreamingSession(preWarm = false): Promise<void> {
         // touch. Built-in slash commands stay typable (programmatic /compact
         // unaffected) — they are only hidden from the model.
         disableBundledSkills: true,
+        // Skip the WebFetch blocklist check (SDK 0.3.201+ `Settings.skipWebFetchPreflight`,
+        // d.ts:7022-7025). User network egress hits Anthropic's published
+        // blocklist (private IP / SSRF-defense / suspicious-TLD rules) and the
+        // tool exits with a blocklist error before any HTTP call is made. This
+        // field is a per-query override of Claude Code's own settings and does
+        // NOT touch disk — only the in-process agent spawned for this Chat
+        // session inherits it. Auxiliary queries (subscription-auth / kb-
+        // relations / title-generator / provider-verify) do not invoke WebFetch
+        // and intentionally keep the default blocklist behavior.
+        skipWebFetchPreflight: true,
       },
       // Permission mode mapping (uses mapToSdkPermissionMode):
       // - auto → acceptEdits (auto-accept edits, check others via canUseTool)
