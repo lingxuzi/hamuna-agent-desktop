@@ -1,21 +1,38 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./utils/runtime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/runtime')>();
+  return {
+    ...actual,
+    getBundledResourcePath: vi.fn(),
+  };
+});
 
 import { buildSystemPromptAppend } from './system-prompt';
+import { getBundledResourcePath } from './utils/runtime';
 
-describe('buildSystemPromptAppend floating-ball surface', () => {
-  it('adds floating-ball instructions only for the floating desktop surface', () => {
-    expect(buildSystemPromptAppend({ type: 'desktop' })).not.toContain('<hamuna-floating-ball-instructions>');
+describe('buildSystemPromptAppend floating-ball surface (fallback)', () => {
+  beforeEach(() => {
+    vi.mocked(getBundledResourcePath).mockReset().mockReturnValue(null);
+  });
 
-    const prompt = buildSystemPromptAppend({ type: 'desktop', surface: 'floating-ball' });
+  it('adds floating-ball instructions only for the floating desktop surface', async () => {
+    expect(await buildSystemPromptAppend({ type: 'desktop' })).not.toContain('<hamuna-floating-ball-instructions>');
+
+    const prompt = await buildSystemPromptAppend({ type: 'desktop', surface: 'floating-ball' });
     expect(prompt).toContain('<hamuna-floating-ball-instructions>');
     expect(prompt).toContain('HamunaAgent desktop floating window');
     expect(prompt).toContain('Keep responses concise');
   });
 });
 
-describe('buildSystemPromptAppend registered Agent events', () => {
-  it('keeps action semantics open while binding the exact execution identity', () => {
-    const prompt = buildSystemPromptAppend({
+describe('buildSystemPromptAppend registered Agent events (fallback)', () => {
+  beforeEach(() => {
+    vi.mocked(getBundledResourcePath).mockReset().mockReturnValue(null);
+  });
+
+  it('keeps action semantics open while binding the exact execution identity', async () => {
+    const prompt = await buildSystemPromptAppend({
       type: 'registeredAgent',
       platform: 'space',
       spaceId: 'space-1',

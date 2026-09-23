@@ -142,6 +142,15 @@
 
 ### 3.1 进行中
 
+#### TODO #193 — HamunaAgent 全局系统提示词开发者可控（bundled-prompts/global.md）✅ DONE
+**触发**：用户 2026-09-23 原话「希望在 desktop 加入一个全局系统提示词，升级后覆盖升级，用于控制 Agent 行为」，后续澄清为「开发需要可以配置」（bundled-prompts/global.md 路径，开发者编辑）。**用户拍板拍板过程**：(a) 范围从「~/.hamuna/system-prompt.md 用户可编辑」flip 到「bundled-prompts/global.md 开发者配」；(b) 语义 = 整体系统提示词，规定用户某类需求走哪个 Agent 执行规划（替代原 L1-L4 inline 模板）；(c) 读取时机 = 每次 query 读（开发改文件即下一 turn 生效，不重启 Sidecar）；(d) 用户侧无 override 入口（产品意志优先）。
+**修法（5 文件 + 2 新文件）**：(1) NEW `bundled-prompts/global.md` — 12 行占位铁律 + 模板变量 `{{runtimeName}}` `{{platformLabel}}` `{{sourceTypeLabel}}` `{{botName}}` `{{taskId}}` `{{intervalText}}` `{{heartbeatHint}}` `{{floatingBallHint}}` `{{spaceId}}` `{{registeredAgentId}}` `{{aiCanExit}}` + `{{#if}}` 块（IM/cron/floatingBall/registeredAgent 分支 gating）；注释头说明编辑方式（PR 即生效）+ SDK 16K-32K token 上限。(2) `src-tauri/tauri.conf.json` resources 加 `"../bundled-prompts": "bundled-prompts"`（与 `bundled-skills` / `bundled-agents` 同 pattern，整个目录进 bundle）。(3) `src/server/system-prompt.ts` 重写：`buildSystemPromptAppend` 改 async（每次 query 读 `getBundledResourcePath('bundled-prompts/global.md')` → `readFile`），bundled missing/empty 走 `warn-once` + inline fallback（L1-L4 保留为窄字符串保 prod 不崩）；widget / sessionInbox / CLI tools hint 仍然 inline（不搬到外部 md）。(4) `src/server/agent-session.ts:10748` + `src/server/runtimes/external-session.ts:2281` 两个 caller 加 `await`（上下文都是 async，无 sync caller 风险）。(5) NEW `src/server/system-prompt-bundled.unit.test.ts` 7 case（bundled 渲染 / missing 走 fallback / empty 走 fallback / IM 分支 / registeredAgent 分支 / floating-ball 分支 / **每次读新鲜 — 改文件下一 query 即生效**），既有 `system-prompt.unit.test.ts` 2 case 改 async + 加 fallback mock。
+**scope-out**：(a) 不加 user override 层（`~/.hamuna/system-prompt.md` 取消）；(b) 不在 Settings 加 UI 编辑器（v1 文件即可）；(c) 不为 bundled 改 bundled 提供 reload 按钮（每次 query 自动读 = 0 额外 UI）；(d) 不动 widget / sessionInbox / CLI tools hint（能力指针必须 inline）；(e) 不动 SDK ingress（`settingSources: ['project']` 仍只读 `<cwd>/.claude/`，bundled-prompts/global.md 不进 SDK discover）；(f) 不动 bundled-agents/hamuna_helper/CLAUDE.md（确认**不是全局 system prompt**，是 Agent Template，只在 `subagent_type='hamuna_helper'` 时 load）。
+**关键 grllling — 不要默默降级「每次 query 读」到「Sidecar 启动时读」**：原计划想保持 sync 签名偷懒，但用户拍板「每次 query 读」= 改文件立刻生效；默默降级 = 改文件需重启 sidecar 才生效 = 语义降级。**强制 async 化**，两个 caller 上下文都是 async，加 `await` 即可。
+**关键 grllling — bundled missing 时不要 throw**：throw 会让 dev box 没 bundle 资源 → 全 session 崩；prod CI 没 bundle 资源 → 测试全红。**warn-once + fallback** 保 prod 不死 + 观测得到。
+**验证（全绿）**：`npm run typecheck` 0 errors（async 签名变更全 caller 已 await）；`npx vitest run --project unit src/server/system-prompt.unit.test.ts src/server/system-prompt-bundled.unit.test.ts` 9/9（既有 2 + 新 7）；`npx eslint src/server/system-prompt.ts src/server/system-prompt-bundled.unit.test.ts src/server/system-prompt.unit.test.ts src/server/agent-session.ts src/server/runtimes/external-session.ts` 0 errors。pre-existing 5 failed 不增不减。
+**follow-up**：(a) user 实测：改 `bundled-prompts/global.md` 加一行「用户说 X 就走 Y Agent」→ 下一 turn 不重启 sidecar 验证生效；(b) 待 user 决定是否给 helper（`bundled-agents/hamuna_helper/CLAUDE.md`）拉一根 symlink 或 inline 到 global.md（helper 是 Agent Template 不是 system prompt，路径不同不冲突）；(c) 若 prompt 体量逼近 SDK 上限，需要切 chunking / 拆分到多文件。
+
 #### TODO #186 — OpenAI Bridge 自建 provider 首字慢 12-35s ✅ 已定位上游（不在 bridge）
 **症状**：SSE 首字 12-35s；stream 仍走完。**真因**（TTFT 5 次 2026-09-23 req=7fa7dbf6/f2f193cf/3004a67d/165c3717/340f12c9）：`connect_ms=27944/54636/21378/47242/6725 ms`；`translate_ms=12-20ms`、`upstream_first_byte_ms=1-3ms`、`anthropic_first_event_ms=0-1ms` 全健康 → **owner = upstream `https://api.agnes-ai.cn/v1` cold TLS/TCP**。**用户拍板**：不动 bridge，走网络层自查（DNS/VPN/CDN/反代）。**v1 已落 3 项**（per-hop TTFT 诊断 handler.ts + Rust SSE pool 5s→90s + `Agent({connectTimeout:5000})`）`typecheck 0 + eslint 0 + cargo check Finished` 验证 OK，留作日后诊断工具。**follow-up**：网络层优化后 connect_ms < 2s 即可。
 
@@ -201,14 +210,8 @@
 - **resolver 函数本体不反向同步 MyAgents**（已领先）
 - **`buildMcpStdioLaunchConfig` 统一入口模式待 v2 借鉴**：本仓当前 MCP stdio spawn 三处（probe / warmup / runtime projection）各自拼 PATH + env，未来如出现 path-policy 漂移或 Windows 大小写问题，单一入口可消重复。**不在本任务范围**
 
-#### TODO #183 — hamuna-writing-system 正文写作接 human-writing 方法论 ✅ DONE（v1 双源并集）
-（落地详见 §4 git log + 4 文件改动：scripts/check_prose.py NEW 副本 + anti-ai-lexicon.md 顶部 ABSOLUTE 段 + SKILL.md 阶段三/四 3 处更新 + snapshot.md）。**follow-up**：playwright 端到端跑 wizard step 写作；`human-writing` 升级 1.2+ 时 `check_prose.py` 内部 HARD_JARGON / HARD_STOPS 列表可能增删——v2 已本地化此风险归零。
-
-#### TODO #184 — hamuna-writing-system 完全继承 human-writing + 删除独立 skill 🔄
-（落地详见 §4 git log + 9 文件改动：6 NEW reference + SKILL.md 4 处改 + anti-ai-lexicon 顶部改 + scripts/test_check_prose.md NEW + 删除 `bundled-skills/human-writing/`）。**scope-out**：forum-prose.md 8 段示例全删不删（user 拍板全保留）；不抽 reusable 章节模板；`agents/openai.yaml` 已随 human-writing 目录删除。**follow-up**：playwright 端到端跑 wizard step 一次确认 prose-methods.md 加载链路；`scripts/test_check_prose.md` 故意 trigger 所有硬禁令，未来如果硬禁令列表扩张，本测试章节需要随之扩展。
-
-#### TODO #158 / #159 / #160 / #161 — nxgd 5 段右下浮窗 wizard + gate bug 修 + step 4 直跳 + full-screen overlay ✅ DONE
-（落地详见 §4 git log；commit hash 见 §4。**关键 pit-of-success**（#159）：wizard 语义 = "用户**看过**"，verifyStatus = "upstream **验证过**"，把 cache 当用户配置 = 经典错位；删 gate verifyStatus 短路，唯一权威 = dismissedAt。）
+#### TODO #183 / #184 / #158-161 / #162 — hamuna-writing / nxgd wizard 5 段 / provider 默认隐藏 ✅ DONE
+（落地详见 §4 git log + 各 commit hash。**关键 pit-of-success**（#159）：wizard 语义 = "用户**看过**"，verifyStatus = "upstream **验证过**"，把 cache 当用户配置 = 经典错位；删 gate verifyStatus 短路，唯一权威 = dismissedAt。）
 
 #### TODO #162 — 模型供应商默认隐藏除广电外预设（默认 disabled，Settings 可启用）🔄
 **触发**：user 原话「模型供应商默认隐藏除了广电之外的预设供应商」，clarification「启用和排序默认禁用非广电之外的供应商就行，已经有这个功能了都」= 复用既有 `AppConfig.disabledProviderIds` 字段（Settings → ProviderEnableOrderDialog 已能 toggle），不在 PRESET_PROVIDERS 字面量标 `enabled:false`、不引入 config-version、不为老用户反向 migration。**改动 2 文件**（+5 -0）：(1) `src/shared/config-types.ts` `DEFAULT_CONFIG` 末尾加 `disabledProviderIds: PRESET_PROVIDERS.map(p => p.id).filter(id => id !== NXGD_PROVIDER_ID)` —— **派生而非硬编码 18 个 id**，加新预设时自动包含，避免 drift。`applyProviderEnablementAndOrder` 已用 `disabledProviderIds` 派生 `provider.enabled`，逻辑零改动；`loadAppConfig` 浅 merge `{...DEFAULT_CONFIG, ...migrated}` 自动处理磁盘字段存在 vs 缺失。(2) `src/shared/config-types.test.ts` +1 describe 段 5 case：DEFAULT_CONFIG 长度=18 不含 nxgd；默认派生下 18 个非 nxgd disabled + nxgd enabled；磁盘 `disabledProviderIds:[]` 覆盖默认（全 enabled）；磁盘 `disabledProviderIds:[someId]` 仅该 id disabled。**设计取舍 — 不在 PRESET_PROVIDERS 字面量加 enabled:false**：单一真相源；line 270 "nextEnabled && provider.enabled===undefined 不写回" 优化会被字面量 false 干扰。**scope-out**：(a) ProviderEnableOrderDialog UI 不动；(b) `applyProviderEnablementAndOrder` 不动；(c) SettingsPage 写盘逻辑不动；(d) providerService / admin-config 派生不动；(e) Rust 端 `serde_json::Value` 透传新字段；(f) 老用户 `disabledProviderIds:[]` 磁盘显式保留(尊重用户决定)；(g) 不为「provider 全默认 enabled」和「provider 字面量 disabled」两条规则并存——by-construction 仅一条。**验证**（全绿）：`npm run typecheck` 0 errors；`npx vitest run --project unit src/shared/config-types.test.ts` 49/49（含新 5 case）；`providerEnablement.test.ts` 3/3 + `providerService.test.ts` 6/6 + `nxgd-auth.unit.test.ts` 20/20 全绿；`npm run test:unit` 3057 passed + 5 pre-existing failed(themeArchitecture 2 + widgetSandboxHtml 1 + playwright-bash-redirect 1 + eventRegistry 1，baseline stash 验证同样 5 failed，与本次改动无关)。**验收红线**：新装 Chat 模型下拉只剩「广电 (云广智能)」；Settings → 启用和排序对话框 显示 19 行 nxgd enabled + 18 disabled；toggle 保存 → Chat 即时反映；重启 → 保留 toggle。**版本流转**：patch bump-on-commit（与 wizard 同期）。
@@ -220,7 +223,7 @@
 
 #### TODO #157 — nxgd `/api/nxgd/models` 路由从未注册（hidden 404 bug）✅ DONE
 
-#### TODO #147 — nxgd 模型发现 `parseModelsResponse` 不识别顶层数组（永远返 `[]`）✅ DONE
+#### TODO #147 — nxgd `parseModelsResponse` 不识别顶层数组（永远返 `[]`）✅ DONE
 **触发**：用户报"事实上目前广电卡片获取可用模型一直为空"。server 端 live 验证 (`scripts/test-nxgd-fetch-models-live.mjs`) 显示 `/v1/models` 200 + 1 model 正常，**根因在 renderer 端 parser 契约 gap**：`src/renderer/config/services/nxgdSubscriptionService.ts:24` `discoverNxgdModels()` server envelope `{ models: [...], checkedAt }` 解构后把 **`resp.models` 数组** 直接喂给 `parseModelsResponse`；但 `modelDiscoveryService.ts::parseModelsResponse` 只识别 wrapper 对象（Format A OpenAI `{ object:"list", data:[...] }` / Format B Anthropic `{ data:[...] }`），**不识别顶层数组** → 永远返 `[]` → Model Management 面板"Discover Models"区渲染空。**修复**（NEW `src/renderer/config/services/modelDiscoveryService.test.ts` 5 case + parser 加 Format C 分支 `Array.isArray(body) ? rawModels = body`）：覆盖顶层数组（nxgd unwrap 后）/ OpenAI wrapper（grok）/ Anthropic wrapper（fetchProviderModels）/ `null`+`undefined`+`{}`+未知 shape（不抛）/ `status:'Shutdown'` 过滤。**nxgd-auth.unit.test 16/16 不回归**（server 侧 0 改动）。2 文件 / +50 -1，`npm run typecheck` 0 errors + `test:unit` 5/5 新 + 16/16 nxgd-auth + `eslint` 0 errors。**scope-out**：Model Management Panel 顶部"Active Models"显示的是 `provider.models`（preset `ANTHROPIC_MODELS` 7 个 Claude model）— 这块永远非空与本 bug 无关不动；真实 dev 模式 UI 验证（Settings → 广电 → 管理模型 → 看 Discover 列表）留 user 实操。**版本流转**：未 commit → patch bump-on-commit。
 
 #### TODO #144 — 中国广电 Token 平台（`nxgd` provider）内置首选模型供应商 ✅ DONE
@@ -434,31 +437,7 @@
 - **§5.7 视频时长边界单源化**（§3.1 TODO #108 ✅ DONE）—— `video_generate.seconds` 字符串合法值 `"4"-"12"` + 双重约束散落 9 个 ref，drift 风险 → 单一权威段 `bundled-skills/creative-video-suite/references/agnes-ai-api.md §视频时长边界（单一权威 · 2026-09-09 加）`，10 文件全栈 cross-link。image_generate / image_edit / T13 不受约束（3 类工具无 `seconds` 参数）。
 
 ### 5.8 WebKit 内存诊断结论（2026-09-20 · #185 ✅ DONE）
-
-**背景**：用户报告 WebKit 内存涨到 3.24 GB，疑泄漏。**T+0 重启基线（15:17）**：WebKitWebProcess×2 = 629+734=1363 MB / WebKitNetworkProcess×2 = 73+49=122 MB。**30 分钟空跑监控（6 次采样，每 5 分钟）**：
-
-| 时刻 | WP_total | WP1=3321245(主 webview) | WP2=3321256(devtools) | NP1/NP2 | sidecar |
-|---|---|---|---|---|---|
-| 15:17 | 1281 MB | 613 | 667 | 70/47 | 514 MB |
-| 15:22 | 1297 MB | 611 | 686 | 70/47 | 216 MB |
-| 15:27 | 1318 MB | 611 | 707 | 70/47 | 216 MB |
-| 15:32 | 1351 MB | 611 | 737 | 70/47 | 217 MB |
-| 15:37 | 1374 MB | 611 | 758 | 70/47 | 218 MB |
-| 15:42 | 1395 MB | 611 | 779 | 70/47 | 219 MB |
-
-**关键观察**：(a) **WP1 (主 webview)** 25 分钟涨 0.4 MB = 噪声级，**产品代码无泄漏**；(b) **WP2 (devtools)** 25 分钟涨 112 MB ≈ 4.5 MB/min，**单源线性**；(c) **NetworkProcess** 完全平稳；(d) **node sidecar** V8 GC 收敛 514→216 MB 后平稳。
-
-**根因**：WP2 = `src-tauri/src/lib.rs:1040` `window.open_devtools()`（包在 `#[cfg(debug_assertions)]` 下）启动的 **WebKitGTK DevTools Inspector WebProcess**。WebKitGTK 4.x 在 Linux 下 devtools 与主 webview 拆两个进程，inspector 后台持续 cache 主 webview 的 DOM tree + source map + build artifact，DOM 越大占得越多。**`#[cfg(debug_assertions)]` 门控 = release 构建无此进程 = 用户线上不受影响**。
-
-**之前误判订正**："单 WebProcess 3272741 涨到 3.24 GB"实际就是 devtools WebProcess 单进程涨上来的数字（主 webview 是另一个 PID 被漏跟），不是单 webview 泄漏。**真实泄漏源一直是 devtools，不是产品代码**。
-
-**结论**：A = 接受，不动代码，不写 hook。开发期机器 16 GB 够用；开发完退出 dev，不要长挂。
-
-**scope-out**：(a) 不 gate `open_devtools()` 到快捷键（失去"启动自动开"便利性，换 RAM 不划算）；(b) 不改 release 构建验证（release 已经不会调 open_devtools，编译浪费时间）；(c) 不写 memory regression 测试（devtools 自身行为，测不出产品问题）；(d) 不 commit。
-
-**验证**：`/tmp/webkit-monitor.sh` PID 3323131 → 6 次采样写 `/tmp/webkit-rss-log.tsv` ✓；所有进程 RSS 趋势可重复分析 ✓；30 分钟空跑零文件保存纪律遵守 ✓。
-
-**踩坑 — `pgrep -f` 抓 bash wrapper**：shell wrapper 的 cmdline 包含 `/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess` 字面量（作为 pgrep 模式参数），`pgrep -f` 自匹配返回 shell PID 4 KB RSS 假阳性。**修法**：`ps -eo pid,comm,args | grep ... | grep -v grep` 排掉自己，或直接读 `/proc/<pid>/status` 看 VmRSS。
+**核心结论**：涨到 3.24 GB 的不是产品代码泄漏，是 WebKitGTK DevTools Inspector WebProcess 在 `#[cfg(debug_assertions)]` 下长 cache 主 webview DOM/source map；release build 无此进程 = 用户线上不受影响。详细采样表 / 误判订正 / `pgrep -f` 抓 bash wrapper 踩坑 → 见 git log。**scope-out**：(a) 不 gate `open_devtools()`；(b) 不写 memory regression 测试；(c) 不 commit（诊断而非 fix）。
 
 ### 5.9 OpenAI Bridge Responses API tool 形状回归到嵌套结构（2026-09-20 · #186 落地）
 

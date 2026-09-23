@@ -10745,7 +10745,7 @@ async function startStreamingSession(preWarm = false): Promise<void> {
       systemPrompt: {
         type: 'preset' as const,
         preset: 'claude_code' as const,
-        append: buildSystemPromptAppend(currentScenario, {
+        append: await buildSystemPromptAppend(currentScenario, {
           playwrightStorageEnabled: (configState.currentMcpServers ?? []).some(
             s => s.id === 'playwright' && (s.args ?? []).some((a: string) => /^--caps=.*\bstorage\b/.test(a))
           ),
