@@ -336,13 +336,17 @@ async fn connect_sse(
     // CRITICAL: Enable tcp_nodelay to disable Nagle's algorithm for immediate packet transmission
     // Without this, small SSE events may be buffered and delayed, causing UI to feel unresponsive
     // Force HTTP/1.1 for compatibility with Bun server (HTTP/2 may cause connection issues on Windows)
-    // Use short-lived connection pool to balance performance and stability
+    // Use longer-lived connection pool so back-to-back chat messages amortize
+    // the TCP+TLS handshake cost across the typical session pause interval.
+    // ponytail: 5s was too aggressive — a chat session with a >5s thinking pause
+    // paid a fresh handshake on the next message. 90s matches typical session
+    // pause windows; cap at 4 conns/host to keep multi-tab safe.
     let client = crate::local_http::builder()
         .read_timeout(std::time::Duration::from_secs(SSE_READ_TIMEOUT_SECS))
         .tcp_nodelay(true)
         .http1_only() // Force HTTP/1.1 for SSE compatibility
-        .pool_idle_timeout(std::time::Duration::from_secs(5))
-        .pool_max_idle_per_host(2)
+        .pool_idle_timeout(std::time::Duration::from_secs(90))
+        .pool_max_idle_per_host(4)
         .build()
         .map_err(|e| format!("[sse-proxy] Failed to create HTTP client: {}", e))?;
 

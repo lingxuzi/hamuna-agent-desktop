@@ -6,7 +6,7 @@
 // `UND_ERR_INVALID_ARG: invalid onRequestStart method` (internal API drift
 // between majors). Importing fetch from the same package guarantees the
 // dispatcher and fetch share the same internal contract.
-import { fetch, ProxyAgent, type Dispatcher } from 'undici';
+import { fetch, ProxyAgent, Agent, type Dispatcher } from 'undici';
 import type { BridgeConfig, UpstreamConfig } from './types/bridge';
 import type { AnthropicRequest } from './types/anthropic';
 import type { OpenAIRequest, OpenAIResponse, OpenAIStreamChunk } from './types/openai';
@@ -112,6 +112,18 @@ function getDispatcherForProxy(proxyUrl: string): Dispatcher {
   }
   return agent;
 }
+
+// per-hop TTFT anchors live here so the streaming transform functions can read them
+// across the function boundary (Response is the only stable handle).
+type TtftCtx = {
+  entryMs: number;
+  beforeTranslateMs: number;
+  headersMs: number;
+  firstUpstreamByteMs?: number;
+  firstAnthropicEventMs?: number;
+  baseUrl: string;
+};
+const ttftByResponse = new WeakMap<Response, TtftCtx>();
 
 function resolvePromptCacheKey(
   upstream: UpstreamConfig,
@@ -350,6 +362,15 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
   const imageSaver: ToolImageSaver | undefined = config.workspacePath
     ? createToolImageSaver(config.workspacePath)
     : undefined;
+  // ponytail: cap connect at 5s (vs undici 10s default) so silent connect hangs
+  // surface before they inflate TTFT into "looks like upstream slow". 5s is well
+  // above any real LAN/WAN connect; bump to 10s if a real-world provider starts
+  // timing out on cold connect.
+  const defaultAgent = new Agent({ connectTimeout: 5000, headersTimeout: upstreamHeadersTimeoutMs });
+  // BUILD-PROOF: marker emitted once per handler construction. If you see this
+  // in unified log, the rebuilt server-dist.js is actually running. If you don't,
+  // the dev process is still on the old bundle (restart `npm run tauri:dev`).
+  log('[bridge] build_proof ttft_diag_v1 defaultAgent=5s_connect');
 
   // Cache tool_call_id → thought_signature across requests.
   // Gemini thinking models require round-tripping thought_signature on every request
@@ -359,6 +380,9 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
   const thoughtSignatureCache = new Map<string, string>();
 
   const handler = async (request: Request): Promise<Response> => {
+    // per-hop TTFT anchor #1: handler entry (before any work).
+    const ttftEntryMs = Date.now();
+
     // 1. Extract API key from request headers
     const apiKey = request.headers.get('x-api-key') || request.headers.get('authorization')?.replace('Bearer ', '') || '';
 
@@ -369,6 +393,9 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
     } catch {
       return jsonError(400, 'invalid_request_error', 'Invalid JSON in request body');
     }
+
+    // per-hop TTFT anchor #2: post-parse, pre-translate.
+    const ttftBeforeTranslateMs = Date.now();
 
     // 3. Get upstream config
     let upstream: UpstreamConfig;
@@ -394,6 +421,16 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
     let effectiveApiKey = upstream.apiKey || apiKey;
     let activeCredentialVersion = upstream.credentialVersion;
     const baseUrl = upstream.baseUrl.replace(/\/+$/, ''); // trim trailing slashes
+    // per-hop TTFT ctx: populated across handler entry → upstream fetch → first
+    // upstream byte → first Anthropic event emitted. Read by handleStreamResponse /
+    // handleResponsesStreamResponse via ttftByResponse WeakMap; weak so the
+    // Response object alone (the key) owns the lifetime.
+    const ttftCtx: TtftCtx = {
+      entryMs: ttftEntryMs,
+      beforeTranslateMs: ttftBeforeTranslateMs,
+      headersMs: 0,
+      baseUrl,
+    };
     // Honor a previously-observed responses-format incompatibility for this
     // provider so subsequent requests skip the broken format silently.
     // `let` because the in-flight retry loop may flip to chat_completions
@@ -582,6 +619,8 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
         };
         if (proxyUrl) {
           fetchInit.dispatcher = getDispatcherForProxy(proxyUrl);
+        } else {
+          fetchInit.dispatcher = defaultAgent;
         }
         // Cast to global Response — undici.Response is structurally identical at
         // runtime; the type drift is only in @types/node vs undici/types Headers
@@ -591,6 +630,9 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
         // fetch() resolves when response headers arrive. End the headers-only
         // timeout here for every status, before any success or error body read.
         clearTimeout(headersTimer);
+        // per-hop TTFT anchor #3: headers arrived (upstream connect done).
+        ttftCtx.headersMs = Date.now();
+        ttftByResponse.set(upstreamResp, ttftCtx);
         return { ok: true, attempt: { upstreamResp, controller, onDownstreamAbort } };
       } catch (err) {
         clearTimeout(headersTimer);
@@ -964,12 +1006,41 @@ export function handleStreamResponse(
     }
   };
 
+  // per-hop TTFT: ctx wired from the main handler via WeakMap. Stage 1 sets
+  // `firstUpstreamByteMs` on the first non-empty SSE event; Stage 2 sets
+  // `firstAnthropicEventMs` on the first enqueued Anthropic event and emits
+  // the consolidated TTFT log exactly once. flush() emits a distinct marker
+  // log when no Anthropic event was ever produced (empty body / [DONE]-only
+  // upstream), so the empty-path diagnostic doesn't get conflated with the
+  // normal TTFT signal.
+  const ttftCtx = ttftByResponse.get(upstreamResp);
+  let ttftEmitted = false;
+  const emitTtftLog = (): void => {
+    if (!ttftCtx || ttftEmitted) return;
+    const now = Date.now();
+    const translateMs = Math.max(0, ttftCtx.beforeTranslateMs - ttftCtx.entryMs);
+    const connectMs = Math.max(0, ttftCtx.headersMs - ttftCtx.beforeTranslateMs);
+    if (ttftCtx.firstUpstreamByteMs === undefined) {
+      log(`[bridge] ttft_no_first_byte translate_ms=${translateMs} connect_ms=${connectMs} elapsed_ms=${Math.max(0, now - ttftCtx.entryMs)} upstream=${ttftCtx.baseUrl}`);
+      ttftEmitted = true;
+      return;
+    }
+    const upstreamFirstByteMs = Math.max(0, ttftCtx.firstUpstreamByteMs - ttftCtx.headersMs);
+    const anthropicFirstEventMs = Math.max(0, now - ttftCtx.firstUpstreamByteMs);
+    const totalMs = Math.max(0, now - ttftCtx.entryMs);
+    log(`[bridge] ttft translate_ms=${translateMs} connect_ms=${connectMs} upstream_first_byte_ms=${upstreamFirstByteMs} anthropic_first_event_ms=${anthropicFirstEventMs} total_ms=${totalMs} upstream=${ttftCtx.baseUrl}`);
+    ttftEmitted = true;
+  };
+
   // Stage 1: bytes → SSE events (parse via SSEParser).
   const decoder = new TextDecoder();
   const sseParseTransform = new TransformStream<Uint8Array, ChatPipelineItem>({
     transform(chunk, controller) {
       const text = decoder.decode(chunk, { stream: true });
       const sseEvents = sseParser.feed(text);
+      if (ttftCtx && ttftCtx.firstUpstreamByteMs === undefined && sseEvents.length > 0) {
+        ttftCtx.firstUpstreamByteMs = Date.now();
+      }
       for (const sseEvent of sseEvents) {
         if (sseEvent.data === '[DONE]') {
           // Protocol terminator — forward as the finalize signal (see STREAM_DONE).
@@ -1035,9 +1106,12 @@ export function handleStreamResponse(
         }
       }
       const anthropicEvents = translator.feed(chunk);
+      let emittedAny = false;
       for (const event of anthropicEvents) {
         controller.enqueue(encoder.encode(formatSSE(event)));
+        emittedAny = true;
       }
+      if (emittedAny) emitTtftLog();
     },
     flush(controller) {
       // Emit closing events for incomplete streams (no-op if already finished).
@@ -1045,6 +1119,9 @@ export function handleStreamResponse(
       for (const event of finalEvents) {
         controller.enqueue(encoder.encode(formatSSE(event)));
       }
+      // Empty-body / [DONE]-only upstream fallback: emit TTFT with firstAnthropicEventMs unset
+      // so the diagnostic surfaces that the upstream never produced a parseable event.
+      emitTtftLog();
       detachDownstream();
     },
   });
@@ -1202,11 +1279,35 @@ export function handleResponsesStreamResponse(
     }
   };
 
+  // per-hop TTFT mirror of handleStreamResponse — see notes there for the
+  // WeakMap wiring and the empty-body vs real-first-event distinction.
+  const ttftCtx = ttftByResponse.get(upstreamResp);
+  let ttftEmitted = false;
+  const emitTtftLog = (): void => {
+    if (!ttftCtx || ttftEmitted) return;
+    const now = Date.now();
+    const translateMs = Math.max(0, ttftCtx.beforeTranslateMs - ttftCtx.entryMs);
+    const connectMs = Math.max(0, ttftCtx.headersMs - ttftCtx.beforeTranslateMs);
+    if (ttftCtx.firstUpstreamByteMs === undefined) {
+      log(`[bridge] ttft_no_first_byte translate_ms=${translateMs} connect_ms=${connectMs} elapsed_ms=${Math.max(0, now - ttftCtx.entryMs)} upstream=${ttftCtx.baseUrl}`);
+      ttftEmitted = true;
+      return;
+    }
+    const upstreamFirstByteMs = Math.max(0, ttftCtx.firstUpstreamByteMs - ttftCtx.headersMs);
+    const anthropicFirstEventMs = Math.max(0, now - ttftCtx.firstUpstreamByteMs);
+    const totalMs = Math.max(0, now - ttftCtx.entryMs);
+    log(`[bridge] ttft translate_ms=${translateMs} connect_ms=${connectMs} upstream_first_byte_ms=${upstreamFirstByteMs} anthropic_first_event_ms=${anthropicFirstEventMs} total_ms=${totalMs} upstream=${ttftCtx.baseUrl}`);
+    ttftEmitted = true;
+  };
+
   const decoder = new TextDecoder();
   const sseParseTransform = new TransformStream<Uint8Array, ResponsesStreamEvent>({
     transform(chunk, controller) {
       const text = decoder.decode(chunk, { stream: true });
       const sseEvents = sseParser.feed(text);
+      if (ttftCtx && ttftCtx.firstUpstreamByteMs === undefined && sseEvents.length > 0) {
+        ttftCtx.firstUpstreamByteMs = Date.now();
+      }
       for (const sseEvent of sseEvents) {
         // Intentional asymmetry vs the Chat path: the Responses translator
         // finalizes inline on `response.completed`/`response.failed` (its real
@@ -1228,9 +1329,12 @@ export function handleResponsesStreamResponse(
   const translateTransform = new TransformStream<ResponsesStreamEvent, Uint8Array>({
     transform(event, controller) {
       const anthropicEvents = translator.feed(event);
+      let emittedAny = false;
       for (const ae of anthropicEvents) {
         controller.enqueue(encoder.encode(formatSSE(ae)));
+        emittedAny = true;
       }
+      if (emittedAny) emitTtftLog();
       // The Responses translator finalizes inline on `response.completed` /
       // `response.failed` (emits message_stop). That is the protocol terminator,
       // so end the downstream response NOW rather than waiting for transport EOF
@@ -1248,6 +1352,7 @@ export function handleResponsesStreamResponse(
       for (const event of finalEvents) {
         controller.enqueue(encoder.encode(formatSSE(event)));
       }
+      emitTtftLog();
       detachDownstream();
     },
   });
