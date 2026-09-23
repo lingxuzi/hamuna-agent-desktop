@@ -4,16 +4,16 @@ vi.mock('./utils/runtime', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./utils/runtime')>();
   return {
     ...actual,
-    getBundledResourcePath: vi.fn(),
+    getBundledTopLevelResourcePath: vi.fn(),
   };
 });
 
 import { buildSystemPromptAppend } from './system-prompt';
-import { getBundledResourcePath } from './utils/runtime';
+import { getBundledTopLevelResourcePath } from './utils/runtime';
 
 describe('buildSystemPromptAppend floating-ball surface (fallback)', () => {
   beforeEach(() => {
-    vi.mocked(getBundledResourcePath).mockReset().mockReturnValue(null);
+    vi.mocked(getBundledTopLevelResourcePath).mockReset().mockReturnValue(null);
   });
 
   it('adds floating-ball instructions only for the floating desktop surface', async () => {
@@ -28,7 +28,7 @@ describe('buildSystemPromptAppend floating-ball surface (fallback)', () => {
 
 describe('buildSystemPromptAppend registered Agent events (fallback)', () => {
   beforeEach(() => {
-    vi.mocked(getBundledResourcePath).mockReset().mockReturnValue(null);
+    vi.mocked(getBundledTopLevelResourcePath).mockReset().mockReturnValue(null);
   });
 
   it('keeps action semantics open while binding the exact execution identity', async () => {

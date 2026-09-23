@@ -659,7 +659,7 @@ import {
   type ProviderEnv,
 } from './agent-session';
 import { getHomeDirOrNull, isSkillBlockedOnPlatform } from './utils/platform';
-import { getScriptDir } from './utils/runtime';
+import { getBundledTopLevelResourcePath } from './utils/runtime';
 import {
   createSession,
   deleteSession,
@@ -1363,23 +1363,7 @@ function bumpSkillsGeneration(): void {
  * - Development: <project-root>/bundled-skills/
  */
 function resolveBundledSkillsDir(): string | null {
-  const scriptDir = getScriptDir();
-
-  // Production: bundled-skills is alongside server-dist.js in Resources
-  const prodPath = resolve(scriptDir, 'bundled-skills');
-  if (existsSync(prodPath)) return prodPath;
-
-  // Development: bundled-skills is at project root
-  // In dev, scriptDir is something like <project>/src/server/utils
-  // Walk up to find bundled-skills at project root
-  let dir = scriptDir;
-  for (let i = 0; i < 5; i++) {
-    const devPath = resolve(dir, 'bundled-skills');
-    if (existsSync(devPath)) return devPath;
-    dir = dirname(dir);
-  }
-
-  return null;
+  return getBundledTopLevelResourcePath('bundled-skills');
 }
 
 // System skills — owned by the app, version-gated by the Rust side

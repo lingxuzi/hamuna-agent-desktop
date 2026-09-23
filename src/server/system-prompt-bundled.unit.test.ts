@@ -7,12 +7,12 @@ vi.mock('./utils/runtime', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./utils/runtime')>();
   return {
     ...actual,
-    getBundledResourcePath: vi.fn(),
+    getBundledTopLevelResourcePath: vi.fn(),
   };
 });
 
 import { buildSystemPromptAppend, type InteractionScenario, type SystemPromptOptions } from './system-prompt';
-import { getBundledResourcePath } from './utils/runtime';
+import { getBundledTopLevelResourcePath } from './utils/runtime';
 
 const desktopScenario: InteractionScenario = { type: 'desktop' };
 const floatingBallScenario: InteractionScenario = { type: 'desktop', surface: 'floating-ball' };
@@ -30,7 +30,7 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
   let mockFilePath: string | null = null;
 
   beforeEach(() => {
-    vi.mocked(getBundledResourcePath).mockReset();
+    vi.mocked(getBundledTopLevelResourcePath).mockReset();
     mockFilePath = null;
   });
 
@@ -43,7 +43,7 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
     const file = join(dir, 'global.md');
     writeFileSync(file, content);
     mockFilePath = file;
-    vi.mocked(getBundledResourcePath).mockReturnValue(file);
+    vi.mocked(getBundledTopLevelResourcePath).mockReturnValue(file);
   }
 
   it('returns rendered bundled content when the file is present', async () => {
@@ -54,7 +54,7 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
   });
 
   it('falls back to inline templates when bundled resource path is missing', async () => {
-    vi.mocked(getBundledResourcePath).mockReturnValue(null);
+    vi.mocked(getBundledTopLevelResourcePath).mockReturnValue(null);
     const prompt = await buildSystemPromptAppend(desktopScenario, baseOptions);
     expect(prompt).toContain('<hamuna-identity>');
     expect(prompt).toContain('HamunaAgent 内置 Claude Agent SDK');
@@ -68,7 +68,7 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
   });
 
   it('renders IM channel template when scenario is im (fallback path)', async () => {
-    vi.mocked(getBundledResourcePath).mockReturnValue(null);
+    vi.mocked(getBundledTopLevelResourcePath).mockReturnValue(null);
     const prompt = await buildSystemPromptAppend(imScenario, baseOptions);
     expect(prompt).toContain('<hamuna-interaction-channel>');
     expect(prompt).toContain('飞书');
@@ -77,14 +77,14 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
   });
 
   it('renders registeredAgent identity with space + agent ids (fallback path)', async () => {
-    vi.mocked(getBundledResourcePath).mockReturnValue(null);
+    vi.mocked(getBundledTopLevelResourcePath).mockReturnValue(null);
     const prompt = await buildSystemPromptAppend(registeredAgentScenario, baseOptions);
     expect(prompt).toContain('space-id="space-42" registered-agent-id="agent-7"');
     expect(prompt).toContain('<registered-agent-instruction>');
   });
 
   it('renders floating-ball template only for floating surface (fallback path)', async () => {
-    vi.mocked(getBundledResourcePath).mockReturnValue(null);
+    vi.mocked(getBundledTopLevelResourcePath).mockReturnValue(null);
     const chatPrompt = await buildSystemPromptAppend({ type: 'desktop' }, baseOptions);
     expect(chatPrompt).not.toContain('<hamuna-floating-ball-instructions>');
 
@@ -108,4 +108,18 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
   // Suppress unused-var noise: the var is held by mockBundledFile for the
   // second test to mutate.
   void mockFilePath;
+});
+
+describe('getBundledTopLevelResourcePath (real dev layout)', () => {
+  it('finds bundled-prompts/ at the repository root in dev mode', () => {
+    // Re-import the real runtime module (not the one mocked above) by clearing
+    // the mock and re-reading from the module cache.
+    vi.doUnmock('./utils/runtime');
+    // Re-import fresh: this gives us the real implementation.
+    return import('./utils/runtime').then((realRuntime) => {
+      const realPath = realRuntime.getBundledTopLevelResourcePath('bundled-prompts/global.md');
+      expect(realPath).not.toBeNull();
+      expect(realPath).toMatch(/bundled-prompts[\\/]global\.md$/);
+    });
+  });
 });

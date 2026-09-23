@@ -23,7 +23,7 @@ import { readFile } from 'fs/promises';
 import type { RuntimeType } from '../shared/types/runtime';
 import type { OfficialToolId } from '../shared/official-tools';
 import type { HostInteractionCapability } from '../shared/types/hostInteraction';
-import { getBundledResourcePath } from './utils/runtime';
+import { getBundledTopLevelResourcePath } from './utils/runtime';
 import { buildCliToolsAppend, buildWidgetSection, buildSessionInboxSection } from './system-prompt-cli-tools';
 
 // ===== Scenario types =====
@@ -124,7 +124,7 @@ const BUNDLED_PROMPT_PATH = 'bundled-prompts/global.md';
 // Warn-once guard so the fallback path doesn't spam the log on every query.
 let warnedMissing = false;
 async function loadBundledPrompt(): Promise<string | null> {
-  const filePath = getBundledResourcePath(BUNDLED_PROMPT_PATH);
+  const filePath = getBundledTopLevelResourcePath(BUNDLED_PROMPT_PATH);
   if (!filePath) {
     if (!warnedMissing) {
       console.warn(`[system-prompt] bundled resource missing: ${BUNDLED_PROMPT_PATH}; falling back to inline templates`);

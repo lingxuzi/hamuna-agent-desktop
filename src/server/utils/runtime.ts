@@ -384,6 +384,37 @@ export function getBundledResourcePath(relativePath: string): string | null {
 }
 
 /**
+ * Resolve a "business resource" that's bundled at the **repository root**
+ * (e.g. `bundled-skills/`, `bundled-agents/`, `bundled-prompts/`) rather
+ * than under `src-tauri/resources/`. Tauri builds copy these wholesale to
+ * `<bundle>/Resources/<name>/` (per `tauri.conf.json > bundle.resources`
+ * entries like `"../bundled-skills": "bundled-skills"`). In dev, the
+ * resources stay at the project root unchanged, and the Sidecar resolves
+ * them by walking up from `scriptDir`.
+ *
+ * Differs from `getBundledResourcePath`: that helper handles resources
+ * under `src-tauri/resources/` (binary / large-dependency payloads like
+ * nodejs, python, sharp-runtime) which exist nowhere in dev. Resources at
+ * the project root (markdown skills, agent templates, prompt files) live
+ * in both dev (project root) and prod (Resources/<name>/) layouts.
+ */
+export function getBundledTopLevelResourcePath(relativePath: string): string | null {
+  const scriptDir = getScriptDir();
+  // Production layout: shipped into Resources/<relativePath>/
+  const prodPath = resolve(scriptDir, relativePath);
+  if (existsSync(prodPath)) return prodPath;
+  // Dev layout: walk up from scriptDir to find the project root, where
+  // bundled-skills/, bundled-agents/, bundled-prompts/ live.
+  let dir = scriptDir;
+  for (let i = 0; i < 6; i++) {
+    const devPath = resolve(dir, relativePath);
+    if (existsSync(devPath)) return devPath;
+    dir = dirname(dir);
+  }
+  return null;
+}
+
+/**
  * Get the absolute path to the bundled sharp module's CommonJS entry (`lib/index.js`).
  *
  * sharp ships per-platform native addons (`@img/sharp-<triple>/sharp.node`) that

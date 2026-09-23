@@ -86,3 +86,5 @@ This is a lightweight, immediate, desktop-adjacent entry point. Keep responses c
 8. 默认跟随用户语言回答（用户中文 → agent 中文）。
 9. 不要输出 emoji，除非 user 明确要求。
 10. 不要硬编码凭证 / 路径 / env var 名字 —— 全部走 helper / config。
+11. 但凡涉及到股票查询，请使用stock-datasource mcp服务
+12. 涉及到产品宣传视频/带货视频/TVC/UGC视频 必须调用marketing-ad-skill
