@@ -628,7 +628,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-
     <p class="tagline" data-i18n="hero.tag">search, write, plan, crunch numbers, make images — and talk to it like a friend. Everything stays on your PC.</p>
   </div>
   <div class="number-anchor">
-    <span class="v" data-i18n="hero.anchor.ver">v0.3.185</span>
+    <span class="v" data-i18n="hero.anchor.ver">v0.3.209</span>
     <div>
       <!--<span class="v-sub" data-i18n="hero.anchor.size">~92 MB</span>-->
       <span class="v-sub" data-i18n="hero.anchor.sys">Windows 10 / 11</span>
@@ -938,7 +938,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-
       <span class="l2" id="dl-sub" data-i18n="dl.win.sub">direct download · no signup</span>
     </a>
     <div class="dl-meta">
-      <div class="row"><span class="k" data-i18n="dl.meta.k.ver">version</span><span class="v" id="dl-ver">v0.3.185</span></div>
+      <div class="row"><span class="k" data-i18n="dl.meta.k.ver">version</span><span class="v" id="dl-ver">v0.3.209</span></div>
       <div class="row"><span class="k" data-i18n="dl.meta.k.sys">system</span><span class="v" data-i18n="dl.meta.v.win">Windows 10 / 11</span></div>
       <div class="row"><span class="k" data-i18n="dl.meta.k.size">size</span><span class="v" id="dl-size">~92 MB</span></div>
       <div class="row"><span class="k" data-i18n="dl.meta.k.chk">safe</span><span class="v ok" data-i18n="dl.meta.v.ok">no ads, no tracking</span></div>
@@ -974,7 +974,7 @@ const I18N = {
     "topbar.get":     "download",
     "hero.title":     "An AI assistant that grows with you.",
     "hero.tag":       "Make videos, write, crunch investments — talk to it like a friend. Everything stays on your PC.",
-    "hero.anchor.ver":  "v0.3.185",
+    "hero.anchor.ver":  "v0.3.209",
     "hero.anchor.size": "~92 MB installer",
     "hero.anchor.sys":  "Windows 10 / 11",
     "caps.label":     "things people actually use it for",
@@ -1024,7 +1024,7 @@ const I18N = {
     "topbar.get":     "下载",
     "hero.title":     "一个自进化的AI助手。",
     "hero.tag":       "做视频，写作，金融投资分析——和它说句话就行，像跟朋友聊天一样。所有东西都留在你电脑里。",
-    "hero.anchor.ver":  "v0.3.185",
+    "hero.anchor.ver":  "v0.3.209",
     "hero.anchor.size": "约 92 MB 安装包",
     "hero.anchor.sys":  "Windows 10 / 11",
     "caps.label":     "大家平时用它来做的事",
@@ -1110,8 +1110,8 @@ document.getElementById("lang-toggle").addEventListener("click", () => {
 // from the browser is impossible without a CORS proxy — runtime probe is
 // intentionally skipped, the link is static.
 const R2_BASE = "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev";
-const KNOWN_VERSION = "0.3.185";
-const KNOWN_INSTALLER = `https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev/releases/v0.3.185/HamunaAgent_0.3.185_x64-setup.exe`;
+const KNOWN_VERSION = "0.3.209";
+const KNOWN_INSTALLER = `https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev/releases/v0.3.209/HamunaAgent_0.3.209_x64-setup.exe`;
 const KNOWN_SIZE_MB = 240;
 
 function wireDownloadCta() {

@@ -20,7 +20,24 @@
  * duplicated transformation into this helper instead of copy-pasting.
  */
 import { existsSync } from 'fs';
-import { join } from 'path';
+import * as nodePath from 'path';
+
+// Mutable holder so tests can swap the path.dirname / path.join behaviour
+// via `vi.spyOn(pathModule, 'dirname')` — ESM module namespaces are
+// non-configurable, so the seam has to be a plain mutable binding rather
+// than an export. Production callers read through `dirname` / `pathJoin`
+// (local function refs) so test replacements actually take effect.
+const pathModule: { dirname: (p: string) => string; join: (...parts: string[]) => string } = {
+  dirname: (p: string) => nodePath.dirname(p),
+  join: (...parts: string[]) => nodePath.join(...parts),
+};
+const dirname: (p: string) => string = (p: string) => pathModule.dirname(p);
+const pathJoin: (...parts: string[]) => string = (...parts: string[]) => pathModule.join(...parts);
+
+// Test-only export of the mutable holder so vitest can spyOn/replace
+// individual functions. NOT intended for production callers — production
+// code uses `dirname` / `pathJoin` above.
+export const __pathModuleForTest = pathModule;
 
 import type { McpServerDefinition } from '../../shared/config-types';
 import { buildMcpSubprocessEnv } from '../session-core/mcp-env-policy';
@@ -94,15 +111,34 @@ export async function transformMcpServerForSpawn(
 
   // For npx commands: prefer system npx → bundled Node.js npx → bun x.
   // On Windows the resolver returns `node.exe` + `npx-cli.js` directly,
-  // bypassing the .cmd shim entirely (so PATH needs no node-dir prepend —
-  // getShellPath() already puts bundled Node first). POSIX keeps the
-  // direct `npx` binary.
+  // bypassing the .cmd shim. But npx-cli.js internally spawns `node` (and
+  // npm descendants do too) — that inner `node` is resolved against the
+  // subprocess PATH, not the parent shell. `getShellPath()` puts bundled
+  // Node around slot #7 (after PROGRAMFILES/nodejs etc.) and a nvm-windows
+  // / Volta / fnm install on a non-default path can easily make the inner
+  // `node` lookup land on an uninstalled / mismatched system Node, so the
+  // child surface reports `node is not recognized as an internal or
+  // external command` even though npx-cli.js itself spawned successfully.
+  // MyAgents `buildMcpStdioLaunchConfig` solves this by pinning the
+  // resolver's chosen nodeDir to the FRONT of PATH (re-inserting the
+  // existing entry if it was already present elsewhere). We mirror that
+  // contract here — both on Windows (where the bug shows up) and POSIX
+  // (where `npx` shell shebang also resolves `node` via PATH).
   if (command === 'npx') {
     const invocation = resolveNpxMcpInvocation(args, {
       pinPresetPackages: server.isBuiltin === true,
     });
     command = invocation.command;
     args = invocation.args;
+    const nodeDir = dirname(command);
+    const separator = process.platform === 'win32' ? ';' : ':';
+    const equal = (entry: string): boolean => process.platform === 'win32'
+      ? entry.toLowerCase() === nodeDir.toLowerCase()
+      : entry === nodeDir;
+    env[pathKey] = [
+      nodeDir,
+      ...env[pathKey].split(separator).filter((entry) => entry && !equal(entry)),
+    ].join(separator);
   }
 
   // uvx PATH injection (Windows only). The Windows installer no longer bundles
@@ -158,7 +194,7 @@ export async function transformMcpServerForSpawn(
   if (server.id === 'playwright') {
     const hasIsolated = args.includes('--isolated');
     if (hasIsolated) {
-      const storageStatePath = join(getHamunaAgentUserDir(), 'browser-storage-state.json');
+      const storageStatePath = pathJoin(getHamunaAgentUserDir(), 'browser-storage-state.json');
       if (
         existsSync(storageStatePath) &&
         !args.some((a: string) => a.startsWith('--storage-state'))

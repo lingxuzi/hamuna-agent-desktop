@@ -1,6 +1,6 @@
 # UGC 口播路由（精简版）
 
-> **完整 504 行规范**见 `bundled-skills/creative-video-suite/references/commercial/ugc-talking-video-ref.md`。本文件只放**精简执行版**——执行 UGC 任务的最小规则集，详细规则查源。
+> 本文件即 UGC 口播任务的**权威精简执行版**——执行 UGC 任务的最小规则集全在本目录，无需查任何外部 skill / 仓库。
 
 ## 1. 触发关键词（首轮判定）
 
@@ -118,7 +118,8 @@
   second_by_second:
     0-1s: 具体动作
     1-2s: 具体动作
-  audio_voiceover: {具体台词}（12s 60-72 字 / 高密度 72-84 字；中文 5-6 字/秒；遵守 language_lock）
+  audio_voiceover: {具体台词}（12s 60-72 字 / 高密度 72-84 字；中文 5-6 字/秒；遵守 language_lock · 默认 zh-CN 普通话）
+  # 2026-09-22 铁律：language_lock 默认 = zh-CN（普通话），除非 brief 明确指定
   seedance_motion_notes: 运镜、产品中心稳定、动作连续性
   must_preserve: [产品logo清晰, 包装与参考图一致, 场景/光源连续, 人物本条内一致, 有人时自然双眼眨眼]
   do_not_generate: [逐句字幕/自动caption/lower-third/口播逐字转写/水印, 修改产品包装, 新增假logo/假标签, 鼻钉/面部穿孔/大面积纹身]
@@ -163,8 +164,10 @@ no fake/new/extra logo, no relabeled packaging;
 
 ## 12. 落盘契约
 
+**遵循 skill 整体约定**（与 §3-§6 / §8 一致）：`<workspace>/market-workspace/<project-name>/`。
+
 ```
-<workspace>/creative-video-suite/<project-name>/
+<workspace>/market-workspace/<project-name>/
 ├── project.json                                  # type="ugc" / style_anchor 强门控必填
 ├── 01_planner.md                                 # brief + style_ref 来源
 ├── 02_storyboard.md                              # 轻量分镜表
@@ -221,4 +224,4 @@ no fake/new/extra logo, no relabeled packaging;
 
 ---
 
-**完整 504 行规范见** `bundled-skills/creative-video-suite/references/commercial/ugc-talking-video-ref.md`
+**完整规范见本文件全文**——所有规则已内化在本目录，按上方章节执行，无需查任何外部 skill / 仓库。

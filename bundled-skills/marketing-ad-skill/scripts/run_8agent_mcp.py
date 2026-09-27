@@ -308,10 +308,11 @@ def cmd_grade(args) -> None:
         # 2. 新约定 cwd/market-workspace/<proj>/images/（跨 project 全扫）
         if not local_images:
             cwd = Path.cwd()
-            alt_candidates = [
-                cwd / "outputs" / "images",                # 旧约定
-                *list((cwd / "market-workspace").glob("*/images")) if (cwd / "market-workspace").exists() else [],  # 新约定
-            ]
+            alt_candidates = [cwd / "outputs" / "images"]  # 旧约定
+            # 新约定 cwd/market-workspace/<proj>/images/
+            mw = cwd / "market-workspace"
+            if mw.exists():
+                alt_candidates.extend(mw.glob("*/images"))
             for alt in alt_candidates:
                 if alt.exists():
                     local_images = list(alt.glob("*.png"))
@@ -396,6 +397,64 @@ def cmd_grade(args) -> None:
         has_all = all(e in five_elements for e in required)
         check("World Setting 5 要素齐全", has_all,
               f"缺失 {[e for e in required if e not in five_elements]}")
+
+    # 断言 13-18: §8 路由 Round 0.5 qisi Remixer 校验（仅当输出文件存在时跑）
+    qisi_path = out_dir / "json" / "agent_qisi_remixer.json"
+    if qisi_path.exists():
+        qd = read_json(qisi_path)
+        # §8.4 校验铁律 6 条
+        timeline = qd.get("timeline_breakdown", [])
+        check("§8.4 timeline_breakdown ≥3 切片", len(timeline) >= 3,
+              f"实际 {len(timeline)}")
+        np_text = qd.get("narrative_pattern", "")
+        check("§8.4 narrative_pattern ≥10 字（防空标签）",
+              isinstance(np_text, str) and len(np_text) >= 10,
+              f"实际 {len(np_text)} 字")
+        bm = qd.get("borrowed_methods", [])
+        check("§8.4 borrowed_methods ≥1", len(bm) >= 1, f"实际 {len(bm)}")
+        nsc = qd.get("new_story_changes", {})
+        if isinstance(nsc, dict):
+            nsc_true = sum(1 for v in nsc.values() if v is True or v == "✓" or v == True)
+        else:
+            nsc_true = 0
+        check("§8.4 new_story_changes ≥2 项 ✓", nsc_true >= 2, f"实际 {nsc_true}")
+        rr = qd.get("route_recommendation", {})
+        rr_route = rr.get("route", "") if isinstance(rr, dict) else ""
+        check("§8.4 route_recommendation ∈ §3-§6",
+              rr_route in ("§3", "§4", "§5", "§6", "3", "4", "5", "6"),
+              f"实际 {rr_route}")
+        ct = qd.get("comparison_table", [])
+        check("§8.4 comparison_table ≥2 行 4 列对照", len(ct) >= 2, f"实际 {len(ct)}")
+
+    # 断言 19-21: §8 路由 3 个 qisi SOP JSON 必跑检查（仅当 Round 0.5 文件存在时跑）
+    if qisi_path.exists():
+        facts_path = out_dir / "json" / "original_story_facts.json"
+        methods_path = out_dir / "json" / "narrative_methods_extracted.json"
+        rhymes_path = out_dir / "json" / "copywriting_rhymes.json"
+
+        check("§8.4 SOP1 original_story_facts.json 必跑",
+              facts_path.exists(),
+              f"缺失 {facts_path} · 必跑 qisi-evidence-frame-extraction.md")
+        check("§8.4 SOP2 narrative_methods_extracted.json 必跑",
+              methods_path.exists(),
+              f"缺失 {methods_path} · 必跑 qisi-narrative-methods-mapping.md")
+        check("§8.4 SOP3 copywriting_rhymes.json 必跑",
+              rhymes_path.exists(),
+              f"缺失 {rhymes_path} · 必跑 qisi-rhyme-copywriting.md")
+
+        # 断言 22: cross-file schema 一致性（仅当 3 个 JSON 都存在）
+        if facts_path.exists() and methods_path.exists():
+            facts = read_json(facts_path)
+            methods = read_json(methods_path)
+            facts_ts_set = {f["ts"] for f in facts.get("evidence_frames", [])}
+            method_ts_refs = set()
+            for m in methods.get("narrative_methods", []):
+                for ts in m.get("evidence_frames", []):
+                    method_ts_refs.add(ts)
+            orphan = method_ts_refs - facts_ts_set
+            check("§8.4 cross-file evidence_frames.ts 对齐",
+                  len(orphan) == 0,
+                  f"narrative_methods 引用了不存在的 ts: {orphan}")
 
     # 输出报告
     log("=" * 50)

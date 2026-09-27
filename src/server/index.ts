@@ -5170,10 +5170,25 @@ async function main() {
 
               const warmupCmd = invocation.command;
               const warmupArgs = [...invocation.args, '--help'];
-              // PATH is already rebuilt by `getShellEnv()` (bundled Node, system
-              // Node, ~/.hamuna/bin, Git, etc. — see utils/shell.ts). On Windows
-              // the resolver hands back `node.exe` + `npx-cli.js` directly so
-              // even a bare npx command would resolve without a PATH prepend.
+              // PATH is rebuilt by `getShellEnv()` (bundled Node, system Node,
+              // ~/.hamuna/bin, Git, etc. — see utils/shell.ts). The npx shebang
+              // and npm descendants resolve `node` against this PATH, so the
+              // resolver's chosen nodeDir MUST be first — otherwise the inner
+              // `node` lookup can land on an uninstalled / mismatched system
+              // Node and surface `node is not recognized`. Mirrors the
+              // transform helper's contract (mcp-server-transform.ts) and
+              // MyAgents `buildMcpStdioLaunchConfig`.
+              const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+              const { dirname } = await import('path');
+              const nodeDir = dirname(warmupCmd);
+              const separator = process.platform === 'win32' ? ';' : ':';
+              const equalEntry = (entry: string): boolean => process.platform === 'win32'
+                ? entry.toLowerCase() === nodeDir.toLowerCase()
+                : entry === nodeDir;
+              baseEnv[pathKey] = [
+                nodeDir,
+                ...(baseEnv[pathKey] ?? '').split(separator).filter((entry) => entry && !equalEntry(entry)),
+              ].join(separator);
               console.log(`[api/mcp/enable] Warming up via ${invocation.source} npx: ${warmupArgs.join(' ')}`);
 
               const handle = wrappedSpawn([warmupCmd, ...warmupArgs], {

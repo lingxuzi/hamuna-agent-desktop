@@ -6,6 +6,25 @@
 
 ---
 
+## 🆕 LibTV seg.md 整合（2026-09-22）
+
+LibTV AI 视频分镜工具（项目根 `seg.md`）定义 4 类连续性方案 — 本规范采纳为 **marketing-ad-skill 跨段连续性铁律**：
+
+| LibTV 类别 | 落地字段 | 强制审计 |
+|---|---|---|
+| **角色描述每镜完整**（§2.2） | `directions[].subject_action` 必含角色服装/妆造/造型标识 | C09 |
+| **场景锚定 4 要素**（§3.1：时间/光线/环境/氛围） | 每段 `primary_action` 必含"全程严格在 X 场景" | C08 |
+| **动作连贯**（§4.2：上一镜结束 = 下镜开始） | `opening_state` 必显式承接上段（"承接/延续/上段"关键词）| C06 |
+| **光影氛围不漂移**（§3.3 + §4.3） | 跨段禁用 "morning sunlight / window light / 中午阳光" | C10 |
+
+**自动化审计**（pre-Round-4 必跑）：
+```bash
+python3 scripts/audit_segment_continuity.py --stdin <<< '<agent_video_direction.json>'
+```
+EXIT 0 才允许进 Round 4 Video Generation。10 项规则详见脚本头部 CONTINUITY_RULES。
+
+---
+
 ## 一、角色定位
 
 **Storyboard 与 Video 之间的桥梁**。不直接调 MCP，仅输出 motion direction JSON，由 Video Generation Agent (Round 4) 拼装成完整 prompt。

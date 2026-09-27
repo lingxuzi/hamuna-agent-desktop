@@ -1314,7 +1314,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // SYSTEM_SKILLS_VERSION is independent — bump it only when SKILL.md
 // *content* changes that must overwrite on every existing install.
 
-const SYSTEM_SKILLS_VERSION: &str = "55";
+const SYSTEM_SKILLS_VERSION: &str = "56";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

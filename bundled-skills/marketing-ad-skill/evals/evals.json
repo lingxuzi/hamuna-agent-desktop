@@ -87,6 +87,20 @@
         "marketing-ad-skill/outputs/game_anime_36s/json/agent_video_direction.json",
         "marketing-ad-skill/outputs/game_anime_36s/json/agent_video.json"
       ]
+    },
+    {
+      "id": 10,
+      "name": "§8 视频复刻·乐事 36s（qisi 4 大叙事手法 + 3 个 SOP 必跑验证）",
+      "prompt": "参考视频 86.5s 乐事薯片 TVC，复刻为 36s §3 商品展示广告，保留原片 4 个核心节拍（漩涡袋口/草帽飞翔/梦里吃薯片/梦境→现实叠化）+ 押韵七言律诗口播",
+      "expected_output": "§8 路由触发（关键词「参考视频/复刻」）→ **必跑 Round 0.5 4 步 SOP 链**：① qisi-evidence-frame-extraction.md（ffmpeg 2fps 抽帧 173 帧 + 17 evidence windows）→ original_story_facts.json ② qisi-narrative-methods-mapping.md（4 维手法 + apply_to_§3 落地）→ narrative_methods_extracted.json ③ qisi-rhyme-copywriting.md（7→4 押韵映射 + rhyme_overlap_table）→ copywriting_rhymes.json ④ Round 0.5 qisi Remixer 11 字段（合并 3 个 JSON）→ agent_qisi_remixer.json → 路由 §3 → 12s × 3 段拼接 → Storyboard 每个 sub_shot_detail.source_ref 引用原片时间戳 + narrative 引用叙事方法名（qisi_methodology_coverage: 100%）→ **断言 19-22 必跑检查通过**：3 个 JSON 都存在 + cross-file evidence_frames.ts 对齐",
+      "files": [
+        "marketing-ad-skill/outputs/leshi_remix_s3_36s/references/original_story_facts.json",
+        "marketing-ad-skill/outputs/leshi_remix_s3_36s/references/narrative_methods_extracted.json",
+        "marketing-ad-skill/outputs/leshi_remix_s3_36s/references/copywriting_rhymes.json",
+        "marketing-ad-skill/outputs/leshi_remix_s3_36s/agent_outputs/agent_qisi_remixer.json",
+        "marketing-ad-skill/outputs/leshi_remix_s3_36s/agent_outputs/agent_storyboard.json",
+        "marketing-ad-skill/outputs/leshi_remix_s3_36s/render/final_36s_v4.mp4"
+      ]
     }
   ]
 }

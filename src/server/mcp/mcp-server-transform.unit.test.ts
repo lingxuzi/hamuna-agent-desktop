@@ -228,4 +228,124 @@ describe('transformMcpServerForSpawn — npx resolution', () => {
     expect(result.spawn!.command).toMatch(/npx$/);
     expect(result.spawn!.args).toEqual(['-y', '@mobilenext/mobile-mcp@latest']);
   });
+
+  it('on win32 prefixes PATH with the resolver-chosen nodeDir (npx inner-spawn node lookup)', async () => {
+    // Regression for the "node is not recognized" symptom: npx-cli.js spawns
+    // `node` internally; that inner `node` resolves against the subprocess
+    // PATH, not the parent shell. `getShellPath()` puts bundled Node around
+    // slot #7 (after PROGRAMFILES/nodejs etc.), so without pinning nodeDir to
+    // the front the inner spawn can land on an uninstalled / mismatched
+    // system Node. MyAgents `buildMcpStdioLaunchConfig` solves this; we
+    // mirror the contract here.
+    //
+    // The transform routes `dirname` through `__pathModuleForTest` (a
+    // mutable holder) so tests can spyOn/replace individual functions on a
+    // Linux CI runner without snapshotting `process.platform` at module
+    // load time. ESM module namespaces are non-configurable so the seam
+    // has to be a plain mutable binding rather than an export.
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const transformModule = await import('./mcp-server-transform');
+    const pathHolder = transformModule.__pathModuleForTest;
+    const originalDirname = pathHolder.dirname;
+    const win32Dirname = (p: string): string => {
+      const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'));
+      return idx <= 0 ? '.' : p.slice(0, idx);
+    };
+    const dirnameSpy = vi.spyOn(pathHolder, 'dirname').mockImplementation(win32Dirname);
+    const spy = vi.spyOn(
+      await import('../utils/mcp-command'),
+      'resolveNpxMcpInvocation',
+    );
+    const nodeDir = 'C:\\staged\\node';
+    spy.mockReturnValue({
+      command: `${nodeDir}\\node.exe`,
+      args: [`${nodeDir}\\node_modules\\npm\\bin\\npx-cli.js`, '-y', '@mobilenext/mobile-mcp@latest'],
+      source: 'bundled',
+    });
+
+    try {
+      const result = await transformMcpServerForSpawn({
+        id: 'mobile-control',
+        name: 'mobile-control',
+        isBuiltin: true,
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@mobilenext/mobile-mcp@latest'],
+        env: {},
+      });
+
+      const pathKey = 'Path';
+      const pathStr = result.spawn!.env[pathKey];
+      expect(pathStr).toBeTruthy();
+      // nodeDir must be the FIRST entry.
+      expect(pathStr!.split(';')[0].toLowerCase()).toBe(nodeDir.toLowerCase());
+      // And it must NOT appear again later (case-insensitive on win32).
+      const restEntries = pathStr!.split(';').slice(1);
+      expect(restEntries.some((e) => e.toLowerCase() === nodeDir.toLowerCase())).toBe(false);
+      expect(dirnameSpy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      dirnameSpy.mockRestore();
+      // Belt-and-suspenders: re-bind to the original in case the spy
+      // call didn't fully clean up.
+      pathHolder.dirname = originalDirname;
+    }
+  });
+
+  it('on win32 dedupes a case-insensitive pre-existing nodeDir entry (case-insensitive move-to-front)', async () => {
+    // Realistic scenario: getShellPath() already included
+    // `C:\Program Files\nodejs` (system Node); the resolver picks
+    // `C:\staged\node` (bundled). We want the bundled node first AND the
+    // system entry preserved (later in PATH) — but never duplicated.
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const transformModule = await import('./mcp-server-transform');
+    const pathHolder = transformModule.__pathModuleForTest;
+    const originalDirname = pathHolder.dirname;
+    const win32Dirname = (p: string): string => {
+      const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'));
+      return idx <= 0 ? '.' : p.slice(0, idx);
+    };
+    const dirnameSpy = vi.spyOn(pathHolder, 'dirname').mockImplementation(win32Dirname);
+    const spy = vi.spyOn(
+      await import('../utils/mcp-command'),
+      'resolveNpxMcpInvocation',
+    );
+    const nodeDir = 'C:\\staged\\node';
+    spy.mockReturnValue({
+      command: `${nodeDir}\\node.exe`,
+      args: [`${nodeDir}\\node_modules\\npm\\bin\\npx-cli.js`, '-y', '@mobilenext/mobile-mcp@latest'],
+      source: 'bundled',
+    });
+    // Force PATH to contain nodeDir in a different position + case, plus a
+    // unrelated system Node entry that should be preserved.
+    const fakePath = `C:\\Program Files\\nodejs;${nodeDir.toUpperCase()};C:\\Windows\\System32`;
+    vi.spyOn(await import('../utils/shell'), 'getShellPath').mockReturnValue(fakePath);
+
+    try {
+      const result = await transformMcpServerForSpawn({
+        id: 'mobile-control',
+        name: 'mobile-control',
+        isBuiltin: true,
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@mobilenext/mobile-mcp@latest'],
+        env: {},
+      });
+
+      const pathKey = 'Path';
+      const pathStr = result.spawn!.env[pathKey];
+      const entries = pathStr!.split(';');
+      expect(entries[0].toLowerCase()).toBe(nodeDir.toLowerCase());
+      // nodeDir appears exactly once (case-insensitive dedupe).
+      const occurrences = entries.filter((e) => e.toLowerCase() === nodeDir.toLowerCase()).length;
+      expect(occurrences).toBe(1);
+      // Unrelated system Node entry is preserved later.
+      expect(pathStr).toContain('C:\\Program Files\\nodejs');
+      expect(pathStr).toContain('C:\\Windows\\System32');
+    } finally {
+      spy.mockRestore();
+      dirnameSpy.mockRestore();
+      pathHolder.dirname = originalDirname;
+    }
+  });
 });
