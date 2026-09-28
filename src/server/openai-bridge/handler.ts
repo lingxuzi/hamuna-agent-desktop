@@ -362,15 +362,25 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
   const imageSaver: ToolImageSaver | undefined = config.workspacePath
     ? createToolImageSaver(config.workspacePath)
     : undefined;
-  // ponytail: cap connect at 5s (vs undici 10s default) so silent connect hangs
-  // surface before they inflate TTFT into "looks like upstream slow". 5s is well
-  // above any real LAN/WAN connect; bump to 10s if a real-world provider starts
-  // timing out on cold connect.
-  const defaultAgent = new Agent({ connectTimeout: 5000, headersTimeout: upstreamHeadersTimeoutMs });
+  // ponytail: keepAliveTimeout 30s (vs undici 5s default) so idle sockets
+  // survive between user turns — user chats idle 5-30s while reading the
+  // reply, then send another message; with 5s default the next fetch pays
+  // a cold TCP+TLS handshake to upstream (实测 5-76s, see TODO #195). 60s
+  // maxTimeout caps total socket age so OS NAT aging (typical 60-120s) can't
+  // silently drop the socket mid-flight. connectTimeout bumped 5→8s: undici
+  // retries past the deadline so a too-tight cap doesn't actually fail-fast,
+  // it just makes the next slow response TTFT worse. 8s is well above any
+  // LAN connect and gives the retry loop enough room to land a real success.
+  const defaultAgent = new Agent({
+    connectTimeout: 8000,
+    headersTimeout: upstreamHeadersTimeoutMs,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+  });
   // BUILD-PROOF: marker emitted once per handler construction. If you see this
   // in unified log, the rebuilt server-dist.js is actually running. If you don't,
   // the dev process is still on the old bundle (restart `npm run tauri:dev`).
-  log('[bridge] build_proof ttft_diag_v1 defaultAgent=5s_connect');
+  log('[bridge] build_proof ttft_diag_v2 defaultAgent=8s_connect keepAlive30s');
 
   // Cache tool_call_id → thought_signature across requests.
   // Gemini thinking models require round-tripping thought_signature on every request
