@@ -71,7 +71,7 @@ describe('cuse diagnostics', () => {
       resolveBundledCusePath: () => bundledPath,
       execRunner: async () => ({ stdout: 'cuse 0.2.1\n' }),
       fetchLatest: async () => ({
-        url: 'https://download.hamuna.io/cuse/latest.json',
+        url: 'https://download.agent.hamuna.club/cuse/latest.json',
         version: 'v0.2.2',
       }),
     });

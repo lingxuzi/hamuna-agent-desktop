@@ -28,7 +28,7 @@ jobs:
       NODE_OPTIONS: "--max-old-space-size=4096"
       # R2 默认值；可用 secrets.R2_BUCKET 覆盖（真实 bucket 是 hamuna-agent）
       R2_BUCKET: ${{ secrets.R2_BUCKET || 'hamuna-agent' }}
-      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL || 'https://download.hamuna.io' }}
+      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL || 'https://download.agent.hamuna.club' }}
 
     steps:
       # Windows runner 无开发者模式 → 无法创建 symlink（仓库根有 AGENTS.md -> CLAUDE.md），

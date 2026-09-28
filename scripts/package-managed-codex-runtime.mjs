@@ -32,7 +32,7 @@ import {
 const RUNTIME_LOCK_SOURCE = new URL('../src/shared/managed-codex-runtime.json', import.meta.url);
 const DEFAULT_RUNTIME_LOCK = readRuntimeLock();
 const DEFAULT_CODEX_VERSION = DEFAULT_RUNTIME_LOCK.version;
-const DEFAULT_BASE_URL = 'https://download.hamuna.io/runtimes/codex/sets';
+const DEFAULT_BASE_URL = 'https://download.agent.hamuna.club/runtimes/codex/sets';
 const OFFICIAL_NPM_REGISTRY = 'https://registry.npmjs.org';
 const DEFAULT_NPM_DOWNLOAD_REGISTRY = 'https://registry.npmmirror.com';
 const PLATFORMS = ['darwin-arm64', 'darwin-x64', 'win32-x64'];

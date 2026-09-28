@@ -54,7 +54,7 @@ Set-Location $ProjectDir
 
 # 配置
 $R2Bucket = if ($env:R2_BUCKET) { $env:R2_BUCKET } else { "hamuna-releases" }
-$DownloadBaseUrl = if ($env:DOWNLOAD_BASE_URL) { $env:DOWNLOAD_BASE_URL } else { "https://download.hamuna.io" }
+$DownloadBaseUrl = if ($env:DOWNLOAD_BASE_URL) { $env:DOWNLOAD_BASE_URL } else { "https://download.agent.hamuna.club" }
 $EnvFile = Join-Path $ProjectDir ".env"
 
 Write-Host ""

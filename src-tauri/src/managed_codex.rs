@@ -26,7 +26,7 @@ pub(crate) const REQUIRED_RUNTIME_SET: &str = env!("HAMUNA_MANAGED_CODEX_RUNTIME
 // builds, override both this AND `DOWNLOAD_HOST` to your custom R2 host.
 const RUNTIME_SETS_BASE_URL: &str = match option_env!("RUNTIME_SETS_BASE_URL") {
     Some(v) => v,
-    None => "https://download.hamuna.io/runtimes/codex/sets",
+    None => "https://download.agent.hamuna.club/runtimes/codex/sets",
 };
 // Keep this in sync with `src-tauri/tauri.conf.json > plugins.updater.pubkey`.
 // Managed runtime manifests and artifacts use the same minisign trust root as app updates.
@@ -35,7 +35,7 @@ const MANIFEST_SCHEMA_VERSION: u32 = 1;
 // Build-time configurable; see comment on RUNTIME_SETS_BASE_URL above.
 const DOWNLOAD_HOST: &str = match option_env!("DOWNLOAD_HOST") {
     Some(v) => v,
-    None => "download.hamuna.io",
+    None => "download.agent.hamuna.club",
 };
 const DOWNLOAD_PATH_PREFIX: &str = "/runtimes/codex/";
 const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
@@ -2636,7 +2636,7 @@ pub async fn cmd_managed_codex_download() -> Result<ManagedCodexStatus, String> 
                 // Honor the configured/provider network path first, but bound a
                 // large-artifact attempt so a degraded proxy cannot monopolize
                 // the entire App-launch retry. The direct fallback is restricted
-                // to the validated first-party download.hamuna.io URL and the
+                // to the validated first-party download.agent.hamuna.club URL and the
                 // payload is still size/hash/minisign/platform-signature checked.
                 let client = external_http_client(PREFERRED_DOWNLOAD_ATTEMPT_TIMEOUT)?;
                 let direct_client = direct_external_http_client(DIRECT_DOWNLOAD_ATTEMPT_TIMEOUT)?;
@@ -3574,18 +3574,18 @@ On a remote or headless machine? Use `codex login --device-auth` instead.";
             "https://example.com/runtimes/codex/codex.zip".to_string();
         assert!(validate_manifest_for_platform(manifest, "darwin-arm64")
             .unwrap_err()
-            .contains("download.hamuna.io"));
+            .contains("download.agent.hamuna.club"));
 
         let mut manifest = valid_manifest("darwin-arm64");
         manifest.artifacts.get_mut("darwin-arm64").unwrap().url =
-            "http://download.hamuna.io/runtimes/codex/codex.zip".to_string();
+            "http://download.agent.hamuna.club/runtimes/codex/codex.zip".to_string();
         assert!(validate_manifest_for_platform(manifest, "darwin-arm64")
             .unwrap_err()
             .contains("HTTPS"));
 
         let mut manifest = valid_manifest("darwin-arm64");
         manifest.artifacts.get_mut("darwin-arm64").unwrap().url =
-            "https://download.hamuna.io/runtimes/codex/sets/other-runtime/darwin-arm64/artifacts/codex.zip".to_string();
+            "https://download.agent.hamuna.club/runtimes/codex/sets/other-runtime/darwin-arm64/artifacts/codex.zip".to_string();
         assert!(validate_manifest_for_platform(manifest, "darwin-arm64")
             .unwrap_err()
             .contains("artifact URL"));

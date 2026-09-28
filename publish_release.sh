@@ -22,7 +22,7 @@ ENV_FILE="${PROJECT_DIR}/.env"
 
 # 配置
 R2_BUCKET="${R2_BUCKET:-hamuna-releases}"
-DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL:-https://download.hamuna.io}"
+DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL:-https://download.agent.hamuna.club}"
 
 # 架构名称辅助函数（避免重复计算逻辑）
 get_arch_suffix() {

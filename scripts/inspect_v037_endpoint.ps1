@@ -27,7 +27,7 @@ Write-Host ""
 Write-Host "=== Whole-file substring scan ===" -ForegroundColor Cyan
 $keyStrings = @(
     'pub-2d5b7e0153e94f999bdfea020fb31629',
-    'download.hamuna.io',
+    'download.agent.hamuna.club',
     'update.windows-x86_64.json',
     'update/{target}.json',
     'updater',

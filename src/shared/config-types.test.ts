@@ -311,7 +311,7 @@ describe('Managed Codex provider readiness', () => {
     expect(MANAGED_CODEX_REQUIRED_RUNTIME.version).toBe(managedCodexRuntimeLock.version);
     expect(MANAGED_CODEX_REQUIRED_RUNTIME.runtimeSet).toBe(`codex-${managedCodexRuntimeLock.version}`);
     expect(MANAGED_CODEX_REQUIRED_RUNTIME.manifestBaseUrl).toBe(
-      `https://download.hamuna.io/runtimes/codex/sets/codex-${managedCodexRuntimeLock.version}`,
+      `https://download.agent.hamuna.club/runtimes/codex/sets/codex-${managedCodexRuntimeLock.version}`,
     );
   });
 

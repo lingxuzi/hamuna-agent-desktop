@@ -1183,7 +1183,7 @@ mod tests {
             "https://analytics.hamuna.io/api/track"
         ));
         assert!(!request_target_is_loopback(
-            "https://download.hamuna.io/update/x.json"
+            "https://download.agent.hamuna.club/update/x.json"
         ));
         // Look-alikes that are NOT loopback hosts.
         assert!(!request_target_is_loopback("http://127.0.0.1.evil.com/x"));

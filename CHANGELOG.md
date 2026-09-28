@@ -214,12 +214,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.4] - 2026-07-27
 
-> HamunaAgent 0.3.4 杩涗竴姝ユ敹绱?R2 鍙戝竷閾捐矾锛氬皢 R2 妗跺悕銆丆SP / 鍗囩骇绔偣 / 杩愯鏃舵竻鍗曞熀鍧€绛?URL 鍏ㄩ儴鏀逛负鍙敱鐜鍙橀噺閰嶇疆 (`.env` / `R2_BUCKET` / `DOWNLOAD_BASE_URL` / `RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST`)锛岃鑷儴缃?R2 鐨勭敤鎴锋棤闇€鏀规簮鐮佸嵆鍙垏璧?`download.hamuna.io`銆傚悓鏃跺湪涓や釜鍙戝竷鑴氭湰閲屽姞鍏ョ増鏈彿涓€鑷存€?hard-fail锛岄伩鍏?`package.json` 涓?`tauri.conf.json` 婕傜Щ鏃堕潤榛樺彂鍑烘棫鐗堛€?
+> HamunaAgent 0.3.4 杩涗竴姝ユ敹绱?R2 鍙戝竷閾捐矾锛氬皢 R2 妗跺悕銆丆SP / 鍗囩骇绔偣 / 杩愯鏃舵竻鍗曞熀鍧€绛?URL 鍏ㄩ儴鏀逛负鍙敱鐜鍙橀噺閰嶇疆 (`.env` / `R2_BUCKET` / `DOWNLOAD_BASE_URL` / `RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST`)锛岃鑷儴缃?R2 鐨勭敤鎴锋棤闇€鏀规簮鐮佸嵆鍙垏璧?`download.agent.hamuna.club`銆傚悓鏃跺湪涓や釜鍙戝竷鑴氭湰閲屽姞鍏ョ増鏈彿涓€鑷存€?hard-fail锛岄伩鍏?`package.json` 涓?`tauri.conf.json` 婕傜Щ鏃堕潤榛樺彂鍑烘棫鐗堛€?
 
 ### Added
 
 - **鍙厤缃?R2 妗跺悕**: `.env` 鏂板 `R2_BUCKET` (榛樿 `hamuna-releases`)锛宍publish_*` / `rollback_*` / `upload_qr_code` / `release.yml` 鍏ㄩ儴浠庣幆澧冨彉閲忚鍙栵紝涓嶅啀鍐欐 `r2:hamuna-releases/...`銆?
-- **CSP 涓?Updater 绔偣 env 鍖?*: `tauri.conf.json` 鐨?CSP `connect-src` / `img-src` 涓?`plugins.updater.endpoints` 鏀圭敤 `${DOWNLOAD_BASE_URL:-https://download.hamuna.io}` 鍗犱綅绗︼紝R2 鑷儴缃茬敤鎴峰彲閫氳繃 `DOWNLOAD_BASE_URL=https://<浣犵殑鍩熷悕>` 涓€閿垏璧般€?
+- **CSP 涓?Updater 绔偣 env 鍖?*: `tauri.conf.json` 鐨?CSP `connect-src` / `img-src` 涓?`plugins.updater.endpoints` 鏀圭敤 `${DOWNLOAD_BASE_URL:-https://download.agent.hamuna.club}` 鍗犱綅绗︼紝R2 鑷儴缃茬敤鎴峰彲閫氳繃 `DOWNLOAD_BASE_URL=https://<浣犵殑鍩熷悕>` 涓€閿垏璧般€?
 - **Managed Codex Runtime 缂栬瘧鏈?env 鍖?*: `src-tauri/src/managed_codex.rs` 鐨?`RUNTIME_SETS_BASE_URL` / `DOWNLOAD_HOST` 鏀圭敤 `option_env!()`锛岄厤鍚?`src-tauri/build.rs` 鏂板鐨?`cargo:rerun-if-env-changed` 鎻愮ず锛屾瀯寤烘椂鏀?env 浼氱湡姝ｈЕ鍙戦噸缂栬瘧銆?
 - **鐗堟湰鍙蜂竴鑷存€?hard-fail**: `publish_release.sh` / `publish_windows.ps1` 鍦ㄨ鍙?`tauri.conf.json` 鐨?`version` 鍚庣珛鍗冲姣?`package.json`锛屼笉涓€鑷寸洿鎺?`exit 1` 骞舵墦鍗颁慨澶嶅懡浠?(`npm run version` / `npm version patch`)锛屾潨缁?蹇樿璺?sync-version 灏?publish"鐨勫洖褰掋€?
 
@@ -229,7 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **CSP `${DOWNLOAD_BASE_URL:-...}` 榛樿鍊肩己 `https://` schema**: 褰?`DOWNLOAD_BASE_URL` 琚樉寮忚涓哄畬鏁?URL 鏃讹紝鍘?fallback 鎷煎嚭 `https://https://...` (鍙?schema)銆侳allback 缁熶竴涓?`https://download.hamuna.io`銆?
+- **CSP `${DOWNLOAD_BASE_URL:-...}` 榛樿鍊肩己 `https://` schema**: 褰?`DOWNLOAD_BASE_URL` 琚樉寮忚涓哄畬鏁?URL 鏃讹紝鍘?fallback 鎷煎嚭 `https://https://...` (鍙?schema)銆侳allback 缁熶竴涓?`https://download.agent.hamuna.club`銆?
 
 ## [0.3.2] - 2026-07-23
 

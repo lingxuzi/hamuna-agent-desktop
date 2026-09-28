@@ -84,10 +84,10 @@ try {
     }
 
     # Tauri config override (Plan B): 自部署 R2 时覆盖 updater endpoint
-    # tauri.conf.json 的 endpoints 是 fallback (https://download.hamuna.io/...);
+    # tauri.conf.json 的 endpoints 是 fallback (https://download.agent.hamuna.club/...);
     # DOWNLOAD_BASE_URL 改了 (非默认) 时, 在 build 时通过 TAURI_CONFIG_OVERRIDES_JSON
     # 把 endpoint 覆盖成 <DOWNLOAD_BASE_URL>/update/{{target}}.json
-    if ($env:DOWNLOAD_BASE_URL -and $env:DOWNLOAD_BASE_URL -ne "https://download.hamuna.io") {
+    if ($env:DOWNLOAD_BASE_URL -and $env:DOWNLOAD_BASE_URL -ne "https://download.agent.hamuna.club") {
         $env:TAURI_CONFIG_OVERRIDES_JSON = '{"plugins":{"updater":{"endpoints":["' + $env:DOWNLOAD_BASE_URL + '/update/{{target}}.json"]}}}'
         Write-Host "  OK - Tauri config override: updater endpoint -> $($env:DOWNLOAD_BASE_URL)" -ForegroundColor Green
     }
@@ -230,7 +230,7 @@ try {
 
     # 每次构建都拉取最新 cuse release — 从 Cloudflare R2 拉取（公网公开），
     # 不再依赖 gh CLI / 私有仓库访问权限。cuse 维护者负责在 GH Release 之后跑
-    # HamunaAgent-Cuse/publish_r2.sh 镜像产物到 R2（`download.hamuna.io/cuse/...`）。
+    # HamunaAgent-Cuse/publish_r2.sh 镜像产物到 R2（`download.agent.hamuna.club/cuse/...`）。
     # 直接在当前 shell 里运行 .ps1，不走 `pwsh -File` ——
     # 这样 Windows PowerShell 5.1（Windows 自带）和 PowerShell 7+ 都能工作，
     # 避免用户没装 pwsh 时 preflight 直接失败。
