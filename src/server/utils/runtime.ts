@@ -159,6 +159,23 @@ export function getBundledNodeDir(): string | null {
     }
   }
 
+  // Fallback: locate bundled node.js relative to the running Node binary.
+  // More robust than cwd when the Sidecar is launched with a non-app cwd
+  // (NSIS service wrappers, daemonized contexts). In production the Sidecar
+  // is spawned with the absolute path of the bundled node.exe, so
+  // `process.execPath` resolves to `<install>/nodejs/node[.exe]` directly
+  // and its parent directory IS the bundled node tree.
+  if (process.execPath && existsSync(process.execPath)) {
+    const execDir = dirname(process.execPath);
+    if (isWindows()) {
+      const winExecDir = resolve(execDir, 'node.exe');
+      if (existsSync(winExecDir)) return execDir;
+    } else {
+      const macExecDir = resolve(execDir, 'node');
+      if (existsSync(macExecDir)) return execDir;
+    }
+  }
+
   // Development: walk up from scriptDir to find src-tauri/resources/nodejs/
   let dir = scriptDir;
   for (let i = 0; i < 6; i++) {

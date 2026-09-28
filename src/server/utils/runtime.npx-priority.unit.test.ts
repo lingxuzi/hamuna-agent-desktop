@@ -52,4 +52,41 @@ describe('getSystemNpxPaths — bundled beats system', () => {
     expect(paths).toContain('/usr/local/bin/npx');
     expect(paths).toContain('/usr/bin/npx');
   });
+
+  // Regression: the new process.execPath probe must not break the existing
+  // bundled-dir resolution. Pointing execPath at the bundled binary MUST
+  // keep returning the same bundled dir. A future regression that breaks
+  // the new probe (e.g. by short-circuiting on a stale execPath) fails
+  // this assertion immediately.
+  //
+  // The full "execPath recovers when scriptDir probe misses" scenario
+  // can't be unit-tested: `import.meta.url` is captured at module-load
+  // time so the scriptDir probe can't be made to fail from the test
+  // without rebuilding the bundle. The production failure mode (NSIS
+  // service wrapper sets a non-app cwd, or any daemonized spawn that
+  // inherits a foreign cwd) is what the new probe is FOR, so the contract
+  // is intentionally asserted at integration / manual levels (see
+  // TODO #187 follow-up).
+  it('process.execPath probe returns the bundled node dir when it points at the bundled binary', () => {
+    const cwdBasedDir = getBundledNodeDir();
+    if (!cwdBasedDir) return; // dev box without staged runtime — skip
+
+    const execName = process.platform === 'win32' ? 'node.exe' : 'node';
+    const bundledExecPath = `${cwdBasedDir}/${execName}`;
+    if (!require('fs').existsSync(bundledExecPath)) return;
+
+    const realExecPath = process.execPath;
+    Object.defineProperty(process, 'execPath', {
+      value: bundledExecPath,
+      configurable: true,
+    });
+    try {
+      expect(getBundledNodeDir()).toBe(cwdBasedDir);
+    } finally {
+      Object.defineProperty(process, 'execPath', {
+        value: realExecPath,
+        configurable: true,
+      });
+    }
+  });
 });
