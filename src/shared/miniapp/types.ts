@@ -36,6 +36,27 @@ export interface MiniAppPermissions {
   };
 }
 
+/**
+ * Per-locale overrides for the three user-facing strings. Whichever fields are
+ * present override the top-level `name` / `description` / `tags`; a missing
+ * field falls back to the top-level value, so an app can translate just its
+ * name and leave everything else alone.
+ */
+export interface MiniAppLocaleStrings {
+  name?: string;
+  description?: string;
+  tags?: string[];
+}
+
+/**
+ * `meta.json::i18n`. Keys are locale ids (`zh-CN`, `en-US`, …). Resolution and
+ * the fallback chain live in `./localize.ts` — the Marketplace renders through
+ * it so the host locale drives what the user sees without any MiniApp code.
+ */
+export interface MiniAppI18n {
+  locales: Record<string, MiniAppLocaleStrings>;
+}
+
 /** `meta.json` schema（PRD v0.3 §2.1.1，Phase 0 子集）。 */
 export interface MiniAppMetadata {
   id: string;
@@ -82,6 +103,8 @@ export interface MiniAppMetadata {
   updated_at?: number;
   min_host_version: string;
   permissions: MiniAppPermissions;
+  /** Optional per-locale overrides for `name` / `description` / `tags`. */
+  i18n?: MiniAppI18n;
   ai_context?: string | null;
 }
 

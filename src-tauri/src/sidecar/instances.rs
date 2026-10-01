@@ -626,7 +626,16 @@ fn check_global_sidecar_status(
     let mut guard = manager.lock().ok()?;
     let instance = guard.get_instance_mut(GLOBAL_SIDECAR_ID)?;
     let created_at = instance.created_at;
-    Some((instance.port, instance.is_running(), created_at))
+    // `process_is_alive`, not `is_running`. The global health monitor polls
+    // every few seconds, and `is_running` reports `false` for the whole window
+    // between spawn and the first successful `wait_for_health` — tens of
+    // seconds while tsx loads the server. The monitor read that as a crash,
+    // logged "died during startup", and `Drop` killed a perfectly healthy node
+    // process before it finished loading, then respawned it on port+1. The
+    // startup grace period does not cover this: it only defers HTTP health
+    // checks, while a false liveness reading falls through to the restart.
+    // Same reasoning as the `alive_check` closure in `ensure_sidecar`.
+    Some((instance.port, instance.process_is_alive(), created_at))
 }
 
 /// How often to poll session-state for the turn wake-lock. Idle sleep triggers

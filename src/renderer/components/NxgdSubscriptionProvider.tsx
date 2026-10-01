@@ -55,10 +55,14 @@ export default function NxgdSubscriptionProvider() {
     }
   };
 
-  const loadBalance = async () => {
+  // `force` maps to the endpoint's ?refresh=1, which bypasses the 1h TTL.
+  // The mount call leaves it false (one cached read); the refresh button and the
+  // post-recharge reload pass true, because in both cases the user has just
+  // changed something upstream and the cached value is known-stale by definition.
+  const loadBalance = async (force = false) => {
     setLoadingBalance(true);
     try {
-      const b = await apiGetJson<NxgdBalanceResponse>('/api/nxgd/balance');
+      const b = await apiGetJson<NxgdBalanceResponse>(`/api/nxgd/balance${force ? '?refresh=1' : ''}`);
       setBalance(b);
     } catch {
       // 静默 — auth state 会显示错误
@@ -69,7 +73,7 @@ export default function NxgdSubscriptionProvider() {
 
   const handleRechargeCompleted = () => {
     setRechargeOpen(false);
-    void loadBalance();
+    void loadBalance(true);
   };
 
   // --- render ---
@@ -113,7 +117,7 @@ export default function NxgdSubscriptionProvider() {
           <>
             <button
               type="button"
-              onClick={() => { void loadBalance(); }}
+              onClick={() => { void loadBalance(true); }}
               disabled={loadingBalance}
               title={t('providers.nxgd.balance.refresh')}
               aria-label={t('providers.nxgd.balance.refresh')}

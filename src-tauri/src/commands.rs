@@ -459,6 +459,11 @@ pub async fn cmd_miniapp_list_installed() -> Result<Vec<MiniAppSummary>, String>
 pub struct MiniAppSummary {
     pub id: String,
     pub name: String,
+    /// Top-level description, i.e. the default-locale one. The renderer pairs
+    /// it with `i18n` through `shared/miniapp/localize.ts` — the Marketplace
+    /// must not do its own per-locale picking, or the fallback chain drifts
+    /// from the one the schema guarantees.
+    pub description: String,
     pub version: i64,
     pub path: String,
     /// Phase 3: catalog source tag. `bundled` = ship-from-app, `installed` =
@@ -481,6 +486,14 @@ pub struct MiniAppSummary {
     /// `OPEN_MINIAPP_SCENE` so the scene tab can spin up the right worker.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worker_kind: Option<String>,
+    /// `meta.json::i18n.locales` passed through verbatim. Rust does not
+    /// resolve it — locale selection is a host-UI concern and lives in one
+    /// place (`shared/miniapp/localize.ts`) so every surface agrees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub i18n: Option<serde_json::Value>,
+    /// `meta.json::tags`, for catalog filtering.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
 }
 
 fn default_miniapp_source() -> String {
@@ -530,11 +543,21 @@ fn list_marketplace_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<Vec
                     let meta_path = entry.path().join("meta.json");
                     if let Some(summary) = read_miniapp_meta_for_listing(&meta_path, "installed") {
                         // If a bundled entry with the same id exists, prefer
-                        // the installed copy (user overrode it).
+                        // the installed copy (user overrode it). Copy every
+                        // field the catalog renders — keeping the bundled
+                        // name/description next to the installed path would
+                        // show a stale title for a local override.
                         if let Some(existing) = out.iter_mut().find(|s| s.id == summary.id) {
                             existing.source = "installed".to_string();
                             existing.version = summary.version;
                             existing.path = summary.path;
+                            existing.name = summary.name;
+                            existing.description = summary.description;
+                            existing.icon = summary.icon;
+                            existing.kind = summary.kind;
+                            existing.worker_kind = summary.worker_kind;
+                            existing.i18n = summary.i18n;
+                            existing.tags = summary.tags;
                         } else {
                             out.push(summary);
                         }
@@ -563,6 +586,11 @@ fn read_miniapp_meta_for_listing(meta_path: &Path, source: &str) -> Option<MiniA
     Some(MiniAppSummary {
         id,
         name,
+        description: parsed
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         version,
         path: meta_path.parent()?.to_string_lossy().to_string(),
         source: source.to_string(),
@@ -578,6 +606,12 @@ fn read_miniapp_meta_for_listing(meta_path: &Path, source: &str) -> Option<MiniA
             .get("worker_kind")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
+        i18n: parsed.get("i18n").cloned().filter(|v| !v.is_null()),
+        tags: parsed.get("tags").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|t| t.as_str().map(|s| s.to_string()))
+                .collect()
+        }),
     })
 }
 
@@ -884,6 +918,21 @@ fn install_blocking(req: &CreateMiniAppRequest, from: &str) -> Result<CreateMini
     Ok(result)
 }
 
+/// Host-owned MiniApp version. `prev_meta_json` MUST be the meta.json as it
+/// was **before** this write; passing the incoming one is the bug this function
+/// exists to make impossible to repeat. The incoming meta.json is AI-authored
+/// and always says `version: 1`, so `prev + 1` on the *new* file pinned every
+/// MiniApp at 2 forever, no matter how often the user re-created it.
+///
+/// First install (no previous meta) → 1.
+fn next_miniapp_version(prev_meta_json: Option<&str>) -> i64 {
+    prev_meta_json
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .and_then(|v| v.get("version").and_then(|n| n.as_i64()))
+        .unwrap_or(0)
+        + 1
+}
+
 fn create_from_chat_blocking(req: &CreateMiniAppRequest) -> Result<CreateMiniAppResult, String> {
     // 1. appId 校验
     if !is_safe_app_id(&req.app_id) {
@@ -946,15 +995,19 @@ fn create_from_chat_blocking(req: &CreateMiniAppRequest) -> Result<CreateMiniApp
     let dest = root.join(&req.app_id);
     let lock_path = root.join(format!("{}.lock", req.app_id));
 
-    crate::utils::file_lock::with_file_lock_blocking(
+    let new_version = crate::utils::file_lock::with_file_lock_blocking(
         &lock_path,
         crate::utils::file_lock::FileLockOptions::default(),
         || {
             // 5a. 旧版本留 snapshot 用于 diff（仅留一个快照）
             let snapshot_path = root.join(format!("{}.prev.json", req.app_id));
+            let mut prev_meta_json: Option<String> = None;
             if dest.exists() {
                 // 收集旧 meta.json + source/* + storage.json 内容
                 let prev = collect_snapshot(&dest);
+                // Keep the old meta.json around: the new version derives from
+                // it, and it is only in scope before the old tree is cleared.
+                prev_meta_json = prev.get("meta.json").cloned();
                 std::fs::write(&snapshot_path, serde_json::to_string(&prev).unwrap_or_default())
                     .map_err(|e| {
                         crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
@@ -989,6 +1042,11 @@ fn create_from_chat_blocking(req: &CreateMiniAppRequest) -> Result<CreateMiniApp
 
             // 5c. 写每文件（tmp + rename + parent create_dir_all）
             for (path, content) in &sanitized {
+                // meta.json 在 5d 单独写：version 是宿主算出来的，不能沿用
+                // AI 写的那份里的值。
+                if path == Path::new("meta.json") {
+                    continue;
+                }
                 let leaf = dest.join(path);
                 if let Some(parent) = leaf.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
@@ -1031,20 +1089,47 @@ fn create_from_chat_blocking(req: &CreateMiniAppRequest) -> Result<CreateMiniApp
                 })?;
             }
 
-            Ok(())
+            // 5d. 写 meta.json，version 由宿主填。
+            // The stored version is what the Marketplace / MiniAppCenter render
+            // (`read_miniapp_meta_for_listing` reads the file, not this return
+            // value), so computing it without persisting it left every card
+            // showing the AI-authored `1` while the API reported a different
+            // number. Host owns this field: the skill's schema documents
+            // `version` as required, but the value is not the author's to pick.
+            let new_version = next_miniapp_version(prev_meta_json.as_deref());
+            let mut meta_with_version = meta.clone();
+            if let Some(obj) = meta_with_version.as_object_mut() {
+                obj.insert("version".to_string(), serde_json::json!(new_version));
+            }
+            let meta_out = dest.join("meta.json");
+            let meta_tmp = {
+                let mut s = meta_out.as_os_str().to_owned();
+                s.push(".tmp");
+                PathBuf::from(s)
+            };
+            std::fs::write(
+                &meta_tmp,
+                serde_json::to_string_pretty(&meta_with_version).unwrap_or_default(),
+            )
+            .map_err(|e| {
+                let _ = std::fs::remove_file(&meta_tmp);
+                crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                    "meta.json tmp write failed: {}",
+                    e
+                )))
+            })?;
+            std::fs::rename(&meta_tmp, &meta_out).map_err(|e| {
+                let _ = std::fs::remove_file(&meta_tmp);
+                crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                    "meta.json rename failed: {}",
+                    e
+                )))
+            })?;
+
+            Ok(new_version)
         },
     )
     .map_err(|e| format!("file lock error: {}", e))?;
-
-    // 6. version 自增（读旧 meta.json.version；旧 snapshot 已保留用于 diff）
-    let new_version = match std::fs::read_to_string(dest.join("meta.json")) {
-        Ok(s) => serde_json::from_str::<serde_json::Value>(&s)
-            .ok()
-            .and_then(|v| v.get("version").and_then(|n| n.as_i64()))
-            .unwrap_or(0)
-            + 1,
-        Err(_) => 1,
-    };
 
     ulog_info!(
         "[miniapp:{}] Created v{} at {}",
@@ -2648,6 +2733,108 @@ fn merge_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod miniapp_version_tests {
+    use super::next_miniapp_version;
+
+    // Regression: the old code read `version` back out of the meta.json it had
+    // *just written* and added 1. That file is AI-authored and always carries
+    // `version: 1`, so every overwrite produced 2 — the number never moved,
+    // while the Marketplace rendered the stored `1`. Both halves are pinned
+    // here: increment against the PREVIOUS version, and start at 1.
+
+    #[test]
+    fn first_install_is_one() {
+        assert_eq!(next_miniapp_version(None), 1);
+    }
+
+    #[test]
+    fn increments_across_repeated_overwrites() {
+        // The AI rewrites `version: 1` every time; only the *previous* stored
+        // version may drive the next one.
+        let mut stored = next_miniapp_version(None);
+        assert_eq!(stored, 1);
+        for expected in 2..=5 {
+            let incoming = r#"{"id":"x","name":"X","description":"d","version":1}"#;
+            stored = next_miniapp_version(Some(&format!(
+                r#"{{"id":"x","name":"X","description":"d","version":{}}}"#,
+                stored
+            )));
+            assert_eq!(stored, expected, "overwrite should increment");
+            // Feeding the AI-authored meta back in must NOT be the input — that
+            // is precisely what pinned the version at 2 forever.
+            assert_ne!(
+                next_miniapp_version(Some(incoming)),
+                expected,
+                "reading the incoming meta must not be mistaken for the old one"
+            );
+        }
+    }
+
+    #[test]
+    fn tolerates_unreadable_or_versionless_previous_meta() {
+        assert_eq!(next_miniapp_version(Some("not json")), 1);
+        assert_eq!(next_miniapp_version(Some(r#"{"id":"x"}"#)), 1);
+        assert_eq!(next_miniapp_version(Some(r#"{"version":"3"}"#)), 1);
+    }
+}
+
+#[cfg(test)]
+mod miniapp_summary_tests {
+    use super::read_miniapp_meta_for_listing;
+    use std::fs;
+
+    fn summary_for(meta: &str) -> super::MiniAppSummary {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("app");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("meta.json"), meta).unwrap();
+        read_miniapp_meta_for_listing(&dir.join("meta.json"), "installed").unwrap()
+    }
+
+    // The catalog renders name/description through `shared/miniapp/localize.ts`,
+    // which needs both halves: the top-level defaults AND the `i18n` table.
+    // Dropping either one here does not fail — the card just silently shows the
+    // wrong language — so pin both.
+    #[test]
+    fn carries_top_level_strings_and_i18n_table() {
+        let s = summary_for(
+            r#"{
+              "id": "gomoku", "name": "五子棋", "description": "经典棋盘",
+              "version": 2, "icon": "Grid3x9", "tags": ["game"],
+              "i18n": { "locales": { "en-US": { "name": "Gomoku" } } }
+            }"#,
+        );
+        assert_eq!(s.name, "五子棋");
+        assert_eq!(s.description, "经典棋盘");
+        assert_eq!(s.tags.as_deref(), Some(&["game".to_string()][..]));
+        let locales = &s.i18n.expect("i18n table must be passed through")["locales"];
+        assert_eq!(locales["en-US"]["name"], serde_json::json!("Gomoku"));
+    }
+
+    #[test]
+    fn missing_optional_fields_stay_none() {
+        let s = summary_for(r#"{"id": "bare", "name": "Bare", "description": "d", "version": 1}"#);
+        assert!(s.i18n.is_none());
+        assert!(s.tags.is_none());
+        assert!(s.icon.is_none());
+        // An older meta.json with no `description` must still list, not panic —
+        // the card falls back to the name.
+        assert_eq!(s.description, "");
+    }
+
+    // `"i18n": null` is what a failed write leaves behind; serializing it as
+    // `Some(Value::Null)` would put a null table on the wire that the renderer's
+    // `Object.keys()` guard has to special-case.
+    #[test]
+    fn null_i18n_is_not_forwarded() {
+        let s = summary_for(
+            r#"{"id":"x","name":"X","description":"d","version":1,"i18n":null}"#,
+        );
+        assert!(s.i18n.is_none());
+    }
 }
 
 #[cfg(test)]

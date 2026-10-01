@@ -22,6 +22,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 }));
 
 import { i18n } from '@/i18n';
+import { CUSTOM_EVENTS } from '../../shared/constants';
 import CustomTitleBar from './CustomTitleBar';
 
 function renderBar(over: Partial<React.ComponentProps<typeof CustomTitleBar>> = {}) {
@@ -99,5 +100,33 @@ describe('CustomTitleBar — 恢复对话 pill (Issue #309)', () => {
         expect(screen.queryByText('小助理')).not.toBeInTheDocument();
         expect(screen.queryByText('任务')).not.toBeInTheDocument();
         expect(screen.queryByText('设置')).not.toBeInTheDocument();
+    });
+});
+
+// The MiniApp Center entry used to live in the Launcher hero and moved here,
+// so these two guards moved with it. The "no Tauri" case matters: the button
+// only dispatches a window event, so gating it on `isTauri()` — the way its
+// Tasks neighbour is gated — would strand the entry in browser dev mode.
+describe('CustomTitleBar — 小程序 entry', () => {
+    beforeEach(async () => {
+        mocks.isTauri.mockReturnValue(false);
+        await i18n.changeLanguage('zh-CN');
+    });
+
+    it('offers the MiniApp Center entry even without the Tauri task center', () => {
+        renderBar();
+
+        expect(screen.getByRole('button', { name: /小程序/ })).toBeInTheDocument();
+    });
+
+    it('dispatches OPEN_MINIAPP_CENTER from the MiniApp Center entry', () => {
+        const onEvent = vi.fn();
+        window.addEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, onEvent);
+
+        renderBar();
+        fireEvent.click(screen.getByRole('button', { name: /小程序/ }));
+
+        expect(onEvent).toHaveBeenCalledTimes(1);
+        window.removeEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, onEvent);
     });
 });

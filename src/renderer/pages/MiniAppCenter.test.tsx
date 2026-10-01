@@ -2,6 +2,13 @@
 //
 // Confirms: grid renders installed MiniApps; empty state when none installed;
 // clicking a card dispatches OPEN_MINIAPP_SCENE with the right payload.
+//
+// NOTE on the react-i18next mock below: `t: (k) => k` returns the key, so any
+// assertion on user-facing copy in THIS file passes whether or not the key
+// exists in the locale files — which is how this page shipped with 20 missing
+// keys and rendered nothing but `miniappCenter.title`. Do not assert on copy
+// here; the real guard is `i18n/resourceParity.test.ts`, which resolves every
+// `t()` literal against the actual resources.
 
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,7 +24,7 @@ vi.mock('@/api/apiFetch', () => ({
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
+  useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'zh-CN' } }),
 }));
 
 describe('MiniAppCenter page', () => {

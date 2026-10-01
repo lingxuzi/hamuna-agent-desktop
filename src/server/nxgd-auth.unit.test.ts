@@ -144,6 +144,77 @@ describe('nxgd-auth', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
+  // Regression: the balance cache used to be a module-level variable, so every
+  // sidecar process held its own copy with its own 1h TTL. Observed on a real
+  // machine: after a top-up the session sidecar answered 0.1 while the global
+  // one — the process that serves the provider card in Settings — kept
+  // answering the pre-top-up 0, with no error anywhere to explain it.
+  //
+  // `vi.resetModules()` + re-import is how a second sidecar is modelled here:
+  // a brand-new module instance (all module state gone) over the same $HOME.
+  // The upstream is NOT mocked for the second instance, so if the cache were
+  // still process-local this call would throw rather than silently re-fetching.
+  it('余额缓存跨 sidecar 共享：全新模块实例读到同一个值且不回源', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-shared' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { username: 'm', balance: 0.1, usedBalance: 0, status: 1 } }),
+      });
+
+    const sidecarA = await import('./nxgd-auth');
+    sidecarA.preloadNxgdAuth();
+    await sidecarA.ensureRegistered();
+    const a = await sidecarA.fetchBalance();
+    expect(a?.balance).toBe(0.1);
+
+    // Second sidecar: same $HOME, zero module state carried over.
+    vi.resetModules();
+    const sidecarB = await import('./nxgd-auth');
+    sidecarB.preloadNxgdAuth();
+    const b = await sidecarB.fetchBalance();
+
+    expect(b?.balance).toBe(0.1);
+    // 2 calls total: register + one balances fetch. A third would mean sidecar B
+    // missed the shared cache and hit the (unmocked) upstream.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('createRechargeOrder 让所有 sidecar 的缓存同时失效（共享文件被删）', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-x' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { username: 'm', balance: 9.9, usedBalance: 0, status: 1 } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { orderNo: 'o-1', checkoutUrl: 'https://pay', expiresAt: 'x' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ code: 200, message: 'success', data: { username: 'm', balance: 100, usedBalance: 0, status: 1 } }),
+      });
+
+    const mod = await import('./nxgd-auth');
+    mod.preloadNxgdAuth();
+    await mod.ensureRegistered();
+    expect((await mod.fetchBalance())?.balance).toBe(9.9);
+    await mod.createRechargeOrder(10);
+
+    // Fresh module (second sidecar) must NOT still see the 9.9 snapshot.
+    vi.resetModules();
+    const sidecarB = await import('./nxgd-auth');
+    sidecarB.preloadNxgdAuth();
+    expect((await sidecarB.fetchBalance())?.balance).toBe(100);
+  });
+
   it('fetchBalance forceRefresh 绕过缓存', async () => {
     mockFetch
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: 200, message: 'success', data: { user: {}, apiKeyName: 'm', apiKey: 'sk-x' } }) })

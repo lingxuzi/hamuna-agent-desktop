@@ -4616,7 +4616,11 @@ async function main() {
         if (!state.registered) {
           return jsonResponse({ error: 'nxgd-not-registered', state }, 503);
         }
-        const snap = await fetchBalance();
+        // ?refresh=1 跳过 1h TTL 直连上游。设置页的刷新按钮走这条 —— 在此之前
+        // 按钮只是又读了一次同一个缓存，forceRefresh 形同虚设，用户充值后按了
+        // 刷新仍看到旧值。上游限流 5/60s 是按 IP 的，所以只应由用户显式点击触发。
+        const forceRefresh = url.searchParams.get('refresh') === '1';
+        const snap = await fetchBalance(forceRefresh);
         if (!snap) {
           return jsonResponse({ error: 'balance-unavailable', state }, 502);
         }

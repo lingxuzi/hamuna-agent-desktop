@@ -9,7 +9,7 @@
  * we use decorations: false on Windows for custom title bar styling.
  */
 
-import { Cloud, Minus, Square, X, RefreshCw, RotateCcw, Settings, Copy, CheckSquare } from 'lucide-react';
+import { Cloud, Minus, Square, X, RefreshCw, RotateCcw, Settings, Copy, CheckSquare, Sparkles } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isTauri } from '@/api/tauriClient';
@@ -299,6 +299,22 @@ export default function CustomTitleBar({
     >
      <Settings className="h-4 w-4" />
      <span className="text-sm font-medium">{t('titlebar.settings')}</span>
+    </button>
+    <TitlebarDragSpacer className="w-1" />
+    {/* MiniApp Center. Lives beside Tasks / Settings rather than in the
+                    Launcher hero: it is a peer navigation target, and the
+                    hero slot is reserved for the brand group. NOT gated on
+                    `isTauri()` — it only dispatches a window event, so
+                    gating it would strand the entry in browser dev mode
+                    (same reasoning as its previous Launcher placement). */}
+    <button
+     onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER))}
+     className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
+     title={t('titlebar.miniAppsTitle')}
+     data-no-drag
+    >
+     <Sparkles className="h-4 w-4" />
+     <span className="text-sm font-medium">{t('titlebar.miniApps')}</span>
     </button>
     <TitlebarDragSpacer className="w-1" />
    </div>

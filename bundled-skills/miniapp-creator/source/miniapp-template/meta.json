@@ -1,17 +1,26 @@
 {
-  "id": "REPLACE_WITH_APP_ID",
-  "name": "REPLACE_WITH_DISPLAY_NAME",
-  "description": "REPLACE_WITH_ONE_LINE_DESCRIPTION",
+  "id": "replace-with-app-id",
+  "name": "Replace With Display Name",
+  "description": "Replace with a one-line description of 200 chars or fewer",
   "icon": "wave",
-  "category": "utility",
+  "category": "other",
   "version": 1,
-  "min_host_version": "0.3.0",
+  "min_host_version": "0.4.0",
   "tags": [],
   "permissions": {
-    "fs": [],
-    "shell": [],
-    "net": [],
-    "ai": []
+    "fs": {
+      "read": ["{appdata}/**"],
+      "write": []
+    },
+    "shell": {
+      "allow": []
+    },
+    "net": {
+      "allow": []
+    },
+    "ai": {
+      "enabled": false
+    }
   },
   "entry": "source/index.html",
   "storage": {

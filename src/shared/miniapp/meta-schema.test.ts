@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -106,8 +106,76 @@ describe('parseMiniAppMetadata', () => {
     });
   });
 
-  it('rejects non-integer version', () => {
-    expect(parseMiniAppMetadata({ ...VALID, version: 1.5 }).ok).toBe(false);
+  describe('i18n', () => {
+    it('is absent by default', () => {
+      const r = parseMiniAppMetadata(VALID);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.result.i18n).toBeUndefined();
+    });
+
+    it('accepts per-locale name/description/tags', () => {
+      const r = parseMiniAppMetadata({
+        ...VALID,
+        i18n: {
+          locales: {
+            'zh-CN': { name: '五子棋', description: '经典棋盘', tags: ['游戏'] },
+            'en-US': { name: 'Gomoku', description: 'Classic board', tags: ['game'] },
+          },
+        },
+      });
+      expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+      if (r.ok) {
+        expect(r.result.i18n?.locales['en-US']).toEqual({
+          name: 'Gomoku',
+          description: 'Classic board',
+          tags: ['game'],
+        });
+      }
+    });
+
+    it('accepts a locale that overrides only one field', () => {
+      const r = parseMiniAppMetadata({
+        ...VALID,
+        i18n: { locales: { 'zh-TW': { name: '五子棋' } } },
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.result.i18n?.locales['zh-TW']).toEqual({ name: '五子棋' });
+    });
+
+    it('rejects a non-object i18n', () => {
+      expect(parseMiniAppMetadata({ ...VALID, i18n: 'zh-CN' }).ok).toBe(false);
+    });
+
+    it('rejects a non-object locales map', () => {
+      expect(parseMiniAppMetadata({ ...VALID, i18n: { locales: [] } }).ok).toBe(false);
+    });
+
+    it('rejects a non-object locale entry', () => {
+      expect(
+        parseMiniAppMetadata({ ...VALID, i18n: { locales: { 'en-US': 'Gomoku' } } }).ok,
+      ).toBe(false);
+    });
+
+    // A translation must not be a way around the limits the top level enforces
+    // — it is the same string, rendered in a different place.
+    it('rejects a translated description > 200 chars', () => {
+      expect(
+        parseMiniAppMetadata({
+          ...VALID,
+          i18n: { locales: { 'en-US': { description: 'x'.repeat(201) } } },
+        }).ok,
+      ).toBe(false);
+    });
+
+    it('rejects more than 8 translated tags', () => {
+      const tags = Array.from({ length: 9 }, (_, i) => `t${i}`);
+      expect(
+        parseMiniAppMetadata({ ...VALID, i18n: { locales: { 'en-US': { tags } } } }).ok,
+      ).toBe(false);
+    });
+  });
+
+  it('rejects non-integer version', () => {    expect(parseMiniAppMetadata({ ...VALID, version: 1.5 }).ok).toBe(false);
   });
 
   it('rejects non-SemVer min_host_version', () => {
@@ -205,5 +273,34 @@ describe('bundled-miniapps/*/meta.json', () => {
     const r = parseMiniAppMetadata(raw);
     expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
     if (r.ok) expect(r.result.id).toBe(dirName);
+  });
+});
+
+/**
+ * The MiniApp authoring skill ships a template that the agent copies from.
+ * Nothing in the install path runs `parseMiniAppMetadata`, so a template that
+ * drifts out of schema does not fail loudly — it installs, and the declared
+ * permissions then silently fall back to defaults (see
+ * `miniapp-worker/node-limits.ts::readDeclaredNode`, which is fail-soft).
+ * Guard the template here, where drift is actually visible.
+ */
+describe('miniapp-creator skill template', () => {
+  const templateRoot = fileURLToPath(
+    new URL('../../../bundled-skills/miniapp-creator/source/miniapp-template', import.meta.url),
+  );
+
+  it('parses against the current schema', () => {
+    const raw = JSON.parse(readFileSync(join(templateRoot, 'meta.json'), 'utf8'));
+    const r = parseMiniAppMetadata(raw);
+    expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+  });
+
+  it('ships every file the 4-file contract requires', () => {
+    // storage.json is legitimately empty in the template — a fresh MiniApp has
+    // no KV state yet. Every other file must carry real content.
+    for (const f of ['meta.json', 'source/index.html', 'source/ui.js', 'source/style.css']) {
+      expect(readFileSync(join(templateRoot, f), 'utf8').length, `${f} is missing or empty`).toBeGreaterThan(0);
+    }
+    expect(existsSync(join(templateRoot, 'storage.json')), 'storage.json is missing').toBe(true);
   });
 });

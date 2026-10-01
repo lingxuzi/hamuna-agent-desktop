@@ -1,4 +1,8 @@
 {
+  "composer": {
+    "cron": "定时任务",
+    "cronEnabled": "定时任务已开启"
+  },
   "input": {
     "launcherPlaceholder": "今天，想干点啥？",
     "placeholder": "输入消息，使用 @ 引用文件，/ 使用技能...",
@@ -962,7 +966,8 @@
       "forkFailed": "创建分支失败",
       "taskDeleted": "任务已删除",
       "taskResumed": "任务已恢复",
-      "taskStopped": "任务已停止"
+      "newSession": "新对话",
+        "taskStopped": "任务已停止"
     },
     "terminalReason": {
       "newSession": "新开会话",

@@ -347,13 +347,20 @@ vi.mock('../runtimes/external-session', () => ({
   waitExternalTurnFinalization: mocks.waitExternalTurnFinalization,
 }));
 
-vi.mock('../utils/admin-config', () => ({
-  getEffectiveOfficialToolIdsForSession: mocks.getEffectiveOfficialToolIdsForSession,
-  loadConfig: mocks.loadConfig,
-  materializeProviderRouteEnv: mocks.materializeProviderRouteEnv,
-  resolveSubscriptionAuthKind: mocks.resolveSubscriptionAuthKind,
-  resolveWorkspaceConfig: mocks.resolveWorkspaceConfig,
-}));
+vi.mock('../utils/admin-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/admin-config')>();
+  return {
+    // The real allowlist: hand-stubbing it here would let the mock drift from
+    // production, which is exactly how 广电 got rejected by the builtin gate in
+    // the first place.
+    BUILTIN_MATERIALIZABLE_AUTH_KINDS: actual.BUILTIN_MATERIALIZABLE_AUTH_KINDS,
+    getEffectiveOfficialToolIdsForSession: mocks.getEffectiveOfficialToolIdsForSession,
+    loadConfig: mocks.loadConfig,
+    materializeProviderRouteEnv: mocks.materializeProviderRouteEnv,
+    resolveSubscriptionAuthKind: mocks.resolveSubscriptionAuthKind,
+    resolveWorkspaceConfig: mocks.resolveWorkspaceConfig,
+  };
+});
 
 vi.mock('../utils/management-api-client', () => ({
   managementApi: mocks.managementApi,

@@ -861,6 +861,24 @@ export function resolveSubscriptionAuthKind(
 }
 
 /**
+ * 订阅认证方式中，builtin 运行时能物化成真实 `ProviderEnv`（baseUrl + apiKey）
+ * 的那些。
+ *
+ * - `sdk-native` 不在列：它走 `'subscription'` 哨兵，由 SDK 自带凭据，
+ *   刻意不注入 base URL / key。见 `agent-session.ts` 的 effectiveProviderEnv。
+ * - `runtime-managed` 不在列：那属于外部运行时（Codex / Claude Code）。
+ *
+ * 这份清单过去在 `builtin-adapter.providerEnvForRouteRequest` 和
+ * `materializeProviderRouteEnv` 两处各硬编码一份。加入第三种方式
+ * `host-managed-auto-register`（广电）时只改了 `resolveProviderEnv` 的
+ * 物化分支，两份白名单都漏了它，于是 nxgd 在 builtin 下被 409 挡在门外、
+ * 一个 token 也流不出来。集中到这里，避免下一种认证方式重蹈覆辙。
+ */
+export const BUILTIN_MATERIALIZABLE_AUTH_KINDS: ReadonlySet<
+  SubscriptionAuthPolicy['kind'] | undefined
+> = new Set(['host-managed-oauth', 'host-managed-auto-register']);
+
+/**
  * Resolve provider environment from providerId by looking up the real provider definition
  * (preset or custom) and API key from config. Handles ALL providers including custom ones.
  *
@@ -958,7 +976,7 @@ export function materializeProviderRouteEnv(
 ): ResolvedProviderEnv | undefined {
   if (!isConcreteProviderRoute(route)) return undefined;
   if (route.kind === 'subscription'
-      && resolveSubscriptionAuthKind(route.providerId, config) !== 'host-managed-oauth') return undefined;
+      && !BUILTIN_MATERIALIZABLE_AUTH_KINDS.has(resolveSubscriptionAuthKind(route.providerId, config))) return undefined;
   return resolveProviderEnv(route.providerId, config);
 }
 

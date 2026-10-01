@@ -1,0 +1,15 @@
+/* style.css — MiniApp styles.
+   Use ONLY the host-injected --hamuna-* tokens (24 available, see
+   references/design-playbook.md §四). Every var() needs a fallback: the host
+   falls back to a light palette when a token is missing, and a wrong token
+   name fails silently rather than erroring. Never hardcode colors or sizes. */
+:root {
+  font-family: var(--hamuna-font-sans, -apple-system, 'Segoe UI', sans-serif);
+  color: var(--hamuna-text-primary, #1c1612);
+  background: var(--hamuna-bg-primary, #fff);
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+}

@@ -3539,15 +3539,21 @@ async fn session_watch_handler(
 // MiniApp (Phase 1, PRD v0.4 §B.2) — Sidecar → Rust 转发层
 // 接收 Chat Sidecar POST /api/miniapp/create 写入 ~/.hamuna/miniapps/<appId>/
 // 接收 GET /api/miniapp/diff 返回当前 vs snapshot 结构化 diff
+//
+// These are catalogue operations: no Session, no Turn, no generation to
+// discriminate. They previously called `request_sidecar_generation` purely as a
+// gate and discarded the value, which made every one of them unreachable from
+// the Global Sidecar — that sidecar is spawned by `ensure_sidecar`, which sets
+// HAMUNA_MANAGEMENT_PORT but not HAMUNA_SIDECAR_GENERATION, so it can never
+// produce the header. The MiniApp page is served by the Global Sidecar, so it
+// failed with "A valid Sidecar generation is required" on the first call.
+// Do NOT re-add the gate here; the goal/task handlers, which actually bind the
+// generation to reject stale turns, still require it.
 // =====================================================================
 
 async fn miniapp_create_handler(
-    headers: HeaderMap,
     Json(req): Json<crate::commands::CreateMiniAppRequest>,
 ) -> Json<serde_json::Value> {
-    if let Err(resp) = request_sidecar_generation(&headers) {
-        return resp;
-    }
     match crate::commands::cmd_miniapp_create_from_chat(req).await {
         Ok(result) => Json(serde_json::json!({
             "ok": true,
@@ -3566,12 +3572,8 @@ struct MiniAppDiffQuery {
 }
 
 async fn miniapp_diff_handler(
-    headers: HeaderMap,
     Query(q): Query<MiniAppDiffQuery>,
 ) -> Json<serde_json::Value> {
-    if let Err(resp) = request_sidecar_generation(&headers) {
-        return resp;
-    }
     match crate::commands::cmd_miniapp_diff_source(q.app_id, q.from_version).await {
         Ok(result) => Json(serde_json::json!({
             "ok": true,
@@ -3596,12 +3598,7 @@ struct MiniAppInstallRequest {
     app_id: String,
 }
 
-async fn miniapp_list_marketplace_handler(
-    headers: HeaderMap,
-) -> Json<serde_json::Value> {
-    if let Err(resp) = request_sidecar_generation(&headers) {
-        return resp;
-    }
+async fn miniapp_list_marketplace_handler() -> Json<serde_json::Value> {
     let Some(app_handle) = crate::logger::get_app_handle() else {
         return Json(serde_json::json!({
             "ok": false,
@@ -3618,12 +3615,8 @@ async fn miniapp_list_marketplace_handler(
 }
 
 async fn miniapp_install_handler(
-    headers: HeaderMap,
     Json(req): Json<MiniAppInstallRequest>,
 ) -> Json<serde_json::Value> {
-    if let Err(resp) = request_sidecar_generation(&headers) {
-        return resp;
-    }
     let Some(app_handle) = crate::logger::get_app_handle() else {
         return Json(serde_json::json!({
             "ok": false,
@@ -3642,12 +3635,8 @@ async fn miniapp_install_handler(
 }
 
 async fn miniapp_uninstall_handler(
-    headers: HeaderMap,
     Json(req): Json<MiniAppInstallRequest>,
 ) -> Json<serde_json::Value> {
-    if let Err(resp) = request_sidecar_generation(&headers) {
-        return resp;
-    }
     match crate::commands::cmd_miniapp_uninstall(req.app_id).await {
         Ok(()) => Json(serde_json::json!({ "ok": true })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
@@ -3661,12 +3650,8 @@ struct MiniAppSourceRequest {
 }
 
 async fn miniapp_source_handler(
-    headers: HeaderMap,
     Json(req): Json<MiniAppSourceRequest>,
 ) -> Json<serde_json::Value> {
-    if let Err(resp) = request_sidecar_generation(&headers) {
-        return resp;
-    }
     let Some(app_handle) = crate::logger::get_app_handle() else {
         return Json(serde_json::json!({
             "ok": false,

@@ -56,7 +56,7 @@ import type { MessageWire, PermissionMode, ProviderEnv } from '../agent-session'
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import type { CancelReason } from '../utils/cancellation';
 import { createConcreteProviderRoute, isConcreteProviderRoute, type ProviderRoute } from '../../shared/providerRoute';
-import { getEffectiveOfficialToolIdsForSession, materializeProviderRouteEnv, resolveSubscriptionAuthKind, resolveWorkspaceConfig } from '../utils/admin-config';
+import { BUILTIN_MATERIALIZABLE_AUTH_KINDS, getEffectiveOfficialToolIdsForSession, materializeProviderRouteEnv, resolveSubscriptionAuthKind, resolveWorkspaceConfig } from '../utils/admin-config';
 import type {
   DesktopAdmissionResult,
   DesktopMessageRequest,
@@ -125,7 +125,7 @@ function providerEnvForRouteRequest(request: {
     if (authKind === 'sdk-native') {
       return { providerEnv: 'subscription', model: request.providerRoute.model };
     }
-    if (authKind !== 'host-managed-oauth') {
+    if (!BUILTIN_MATERIALIZABLE_AUTH_KINDS.has(authKind)) {
       return {
         providerEnv: undefined,
         error: `Subscription provider '${request.providerRoute.providerId}' cannot execute in builtin runtime`,

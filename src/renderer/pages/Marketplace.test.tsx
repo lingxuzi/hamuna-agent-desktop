@@ -21,9 +21,12 @@ vi.mock('@/components/Toast', () => ({
   useToast: () => ({ info: vi.fn(), error: vi.fn(), success: vi.fn(), warning: vi.fn() }),
 }));
 
-// react-i18next: return the key so we can grep for stable strings in tests
+// react-i18next: return the key so we can grep for stable strings in tests.
+// `hostLocale` is mutable so a test can pin the host language the page
+// resolves `meta.i18n` against.
+const { hostLocale } = vi.hoisted(() => ({ hostLocale: { current: 'zh-CN' } }));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
+  useTranslation: () => ({ t: (k: string) => k, i18n: { language: hostLocale.current } }),
 }));
 
 describe('Marketplace page', () => {
@@ -32,6 +35,7 @@ describe('Marketplace page', () => {
     apiPostJson.mockReset();
     vi.restoreAllMocks();
     window.location.hash = '';
+    hostLocale.current = 'zh-CN';
   });
 
   it('renders list of MiniApps from listMarketplace()', async () => {
@@ -101,15 +105,15 @@ describe('Marketplace page', () => {
 
     fireEvent.click(getByTestId('marketplace-install'));
 
-    // ConfirmDialog opens → confirm by clicking the dialog's confirm button
-    // (it has bg-[var(--button-primary-bg)] distinguishing it from the page
-    // Install button which uses bg-[var(--accent)])
+    // ConfirmDialog opens → confirm by clicking the dialog's own confirm
+    // button. Scope the lookup to the dialog: the page's Install button is
+    // also a primary button, so an unscoped class match would find that one
+    // first and just re-open the dialog.
     await waitFor(() => {
-      const buttons = Array.from(document.querySelectorAll('button'));
-      const dialogConfirm = buttons.find(
-        (b) =>
-          b.className.includes('bg-[var(--button-primary-bg)]') &&
-          b.textContent?.includes('marketplace.install'),
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog).toBeTruthy();
+      const dialogConfirm = Array.from(dialog!.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('marketplace.install'),
       );
       expect(dialogConfirm).toBeTruthy();
       fireEvent.click(dialogConfirm!);
@@ -118,5 +122,44 @@ describe('Marketplace page', () => {
     await waitFor(() => {
       expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/install', { appId: 'git-graph' });
     });
+  });
+
+  // `meta.i18n` is pass-through all the way from Rust to this card; if any
+  // link in that chain drops it, the card silently shows the default language
+  // and nothing else fails.
+  const I18N_ITEM = {
+    id: 'gomoku',
+    name: '五子棋',
+    description: '经典棋盘',
+    version: 1,
+    path: '/a',
+    source: 'bundled',
+    i18n: {
+      locales: { 'en-US': { name: 'Gomoku', description: 'Classic board' } },
+    },
+  };
+
+  it('renders the host-locale translation when one exists', async () => {
+    hostLocale.current = 'en-US';
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: [I18N_ITEM] });
+
+    const { getByTestId } = render(<Marketplace isActive={true} />);
+    await waitFor(() => expect(getByTestId('miniapp-card-gomoku')).toBeTruthy());
+
+    const card = getByTestId('miniapp-card-gomoku').textContent ?? '';
+    expect(card).toContain('Gomoku');
+    expect(card).not.toContain('五子棋');
+  });
+
+  it('falls back to the top-level strings for an app with no i18n table', async () => {
+    const { i18n: _dropped, ...noI18n } = I18N_ITEM;
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: [noI18n] });
+
+    const { getByTestId } = render(<Marketplace isActive={true} />);
+    await waitFor(() => expect(getByTestId('miniapp-card-gomoku')).toBeTruthy());
+
+    const card = getByTestId('miniapp-card-gomoku').textContent ?? '';
+    expect(card).toContain('五子棋');
+    expect(card).toContain('经典棋盘');
   });
 });

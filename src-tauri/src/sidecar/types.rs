@@ -185,6 +185,74 @@ mod lifecycle_contract_tests {
         values.into_iter().collect()
     }
 
+    /// A child that outlives the test body, so `try_wait` reliably reports
+    /// "still running" rather than racing a fast exit.
+    fn spawn_idle_child() -> std::process::Child {
+        #[cfg(windows)]
+        {
+            std::process::Command::new("cmd")
+                .args(["/C", "ping", "-n", "30", "127.0.0.1", ">", "NUL"])
+                .spawn()
+                .expect("spawn idle child")
+        }
+        #[cfg(not(windows))]
+        {
+            std::process::Command::new("sleep")
+                .arg("30")
+                .spawn()
+                .expect("spawn idle child")
+        }
+    }
+
+    // Regression: the global health monitor asked `is_running()`, which returns
+    // `false` whenever `healthy` is false. That flag is false for the entire
+    // window between spawn and the first successful `wait_for_health`, so the
+    // monitor declared a starting-but-healthy sidecar dead, logged "died during
+    // startup", and killed it — costing a respawn on port+1 on every launch.
+    //
+    // The two answers must stay distinct: `is_running` keeps the readiness
+    // semantics that force a hung process to be replaced, `process_is_alive`
+    // answers the question the monitor is actually asking.
+    #[test]
+    fn starting_sidecar_is_live_even_though_not_yet_healthy() {
+        let mut instance = SidecarInstance {
+            process: spawn_idle_child(),
+            port: 31415,
+            agent_dir: None,
+            healthy: false,
+            is_global: true,
+            created_at: std::time::Instant::now(),
+        };
+
+        assert!(
+            instance.process_is_alive(),
+            "a freshly spawned, not-yet-healthy sidecar is still a live process"
+        );
+        assert!(
+            !instance.is_running(),
+            "is_running keeps its readiness semantics for the restart path"
+        );
+    }
+
+    #[test]
+    fn exited_sidecar_is_not_alive() {
+        let mut child = spawn_idle_child();
+        child.kill().expect("kill child");
+        child.wait().expect("reap child");
+
+        let mut instance = SidecarInstance {
+            process: child,
+            port: 31415,
+            agent_dir: None,
+            healthy: true,
+            is_global: true,
+            created_at: std::time::Instant::now(),
+        };
+
+        assert!(!instance.process_is_alive());
+        assert!(!instance.is_running());
+    }
+
     #[test]
     fn runtime_drift_with_tab_and_agent_owner_is_kept_alive() {
         let owners = owners(vec![
@@ -695,6 +763,22 @@ pub struct SidecarInstance {
 }
 
 impl SidecarInstance {
+    /// Whether the OS process is still alive, independent of readiness.
+    ///
+    /// Separate from `is_running` on purpose. `is_running` short-circuits on
+    /// `healthy`, which stays false from spawn until the first successful
+    /// `wait_for_health` (tens of seconds while tsx loads the server), and the
+    /// monitor additionally pins it false to force replacement of a hung
+    /// process. Neither means the process is gone, so anything asking "did it
+    /// die?" must ask the process, not the flag.
+    pub fn process_is_alive(&mut self) -> bool {
+        match self.process.try_wait() {
+            Ok(Some(_)) => false,
+            Ok(None) => true,
+            Err(_) => false,
+        }
+    }
+
     /// Check if the sidecar process is still running
     /// This actively checks the process rather than just relying on the healthy flag
     pub fn is_running(&mut self) -> bool {

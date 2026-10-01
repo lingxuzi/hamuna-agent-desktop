@@ -4,10 +4,14 @@
 // run inside Sidecar; the marketplace UI is just a catalog + install flow.
 
 import { apiGetJson, apiPostJson } from '@/api/apiFetch';
+import type { MiniAppI18n } from '../../shared/miniapp/types';
 
 export interface MiniAppMarketplaceItem {
   id: string;
   name: string;
+  /** Top-level (default-locale) description. Pair with `i18n` via
+   *  `localizeMiniApp` rather than picking a locale here. */
+  description: string;
   version: number;
   path: string;
   /** 'bundled' (read-only seed under resource_dir/bundled-miniapps/) or
@@ -22,6 +26,9 @@ export interface MiniAppMarketplaceItem {
   /** Phase 4 entry (PRD v0.4 §B.5): worker entry name (e.g. `git-graph`).
    *  Required when `kind = 'worker'`; passed to the worker pool. */
   worker_kind?: string;
+  /** Per-locale name/description/tags, resolved through `localizeMiniApp`. */
+  i18n?: MiniAppI18n;
+  tags?: string[];
 }
 
 export interface MarketplaceListResponse {

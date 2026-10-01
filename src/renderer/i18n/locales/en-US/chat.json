@@ -1,4 +1,8 @@
 {
+  "composer": {
+    "cron": "Scheduled task",
+    "cronEnabled": "Scheduled task enabled"
+  },
   "input": {
     "launcherPlaceholder": "What do you want to do today?",
     "placeholder": "Message HamunaAgent, use @ for files and / for skills...",
@@ -962,7 +966,8 @@
       "forkFailed": "Failed to create branch.",
       "taskDeleted": "Task deleted.",
       "taskResumed": "Task resumed.",
-      "taskStopped": "Task stopped."
+      "newSession": "New session",
+        "taskStopped": "Task stopped."
     },
     "terminalReason": {
       "newSession": "New chat",

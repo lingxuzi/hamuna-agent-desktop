@@ -17,7 +17,14 @@ rust-version = "1.81"
 
 [lib]
 name = "app_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# rlib only. `staticlib` and `cdylib` had no consumer anywhere in the repo —
+# `main.rs` is a three-line shim that calls into `app_lib` through the rlib,
+# and this is a desktop-only Tauri app (no `gen/apple` / `gen/android`). Building
+# them made every incremental dev rebuild codegen the whole crate three times
+# (two extra passes peaking at ~2.5 GB and ~2.1 GB RSS) and left a 2.5 GB
+# `app_lib.lib` plus a 244 MB PDB on disk that nothing ever read. Re-add them
+# only if a mobile target is ever introduced.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
@@ -162,6 +169,14 @@ tempfile = "3.10"
 
 [profile.dev]
 incremental = true # Compile your binary in smaller steps.
+# Line tables only, instead of cargo's default full debuginfo. Full debuginfo
+# made `link.exe` peak at 3.7 GB on a 7 GB dev box, which drove free RAM to
+# ~90 MB and sent the machine into pagefile thrashing — a single-crate rebuild
+# took 3m51s and `tauri dev` sat on a frozen-looking progress bar for ~4.5 min
+# before the app process even existed. `1` keeps file:line in panics and
+# backtraces; it only costs you variable inspection in a debugger.
+# Drop to `0` if you want backtraces stripped entirely (fastest link).
+debug = 1
 
 [profile.release]
 codegen-units = 1 # Allows LLVM to perform better optimization.

@@ -8,7 +8,7 @@
 
 import { err, ok, type MiniAppResponse } from './errors';
 import { validatePathTemplatePrefix } from './path-templates';
-import type { MiniAppMetadata, MiniAppPermissions } from './types';
+import type { MiniAppI18n, MiniAppMetadata, MiniAppPermissions } from './types';
 
 const KNOWN_CATEGORIES = new Set<MiniAppMetadata['category']>([
   'developer',
@@ -148,6 +148,49 @@ function parsePermissions(raw: unknown): MiniAppPermissions | string {
   return out;
 }
 
+/**
+ * `i18n.locales[<locale-id>]` overrides. Locale keys are opaque (the host
+ * decides what it can render); only the *values* are constrained, and they are
+ * held to the same limits as the top-level fields so a translation cannot
+ * smuggle in a 4KB description or a 40-tag list that the top level forbids.
+ */
+function parseI18n(raw: unknown): MiniAppI18n | string {
+  const r = asRecord(raw);
+  if (!r) return 'i18n must be an object';
+
+  const locales = asRecord(r.locales);
+  if (!locales) return 'i18n.locales must be an object';
+
+  const out: MiniAppI18n = { locales: {} };
+  for (const [locale, value] of Object.entries(locales)) {
+    const strings = asRecord(value);
+    if (!strings) return `i18n.locales["${locale}"] must be an object`;
+
+    const entry: NonNullable<MiniAppI18n['locales'][string]> = {};
+    if (strings.name !== undefined) {
+      const name = asString(strings.name);
+      if (!name) return `i18n.locales["${locale}"].name must be string`;
+      entry.name = name;
+    }
+    if (strings.description !== undefined) {
+      const desc = asString(strings.description);
+      if (!desc) return `i18n.locales["${locale}"].description must be string`;
+      if (desc.length > 200) {
+        return `i18n.locales["${locale}"].description must be ≤ 200 chars`;
+      }
+      entry.description = desc;
+    }
+    if (strings.tags !== undefined) {
+      const arr = asStringArray(strings.tags);
+      if (!arr) return `i18n.locales["${locale}"].tags must be string[]`;
+      if (arr.length > 8) return `i18n.locales["${locale}"].tags must be ≤ 8`;
+      entry.tags = arr;
+    }
+    out.locales[locale] = entry;
+  }
+  return out;
+}
+
 export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetadata> {
   const r = asRecord(raw);
   if (!r) return err('E_SCHEMA_INVALID', 'meta.json must be an object');
@@ -233,6 +276,15 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     workerKind = wk;
   }
 
+  let i18n: MiniAppI18n | undefined;
+  if (r.i18n !== undefined) {
+    const parsedI18n = parseI18n(r.i18n);
+    if (typeof parsedI18n === 'string') {
+      return err('E_SCHEMA_INVALID', parsedI18n);
+    }
+    i18n = parsedI18n;
+  }
+
   const out: MiniAppMetadata = {
     id,
     name,
@@ -246,6 +298,7 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     ...(skills ? { skills } : {}),
     ...(kind ? { kind } : {}),
     ...(workerKind ? { worker_kind: workerKind } : {}),
+    ...(i18n ? { i18n } : {}),
   };
 
   const createdAt = asNumber(r.created_at);

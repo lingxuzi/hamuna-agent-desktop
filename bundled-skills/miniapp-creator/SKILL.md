@@ -11,7 +11,7 @@ author: HamunaAgent
 
 # miniapp-creator — 把想法变成 MiniApp
 
-你正在 HamunaAgent 产品内运行。MiniApp 是一种"独立 Tab 跑的小应用"：用户能在 Chat 里说出"做个图标生成器"，你按 4 文件契约把代码写出来，HamunaAgent 把它存到 `~/.hamuna/miniapps/<id>/`，MiniAppRunner 在新 Tab 里跑出来。**Phase 1 范围内零 Sidecar / 零权限 / 零 skill 挂载**——你只是写代码 + 静态 UI。
+你正在 HamunaAgent 产品内运行。MiniApp 是一种"独立 Tab 跑的小应用"：用户能在 Chat 里说出"做个图标生成器"，你按 4 文件契约把代码写出来，HamunaAgent 把它存到 `~/.hamuna/miniapps/<id>/`，MiniAppRunner 在新 Tab 里跑出来。默认是纯前端 iframe；需要 shell / 文件系统 / git 时走 `kind: "worker"`，需要调宿主 AI 时开 `ai.enabled`。
 
 ## 你写什么 = 4 文件契约
 
@@ -36,20 +36,31 @@ author: HamunaAgent
 ```json
 {
   "id": "kebab-case-id",           // 必填，只能 a-z / 0-9 / -
-  "name": "显示名",                 // 必填，≤ 50 字
+  "name": "显示名",                 // 必填
   "description": "一句话描述",      // 必填，≤ 200 字
-  "icon": "wave",                   // 必填，6 个允许值之一：wave / palette / bolt / clock / list / chart
-  "category": "utility",              // 必填，6 个允许值之一：utility / productivity / creative / education / entertainment / data
-  "version": 1,                     // 必填，正整数
-  "min_host_version": "0.3.0",      // 必填，SemVer x.y.z
+  "icon": "wave",                   // 必填，非空字符串（图标名，如 wave / palette / git-branch）
+  "category": "other",              // 必填，10 个允许值之一：developer / design / productivity / data / media / game / education / social / finance / other
+  "version": 1,                     // 必填，正整数。**你只管写 1**——宿主在写盘时用「覆盖前的 version + 1」覆盖掉这个值并落盘
+  "min_host_version": "0.4.0",      // 必填，SemVer x.y.z
   "tags": ["demo"],                 // 可选，≤ 8 个 tag
-  "permissions": {                  // Phase 1 全空数组，Phase 2 起才能填
-    "fs": [],
-    "shell": [],
-    "net": [],
-    "ai": []
+  "skills": [],                     // 可选，≤ 5 个，取自 bundled-skills/，挂进本 MiniApp 的 Sidecar 会话
+  "kind": "iframe",                 // 可选，iframe（默认，纯前端）| worker（需要 shell/fs/git 时）
+  "worker_kind": "git-graph",       // kind=worker 时必填，对应 src/server/miniapp-worker/worker-rpc.ts 注册的 kind
+  "permissions": {                  // 必填，嵌套对象（不是扁平数组）
+    "fs": {
+      "read": ["{appdata}/**"],     // 每条路径必须以 {appdata} / {workspace} / {user-selected} 开头
+      "write": []                   // 不需要就别写；权限最小化
+    },
+    "shell": { "allow": [] },       // 命令名白名单，空 = 全禁
+    "net": { "allow": [] },         // 域名白名单，空 = 全禁
+    "ai": { "enabled": false }      // 需要调宿主 AI 才开，声明 allowed_models / rate_limit_per_minute
   },
   "entry": "source/index.html",     // 必填，相对 meta.json 的路径
+  "i18n": {                          // 可选，多语言；顶层的 name/description/tags 是默认语言
+    "locales": {
+      "en-US": { "name": "Gomoku", "description": "Classic board", "tags": ["game"] }
+    }
+  },
   "storage": {
     "file": "storage.json",         // 必填
     "defaults": {}                  // 可选，默认 KV
@@ -57,16 +68,24 @@ author: HamunaAgent
 }
 ```
 
+> **`i18n` 怎么工作**：MiniApp 市场卡片用宿主语言渲染 `i18n.locales[<locale>]` 里对应的 `name` / `description` / `tags`；该 locale 没有的字段**回落到顶层**。查找顺序是 `当前语言 → 简体的 zh → en-US → 顶层`。**只在你真的会写第二种语言时才加 `i18n`**——写了没被用的翻译是纯负债。
+
+> **`permissions` 是嵌套对象**（`fs: {read, write}` / `shell: {allow}` / `net: {allow}`），不是扁平数组。写成 `"fs": []` 会被 schema 校验拒绝。
+
 `id` 是目录名，**必须是 kebab-case ASCII**，全局唯一。如果用户没起名，根据 `name` 自动转（中文 → 拼音 / 拆词；如"图标生成器"→ `icon-generator`）。
 
+需要 shell / 文件系统 / git 能力时，把 `kind` 设成 `"worker"` 并指定 `worker_kind`（当前已注册 `git-graph` 和 `file-explorer`），代码写在宿主侧的 worker 里而不是 iframe 里。参考 `bundled-miniapps/git-graph/`。
+
 ## 生成流程（每次必走）
+
+> 契约和流程在本文件；**长什么样**（设计系统、反 AI 味清单、排版、Token 清单、视觉 QA 清单）在 `references/design-playbook.md`，写样式前先读它。
 
 1. **澄清需求**（最重要）：用户说"做个 X"，X 是什么？输入输出？一次性的还是循环用？数据存哪？——**如果需求模糊，先反问 1-3 个澄清问题再开始写**，避免生成后大改
 2. **起 App ID**：用户给了就用，没给按上面规则派生
 3. **写 meta.json**（用上面 schema）
 4. **写 source/index.html**（5-50 行 HTML，body 只放骨架 DOM，不内联 CSS/JS）
 5. **写 source/ui.js**（DOMContentLoaded 后再绑事件；状态读写走 `window.__miniappStorage.get/set`）
-6. **写 source/style.css**（**必须用 CSS Token**，见 §snippet，禁止硬编码颜色/字号）
+6. **写 source/style.css**（**必须用 `--hamuna-*` CSS Token**，见 §snippet 与 `references/design-playbook.md` §四，禁止硬编码颜色/字号）
 7. **写 storage.json**（`{}` 空即可，或 `defaults` 初值）
 8. **提交写盘**（见 §端到端协议）
 9. **告诉用户结果**：appId + 4 文件路径 + SceneTab 怎么开
@@ -91,21 +110,23 @@ Content-Type: application/json
 }
 ```
 
-Sidecar 收到后会：① 解析 `meta.json` schema 校验；② 转发到 Rust `cmd_miniapp_create_from_chat`；③ Rust 写入 `~/.hamuna/miniapps/icon-generator/`，**先卸载旧版本再写新版本**（每次覆盖 = version++）；④ 返回 `{ok, appId, version}`，触发 MiniAppRunner reload。
+Sidecar 收到后会：① 转发到 Rust `cmd_miniapp_create_from_chat`；② Rust 校验 appId 格式 + 5 个必需文件存在且非空 + 相对路径不穿越，然后写入 `~/.hamuna/miniapps/icon-generator/`，**先卸载旧版本再写新版本**（每次覆盖 = version++）；③ 返回 `{ok, appId, version}`，触发 MiniAppRunner reload。
+
+> **写盘不做完整 schema 校验**：`meta.json` 里写错 `category` / `permissions` 不会在安装时报错，但会让 `permissions` 在运行时**静默回落到默认值**（见 `src/server/miniapp-worker/node-limits.ts`）。所以上面的 schema 必须自己写对——本 skill 的模板已通过 `src/shared/miniapp/meta-schema.test.ts` 的守卫，改模板后跑一次该测试。
 
 **Phase 1 范围**：每次 `create` = **整体覆盖**，不做增量 patch。下一轮 Phase 2 才会上 `app.call('miniapp.patch')` 增量修改。
 
 ## 安全 / 边界（你必须知道）
 
 - **不引入第三方 CDN**：iframe 沙箱 `sandbox="allow-scripts allow-same-origin allow-forms"`，`connect-src` CSP 禁外网；只能用内联 JS / CSS，或相对路径引本地资源
-- **不发 fetch 到外网**：`net: []`（Phase 1 必空）。要拉远端数据走 Chat Sidecar 不是 MiniApp
-- **不写文件到 MiniApp 目录之外**：浏览器侧只能读 `source/` 静态文件 + `storage.json`；要跨进程写盘走 Sidecar HTTP
-- **不调 AI**：Phase 1 没有 MiniApp 自有 Sidecar，`ai: []`（Phase 2 Cowork Sidecar 起来后才能调）
-- **不大体积**：4 文件总计 ≤ 50KB；超了用户得在 Phase 2 用 Worker Manager
+- **默认断网**：`net.allow` 留空。要拉远端数据得显式声明域名白名单，且默认就该走 Chat Sidecar 而不是 MiniApp 自己发请求
+- **不写文件到 MiniApp 目录之外**：`fs` 路径必须以 `{appdata}` / `{workspace}` / `{user-selected}` 开头，硬编码绝对路径会被 schema 拒绝
+- **AI 权限按需开**：`ai.enabled` 默认关；开了要同时声明 `allowed_models` 和 `rate_limit_per_minute`，参考 `bundled-miniapps/icon-generator/meta.json`
+- **不大体积**：4 文件总计 ≤ 50KB
 
 ## 与 Chat Sidecar 的关系
 
-你（AI）运行在 Chat Sidecar 里，MiniApp 运行在用户浏览器 iframe 里。两者**完全独立**——你写完代码写盘了 MiniApp 即可，MiniApp 跑起来后不会再回 Chat 跟你聊（Phase 1 边界）。Phase 2 起 MiniApp 才能调 AI（走 Cowork Sidecar）。
+你（AI）运行在 Chat Sidecar 里，MiniApp 运行在用户 iframe 里。你写完代码写盘后 MiniApp 即可独立运行——它不会再回 Chat 跟你聊。MiniApp 自己要用 AI 时，走它自己的 `ai` 权限通道，不复用你这个会话。
 
 Chat 可拖 `~/.hamuna/miniapps/<appId>/source/` 目录到 Chat context 补仓：拖进来后你读 4 文件，按用户续问重写，再 POST `/api/miniapp/create` 整体覆盖。
 
@@ -139,21 +160,23 @@ document.getElementById('gen-btn').addEventListener('click', () => {
 ```
 
 ```css
-/* source/style.css — Phase 1: 仅用 CSS Token，不写硬编码 */
+/* source/style.css — 只用宿主注入的 --hamuna-* token，不写硬编码颜色/字号 */
 :root {
-  background: var(--bg-primary);
-  color: var(--ink);
-  border-radius: var(--theme-radius-md);
-  font-family: var(--font-body);
+  background: var(--hamuna-bg-primary, #fff);
+  color: var(--hamuna-text-primary, #1c1612);
+  font-family: var(--hamuna-font-sans, -apple-system, 'Segoe UI', sans-serif);
 }
 button {
-  background: var(--accent-primary);
-  color: var(--bg-primary);
+  background: var(--hamuna-accent, #7b8f6b);
+  color: var(--hamuna-text-on-primary, #fff);
   border: 0;
   padding: 8px 16px;
-  border-radius: var(--theme-radius-sm);
+  border-radius: var(--hamuna-radius-sm, 4px);
+  min-height: 32px;
 }
 ```
+
+> **token 名字必须是 `--hamuna-*`**，例如 `--hamuna-bg-primary` / `--hamuna-text-primary` / `--hamuna-accent` / `--hamuna-radius-md` / `--hamuna-font-sans`。宿主注入的就是这 24 个（见 `src/renderer/components/miniapp-host/theme-tokens.ts`），写成 `--bg-primary` / `--ink` / `--accent-primary` 这类宿主里**不存在**的名字会**静默失效**——不报错，只是看起来"没生效"。完整清单见 `references/design-playbook.md` §四。
 
 ```json
 // meta.json
@@ -162,11 +185,16 @@ button {
   "name": "Icon Generator",
   "description": "按一下换一个 emoji 图标",
   "icon": "palette",
-  "category": "creative",
+  "category": "design",
   "version": 1,
-  "min_host_version": "0.3.0",
+  "min_host_version": "0.4.0",
   "tags": ["demo", "icons"],
-  "permissions": { "fs": [], "shell": [], "net": [], "ai": [] },
+  "permissions": {
+    "fs": { "read": ["{appdata}/**"], "write": [] },
+    "shell": { "allow": [] },
+    "net": { "allow": [] },
+    "ai": { "enabled": false }
+  },
   "entry": "source/index.html",
   "storage": { "file": "storage.json", "defaults": {} }
 }

@@ -74,7 +74,12 @@ export default function ConfirmDialog({
     // body level — observed 2026-05-08 with SessionHistoryDropdown.
     return createPortal(
         <OverlayBackdrop onClose={loading ? undefined : onCancel} className="z-[300] px-4">
-            <div className="glass-panel w-full max-w-sm">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={title}
+                className="glass-panel w-full max-w-sm"
+            >
                 <div className="border-b border-[var(--line)] px-5 py-4">
                     <div className="break-words text-lg font-semibold text-[var(--ink)]">{title}</div>
                 </div>

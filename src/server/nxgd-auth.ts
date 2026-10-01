@@ -8,10 +8,12 @@
  * - 给 `resolveProviderEnv` 提供当前 apiKey 注入到 ANTHROPIC_API_KEY。
  *
  * 设计：复用 `withFileLock` 做并发注册安全（in-flight promise 复用避免撞 5/60s 限流）；
- * 1h TTL 余额缓存；任何远程失败 fallback 到「上次缓存 + 错误状态」，不抛。
+ * 1h TTL 余额缓存（落盘 ~/.hamuna/nxgd-balance.json，跨 sidecar 共享 —— 余额是
+ * 全局唯一事实，放模块内存会让每个 sidecar 各持一份并各自跑 TTL 而互相分叉）；
+ * 任何远程失败 fallback 到「上次缓存 + 错误状态」，不抛。
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -22,6 +24,8 @@ import { NXGD_BILLING_BASE_URL, NXGD_LLM_BASE_URL } from '../shared/config-types
 
 const AUTH_FILE = join(homedir(), '.hamuna', 'nxgd-auth.json');
 const AUTH_LOCK = AUTH_FILE + '.lock';
+const BALANCE_FILE = join(homedir(), '.hamuna', 'nxgd-balance.json');
+const BALANCE_LOCK = BALANCE_FILE + '.lock';
 const DEVICE_ID_FILE = join(homedir(), '.hamuna', 'device_id');
 const LOW_BALANCE_THRESHOLD = 5; // 元
 const BALANCE_CACHE_MS = 60 * 60 * 1000; // 1h，撞 5/60s IP 限流
@@ -81,7 +85,6 @@ interface RechargeResult {
 let cachedAuth: PersistedAuth | null = null;
 /** `ensureRegistered` in-flight promise，并发调用复用同一 fetch */
 let inflightRegister: Promise<PersistedAuth | null> | null = null;
-let cachedBalance: BalanceSnapshot | null = null;
 /** 当前状态机快照（renderer 可见） */
 let currentState: NxgdAuthState = {
   status: 'idle',
@@ -149,6 +152,64 @@ async function writePersistedAuth(auth: PersistedAuth): Promise<void> {
       const dir = dirname(AUTH_FILE);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2), 'utf-8');
+    },
+  );
+}
+
+/**
+ * 余额缓存落盘，不放模块内存。
+ *
+ * 账户余额是全局唯一事实，但 sidecar 是多进程（1 个 global + 每个 chat tab
+ * 1 个），模块级变量等于每个进程一份、各自独立跑 1h TTL。实测分叉：充值后
+ * session sidecar 已是 0.1，global sidecar 仍返回充值前的 0，而设置页的供应商
+ * 卡片恰好走 global —— 用户看到"余额一直是 0"，且无任何报错可查。缩短 TTL
+ * 只能缩小窗口、还会让 N 个进程各自打上游、更快撞 5/60s 限流，所以正确的
+ * 归属是磁盘：所有 sidecar 读同一份，锁沿用本文件既有的 withFileLock。
+ */
+async function readPersistedBalance(): Promise<BalanceSnapshot | null> {
+  return withFileLock(
+    { lockPath: BALANCE_LOCK, timeoutMs: 5_000, staleMs: 30_000 },
+    async () => {
+      try {
+        if (!existsSync(BALANCE_FILE)) return null;
+        const parsed = JSON.parse(readFileSync(BALANCE_FILE, 'utf-8')) as Partial<BalanceSnapshot>;
+        if (typeof parsed.balance !== 'number' || !Number.isFinite(parsed.balance)) return null;
+        if (typeof parsed.lastCheckedAt !== 'number' || parsed.lastCheckedAt <= 0) return null;
+        return {
+          balance: parsed.balance,
+          usedBalance: typeof parsed.usedBalance === 'number' ? parsed.usedBalance : 0,
+          status: typeof parsed.status === 'number' ? parsed.status : 0,
+          lastCheckedAt: parsed.lastCheckedAt,
+        };
+      } catch (err) {
+        logNxgd('warn', 'read persisted balance failed', { err: String(err) });
+        return null;
+      }
+    },
+  );
+}
+
+async function writePersistedBalance(snap: BalanceSnapshot): Promise<void> {
+  await withFileLock(
+    { lockPath: BALANCE_LOCK, timeoutMs: 5_000, staleMs: 30_000 },
+    async () => {
+      const dir = dirname(BALANCE_FILE);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      writeFileSync(BALANCE_FILE, JSON.stringify(snap, null, 2), 'utf-8');
+    },
+  );
+}
+
+/** 丢弃余额缓存（充值成功 / 手动重置后），下次查询必定回源。 */
+async function clearPersistedBalance(): Promise<void> {
+  await withFileLock(
+    { lockPath: BALANCE_LOCK, timeoutMs: 5_000, staleMs: 30_000 },
+    async () => {
+      try {
+        rmSync(BALANCE_FILE, { force: true });
+      } catch (err) {
+        logNxgd('warn', 'clear persisted balance failed', { err: String(err) });
+      }
     },
   );
 }
@@ -359,16 +420,17 @@ export async function markNxgdSetupDone(): Promise<NxgdAuthState> {
   return currentState;
 }
 
-/** 余额查询。1h TTL 缓存；forceRefresh=true 跳过缓存。 */
+/** 余额查询。1h TTL 缓存（落盘，跨 sidecar 共享）；forceRefresh=true 跳过缓存。 */
 export async function fetchBalance(forceRefresh = false): Promise<BalanceSnapshot | null> {
-  if (!forceRefresh && cachedBalance && Date.now() - cachedBalance.lastCheckedAt < BALANCE_CACHE_MS) {
-    return cachedBalance;
+  const cached = await readPersistedBalance();
+  if (!forceRefresh && cached && Date.now() - cached.lastCheckedAt < BALANCE_CACHE_MS) {
+    return cached;
   }
 
   const deviceId = readDeviceId();
   if (!deviceId) {
     updateState({ error: 'device_id not ready' });
-    return cachedBalance; // 返旧值（如果有）
+    return cached; // 返旧值（如果有）
   }
 
   try {
@@ -380,26 +442,27 @@ export async function fetchBalance(forceRefresh = false): Promise<BalanceSnapsho
       const msg = resp.message || `balance failed (code ${resp.code})`;
       updateState({ error: msg });
       logNxgd('warn', 'balance fetch failed', { code: resp.code, message: resp.message });
-      return cachedBalance;
+      return cached;
     }
-    cachedBalance = {
+    const snap: BalanceSnapshot = {
       balance: Number(resp.data.balance ?? 0),
       usedBalance: Number(resp.data.usedBalance ?? 0),
       status: Number(resp.data.status ?? 0),
       lastCheckedAt: Date.now(),
     };
+    await writePersistedBalance(snap);
     updateState({
-      balance: cachedBalance.balance,
-      usedBalance: cachedBalance.usedBalance,
-      balanceCheckedAt: cachedBalance.lastCheckedAt,
+      balance: snap.balance,
+      usedBalance: snap.usedBalance,
+      balanceCheckedAt: snap.lastCheckedAt,
       error: null,
     });
-    return cachedBalance;
+    return snap;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     updateState({ error: msg });
     logNxgd('error', 'balance fetch threw', { err: msg });
-    return cachedBalance;
+    return cached;
   }
 }
 
@@ -425,8 +488,8 @@ export async function createRechargeOrder(amount: number): Promise<RechargeResul
       logNxgd('warn', 'recharge failed', { code: resp.code, message: resp.message });
       return null;
     }
-    // 成功创建订单后清掉余额缓存，下次 fetchBalance 拿到新值
-    cachedBalance = null;
+    // 成功创建订单后清掉余额缓存，下次 fetchBalance 必定回源拿新值
+    await clearPersistedBalance();
     return resp.data;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -439,7 +502,7 @@ export async function createRechargeOrder(amount: number): Promise<RechargeResul
 /** 强制重置（清掉 in-memory 状态，从持久化文件重读；持久化也没有就重新注册）。 */
 export async function refreshNxgdAuth(): Promise<NxgdAuthState> {
   cachedAuth = null;
-  cachedBalance = null;
+  await clearPersistedBalance();
   updateState({
     status: 'idle',
     registered: false,
