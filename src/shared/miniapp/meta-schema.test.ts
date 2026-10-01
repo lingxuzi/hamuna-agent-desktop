@@ -1,3 +1,7 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { parseMiniAppMetadata } from './meta-schema';
@@ -120,5 +124,24 @@ describe('parseMiniAppMetadata', () => {
       const r = parseMiniAppMetadata({ ...VALID, kind: 'worker', worker_kind: 'Git_Graph' });
       expect(r.ok).toBe(false);
     });
+  });
+});
+
+// The inline fixtures above pin the parser's rules; this pins that every
+// MiniApp actually shipped in `bundled-miniapps/` satisfies them. A typo in a
+// bundled `meta.json` is otherwise invisible until the Marketplace tries to
+// render that card and silently drops it.
+describe('bundled-miniapps/*/meta.json', () => {
+  const bundledRoot = fileURLToPath(new URL('../../../bundled-miniapps', import.meta.url));
+
+  const appDirs = readdirSync(bundledRoot, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== '_e2e-fixtures')
+    .map((e) => e.name);
+
+  it.each(appDirs)('%s parses and its id matches its directory name', (dirName) => {
+    const raw = JSON.parse(readFileSync(join(bundledRoot, dirName, 'meta.json'), 'utf8'));
+    const r = parseMiniAppMetadata(raw);
+    expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+    if (r.ok) expect(r.result.id).toBe(dirName);
   });
 });

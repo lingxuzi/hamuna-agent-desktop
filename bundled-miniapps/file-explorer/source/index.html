@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>File Explorer</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>File Explorer</h1>
+        <p class="hint">
+          Browse a local directory, open files, and substring-search — all through the
+          MiniApp worker pool. Paths are re-checked against the declared read scope
+          inside the worker, not just at the bridge.
+        </p>
+      </header>
+
+      <section class="prompt-row" aria-label="Root directory">
+        <input
+          id="root-input"
+          type="text"
+          placeholder="/path/to/directory"
+          aria-label="Root directory path"
+          autocomplete="off"
+        />
+        <button id="load-btn" type="button">Load</button>
+      </section>
+
+      <div class="panes">
+        <section class="tree-pane" aria-label="Directory tree">
+          <h2>Tree</h2>
+          <ul id="tree" data-testid="tree"></ul>
+        </section>
+
+        <section class="viewer-pane" aria-label="File viewer">
+          <h2>File</h2>
+          <pre id="viewer" data-testid="viewer">Select a file from the tree.</pre>
+        </section>
+      </div>
+
+      <section class="search" aria-label="Search">
+        <input
+          id="search-input"
+          type="text"
+          placeholder="substring to search for"
+          aria-label="Search query"
+          autocomplete="off"
+        />
+        <label class="case-toggle">
+          <input id="case-insensitive" type="checkbox" checked />
+          <span>Ignore case</span>
+        </label>
+        <button id="search-btn" type="button" data-testid="search-btn">Search</button>
+      </section>
+
+      <section class="hits" aria-label="Search results">
+        <ul id="search-hits" data-testid="search-hits"></ul>
+      </section>
+
+      <section class="status" id="status" aria-live="polite"></section>
+    </main>
+    <script src="ui.js"></script>
+  </body>
+</html>

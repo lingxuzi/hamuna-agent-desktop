@@ -1,17 +1,26 @@
 {
   "id": "hello-miniapp",
   "name": "Hello MiniApp",
-  "description": "Phase 0 demo: 1 button + dialog. Zero Sidecar, zero permissions.",
+  "description": "Phase 0 demo — one button and a dialog. No Sidecar, no permissions.",
   "icon": "wave",
-  "category": "utility",
+  "category": "other",
   "version": 1,
   "min_host_version": "0.3.0",
   "tags": ["demo", "phase-0"],
   "permissions": {
-    "fs": [],
-    "shell": [],
-    "net": [],
-    "ai": []
+    "fs": {
+      "read": [],
+      "write": []
+    },
+    "shell": {
+      "allow": []
+    },
+    "net": {
+      "allow": []
+    },
+    "ai": {
+      "enabled": false
+    }
   },
   "entry": "source/index.html",
   "storage": {

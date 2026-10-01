@@ -10,7 +10,7 @@
   "skills": ["icon-design"],
   "permissions": {
     "fs": {
-      "write": ["$APPDIR/source/**"]
+      "write": ["{appdata}/source/**"]
     },
     "shell": {
       "allow": []

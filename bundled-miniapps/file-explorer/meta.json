@@ -1,14 +1,14 @@
 {
-  "id": "git-graph",
-  "name": "Git Graph",
-  "description": "Phase 3 demo — visualizes a local repo's commit graph and log, supports branch checkout, via the worker sandbox.",
-  "icon": "git-branch",
+  "id": "file-explorer",
+  "name": "File Explorer",
+  "description": "Phase 4.2 demo — browses a local directory tree, opens files, and substring-searches within a root, all through the worker sandbox.",
+  "icon": "folder-search",
   "category": "developer",
   "version": 1,
   "min_host_version": "0.4.0",
-  "tags": ["demo", "phase-3", "git", "worker"],
+  "tags": ["demo", "phase-4", "developer", "worker"],
   "kind": "worker",
-  "worker_kind": "git-graph",
+  "worker_kind": "file-explorer",
   "skills": [],
   "permissions": {
     "fs": {
@@ -16,7 +16,7 @@
       "write": []
     },
     "shell": {
-      "allow": ["git"]
+      "allow": []
     },
     "net": {
       "allow": []
@@ -29,8 +29,8 @@
   "storage": {
     "file": "storage.json",
     "defaults": {
-      "cwd": "",
-      "branch": null
+      "root": "",
+      "lastPath": null
     }
   }
 }
