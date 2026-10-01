@@ -107,14 +107,83 @@ const FALLBACK_BROWSER_STORAGE_STATE = `<hamuna-browser-storage-instructions>
 
 // ===== Variable replacement =====
 
+const IF_OPEN = '{{#if ';
+const IF_CLOSE = '{{/if}}';
+const ELSE = '{{else}}';
+
+/**
+ * Resolve `{{#if key}}…{{else}}…{{/if}}` blocks by scanning for the MATCHING
+ * close tag of each open (tracking depth) rather than by regex.
+ *
+ * Why not a regex: `{{#if}}` nests in bundled-prompts/global.md — `botName`
+ * inside `platformLabel`, `aiCanExit` inside `intervalText`. A non-greedy
+ * regex stops at the first `{{/if}}`, which is the INNER one, so the outer
+ * match swallowed the inner open tag and the inner close tag and left an
+ * orphaned `{{/if}}` in the shipped prompt. When the inner var was set, an
+ * unclosed `{{#if botName}}` leaked to the model verbatim. Both failures are
+ * silent — nothing throws, the prompt just ships with template syntax in it.
+ */
+function resolveIfBlocks(template: string, vars: Record<string, string>): string {
+  let out = '';
+  let i = 0;
+  while (i < template.length) {
+    const open = template.indexOf(IF_OPEN, i);
+    if (open === -1) {
+      out += template.slice(i);
+      break;
+    }
+    out += template.slice(i, open);
+
+    const keyEnd = template.indexOf('}}', open);
+    const key = template.slice(open + IF_OPEN.length, keyEnd);
+    // Walk forward to this open's matching close, tracking depth. `{{else}}`
+    // is recorded only at depth 1, so a nested block's own else never wins.
+    let depth = 1;
+    let cursor = keyEnd + 2;
+    let elseAt = -1;
+    let closeAt = -1;
+    while (cursor < template.length) {
+      const nextOpen = template.indexOf(IF_OPEN, cursor);
+      const nextClose = template.indexOf(IF_CLOSE, cursor);
+      const nextElse = template.indexOf(ELSE, cursor);
+      if (depth === 1 && nextElse !== -1 && (nextOpen === -1 || nextElse < nextOpen) && (nextClose === -1 || nextElse < nextClose)) {
+        elseAt = nextElse;
+        cursor = nextElse + ELSE.length;
+        continue;
+      }
+      if (nextClose === -1) break; // unbalanced — emit verbatim, don't loop
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth++;
+        cursor = nextOpen + IF_OPEN.length;
+        continue;
+      }
+      depth--;
+      cursor = nextClose + IF_CLOSE.length;
+      if (depth === 0) {
+        closeAt = nextClose;
+        break;
+      }
+    }
+    if (closeAt === -1) {
+      out += template.slice(open);
+      break;
+    }
+
+    // Recurse on the kept branch: nested blocks inside it still need resolving.
+    // Variable substitution is deliberately NOT done here — it runs once, at
+    // the end, so a substituted value can never be re-scanned as a template.
+    if (vars[key]) {
+      out += resolveIfBlocks(template.slice(keyEnd + 2, elseAt === -1 ? closeAt : elseAt), vars);
+    } else if (elseAt !== -1) {
+      out += resolveIfBlocks(template.slice(elseAt + ELSE.length, closeAt), vars);
+    }
+    i = closeAt + IF_CLOSE.length;
+  }
+  return out;
+}
+
 function renderTemplate(template: string, vars: Record<string, string>): string {
-  let result = template;
-  result = result.replace(
-    /\{\{#if (\w+)\}\}([\s\S]*?)(?:\{\{else\}\}([\s\S]*?))?\{\{\/if\}\}/g,
-    (_, key, ifBlock, elseBlock) => vars[key] ? ifBlock : (elseBlock ?? '')
-  );
-  result = result.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? '');
-  return result;
+  return resolveIfBlocks(template, vars).replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? '');
 }
 
 // ===== Bundled resource loader =====

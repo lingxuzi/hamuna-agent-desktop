@@ -105,6 +105,94 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
     expect(second).not.toContain('version-1');
   });
 
+  // ===== Nested {{#if}} =====
+  //
+  // bundled-prompts/global.md nests blocks: `botName` inside `platformLabel`,
+  // `aiCanExit` inside `intervalText`. The original non-greedy regex matched
+  // the INNER `{{/if}}` as the outer's, so every IM / cron prompt shipped
+  // template syntax to the model — an orphaned `{{/if}}`, plus an unclosed
+  // `{{#if botName}}` when the inner var was set. Silent: nothing threw, and
+  // the flat (desktop-only) assertions all passed.
+
+  const NESTED_IM = [
+    '{{#if platformLabel}}',
+    'via {{platformLabel}} in {{sourceTypeLabel}}.{{#if botName}} You are {{botName}}.{{/if}}',
+    '{{else}}',
+    'via desktop.',
+    '{{/if}}',
+  ].join('\n');
+
+  it('resolves a nested if whose inner var is set (no leaked tags)', async () => {
+    mockBundledFile(NESTED_IM);
+    const prompt = await buildSystemPromptAppend(
+      { type: 'im', platform: 'telegram', sourceType: 'private', botName: 'Ham' },
+      baseOptions,
+    );
+    expect(prompt).toContain('via Telegram in 私聊模式. You are Ham.');
+    expect(prompt).not.toContain('{{#if');
+    expect(prompt).not.toContain('{{/if}}');
+  });
+
+  it('drops the nested branch when its inner var is unset', async () => {
+    mockBundledFile(NESTED_IM);
+    const prompt = await buildSystemPromptAppend(
+      { type: 'im', platform: 'telegram', sourceType: 'private' },
+      baseOptions,
+    );
+    expect(prompt).toContain('via Telegram in 私聊模式.');
+    expect(prompt).not.toContain('{{#if');
+    expect(prompt).not.toContain('{{/if}}');
+  });
+
+  it('resolves a nested if inside the else branch', async () => {
+    mockBundledFile([
+      '{{#if platformLabel}}IM path{{else}}',
+      '{{#if floatingBallHint}}ball path{{else}}chat path{{/if}}',
+      '{{/if}}',
+    ].join('\n'));
+    // desktop has no platformLabel, so the OUTER block takes its else branch —
+    // which is where the nested block lives.
+    const prompt = await buildSystemPromptAppend(desktopScenario, baseOptions);
+    expect(prompt).toContain('chat path');
+    expect(prompt).not.toContain('{{#if');
+    expect(prompt).not.toContain('{{/if}}');
+  });
+
+  it('keeps the nested else-branch when its own var is set', async () => {
+    mockBundledFile([
+      '{{#if platformLabel}}IM path{{else}}',
+      '{{#if floatingBallHint}}ball path{{else}}chat path{{/if}}',
+      '{{/if}}',
+    ].join('\n'));
+    const prompt = await buildSystemPromptAppend(floatingBallScenario, baseOptions);
+    expect(prompt).toContain('ball path');
+    expect(prompt).not.toContain('chat path');
+    expect(prompt).not.toContain('{{#if');
+    expect(prompt).not.toContain('{{/if}}');
+  });
+
+  it('does not re-scan a substituted value as a template', async () => {
+    // A scenario value that itself contains template syntax must survive
+    // verbatim — vars are substituted once, after block resolution.
+    mockBundledFile('bot={{botName}}\n');
+    const prompt = await buildSystemPromptAppend(
+      { type: 'im', platform: 'telegram', sourceType: 'private', botName: '{{#if runtimeName}}x{{/if}}' },
+      baseOptions,
+    );
+    expect(prompt).toContain('bot={{#if runtimeName}}x{{/if}}');
+  });
+
+  it('leaves an unbalanced block verbatim instead of looping or throwing', async () => {
+    mockBundledFile('head\n{{#if botName}}\nunclosed body\n');
+    const prompt = await buildSystemPromptAppend(
+      { type: 'im', platform: 'telegram', sourceType: 'private', botName: 'Ham' },
+      baseOptions,
+    );
+    // Developer typo surfaces as-is rather than silently eating the prompt.
+    expect(prompt).toContain('{{#if botName}}');
+    expect(prompt).toContain('unclosed body');
+  });
+
   // Suppress unused-var noise: the var is held by mockBundledFile for the
   // second test to mutate.
   void mockFilePath;
