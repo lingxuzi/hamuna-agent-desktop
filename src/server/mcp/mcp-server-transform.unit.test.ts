@@ -22,6 +22,7 @@ vi.mock('../utils/runtime', async (importOriginal) => {
 
 import { transformMcpServerForSpawn } from './mcp-server-transform';
 import {
+  findPipInstalledUvxScriptsDir,
   getBundledAgnesMcpBinDirs,
   getBundledPythonBinDir,
 } from '../utils/runtime';
@@ -158,5 +159,60 @@ describe('transformMcpServerForSpawn — macOS PATH injection', () => {
     });
     expect(result.spawn).toBeNull();
     expect(result.skipReason).toMatch(/non-stdio/);
+  });
+});
+
+describe('transformMcpServerForSpawn — Windows uv PATH injection', () => {
+  const originalPlatform = process.platform;
+  const UV_SCRIPTS = 'C:\\Users\\tester\\AppData\\Roaming\\Python\\Python312\\Scripts';
+
+  beforeEach(() => {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    vi.mocked(findPipInstalledUvxScriptsDir).mockReset().mockReturnValue(null);
+    vi.mocked(getBundledPythonBinDir).mockReset();
+    vi.mocked(getBundledAgnesMcpBinDirs).mockReset().mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  });
+
+  function stdioServer(command: string) {
+    return {
+      id: 'probe',
+      name: 'probe',
+      isBuiltin: true,
+      type: 'stdio' as const,
+      command,
+      args: [],
+      env: {},
+    };
+  }
+
+  it.each(['uv', 'uvx'])(
+    'prepends the pip Scripts dir for a bare %s command',
+    async (command) => {
+      vi.mocked(findPipInstalledUvxScriptsDir).mockReturnValue(UV_SCRIPTS);
+
+      const result = await transformMcpServerForSpawn(stdioServer(command));
+
+      expect(result.spawn!.env.PATH!.startsWith(`${UV_SCRIPTS};`)).toBe(true);
+    },
+  );
+
+  it('leaves PATH untouched when the probe finds no install', async () => {
+    vi.mocked(findPipInstalledUvxScriptsDir).mockReturnValue(null);
+
+    const result = await transformMcpServerForSpawn(stdioServer('uv'));
+
+    expect(result.spawn!.env.PATH).toBe(process.env.PATH);
+  });
+
+  it('does not probe for unrelated commands', async () => {
+    vi.mocked(findPipInstalledUvxScriptsDir).mockReturnValue(UV_SCRIPTS);
+
+    await transformMcpServerForSpawn(stdioServer('some-other-tool'));
+
+    expect(findPipInstalledUvxScriptsDir).not.toHaveBeenCalled();
   });
 });

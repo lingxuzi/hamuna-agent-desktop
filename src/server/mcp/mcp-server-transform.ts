@@ -92,14 +92,24 @@ export async function transformMcpServerForSpawn(
   // can work around downstream proxy parser bugs for a specific MCP.
   const env = buildMcpSubprocessEnv(process.env, server.env);
 
-  // uvx PATH injection (Windows only). The Windows installer no longer bundles
-  // a uvx.exe — it runs `pip install --user uv` and registers the resulting
-  // Scripts dir on HKCU\Environment\Path. The probe below is a last-resort
-  // fallback for the edge case where the user just installed and is launching
-  // MCPs BEFORE Sidecar has restarted (inherited PATH still predates the
-  // HKCU write — Windows only refreshes for newly-spawned procs).
+  // uv / uvx PATH injection (Windows only). The Windows installer no longer
+  // bundles a uv binary — it runs `pip install --user uv` and registers the
+  // resulting Scripts dir on HKCU\Environment\Path. The probe below is a
+  // last-resort fallback for the cases where that registration is not in
+  // effect yet: the installer skips the whole step in update mode, swallows
+  // any failure, and Windows only refreshes the environment for *newly
+  // spawned* processes — so a Sidecar started before the registry write
+  // still has a PATH without the Scripts dir.
+  //
+  // Both spellings must be probed. `uvx` is the documented way to run a
+  // Python-hosted MCP, but the bundled `multimedia-creator` MCP (see
+  // extended_buildin_mcp/mcp.json) declares `"command": "uv"` with
+  // `tool run --from ...` — gating on `uvx` alone left that server with a
+  // bare `uv` that no PATH entry resolves, and it failed the enable-time
+  // handshake with spawn ENOENT ("命令 uv 未找到").
+  //
   // macOS/Linux rely on Homebrew / system uv being on PATH.
-  if (command === 'uvx') {
+  if (command === 'uv' || command === 'uvx') {
     const scriptsDir = findPipInstalledUvxScriptsDir();
     if (scriptsDir) {
       const delimiter = process.platform === 'win32' ? ';' : ':';
