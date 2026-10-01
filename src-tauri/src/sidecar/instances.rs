@@ -171,6 +171,11 @@ pub fn start_tab_sidecar<R: Runtime>(
     // Apply proxy policy: user proxy / inherit system / protect localhost (pit-of-success)
     proxy_config::apply_to_subprocess(&mut cmd);
 
+    // Give the Sidecar the augmented PATH — the bare Explorer-inherited one
+    // has no Node.js on Windows, which breaks npx-spawned MCP shims. See
+    // spawn.rs::apply_augmented_path_env for the full failure chain.
+    apply_augmented_path_env(&mut cmd);
+
     // Inject Python package mirror env into all child processes (MCP stdio
     // spawns, external runtime CLI, etc.). Aliyun for pip + Tsinghua for uv
     // covers both pip (used by Python skills) and uv/uvx (used by
