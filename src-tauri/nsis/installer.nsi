@@ -797,9 +797,11 @@ SectionEnd
 ;
 ; Sidecar uvx resolution after install is handled by
 ; `src/server/utils/runtime.ts::findPipInstalledUvxScriptsDir()`
-; (probes %APPDATA%\Roaming\Python\Python312\Scripts and
-; %LOCALAPPDATA%\Programs\Python\Python312\Scripts — both are PEP 370
-; per-user pip targets).
+; (enumerates <root>/PythonXY/Scripts under %APPDATA%\Roaming\Python and
+; %LOCALAPPDATA%\Programs\Python — both are PEP 370 per-user pip targets).
+; That probe is the safety net; the HKCU PATH write below is what makes
+; `uvx` visible to freshly spawned processes (Sidecar restarts, the
+; agent's Bash tool) without waiting for the probe.
 Section UvxFallback
   ${If} $UpdateMode <> 1
     DetailPrint "$(uvxFallbackInstalling)"
@@ -849,11 +851,24 @@ Section UvxFallback
       DetailPrint "$(uvxFallbackSuccess)"
       ; Persist Scripts dir on HKCU\Environment\Path so future Sidecar
       ; restarts find `uvx` via system PATH (the per-user pip target
-      ; lives under PEP 370's %APPDATA%\Roaming\Python\Python312\Scripts,
+      ; lives under PEP 370's %APPDATA%\Roaming\Python\PythonXY\Scripts,
       ; which is NOT on PATH by default — we have to register it).
-      ; PowerShell script is staged alongside the main exe by Tauri's
-      ; bundle.resources entry (see tauri.windows.conf.json).
-      nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\uvx-path-setup.ps1" "$4"'
+      ;
+      ; Extract the script to $TEMP ourselves instead of running it from
+      ; $INSTDIR. It is declared in tauri.windows.conf.json
+      ; bundle.resources, which Tauri copies inside `Section Install` —
+      ; and NSIS runs sections in file order, so Section Install executes
+      ; AFTER this one. Referencing $INSTDIR here meant a fresh install
+      ; had no script on disk yet and nsExec::ExecToLog swallowed the
+      ; failure, so HKCU\Environment\Path was never written. (An update
+      ; over an existing install happened to find the leftover file,
+      ; which is why this only ever showed up on fresh installs.)
+      ;
+      ; Path relative from build dir (target/x86_64-pc-windows-msvc/release/nsis/x64/),
+      ; same convention as the python-installer.exe `File` in §PythonInstall.
+      File "/oname=$TEMP\uvx-path-setup.ps1" "..\..\..\..\..\nsis\uvx-path-setup.ps1"
+      nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -File "$TEMP\uvx-path-setup.ps1" "$4"'
+      Delete "$TEMP\uvx-path-setup.ps1"
     ${Else}
       DetailPrint "$(uvxFallbackError)"
       ; Best-effort, don't abort — MCPs that don't need Python still work.

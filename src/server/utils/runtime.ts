@@ -5,7 +5,7 @@
  * This ensures the app can run without requiring users to have Node.js installed.
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -281,38 +281,107 @@ export function getBundledCusePath(): string | null {
   return null;
 }
 
+/** Parse the `XY` out of a PEP 370 `PythonXY` dir name, or -1 if it isn't one. */
+function pythonVersionOfDirName(name: string): number {
+  const matched = /^Python(\d+)$/i.exec(name);
+  return matched ? Number(matched[1]) : -1;
+}
+
 /**
- * Locate the per-user pip-installed `uvx.exe` Scripts directory on Windows.
- * The HamunaAgent NSIS installer runs `pip install --user uv` (via
- * Section UvxFallback in installer.nsi), which PEP 370 places at
- * `%APPDATA%\Roaming\Python\Python<major><minor>\Scripts\`. That path is
- * NOT on the system PATH by default — the installer also calls
- * `uvx-path-setup.ps1` to register it on HKCU\Environment\Path. This
- * helper exists as a last-resort probe for the Sidecar's MCP spawn path
- * (agent-session.ts) to prepend the dir when the inherited PATH doesn't
- * yet reflect the installer write (first launch before Sidecar restart,
- * or anti-virus / Defender that delayed the env refresh).
+ * Enumerate `<root>/PythonXY/Scripts` for every PEP 370 per-user Python
+ * install found under the given roots, ordered by caller preference.
  *
- * Returns null on non-Windows (macOS/Linux rely on Homebrew / system uv
- * and don't need a probe) or when the dir is not present (user hasn't
- * run pip install yet).
+ * Roots are ranked by the `roots` array order, NOT by Python version
+ * across roots. `§UvxFallback` installs uv with
+ * `pip install --user uv==0.11.33`, and `--user` redirects the install
+ * target to the PEP 370 *roaming* user site regardless of which
+ * interpreter invoked it — so the pinned, MCP-verified uv always lands
+ * under `%APPDATA%\Roaming\Python`, never under the installer's own
+ * `%LOCALAPPDATA%\Programs\Python`. Ranking the interpreter's own Scripts
+ * dir first would prefer a *non*-`--user` uv (unpinned, possibly 0.12.x,
+ * whose `uvx --from` parsing silently breaks the multimedia-creator MCP)
+ * over the pin the installer deliberately applied.
+ *
+ * Within a single root the newest version wins. Enumerating at all
+ * (instead of hardcoding `Python312`) is what lets the pin be found when
+ * the installer targeted an interpreter other than 3.12.
+ *
+ * Missing roots are normal (most users have at most one of the two
+ * layouts), so readdir failures are swallowed and the caller decides
+ * via the `uvx.exe` presence check.
+ */
+function enumeratePythonScriptsDirs(roots: string[]): string[] {
+  const found: { dir: string; version: number; rootIndex: number }[] = [];
+
+  for (let i = 0; i < roots.length; i++) {
+    const root = roots[i];
+    let names: string[];
+    try {
+      names = readdirSync(root);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const version = pythonVersionOfDirName(name);
+      if (version < 0) continue;
+      found.push({ dir: join(root, name, 'Scripts'), version, rootIndex: i });
+    }
+  }
+
+  return found
+    .sort((a, b) => a.rootIndex - b.rootIndex || b.version - a.version || a.dir.localeCompare(b.dir))
+    .map(item => item.dir);
+}
+
+/**
+ * Locate the per-user pip-installed `uv` / `uvx` Scripts directory on
+ * Windows. The HamunaAgent NSIS installer runs `pip install --user uv`
+ * (via Section UvxFallback in installer.nsi), which PEP 370 places at
+ * `%APPDATA%\Roaming\Python\PythonXY\Scripts\`. That path is NOT on the
+ * system PATH by default — the installer also runs `uvx-path-setup.ps1`
+ * to register it on HKCU\Environment\Path.
+ *
+ * Serves both binary names: pip's `uv` distribution installs `uv.exe`
+ * and `uvx.exe` side by side, and MCP entries use either spelling
+ * (`uv tool run --from ...` for the bundled multimedia-creator server,
+ * `uvx <pkg>` for ad-hoc ones). `uvx.exe` is used as the presence probe
+ * for the whole install, which is sound because the two always ship
+ * together from the same wheel.
+ *
+ * This probe is the safety net for when that registration did not take
+ * effect: the installer step is best-effort (it is skipped in update
+ * mode, and any failure is swallowed so install proceeds), and Windows
+ * only refreshes the environment for *newly spawned* processes — so a
+ * Sidecar started before the registry write still has a PATH without
+ * the Scripts dir. The MCP spawn path (`mcp-server-transform.ts`) calls
+ * this to prepend the dir, which makes bare `uv` / `uvx` work
+ * immediately rather than after an app restart.
+ *
+ * Returns null on non-Windows (macOS/Linux rely on Homebrew / system uv)
+ * or when no per-user Python install carries a `uvx.exe`.
  */
 export function findPipInstalledUvxScriptsDir(): string | null {
   if (!isWindows()) return null;
 
-  // PEP 370 default per-user site on Windows is %APPDATA%\Python\PythonXY
-  // for the SITE-PACKAGES and a sibling `Scripts\` for entry-point
-  // trampolines. We check both %APPDATA%\Roaming (the modern default)
-  // and %LOCALAPPDATA% (older Python + virtualenv layouts) so we cover
-  // any Python distribution the installer might have landed.
-  const candidates: string[] = [];
-  const roaming = process.env.APPDATA;          // %APPDATA%\Roaming\Python\Python312\Scripts
-  if (roaming) candidates.push(resolve(roaming, 'Python', 'Python312', 'Scripts'));
-  const localApp = process.env.LOCALAPPDATA;    // %LOCALAPPDATA%\Programs\Python\Python312\Scripts
-  if (localApp) candidates.push(resolve(localApp, 'Programs', 'Python', 'Python312', 'Scripts'));
+  // Two PEP 370 per-user layouts, in preference order:
+  //   1. %APPDATA%\Roaming\Python\PythonXY — where §UvxFallback's
+  //      `pip install --user uv==0.11.33` actually lands (`--user`
+  //      overrides the invoking interpreter's own site), and the only
+  //      one of the two that is NOT on PATH — i.e. the dir this probe
+  //      exists to rescue. Holds the pinned, MCP-verified uv.
+  //   2. %LOCALAPPDATA%\Programs\Python\PythonXY — the Python for
+  //      Windows installer's Scripts dir, which the installer does put
+  //      on HKCU\Environment\Path. A uv here is whatever the user
+  //      installed without `--user`: unpinned, so only a fallback.
+  // Ordering matters: see enumeratePythonScriptsDirs.
+  const roots: string[] = [];
+  const roaming = process.env.APPDATA;
+  if (roaming) roots.push(resolve(roaming, 'Python'));
+  const localApp = process.env.LOCALAPPDATA;
+  if (localApp) roots.push(resolve(localApp, 'Programs', 'Python'));
 
-  for (const dir of candidates) {
-    if (existsSync(join(dir, 'uvx.exe'))) return dir;
+  for (const scriptsDir of enumeratePythonScriptsDirs(roots)) {
+    if (existsSync(join(scriptsDir, 'uvx.exe'))) return scriptsDir;
   }
   return null;
 }

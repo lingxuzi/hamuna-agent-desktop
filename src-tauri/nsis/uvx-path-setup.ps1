@@ -7,14 +7,18 @@
 #     which on Windows defaults to %APPDATA%\Roaming\Python\Python312\Scripts\.
 #     That path is NOT on the system PATH by default (per-user pip install
 #     intentionally avoids touching env vars to stay zero-privilege).
-#   - Sidecar's MCP spawn path (`agent-session.ts`) used to prepend a
-#     bundled uvx dir to mcpEnv.PATH as a workaround. We removed the
-#     bundle entirely (pip-only direction), so MCP spawn now depends on
-#     `uvx` being reachable via system PATH.
+#   - Sidecar's MCP spawn path used to prepend a bundled uvx dir to
+#     mcpEnv.PATH as a workaround. We removed the bundle entirely
+#     (pip-only direction), so the durable fix is this registry write.
 #   - Registering the Scripts dir on HKCU\Environment\Path is per-user
 #     (no UAC), takes effect on next process spawn (Sidecar restart),
 #     and is broadcast via WM_SETTINGCHANGE so Explorer / cmd.exe
 #     refresh their cached environment.
+#   - This write is the durable path, not the only one:
+#     `src/server/utils/runtime.ts::findPipInstalledUvxScriptsDir()`
+#     independently locates the same dir for MCP spawns, so a failure
+#     here degrades visibility (Bash tool, user shells) rather than
+#     breaking MCP servers outright.
 #
 # Failure modes:
 #   - python.exe not on PATH: `python -m site --user-site` errors.

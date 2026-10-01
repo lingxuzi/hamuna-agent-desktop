@@ -22,6 +22,7 @@ vi.mock('../utils/runtime', async (importOriginal) => {
 
 import { transformMcpServerForSpawn } from './mcp-server-transform';
 import {
+  findPipInstalledUvxScriptsDir,
   getBundledAgnesMcpBinDirs,
   getBundledPythonBinDir,
 } from '../utils/runtime';
@@ -101,12 +102,13 @@ describe('transformMcpServerForSpawn — macOS PATH injection', () => {
     expect(path.indexOf(PY_X64)).toBeLessThan(path.indexOf(PY_ARM));
   });
 
-  it('on non-darwin (e.g. linux), PATH starts with the platform-rebuilt fallback (not raw parentEnv.PATH)', async () => {
+  it('on non-darwin (e.g. linux), PATH is unchanged for agnes command', async () => {
     Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
     Object.defineProperty(process, 'arch', { value: 'x64', configurable: true });
     vi.mocked(getBundledPythonBinDir).mockReturnValue(null);
     vi.mocked(getBundledAgnesMcpBinDirs).mockReturnValue([]);
 
+    const originalPath = process.env.PATH ?? '';
     const result = await transformMcpServerForSpawn({
       id: 'multimedia-creator',
       name: 'multimedia-creator',
@@ -117,14 +119,7 @@ describe('transformMcpServerForSpawn — macOS PATH injection', () => {
       env: {},
     });
 
-    const pathStr = result.spawn!.env.PATH;
-    // The PATH now comes from getShellPath() which prepends platform fallback
-    // (homebrew, /usr/bin, bundled node, etc.) so an MCP child spawned by a
-    // Sidecar launched without a login shell PATH can still find binaries.
-    expect(pathStr).toBeTruthy();
-    expect(pathStr.split(':')[0]).toMatch(/opt\/homebrew|usr\/local|usr\/bin|bin/);
-    // Inherited PATH is preserved at the tail.
-    expect(pathStr.endsWith(process.env.PATH ?? '')).toBe(true);
+    expect(result.spawn!.env.PATH).toBe(originalPath);
   });
 
   it('skips missing staging dirs (helper returns null) without breaking PATH', async () => {
@@ -167,11 +162,14 @@ describe('transformMcpServerForSpawn — macOS PATH injection', () => {
   });
 });
 
-describe('transformMcpServerForSpawn — npx resolution', () => {
+describe('transformMcpServerForSpawn — Windows uv PATH injection', () => {
   const originalPlatform = process.platform;
+  const UV_SCRIPTS = 'C:\\Users\\tester\\AppData\\Roaming\\Python\\Python312\\Scripts';
 
   beforeEach(() => {
-    vi.mocked(getBundledPythonBinDir).mockReset().mockReturnValue(null);
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    vi.mocked(findPipInstalledUvxScriptsDir).mockReset().mockReturnValue(null);
+    vi.mocked(getBundledPythonBinDir).mockReset();
     vi.mocked(getBundledAgnesMcpBinDirs).mockReset().mockReturnValue([]);
   });
 
@@ -179,173 +177,42 @@ describe('transformMcpServerForSpawn — npx resolution', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
   });
 
-  it('on win32 spawns the resolved command verbatim (resolver hands back node.exe+npx-cli.js)', async () => {
-    // The Windows-npx strategy (node.exe + npx-cli.js) is asserted in
-    // utils/mcp-command.unit.test.ts; here we only need to confirm transform
-    // does not re-introduce a .cmd shim via PATH prepend. We mock the
-    // resolver to return a known node.exe path so the assertion is stable
-    // across dev boxes (which may or may not have a staged Win node).
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    const spy = vi.spyOn(
-      await import('../utils/mcp-command'),
-      'resolveNpxMcpInvocation',
-    );
-    spy.mockReturnValue({
-      command: 'C:\\staged\\node\\node.exe',
-      args: ['C:\\staged\\node\\node_modules\\npm\\bin\\npx-cli.js', '-y', '@mobilenext/mobile-mcp@latest'],
-      source: 'bundled',
-    });
-
-    const result = await transformMcpServerForSpawn({
-      id: 'mobile-control',
-      name: 'mobile-control',
+  function stdioServer(command: string) {
+    return {
+      id: 'probe',
+      name: 'probe',
       isBuiltin: true,
-      type: 'stdio',
-      command: 'npx',
-      args: ['-y', '@mobilenext/mobile-mcp@latest'],
+      type: 'stdio' as const,
+      command,
+      args: [],
       env: {},
-    });
-
-    expect(result.spawn!.command.toLowerCase()).toMatch(/node\.exe$/);
-    expect(result.spawn!.command.toLowerCase()).not.toMatch(/npx\.cmd$/);
-    expect(result.spawn!.args[0]).toMatch(/npx-cli\.js$/);
-    expect(result.spawn!.args.slice(1)).toEqual(['-y', '@mobilenext/mobile-mcp@latest']);
-    spy.mockRestore();
-  });
-
-  it('on darwin keeps the direct npx binary (no shim layer to bypass)', async () => {
-    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-    const result = await transformMcpServerForSpawn({
-      id: 'mobile-control',
-      name: 'mobile-control',
-      isBuiltin: true,
-      type: 'stdio',
-      command: 'npx',
-      args: ['-y', '@mobilenext/mobile-mcp@latest'],
-      env: {},
-    });
-
-    expect(result.spawn!.command).toMatch(/npx$/);
-    expect(result.spawn!.args).toEqual(['-y', '@mobilenext/mobile-mcp@latest']);
-  });
-
-  it('on win32 prefixes PATH with the resolver-chosen nodeDir (npx inner-spawn node lookup)', async () => {
-    // Regression for the "node is not recognized" symptom: npx-cli.js spawns
-    // `node` internally; that inner `node` resolves against the subprocess
-    // PATH, not the parent shell. `getShellPath()` puts bundled Node around
-    // slot #7 (after PROGRAMFILES/nodejs etc.), so without pinning nodeDir to
-    // the front the inner spawn can land on an uninstalled / mismatched
-    // system Node. MyAgents `buildMcpStdioLaunchConfig` solves this; we
-    // mirror the contract here.
-    //
-    // The transform routes `dirname` through `__pathModuleForTest` (a
-    // mutable holder) so tests can spyOn/replace individual functions on a
-    // Linux CI runner without snapshotting `process.platform` at module
-    // load time. ESM module namespaces are non-configurable so the seam
-    // has to be a plain mutable binding rather than an export.
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    const transformModule = await import('./mcp-server-transform');
-    const pathHolder = transformModule.__pathModuleForTest;
-    const originalDirname = pathHolder.dirname;
-    const win32Dirname = (p: string): string => {
-      const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'));
-      return idx <= 0 ? '.' : p.slice(0, idx);
     };
-    const dirnameSpy = vi.spyOn(pathHolder, 'dirname').mockImplementation(win32Dirname);
-    const spy = vi.spyOn(
-      await import('../utils/mcp-command'),
-      'resolveNpxMcpInvocation',
-    );
-    const nodeDir = 'C:\\staged\\node';
-    spy.mockReturnValue({
-      command: `${nodeDir}\\node.exe`,
-      args: [`${nodeDir}\\node_modules\\npm\\bin\\npx-cli.js`, '-y', '@mobilenext/mobile-mcp@latest'],
-      source: 'bundled',
-    });
+  }
 
-    try {
-      const result = await transformMcpServerForSpawn({
-        id: 'mobile-control',
-        name: 'mobile-control',
-        isBuiltin: true,
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', '@mobilenext/mobile-mcp@latest'],
-        env: {},
-      });
+  it.each(['uv', 'uvx'])(
+    'prepends the pip Scripts dir for a bare %s command',
+    async (command) => {
+      vi.mocked(findPipInstalledUvxScriptsDir).mockReturnValue(UV_SCRIPTS);
 
-      const pathKey = 'Path';
-      const pathStr = result.spawn!.env[pathKey];
-      expect(pathStr).toBeTruthy();
-      // nodeDir must be the FIRST entry.
-      expect(pathStr!.split(';')[0].toLowerCase()).toBe(nodeDir.toLowerCase());
-      // And it must NOT appear again later (case-insensitive on win32).
-      const restEntries = pathStr!.split(';').slice(1);
-      expect(restEntries.some((e) => e.toLowerCase() === nodeDir.toLowerCase())).toBe(false);
-      expect(dirnameSpy).toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-      dirnameSpy.mockRestore();
-      // Belt-and-suspenders: re-bind to the original in case the spy
-      // call didn't fully clean up.
-      pathHolder.dirname = originalDirname;
-    }
+      const result = await transformMcpServerForSpawn(stdioServer(command));
+
+      expect(result.spawn!.env.PATH!.startsWith(`${UV_SCRIPTS};`)).toBe(true);
+    },
+  );
+
+  it('leaves PATH untouched when the probe finds no install', async () => {
+    vi.mocked(findPipInstalledUvxScriptsDir).mockReturnValue(null);
+
+    const result = await transformMcpServerForSpawn(stdioServer('uv'));
+
+    expect(result.spawn!.env.PATH).toBe(process.env.PATH);
   });
 
-  it('on win32 dedupes a case-insensitive pre-existing nodeDir entry (case-insensitive move-to-front)', async () => {
-    // Realistic scenario: getShellPath() already included
-    // `C:\Program Files\nodejs` (system Node); the resolver picks
-    // `C:\staged\node` (bundled). We want the bundled node first AND the
-    // system entry preserved (later in PATH) — but never duplicated.
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    const transformModule = await import('./mcp-server-transform');
-    const pathHolder = transformModule.__pathModuleForTest;
-    const originalDirname = pathHolder.dirname;
-    const win32Dirname = (p: string): string => {
-      const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'));
-      return idx <= 0 ? '.' : p.slice(0, idx);
-    };
-    const dirnameSpy = vi.spyOn(pathHolder, 'dirname').mockImplementation(win32Dirname);
-    const spy = vi.spyOn(
-      await import('../utils/mcp-command'),
-      'resolveNpxMcpInvocation',
-    );
-    const nodeDir = 'C:\\staged\\node';
-    spy.mockReturnValue({
-      command: `${nodeDir}\\node.exe`,
-      args: [`${nodeDir}\\node_modules\\npm\\bin\\npx-cli.js`, '-y', '@mobilenext/mobile-mcp@latest'],
-      source: 'bundled',
-    });
-    // Force PATH to contain nodeDir in a different position + case, plus a
-    // unrelated system Node entry that should be preserved.
-    const fakePath = `C:\\Program Files\\nodejs;${nodeDir.toUpperCase()};C:\\Windows\\System32`;
-    vi.spyOn(await import('../utils/shell'), 'getShellPath').mockReturnValue(fakePath);
+  it('does not probe for unrelated commands', async () => {
+    vi.mocked(findPipInstalledUvxScriptsDir).mockReturnValue(UV_SCRIPTS);
 
-    try {
-      const result = await transformMcpServerForSpawn({
-        id: 'mobile-control',
-        name: 'mobile-control',
-        isBuiltin: true,
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', '@mobilenext/mobile-mcp@latest'],
-        env: {},
-      });
+    await transformMcpServerForSpawn(stdioServer('some-other-tool'));
 
-      const pathKey = 'Path';
-      const pathStr = result.spawn!.env[pathKey];
-      const entries = pathStr!.split(';');
-      expect(entries[0].toLowerCase()).toBe(nodeDir.toLowerCase());
-      // nodeDir appears exactly once (case-insensitive dedupe).
-      const occurrences = entries.filter((e) => e.toLowerCase() === nodeDir.toLowerCase()).length;
-      expect(occurrences).toBe(1);
-      // Unrelated system Node entry is preserved later.
-      expect(pathStr).toContain('C:\\Program Files\\nodejs');
-      expect(pathStr).toContain('C:\\Windows\\System32');
-    } finally {
-      spy.mockRestore();
-      dirnameSpy.mockRestore();
-      pathHolder.dirname = originalDirname;
-    }
+    expect(findPipInstalledUvxScriptsDir).not.toHaveBeenCalled();
   });
 });
