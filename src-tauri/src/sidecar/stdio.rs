@@ -298,7 +298,9 @@ mod stderr_classifier_tests {
             SidecarStderrLevel::Info
         ));
         assert!(matches!(
-            classify_sidecar_stderr("[shell] Interactive PATH detection failed, staying on fallback: ..."),
+            classify_sidecar_stderr(
+                "[shell] Interactive PATH detection failed, staying on fallback: ..."
+            ),
             SidecarStderrLevel::Info
         ));
         assert!(matches!(
@@ -348,12 +350,16 @@ mod stderr_classifier_tests {
         ));
         // Continuation line of the same advisory.
         assert!(matches!(
-            classify_sidecar_stderr("(Use `node --trace-warnings ...` to show where the warning was created)"),
+            classify_sidecar_stderr(
+                "(Use `node --trace-warnings ...` to show where the warning was created)"
+            ),
             SidecarStderrLevel::Warn
         ));
         // sdk-stderr echo — real signal lives on the NODE channel.
         assert!(matches!(
-            classify_sidecar_stderr("[sdk-stderr] [claude-code:unrecognized_model] {\"model\":\"agnes-2.5-flash\"}"),
+            classify_sidecar_stderr(
+                "[sdk-stderr] [claude-code:unrecognized_model] {\"model\":\"agnes-2.5-flash\"}"
+            ),
             SidecarStderrLevel::Warn
         ));
         // Genuine Node crash still ERROR.
@@ -362,7 +368,9 @@ mod stderr_classifier_tests {
             SidecarStderrLevel::Error
         ));
         assert!(matches!(
-            classify_sidecar_stderr("(node:1) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Fatality: something real broke"),
+            classify_sidecar_stderr(
+                "(node:1) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Fatality: something real broke"
+            ),
             SidecarStderrLevel::Error
         ));
         // Embedded pattern mid-line must stay ERROR (anchor rule).

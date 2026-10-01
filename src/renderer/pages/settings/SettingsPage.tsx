@@ -2307,11 +2307,17 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
  }, [saveProviderVerifyStatus, tSettings]);
 
  // Auto-verify when API key changes (with debounce)
- const handleSaveApiKey = useCallback(async (provider: Provider, key: string) => {
+ // Latest key per provider, captured at handleSaveApiKey time. Read by both
+  // the debounce timer and the onBlur flush so they verify against the most
+  // recent keystroke rather than a closure captured when the timer was set.
+  const pendingKeyRef = useRef<Record<string, string>>({});
+
+  const handleSaveApiKey = useCallback(async (provider: Provider, key: string) => {
   // Snapshot BEFORE the await — saveApiKey eventually swaps apiKeysRef.current
   // via ConfigProvider's state update. Reading afterwards races that swap.
   const prevKey = apiKeysRef.current[provider.id] ?? '';
   await saveApiKey(provider.id, key);
+  pendingKeyRef.current[provider.id] = key;
 
   // Clear previous timeout for this provider
   if (verifyTimeoutRef.current[provider.id]) {
@@ -2336,11 +2342,32 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
    return;
   }
 
-  // Debounce verification for the grow-the-key case
+  // Debounce verification for the grow-the-key case.
+  // 1200ms (was 500ms): mid-typing states are already gated by min-length in
+  // apiKeyAutoVerify; this window covers slow typists / password-manager
+  // per-character fills so we still collapse adjacent keystrokes into one
+  // verify rather than firing on every gap. Fast pastes still trigger ~1s
+  // after release, well within human-perceived "instant" for a background
+  // validation badge. The onBlur handler below flushes early so leaving the
+  // field verifies without waiting for the timer.
   verifyTimeoutRef.current[provider.id] = setTimeout(() => {
    verifyProvider(provider, key);
-  }, 500);
+  }, 1200);
  }, [saveApiKey, verifyProvider, errorDetailOpenId]);
+
+  // Flush a pending debounced verify for this provider immediately (skipping
+  // the 1200ms wait). Used by the input's onBlur so the user gets verification
+  // the moment they leave the field, regardless of where they are in the
+  // typing window. No-op if there's nothing pending.
+  const flushPendingVerify = useCallback((provider: Provider) => {
+   const key = pendingKeyRef.current[provider.id];
+   if (!key) return;
+   if (verifyTimeoutRef.current[provider.id]) {
+    clearTimeout(verifyTimeoutRef.current[provider.id]);
+    delete verifyTimeoutRef.current[provider.id];
+   }
+   void verifyProvider(provider, key);
+  }, [verifyProvider]);
 
  // Cleanup timeouts on unmount
  useEffect(() => {
@@ -4039,6 +4066,7 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
                placeholder={tSettings('providers.apiKeyPlaceholder')}
                value={apiKeys[provider.id] || ''}
                onChange={(e) => handleSaveApiKey(provider, e.target.value)}
+               onBlur={() => flushPendingVerify(provider)}
                className="w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] py-2.5 pl-10 pr-4 text-sm text-[var(--ink)] placeholder-[var(--ink-muted)] transition-colors focus:border-[var(--focus-border)] focus:outline-none"
               />
              </div>

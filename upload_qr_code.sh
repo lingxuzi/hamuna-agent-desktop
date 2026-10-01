@@ -25,10 +25,10 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Configuration - same bucket as publish_release.sh (download.hamuna.io domain)
+# Configuration - same bucket as publish_release.sh (download.agent.hamuna.club domain)
 R2_BUCKET="${R2_BUCKET:-hamuna-releases}"
 TARGET_PATH="assets/feedback_qr_code.png"
-PUBLIC_URL="${DOWNLOAD_BASE_URL:-https://download.hamuna.io}/${TARGET_PATH}"
+PUBLIC_URL="${DOWNLOAD_BASE_URL:-https://download.agent.hamuna.club}/${TARGET_PATH}"
 
 echo -e "${CYAN}╔════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║     HamunaAgent QR Code Upload Tool               ║${NC}"

@@ -4,6 +4,28 @@ import type { AnthropicToolDefinition, AnthropicToolChoice } from '../types/anth
 import type { OpenAIToolDefinition, OpenAIToolChoice, OpenAIToolCall } from '../types/openai';
 import { generateToolUseId } from '../utils/id';
 
+/** Fallback JSON Schema for Anthropic server-side tools that ship with no
+ *  client input_schema (web_search / web_fetch / code_execution / …). OpenAI
+ *  requires `parameters: object` on every function tool entry; emitting the
+ *  empty schema keeps the wire payload valid and prevents strict upstream
+ *  deserializers (Rust serde untagged enum — agnes) from rejecting with
+ *  `tools[0].function: missing field 'parameters'`. Regression: req=4ca8e7bc
+ *  2026-09-23. See `request-responses.ts::stripSchemaDescriptions` for the
+ *  mirror call site on the Responses path. */
+export const EMPTY_OBJECT_SCHEMA = { type: 'object', properties: {} } as const;
+
+/** Normalize a possibly-undefined tool schema to a non-empty object.
+ *  Anything truthy & object-shaped is returned verbatim; undefined / null /
+ *  non-object falls back to `EMPTY_OBJECT_SCHEMA`. */
+export function ensureObjectParameters(
+  schema: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (schema && typeof schema === 'object') {
+    return schema;
+  }
+  return EMPTY_OBJECT_SCHEMA as Record<string, unknown>;
+}
+
 /** Anthropic tool definitions → OpenAI function tools */
 export function translateToolDefinitions(tools: AnthropicToolDefinition[]): OpenAIToolDefinition[] {
   return tools.map(tool => ({
@@ -11,7 +33,7 @@ export function translateToolDefinitions(tools: AnthropicToolDefinition[]): Open
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.input_schema,
+      parameters: ensureObjectParameters(tool.input_schema),
     },
   }));
 }

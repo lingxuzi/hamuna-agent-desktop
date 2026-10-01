@@ -671,7 +671,7 @@ export const MANAGED_CODEX_REQUIRED_RUNTIME = {
   component: 'codex',
   version: managedCodexVersion,
   runtimeSet: managedCodexRuntimeSet,
-  manifestBaseUrl: `https://download.hamuna.io/runtimes/codex/sets/${managedCodexRuntimeSet}`,
+  manifestBaseUrl: `https://download.agent.hamuna.club/runtimes/codex/sets/${managedCodexRuntimeSet}`,
   manifestPublicKeyId: 'hamuna-runtime-manifest-ed25519-2026-06',
 } as const;
 

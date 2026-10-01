@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>File Explorer</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 data-i18n="title">File Explorer</h1>
+        <p class="hint" data-i18n="hint">
+          Browse a local directory, open files, and substring-search — all through the
+          MiniApp worker pool. Paths are re-checked against the declared read scope
+          inside the worker, not just at the bridge.
+        </p>
+      </header>
+
+      <section class="prompt-row" data-i18n-attr="aria-label" data-i18n="rootSectionAria">
+        <input
+          id="root-input"
+          type="text"
+          placeholder="/path/to/directory"
+          data-i18n-attr="aria-label"
+          data-i18n="rootInputAria"
+          autocomplete="off"
+        />
+        <button id="load-btn" type="button" data-i18n="load">Load</button>
+      </section>
+
+      <div class="panes">
+        <section class="tree-pane" data-i18n-attr="aria-label" data-i18n="treeAria">
+          <h2 data-i18n="tree">Tree</h2>
+          <ul id="tree" data-testid="tree"></ul>
+        </section>
+
+        <section class="viewer-pane" data-i18n-attr="aria-label" data-i18n="viewerAria">
+          <h2 data-i18n="file">File</h2>
+          <pre id="viewer" data-testid="viewer" data-i18n="viewerEmpty">
+            Select a file from the tree.
+          </pre>
+        </section>
+      </div>
+
+      <section class="search" data-i18n-attr="aria-label" data-i18n="searchAria">
+        <input
+          id="search-input"
+          type="text"
+          placeholder="substring to search for"
+          data-i18n-attr="aria-label"
+          data-i18n="searchInputAria"
+          autocomplete="off"
+        />
+        <label class="case-toggle">
+          <input id="case-insensitive" type="checkbox" checked />
+          <span data-i18n="ignoreCase">Ignore case</span>
+        </label>
+        <button id="search-btn" type="button" data-testid="search-btn" data-i18n="search">
+          Search
+        </button>
+      </section>
+
+      <section class="hits" data-i18n-attr="aria-label" data-i18n="hitsAria">
+        <ul id="search-hits" data-testid="search-hits"></ul>
+      </section>
+
+      <section class="status" id="status" aria-live="polite"></section>
+    </main>
+    <script src="ui.js"></script>
+  </body>
+</html>

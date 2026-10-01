@@ -1,0 +1,36 @@
+{
+  "id": "file-explorer",
+  "name": "File Explorer",
+  "description": "Phase 4.2 demo — browses a local directory tree, opens files, and substring-searches within a root, all through the worker sandbox.",
+  "icon": "folder-search",
+  "category": "developer",
+  "version": 1,
+  "min_host_version": "0.4.0",
+  "tags": ["demo", "phase-4", "developer", "worker"],
+  "kind": "worker",
+  "worker_kind": "file-explorer",
+  "skills": [],
+  "permissions": {
+    "fs": {
+      "read": ["{workspace}/**"],
+      "write": []
+    },
+    "shell": {
+      "allow": []
+    },
+    "net": {
+      "allow": []
+    },
+    "ai": {
+      "enabled": false
+    }
+  },
+  "entry": "source/index.html",
+  "storage": {
+    "file": "storage.json",
+    "defaults": {
+      "root": "",
+      "lastPath": null
+    }
+  }
+}

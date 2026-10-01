@@ -28,7 +28,7 @@ use crate::sidecar::ManagedSidecar;
 
 /// Temporary kill-switch for the entire auto-update subsystem. Flip both
 /// this and the matching flag in `src/renderer/hooks/useUpdater.ts` to
-/// `true` together when `download.hamuna.io` / R2 needs to be silenced
+/// `true` together when `download.agent.hamuna.club` / R2 needs to be silenced
 /// (DNS / custom domain outage, etc.).
 ///
 /// Both sides MUST be flipped together — the Rust side gates the
@@ -50,7 +50,7 @@ static DOWNLOADED_VERSION: std::sync::Mutex<Option<String>> = std::sync::Mutex::
 ///
 /// **Why this exists:** Tauri's `Update::install(bytes)` is a method on `Update`,
 /// but the only public way to obtain an `Update` is `updater.check().await`,
-/// which makes a fresh HTTPS round-trip to `download.hamuna.io`. On Windows
+/// which makes a fresh HTTPS round-trip to `download.agent.hamuna.club`. On Windows
 /// (where the install path is split across download → click → install), this
 /// extra round-trip at click-time means a flaky/blocked network silently kills
 /// the install — the user sees the "重启更新" button do nothing.
@@ -520,7 +520,7 @@ async fn check_and_download_silently(app: &AppHandle) -> Result<Option<String>, 
     logger::info(
         app,
         format!(
-            "[Updater] Checking for updates... Current: v{}, Target: {}, Endpoint: https://download.hamuna.io/update/{}.json",
+            "[Updater] Checking for updates... Current: v{}, Target: {}, Endpoint: https://download.agent.hamuna.club/update/{}.json",
             current_version, target, target
         ),
     );
@@ -1128,9 +1128,7 @@ fn get_updater_base_url() -> String {
         .ok()
         .map(|s| s.trim_end_matches('/').to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev".to_string()
-        })
+        .unwrap_or_else(|| "https://pub-2d5b7e0153e94f999bdfea020fb31629.r2.dev".to_string())
 }
 
 /// Get the update target string for the current platform
@@ -1262,7 +1260,10 @@ mod tests {
     #[test]
     fn parses_windows_updater_temp_dir_names() {
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-0.2.27-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-0.2.27-updater-abcd",
+                "HamunaAgent"
+            ),
             Some("0.2.27")
         );
         assert_eq!(
@@ -1282,7 +1283,10 @@ mod tests {
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-01.2.3-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-01.2.3-updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(
@@ -1290,15 +1294,24 @@ mod tests {
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-1.2.3--updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-1.2.3--updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-1.2.3+-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-1.2.3+-updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(
-            parse_windows_updater_temp_dir_version("HamunaAgent-1.2.3-01-updater-abcd", "HamunaAgent"),
+            parse_windows_updater_temp_dir_version(
+                "HamunaAgent-1.2.3-01-updater-abcd",
+                "HamunaAgent"
+            ),
             None
         );
         assert_eq!(

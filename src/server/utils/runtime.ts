@@ -108,7 +108,14 @@ function getSystemNpmPaths(): string[] {
 
 export function getSystemNpxPaths(): string[] {
   const exe = isWindows() ? 'npx.cmd' : 'npx';
-  return getSystemNodeDirs().map(d => resolve(d, exe));
+  const paths: string[] = [];
+  // Bundled Node takes priority over user-installed Node so MCP servers
+  // pinned to a bundled Node version don't drift when a user installs their
+  // own (potentially mismatched) Node.js — and so a missing system npx.cmd
+  // doesn't silently bypass the bundled one we shipped in the installer.
+  const bundledNodeDir = getBundledNodeDir();
+  if (bundledNodeDir) paths.push(resolve(bundledNodeDir, exe));
+  return paths.concat(getSystemNodeDirs().map(d => resolve(d, exe)));
 }
 
 /**
@@ -149,6 +156,23 @@ export function getBundledNodeDir(): string | null {
     const macDir = resolve(scriptDir, 'nodejs', 'bin');
     if (existsSync(resolve(macDir, 'node'))) {
       return macDir;
+    }
+  }
+
+  // Fallback: locate bundled node.js relative to the running Node binary.
+  // More robust than cwd when the Sidecar is launched with a non-app cwd
+  // (NSIS service wrappers, daemonized contexts). In production the Sidecar
+  // is spawned with the absolute path of the bundled node.exe, so
+  // `process.execPath` resolves to `<install>/nodejs/node[.exe]` directly
+  // and its parent directory IS the bundled node tree.
+  if (process.execPath && existsSync(process.execPath)) {
+    const execDir = dirname(process.execPath);
+    if (isWindows()) {
+      const winExecDir = resolve(execDir, 'node.exe');
+      if (existsSync(winExecDir)) return execDir;
+    } else {
+      const macExecDir = resolve(execDir, 'node');
+      if (existsSync(macExecDir)) return execDir;
     }
   }
 
@@ -439,6 +463,37 @@ export function getBundledResourcePath(relativePath: string): string | null {
   let dir = scriptDir;
   for (let i = 0; i < 6; i++) {
     const devPath = resolve(dir, 'src-tauri', 'resources', relativePath);
+    if (existsSync(devPath)) return devPath;
+    dir = dirname(dir);
+  }
+  return null;
+}
+
+/**
+ * Resolve a "business resource" that's bundled at the **repository root**
+ * (e.g. `bundled-skills/`, `bundled-agents/`, `bundled-prompts/`) rather
+ * than under `src-tauri/resources/`. Tauri builds copy these wholesale to
+ * `<bundle>/Resources/<name>/` (per `tauri.conf.json > bundle.resources`
+ * entries like `"../bundled-skills": "bundled-skills"`). In dev, the
+ * resources stay at the project root unchanged, and the Sidecar resolves
+ * them by walking up from `scriptDir`.
+ *
+ * Differs from `getBundledResourcePath`: that helper handles resources
+ * under `src-tauri/resources/` (binary / large-dependency payloads like
+ * nodejs, python, sharp-runtime) which exist nowhere in dev. Resources at
+ * the project root (markdown skills, agent templates, prompt files) live
+ * in both dev (project root) and prod (Resources/<name>/) layouts.
+ */
+export function getBundledTopLevelResourcePath(relativePath: string): string | null {
+  const scriptDir = getScriptDir();
+  // Production layout: shipped into Resources/<relativePath>/
+  const prodPath = resolve(scriptDir, relativePath);
+  if (existsSync(prodPath)) return prodPath;
+  // Dev layout: walk up from scriptDir to find the project root, where
+  // bundled-skills/, bundled-agents/, bundled-prompts/ live.
+  let dir = scriptDir;
+  for (let i = 0; i < 6; i++) {
+    const devPath = resolve(dir, relativePath);
     if (existsSync(devPath)) return devPath;
     dir = dirname(dir);
   }

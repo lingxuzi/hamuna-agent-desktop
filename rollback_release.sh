@@ -20,7 +20,7 @@ ENV_FILE="${PROJECT_DIR}/.env"
 
 # 配置
 R2_BUCKET="${R2_BUCKET:-hamuna-releases}"
-DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL:-https://download.hamuna.io}"
+DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL:-https://download.agent.hamuna.club}"
 
 # 人类可读文件大小（兼容 macOS，无需 numfmt）
 human_size() {

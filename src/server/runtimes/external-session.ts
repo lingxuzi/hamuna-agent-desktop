@@ -2278,7 +2278,7 @@ async function _doStartExternalSession(options: {
     options.workspacePath,
     existingMetadataAtStart,
   );
-  const baseSystemPrompt = buildSystemPromptAppend(options.scenario, {
+  const baseSystemPrompt = await buildSystemPromptAppend(options.scenario, {
     runtime: runtimeType,
     cliToolsEnabled: true,
     userCliToolsEnabled: isCliToolRegistryEnabled(),

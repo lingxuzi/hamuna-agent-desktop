@@ -271,6 +271,11 @@ describe('Claude SDK context window env', () => {
   });
 
   it('keeps provider-routed sessions eligible for registry-backed SDK 1M unlocks', () => {
+    // 2026-09-20: buildClaudeSessionEnv now strips DISABLE_AUTOUPDATER (host-shell CLI
+    // flag, not desktop-app flag). Other context-window flags intentionally survive
+    // the {...process.env} spread — host-shell opt-in is legitimate. Stub it out so
+    // this test asserts the in-code contract, not the developer's terminal state.
+    vi.stubEnv('CLAUDE_CODE_DISABLE_1M_CONTEXT', '');
     const env = buildClaudeSessionEnv(
       {
         providerId: 'minimax',
@@ -285,8 +290,36 @@ describe('Claude SDK context window env', () => {
       'MiniMax-M2.5',
     );
 
-    expect(env.CLAUDE_CODE_DISABLE_1M_CONTEXT).toBeUndefined();
+    expect(env.CLAUDE_CODE_DISABLE_1M_CONTEXT).toBe('');
     expect(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('204800');
     expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('MiniMax-M2.5[1m]');
+  });
+});
+
+describe('buildClaudeSessionEnv 2026-09-20 SDK env pinning', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('pins 6 SDK env vars and strips DISABLE_AUTOUPDATER from host shell', () => {
+    vi.stubEnv(
+      process.platform === 'win32' ? 'USERPROFILE' : 'HOME',
+      process.platform === 'win32' ? 'C:\\Users\\hamuna-test' : '/tmp/hamuna-env-home',
+    );
+
+    const env = buildClaudeSessionEnv();
+
+    // buildClaudeSessionEnv always writes these 6.
+    expect(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe('1');
+    expect(env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS).toBe('1');
+    expect(env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING).toBe('1');
+    expect(env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe('false');
+    expect(env.ENABLE_TOOL_SEARCH).toBe('true');
+    expect(env.CLAUDE_CODE_ENABLE_TELEMETRY).toBe('0');
+    // Always stripped: it's a Claude Code CLI flag, not a desktop-app flag.
+    expect(env.DISABLE_AUTOUPDATER).toBeUndefined();
+    // NOT pinned by buildClaudeSessionEnv — host shell may set them (legitimate opt-in),
+    // and per-provider applyContextWindowSuffix owns context window globally (#392, #444).
+    // We assert this isn't actively written on top of the spread.
   });
 });

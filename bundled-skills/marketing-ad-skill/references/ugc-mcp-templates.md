@@ -1,6 +1,6 @@
 # UGC MCP 调用模板（T06 / T12 / T13）
 
-> **完整模板见** `bundled-skills/creative-video-suite/references/mcp-call-templates.md` §T06/T12/T13。本文件只放**精简执行版**——执行 UGC 视频生成时直接复制填占位符。
+> 本文件即 §T06/T12/T13 的**权威模板源**——执行 UGC 视频生成时直接复制填占位符即可，无需查任何外部 skill / 仓库。
 
 ## 升级路径（铁律）
 
@@ -167,4 +167,4 @@ mcp__multimedia-creator__agnes25_image_generate(
 
 ---
 
-**完整模板见** `bundled-skills/creative-video-suite/references/mcp-call-templates.md` §T06/T12/T13
+**完整模板见本文件正文**——T06/T12/T13 完整内容已内化在上方章节，直接按模板执行，无需查任何外部 skill / 仓库。

@@ -5936,8 +5936,7 @@ pub fn space_build_capability() -> SpaceBuildCapability {
                 base_url: None,
                 public_client_id: configured_public_client_id(),
                 reason: Some(
-                    "HAMUNA_SPACE_BASE_URL is required when HAMUNA_SPACE_ENABLED=true"
-                        .to_string(),
+                    "HAMUNA_SPACE_BASE_URL is required when HAMUNA_SPACE_ENABLED=true".to_string(),
                 ),
                 environments: vec![SpaceEnvironment::Production],
                 active_environment: SpaceEnvironment::Production,
@@ -6746,7 +6745,8 @@ fn require_session() -> Result<SpaceSession, String> {
         return Ok(crate::space_cloud_mock::session());
     }
     let configured_base_url = space_base_url()?;
-    let session = read_session()?.ok_or_else(|| "Not logged in to HamunaAgent Space".to_string())?;
+    let session =
+        read_session()?.ok_or_else(|| "Not logged in to HamunaAgent Space".to_string())?;
     if !space_base_urls_equal(&session.base_url, &configured_base_url) {
         return Err(
             "Space session belongs to a different Space service. Please log in again.".to_string(),
@@ -10567,9 +10567,7 @@ mod tests {
         assert!(prompt.contains("- Issue ID: issue_1"));
         assert!(prompt.contains("- Issue ID: issue_2"));
         assert_eq!(
-            prompt
-                .matches("hamuna space issue view <issue.id>")
-                .count(),
+            prompt.matches("hamuna space issue view <issue.id>").count(),
             1
         );
         assert!(!prompt.contains("hamuna space issue claim issue_1"));

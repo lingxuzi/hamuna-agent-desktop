@@ -16,6 +16,9 @@ export type TabContentKind =
     | 'settings'
     | 'taskcenter'
     | 'space'
+    | 'marketplace'
+    | 'miniapp-center' // Phase 4 entry: installed MiniApps grid (PRD v0.4 §B.5)
+    | 'miniapp-scene' // Phase 4 entry: live MiniApp Runner (PRD v0.4 §B.5)
     | 'cold' // restored chat tab not yet activated → placeholder, NO TabProvider
     | 'chat'; // live chat tab → mounts TabProvider
 
@@ -34,6 +37,9 @@ export function tabContentKind(tab: Tab, isDeferredMount: boolean): TabContentKi
     if (tab.view === 'settings') return 'settings';
     if (tab.view === 'taskcenter') return 'taskcenter';
     if (tab.view === 'space') return 'space';
+    if (tab.view === 'marketplace') return 'marketplace';
+    if (tab.view === 'miniapp-center') return 'miniapp-center';
+    if (tab.view === 'miniapp-scene') return 'miniapp-scene';
     if (tab.restoreState === 'cold') return 'cold';
     return 'chat';
 }

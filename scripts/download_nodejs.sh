@@ -224,6 +224,19 @@ check_existing() {
         if [[ -n "$expected_arch" && ( "$platform" == "darwin" || "$platform" == "linux" ) ]]; then
             check_arch "$node_bin" "$expected_arch" || return 1
         fi
+        # Windows flat layout must include npm.cmd + npx.cmd. If either is
+        # missing the cache is partial (download_windows' `cp ... || true`
+        # used to silently swallow copy failures) and MCP spawn would later
+        # fail to find `npx` even though check_existing above approved it.
+        # Gate here so partial caches are re-fetched instead of staged.
+        if [[ "$platform" == "win" ]]; then
+            for shim in npm.cmd npx.cmd; do
+                if [[ ! -f "${dir}/${shim}" ]]; then
+                    log_warn "Missing ${shim} in ${dir} — cache is partial"
+                    return 1
+                fi
+            done
+        fi
         return 0  # Version and arch match
     fi
     return 1
@@ -461,10 +474,15 @@ download_windows() {
     rm -rf "$cache_dir"
     mkdir -p "$cache_dir"
 
-    # Windows: flat structure (node.exe, npm.cmd, npx.cmd, node_modules/)
+    # Windows: flat structure (node.exe, npm.cmd, npx.cmd, node_modules/).
+    # npm.cmd / npx.cmd MUST land — MCP npx server spawn fails silently when
+    # these are missing (TODO #185). Drop `|| true` so a real extraction
+    # failure surfaces here instead of producing a partial cache that
+    # check_existing later accepts. The shim-less `npm` / `npx` backups and
+    # `node_modules/` copy are best-effort (POSIX / very rare zip variants).
     cp "${extracted_dir}/node.exe" "$cache_dir/"
-    cp "${extracted_dir}/npm.cmd" "$cache_dir/" 2>/dev/null || true
-    cp "${extracted_dir}/npx.cmd" "$cache_dir/" 2>/dev/null || true
+    cp "${extracted_dir}/npm.cmd" "$cache_dir/"
+    cp "${extracted_dir}/npx.cmd" "$cache_dir/"
     cp "${extracted_dir}/npm" "$cache_dir/" 2>/dev/null || true
     cp "${extracted_dir}/npx" "$cache_dir/" 2>/dev/null || true
     cp -R "${extracted_dir}/node_modules" "$cache_dir/" 2>/dev/null || true
@@ -481,6 +499,11 @@ download_windows() {
     if [[ "$should_stage" == "true" ]]; then
         stage_nodejs "$cache_dir" "win" "$arch"
     fi
+
+    # CI visibility: dump cache contents so a future "missing npx.cmd"
+    # regression is diagnosable from the workflow log alone (TODO #185).
+    log_info "Windows cache contents:"
+    ls -la "$cache_dir" | head -20 || true
 
     log_ok "Windows ${arch}: Node.js v${NODE_VERSION} ready"
 }

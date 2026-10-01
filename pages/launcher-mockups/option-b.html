@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hamuna launcher — option B · manual</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #2b2b2b;
+  --ink-mute: #6f6f6f;
+  --ink-faint: #a8a8a8;
+  --paper: #f6f5f1;
+  --paper-edge: #fafaf7;
+  --hair: #d8d6cf;
+  --hair-strong: #b8b5ac;
+  --accent: #c83c2c;
+  --font: 'Helvetica Neue', 'Inter', -apple-system, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+button { font: inherit; cursor: pointer; border: 0; background: transparent; color: inherit; text-align: left; }
+
+/* ---------- titlebar · hairline above ---------- */
+.titlebar {
+  height: 44px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 36px;
+  border-bottom: 1px solid var(--hair);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  -webkit-app-region: drag;
+}
+.titlebar .center { color: var(--ink); font-weight: 500; }
+.titlebar .right { text-align: right; -webkit-app-region: no-drag; }
+
+/* ---------- main column · 760px wide centered ---------- */
+.page {
+  height: calc(100vh - 44px - 36px);
+  overflow-y: auto;
+  padding: 0 36px;
+}
+.col {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 72px 0 48px;
+}
+
+/* chapter eyebrow */
+.chapter {
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 14px;
+}
+.chapter .num { font-weight: 500; }
+.chapter .line { flex: 1; height: 1px; background: var(--hair-strong); }
+.chapter .meta { color: var(--ink-mute); }
+
+/* hero · one sentence */
+.hero {
+  font-weight: 300;
+  font-size: 40px;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin-bottom: 12px;
+  max-width: 22ch;
+}
+.hero .accent { color: var(--accent); font-weight: 400; }
+
+.hero-sub {
+  font-size: 14px;
+  color: var(--ink-mute);
+  line-height: 1.7;
+  max-width: 56ch;
+  margin-bottom: 56px;
+}
+
+/* section heading */
+.sec-head {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  display: flex; gap: 12px; align-items: center;
+}
+.sec-head .rule { flex: 1; height: 1px; background: var(--hair); }
+
+/* list · numbered rows like a manual */
+.manual {
+  display: flex; flex-direction: column;
+  margin-bottom: 56px;
+}
+.manual .entry {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  gap: 16px;
+  align-items: baseline;
+  padding: 18px 0;
+  border-top: 1px solid var(--hair);
+  cursor: pointer;
+}
+.manual .entry:last-child { border-bottom: 1px solid var(--hair); }
+.manual .entry .num {
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.manual .entry .name {
+  font-size: 15px;
+  color: var(--ink);
+  font-weight: 400;
+}
+.manual .entry .name .badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.manual .entry .desc {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+}
+.manual .entry .when {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.manual .entry.current { background: rgba(200, 60, 44, 0.04); }
+.manual .entry.current .num { color: var(--accent); }
+.manual .entry.current .name { color: var(--accent); }
+
+/* input section */
+.input-block {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding-top: 18px;
+  border-top: 1px solid var(--hair-strong);
+  margin-bottom: 24px;
+}
+.input-block .step {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding-top: 8px;
+}
+.input-block .field { width: 100%; }
+.input {
+  width: 100%;
+  background: transparent;
+  border: 0; outline: 0;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  resize: none;
+  min-height: 64px;
+  padding: 0;
+}
+.input::placeholder { color: var(--ink-faint); }
+.input-tools {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.input-tools .left-tools { display: flex; gap: 16px; color: var(--ink-mute); }
+.input-tools .left-tools span:hover { color: var(--ink); }
+.input-tools .send {
+  color: var(--ink);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.input-tools .send:hover { color: var(--accent); }
+
+/* meta footnote */
+.footnote {
+  display: flex; gap: 32px;
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+  padding-top: 18px;
+  border-top: 1px solid var(--hair);
+}
+.footnote .k { color: var(--ink-mute); margin-right: 6px; }
+
+/* ---------- footer ---------- */
+.foot {
+  height: 36px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 36px;
+  border-top: 1px solid var(--hair);
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.06em;
+}
+.foot .right { display: flex; gap: 18px; }
+
+@media (max-width: 760px) {
+  .titlebar { padding: 0 18px; }
+  .page { padding: 0 18px; }
+  .col { padding: 32px 0 24px; }
+  .hero { font-size: 28px; }
+  .hero-sub { margin-bottom: 32px; }
+  .manual .entry { grid-template-columns: 28px 1fr auto; gap: 10px; }
+  .manual .entry .desc { display: none; }
+  .manual { margin-bottom: 32px; }
+  .input-block { grid-template-columns: 1fr; gap: 6px; }
+  .input-block .step { padding-top: 0; }
+  .foot { padding: 0 18px; }
+  .footnote { flex-wrap: wrap; gap: 14px; }
+}
+</style>
+</head>
+<body>
+
+<header class="titlebar">
+  <span>hamuna · desktop agent</span>
+  <span class="center">v0.3.185</span>
+  <span class="right">sidecar · ready</span>
+</header>
+
+<main class="page">
+  <div class="col">
+
+    <div class="chapter">
+      <span class="num">01 /</span>
+      <span>launcher</span>
+      <span class="line"></span>
+      <span class="meta">manual · 2026</span>
+    </div>
+
+    <h1 class="hero">
+      A desktop that <span class="accent">does the work.</span>
+    </h1>
+    <p class="hero-sub">
+      The agent runs locally — code, files, drafts, images.
+      You decide what it touches and when.
+      Pick a workspace to begin, or type what you want done below.
+    </p>
+
+    <div class="sec-head">
+      <span>Workspaces</span>
+      <span class="rule"></span>
+      <span>04 active</span>
+    </div>
+    <div class="manual">
+      <button class="entry current">
+        <span class="num">01</span>
+        <span class="name">~/projects/mino</span>
+        <span class="desc">code · drafts · 12 sessions</span>
+        <span class="when">2m ago</span>
+      </button>
+      <button class="entry">
+        <span class="num">02</span>
+        <span class="name">~/writing/notes <span class="badge">Agent</span></span>
+        <span class="desc">long-form · 4 sessions</span>
+        <span class="when">1d ago</span>
+      </button>
+      <button class="entry">
+        <span class="num">03</span>
+        <span class="name">~/work/q3-report</span>
+        <span class="desc">data · 2 sessions</span>
+        <span class="when">3d ago</span>
+      </button>
+      <button class="entry">
+        <span class="num">04</span>
+        <span class="name">~/archive/old-blog</span>
+        <span class="desc">archived · 31 sessions</span>
+        <span class="when">31d ago</span>
+      </button>
+    </div>
+
+    <div class="sec-head">
+      <span>Scheduled</span>
+      <span class="rule"></span>
+      <span>02 running</span>
+    </div>
+    <div class="manual">
+      <button class="entry">
+        <span class="num">01</span>
+        <span class="name">Weekly sales digest</span>
+        <span class="desc">every monday 09:00</span>
+        <span class="when">2d left</span>
+      </button>
+      <button class="entry">
+        <span class="num">02</span>
+        <span class="name">GitHub issue triage</span>
+        <span class="desc">every 6h</span>
+        <span class="when">3h left</span>
+      </button>
+    </div>
+
+    <div class="sec-head">
+      <span>Begin a new task</span>
+      <span class="rule"></span>
+    </div>
+    <div class="input-block">
+      <span class="step">→ type</span>
+      <div class="field">
+        <textarea class="input" placeholder="What do you want done?"></textarea>
+        <div class="input-tools">
+          <div class="left-tools">
+            <span>attach</span>
+            <span>image</span>
+            <span>schedule</span>
+          </div>
+          <button class="send">send ›</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footnote">
+      <span><span class="k">model</span>deepseek-v4-flash-0731</span>
+      <span><span class="k">balance</span>¥42.80</span>
+      <span><span class="k">permission</span>bypass</span>
+    </div>
+
+  </div>
+</main>
+
+<footer class="foot">
+  <span>hamuna © 2026 · apache-2.0</span>
+  <span class="right"><span>⌘k shortcut</span><span>⌘l logs</span></span>
+</footer>
+
+</body>
+</html>

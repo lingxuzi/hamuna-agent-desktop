@@ -6,7 +6,7 @@
 // `UND_ERR_INVALID_ARG: invalid onRequestStart method` (internal API drift
 // between majors). Importing fetch from the same package guarantees the
 // dispatcher and fetch share the same internal contract.
-import { fetch, ProxyAgent, type Dispatcher } from 'undici';
+import { fetch, ProxyAgent, Agent, type Dispatcher } from 'undici';
 import type { BridgeConfig, UpstreamConfig } from './types/bridge';
 import type { AnthropicRequest } from './types/anthropic';
 import type { OpenAIRequest, OpenAIResponse, OpenAIStreamChunk } from './types/openai';
@@ -113,6 +113,18 @@ function getDispatcherForProxy(proxyUrl: string): Dispatcher {
   return agent;
 }
 
+// per-hop TTFT anchors live here so the streaming transform functions can read them
+// across the function boundary (Response is the only stable handle).
+type TtftCtx = {
+  entryMs: number;
+  beforeTranslateMs: number;
+  headersMs: number;
+  firstUpstreamByteMs?: number;
+  firstAnthropicEventMs?: number;
+  baseUrl: string;
+};
+const ttftByResponse = new WeakMap<Response, TtftCtx>();
+
 function resolvePromptCacheKey(
   upstream: UpstreamConfig,
   fallbackModel: string,
@@ -151,6 +163,35 @@ function isUnsupportedPromptCacheKeyDescriptor(value: string): boolean {
   return /\b(?:unknown|unsupported|unrecognized|unexpected)\b.*\b(?:parameter|field|argument|property)?\b.*\bprompt_cache_key\b/i.test(value)
     || /\bprompt_cache_key\b.*\b(?:unknown|unsupported|unrecognized|unexpected|not supported)\b/i.test(value)
     || /\b(?:additional|extra)\b.*\b(?:parameter|field|argument|property)\b.*\bprompt_cache_key\b/i.test(value);
+}
+
+// ponytail: kept inline (not refactored into shared schema-field descriptor)
+// until a third call site appears — CLAUDE.md §3 精准改动.
+function isUnsupportedPromptCacheBreakpointDescriptor(value: string): boolean {
+  return /\b(?:unknown|unsupported|unrecognized|unexpected)\b.*\b(?:parameter|field|argument|property)?\b.*\bprompt_cache_breakpoint\b/i.test(value)
+    || /\bprompt_cache_breakpoint\b.*\b(?:unknown|unsupported|unrecognized|unexpected|not supported)\b/i.test(value)
+    || /\b(?:additional|extra)\b.*\b(?:parameter|field|argument|property)\b.*\bprompt_cache_breakpoint\b/i.test(value);
+}
+
+/**
+ * Single-rule classifier for "upstream rejects explicit `prompt_cache_breakpoint`
+ * markers in this request". Whenever ANY 4xx mentions `prompt_cache_breakpoint`,
+ * the bridge downgrades for this token (sticky) and re-runs the translator
+ * without projection. Coarser than myagents' 3-branch classifier (`field` /
+ * `developer_role` / `content_shape`) — see plan; upgrade path documented in
+ * the project plan file.
+ */
+function isUnsupportedPromptCacheBreakpointError(status: number, body: string): boolean {
+  if (status !== 400 && status !== 422) return false;
+  const structured = extractUpstreamErrorFields(body);
+  const descriptor = [
+    structured?.message,
+    structured?.code,
+    structured?.type,
+  ].filter(Boolean).join(' ');
+  const haystack = descriptor || body;
+  return /prompt_cache_breakpoint/i.test(haystack)
+    && isUnsupportedPromptCacheBreakpointDescriptor(haystack);
 }
 
 /**
@@ -321,6 +362,25 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
   const imageSaver: ToolImageSaver | undefined = config.workspacePath
     ? createToolImageSaver(config.workspacePath)
     : undefined;
+  // ponytail: keepAliveTimeout 30s (vs undici 5s default) so idle sockets
+  // survive between user turns — user chats idle 5-30s while reading the
+  // reply, then send another message; with 5s default the next fetch pays
+  // a cold TCP+TLS handshake to upstream (实测 5-76s, see TODO #195). 60s
+  // maxTimeout caps total socket age so OS NAT aging (typical 60-120s) can't
+  // silently drop the socket mid-flight. connectTimeout bumped 5→8s: undici
+  // retries past the deadline so a too-tight cap doesn't actually fail-fast,
+  // it just makes the next slow response TTFT worse. 8s is well above any
+  // LAN connect and gives the retry loop enough room to land a real success.
+  const defaultAgent = new Agent({
+    connectTimeout: 8000,
+    headersTimeout: upstreamHeadersTimeoutMs,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+  });
+  // BUILD-PROOF: marker emitted once per handler construction. If you see this
+  // in unified log, the rebuilt server-dist.js is actually running. If you don't,
+  // the dev process is still on the old bundle (restart `npm run tauri:dev`).
+  log('[bridge] build_proof ttft_diag_v2 defaultAgent=8s_connect keepAlive30s');
 
   // Cache tool_call_id → thought_signature across requests.
   // Gemini thinking models require round-tripping thought_signature on every request
@@ -330,6 +390,9 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
   const thoughtSignatureCache = new Map<string, string>();
 
   const handler = async (request: Request): Promise<Response> => {
+    // per-hop TTFT anchor #1: handler entry (before any work).
+    const ttftEntryMs = Date.now();
+
     // 1. Extract API key from request headers
     const apiKey = request.headers.get('x-api-key') || request.headers.get('authorization')?.replace('Bearer ', '') || '';
 
@@ -340,6 +403,9 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
     } catch {
       return jsonError(400, 'invalid_request_error', 'Invalid JSON in request body');
     }
+
+    // per-hop TTFT anchor #2: post-parse, pre-translate.
+    const ttftBeforeTranslateMs = Date.now();
 
     // 3. Get upstream config
     let upstream: UpstreamConfig;
@@ -365,6 +431,16 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
     let effectiveApiKey = upstream.apiKey || apiKey;
     let activeCredentialVersion = upstream.credentialVersion;
     const baseUrl = upstream.baseUrl.replace(/\/+$/, ''); // trim trailing slashes
+    // per-hop TTFT ctx: populated across handler entry → upstream fetch → first
+    // upstream byte → first Anthropic event emitted. Read by handleStreamResponse /
+    // handleResponsesStreamResponse via ttftByResponse WeakMap; weak so the
+    // Response object alone (the key) owns the lifetime.
+    const ttftCtx: TtftCtx = {
+      entryMs: ttftEntryMs,
+      beforeTranslateMs: ttftBeforeTranslateMs,
+      headersMs: 0,
+      baseUrl,
+    };
     // Honor a previously-observed responses-format incompatibility for this
     // provider so subsequent requests skip the broken format silently.
     // `let` because the in-flight retry loop may flip to chat_completions
@@ -382,6 +458,16 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
     const effectiveModelMapping = upstream.modelMapping ?? config.modelMapping;
     const upstreamFormat = isResponses ? 'responses' : 'chat_completions';
     const promptCacheKey = resolvePromptCacheKey(upstream, anthropicReq.model, upstreamFormat);
+    // Explicit cache breakpoint projection is gated on three things being true
+    // simultaneously: session-mode cache is on, we have a session id to anchor
+    // against, AND the registry hasn't sticky-downgraded this token for that
+    // provider. The flag is mutable so the retry block below can flip it off
+    // and re-run the translator without affecting the upstream.config snapshot.
+    let promptCacheBreakpointsEnabled =
+      upstream.cacheAffinity?.promptCacheKeyMode === 'session'
+      && Boolean(upstream.cacheAffinity.sessionId?.trim())
+      && !upstream.cacheAffinity.promptCacheBreakpointsDisabled;
+    let promptCacheBreakpointsRetryAttempted = false;
     const translatedReq = isResponses
       ? translateRequestToResponses(anthropicReq, {
           modelOverride: upstream.model,
@@ -389,6 +475,7 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           imageSaver,
           reasoningEffort: upstream.reasoningEffort,
           promptCacheKey,
+          promptCacheBreakpoints: promptCacheBreakpointsEnabled,
         })
       : translateRequest(anthropicReq, {
           modelMapping: effectiveModelMapping,
@@ -396,6 +483,7 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           imageSaver,
           reasoningEffort: upstream.reasoningEffort,
           promptCacheKey,
+          promptCacheBreakpoints: promptCacheBreakpointsEnabled,
         });
     const translatedModel = (translatedReq as { model: string }).model;
     if (upstream.reasoningEffort
@@ -541,6 +629,8 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
         };
         if (proxyUrl) {
           fetchInit.dispatcher = getDispatcherForProxy(proxyUrl);
+        } else {
+          fetchInit.dispatcher = defaultAgent;
         }
         // Cast to global Response — undici.Response is structurally identical at
         // runtime; the type drift is only in @types/node vs undici/types Headers
@@ -550,6 +640,9 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
         // fetch() resolves when response headers arrive. End the headers-only
         // timeout here for every status, before any success or error body read.
         clearTimeout(headersTimer);
+        // per-hop TTFT anchor #3: headers arrived (upstream connect done).
+        ttftCtx.headersMs = Date.now();
+        ttftByResponse.set(upstreamResp, ttftCtx);
         return { ok: true, attempt: { upstreamResp, controller, onDownstreamAbort } };
       } catch (err) {
         clearTimeout(headersTimer);
@@ -643,6 +736,7 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
             imageSaver,
             reasoningEffort: upstream.reasoningEffort,
             promptCacheKey: resolvePromptCacheKey(upstream, anthropicReq.model, 'chat_completions'),
+            promptCacheBreakpoints: promptCacheBreakpointsEnabled,
           });
           if (upstream.reasoningEffort
               && !shouldSendProviderReasoningEffort(upstream.providerId, newReq.model, upstream.reasoningEffort)) {
@@ -674,6 +768,54 @@ export function createBridgeHandler(config: BridgeConfig): BridgeHandler {
           upstream.cacheAffinity?.disablePromptCacheKey?.();
           requestBody = stringifyWithoutPromptCacheKey(translatedReq);
           log(`[bridge] ${upstreamFormat} prompt_cache_key unsupported for provider=${upstream.providerId} endpoint=${hashForLog(upstreamUrl)}; disabled for this bridge`);
+          continue;
+        }
+
+        // Explicit cache breakpoint projection was rejected by the upstream.
+        // Sticky-disable for this token and re-translate without projection.
+        // Mirrors the chat_completions fallback above — hamuna has no
+        // translateForAttempt() closure, so we inline the re-translation
+        // (reasoning_effort + max_output_tokens normalization is duplicated
+        // here because requestBody is rebuilt from translatedReq).
+        const canRetryWithoutPromptCacheBreakpoints =
+          !promptCacheBreakpointsRetryAttempted
+          && promptCacheBreakpointsEnabled
+          && Boolean(upstream.cacheAffinity?.disablePromptCacheBreakpoints)
+          && isUnsupportedPromptCacheBreakpointError(status, errBody);
+        if (canRetryWithoutPromptCacheBreakpoints) {
+          promptCacheBreakpointsRetryAttempted = true;
+          promptCacheBreakpointsEnabled = false;
+          upstream.cacheAffinity?.disablePromptCacheBreakpoints?.();
+          const newReq = isResponses
+            ? translateRequestToResponses(anthropicReq, {
+                modelOverride: upstream.model,
+                modelMapping: effectiveModelMapping,
+                imageSaver,
+                reasoningEffort: upstream.reasoningEffort,
+                promptCacheKey,
+                promptCacheBreakpoints: false,
+              })
+            : translateRequest(anthropicReq, {
+                modelMapping: effectiveModelMapping,
+                modelOverride: upstream.model,
+                imageSaver,
+                reasoningEffort: upstream.reasoningEffort,
+                promptCacheKey,
+                promptCacheBreakpoints: false,
+              });
+          if (upstream.reasoningEffort
+              && !shouldSendProviderReasoningEffort(upstream.providerId, newReq.model, upstream.reasoningEffort)) {
+            delete (newReq as OpenAIRequest & { reasoning_effort?: string }).reasoning_effort;
+          }
+          const retryTokenCap = upstream.maxOutputTokens ?? config.maxOutputTokens;
+          if (retryTokenCap) {
+            const paramName = upstream.maxOutputTokensParamName ?? 'max_tokens';
+            (newReq as OpenAIRequest & { [key: string]: unknown })[paramName] = retryTokenCap;
+          }
+          (translatedReq as { model: string }).model = newReq.model;
+          Object.assign(translatedReq as object, newReq as object);
+          requestBody = JSON.stringify(translatedReq);
+          log(`[bridge] ${upstreamFormat} prompt_cache_breakpoint unsupported for provider=${upstream.providerId} endpoint=${hashForLog(upstreamUrl)}; disabled for this bridge`);
           continue;
         }
 
@@ -874,12 +1016,41 @@ export function handleStreamResponse(
     }
   };
 
+  // per-hop TTFT: ctx wired from the main handler via WeakMap. Stage 1 sets
+  // `firstUpstreamByteMs` on the first non-empty SSE event; Stage 2 sets
+  // `firstAnthropicEventMs` on the first enqueued Anthropic event and emits
+  // the consolidated TTFT log exactly once. flush() emits a distinct marker
+  // log when no Anthropic event was ever produced (empty body / [DONE]-only
+  // upstream), so the empty-path diagnostic doesn't get conflated with the
+  // normal TTFT signal.
+  const ttftCtx = ttftByResponse.get(upstreamResp);
+  let ttftEmitted = false;
+  const emitTtftLog = (): void => {
+    if (!ttftCtx || ttftEmitted) return;
+    const now = Date.now();
+    const translateMs = Math.max(0, ttftCtx.beforeTranslateMs - ttftCtx.entryMs);
+    const connectMs = Math.max(0, ttftCtx.headersMs - ttftCtx.beforeTranslateMs);
+    if (ttftCtx.firstUpstreamByteMs === undefined) {
+      log(`[bridge] ttft_no_first_byte translate_ms=${translateMs} connect_ms=${connectMs} elapsed_ms=${Math.max(0, now - ttftCtx.entryMs)} upstream=${ttftCtx.baseUrl}`);
+      ttftEmitted = true;
+      return;
+    }
+    const upstreamFirstByteMs = Math.max(0, ttftCtx.firstUpstreamByteMs - ttftCtx.headersMs);
+    const anthropicFirstEventMs = Math.max(0, now - ttftCtx.firstUpstreamByteMs);
+    const totalMs = Math.max(0, now - ttftCtx.entryMs);
+    log(`[bridge] ttft translate_ms=${translateMs} connect_ms=${connectMs} upstream_first_byte_ms=${upstreamFirstByteMs} anthropic_first_event_ms=${anthropicFirstEventMs} total_ms=${totalMs} upstream=${ttftCtx.baseUrl}`);
+    ttftEmitted = true;
+  };
+
   // Stage 1: bytes → SSE events (parse via SSEParser).
   const decoder = new TextDecoder();
   const sseParseTransform = new TransformStream<Uint8Array, ChatPipelineItem>({
     transform(chunk, controller) {
       const text = decoder.decode(chunk, { stream: true });
       const sseEvents = sseParser.feed(text);
+      if (ttftCtx && ttftCtx.firstUpstreamByteMs === undefined && sseEvents.length > 0) {
+        ttftCtx.firstUpstreamByteMs = Date.now();
+      }
       for (const sseEvent of sseEvents) {
         if (sseEvent.data === '[DONE]') {
           // Protocol terminator — forward as the finalize signal (see STREAM_DONE).
@@ -945,9 +1116,12 @@ export function handleStreamResponse(
         }
       }
       const anthropicEvents = translator.feed(chunk);
+      let emittedAny = false;
       for (const event of anthropicEvents) {
         controller.enqueue(encoder.encode(formatSSE(event)));
+        emittedAny = true;
       }
+      if (emittedAny) emitTtftLog();
     },
     flush(controller) {
       // Emit closing events for incomplete streams (no-op if already finished).
@@ -955,6 +1129,9 @@ export function handleStreamResponse(
       for (const event of finalEvents) {
         controller.enqueue(encoder.encode(formatSSE(event)));
       }
+      // Empty-body / [DONE]-only upstream fallback: emit TTFT with firstAnthropicEventMs unset
+      // so the diagnostic surfaces that the upstream never produced a parseable event.
+      emitTtftLog();
       detachDownstream();
     },
   });
@@ -1112,11 +1289,35 @@ export function handleResponsesStreamResponse(
     }
   };
 
+  // per-hop TTFT mirror of handleStreamResponse — see notes there for the
+  // WeakMap wiring and the empty-body vs real-first-event distinction.
+  const ttftCtx = ttftByResponse.get(upstreamResp);
+  let ttftEmitted = false;
+  const emitTtftLog = (): void => {
+    if (!ttftCtx || ttftEmitted) return;
+    const now = Date.now();
+    const translateMs = Math.max(0, ttftCtx.beforeTranslateMs - ttftCtx.entryMs);
+    const connectMs = Math.max(0, ttftCtx.headersMs - ttftCtx.beforeTranslateMs);
+    if (ttftCtx.firstUpstreamByteMs === undefined) {
+      log(`[bridge] ttft_no_first_byte translate_ms=${translateMs} connect_ms=${connectMs} elapsed_ms=${Math.max(0, now - ttftCtx.entryMs)} upstream=${ttftCtx.baseUrl}`);
+      ttftEmitted = true;
+      return;
+    }
+    const upstreamFirstByteMs = Math.max(0, ttftCtx.firstUpstreamByteMs - ttftCtx.headersMs);
+    const anthropicFirstEventMs = Math.max(0, now - ttftCtx.firstUpstreamByteMs);
+    const totalMs = Math.max(0, now - ttftCtx.entryMs);
+    log(`[bridge] ttft translate_ms=${translateMs} connect_ms=${connectMs} upstream_first_byte_ms=${upstreamFirstByteMs} anthropic_first_event_ms=${anthropicFirstEventMs} total_ms=${totalMs} upstream=${ttftCtx.baseUrl}`);
+    ttftEmitted = true;
+  };
+
   const decoder = new TextDecoder();
   const sseParseTransform = new TransformStream<Uint8Array, ResponsesStreamEvent>({
     transform(chunk, controller) {
       const text = decoder.decode(chunk, { stream: true });
       const sseEvents = sseParser.feed(text);
+      if (ttftCtx && ttftCtx.firstUpstreamByteMs === undefined && sseEvents.length > 0) {
+        ttftCtx.firstUpstreamByteMs = Date.now();
+      }
       for (const sseEvent of sseEvents) {
         // Intentional asymmetry vs the Chat path: the Responses translator
         // finalizes inline on `response.completed`/`response.failed` (its real
@@ -1138,9 +1339,12 @@ export function handleResponsesStreamResponse(
   const translateTransform = new TransformStream<ResponsesStreamEvent, Uint8Array>({
     transform(event, controller) {
       const anthropicEvents = translator.feed(event);
+      let emittedAny = false;
       for (const ae of anthropicEvents) {
         controller.enqueue(encoder.encode(formatSSE(ae)));
+        emittedAny = true;
       }
+      if (emittedAny) emitTtftLog();
       // The Responses translator finalizes inline on `response.completed` /
       // `response.failed` (emits message_stop). That is the protocol terminator,
       // so end the downstream response NOW rather than waiting for transport EOF
@@ -1158,6 +1362,7 @@ export function handleResponsesStreamResponse(
       for (const event of finalEvents) {
         controller.enqueue(encoder.encode(formatSSE(event)));
       }
+      emitTtftLog();
       detachDownstream();
     },
   });

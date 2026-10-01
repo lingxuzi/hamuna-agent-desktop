@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-DOWNLOAD_BASE_URL="https://download.hamuna.io"
+DOWNLOAD_BASE_URL="https://download.agent.hamuna.club"
 LATEST_URL="${DOWNLOAD_BASE_URL}/cuse/latest.json"
 RELEASES_BASE_URL="${DOWNLOAD_BASE_URL}/cuse/releases"
 

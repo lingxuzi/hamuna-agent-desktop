@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hamuna launcher — option D · void</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #2b2b2b;
+  --ink-mute: #6f6f6f;
+  --ink-faint: #a8a8a8;
+  --paper: #ffffff;
+  --hair: #e2e2dd;
+  --accent: #c83c2c;
+  --font: 'Helvetica Neue', 'Inter', -apple-system, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+button { font: inherit; cursor: pointer; border: 0; background: transparent; color: inherit; text-align: left; }
+
+/* ---------- titlebar · corner mark ---------- */
+.titlebar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  -webkit-app-region: drag;
+  z-index: 10;
+}
+.titlebar .brand {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+  font-weight: 500;
+}
+.titlebar .ver {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  -webkit-app-region: no-drag;
+}
+
+/* ---------- main canvas: void ---------- */
+.canvas {
+  position: fixed;
+  top: 32px; left: 0; right: 0; bottom: 24px;
+  display: flex; flex-direction: column;
+  padding: 0;
+}
+
+/* hero · upper-left, single line */
+.hero {
+  padding: 48px 56px 0;
+  max-width: 60ch;
+}
+.hero .label {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 24px;
+}
+.hero .sentence {
+  font-weight: 300;
+  font-size: 34px;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.hero .sentence .accent { color: var(--accent); font-weight: 400; }
+
+/* massive empty middle · the void */
+
+/* corner cluster · lower right */
+.corner {
+  position: fixed;
+  bottom: 36px; right: 56px;
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 12px;
+  max-width: 360px;
+  text-align: right;
+}
+.corner .meta {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  line-height: 1.6;
+}
+.corner .meta .v { color: var(--ink); margin-left: 8px; }
+.corner .enter {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ink);
+  font-weight: 500;
+}
+.corner .enter:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.corner .enter .arrow { font-size: 14px; }
+
+/* input · invisible until typed */
+.void-input {
+  position: fixed;
+  bottom: 36px; left: 56px;
+  width: 360px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  font-family: var(--font);
+  border: 0;
+  border-bottom: 1px solid var(--hair);
+  padding: 8px 0;
+  background: transparent;
+  outline: 0;
+}
+.void-input::placeholder {
+  color: var(--ink-faint);
+}
+
+/* hidden meta · only shows on hover */
+.peek {
+  position: fixed;
+  top: 50%;
+  left: 56px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+/* index · absolutely minimal left-bottom */
+.index {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex; gap: 28px;
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.06em;
+}
+.index .item { display: inline-flex; gap: 8px; align-items: baseline; }
+.index .item .num {
+  font-size: 10px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.index .item.current .name { color: var(--accent); }
+.index .item.current .num { color: var(--accent); }
+
+/* ---------- footer · 1 line ---------- */
+.foot {
+  position: fixed;
+  bottom: 8px; left: 0; right: 0;
+  height: 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.foot .right { display: flex; gap: 18px; }
+
+@media (max-width: 760px) {
+  .canvas { top: 32px; bottom: auto; }
+  .hero { padding: 32px 24px 0; }
+  .hero .sentence { font-size: 24px; }
+  .peek { display: none; }
+  .void-input {
+    position: relative; bottom: auto; left: auto; width: auto;
+    margin: 32px 24px 0;
+  }
+  .corner {
+    position: relative; bottom: auto; right: auto; max-width: none;
+    align-items: flex-start; text-align: left;
+    margin: 24px; gap: 16px;
+  }
+  .corner .enter { align-self: flex-start; }
+  .index {
+    position: relative; bottom: auto; left: auto; transform: none;
+    flex-wrap: wrap; padding: 16px 24px;
+  }
+  .foot { font-size: 9px; padding: 0 14px; }
+}
+</style>
+</head>
+<body>
+
+<header class="titlebar">
+  <span class="brand">hamuna</span>
+  <span class="ver">v0.3.185 · sidecar ready</span>
+</header>
+
+<main class="canvas">
+
+  <header class="hero">
+    <div class="label">launcher</div>
+    <h1 class="sentence">A desktop that <span class="accent">does the work.</span></h1>
+  </header>
+
+  <div class="peek">type · choose · send</div>
+
+  <input class="void-input" placeholder="What do you want done?" />
+
+  <nav class="index">
+    <span class="item current"><span class="num">01</span><span class="name">~/projects/mino</span></span>
+    <span class="item"><span class="num">02</span><span class="name">~/writing/notes</span></span>
+    <span class="item"><span class="num">03</span><span class="name">~/work/q3-report</span></span>
+    <span class="item"><span class="num">04</span><span class="name">~/archive/old-blog</span></span>
+  </nav>
+
+  <aside class="corner">
+    <div class="meta">
+      <div>model <span class="v">deepseek-v4-flash-0731</span></div>
+      <div>balance <span class="v">¥42.80</span></div>
+      <div>permission <span class="v">bypass</span></div>
+    </div>
+    <button class="enter">open workspace <span class="arrow">›</span></button>
+  </aside>
+
+</main>
+
+<footer class="foot">
+  <span>hamuna © 2026</span>
+  <span class="right"><span>⌘k shortcut</span><span>⌘l logs</span></span>
+</footer>
+
+</body>
+</html>

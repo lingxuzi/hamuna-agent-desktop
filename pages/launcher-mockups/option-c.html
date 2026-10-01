@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hamuna launcher — option C · grid paper</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #2b2b2b;
+  --ink-mute: #6f6f6f;
+  --ink-faint: #a8a8a8;
+  --paper: #fcfbf7;
+  --grid: #d6d4cc;
+  --grid-strong: #b8b5aa;
+  --accent: #c83c2c;
+  --font: 'Helvetica Neue', 'Inter', -apple-system, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+button { font: inherit; cursor: pointer; border: 0; background: transparent; color: inherit; text-align: left; }
+
+/* ---------- titlebar ---------- */
+.titlebar {
+  height: 36px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--grid-strong);
+  -webkit-app-region: drag;
+}
+.titlebar .brand {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink);
+}
+.titlebar .grid-meta {
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+  -webkit-app-region: no-drag;
+}
+
+/* ---------- layout: 12-col grid ---------- */
+.frame {
+  height: calc(100vh - 36px - 24px);
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0;
+}
+
+/* hero · span 12 on top */
+.hero {
+  grid-column: 1 / -1;
+  padding: 64px 56px 32px;
+  border-bottom: 1px solid var(--grid-strong);
+  background: var(--paper);
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.hero .axis {
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding-top: 8px;
+}
+.hero .sentence {
+  font-weight: 300;
+  font-size: 38px;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.hero .sentence .accent { color: var(--accent); font-weight: 400; }
+.hero .meta-row {
+  grid-column: 2;
+  display: flex; gap: 24px;
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+  margin-top: 16px;
+}
+.hero .meta-row .k { color: var(--ink-faint); }
+
+/* ---------- LEFT · workspace index ---------- */
+.left {
+  grid-column: 1 / 7;
+  padding: 24px 24px 24px 56px;
+  border-right: 1px solid var(--grid-strong);
+  background: var(--paper);
+}
+.head-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 64px 72px;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--grid-strong);
+  margin-bottom: 8px;
+}
+.head-row .num { color: var(--ink-faint); }
+
+.ws-list { display: flex; flex-direction: column; }
+.ws-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 64px 72px;
+  gap: 12px;
+  align-items: baseline;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--grid);
+  cursor: pointer;
+}
+.ws-row .num {
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.ws-row .name {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-row .name .badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--accent);
+  padding: 1px 6px;
+  border-radius: 0;
+}
+.ws-row .sess {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.ws-row .when {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.ws-row.current { background: rgba(200, 60, 44, 0.06); padding-left: 8px; padding-right: 8px; margin: 0 -8px; }
+.ws-row.current .num { color: var(--accent); font-weight: 500; }
+.ws-row.current .name { color: var(--accent); }
+
+/* ---------- RIGHT · input + scheduled ---------- */
+.right {
+  grid-column: 7 / -1;
+  padding: 24px 56px 24px 24px;
+  background: var(--paper);
+  display: flex; flex-direction: column;
+  gap: 24px;
+}
+
+.input-section {
+  border: 1px solid var(--grid-strong);
+  padding: 16px;
+  display: flex; flex-direction: column;
+  gap: 12px;
+  background: var(--paper);
+}
+.input-section .axis {
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--grid);
+}
+.input {
+  width: 100%;
+  background: transparent;
+  border: 0; outline: 0;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.55;
+  resize: none;
+  min-height: 80px;
+  padding: 0;
+}
+.input::placeholder { color: var(--ink-faint); }
+.input-tools {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--grid);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.input-tools .left-tools { display: flex; gap: 14px; color: var(--ink-mute); }
+.input-tools .left-tools span:hover { color: var(--ink); }
+.input-tools .send {
+  color: var(--ink);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.input-tools .send:hover { color: var(--accent); }
+
+/* scheduled sub-list */
+.sub-head {
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--grid-strong);
+  margin-bottom: 0;
+}
+.sub-list { display: flex; flex-direction: column; }
+.sub-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 80px;
+  gap: 12px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--grid);
+}
+.sub-row .num {
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.sub-row .name {
+  font-size: 13px;
+  color: var(--ink);
+}
+.sub-row .when {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- footer · axis line ---------- */
+.foot {
+  height: 24px;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  border-top: 1px solid var(--grid-strong);
+  background: var(--paper);
+}
+.foot .cell {
+  border-right: 1px solid var(--grid);
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+  padding: 0 8px;
+  display: flex; align-items: center;
+}
+.foot .cell:last-child { border-right: 0; }
+.foot .cell.left { grid-column: 1 / 4; }
+.foot .cell.mid { grid-column: 4 / 8; justify-content: center; color: var(--accent); }
+.foot .cell.right { grid-column: 8 / -1; justify-content: flex-end; }
+
+@media (max-width: 760px) {
+  .frame { height: auto; min-height: calc(100vh - 36px - 24px); grid-template-columns: 1fr; }
+  body { overflow: auto; }
+  .hero { grid-template-columns: 1fr; padding: 32px 20px; gap: 8px; }
+  .hero .meta-row { grid-column: 1; margin-top: 8px; flex-wrap: wrap; gap: 12px; }
+  .hero .sentence { font-size: 26px; }
+  .left { grid-column: 1; padding: 16px 20px; border-right: 0; border-bottom: 1px solid var(--grid-strong); }
+  .right { grid-column: 1; padding: 16px 20px; }
+  .head-row, .ws-row { grid-template-columns: 24px 1fr 64px; gap: 8px; }
+  .head-row .sess, .ws-row .sess { display: none; }
+  .foot { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="titlebar">
+  <span class="brand">hamuna</span>
+  <span class="grid-meta">v0.3.185 · 32px grid · sidecar ready</span>
+</header>
+
+<main class="frame">
+
+  <header class="hero">
+    <div class="axis">y · 1</div>
+    <div class="sentence">A desktop that <span class="accent">does the work.</span></div>
+    <div class="meta-row">
+      <span><span class="k">model</span> deepseek-v4-flash-0731</span>
+      <span><span class="k">balance</span> ¥42.80</span>
+      <span><span class="k">permission</span> bypass</span>
+      <span><span class="k">provider</span> nxgd</span>
+    </div>
+  </header>
+
+  <section class="left">
+    <div class="head-row">
+      <span class="num">№</span>
+      <span>Workspace</span>
+      <span>Sessions</span>
+      <span>Updated</span>
+    </div>
+    <div class="ws-list">
+
+      <button class="ws-row current">
+        <span class="num">01</span>
+        <span class="name">~/projects/mino</span>
+        <span class="sess">12</span>
+        <span class="when">2m</span>
+      </button>
+
+      <button class="ws-row">
+        <span class="num">02</span>
+        <span class="name">~/writing/notes<span class="badge">Agent</span></span>
+        <span class="sess">04</span>
+        <span class="when">1d</span>
+      </button>
+
+      <button class="ws-row">
+        <span class="num">03</span>
+        <span class="name">~/work/q3-report</span>
+        <span class="sess">02</span>
+        <span class="when">3d</span>
+      </button>
+
+      <button class="ws-row">
+        <span class="num">04</span>
+        <span class="name">~/archive/old-blog</span>
+        <span class="sess">31</span>
+        <span class="when">31d</span>
+      </button>
+
+      <button class="ws-row">
+        <span class="num">05</span>
+        <span class="name">+ new workspace</span>
+        <span class="sess">—</span>
+        <span class="when">—</span>
+      </button>
+
+    </div>
+  </section>
+
+  <aside class="right">
+
+    <div>
+      <div class="input-section">
+        <div class="axis">begin · what do you want done</div>
+        <textarea class="input" placeholder=""></textarea>
+        <div class="input-tools">
+          <div class="left-tools">
+            <span>attach</span>
+            <span>image</span>
+            <span>schedule</span>
+          </div>
+          <button class="send">send ›</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sub-head">Scheduled · 02 running</div>
+      <div class="sub-list">
+        <div class="sub-row">
+          <span class="num">01</span>
+          <span class="name">Weekly sales digest</span>
+          <span class="when">mon 9:00</span>
+        </div>
+        <div class="sub-row">
+          <span class="num">02</span>
+          <span class="name">GitHub issue triage</span>
+          <span class="when">every 6h</span>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+
+<footer class="foot">
+  <div class="cell left">sidecar · ready</div>
+  <div class="cell mid">y · 12 / x · 7</div>
+  <div class="cell right">⌘k · ⌘l</div>
+</footer>
+
+</body>
+</html>

@@ -101,6 +101,8 @@ interface Entry {
   description: string;
   /** Sticky per-token compatibility downgrade for prompt_cache_key. */
   promptCacheKeyDisabled: boolean;
+  /** Sticky per-token compatibility downgrade for explicit cache breakpoints. */
+  promptCacheBreakpointsDisabled: boolean;
 }
 
 const registry = new Map<string, Entry>();
@@ -128,6 +130,7 @@ export function registerBridge(
     registeredAt: Date.now(),
     description,
     promptCacheKeyDisabled: existing?.promptCacheKeyDisabled ?? false,
+    promptCacheBreakpointsDisabled: existing?.promptCacheBreakpointsDisabled ?? false,
   });
 }
 
@@ -171,6 +174,18 @@ export function disablePromptCacheKey(token: string): void {
 
 export function isPromptCacheKeyDisabled(token: string): boolean {
   return registry.get(token)?.promptCacheKeyDisabled ?? false;
+}
+
+/** Sticky per-token downgrade for explicit cache breakpoint projection.
+ *  Set when the upstream rejects a request carrying `prompt_cache_breakpoint`
+ *  markers; subsequent requests skip projection entirely. */
+export function disablePromptCacheBreakpoints(token: string): void {
+  const entry = registry.get(token);
+  if (entry) entry.promptCacheBreakpointsDisabled = true;
+}
+
+export function isPromptCacheBreakpointsDisabled(token: string): boolean {
+  return registry.get(token)?.promptCacheBreakpointsDisabled ?? false;
 }
 
 /**

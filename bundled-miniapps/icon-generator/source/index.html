@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Icon Generator</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Icon Generator</h1>
+        <p class="hint">Describe a flat vector icon. Get 3–5 candidates, pick one, edit, export.</p>
+      </header>
+
+      <section class="prompt-row" aria-label="Prompt">
+        <input
+          id="prompt-input"
+          type="text"
+          placeholder="rocket launching, geometric, indigo background"
+          aria-label="Icon description"
+          autocomplete="off"
+        />
+        <button id="gen-btn" type="button">Generate</button>
+      </section>
+
+      <section class="candidates" aria-label="Candidate icons">
+        <div id="candidate-grid" data-testid="candidate-grid"></div>
+      </section>
+
+      <section class="editor" aria-label="Editor">
+        <canvas id="icon-output" width="256" height="256" aria-label="Selected icon"></canvas>
+        <div class="editor-controls">
+          <button id="edit-btn" type="button" data-testid="edit-btn">Edit</button>
+          <button id="continue-chat-btn" type="button" data-testid="continue-chat-btn">
+            Continue in chat
+          </button>
+          <button id="export-btn" type="button" data-testid="export-btn">Export PNG</button>
+        </div>
+      </section>
+
+      <section class="dropzone" aria-label="Reference image drop zone">
+        <label for="ref-input">Drop a reference image</label>
+        <input id="ref-input" type="file" accept="image/*" />
+        <p class="status" id="ref-status" aria-live="polite"></p>
+      </section>
+
+      <section class="status" id="status" aria-live="polite"></section>
+    </main>
+    <script src="ui.js"></script>
+  </body>
+</html>

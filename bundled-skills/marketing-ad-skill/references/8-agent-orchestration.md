@@ -1,6 +1,15 @@
-# 独立 Agent 编排规范（完全对齐 AdCraft）
+# 独立 Agent 编排规范（AdCraft 11 Agent + §8 入口加 Round 0.5 = 12 Agent）
 
-> **设计目标**：100% 对齐 AdCraft 8-Agent 架构，用 Claude Code Agent 工具并行起独立 subagent。
+> **设计目标**：对齐 AdCraft 11-Agent 架构（Director + World Setting + Script + Character + Scene + Prop + Storyboard + BGM + Video Direction + Video + Quick Media），用 Claude Code Agent 工具并行起独立 subagent。
+> **§8 入口扩展**：视频复刻（§8）触发时**加跑 Round 0.5 qisi Remixer**（拆片+叙事方法提取，11 字段结构化输出），总编排为 12 Agent。其它路由（§3/§4/§5/§6/§7）跳过 Round 0.5 保持 11 Agent。
+>
+> **Round 0.5 必跑 SOP 链（§8 入口强制 4 步）**：
+> 1. `references/qisi-evidence-frame-extraction.md`（ffmpeg 抽帧 + 关键帧筛选）→ 产出 `original_story_facts.json`
+> 2. `references/qisi-narrative-methods-mapping.md`（4 维手法提取 + apply_to_§X）→ 产出 `narrative_methods_extracted.json`
+> 3. `references/qisi-rhyme-copywriting.md`（原片押韵 → §3-§6 短押韵 7 步改写）→ 产出 `copywriting_rhymes.json`
+> 4. Round 0.5 qisi Remixer Agent 合并 3 个 JSON 为 11 字段结构（`timeline_breakdown` + `narrative_pattern` + `borrowed_methods` + ...）
+>
+> **缺任意 1 步 → §8 路由必报错**（见 `scripts/run_8agent_mcp.py` 断言 19-21）。
 > **来源**：AdCraft `apps/api/app/services/workflow_skill_registry.py` + `agent_canvas_prompt_preparation.py` 真实定义。
 > **AdCraft 真实 Agent 角色**（7 user-facing + 多 capability）：
 >
@@ -12,6 +21,10 @@
 > | 6 | BGM Agent |
 > | 7 | Video Generation / Composition Agent |
 > | 8 | Quick Media Agent（轻量文本节点处理）|
+> | 9 | **Prop Designer Agent**（道具 · Round 2b 与 character/scene 并行 · marketing-ad-skill 新增） |
+> | 10 | **World Setting Agent**（Round 1.5 串行 · marketing-ad-skill 新增） |
+> | 11 | **Video Direction Agent**（Round 3.5 串行 · storyboard→video 桥 · marketing-ad-skill 新增） |
+> | 12 | **qisi Remixer Agent**（Round 0.5 · **§8 视频复刻入口必跑** · 拆片+叙事方法 11 字段） |
 
 ---
 
@@ -88,9 +101,12 @@ storyboard → storyboard-image-generation → storyboard-video-generation
 | **36s（推荐短剧带货）** | **12 + 12 + 12** | **3** | **取代 30s 旧模板 · 段3 有完整 CTA 收束空间** |
 | 48s | 12 + 12 + 12 + 12 | 4 | 长剧情 |
 | 60s | 12 × 5 | 5 | 完整故事片 |
+| **§8 例外 72-120s** | **12 × 6-10** | **6-10** | **仅 §8 视频复刻原片 ≥ 60s 时启用** |
 
 - **禁止**：6s/8s/15s/18s/24s 等非 12s 切分（旧 §3.3 段拼接表已废弃）
 - **脚本/storyboard 同步**：脚本总时长必须 = N × 12s。若创意天然不是 12 倍数（如 30s），脚本补 6s 留白到 36s 或精简到 24s，不要出 6s 段
+
+> **§8 路由例外**（2026-09-21 新增 · leshi 86.5s 实战触发）：原片 ≥ 60s 时 N 可放宽到 6-10（120s 上限）。**段数换算公式**：N = ceil(原片时长 / 12)。**仅 §8 适用**，§3-§7 仍守 60s。详见 `storyboard-prompt-spec.md` §1.3 + 4 条配套规则（末帧锚定 / 离散分镜 3-4 个 / batch_size=4 / drawtext 4-6 句）。
 - **衔接连贯铁律**（用户第 41 轮新要求）：
   1. **末帧锚点**：每段 closing_state 必须是"可作为下一段 first_frame 的定格状态"（如 hero shot 居中特写/推门呆愣定格/眼妆成品 selfie）
   2. **首帧承接**：每段 opening_state 必须显式声明"承接上段 closing_state"
@@ -165,12 +181,13 @@ storyboard → storyboard-image-generation → storyboard-video-generation
   - 不写脚本 / 不写镜头
 ```
 
-### Agent 2 · Script Writer Agent（脚本）
+### Agent 2 · Script Writer Agent（脚本 · 🆕 screenwriter.md 整合版）
 
 ```
 你是 AdCraft Script Writer Agent。任务：
 - 接收：{outputs/agent_director.json 内容}
 - Capability: video_agent_script_authoring
+- 整合规范：screenwriter.md（小逻影视编剧）§核心冲突 / §人物小传 / §场次规划 / §五维微表演 → §3-§6 4 类路由全部适用；§7 UGC 走 ugc-talking-video-ref 不走本规范
 - 输出（JSON · 写到 outputs/agent_script.json）：
   {
     "script": {
@@ -180,10 +197,34 @@ storyboard → storyboard-image-generation → storyboard-video-generation
       "selling_points": ["<卖点1>", "<卖点2>", "<卖点3>"],
       "subtitle_triggers": [
         {"time": "<时间点>", "text": "<字幕>"}
-      ]
+      ],
+      "core_conflict": "<核心冲突 · 必含 6 类关键词 ≥3：欲望/利益/身份/关系/世界阻力/失败代价>",
+      "hero_desire": "<主角欲望>",
+      "hero_fear": "<主角恐惧>",
+      "hero_arc": "<人物弧光 · 初始→裂缝→最终选择→结局>",
+      "scenes": [
+        {"scene": "<场景名>", "time_range": "<时间段>",
+         "scene_goal": "...", "obstacle": "...",
+         "info_release": "...", "relationship_change": "...",
+         "exit_hook": "..."}
+      ],
+      "dialogues": [
+        {"character": "<正式姓名 · 禁'她/他/它/对方'>", "line": "<台词>"}
+      ],
+      "visual_directions": [
+        {"beat": "...", "shot": "<景别+机位+构图焦点>", "blocking": "..."}
+      ],
+      "continuity_check": {"passed": true, "items": ["..."]}
     }
   }
-- 验证：30s 时长分配 + selling_points ≥3
+- 验证：30s 时长分配 + selling_points 3-5 + body 引用 ≥2 个 selling_points + cta 命中 ≥1 个 + 6 类冲突关键词 ≥3 + 场次 ≥3 + 对白 ≥3 + 角色名正式（非代词）
+- **🆕 必跑 pre-Round-2b 静态审计**：
+  ```bash
+  python3 scripts/audit_script.py --stdin <<< '<agent_script.json>'
+  ```
+  - **EXIT 0 才允许进 Round 2b**（EXIT 1 = 必修复后重跑）
+  - 12 项规则详见 fixture `audit_script.py` 头部 SCRIPT_RULES 列表
+  - 常见违规 → `S04 selling_points <3 或 >5` / `S06 body 未引用卖点` / `S07 cta 未命中卖点` / `S08 core_conflict <3 类冲突` / `S10 scenes <3 场` / `S11 对白用'她/他'代词`
 ```
 
 ### Agent 3 · Character Designer Agent（角色设计）
@@ -285,25 +326,47 @@ storyboard → storyboard-image-generation → storyboard-video-generation
 
 ```
 你是 AdCraft Storyboard Agent。任务：
-- 接收：{outputs/agent_director.json + agent_script.json + agent_character.json + agent_scene.json}
+- 接收：{outputs/agent_director.json + agent_script.json + agent_character.json + agent_scene.json + agent_qisi_remixer.json（§8 入口时）}
 - Capability: video_agent_storyboard_design
 - **MUST 遵循 §2.1 段时长硬约束**：所有 segment.duration = 12（受 agnes 视频模型限制）
+- **MUST 遵循 `references/storyboard-prompt-spec.md`**（段内节奏驱动规范）：
+  - 每段拆 3-4 个 1-4s **离散分镜**（`discrete_shots[]` 字段），避免"全程空转"
+  - 离散分镜 prompt 用 "X秒" 文字驱动节奏（不是 MCP `seconds` 参数）
+  - 资产引用走 `<Picture N>` 重映射（images[] 按 prompt 首次引用顺序排列，从 1 连续编号）
+  - 每段末子镜头必填 `handoff_to_next`（承接段尾 closing_state）
+  - 详细规范见 `references/storyboard-prompt-spec.md` §0-§9
 - **MUST 遵循衔接连贯**：每段 closing_state 显式说明"作为下段 first_frame 的定格状态"
+- **MUST 记录 split_reason**（§8 入口必填 · 其他路由可选）：
+  - `storyboard.segments[].split_reason`：每段必填，5 类枚举之一 + 具体说明
+  - `storyboard.continuity_handoffs[].split_reason`：段间锚点必填
+  - 5 类枚举：`scene_change` / `time_layer_shift` / `wardrobe_change` / `action_complexity` / `duration_cap`
+  - 取值依据见 `references/qisi-section-decision-sop.md` §1
 - 输出（JSON · 写到 outputs/agent_storyboard.json）：
   {
     "storyboard": {
       "segment_table": "12s + 12s + 12s"（36s 总长）或 "12s × N",
       "total_duration_seconds": 36,
-      "continuity_anchors": [
-        {"from_seg": 1, "to_seg": 2, "anchor": "<服装/道具/光线跨段锚点>"}
+      "continuity_handoffs": [
+        {"from_seg": 1, "to_seg": 2, "anchor": "<服装/道具/光线跨段锚点>",
+         "split_reason": "<scene_change|wardrobe_change|...>"}
       ],
       "segments": [
-        {"idx": 1, "duration": 12, "shot": "<镜头>", "scene_id": "<场景>",
-         "closing_state_for_next_segment": "<末帧定格描述 · 直接对接下段 first_frame>"},
-        {"idx": 2, "duration": 12, "shot": "<镜头>", "scene_id": "<场景>",
-         "closing_state_for_next_segment": "..."},
-        {"idx": 3, "duration": 12, "shot": "<镜头>", "scene_id": "<场景>",
-         "closing_state_for_next_segment": "..."}
+        {"idx": 1, "duration": 12, "shot": "<段总标题>", "scene_id": "<场景ID>",
+         "closing_state_for_next_segment": "<末帧定格描述 · 直接对接下段 first_frame>",
+         "split_reason": "<5 类枚举之一 + 说明>",
+         "discrete_shots": [
+           {"sub_idx": 1, "duration_seconds": 3, "shot_type": "<中景/特写/微距>",
+            "prompt": "<3秒 子镜头完整 prompt · 含 <Picture N> 引用>",
+            "handoff_to_next": "<承接下子镜头的元素>"},
+           {"sub_idx": 2, "duration_seconds": 4, "shot_type": "...",
+            "prompt": "<4秒 子镜头完整 prompt>", "handoff_to_next": "..."},
+           {"sub_idx": 3, "duration_seconds": 3, "shot_type": "...",
+            "prompt": "<3秒 子镜头完整 prompt>",
+            "handoff_to_next": "<末子镜头必填 · 段尾承接 closing_state>"}
+         ],
+         "prompt_combined": "<所有子镜 prompt 拼接 · 末尾接 BGM/字幕规则 · Video Agent 直接取用>",
+         "referenced_assets_in_prompt_order": ["<asset_1>", "<asset_2>", "..."]
+        }
       ],
       "storyboard_markdown_table": "<Markdown 表格>"
     }
@@ -311,8 +374,13 @@ storyboard → storyboard-image-generation → storyboard-video-generation
 - 验证：
   - 所有 segments[].duration == 12（铁律）
   - total_duration_seconds = N × 12
-  - continuity_anchors 长度 = N-1
+  - continuity_handoffs 长度 = N-1
   - 每段 closing_state_for_next_segment 非空
+  - §8 入口：所有 segments[].split_reason 在 5 类枚举内
+  - **🆕 每段 discrete_shots 数量 = 3-4（避免全程空转）**
+  - **🆕 每段 discrete_shots[].duration_seconds 总和 = 12**
+  - **🆕 末子镜头 handoff_to_next 非空**
+  - **🆕 referenced_assets_in_prompt_order 与 <Picture N> 编号 1:1 对齐**
 ```
 
 ### Agent 6 · BGM Agent（背景音乐）
@@ -351,7 +419,7 @@ storyboard → storyboard-image-generation → storyboard-video-generation
   - **MUST 遵循 §2.1 段时长硬约束**：所有 directions[].duration_seconds = 12（受 agnes 视频模型限制）
   - **MUST 衔接连贯**：每段 closing_state 必须是"可作为下段 first_frame 的定格状态"
   - 严格遵循 storyboard 的段拼接表（12 × N）
-  - 跨段连续性来自 storyboard.continuity_anchors（角色服装锚点/场景道具锚点/光照连续性）
+  - 跨段连续性来自 storyboard.continuity_handoffs（角色服装锚点/场景道具锚点/光照连续性）
   - 不编造 duration / aspect_ratio / resolution / model（这些由 video agent 决定）
 - 输出（JSON · 写到 outputs/agent_video_direction.json）：
   {
@@ -384,6 +452,13 @@ storyboard → storyboard-image-generation → storyboard-video-generation
   - 每段 opening_state / primary_action / closing_state 三态齐
   - continuity_handoffs 长度 = directions 长度 - 1（每个段间过渡一个锚点）
   - 不写 prompt 全文（留给 Agent 8 拼装）
+- **🆕 必跑跨段连续性 pre-MCP 自检**（写 agent_video_direction.json 后、调 Round 4 之前）：
+  ```bash
+  python3 scripts/audit_segment_continuity.py --stdin <<< '<agent_video_direction.json>'
+  ```
+  - **EXIT 0 才允许调 Agent 8**（EXIT 1 = 必修复：continuity_handoffs / 段首承接 / 末帧定格 / 场景锁定 / 服装光线漂移）
+  - 10 项规则详见 fixture `audit_segment_continuity.py` 头部 CONTINUITY_RULES 列表
+  - 常见违规 → `C03 handoffs 长度 ≠ directions-1` / `C06 段首未承接` / `C07 末帧非定格` / `C08 缺场景锁定` / `C09 跨段换装` / `C10 跨段光线漂移`
 ```
 
 ### Agent 8 · Video Generation Agent（MCP 调用链）
@@ -394,6 +469,24 @@ storyboard → storyboard-image-generation → storyboard-video-generation
 - 角色定位：把 motion direction 转成实际 MCP 调用步骤（image_generate + video_generate）
 - 必读 video_direction.directions[].{opening_state, primary_action, closing_state, subject_action, camera_motion, framing} → 拼装成完整 prompt
 - **MUST 遵循 §2.1**：所有 video_generate_calls[].params.seconds = 12（铁律）
+- **MUST 遵循 `references/storyboard-prompt-spec.md`**：
+  - 每段 `prompt` 取 `storyboard.segments[].prompt_combined`（已含离散分镜 + BGM/字幕规则 · 不要重新拼装）
+  - `mode="reference"` · `images` 按 `<Picture N>` 顺序排列（只传用到的 · contact sheet 单元素数组）
+  - `aspect_ratio="9:16"` 抖音 / `"16:9"` 横屏（按平台）
+  - 不在 prompt 里写 AI 内嵌字幕（drawtext 后处理 v9 铁律）
+- **🆕 必跑 pre-MCP 静态审计**（调任何 video_generate 之前）：
+  ```bash
+  python3 scripts/audit_video_generate.py --stdin <<< '<video_generate_calls JSON>'
+  ```
+  - **EXIT 0 才允许调 MCP**（EXIT 1 = 必修复后重跑，禁止带违规调 video_generate）
+  - 15 项规则详见 fixture `audit_video_generate.py` 头部 SPEC_RULES 列表
+  - 常见违规 → `S02 seconds≠12` / `S09 无 X秒 节奏点` / `S11 缺场景锁定指令` / `S12 含 ¥/价格字符` / `S07 <Picture N> 跳号`
+- **🆕 必跑跨段连续性审计**（Round 3.5 Video Direction Agent 必跑 · Agent 8 必读）：
+  ```bash
+  python3 scripts/audit_segment_continuity.py --stdin <<< '<agent_video_direction.json>'
+  ```
+  - Agent 7 写 agent_video_direction.json 后必跑，EXIT 0 才进 Round 4
+  - 10 项规则（handoffs 长度 / 段首承接 / 末帧定格 / 场景锁定 / 服装光线漂移等）详见 fixture CONTINUITY_RULES
 - 参考：`references/mcp-multimedia-creator.md` + `references/failure-modes.md`
 - 输出（JSON · 写到 outputs/agent_video.json）：
   {
@@ -402,9 +495,13 @@ storyboard → storyboard-image-generation → storyboard-video-generation
         {"step": 1, "purpose": "<对应 direction[0].closing_state 的 hero shot>", "prompt": "<完整 prompt>"}
       ],
       "video_generate_calls": [
-        {"step": 2, "segment": 1, "mode": "keyframe", "first_frame": "step1 output", "seconds": 12, "prompt": "<拼装：direction[0] 三态 + 失败模式规避>"},
-        {"step": 3, "segment": 2, "mode": "reference", "images": ["step2 角色立绘"], "seconds": 12, "prompt": "<...>"},
-        {"step": 4, "segment": 3, "mode": "keyframe", "first_frame": "step3 末尾帧", "seconds": 12, "prompt": "<...>"}
+        {"step": 2, "segment": 1, "mode": "reference", "images": ["contact_sheet_seg1.png"], "seconds": 12,
+         "prompt": "<取 storyboard.segments[0].prompt_combined · 直接复用 · 不重拼>",
+         "aspect_ratio": "9:16", "size": "720P", "output_filename": "seg01.mp4"},
+        {"step": 3, "segment": 2, "mode": "reference", "images": ["contact_sheet_seg2.png"], "seconds": 12,
+         "prompt": "<取 storyboard.segments[1].prompt_combined>", "aspect_ratio": "9:16", "size": "720P"},
+        {"step": 4, "segment": 3, "mode": "reference", "images": ["contact_sheet_seg3.png"], "seconds": 12,
+         "prompt": "<取 storyboard.segments[2].prompt_combined>", "aspect_ratio": "9:16", "size": "720P"}
       ],
       "concat_command": "ffmpeg -f concat -safe 0 -i segments.txt -c copy final_36s.mp4",
       "drawtext_subtitles_command": "ffmpeg -i final_36s.mp4 -vf \"drawtext=...\" -c:a copy final_36s_with_subtitle.mp4"
@@ -415,9 +512,14 @@ storyboard → storyboard-image-generation → storyboard-video-generation
   - video_generate_calls = storyboard.segments 长度
   - **所有 video_generate_calls[].params.seconds == 12（铁律 · §2.1）**
   - 每段 first_frame / images 引用正确的 step 输出
+  - **🆕 每段 prompt = storyboard.segments[].prompt_combined（直接取用，不重拼装）**
+  - **🆕 每段 images 顺序与 prompt 内 <Picture N> 编号对齐（连续 1, 2, 3...）**
+  - **🆕 每段 images 数量 = prompt 实际引用的资产数（只传用到的）**
   - 拼装的 prompt 含 direction 的 opening_state / primary_action / closing_state 全部三态
   - **#15 三轨同步**：dialogue_blocks ↔ drawtext_subtitles_command ↔ 各段 prompt DIALOGUE BLOCK 时间码 1:1 对齐 + 核心台词不跨段重复
   - drawtext_subtitles_command 必须为 v9 后处理（不在 video prompt 里要求 AI 渲染文字）
+  - **🆕 pre-MCP 审计 EXIT 0**：跑 `scripts/audit_video_generate.py --stdin` 全 15 项通过，违规 0 项
+  - **🆕 跨段连续性 EXIT 0**：跑 `scripts/audit_segment_continuity.py --stdin` 全 10 项通过（由 Agent 7 保证；Agent 8 复跑验收）
 ```
 
 ### Agent 9 · Quick Media Agent（可选 · 用于单节点文本修订）

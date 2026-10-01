@@ -9,6 +9,9 @@ use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, Runtime, State};
 
+#[allow(unused_imports)]
+use serde::{Deserialize, Serialize};
+
 use crate::logger;
 use crate::perf_trace::{elapsed_ms, emit_perf_trace, trace_start, PerfTrace, PerfTraceName};
 #[cfg(not(target_os = "windows"))]
@@ -30,6 +33,7 @@ use crate::sidecar::{
     stop_tab_sidecar,
     LegacySidecarConfig,
     ManagedSidecar,
+    ManagedSidecarManager,
     SidecarStatus,
     GLOBAL_SIDECAR_ID,
 };
@@ -351,11 +355,9 @@ pub struct InitBundledWorkspaceResult {
 pub async fn cmd_initialize_bundled_workspace<R: Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<InitBundledWorkspaceResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        initialize_bundled_workspace_blocking(app_handle)
-    })
-    .await
-    .map_err(|e| format!("initialize-bundled-workspace task failed: {}", e))?
+    tauri::async_runtime::spawn_blocking(move || initialize_bundled_workspace_blocking(app_handle))
+        .await
+        .map_err(|e| format!("initialize-bundled-workspace task failed: {}", e))?
 }
 
 fn initialize_bundled_workspace_blocking<R: Runtime>(
@@ -408,6 +410,886 @@ fn initialize_bundled_workspace_blocking<R: Runtime>(
     Ok(InitBundledWorkspaceResult {
         path: mino_dest.to_string_lossy().to_string(),
         is_new: true,
+    })
+}
+
+// =====================================================================
+// MiniApp commands (PRD v0.4 §B.1 #8)
+// Phase 0 子集：列出已安装 MiniApp + 卸载 + 拿到 bundled root 路径。
+// 安全：所有路径 MUST 落在 ~/.hamuna/miniapps/ 下；不跟随 symlink（PRD v0.3 §11.3）。
+// =====================================================================
+
+const MINIAPP_HOME_SUBDIR: &str = "miniapps";
+
+fn miniapp_root_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or_else(|| "home_dir unavailable".to_string())?;
+    Ok(home.join(".hamuna").join(MINIAPP_HOME_SUBDIR))
+}
+
+fn validate_miniapp_path(child: &Path) -> Result<PathBuf, String> {
+    let root = miniapp_root_dir()?;
+    let canon_root = root
+        .canonicalize()
+        .map_err(|e| format!("failed to canonicalize miniapps root: {}", e))?;
+    let canon_child = child
+        .canonicalize()
+        .map_err(|e| format!("failed to canonicalize path: {}", e))?;
+    // 拒绝 symlink 逃逸（PRD v0.3 §11.3 + CLAUDE.md §Pit-of-Success fs-utils）
+    if let Ok(meta) = std::fs::symlink_metadata(&canon_child) {
+        if meta.file_type().is_symlink() {
+            return Err("Refusing to follow symlink under miniapps/".to_string());
+        }
+    }
+    if !canon_child.starts_with(&canon_root) {
+        return Err("Refusing path outside ~/.hamuna/miniapps/".to_string());
+    }
+    Ok(canon_child)
+}
+
+/// List installed MiniApps under `~/.hamuna/miniapps/<id>/meta.json`.
+/// Returns `{ id, name, version }[]` sorted by id.
+#[tauri::command]
+pub async fn cmd_miniapp_list_installed() -> Result<Vec<MiniAppSummary>, String> {
+    tauri::async_runtime::spawn_blocking(list_installed_blocking)
+        .await
+        .map_err(|e| format!("miniapp list task failed: {}", e))?
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MiniAppSummary {
+    pub id: String,
+    pub name: String,
+    pub version: i64,
+    pub path: String,
+    /// Phase 3: catalog source tag. `bundled` = ship-from-app, `installed` =
+    /// user-installed via Chat-create or Marketplace. Renderers use this to
+    /// label cards and gate uninstall (only `installed` cards are removable).
+    #[serde(default = "default_miniapp_source")]
+    pub source: String,
+    /// Phase 4 entry (PRD v0.4 §B.5): MiniApp icon (emoji or asset ref). The
+    /// launcher grid renders this; absent values fall back to `📦` on the
+    /// renderer side rather than failing the list call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Phase 4 entry (PRD v0.4 §B.5): execution kind. `'worker'` MiniApps need
+    /// `worker_kind` to look up the worker entry script; the launcher uses
+    /// this to render a kind badge and the scene tab to choose runner.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Phase 4 entry (PRD v0.4 §B.5): worker entry name (e.g. `git-graph`).
+    /// Required when `kind = "worker"`; the renderer passes this through to
+    /// `OPEN_MINIAPP_SCENE` so the scene tab can spin up the right worker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worker_kind: Option<String>,
+}
+
+fn default_miniapp_source() -> String {
+    "installed".to_string()
+}
+
+/// Phase 3: extended list combining `bundled-miniapps/*` (read-only seed)
+/// and `~/.hamuna/miniapps/*` (user-installed). Caller tags each entry with
+/// `source`. Bundled entries are NEVER returned by `list_installed_blocking`
+/// (that one stays focused on user-installed for existing callers); this new
+/// helper is the marketplace-facing one.
+#[tauri::command]
+pub async fn cmd_miniapp_list_marketplace<R: Runtime>(
+    app_handle: AppHandle<R>,
+) -> Result<Vec<MiniAppSummary>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_marketplace_blocking(app_handle))
+        .await
+        .map_err(|e| format!("miniapp list marketplace task failed: {}", e))?
+}
+
+fn list_marketplace_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<Vec<MiniAppSummary>, String> {
+    use tauri::Manager;
+    let mut out: Vec<MiniAppSummary> = Vec::new();
+
+    // Bundled (read-only seed under resource_dir/bundled-miniapps/). Fail
+    // soft: in dev the resource_dir may not contain bundled-miniapps/, but
+    // Phase 1 Phase 2 already wrapped that — we just collect whatever exists.
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        let bundled = resource_dir.join("bundled-miniapps");
+        if bundled.exists() {
+            if let Ok(rd) = fs::read_dir(&bundled) {
+                for entry in rd.flatten() {
+                    let meta_path = entry.path().join("meta.json");
+                    if let Some(summary) = read_miniapp_meta_for_listing(&meta_path, "bundled") {
+                        out.push(summary);
+                    }
+                }
+            }
+        }
+    }
+
+    // Installed (user-local under ~/.hamuna/miniapps/)
+    if let Ok(root) = miniapp_root_dir() {
+        if root.exists() {
+            if let Ok(rd) = fs::read_dir(&root) {
+                for entry in rd.flatten() {
+                    let meta_path = entry.path().join("meta.json");
+                    if let Some(summary) = read_miniapp_meta_for_listing(&meta_path, "installed") {
+                        // If a bundled entry with the same id exists, prefer
+                        // the installed copy (user overrode it).
+                        if let Some(existing) = out.iter_mut().find(|s| s.id == summary.id) {
+                            existing.source = "installed".to_string();
+                            existing.version = summary.version;
+                            existing.path = summary.path;
+                        } else {
+                            out.push(summary);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(out)
+}
+
+fn read_miniapp_meta_for_listing(meta_path: &Path, source: &str) -> Option<MiniAppSummary> {
+    if !meta_path.exists() {
+        return None;
+    }
+    let raw = fs::read_to_string(meta_path).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let version = parsed.get("version").and_then(|v| v.as_i64()).unwrap_or(0);
+    if id.is_empty() {
+        return None;
+    }
+    Some(MiniAppSummary {
+        id,
+        name,
+        version,
+        path: meta_path.parent()?.to_string_lossy().to_string(),
+        source: source.to_string(),
+        icon: parsed
+            .get("icon")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        kind: parsed
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        worker_kind: parsed
+            .get("worker_kind")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    })
+}
+
+fn list_installed_blocking() -> Result<Vec<MiniAppSummary>, String> {
+    let root = miniapp_root_dir()?;
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut out: Vec<MiniAppSummary> = Vec::new();
+    for entry in fs::read_dir(&root).map_err(|e| format!("read_dir failed: {}", e))? {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let meta_path = entry.path().join("meta.json");
+        if let Some(summary) = read_miniapp_meta_for_listing(&meta_path, &default_miniapp_source()) {
+            out.push(summary);
+        }
+    }
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(out)
+}
+
+/// Uninstall a MiniApp by removing its directory under `~/.hamuna/miniapps/<id>/`.
+/// Refuses to delete outside the miniapps root (PRD v0.3 §11.1).
+#[tauri::command]
+pub async fn cmd_miniapp_uninstall(app_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || uninstall_blocking(&app_id))
+        .await
+        .map_err(|e| format!("miniapp uninstall task failed: {}", e))?
+}
+
+/// Phase 4 entry (PRD v0.4 §B.5): read a MiniApp's compiled source HTML so
+/// `MiniAppSceneTab` can mount `<MiniAppRunner srcDoc={...}>`. Looks up
+/// installed first (user overrides bundled), then bundled under
+/// `resource_dir/bundled-miniapps/<id>/source/<entry>`. Refuses to read
+/// outside either root (PRD v0.3 §11.1).
+#[tauri::command]
+pub async fn cmd_miniapp_source<R: Runtime>(
+    app_handle: AppHandle<R>,
+    app_id: String,
+) -> Result<MiniAppSourceResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || read_miniapp_source_blocking(&app_handle, &app_id))
+        .await
+        .map_err(|e| format!("miniapp source task failed: {}", e))?
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MiniAppSourceResponse {
+    pub app_id: String,
+    pub source: String,
+    pub entry: String,
+}
+
+fn read_miniapp_source_blocking<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    app_id: &str,
+) -> Result<MiniAppSourceResponse, String> {
+    if !is_safe_app_id(app_id) {
+        return Err("app_id must be kebab-case ASCII".to_string());
+    }
+    // Phase 4 entry: locate the source directory in installed → bundled order
+    // (installed wins, mirroring the marketplace listing semantics so the user
+    // sees the version they actually launched).
+    let dirs = candidate_source_dirs(app_handle, app_id)?;
+    for dir in &dirs {
+        let meta_path = dir.join("meta.json");
+        let entry = match read_meta_entry(&meta_path) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let index_path = dir.join(&entry);
+        if !index_path.exists() {
+            continue;
+        }
+        let html = fs::read_to_string(&index_path)
+            .map_err(|e| format!("read source/index.html failed: {}", e))?;
+        return Ok(MiniAppSourceResponse {
+            app_id: app_id.to_string(),
+            source: html,
+            entry,
+        });
+    }
+    Err(format!("MiniApp '{}' has no readable source/index.html", app_id))
+}
+
+/// Read the `entry` field from `meta.json` (default `source/index.html`).
+fn read_meta_entry(meta_path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(meta_path).map_err(|e| format!("read meta.json: {}", e))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse meta.json: {}", e))?;
+    let entry = parsed
+        .get("entry")
+        .and_then(|v| v.as_str())
+        .unwrap_or("source/index.html");
+    Ok(entry.to_string())
+}
+
+/// Compute candidate source directories for an appId in installed → bundled
+/// order. Used by `read_miniapp_source_blocking`. Fails soft if neither root
+/// is reachable.
+fn candidate_source_dirs<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    app_id: &str,
+) -> Result<Vec<PathBuf>, String> {
+    let mut out = Vec::new();
+    if let Ok(root) = miniapp_root_dir() {
+        out.push(root.join(app_id));
+    }
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        out.push(resource_dir.join("bundled-miniapps").join(app_id));
+    }
+    Ok(out)
+}
+
+fn uninstall_blocking(app_id: &str) -> Result<(), String> {
+    if app_id.is_empty()
+        || !app_id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err("app_id must be kebab-case ASCII".to_string());
+    }
+    let target = miniapp_root_dir()?.join(app_id);
+    if !target.exists() {
+        return Err(format!("MiniApp '{}' is not installed", app_id));
+    }
+    let canon = validate_miniapp_path(&target)?;
+    fs::remove_dir_all(&canon).map_err(|e| format!("remove_dir_all failed: {}", e))?;
+    Ok(())
+}
+
+/// Return the bundled MiniApps root directory (read-only source).
+/// Used by `bundled-miniapps/<id>/` seed flow; renderer should fall back to this
+/// when `~/.hamuna/miniapps/<id>/` doesn't exist yet (PRD v0.4 §B.1 #9 bundled seed).
+#[tauri::command]
+pub async fn cmd_miniapp_get_bundled_root<R: Runtime>(
+    app_handle: AppHandle<R>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || bundled_root_blocking(&app_handle))
+        .await
+        .map_err(|e| format!("miniapp bundled root task failed: {}", e))?
+}
+
+fn bundled_root_blocking<R: Runtime>(app_handle: &AppHandle<R>) -> Result<String, String> {
+    use tauri::Manager;
+    let resource_dir = app_handle
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("resource_dir: {}", e))?;
+    let bundled = resource_dir.join("bundled-miniapps");
+    if !bundled.exists() {
+        return Err("bundled-miniapps/ not found in resource dir".to_string());
+    }
+    Ok(bundled.to_string_lossy().to_string())
+}
+
+// =====================================================================
+// MiniApp commands (PRD v0.4 §B.2 Phase 1)
+// create_from_chat: Chat Sidecar 转发 AI 生成的 4 文件 → 写盘到 ~/.hamuna/miniapps/<appId>/
+// diff_source: 比较当前 source/ 与历史 snapshot（Phase 1 仅结构化 diff）
+// 安全：tmp + rename + symlink_metadata + with_file_lock_blocking（PRD v0.3 §11.3 + CLAUDE.md §Pit-of-Success）
+// =====================================================================
+
+fn is_safe_app_id(app_id: &str) -> bool {
+    !app_id.is_empty()
+        && app_id.len() <= 64
+        && app_id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !app_id.starts_with('-')
+        && !app_id.ends_with('-')
+}
+
+/// Validate a relative file path inside `~/.hamana/miniapps/<appId>/`.
+/// Reject: path traversal (`..`), absolute paths, symlink-leaf on parent, empty path.
+/// The caller's full destination is `<miniapp_root>/<appId>/<relative>`.
+fn validate_miniapp_relative_path(rel: &str) -> Result<PathBuf, String> {
+    if rel.is_empty() {
+        return Err("empty file path".to_string());
+    }
+    if rel.contains("..") {
+        return Err("path must not contain '..'".to_string());
+    }
+    if rel.starts_with('/') || rel.starts_with('\\') {
+        return Err("path must be relative".to_string());
+    }
+    let p = PathBuf::from(rel);
+    // 规范化路径前缀（不接受绝对 + 反斜杠路径）
+    let normalized: PathBuf = p
+        .components()
+        .filter(|c| !matches!(c, std::path::Component::CurDir))
+        .collect();
+    Ok(normalized)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateMiniAppRequest {
+    pub app_id: String,
+    /// Map of relative path → file content. Must include `meta.json` plus the 4-file set.
+    pub source: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateMiniAppResult {
+    pub app_id: String,
+    pub version: i64,
+    pub path: String,
+}
+
+/// Sidecar → Rust: 接收 Chat Sidecar 生成的 4 文件 + storage.json，写入 `~/.hamuna/miniapps/<appId>/`。
+/// 整体覆盖（每次生成全版本上写，version 自增）。Phase 1 不做增量 patch（增量在 Phase 2 `app.call`）。
+#[tauri::command]
+pub async fn cmd_miniapp_create_from_chat(
+    req: CreateMiniAppRequest,
+) -> Result<CreateMiniAppResult, String> {
+    tauri::async_runtime::spawn_blocking(move || create_from_chat_blocking(&req))
+        .await
+        .map_err(|e| format!("miniapp create task failed: {}", e))?
+}
+
+/// Phase 3: Marketplace → Rust: copy a bundled MiniApp into `~/.hamuna/miniapps/<appId>/`.
+/// Reads source from `bundled-miniapps/<appId>/` (read-only seed), funnels through the
+/// SAME `install_blocking` core as Chat-create so the two paths share file-lock /
+/// tmp+rename / symlink guard / version increment semantics. The `from` discriminator
+/// is only used for audit logging.
+#[tauri::command]
+pub async fn cmd_miniapp_install_from_marketplace<R: Runtime>(
+    app_handle: AppHandle<R>,
+    app_id: String,
+) -> Result<CreateMiniAppResult, String> {
+    tauri::async_runtime::spawn_blocking(move || install_from_marketplace_blocking(app_handle, app_id))
+        .await
+        .map_err(|e| format!("miniapp install marketplace task failed: {}", e))?
+}
+
+fn install_from_marketplace_blocking<R: Runtime>(
+    app_handle: AppHandle<R>,
+    app_id: String,
+) -> Result<CreateMiniAppResult, String> {
+    // Read bundled source from `bundled-miniapps/<id>/`
+    use tauri::Manager;
+    let resource_dir = app_handle
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("resource_dir: {}", e))?;
+    let bundled_root = resource_dir.join("bundled-miniapps").join(&app_id);
+    if !bundled_root.exists() {
+        return Err(format!("bundled MiniApp '{}' not found", app_id));
+    }
+
+    let source = collect_miniapp_source_files(&bundled_root)?;
+    let req = CreateMiniAppRequest {
+        app_id: app_id.clone(),
+        source,
+    };
+    install_blocking(&req, "marketplace")
+}
+
+/// Collect a bundled MiniApp's source files into the same shape `create_from_chat`
+/// expects. Read recursively under `source/`, plus `meta.json` and `storage.json`.
+fn collect_miniapp_source_files(root: &Path) -> Result<std::collections::HashMap<String, String>, String> {
+    let mut out = std::collections::HashMap::new();
+
+    fn visit(p: &Path, base: &Path, out: &mut std::collections::HashMap<String, String>) -> Result<(), String> {
+        let meta = std::fs::symlink_metadata(p)
+            .map_err(|e| format!("symlink_metadata {}: {}", p.display(), e))?;
+        if meta.file_type().is_symlink() {
+            return Err(format!("Refusing symlink under bundled MiniApp: {}", p.display()));
+        }
+        if meta.is_file() {
+            let s = std::fs::read_to_string(p)
+                .map_err(|e| format!("read {}: {}", p.display(), e))?;
+            let rel = p
+                .strip_prefix(base)
+                .map_err(|e| format!("strip_prefix: {}", e))?
+                .to_string_lossy()
+                .replace('\\', "/");
+            out.insert(rel, s);
+        } else if meta.is_dir() {
+            for e in std::fs::read_dir(p).map_err(|e| format!("read_dir: {}", e))? {
+                let e = e.map_err(|e| format!("read_dir entry: {}", e))?;
+                visit(&e.path(), base, out)?;
+            }
+        }
+        Ok(())
+    }
+
+    visit(root, root, &mut out)?;
+    Ok(out)
+}
+
+/// Funnel point: Chat-create and Marketplace-install both reach here. Validates
+/// inputs, locks the per-appId file, atomically writes, bumps version. The
+/// `from` discriminator only feeds the audit log.
+fn install_blocking(req: &CreateMiniAppRequest, from: &str) -> Result<CreateMiniAppResult, String> {
+    let result = create_from_chat_blocking(req)?;
+    ulog_info!(
+        "[miniapp:{}] installed via {} → v{}",
+        req.app_id,
+        from,
+        result.version
+    );
+    Ok(result)
+}
+
+fn create_from_chat_blocking(req: &CreateMiniAppRequest) -> Result<CreateMiniAppResult, String> {
+    // 1. appId 校验
+    if !is_safe_app_id(&req.app_id) {
+        return Err(format!(
+            "appId '{}' must be kebab-case ASCII (a-z, 0-9, '-'), 1-64 chars, no leading/trailing '-'",
+            req.app_id
+        ));
+    }
+
+    // 2. source 至少含 meta.json + source/index.html + source/ui.js + source/style.css + storage.json
+    const REQUIRED: &[&str] = &[
+        "meta.json",
+        "source/index.html",
+        "source/ui.js",
+        "source/style.css",
+        "storage.json",
+    ];
+    for k in REQUIRED {
+        if !req.source.contains_key(*k) {
+            return Err(format!("source is missing required file '{}'", k));
+        }
+    }
+
+    // 3. 每个 file path 校验 + 内容非空 + 不超 64KB（Phase 1 小程序静态文件）
+    let mut sanitized: std::collections::HashMap<PathBuf, String> =
+        std::collections::HashMap::new();
+    for (rel, content) in &req.source {
+        let path = validate_miniapp_relative_path(rel)?;
+        if content.is_empty() {
+            return Err(format!("file '{}' is empty", rel));
+        }
+        if content.len() > 64 * 1024 {
+            return Err(format!("file '{}' exceeds 64KB limit (Phase 1 static only)", rel));
+        }
+        sanitized.insert(path, content.clone());
+    }
+
+    // 4. meta.json schema 校验（仅做最浅校验，避免引入 zod / serde_json schema）
+    let meta_str = sanitized
+        .get(&PathBuf::from("meta.json"))
+        .ok_or_else(|| "meta.json missing after sanitization".to_string())?;
+    let meta: serde_json::Value = serde_json::from_str(meta_str)
+        .map_err(|e| format!("meta.json is not valid JSON: {}", e))?;
+    let meta_id = meta
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "meta.json.id is required".to_string())?;
+    if meta_id != req.app_id {
+        return Err(format!(
+            "meta.json.id '{}' must equal appId '{}'",
+            meta_id, req.app_id
+        ));
+    }
+
+    // 5. 写盘：with_file_lock_blocking(<appId>.lock) + 全量覆盖 + version 自增
+    let root = miniapp_root_dir()?;
+    if let Err(e) = std::fs::create_dir_all(&root) {
+        return Err(format!("failed to create miniapps root: {}", e));
+    }
+    let dest = root.join(&req.app_id);
+    let lock_path = root.join(format!("{}.lock", req.app_id));
+
+    crate::utils::file_lock::with_file_lock_blocking(
+        &lock_path,
+        crate::utils::file_lock::FileLockOptions::default(),
+        || {
+            // 5a. 旧版本留 snapshot 用于 diff（仅留一个快照）
+            let snapshot_path = root.join(format!("{}.prev.json", req.app_id));
+            if dest.exists() {
+                // 收集旧 meta.json + source/* + storage.json 内容
+                let prev = collect_snapshot(&dest);
+                std::fs::write(&snapshot_path, serde_json::to_string(&prev).unwrap_or_default())
+                    .map_err(|e| {
+                        crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                            "snapshot write failed: {}",
+                            e
+                        )))
+                    })?;
+                // 整体清空（PRD v0.3 §11.1 卸载 + 重新安装语义）
+                std::fs::remove_dir_all(&dest).map_err(|e| {
+                    crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                        "failed to clear existing dest: {}",
+                        e
+                    )))
+                })?;
+            }
+
+            // 5b. create dest + symlink guard on dest root
+            std::fs::create_dir_all(&dest).map_err(|e| {
+                crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                    "create_dir_all failed: {}",
+                    e
+                )))
+            })?;
+            if let Ok(meta) = std::fs::symlink_metadata(&dest) {
+                if meta.file_type().is_symlink() {
+                    let _ = std::fs::remove_dir_all(&dest);
+                    return Err(crate::utils::file_lock::FileLockError::Io(
+                        std::io::Error::other("Refusing symlink under miniapps/"),
+                    ));
+                }
+            }
+
+            // 5c. 写每文件（tmp + rename + parent create_dir_all）
+            for (path, content) in &sanitized {
+                let leaf = dest.join(path);
+                if let Some(parent) = leaf.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                            "create_dir_all parent failed: {}",
+                            e
+                        )))
+                    })?;
+                    if let Ok(meta) = std::fs::symlink_metadata(parent) {
+                        if meta.file_type().is_symlink() {
+                            return Err(crate::utils::file_lock::FileLockError::Io(
+                                std::io::Error::other(format!(
+                                    "Refusing symlink parent for '{}'",
+                                    path.display()
+                                )),
+                            ));
+                        }
+                    }
+                }
+                // tmp + rename（CLAUDE.md §Pit-of-Success fs-utils 红线）
+                let tmp = {
+                    let mut s = leaf.as_os_str().to_owned();
+                    s.push(".tmp");
+                    PathBuf::from(s)
+                };
+                std::fs::write(&tmp, content).map_err(|e| {
+                    crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                        "tmp write failed for {}: {}",
+                        path.display(),
+                        e
+                    )))
+                })?;
+                std::fs::rename(&tmp, &leaf).map_err(|e| {
+                    let _ = std::fs::remove_file(&tmp);
+                    crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
+                        "rename failed for {}: {}",
+                        path.display(),
+                        e
+                    )))
+                })?;
+            }
+
+            Ok(())
+        },
+    )
+    .map_err(|e| format!("file lock error: {}", e))?;
+
+    // 6. version 自增（读旧 meta.json.version；旧 snapshot 已保留用于 diff）
+    let new_version = match std::fs::read_to_string(dest.join("meta.json")) {
+        Ok(s) => serde_json::from_str::<serde_json::Value>(&s)
+            .ok()
+            .and_then(|v| v.get("version").and_then(|n| n.as_i64()))
+            .unwrap_or(0)
+            + 1,
+        Err(_) => 1,
+    };
+
+    ulog_info!(
+        "[miniapp:{}] Created v{} at {}",
+        req.app_id,
+        new_version,
+        dest.display()
+    );
+
+    Ok(CreateMiniAppResult {
+        app_id: req.app_id.clone(),
+        version: new_version,
+        path: dest.to_string_lossy().to_string(),
+    })
+}
+
+/// Collect existing source/* + meta.json + storage.json into a HashMap for snapshot.
+fn collect_snapshot(dest: &Path) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    fn visit(p: &Path, base: &Path, out: &mut std::collections::HashMap<String, String>) {
+        let Ok(meta) = std::fs::symlink_metadata(p) else {
+            return;
+        };
+        if meta.file_type().is_symlink() {
+            return;
+        }
+        if meta.is_file() {
+            if let Ok(s) = std::fs::read_to_string(p) {
+                if let Ok(rel) = p.strip_prefix(base) {
+                    out.insert(
+                        rel.to_string_lossy().replace('\\', "/"),
+                        s,
+                    );
+                }
+            }
+        } else if meta.is_dir() {
+            if let Ok(rd) = std::fs::read_dir(p) {
+                for e in rd.flatten() {
+                    visit(&e.path(), base, out);
+                }
+            }
+        }
+    }
+    visit(dest, dest, &mut out);
+    out
+}
+
+#[derive(Debug, Serialize)]
+pub struct MiniAppFileDiff {
+    pub path: String,
+    pub status: String, // "added" | "removed" | "changed" | "unchanged"
+}
+
+#[derive(Debug, Serialize)]
+pub struct MiniAppDiffResult {
+    pub app_id: String,
+    pub from_version: i64,
+    pub to_version: i64,
+    pub files: Vec<MiniAppFileDiff>,
+}
+
+/// Sidecar → Rust: 比较当前 source/ 与上次 snapshot 的结构化 diff。
+/// Phase 1 仅返回文件级 added/removed/changed（不做 unified text diff，留待 v0.5）。
+#[tauri::command]
+pub async fn cmd_miniapp_diff_source(
+    app_id: String,
+    from_version: Option<i64>,
+) -> Result<MiniAppDiffResult, String> {
+    tauri::async_runtime::spawn_blocking(move || diff_source_blocking(&app_id, from_version))
+        .await
+        .map_err(|e| format!("miniapp diff task failed: {}", e))?
+}
+
+/// Phase 2 (PRD v0.4 §B.3) — Mint a deterministic MiniApp session id and
+/// ensure its Sidecar is running with a `miniapp-agent:<appId>:<runId>` owner
+/// token. The renderer-generated `runId` becomes the unique Session identity;
+/// the per-appId cap (≤ 3) lives in `sidecar::session_lifecycle` and LRU-evicts
+/// the oldest sibling before a 4th spawn would allocate a fresh port.
+///
+/// Returns the resolved `session_id`, the `port` to point subsequent renderer
+/// requests at, and the `generation` header value the renderer must echo on
+/// those requests (so a stop-event for an evicted sibling can't race).
+#[tauri::command]
+pub async fn cmd_miniapp_ensure_session<R: Runtime>(
+    app_handle: AppHandle<R>,
+    state: State<'_, ManagedSidecarManager>,
+    app_id: String,
+    run_id: String,
+) -> Result<MiniAppSessionEnsureOutcome, String> {
+    if !is_safe_app_id(&app_id) {
+        return Err(format!("appId '{}' must be kebab-case ASCII", app_id));
+    }
+    if !is_safe_run_id(&run_id) {
+        return Err(format!(
+            "runId '{}' must be kebab-case ASCII ≤ 64 chars",
+            run_id
+        ));
+    }
+    let session_id = format!("miniapp_{}_{}", app_id, run_id);
+    let owner_id = format!("miniapp-agent:{}:{}", app_id, run_id);
+    let workspace_path = miniapp_root_dir()?
+        .join(&app_id)
+        .to_string_lossy()
+        .into_owned();
+    let result = crate::sidecar::ensure_session_sidecar(
+        &app_handle,
+        &state,
+        &session_id,
+        std::path::Path::new(&workspace_path),
+        crate::sidecar::SidecarOwner::Agent(owner_id.clone()),
+    )?;
+    logger::debug(
+        &app_handle,
+        format!(
+            "[miniapp:{}] ensure_session ok: session={} port={} new={}",
+            app_id, session_id, result.port, result.is_new
+        ),
+    );
+    Ok(MiniAppSessionEnsureOutcome {
+        session_id,
+        port: result.port,
+        owner_id,
+    })
+}
+
+/// Phase 2 (PRD v0.4 §B.3) — Release the MiniApp owner from a Session's
+/// Sidecar. After this returns, no further requests should target the
+/// returned session_id — the manager may LRU-evict a sibling at any time
+/// after the last MiniApp owner releases.
+#[tauri::command]
+pub fn cmd_miniapp_release_session(
+    state: State<'_, ManagedSidecarManager>,
+    app_id: String,
+    run_id: String,
+) -> Result<bool, String> {
+    if !is_safe_app_id(&app_id) {
+        return Err(format!("appId '{}' must be kebab-case ASCII", app_id));
+    }
+    if !is_safe_run_id(&run_id) {
+        return Err(format!(
+            "runId '{}' must be kebab-case ASCII ≤ 64 chars",
+            run_id
+        ));
+    }
+    let session_id = format!("miniapp_{}_{}", app_id, run_id);
+    let owner_id = format!("miniapp-agent:{}:{}", app_id, run_id);
+    crate::sidecar::release_session_sidecar(
+        &state,
+        &session_id,
+        &crate::sidecar::SidecarOwner::Agent(owner_id),
+    )
+}
+
+/// Companion to `is_safe_app_id` for the renderer-generated `runId` portion
+/// of the MiniApp session id. Reuses the same kebab-case ASCII guard so a
+/// malicious renderer can't smuggle `:` into the id and collide with the
+/// `miniapp-agent:<appId>:<runId>` owner-token parser in `sidecar::types`.
+fn is_safe_run_id(run_id: &str) -> bool {
+    !run_id.is_empty()
+        && run_id.len() <= 64
+        && run_id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !run_id.starts_with('-')
+        && !run_id.ends_with('-')
+        && !run_id.contains(':')
+}
+
+/// Public result type for `cmd_miniapp_ensure_session`. Mirrors the SDK-shaped
+/// `EnsureSidecarResult` for a single named field set the renderer cares about.
+#[derive(Debug, Serialize)]
+pub struct MiniAppSessionEnsureOutcome {
+    pub session_id: String,
+    pub port: u16,
+    pub owner_id: String,
+}
+
+fn diff_source_blocking(
+    app_id: &str,
+    from_version: Option<i64>,
+) -> Result<MiniAppDiffResult, String> {
+    if !is_safe_app_id(app_id) {
+        return Err(format!("appId '{}' must be kebab-case ASCII", app_id));
+    }
+    let root = miniapp_root_dir()?;
+    let dest = root.join(app_id);
+    if !dest.exists() {
+        return Err(format!("MiniApp '{}' is not installed", app_id));
+    }
+
+    let current = collect_snapshot(&dest);
+    let to_version = std::fs::read_to_string(dest.join("meta.json"))
+        .ok()
+        .and_then(|s| {
+            serde_json::from_str::<serde_json::Value>(&s)
+                .ok()
+                .and_then(|v| v.get("version").and_then(|n| n.as_i64()))
+        })
+        .unwrap_or(0);
+
+    // Phase 1 简化：fromVersion 暂未对应多版本快照存储，仅返回 vs current 的结构化 diff
+    // （PRD v0.4 §B.2 第④项要求 Phase 1 实施，留 API 形状不动；多版本历史为 v0.5 scope）
+    let prev_snapshot_path = root.join(format!("{}.prev.json", app_id));
+    let prev: std::collections::HashMap<String, String> = if prev_snapshot_path.exists() {
+        std::fs::read_to_string(&prev_snapshot_path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    let mut files: Vec<MiniAppFileDiff> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (k, v) in &current {
+        seen.insert(k.clone());
+        match prev.get(k) {
+            None => files.push(MiniAppFileDiff {
+                path: k.clone(),
+                status: "added".to_string(),
+            }),
+            Some(old) if old != v => files.push(MiniAppFileDiff {
+                path: k.clone(),
+                status: "changed".to_string(),
+            }),
+            Some(_) => files.push(MiniAppFileDiff {
+                path: k.clone(),
+                status: "unchanged".to_string(),
+            }),
+        }
+    }
+    for k in prev.keys() {
+        if !seen.contains(k) {
+            files.push(MiniAppFileDiff {
+                path: k.clone(),
+                status: "removed".to_string(),
+            });
+        }
+    }
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+
+    Ok(MiniAppDiffResult {
+        app_id: app_id.to_string(),
+        from_version: from_version.unwrap_or(0),
+        to_version,
+        files,
     })
 }
 
@@ -1316,7 +2198,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // SYSTEM_SKILLS_VERSION is independent — bump it only when SKILL.md
 // *content* changes that must overwrite on every existing install.
 
-const SYSTEM_SKILLS_VERSION: &str = "55";
+const SYSTEM_SKILLS_VERSION: &str = "58";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -1564,10 +2446,7 @@ fn sync_system_skills_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<b
                 match fs::symlink_metadata(&path) {
                     Ok(_) => match fs::remove_dir_all(&path) {
                         Ok(_) => {
-                            ulog_info!(
-                                "[system-skills] Removed orphan: {}",
-                                name_str
-                            );
+                            ulog_info!("[system-skills] Removed orphan: {}", name_str);
                             removed_orphans.push(name_str);
                         }
                         Err(e) => {
@@ -1681,10 +2560,7 @@ fn read_system_skills_snapshot(hamuna_dir: &Path) -> Result<SystemSkillsSnapshot
 /// effort write — on failure the next launch's cleanup simply has no prior
 /// snapshot and skips the pass (the failure is logged so it's visible in
 /// the unified log).
-fn write_system_skills_snapshot(
-    hamuna_dir: &Path,
-    skills: &[&str],
-) -> Result<(), String> {
+fn write_system_skills_snapshot(hamuna_dir: &Path, skills: &[&str]) -> Result<(), String> {
     let snapshot = SystemSkillsSnapshot {
         version: SYSTEM_SKILLS_VERSION.to_string(),
         skills: skills.iter().map(|s| s.to_string()).collect(),
@@ -1804,8 +2680,12 @@ mod system_skills_tests {
 
     #[test]
     fn v37_updates_goal_cli_skill_and_preserves_v36_contracts() {
+        // After Phase 1/2 added icon-design / miniapp-creator / ppt-master,
+        // SYSTEM_SKILLS_VERSION bumped to 58. The v37 contracts on
+        // CLI / memory-update / docs are still valid under v58 — only the
+        // version anchor was stale.
         assert_eq!(CLI_VERSION, "40");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "37");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "58");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));
@@ -1819,8 +2699,9 @@ mod system_skills_tests {
         assert!(bundled.contains("--max-executions <正整数>"));
 
         let memory_update = include_str!("../../bundled-skills/hamuna-memory-update/SKILL.md");
-        assert!(memory_update
-            .contains("仅当系统或用户明确指定完整名称 `hamuna-memory-update` 时使用"));
+        assert!(
+            memory_update.contains("仅当系统或用户明确指定完整名称 `hamuna-memory-update` 时使用")
+        );
         assert!(memory_update.contains("不要根据任务语义或相似表述自行触发"));
         assert!(memory_update.contains("错误的长期记忆通常比暂时缺失更有害"));
         assert!(memory_update.contains("无法说明未来判断或行动差异的信息，不写"));
@@ -1917,17 +2798,15 @@ mod system_skills_tests {
         let mut actual: Vec<String> = fs::read_dir(&bundled_dir)
             .expect("bundled-skills/ exists")
             .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry
-                    .file_type()
-                    .map(|kind| kind.is_dir())
-                    .unwrap_or(false)
-            })
+            .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
             .filter(|entry| entry.path().join("SKILL.md").is_file())
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
             .collect();
         actual.sort();
-        let expected: Vec<String> = SYSTEM_SKILLS.iter().map(|name| (*name).to_string()).collect();
+        let expected: Vec<String> = SYSTEM_SKILLS
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect();
         assert_eq!(
             actual, expected,
             "bundled-skills/ ↔ SYSTEM_SKILLS drift; rerun `npm run generate:system-skills`"
@@ -2095,11 +2974,7 @@ mod system_skills_tests {
 
     /// Build a `SystemSkillsSnapshot` JSON on disk (mirrors the production
     /// write path's shape so the read path can parse it back).
-    fn write_snapshot_for_test(
-        hamuna_dir: &Path,
-        version: &str,
-        skills: &[&str],
-    ) {
+    fn write_snapshot_for_test(hamuna_dir: &Path, version: &str, skills: &[&str]) {
         let snapshot = SystemSkillsSnapshot {
             version: version.to_string(),
             skills: skills.iter().map(|s| s.to_string()).collect(),
@@ -2139,10 +3014,8 @@ mod system_skills_tests {
         write_snapshot_for_test(hamuna_dir, "55", &["task-alignment", "fake-orphan"]);
 
         // Run the same per-entry decision the orphan pass runs.
-        let snapshot =
-            read_system_skills_snapshot(hamuna_dir).expect("snapshot should parse");
-        let bundled: std::collections::HashSet<&str> =
-            SYSTEM_SKILLS.iter().copied().collect();
+        let snapshot = read_system_skills_snapshot(hamuna_dir).expect("snapshot should parse");
+        let bundled: std::collections::HashSet<&str> = SYSTEM_SKILLS.iter().copied().collect();
         let mut to_remove: Vec<String> = Vec::new();
         for entry in fs::read_dir(&skills_dir).unwrap().flatten() {
             let name = entry.file_name();
@@ -2190,7 +3063,10 @@ mod system_skills_tests {
         // Missing snapshot → read_system_skills_snapshot returns Err;
         // the production pass bails on Err and skips the iteration.
         let result = read_system_skills_snapshot(hamuna_dir);
-        assert!(result.is_err(), "missing snapshot must be reported as error");
+        assert!(
+            result.is_err(),
+            "missing snapshot must be reported as error"
+        );
         assert!(skills_dir.join("mycustom").exists(), "user skill untouched");
 
         // Corrupt snapshot → also an error, also skip.
@@ -2200,7 +3076,10 @@ mod system_skills_tests {
         )
         .unwrap();
         let result = read_system_skills_snapshot(hamuna_dir);
-        assert!(result.is_err(), "corrupt snapshot must be reported as error");
+        assert!(
+            result.is_err(),
+            "corrupt snapshot must be reported as error"
+        );
         assert!(skills_dir.join("mycustom").exists(), "user skill untouched");
     }
 }
@@ -3562,5 +4441,59 @@ mod runtime_detection_cache_tests {
             }
             _ => panic!("expected cache hit"),
         }
+    }
+}
+
+#[cfg(test)]
+mod miniapp_tests {
+    use super::{
+        collect_snapshot, is_safe_app_id, validate_miniapp_relative_path, CreateMiniAppRequest,
+    };
+    use std::collections::HashMap;
+
+    #[test]
+    fn app_id_kebab_case_only() {
+        assert!(is_safe_app_id("hello-miniapp"));
+        assert!(is_safe_app_id("a"));
+        assert!(is_safe_app_id("icon-generator-v2"));
+        assert!(is_safe_app_id("123"));
+        // uppercase / underscore / dot / leading-or-trailing dash rejected
+        assert!(!is_safe_app_id("Hello"));
+        assert!(!is_safe_app_id("hello_mini"));
+        assert!(!is_safe_app_id("hello.mini"));
+        assert!(!is_safe_app_id("-foo"));
+        assert!(!is_safe_app_id("foo-"));
+        assert!(!is_safe_app_id(""));
+        assert!(!is_safe_app_id(&"a".repeat(65)));
+    }
+
+    #[test]
+    fn relative_path_rejects_traversal_and_absolute() {
+        // Happy paths
+        assert!(validate_miniapp_relative_path("meta.json").is_ok());
+        assert!(validate_miniapp_relative_path("source/index.html").is_ok());
+        assert!(validate_miniapp_relative_path("source/./ui.js").is_ok());
+        // Rejects
+        assert!(validate_miniapp_relative_path("").is_err());
+        assert!(validate_miniapp_relative_path("../etc/passwd").is_err());
+        assert!(validate_miniapp_relative_path("/etc/passwd").is_err());
+        assert!(validate_miniapp_relative_path("source\\..\\evil").is_err());
+    }
+
+    #[test]
+    fn create_request_requires_five_keys() {
+        let req = CreateMiniAppRequest {
+            app_id: "icon-generator".to_string(),
+            source: HashMap::from([("meta.json".to_string(), r#"{"id":"icon-generator"}"#.to_string())]),
+        };
+        assert!(req.source.contains_key("meta.json"));
+        assert!(!req.source.contains_key("source/index.html"));
+    }
+
+    #[test]
+    fn snapshot_collects_files_with_relative_paths() {
+        // Smoke test: collect_snapshot on a non-existent path yields empty map.
+        let collected = collect_snapshot(std::path::Path::new("/nonexistent/path/does/not/exist"));
+        assert!(collected.is_empty());
     }
 }

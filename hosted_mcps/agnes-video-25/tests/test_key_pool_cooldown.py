@@ -30,6 +30,7 @@ from agnes_video_25.server import (  # noqa: E402  (sys.path tweak above)
     _KEY_POOL,
     _KEY_POOL_LOADED,
     _KEY_POOL_LOCK,
+    _KEY_ROUND_ROBIN_COUNTER,
     _KeyState,
     _load_key_pool,
     _load_persisted_state,
@@ -44,10 +45,11 @@ def _reset_pool(*raw_keys: str) -> list[_KeyState]:
     """Replace the module-level pool with fresh states for deterministic asserts."""
     with _KEY_POOL_LOCK:
         _KEY_POOL[:] = [_KeyState(raw=k, masked=k[:4] + "***") for k in raw_keys]
-        # Flip the cached-loaded flag via a local rebind; module attr reassignment
-        # is the only way since _KEY_POOL_LOADED is a module-level bool.
+        # 0.2.3: also reset round-robin counter so tests are deterministic
+        # regardless of order — pool mutations must re-bind the module attr.
     import agnes_video_25.server as srv
     srv._KEY_POOL_LOADED = True  # type: ignore[attr-defined]
+    srv._KEY_ROUND_ROBIN_COUNTER = 0  # type: ignore[attr-defined]
     return list(_KEY_POOL)
 
 
@@ -188,12 +190,127 @@ def main() -> int:
         test_pick_key_refreshes_after_cooldown,
         test_state_persists_across_calls,
         test_load_merges_future_disabled_only,
+        test_round_robin_cycles_through_healthy_keys,
+        test_round_robin_skips_cooldown_keys,
+        test_round_robin_counter_persists_across_load,
+        test_round_robin_mixed_health_after_one_disables,
     ]
     for t in tests:
         t()
         print(f"PASS {t.__name__}")
     print(f"\n{len(tests)} self-check(s) passed.")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# 0.2.3: round-robin first-pick selection. Existing fallback / cooldown /
+# 30s-window semantics above are UNCHANGED — these only verify the *first*
+# pick cycles evenly among healthy keys.
+# ---------------------------------------------------------------------------
+
+def test_round_robin_cycles_through_healthy_keys() -> None:
+    """3-key pool, all healthy → _pick_key cycles 0→1→2→0… in order."""
+    keys = _reset_pool("key-aaaaaaaaaaaa", "key-bbbbbbbbbbbb", "key-cccccccccccc")
+    by_raw = {k.raw: k for k in keys}
+    seen = [_pick_key().raw for _ in range(6)]
+    # 6 picks across 3 keys → each picked exactly twice.
+    expected = [
+        "key-aaaaaaaaaaaa",
+        "key-bbbbbbbbbbbb",
+        "key-cccccccccccc",
+        "key-aaaaaaaaaaaa",
+        "key-bbbbbbbbbbbb",
+        "key-cccccccccccc",
+    ]
+    assert seen == expected, f"round-robin order wrong: got {seen}, want {expected}"
+    # Counter is an absolute value (not modulo-wrapped) so a process restart
+    # can resume from where it stopped. After 6 picks it should equal 6.
+    import agnes_video_25.server as srv
+    assert srv._KEY_ROUND_ROBIN_COUNTER == 6, \
+        f"counter should be 6 after 6 picks (absolute, not wrapped), got {srv._KEY_ROUND_ROBIN_COUNTER}"
+
+
+def test_round_robin_skips_cooldown_keys() -> None:
+    """A cooldown key is invisible to round-robin until it expires."""
+    keys = _reset_pool("key-aaaaaaaaaaaa", "key-bbbbbbbbbbbb", "key-cccccccccccc")
+    by_raw = {k.raw: k for k in keys}
+    # Cooldown key-b for the next 60s.
+    by_raw["key-bbbbbbbbbbbb"].disabled_until = time.time() + 60.0
+    # _reset_pool zeros the counter → first pick goes to key-a (index 0).
+    seen = [_pick_key().raw for _ in range(4)]
+    # Expect: a, c (b skipped), a, c — round-robin over healthy={a, c}.
+    expected = [
+        "key-aaaaaaaaaaaa",
+        "key-cccccccccccc",
+        "key-aaaaaaaaaaaa",
+        "key-cccccccccccc",
+    ]
+    assert seen == expected, f"cooldown key should be skipped: got {seen}, want {expected}"
+
+
+def test_round_robin_counter_persists_across_load() -> None:
+    """Disk counter survives a "process restart" (cache reset + reload)."""
+    import json as _json
+    import agnes_video_25.server as srv
+
+    # Seed disk state with a non-zero counter + a healthy pool.
+    state_path = _state_file()
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(_json.dumps({
+        "key-aaaaaaaaaaaa": {
+            "disabled_until": 0.0,
+            "disabled_reason": None,
+            "last_429_at": 0.0,
+            "consecutive_failures": 0,
+        },
+        "key-bbbbbbbbbbbb": {
+            "disabled_until": 0.0,
+            "disabled_reason": None,
+            "last_429_at": 0.0,
+            "consecutive_failures": 0,
+        },
+        "_round_robin_counter": 1,  # restart should resume from index 1
+    }), encoding="utf-8")
+
+    saved = os.environ.get("AGNES_API_KEYS")
+    os.environ["AGNES_API_KEYS"] = "key-aaaaaaaaaaaa,key-bbbbbbbbbbbb"
+    try:
+        srv._KEY_POOL_LOADED = False  # type: ignore[attr-defined]
+        srv._KEY_ROUND_ROBIN_COUNTER = 0  # type: ignore[attr-defined]
+        # First pick should use the loaded counter (1) → key-b, then advance to 2.
+        first = _pick_key()
+        assert first is not None
+        assert first.raw == "key-bbbbbbbbbbbb", \
+            f"expected key-b (counter=1), got {first.raw}"
+        assert srv._KEY_ROUND_ROBIN_COUNTER == 2, \
+            f"counter should be 2 after one pick, got {srv._KEY_ROUND_ROBIN_COUNTER}"
+    finally:
+        if saved is None:
+            os.environ.pop("AGNES_API_KEYS", None)
+        else:
+            os.environ["AGNES_API_KEYS"] = saved
+
+
+def test_round_robin_mixed_health_after_one_disables() -> None:
+    """Counter advances even when one key is mid-request-disabled; healthy pool shrinks."""
+    keys = _reset_pool("key-aaaaaaaaaaaa", "key-bbbbbbbbbbbb", "key-cccccccccccc")
+    by_raw = {k.raw: k for k in keys}
+    # 3 healthy keys, counter=0 → first pick = key-a.
+    first = _pick_key()
+    assert first.raw == "key-aaaaaaaaaaaa"
+    # Simulate: key-a just got a 429 mid-request (caller hasn't called
+    # _mark_disabled yet — the counter advanced in _pick_key already).
+    by_raw["key-aaaaaaaaaaaa"].disabled_until = time.time() + 60.0
+    # Next pick should skip key-a (now cooldown) and pick key-c (counter was 1 → idx 1 of healthy={b, c}).
+    second = _pick_key()
+    assert second is not None
+    assert second.raw == "key-cccccccccccc", \
+        f"expected key-c (skipping cooldown key-a), got {second.raw}"
+    # Third pick: healthy={b, c}, counter=2 → idx 0 → key-b.
+    third = _pick_key()
+    assert third is not None
+    assert third.raw == "key-bbbbbbbbbbbb", \
+        f"expected key-b, got {third.raw}"
 
 
 if __name__ == "__main__":

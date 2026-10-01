@@ -7,7 +7,7 @@
 
 .DESCRIPTION
     Downloads cuse-v{VERSION}-windows-x64.zip from
-    https://download.hamuna.io/cuse/releases/v{VERSION}/, verifies SHA-256,
+    https://download.agent.hamuna.club/cuse/releases/v{VERSION}/, verifies SHA-256,
     and extracts cuse.exe as cuse-x86_64-pc-windows-msvc.exe.
 
     Source of truth for cuse releases is GitHub

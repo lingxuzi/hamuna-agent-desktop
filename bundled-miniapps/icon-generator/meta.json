@@ -1,0 +1,37 @@
+{
+  "id": "icon-generator",
+  "name": "Icon Generator",
+  "description": "Demo MiniApp — generates 3–5 icon candidates via the icon-design skill, lets the user pick one and edit it on a canvas, then exports PNG.",
+  "icon": "palette",
+  "category": "design",
+  "version": 2,
+  "min_host_version": "0.4.0",
+  "tags": ["demo", "phase-2", "design", "icon"],
+  "skills": ["icon-design"],
+  "permissions": {
+    "fs": {
+      "write": ["{appdata}/source/**"]
+    },
+    "shell": {
+      "allow": []
+    },
+    "net": {
+      "allow": []
+    },
+    "ai": {
+      "enabled": true,
+      "allowed_models": ["gemini-2.5-flash-image", "imagen-3.0-generate"],
+      "max_tokens_per_request": 2000,
+      "rate_limit_per_minute": 5
+    }
+  },
+  "entry": "source/index.html",
+  "storage": {
+    "file": "storage.json",
+    "defaults": {
+      "lastPrompt": "",
+      "selectedVariant": null,
+      "editHistory": []
+    }
+  }
+}

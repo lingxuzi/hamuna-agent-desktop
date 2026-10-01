@@ -68,10 +68,10 @@ else
 fi
 
 # Tauri config override (Plan B): 自部署 R2 时覆盖 updater endpoint
-# tauri.conf.json 的 endpoints 是 fallback (https://download.hamuna.io/...);
+# tauri.conf.json 的 endpoints 是 fallback (https://download.agent.hamuna.club/...);
 # DOWNLOAD_BASE_URL 改了 (非默认) 时, 在 build 时通过 TAURI_CONFIG_OVERRIDES_JSON
 # 把 endpoint 覆盖成 <DOWNLOAD_BASE_URL>/update/{{target}}.json
-if [ -n "$DOWNLOAD_BASE_URL" ] && [ "$DOWNLOAD_BASE_URL" != "https://download.hamuna.io" ]; then
+if [ -n "$DOWNLOAD_BASE_URL" ] && [ "$DOWNLOAD_BASE_URL" != "https://download.agent.hamuna.club" ]; then
     export TAURI_CONFIG_OVERRIDES_JSON="{\"plugins\":{\"updater\":{\"endpoints\":[\"$DOWNLOAD_BASE_URL/update/{{target}}.json\"]}}}"
     echo -e "  ${GREEN}✓ Tauri config override: updater endpoint → $DOWNLOAD_BASE_URL${NC}"
 fi
@@ -203,7 +203,7 @@ echo ""
 
 # 下载最新 cuse 二进制 (computer-use MCP)
 # 每次构建都拉取最新 release —— cuse 私有仓库的 release.yml 自动构建并发到 GH Release，
-# 维护者再跑 HamunaAgent-Cuse/publish_r2.sh 把产物镜像到 R2（`download.hamuna.io/cuse/...`），
+# 维护者再跑 HamunaAgent-Cuse/publish_r2.sh 把产物镜像到 R2（`download.agent.hamuna.club/cuse/...`），
 # 此脚本从 R2 公网拉取，无需 gh CLI / 无需访问私有仓库。
 echo -e "${BLUE}[4.5/7] 拉取最新 cuse 二进制...${NC}"
 if ! "${PROJECT_DIR}/scripts/download_cuse.sh"; then

@@ -41,10 +41,20 @@ export function translateResponse(
 
     // text content
     if (choice.message.content) {
-      content.push({
-        type: 'text',
-        text: choice.message.content,
-      });
+      // upstream response content is always a flat string per the OpenAI
+      // Chat Completions spec; the array shape (OpenAITextContentPart[])
+      // only exists on the request side for SDK cache_control projection.
+      // Narrow defensively in case a strict-proxy upstream echoes back the
+      // request-side shape.
+      const text = typeof choice.message.content === 'string'
+        ? choice.message.content
+        : choice.message.content
+            .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+            .map(p => p.text)
+            .join('');
+      if (text) {
+        content.push({ type: 'text', text });
+      }
     }
 
     // tool calls

@@ -61,9 +61,11 @@ Add alongside `multimedia-creator`:
 
 | Tool | Purpose |
 |---|---|
-| `agnes25_video_generate` | Submit + wait + download video in one call (`mode="text" \| "keyframe" \| "reference"`) |
+| `agnes25_video_generate` | **Submit** video generation task only (`mode="text" \| "keyframe" \| "reference"`). Returns `{video_id, model_id, submit_key_masked}` — pair with `agnes25_video_query` for status / download. |
+| `agnes25_video_query` | **Poll** video task status by id. Pass `force_key_masked` (from `agnes25_video_generate`'s `submit_key_masked`) so the poll reuses the submitting key. Optional `download=True` saves to `AGNES_OUTPUT_DIR/videos/`. |
 | `agnes25_image_generate` | Generate images (text-to-image + optional img2img via `image_paths`) |
 | `agnes25_image_edit` | Edit images via `image_paths` + optional `mask_path` (inpainting) |
+| `agnes25_upload_image` | Upload a local file to `img.remit.ee` and return the public HTTPS URL |
 
 Full schema: see [`SKILL.md`](SKILL.md). Public docs:
 - <https://wiki.agnes-ai.cn/zh-Hans/docs/agnes-video-25>

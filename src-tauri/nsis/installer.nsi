@@ -769,10 +769,10 @@ Section HostedMcpPrefetch
     StrCpy $4 "python"
   ${EndIf}
   DetailPrint "Prefetching agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION} wheel (best-effort)"
-  ExecWait '"$4" -m pip install --user --index-url https://mirrors.aliyun.com/pypi/simple/ --upgrade agnes-video-25-mcp' $1
+  ExecWait '"$4" -m pip install --user --index-url https://mirrors.aliyun.com/pypi/simple/ --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
   ${If} $1 != 0
     DetailPrint "Aliyun PyPI mirror failed (exit $1); falling back to PyPI official"
-    ExecWait '"$4" -m pip install --user --index-url https://pypi.org/simple --upgrade agnes-video-25-mcp' $1
+    ExecWait '"$4" -m pip install --user --index-url https://pypi.org/simple --upgrade agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION}' $1
   ${EndIf}
   ${If} $1 == 0
     DetailPrint "Hosted MCP wheel prefetch OK (agnes-video-25-mcp==${AGNES_VIDEO_25_MCP_VERSION})"

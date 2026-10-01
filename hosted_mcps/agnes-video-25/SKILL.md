@@ -13,15 +13,16 @@ Use the `agnes_video_25` MCP server. If its tools are unavailable, ask the user 
 2. Pick the model and mode that match the request.
 3. For video references on 2.5 / 2.5 Flash, the server auto-resolves local paths / data URIs to HTTPS URLs via `img.remit.ee` (see Reference media resolution). No manual upload needed.
 4. Build the prompt with `<Picture N>` / `<Audio N>` / `<Video N>` placeholders when using `mode="reference"` (2.5 / 2.5 Flash only).
-5. Submit, then poll or wait; present `local_path` and `video_url` on success.
+5. `agnes25_video_generate` submits the task and returns `{video_id, model_id, submit_key_masked, ...}`. **It does not wait** (0.2.5+). To get the final video, call `agnes25_video_query(video_id, force_key_masked=<submit_key_masked>)` in a loop until `status=="completed"`, then call again with `download=True` (or fetch `video_url` directly).
 
 ## Tool selection
 
 | Task | Tool | Key options |
 |---|---|---|
-| Pure text-to-video | `agnes25_video_generate` | `mode="text"` |
-| Start/end frame control | `agnes25_video_generate` | `mode="keyframe"`, `first_frame`, `last_frame` |
-| Image / audio / video reference (2.5 / 2.5 Flash only) | `agnes25_video_generate` | `mode="reference"`, `images`, `audios`, `videos` |
+| Submit video task (text-to-video) | `agnes25_video_generate` | `mode="text"` (default) |
+| Submit video task (start/end frame) | `agnes25_video_generate` | `mode="keyframe"`, `first_frame`, `last_frame` |
+| Submit video task (image / audio / video reference, 2.5 / 2.5 Flash only) | `agnes25_video_generate` | `mode="reference"`, `images`, `audios`, `videos` |
+| Poll status / download completed video | `agnes25_video_query` | `video_id`, `force_key_masked?` (from submit), `download?` |
 | Text-to-image (default) | `agnes25_image_generate` | `prompt`, `size`, `ratio` |
 | Image-to-image / inpaint | `agnes25_image_edit` | `image_paths` (required), `mask_path?` |
 | Upload local file → HTTPS URL | `agnes25_upload_image` | `path` (absolute local file path) |
@@ -67,8 +68,8 @@ The `videos` field is `list[dict[str, Any]]` (structured objects); URL fields in
 
 ## Output
 
-- For video, provide `local_path` (downloaded) and `video_url` when available.
-- For async, surface the `video_id` so the user can resume polling later.
+- For video submit (`agnes25_video_generate`), return `{video_id, model_id, submit_key_masked}` so the caller can poll / download.
+- For video query (`agnes25_video_query`), surface `status`, `video_url`, and `local_path` when `download=True`. The `submit_key_masked` from submit MUST be forwarded as `force_key_masked` on every query — upstream scopes tasks to the submitting key (0.2.4 fix).
 - For image, return the `data[]` entries with `local_path` populated per entry; do not echo b64 payloads by default.
 - Do not expose credentials or invent a successful result on error.
 

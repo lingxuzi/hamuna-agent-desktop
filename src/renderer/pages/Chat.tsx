@@ -55,6 +55,7 @@ import { getSessionCronTask, isTaskExecuting, createCronTask, startCronTask as s
 import { updateSession as patchSessionMetadata } from '@/api/sessionClient';
 import { sessionHasPersistentOwners } from '@/api/tauriClient';
 import { persistInputOptionChange, type BuiltinModelSelection, type BuiltinProviderEnvPolicy } from '@/api/persistInputOption';
+import { perfMark } from '@/utils/perfMark';
 import { materializePendingSessionConfig } from '@/api/sessionMaterialize';
 import type { CronTask } from '@/types/cronTask';
 import type { SessionGoal } from '@/types/sessionGoal';
@@ -3716,6 +3717,8 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     if ((!text && (!images || images.length === 0)) || sessionState === 'stopping') {
       return false;
     }
+    // TTFT start anchor — paired with `chat_first_token` in TabProvider message-chunk handler.
+    perfMark('chat_send');
 
     // 广电：余额 < 5 元时弹充值 modal，不发送（pit-of-success: 阻止 silent failure）。
     if (currentProviderRef.current?.id === NXGD_PROVIDER_ID && await nxgdGuard.check()) {

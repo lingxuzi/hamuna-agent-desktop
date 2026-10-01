@@ -23,9 +23,9 @@ import { getBundledResourcePath } from '../utils/runtime';
 // Vendored at build time from the same R2 object the build pipeline uploads
 // to (the R2 bucket is read from R2_BUCKET / .env at publish time). Kept bundled so the Feedback
 // popover works without a network round-trip — and stays working when
-// `download.hamuna.io` is temporarily unreachable.
+// `download.agent.hamuna.club` is temporarily unreachable.
 const QR_CODE_BUNDLED = 'assets/feedback_qr_code.png';
-const QR_CODE_URL = 'https://download.hamuna.io/assets/feedback_qr_code.png';
+const QR_CODE_URL = 'https://download.agent.hamuna.club/assets/feedback_qr_code.png';
 const CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 const LOCK_MAX_AGE_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 10_000;

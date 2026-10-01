@@ -76,7 +76,7 @@ const UPDATER_DISABLED = false
 /**
  * Temporary kill-switch for the auto-update subsystem. Flip both this
  * and the matching `UPDATER_DISABLED` flag in
- * `src-tauri/src/updater.rs` to `true` together when `download.hamuna.io`
+ * `src-tauri/src/updater.rs` to `true` together when `download.agent.hamuna.club`
  * / R2 needs to be silenced (DNS / custom domain outage, etc.).
  *
  * When `true`: the 30-min interval, the startup pending-update probe, and

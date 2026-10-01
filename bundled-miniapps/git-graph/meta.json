@@ -1,0 +1,36 @@
+{
+  "id": "git-graph",
+  "name": "Git Graph",
+  "description": "Phase 3 demo — visualizes a local repo's commit graph and log, supports branch checkout, via the worker sandbox.",
+  "icon": "git-branch",
+  "category": "developer",
+  "version": 1,
+  "min_host_version": "0.4.0",
+  "tags": ["demo", "phase-3", "git", "worker"],
+  "kind": "worker",
+  "worker_kind": "git-graph",
+  "skills": [],
+  "permissions": {
+    "fs": {
+      "read": ["{workspace}/**"],
+      "write": []
+    },
+    "shell": {
+      "allow": ["git"]
+    },
+    "net": {
+      "allow": []
+    },
+    "ai": {
+      "enabled": false
+    }
+  },
+  "entry": "source/index.html",
+  "storage": {
+    "file": "storage.json",
+    "defaults": {
+      "cwd": "",
+      "branch": null
+    }
+  }
+}

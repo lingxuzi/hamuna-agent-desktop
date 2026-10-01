@@ -138,6 +138,13 @@ class _KeyState:
 _KEY_POOL: list[_KeyState] = []
 _KEY_POOL_LOCK = threading.Lock()
 _KEY_POOL_LOADED = False
+# 0.2.3: round-robin counter — first-available-key selection is no longer
+# always-key[0]; it cycles through healthy keys so 429 quota burns evenly
+# across the pool instead of hammering one key until it 429s. Fallback path
+# (cooldown + switch on 401/429/503) is unchanged; this only changes the
+# *first* pick. Persisted across restarts (same JSON file as disabled_until /
+# last_429_at) so a restart doesn't reset to key[0] and burn the same key.
+_KEY_ROUND_ROBIN_COUNTER: int = 0
 
 
 def _mask_key(raw: str) -> str:
@@ -174,11 +181,25 @@ def _load_persisted_state() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _get_round_robin_counter(persisted: dict[str, Any]) -> int:
+    """Read round-robin counter from persisted state (0.2.3+).
+    Returns 0 if missing or invalid — backward compatible with 0.1.4-0.2.2
+    state files that don't carry the counter.
+    """
+    raw = persisted.get("_round_robin_counter")
+    if not isinstance(raw, (int, float)):
+        return 0
+    n = int(raw)
+    return n if n >= 0 else 0
+
+
 def _persist_state() -> None:
     """Atomically write key pool state. Acquires _KEY_POOL_LOCK internally."""
     with _KEY_POOL_LOCK:
         path = _state_file()
-        payload: dict[str, dict[str, Any]] = {}
+        # payload is dict[str, Any] because 0.2.3 adds a global
+        # "_round_robin_counter" string-key alongside the per-key dict values.
+        payload: dict[str, Any] = {}
         for k in _KEY_POOL:
             payload[k.raw] = {
                 "disabled_until": k.disabled_until,
@@ -186,6 +207,9 @@ def _persist_state() -> None:
                 "last_429_at": k.last_429_at,
                 "consecutive_failures": k.consecutive_failures,
             }
+        # 0.2.3: round-robin counter is global (not per-key), lives at
+        # top level under a sentinel key to keep the per-key dict typed.
+        payload["_round_robin_counter"] = _KEY_ROUND_ROBIN_COUNTER
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(path.suffix + ".tmp")
@@ -214,6 +238,11 @@ def _load_key_pool() -> list[_KeyState]:
     if not keys:
         return keys
     persisted = _load_persisted_state()
+    # 0.2.3: hydrate round-robin counter from disk so a restart continues
+    # from where the previous process stopped (instead of resetting to key[0]
+    # and re-burning the same quota headroom).
+    global _KEY_ROUND_ROBIN_COUNTER
+    _KEY_ROUND_ROBIN_COUNTER = _get_round_robin_counter(persisted)
     now = time.time()
     for k in keys:
         ps = persisted.get(k.raw)
@@ -239,7 +268,22 @@ def _load_key_pool() -> list[_KeyState]:
 
 
 def _pick_key() -> _KeyState | None:
-    global _KEY_POOL_LOADED
+    """Select a healthy key for the next request.
+
+    0.2.3: round-robin among healthy (non-cooldown) keys. Fallback
+    semantics are unchanged: on 401/429/503 the caller (via _mark_disabled)
+    cooldown the offending key and the *next* _pick_key() call will skip
+    it. We do NOT touch the cooldown / last_429_at / disabled_until state
+    machine — round-robin only changes the *first pick*.
+
+    Selection algorithm:
+      1. Snapshot all healthy keys (disabled_until <= now).
+      2. If none healthy → return None (all_keys_exhausted path).
+      3. Pick index = counter % len(healthy); advance counter.
+      4. Cooldown-complete keys get their last_429_at refreshed (existing
+         behavior; preserved verbatim so we don't break the 30s window).
+    """
+    global _KEY_POOL_LOADED, _KEY_ROUND_ROBIN_COUNTER
     picked: _KeyState | None = None
     needs_persist = False
     with _KEY_POOL_LOCK:
@@ -247,14 +291,22 @@ def _pick_key() -> _KeyState | None:
             _KEY_POOL[:] = _load_key_pool()
             _KEY_POOL_LOADED = True
         now = time.time()
-        for k in _KEY_POOL:
-            if k.disabled_until <= now:
-                # Cooldown complete → refresh 429 allowance (key gets 2 fresh 429 chances).
+        healthy = [k for k in _KEY_POOL if k.disabled_until <= now]
+        if healthy:
+            # Cooldown-complete key refreshes its 429 allowance (unchanged
+            # from 0.1.6 — preserves the 30s-window semantics).
+            for k in healthy:
                 if k.last_429_at > 0.0:
                     k.last_429_at = 0.0
                     needs_persist = True
-                picked = k
-                break
+            # Counter is stored as an absolute value (NOT modulo len(healthy))
+            # so a process restart resumes from where it stopped. Modulo only
+            # happens at the read site (idx = counter % len(healthy)) and the
+            # write site advances by 1 — bounded only by Python int growth,
+            # which is fine in practice (a 64-bit signed int overflows at ~9e18).
+            idx = _KEY_ROUND_ROBIN_COUNTER % len(healthy)
+            picked = healthy[idx]
+            _KEY_ROUND_ROBIN_COUNTER = _KEY_ROUND_ROBIN_COUNTER + 1
     if needs_persist:
         _persist_state()
     return picked
@@ -432,6 +484,7 @@ def _request_json(
     json_body: dict[str, Any] | None = None,
     timeout: float = 120.0,
     base_url: str | None = None,
+    force_key_masked: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Call Agnes API with multi-key fallback on 401/429/503.
 
@@ -439,6 +492,19 @@ def _request_json(
     parse reset time + mark temp + switch; 503 → 60s cooldown + switch; other
     status / network errors → return immediately (not key-related). All keys
     exhausted → return last error with all_keys_exhausted context.
+
+    When ``force_key_masked`` is set, the matching pool key is used first
+    (poll-after-submit stickiness — upstream scopes tasks to the key that
+    created them, so poll must use the same key).
+
+    Forced-mode semantics: when ``force_key_masked`` resolves to a healthy
+    key, that single key is the only attempt — no multi-key fallback. The
+    caller already committed to a key (e.g. the submit key), so 401/429/503
+    surface to the caller instead of silently rotating. This is what lets
+    ``_submit_impl``'s 503 retry loop re-attempt the same key after backoff
+    instead of getting stuck in ``all_keys_exhausted`` after the first 503
+    marks the only pool key into cooldown. 429 cooldown state machinery is
+    still observed on subsequent non-forced calls (e.g. next submit).
     """
     url = f"{base_url or _base_url()}{path}"
     tried: list[tuple[str, int, str]] = []  # (masked_key, status_code, reason)
@@ -452,8 +518,26 @@ def _request_json(
         pool_size = len(_KEY_POOL)
     if pool_size == 0:
         return False, _error("missing_api_key", "Set AGNES_API_KEY (or AGNES_API_KEYS) before calling Agnes.")
+    forced_key: _KeyState | None = None
+    forced_mode_active = False
+    if force_key_masked is not None:
+        for k in _KEY_POOL:
+            if k.masked == force_key_masked and k.disabled_until <= time.time():
+                forced_key = k
+                forced_mode_active = True
+                break
+        if forced_key is None:
+            # Caller pinned a key that's in cooldown or no longer in the pool.
+            # Surface that as a clear error rather than silently switching —
+            # the caller's retry loop (submit 503 / status poll) owns backoff.
+            return False, _error(
+                "forced_key_unavailable",
+                f"Requested key {force_key_masked!r} is disabled or not in pool.",
+                details={"requested": force_key_masked, "pool_size": pool_size},
+            )
     for _ in range(pool_size):
-        key = _pick_key()
+        key = forced_key if forced_key is not None else _pick_key()
+        forced_key = None  # only honor the override on the first attempt
         if key is None:
             break  # all disabled
         headers = {"Authorization": f"Bearer {key.raw}", "Content-Type": "application/json"}
@@ -467,6 +551,12 @@ def _request_json(
             body = exc.response.text
             err = _error("http_error", "Agnes returned non-success.",
                          details={"status_code": sc, "body": body})
+            # Forced mode: surface all non-success to caller (no multi-key
+            # fallback, no cooldown marking). Caller's retry loop owns backoff.
+            # The 30s-window / 60s cooldown machinery still runs when the
+            # caller makes a *non-forced* call later (next submit, image gen).
+            if forced_mode_active:
+                return False, err
             if sc == 401:
                 _mark_disabled(key, "auth_401", float("inf"))
                 tried.append((key.masked, sc, "auth_401"))
@@ -781,8 +871,14 @@ def _submit_impl(
     images: list[str] | None = None, audios: list[str] | None = None,
     videos: list[dict[str, Any]] | None = None,
     include_raw: bool = False,
+    submit_503_retries: int = 10, submit_503_retry_seconds: float = 5.0,
 ) -> dict[str, Any]:
-    """Internal submit helper used by _generate_impl. Not exposed as MCP tool."""
+    """Internal submit helper used by _generate_impl. Not exposed as MCP tool.
+
+    On 503 (video_queue_full), retries every submit_503_retry_seconds up to
+    submit_503_retries times before giving up — the upstream queue is shared,
+    so a backoff that doesn't actually wait would just keep 503'ing.
+    """
     if not prompt.strip():
         return _error("invalid_prompt", "prompt must not be empty.")
     if mode == "keyframe":
@@ -814,15 +910,31 @@ def _submit_impl(
         aspect_ratio=aspect_ratio, seed=seed, first_frame=first_frame,
         last_frame=last_frame, images=images, audios=audios, videos=videos,
     )
-    ok, response = _request_json("POST", "/videos", json_body=payload)
+    submit_key = _pick_key()
+    if submit_key is None:
+        return _error("all_keys_exhausted", "All keys disabled before submit.")
+    last_response: dict[str, Any] | None = None
+    ok = False
+    response: dict[str, Any] = {}
+    for attempt in range(submit_503_retries + 1):
+        ok, response = _request_json("POST", "/videos", json_body=payload,
+                                     force_key_masked=submit_key.masked)
+        if ok:
+            break
+        last_response = response
+        sc = (response.get("error", {}).get("details", {}) or {}).get("status_code")
+        if sc != 503 or attempt >= submit_503_retries:
+            return response
+        time.sleep(submit_503_retry_seconds)
     if not ok:
-        return response
+        return last_response or response  # pragma: no cover
     result = {
         "ok": True,
         "task_id": _extract(response, "task_id", "id"),
         "video_id": _extract(response, "video_id"),
         "status": _extract(response, "status"),
         "model": _extract(response, "model") or model,
+        "_submit_key_masked": submit_key.masked,
     }
     for field in ("progress", "seconds", "size", "created_at"):
         v = _extract(response, field)
@@ -834,14 +946,43 @@ def _submit_impl(
 
 
 def _status_impl(video_id: str, *, model: str = DEFAULT_MODEL,
-                 include_raw: bool = False) -> dict[str, Any]:
+                 include_raw: bool = False,
+                 force_key_masked: str | None = None) -> dict[str, Any]:
     if not video_id.strip():
         return _error("invalid_video_id", "video_id must not be empty.")
     if model not in MODELS:
         return _error("invalid_model", f"model must be one of {sorted(MODELS)}.",
                       details={"got": model})
     path = f"/agnesapi?video_id={quote(video_id, safe='')}&model_name={quote(model, safe='')}"
-    ok, response = _request_json("GET", path, base_url=_domain_root())
+    ok, response = _request_json("GET", path, base_url=_domain_root(),
+                                 force_key_masked=force_key_masked)
+    # Fallback: when /agnesapi 404s ("任务不存在"), submit upstream sometimes
+    # returns task_id in the video_id field. The real query id lives at the
+    # OpenAI-style /v1/videos/{task_id} endpoint (verified — returns 401 not
+    # 404 with dummy key, so the path exists). Try stripping the "task_" prefix
+    # too in case the /v1 endpoint expects the bare hash.
+    if not ok:
+        sc = (response.get("error", {}).get("details", {}) or {}).get("status_code")
+        if sc == 404:
+            stripped = video_id.removeprefix("task_")
+            fallback_summary: list[str] = []
+            for alt_path in (
+                f"/v1/videos/{quote(video_id, safe='')}",
+                f"/v1/videos/{quote(stripped, safe='')}",
+            ):
+                alt_ok, alt_resp = _request_json("GET", alt_path,
+                                                  force_key_masked=force_key_masked)
+                alt_sc = (alt_resp.get("error", {}).get("details", {}) or {}).get("status_code")
+                fallback_summary.append(f"{alt_path}={alt_sc}")
+                if alt_ok:
+                    ok, response = True, alt_resp
+                    break
+            if not ok:
+                # All fallback paths failed — annotate the error message with
+                # what we tried so MCP clients / humans can see the path list.
+                response.setdefault("error", {})["message"] = (
+                    f"Agnes /agnesapi 404. Fallback tried: {'; '.join(fallback_summary)}"
+                )
     if not ok:
         response["video_id"] = video_id
         return response
@@ -868,6 +1009,7 @@ def _wait_impl(
     model: str = DEFAULT_MODEL,
     timeout_seconds: float = 600.0, poll_interval_seconds: float = 5.0,
     download: bool = True, output_filename: str | None = None,
+    force_key_masked: str | None = None,
 ) -> dict[str, Any]:
     if timeout_seconds <= 0:
         return _error("invalid_timeout", "timeout_seconds must be > 0.")
@@ -877,7 +1019,8 @@ def _wait_impl(
     attempts = max(1, math.ceil(timeout_seconds / poll_interval_seconds) + 1)
     last: dict[str, Any] | None = None
     for attempt in range(attempts):
-        last = _status_impl(video_id, model=model, include_raw=True)
+        last = _status_impl(video_id, model=model, include_raw=True,
+                            force_key_masked=force_key_masked)
         if not last.get("ok"):
             err = last.get("error") or {}
             det = err.get("details") if isinstance(err, dict) else None
@@ -921,6 +1064,13 @@ def _generate_impl(
     timeout_seconds: float = 600.0, poll_interval_seconds: float = 5.0,
     download: bool = True, output_filename: str | None = None,
 ) -> dict[str, Any]:
+    # 0.2.1: harness (Claude Code MCP client) sometimes serializes single-element
+    # array args as {"item": "<value>"} dicts. Schema already accepts dict, here
+    # we unwrap so the inner payload is the canonical list shape. CHANGELOG
+    # 0.2.1 documents the trade-off; long-term fix is caller-side discipline.
+    images = _coerce_str_list_input(images) if images is not None else None
+    audios = _coerce_str_list_input(audios) if audios is not None else None
+    videos = _coerce_videos_input(videos) if videos is not None else None
     submit = _submit_impl(
         prompt, model=model, mode=mode, seconds=seconds, size=size,
         aspect_ratio=aspect_ratio, seed=seed, first_frame=first_frame,
@@ -935,7 +1085,8 @@ def _generate_impl(
                       details={"submit_result": submit})
     wait = _wait_impl(vid, model=model, timeout_seconds=timeout_seconds,
                       poll_interval_seconds=poll_interval_seconds,
-                      download=download, output_filename=output_filename)
+                      download=download, output_filename=output_filename,
+                      force_key_masked=submit.get("_submit_key_masked"))
     if not wait.get("ok"):
         wait["submit_result"] = submit
     return wait
@@ -1035,6 +1186,9 @@ def _coerce_image_paths_input(
 
     Unwrap rules:
       - ``{"item": [list]}`` → return the inner list (the symptom in the bug report).
+      - ``{"item": "<single string>"}`` → return ``["<single string>"]`` (new in 0.2.1:
+        harness sometimes serializes a single-element ``["<url>"]`` as
+        ``{"item": "<url>"}`` instead of ``{"item": ["<url>"]}``).
       - Single-key dict whose only value is a list → return that list.
       - Everything else (None, real list, dict that doesn't match) → return unchanged.
 
@@ -1046,13 +1200,86 @@ def _coerce_image_paths_input(
         will silently be "fixed" into ``["bar"]``. Caller-side discipline is the
         long-term fix; this is the cheapest server-side mitigation.
     """
-    if isinstance(value, dict):
-        if "item" in value and isinstance(value["item"], list):
-            return value["item"]
+    # 0.2.2: 递归 unwrap。harness / sub-agent 多次调用会逐层套 {"item": ...}，
+    # 单次 unwrap 在嵌套深度 ≥2 时返回 dict，后续 for v in values 静默把 dict
+    # keys 当 URL 喂下去，掩盖真实错误（"传入多于一个 url 愈发严重"的根因）。
+    # 深度上限 8 足够挡实际 harness 链路的累计嵌套，同时防恶意/异常输入死循环。
+    seen: set[int] = set()
+    while isinstance(value, dict) and id(value) not in seen:
+        seen.add(id(value))
+        if len(seen) > 8:
+            break
+        if "item" in value:
+            inner = value["item"]
+            if isinstance(inner, list):
+                value = inner
+                continue
+            if isinstance(inner, str):
+                return [inner]
+            if isinstance(inner, dict):
+                value = inner
+                continue
         if len(value) == 1:
             only = next(iter(value.values()))
             if isinstance(only, list):
-                return only
+                value = only
+                continue
+            if isinstance(only, dict):
+                value = only
+                continue
+        break
+    return value
+
+
+def _coerce_str_list_input(
+    value: list[str] | dict[str, Any] | None,
+) -> list[str] | None:
+    """Same as :func:`_coerce_image_paths_input` — kept as a separate name for
+    video-tool call sites (``images`` / ``audios``) to make intent obvious at
+    the read site and to let the two helpers diverge later without rippling
+    type hints.
+
+    0.2.1: added to fix harness single-element dict-of-string bug for video
+    reference mode (images + audios fields), which image side already worked
+    around via _coerce_image_paths_input but the video type hint was still
+    ``list[str] | None`` so Pydantic rejected the dict upstream.
+    """
+    return _coerce_image_paths_input(value)
+
+
+def _coerce_videos_input(
+    value: list[dict[str, Any]] | dict[str, Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Tolerate dict-shaped ``videos`` from MCP clients.
+
+    0.2.1: mirror of _coerce_image_paths_input for the video-list payload.
+    Videos have shape ``[{"url": "..."}]`` not ``[str]`` so the unwrap must
+    preserve list-of-dict semantics.
+
+    0.2.2: recursive unwrap — same rationale as _coerce_image_paths_input.
+    """
+    seen: set[int] = set()
+    while isinstance(value, dict) and id(value) not in seen:
+        seen.add(id(value))
+        if len(seen) > 8:
+            break
+        if "item" in value:
+            inner = value["item"]
+            if isinstance(inner, list):
+                value = inner
+                continue
+            if isinstance(inner, dict):
+                value = inner
+                continue
+        if len(value) == 1:
+            only = next(iter(value.values()))
+            if isinstance(only, list):
+                value = only
+                continue
+            if isinstance(only, dict):
+                value = only
+                continue
+        break
     return value
 
 
@@ -1200,20 +1427,109 @@ async def agnes25_video_generate(
     seconds: str = DEFAULT_SECONDS, size: str = DEFAULT_SIZE,
     aspect_ratio: str = DEFAULT_ASPECT, seed: int | None = None,
     first_frame: str | None = None, last_frame: str | None = None,
-    images: list[str] | None = None, audios: list[str] | None = None,
-    videos: list[dict[str, Any]] | None = None,
-    timeout_seconds: float = 600.0, poll_interval_seconds: float = 5.0,
-    download: bool = True, output_filename: str | None = None,
+    # 0.2.1: accept list | dict | None so Pydantic doesn't reject harness inputs
+    # that wrap single-element arrays as {"item": "<url>"} dicts. Image side
+    # already worked around this in 0.1.8 — apply the same trade-off here for
+    # video reference mode (images / audios / videos). Runtime normalization
+    # lives in _coerce_str_list_input / _coerce_videos_input.
+    images: list[str] | dict[str, Any] | None = None,
+    audios: list[str] | dict[str, Any] | None = None,
+    videos: list[dict[str, Any]] | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Submit + wait combined. `mode` ∈ {text, keyframe, reference}; reference mode uses images[]/audios[]/videos[] with <Picture N> / <Audio N> / <Video N> placeholders."""
-    return await asyncio.to_thread(
-        _generate_impl, prompt,
+    """Submit video generation task only — no wait / no download. `mode` ∈ {text, keyframe, reference}; reference mode uses images[]/audios[]/videos[] with <Picture N> / <Audio N> / <Video N> placeholders. `images` / `audios` / `videos` accept list (preferred) or dict (fallback for harness clients that wrap arrays as ``{"item": [...]}``); see CHANGELOG 0.2.1.
+
+    Returns the submit result plus ``video_id`` (the id to pass to
+    ``agnes25_video_query``), ``model_id`` (the resolved model), and
+    ``submit_key_masked`` (the masked API key the task was submitted with —
+    forward to ``agnes25_video_query(force_key_masked=...)`` so the poll uses
+    the same key the submit used; upstream scopes tasks to the submitting
+    key). 0.2.5 changed semantics from submit+wait+download to submit-only.
+    Pair with ``agnes25_video_query`` for the wait / download side.
+    """
+    submit = await asyncio.to_thread(
+        _submit_impl, prompt,
         model=model, mode=mode, seconds=seconds, size=size, aspect_ratio=aspect_ratio,
         seed=seed, first_frame=first_frame, last_frame=last_frame,
         images=images, audios=audios, videos=videos,
-        timeout_seconds=timeout_seconds, poll_interval_seconds=poll_interval_seconds,
-        download=download, output_filename=output_filename,
+        include_raw=False,
     )
+    if not submit.get("ok"):
+        return submit
+    # Reshape submit payload into the documented {video_id, model_id,
+    # submit_key_masked, ...} contract. _submit_impl returns
+    # {task_id, video_id, status, model, _submit_key_masked, ...} — rename
+    # `model` → `model_id` and `_submit_key_masked` → `submit_key_masked` for
+    # the public surface so the contract is unambiguous (the leading
+    # underscore is the in-process convention for keys the caller shouldn't
+    # depend on; we DO want callers to depend on submit_key_masked so we drop
+    # the underscore).
+    submit_key_masked = submit.pop("_submit_key_masked", None)
+    result = {
+        "ok": True,
+        "video_id": submit.get("video_id"),
+        "model_id": submit.get("model"),
+        "submit_key_masked": submit_key_masked,
+    }
+    for field in ("task_id", "status", "progress", "seconds", "size", "created_at"):
+        v = submit.get(field)
+        if v is not None:
+            result[field] = v
+    return result
+
+
+@mcp.tool()
+async def agnes25_video_query(
+    video_id: str, *,
+    model: str = DEFAULT_MODEL,
+    # 0.2.5: pass through the masked key from agnes25_video_generate's
+    # `submit_key_masked` so the poll uses the same key the submit used
+    # (upstream scopes tasks to the submitting key — round-robin on poll
+    # would 404). Optional: omit to use round-robin (works when the pool
+    # has only one key).
+    force_key_masked: str | None = None,
+    download: bool = False, output_filename: str | None = None,
+    include_raw: bool = False,
+) -> dict[str, Any]:
+    """Poll video task status by id. Returns status / video_url / model /
+    progress / task_error. Pass ``force_key_masked`` (the
+    ``submit_key_masked`` value returned by ``agnes25_video_generate``) so
+    the poll reuses the submitting key — round-robin key selection on poll
+    would 404 because upstream scopes tasks to the submitting key.
+
+    If ``download=True`` and the task is ``completed``, the video is saved
+    to ``AGNES_OUTPUT_DIR/videos/`` (or ``output_filename`` if provided) and
+    the result includes ``local_path``. ``download`` is opt-in (default
+    ``False``) — most callers poll until ``status=="completed"`` and only
+    then call again with ``download=True``, or fetch the URL directly.
+    """
+    if not video_id.strip():
+        return _error("invalid_video_id", "video_id must not be empty.")
+    if model not in MODELS:
+        return _error("invalid_model", f"model must be one of {sorted(MODELS)}.",
+                      details={"got": model})
+    status = await asyncio.to_thread(
+        _status_impl, video_id, model=model, include_raw=include_raw,
+        force_key_masked=force_key_masked,
+    )
+    if not status.get("ok"):
+        return status
+    if download and str(status.get("status") or "").lower() == "completed":
+        url = status.get("video_url")
+        if isinstance(url, str):
+            filename = _sanitize_filename(output_filename)
+            ok, res = _download_video(url, filename)
+            if ok:
+                status["local_path"] = res  # type: ignore[assignment]
+            else:
+                status["download_error"] = res["error"]  # type: ignore[index]
+        else:
+            status["download_error"] = _error(
+                "missing_video_url",
+                "status is completed but no video_url was returned.",
+            )["error"]
+    if include_raw and "raw" in status:
+        pass  # status already carries raw; keep as-is
+    return status
 
 
 @mcp.tool()

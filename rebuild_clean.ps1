@@ -29,7 +29,7 @@ Write-Host "  $csp" -ForegroundColor DarkGray
 Write-Host ""
 
 # 验证关键部分
-$required = @("http://ipc.localhost", "asset:", "connect-src", "https://download.hamuna.io")
+$required = @("http://ipc.localhost", "asset:", "connect-src", "https://download.agent.hamuna.club")
 $missing = @()
 
 foreach ($part in $required) {

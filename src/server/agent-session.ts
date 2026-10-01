@@ -32,6 +32,7 @@ import {
   type InFlightAsyncCancelResult,
 } from './utils/inflight-terminal';
 import { shouldBlockToolInPlanMode, planModeDenyMessage, isPlanModeInEffect, PLAN_MODE_READONLY_TOOLS, PLAN_MODE_HOST_INTERACTION_TOOLS, applyPermissionModeSelection, computePlanExitState, computeRestoredPlanState } from './utils/plan-mode-gate';
+import { decideMiniAppTool, loadMiniAppGrantsForApp } from './miniapp-permission-gate';
 import { planRetraction } from './utils/message-retraction';
 import type { TransientProviderTextRetryDecision } from './session-core/turn-result-policy';
 import {
@@ -5816,6 +5817,20 @@ export function buildClaudeSessionEnv(
   // HamunaAgent manages its own telemetry; these external connections add startup latency
   // and can timeout in restricted network environments (e.g. China).
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
+  // 2026-09-20: opt out of adaptive thinking + experimental betas + telemetry, and
+  // strip DISABLE_AUTOUPDATER from host shell. NOT setting MAX_CONTEXT_TOKENS or
+  // DISABLE_1M_CONTEXT here — those break pre-existing contract tests for the
+  // 1M-eligible model registry (#392, #444) and must be set per-provider via
+  // applyContextWindowSuffix, not globally. Tool search stays on so subagents
+  // can still resolve tool ids without listing everything. DISABLE_AUTOUPDATER
+  // is a Claude Code CLI flag, not a desktop-app flag — strip it so a host shell
+  // export doesn't silently turn off sidecar subprocess upgrades.
+  env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING = '1';
+  env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS = '1';
+  env.ENABLE_TOOL_SEARCH = 'true';
+  env.CLAUDE_CODE_ENABLE_TELEMETRY = '0';
+  env.CLAUDE_CODE_ATTRIBUTION_HEADER = 'false';
+  delete env.DISABLE_AUTOUPDATER;
   // Disable SDK built-in cron tools (CronCreate/CronDelete/CronList).
   // HamunaAgent has its own persistent scheduled Task system (im-cron compatibility
   // tool → Rust TaskStore/TaskSchedulerController) with IM delivery and wall-clock scheduling.
@@ -10683,6 +10698,16 @@ async function startStreamingSession(preWarm = false): Promise<void> {
         // touch. Built-in slash commands stay typable (programmatic /compact
         // unaffected) — they are only hidden from the model.
         disableBundledSkills: true,
+        // Skip the WebFetch blocklist check (SDK 0.3.201+ `Settings.skipWebFetchPreflight`,
+        // d.ts:7022-7025). User network egress hits Anthropic's published
+        // blocklist (private IP / SSRF-defense / suspicious-TLD rules) and the
+        // tool exits with a blocklist error before any HTTP call is made. This
+        // field is a per-query override of Claude Code's own settings and does
+        // NOT touch disk — only the in-process agent spawned for this Chat
+        // session inherits it. Auxiliary queries (subscription-auth / kb-
+        // relations / title-generator / provider-verify) do not invoke WebFetch
+        // and intentionally keep the default blocklist behavior.
+        skipWebFetchPreflight: true,
       },
       // Permission mode mapping (uses mapToSdkPermissionMode):
       // - auto → acceptEdits (auto-accept edits, check others via canUseTool)
@@ -10721,7 +10746,7 @@ async function startStreamingSession(preWarm = false): Promise<void> {
       systemPrompt: {
         type: 'preset' as const,
         preset: 'claude_code' as const,
-        append: buildSystemPromptAppend(currentScenario, {
+        append: await buildSystemPromptAppend(currentScenario, {
           playwrightStorageEnabled: (configState.currentMcpServers ?? []).some(
             s => s.id === 'playwright' && (s.args ?? []).some((a: string) => /^--caps=.*\bstorage\b/.test(a))
           ),
@@ -11232,6 +11257,32 @@ async function startStreamingSession(preWarm = false): Promise<void> {
                   updatedInput: decision.updatedInput ?? undefined,
                   additionalContext: decision.additionalContext ?? undefined,
                 },
+              };
+            },
+            // Phase 2 (PRD v0.4 §B.3) — MiniApp Cowork Sidecar permission gate.
+            // Runs BEFORE the plan-mode-gate closes its window; only acts on
+            // calls whose session_id starts with `miniapp_`. Other sessions
+            // see `allow: true` immediately. Reads grants.json via the
+            // pure-function helper so the policy stays unit-testable.
+            async (input: HookInput): Promise<HookJSONOutput> => {
+              const pre = input as PreToolUseHookInput;
+              const sessionId = pre.session_id ?? '';
+              if (!sessionId.startsWith('miniapp_')) {
+                return { continue: true };
+              }
+              const configDir = (await import('./utils/admin-config')).getConfigDir();
+              const appId = sessionId.slice('miniapp_'.length).split('_')[0] ?? '';
+              const grants = await loadMiniAppGrantsForApp({ configDir }, appId);
+              const decision = decideMiniAppTool(sessionId, pre.tool_name, grants);
+              if (decision.allow) {
+                return { continue: true };
+              }
+              console.warn(
+                `[miniapp-permission-gate] deny ${appId} ${pre.tool_name}: ${decision.reason}`,
+              );
+              return {
+                decision: 'block',
+                reason: decision.reason ?? 'MiniApp tool call denied by permission gate',
               };
             },
           ],

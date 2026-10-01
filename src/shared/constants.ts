@@ -86,6 +86,16 @@ export const CUSTOM_EVENTS = {
     OPEN_TASK_CENTER: 'open-task-center',
     /** Fired to open the Team Space singleton tab when the build/runtime gates allow it. */
     OPEN_SPACE: 'open-space',
+    /** Phase 3 (PRD v0.4 §B.4): Fired to open the MiniApp Marketplace singleton tab. */
+    OPEN_MARKETPLACE: 'open-marketplace',
+    /** Phase 4 entry (PRD v0.4 §B.5): Fired to open the MiniApp Center singleton tab. */
+    OPEN_MINIAPP_CENTER: 'open-miniapp-center',
+    /**
+     * Phase 4 entry (PRD v0.4 §B.5): Fired to open a specific installed MiniApp in a
+     * new SceneTab. Payload: `{ appId: string; kind?: 'iframe' | 'worker';
+     * workerKind?: string }`.
+     */
+    OPEN_MINIAPP_SCENE: 'open-miniapp-scene',
     /**
      * Fired to open a new chat tab primed with `/task-alignment` for a thought.
      * Payload: `{ thoughtId: string; content: string; tags: string[] }`.

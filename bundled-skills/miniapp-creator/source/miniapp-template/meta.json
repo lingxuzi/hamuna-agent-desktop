@@ -1,0 +1,21 @@
+{
+  "id": "REPLACE_WITH_APP_ID",
+  "name": "REPLACE_WITH_DISPLAY_NAME",
+  "description": "REPLACE_WITH_ONE_LINE_DESCRIPTION",
+  "icon": "wave",
+  "category": "utility",
+  "version": 1,
+  "min_host_version": "0.3.0",
+  "tags": [],
+  "permissions": {
+    "fs": [],
+    "shell": [],
+    "net": [],
+    "ai": []
+  },
+  "entry": "source/index.html",
+  "storage": {
+    "file": "storage.json",
+    "defaults": {}
+  }
+}
