@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Project } from '@/config/types';
 import { i18n } from '@/i18n';
+import { CUSTOM_EVENTS } from '../../../shared/constants';
 import { ThemeRegistry, ThemeRuntimeProvider } from '@/theme';
 import { syntheticTheme } from '@/theme/__tests__/syntheticTheme';
 import { myAgentsDefaultTheme } from '@/theme/themes/hamuna-default';
@@ -157,5 +158,25 @@ describe('BrandSection', () => {
     expect(screen.getByRole('heading', { name: 'Synthetic Agents' })).toBeInTheDocument();
     expect(screen.getByText('合成主题标记')).toBeInTheDocument();
     expect(container.querySelector('[data-theme-hero="synthetic-test-theme"]')).not.toBeNull();
+  });
+
+  // The Center link must survive `modeSegmentEnabled === false` (browser dev
+  // mode has no Tauri task center). It only dispatches a window event, so
+  // gating it on a Tauri-only capability would strand the entry point.
+  it('offers the MiniApp Center entry even without the Tauri task center', () => {
+    renderBrandSection();
+
+    expect(screen.getByRole('button', { name: /创意中心/ })).toBeInTheDocument();
+  });
+
+  it('dispatches OPEN_MINIAPP_CENTER from the MiniApp Center entry', () => {
+    const onEvent = vi.fn();
+    window.addEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, onEvent);
+
+    renderBrandSection();
+    fireEvent.click(screen.getByRole('button', { name: /创意中心/ }));
+
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    window.removeEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, onEvent);
   });
 });

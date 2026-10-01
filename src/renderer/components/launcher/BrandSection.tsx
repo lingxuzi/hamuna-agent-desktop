@@ -34,6 +34,8 @@ import type { RuntimeType, RuntimeModelInfo, RuntimePermissionMode } from '../..
 import type { Thought } from '../../../shared/types/thought';
 import type { OfficialToolDefinition, OfficialToolId } from '../../../shared/official-tools';
 import { useResolvedTheme } from '@/theme';
+import { retainFocusOnMouseDown } from '@/utils/focusRetention';
+import { Sparkles } from 'lucide-react';
 
 interface BrandSectionProps {
  // Workspace
@@ -551,18 +553,24 @@ export default memo(function BrandSection({
                 signal; power users who need the shortcut will discover
                 it naturally, casual users shouldn't have a persistent
                 tooltip popping every time their cursor brushes past. */}
-   {modeSegmentEnabled && (
-    // v0.1.69 polish: bottom gap tightened from mb-6 to mb-3 so
-    // the toggle reads as an affordance OF the input below, not
-    // a free-floating headline. Top gap kept at mt-6 to preserve
-    // breathing room from the brand slogan above.
-    <div className="mt-6 mb-3">
-     <ModeSegment
-      value={mode}
-      onChange={setModeAndFocus}
-     />
-    </div>
-   )}
+   {/* MiniApp Center entry. Sits BESIDE the ModeSegment rather than as a third
+       tier: the segment is a two-way input-mode toggle bound to Tab / Cmd+Shift+T,
+       and a third tier would turn that chord into a three-way cycle with no
+       obvious stop. The Center is a navigation target, not an input mode.
+       Not gated on `modeSegmentEnabled` (Tauri-only) — the Center is reachable
+       in browser dev mode too, since it only dispatches a window event. */}
+   <div className="mt-6 mb-3 flex items-center gap-2">
+    {modeSegmentEnabled && <ModeSegment value={mode} onChange={setModeAndFocus} />}
+    <button
+     type="button"
+     onMouseDown={retainFocusOnMouseDown}
+     onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER))}
+     className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1 text-sm font-medium text-[var(--ink-muted)] transition-colors duration-150 hover:text-[var(--ink-secondary)]"
+    >
+     <Sparkles className="h-3 w-3" strokeWidth={1.75} />
+     {t('miniAppCenter')}
+    </button>
+   </div>
 
    {/* Lower area: Input box with workspace selector in toolbar.
                 When 「想法」 mode is active, a compact Recent Thoughts strip is
