@@ -5762,8 +5762,14 @@ async function main() {
 
       if (pathname === '/api/miniapp/install' && request.method === 'POST') {
         try {
+          // Marketplace install is appId-only: Rust reads the bundled source itself
+          // (cmd_miniapp_install_from_marketplace → collect_miniapp_source_files over
+          // resource_dir/bundled-miniapps/<appId>). Do NOT require/forward `source` here
+          // — the renderer never sends it, and the old check made every install 400 with
+          // "source must be Record<string,string>". Unlike /api/miniapp/create, which
+          // really does take file contents from Chat.
           const body = (await request.json().catch(() => null)) as
-            | { appId?: unknown; source?: unknown }
+            | { appId?: unknown }
             | null;
           if (
             !body ||
@@ -5777,12 +5783,8 @@ async function main() {
               400,
             );
           }
-          if (!body.source || typeof body.source !== 'object' || Array.isArray(body.source)) {
-            return jsonResponse({ ok: false, error: 'source must be Record<string,string>' }, 400);
-          }
           const result = await managementApi('/api/miniapp/install', 'POST', {
             app_id: body.appId,
-            source: body.source,
             from: 'marketplace',
           });
           return jsonResponse(result, result.ok === true ? 200 : 400);
