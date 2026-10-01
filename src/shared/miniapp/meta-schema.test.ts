@@ -44,6 +44,68 @@ describe('parseMiniAppMetadata', () => {
     expect(parseMiniAppMetadata({ ...VALID, category: 'magic' }).ok).toBe(false);
   });
 
+  it.each([
+    'developer',
+    'design',
+    'productivity',
+    'data',
+    'media',
+    'game',
+    'education',
+    'social',
+    'finance',
+    'other',
+  ])('accepts category %s', (category) => {
+    expect(parseMiniAppMetadata({ ...VALID, category }).ok).toBe(true);
+  });
+
+  describe('permissions.node', () => {
+    it('accepts a full declaration', () => {
+      const r = parseMiniAppMetadata({
+        ...VALID,
+        permissions: { node: { enabled: true, max_memory_mb: 128, timeout_ms: 5000 } },
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.result.permissions.node).toEqual({
+          enabled: true,
+          max_memory_mb: 128,
+          timeout_ms: 5000,
+        });
+      }
+    });
+
+    it('rejects a non-object node group', () => {
+      expect(parseMiniAppMetadata({ ...VALID, permissions: { node: 64 } }).ok).toBe(false);
+    });
+
+    it('rejects a non-boolean enabled', () => {
+      expect(
+        parseMiniAppMetadata({ ...VALID, permissions: { node: { enabled: 'yes' } } }).ok,
+      ).toBe(false);
+    });
+
+    // Bounds are policy, not schema trivia: below 16MB a worker can't even boot
+    // its own runtime, above 512MB the "sandbox" stops being one.
+    it.each([15, 513])('rejects max_memory_mb = %d (out of [16, 512])', (mb) => {
+      expect(
+        parseMiniAppMetadata({ ...VALID, permissions: { node: { max_memory_mb: mb } } }).ok,
+      ).toBe(false);
+    });
+
+    it.each([16, 512])('accepts max_memory_mb = %d (boundary)', (mb) => {
+      expect(
+        parseMiniAppMetadata({ ...VALID, permissions: { node: { max_memory_mb: mb } } }).ok,
+      ).toBe(true);
+    });
+
+    it.each([999, 60001])('rejects timeout_ms = %d (out of [1000, 60000])', (ms) => {
+      expect(
+        parseMiniAppMetadata({ ...VALID, permissions: { node: { timeout_ms: ms } } }).ok,
+      ).toBe(false);
+    });
+  });
+
   it('rejects non-integer version', () => {
     expect(parseMiniAppMetadata({ ...VALID, version: 1.5 }).ok).toBe(false);
   });

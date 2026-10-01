@@ -8,7 +8,7 @@
 
 §0 之前累积的 narrative 已折叠到下方锚点；详细设计取舍见 git log + 对应 spec：
 
-- **#187 MiniApp Desktop App PRD v0.3**（2026-09-21）— `specs/prd/miniapp.md` 680 行；**v0.3 反转 v0.2 决策**：v0.4.0 MVP = **Icon Design Demo** + **4 个新基础设施**（MiniApp Runner / FloatingMiniChat Bubble Claim / MiniApp Cowork Sidecar / MiniApp Worker Manager）+ `app.ai.chat` SSE relay。**架构同步 openbitfun**：独立 Scene Tab + Bubble Claim bridge + MiniApp 自有 Cowork Sidecar（owner = `miniapp-agent:<app_id>:<run_id>`，永不主动关）+ Node v24 `worker_threads` 沙箱（**不引 Bun**）。**Bridge API 完整对齐 openbitfun**：恢复 `app.ai.chat/cancel/contextFiles` + `app.agent.*` + `app.call` + `app.chat.claimComposer`；schema 新增 `permissions.agent/chat/node` 三块。详见 §15 评审清单 8 项 + §11 红线 15 条 + §13 风险 14 项 + §14 scope-out 11 项。本地草稿，gitignore `specs/prd/` 不入库。
+- **#187 MiniApp Desktop App PRD v0.3**（2026-09-21）— `specs/prd/miniapp.md` 680 行；v0.3 反转 v0.2 决策。详见 git log；本地草稿，gitignore `specs/prd/` 不入库。
 - **#182/#174-176/#166** — launcher 4 风格 mockup（A Hallmark / B Marquee / C Stacked / D Card）+ landing v5 全链路（hero 92px + caps 2-col 11 段 + 21:9 视频锚点 + R2 prod endpoint 修正 + a11y P1 audit + polish 7 处）+ wizard step 2 结构化错误路由（`NxgdDiscoveryResult` discriminated union + 502 envelope `checkedAt`）。详见 `pages/launcher-mockups/` + `pages/landing/index.html` + `bundled-skills/hamuna-writing-system/`。
 - **#195 desktop 慢 v1 / #194 npx nodeDir PATH-prepend / #193/#193.1 bundled-prompts / #192 mcp-command 跨平台 / #191 apikey debounce / #190 SDK WebFetch blocklist / #189 Bridge tools parameters / #187/#185 npx Win shim-less / #186 OpenAI Bridge TTFT / #183-#184 hamuna-writing / #162 provider 默认隐藏 / #163/#157/#144 nxgd / #130 release.yml beforeBuildCommand** — 详见 §4 git log（对应 commit hash）。
 
@@ -143,46 +143,16 @@
 
 ### 3.1 进行中
 
-#### TODO #198 — getBundledNodeDir 兜底加 process.execPath 探针（修 user 报 "node 找不到"）
-**症状（2026-09-29）**：user 报 "全新安装也找不到" + 实测装目录 node.exe / npx-cli.js 都在 nodejs/。**根因推理**（代码坐实）：`server` esbuild target `format: 'esm'` + `import.meta.url` 可用 → `getScriptDir()` ESM 分支返回 `<install>/Resources`，应命中；但当 Sidecar 启动上下文 cwd ≠ `<install>/Resources`（NSIS service wrapper / daemonized launch），前两个 probe 全 miss → `getBundledNodeDir` 返 null → `resolveNpxMcpInvocation` throw `NpxMcpResolutionError`。
+#### TODO #199 — MiniApp Launcher Tab + SceneTab 入口打通（v0.4 §B.5 衔接 Phase 3）✅ DONE（折叠到 §5.12.12）
 
-**修法**：`src/server/utils/runtime.ts::getBundledNodeDir` 在 scriptDir probe + dev walk-up 之后追加 `process.execPath` 探针——prod Sidecar spawn bundled node.exe 用绝对路径 → `process.execPath = <install>/nodejs/node.exe` → 一击命中，跳过 scriptDir 完全无关。
+#### TODO Phase 3 (v0.4 §B.4) — Worker sandbox + Marketplace List/Detail/Install (2026-09-29 · ✅ DONE)
+**折叠**：详见 §5.12.11。✅ DONE（51 tests pass + 0 typecheck/lint errors + Rust commands::* 30 pass + v37 stale assertion 最小修复）。
 
-**验证**：`runtime.npx-priority.unit.test.ts` 3/3（既有 2 + 新 execPath probe contract test 1）；`mcp-command.unit.test.ts` 7/7；`tsc --noEmit` 0。
-
-**scope-out**：不动 `getScriptDir()`（6 处 caller 依赖 cwd 语义）；不动 Rust spawn cwd 契约（`instances.rs:166-167` 已兑现 `current_dir(script_dir)`）；不动 #187 NSIS RMDir；不抽通用 helper。
-
-**follow-up（关键）**：本修法是**防御性兜底**，**未坐实 user 实际故障 mode**——三种可能 (a) `import.meta.url` 在 user 机器某种 esbuild edge 失效（最可能）/ (b) cwd 被 NSIS service wrapper 重写 / (c) 装目录 layout 偏差。user 实测若问题消失 → close；仍存在 → 抓 unified-{今日}.log 看 `[getScriptDir]` / `[sidecar]` 行 + `ls -R <install>/nodejs` 反推 mode，再决定下一步。
-
-#### TODO #195 — desktop 慢 vs curl 快根因复查（TTFT 数据再定位）✅ v1 落地（keepAliveTimeout 30s + connectTimeout 8s）
-**触发（2026-09-28）**：用户原话「curl正常，但是desktop app不行 很慢」「我想你找到到底是什么原因desktop app那么慢」「继续优化」。**症状**：bridge ttft 实测 (req=e74a5a15/0c5f5c5e/c4c7ee77/667409a1/f55b0b56/d7f6ab3b/0b4c7abb/9fd1de67 全 2026-09-28 17:36-18:03) — `connect_ms = 40065 / N/A(503) / 23669 / N/A(aborted) / N/A(aborted) / N/A(timeout300s) / N/A(aborted) / N/A(ETIMEDOUT)`；`translate_ms = 1-6 ms` + `upstream_first_byte_ms = 0-6 ms` 全健康。**对比**：同机 curl 直打 `api.agnes-ai.cn/v1/chat/completions` → 600 ms total；裸 `undici@8 Agent({connectTimeout:5000,headersTimeout:300000})` cold/warm/16s 后冷热重测全 400-850 ms（system Node v25.2.1 + bundled Node v24.16.0 双跑）。**真因判定**：cold TCP+TLS 到 `api.agnes-ai.cn` 在用户侧网络 5-76s；bridge 没有任何代码放大它——**但 undici `Agent` 默认 `keepAliveTimeout=5000ms` 在 idle 5s 后关 socket**，所以两次 user turn 之间只要 ≥5s idle，下次必然 cold connect = 20-40s；这正好解释了为何「桌面慢但 curl 快」（curl 自带 keep-alive 12s+ 默认 / 用户自己跑的两条 curl 间隔不到 5s）。
-
-**v1 修法（2 文件）**：
-(1) `src/server/openai-bridge/handler.ts::createBridgeHandler` 的 `defaultAgent` 新配置：`connectTimeout: 5000→8000`（实测 cold 5-76s，5s 太紧 → undici 内部 retry 让 connect 看着更慢；8s 给上游 30% 余量，仍保留「快速失败」语义）、新增 `keepAliveTimeout: 30_000`（idle socket 活 30s，覆盖 user 读完回复再发消息的典型 5-30s 节奏）、新增 `keepAliveMaxTimeout: 60_000`（socket 总寿命硬上限，避开 OS NAT 老化期静默断 socket）。ponytail 注释从「bump to 10s if cold connect starts timing out」改为完整 explain `keepAliveTimeout/connectTimeout` 双 cap 理由（30 行）。build_proof marker 从 `ttft_diag_v1 defaultAgent=5s_connect` → `ttft_diag_v2 defaultAgent=8s_connect keepAlive30s`（dev box 没看到 v2 marker = 没真跑新 bundle）。
-(2) `src/server/openai-bridge/handler-agent-config.unit.test.ts` NEW（1 case）：构造 handler 收集 `logger` 数组，断言必含 `build_proof ttft_diag_v2` + `defaultAgent=8s_connect keepAlive30s`。任何人 revert 这两个数字字面量 → test fail → regression 在合 main 前拦截。
-
-**scope-out**：
-(a) 不动 `setSessionModel` / `pendingSetModelPromise` / `applyModelUpdate`（已验 ✅ 正确，模型 desync 假设已排除）；
-(b) 不改 SSE pool 90s / TTFT 诊断日志（#186 v1 已稳）；
-(c) 不动 undici `connections` / `pipelining`（默认 unlimited 对 bridge 单连接池够用，cap 反而瓶颈）；
-(d) 不写 dispatcher 预热（牺牲 idle socket 换 cold connect 0s — user 没拍板 + 偏离「最小改动」原则，留 follow-up）；
-(e) 不动 `ProxyAgent` 配置（provider 未配 proxy）；
-(f) 不增 `tls.ALPNProtocols: ['h2']`（undici 已默认 h2 + bridge stream 已走 HTTP/1.1 SSE chunked，加 h2 反可能让 streaming chunked-encode 退化）；
-(g) 不改 SDK 「model unrecognized」benign warning（SDK 自身 issue，不影响 turn）。
-
-**验证（全绿）**：
-- `npm run typecheck` 0 errors
-- `npx eslint src/server/openai-bridge/handler.ts src/server/openai-bridge/handler-agent-config.unit.test.ts` 0
-- `npx vitest run --project unit src/server/openai-bridge/handler-agent-config.unit.test.ts` 1/1
-- `npx vitest run --project unit src/server/openai-bridge/` 13 files / 105 tests 全绿
-- `npm run test:classification` 209 server tests ok (43 integration, 4 credentialed)
-- 自测 keepAliveTimeout=30s + 30s 内 4 次 fetch cold/warm/8s/23s/58s 后 5 次全 warm connect（400-700ms），除 1.5s 后一次 9s 离群（同既有 upstream 偶发抖），无 cold connect。
-
-**follow-up（用户拍板再动）**：
-(a) **等 user 实测 desktop**：30s idle 内发送第二条消息，bridge ttft 应 <1s（warm socket）；超 30s idle 才再付 cold connect 5-40s；
-(b) **上游 network profile**：4 项排查 `tcping / dig / openssl s_client / curl 同段时间对照`（TODO #195 旧 follow-up）；
-(c) **如果 30s keepAlive 仍不够**：拉 `keepAliveTimeout: 60_000` + `keepAliveMaxTimeout: 120_000`；
-(d) **如果 dispatch 真的需要 cold connect = 0s**：bridge handler 暴露 `ensureUpstreamWarmup()`，在 `lifecycleState.preWarm` 完成后主动 fetch 一次 `/v1/models`（用 GET 廉价）保 socket 活；user 拍板才动。
+#### TODO #198 — getBundledNodeDir 兜底加 process.execPath 探针（修 user 报 "node 找不到"）🔄 BLOCKED
+**折叠**:user 实测需先回 unified-log 看 `[getScriptDir]` 行 + `ls -R <install>/nodejs` 反推 mode 后再判定根因。Plan: 修法= `src/server/utils/runtime.ts::getBundledNodeDir` 加 `process.execPath` 探针;验证=`runtime.npx-priority.unit.test.ts` 3/3;scope-out=不动 `getScriptDir()` / Rust spawn cwd 契约 / NSIS RMDir。
+ TODO #195 — desktop 慢 vs curl 快根因复查（TTFT 数据再定位）✅ v1 落地（keepAliveTimeout 30s + connectTimeout 8s）
+#### TODO #195 — desktop 慢 vs curl 快根因复查 ✅ DONE
+**折叠**:keepAliveTimeout 30s + connectTimeout 8s + keepAliveMaxTimeout 60s 三 cap。根因= undici 默认 `keepAliveTimeout=5000ms` 撞 user turn 间隔 >5s → cold connect 20-40s。
 
 #### TODO v0.2.5 — agnes-video-25-mcp: `agnes25_video_generate` 拆 submit-only + 新增 `agnes25_video_query` 🔄 BLOCKED ON PyPI
 **触发**:用户 2026-09-27 原话"hosted_mcps/agnes-video-25 增加一个 agnes25_video_query 的tool，现有 video_generation tool 去掉自动等待，只是提交视频生成task，返回video_id、model_id还有对应使用的apikey，由video_query tool 获取最新状态"。**拍板过程** (2 轮):(a) submit 命名 = 沿用 `agnes25_video_generate` (推荐) — 保持既有 tool 名不动,只把语义从 eager 切到 submit-only;(b) apikey 形式 = masked key (推荐) — 用户拍板 notes "返回masked_key 但是video_query 查询需要用到生成视频的key" → 确认 `_submit_key_masked` 0.2.4 已落 + `_mask_key()` 0.1.5+ 已落,直接复用。
@@ -233,8 +203,8 @@ TODO #126 pin 0.11.33 后整条 rationale chain (`197837b / 4812fbe / 37a7f21 / 
 清华源 `https://pypi.tuna.tsinghua.edu.cn/simple` 2026-09-10 fresh install 时 timeout（`9732280` rationale chain 之一撞新墙）；单一 mirror = 单点依赖（`197837b` 已栽过）→ **必须**带 fallback。**改动 2 文件**（+15 -2）：`installer.nsi:781` `pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple` → 主源 `https://mirrors.aliyun.com/pypi/simple/` + `${If} $1 != 0` ExecWait fallback `https://pypi.org/simple` + 13 行注释 + 显式 "DO NOT fall back to Tsinghua" 提醒；`mcp.json:41` description 改写 mirror 段（清华源引用 → 阿里主 + PyPI fallback + cross-link #128）。**已 #127 烟测兜底**：TODO #127 smoke step 5 不依赖走哪个 mirror，uvx 装上即 pass；新 mirror chain 由 workflow 自动验证。**未引入新设计**：mirror chain 是单点 fallback 标准模式，无新抽象/依赖。**未验证**：阿里源 0.11.33 同步延迟 / 阿里源从 US IP 拉时延 / PyPI 官方源大陆可达性。**版本流转**：0.3.147。
 
 #### TODO #121 — Windows install pip-only 落地（uvx 退 bundled）✅ DONE
-**原方案**（A 路径）：auto-merge bundled MCP + bundled uvx 拷 `~/.hamuna/bin/`。**user 二次拍板**：改 pip-only —— 移除 bundled uvx.exe（`tauri.conf.json` + `tauri.windows.conf.json` bundle.resources + `windows-release.yml` Download uvx step + `git rm src-tauri/resources/{uvx.exe,.uv-version}`）+ NSIS `Section UvxFallback` 改无条件 `pip install --user --index-url https://mirrors.aliyun.com/pypi/simple/ --upgrade uv==0.11.33`（TODO #126 pin + #128 mirror）+ 新增 `src-tauri/nsis/uvx-path-setup.ps1`（写 HKCU\Environment\Path + WM_SETTINGCHANGE 广播）+ `tauri.windows.conf.json` 平铺 `$INSTDIR\` + `runtime.ts::findPipInstalledUvxScriptsDir()` Win probe + 删 `getBundledUvPath/getUserHomeBinUvxPath` + `mcp-bundled-seed.ts::seedBundledUvToHamunaBin` + 2 unit test 文件 + `index.ts` import/调用 + `agent-session.ts` uvx spawn 块改调新 helper。**决策依据**：(1) `download_uv.ps1` 修字符串字面量后仍走 GitHub release → 中国大陆下载不稳；(2) `uv` PyPI 包内含 `uvx` trampoline → pip install uv 一次解决；(3) PEP 370 per-user pip install 不自动加 PATH → `uvx-path-setup.ps1` 补齐 HKCU 持久化；(4) install 体积减 48 MB。**auto-merge 部分保留**（`seedBundledExtendedMcpServers` 仍跑），只废 uvx 拷贝段。**遗留**：`scripts/download_uv.ps1` 保留 dev box 参考但 CI 不调（注释 DEPRECATED）。
-
+#### TODO #121 — Windows install pip-only 落地（uvx 退 bundled）✅ DONE
+**折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log（含 `69a8c63` feat + 各 follow-up commit）。原方案 A = auto-merge bundled uvx；user 拍板改 pip-only；48 MB bundle 减重；HKCU\Environment\Path 由 `uvx-path-setup.ps1` 持久化。
 #### TODO #108 — creative-video-suite 视频时长边界单源化 ✅ DONE
 详见 §5.7 narrative + 10 文件改动：`agnes-ai-api.md §视频时长边界（单一权威 · 2026-09-09 加）` + 9 个 ref 全部 cross-link；dual constraint 4 下限 / 12 上限 / 9 合法值字符串集合；drama 90→72 残留修复；gate 11→12；T13 footnote 显式豁免。
 
@@ -256,37 +226,21 @@ TODO #126 pin 0.11.33 后整条 rationale chain (`197837b / 4812fbe / 37a7f21 / 
 #### TODO #120 — creative-ad-director: 抖音/创意广告 5 阶段 SKILL ✅ DONE
 
 #### TODO #131 — agnes-video-25 v0.1.7 `_coerce_image_paths_input` helper ✅ DONE
-**触发**：用户报 `image_paths` 数组"含中文路径 + 长度 3 时 7/7 失败 + 被序列化为 `{item: [...]}` dict"。grlling 揭示报告与事实 4 处矛盾（长度 3 vs 实际 2 / JSON 合法 / 无 Pydantic error 原文 / 无调用方信息）。user 拍板 "现状直接 commit + publish，承担权衡"，绕过 grillng 接受 trade-off 修复。**改动 4 文件**（+198 -6）：`server.py` 抽 helper `_coerce_image_paths_input(value)` 处理 `list[str] | dict | None` → `list[str] | None`（`{"item":[...]}` 解包 + `{key:[list]}` 单键解包 + 其它原样返回），`_image_generate_impl` 入口调它；`pyproject.toml` 0.1.6→0.1.7；`CHANGELOG.md` 新 `[0.1.7]` 段（trade-off 已知风险完整记录）+ **retroactive** `[0.1.6]` 段（§3.2 P3 Step 3 当时漏写，content 重建自 `d2403e6` multi-key cooldown 持久化 + 30s 窗口 reason split）；`tests/test_image_paths_dict_tolerance.py` +10/10 self-check。**PyPI**：`uv build` + `twine upload --repository pypi`（`uv publish` 走 trusted publishing 失败，twine 走 `~/.pypirc` token）。**verify**：`pip install --dry-run agnes-video-25-mcp==0.1.7` + sha256 比对（本地 `e80a58ed...` = PyPI simple API 完全一致）。**意外副作用**：`twine upload dist/*` 因 `dist/` 残留 0.1.5+0.1.6 旧 artifact 把旧版本也试图重传 —— PyPI 静默拒绝同 version 重传（不更新 upload_time），无害。**follow-up**：(a) schema 层 BeforeValidator 归一化（架构正确做法，user 拍板 0.1.7 暂不上）+ (b) `bundled-skills/creative-video-suite/references/agnes-ai-api.md` §5.5 narrative 误写待独立 commit 修。
-
-**v0.2.2 缓解**（2026-09-21, snapshot 标注 · 非新 TODO）：harness 多次调用嵌套 bug → helper 单层 unwrap 深度≥2 时返 dict，下游 `for v in values` 把 dict keys 当 URL 静默丢全部图片。0.2.2 改递归 unwrap（+ `id()` 自引用环检测 + 深度上限 8）+ 8 nested regression case。**PyPI v0.2.2 已 ship**。**架构正确做法（BeforeValidator）仍是 follow-up (a) 未偿还** —— 本次是 runtime mitigation；user 拍板按方案 C 走。详见 CHANGELOG `[0.2.2]` 段。
-
+#### TODO #131 — agnes-video-25 v0.1.7 `_coerce_image_paths_input` helper ✅ DONE
+**折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log `c008edc` + `hosted_mcps/agnes-video-25/CHANGELOG.md [0.1.7]/[0.2.2]` 段。**v0.2.2 缓解**：递归 unwrap + `id()` 环检测 + 深度 8 上限；架构正确做法（BeforeValidator）未偿还。
 #### TODO #132 — agnes-video-25 v0.1.8 schema 层放宽 `image_paths: list[str] | dict | None` ✅ DONE
-0.1.7 落地后已记录 "FastMCP / Pydantic v2 在 strict schema 模式下会在函数体前拦截 dict 输入，helper 不可达" trade-off。0.1.8 关闭这条 leak。**改动 3 文件**（+39 -8）：`server.py` `_image_generate_impl` 与 `agnes25_image_generate` 两处签名 `image_paths: list[str] | None = None` → `list[str] | dict[str, Any] | None = None`，helper 保持不变（已 0.1.7 测试覆盖）；`pyproject.toml` 0.1.7→0.1.8；`CHANGELOG.md` 新 `[0.1.8]` 段（schema-layer fix rationale + 残留 trade-off 链 + JSON schema 现列 `image_paths` 为 `oneOf: [array<string>, object, null]`）。**PyPI**：`rm -rf dist/`（避免 0.1.7 时 `dist/*` wildcard 重传 0.1.5/0.1.6 副作用）+ `uv build` + `twine upload --repository pypi dist/agnes_video_25_mcp-0.1.8-{py3-none-any.whl,tar.gz}` 显式指定两文件避免 wildcards。**verify**：本地 whl sha256 `3ea01f906...` = PyPI simple API `3ea01f906...` 完全一致。**为什么 schema 放宽而非 BeforeValidator**：MCP `@mcp.tool()` entry + `_image_generate_impl` 内部 helper 两边都要放宽才能让 dict 一路通过 → `list[str] | dict[str, Any] | None` 是最小改动；若只 BeforeValidator 在 entry 层则内部 helper 仍见 `list[str]` 与 `_img_normalize_inputs(image_paths, ...)` 类型冲突。**残留 trade-off**：(a) single-key unwrap 仍 type-unsafe；(b) JSON schema 改 oneOf 消费方需 handle new object case；(c) bug 报告本身未经 Pydantic error 原文核实 —— helper 现在可达，但触发源未确认是 Claude Code 还是别的 MCP client。**follow-up**：(1) creative-video-suite §5.5 narrative 错误声明待修；(2) `findPipInstalledUvxScriptsDir` 之外的 Windows image_paths 中文路径 e2e（#127 smoke 涵盖 uvx 解析，非 MCP tool surface）。
-
+#### TODO #132 — agnes-video-25 v0.1.8 schema 层放宽 `image_paths: list[str] | dict | None` ✅ DONE
+**折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log `f65a609` + `hosted_mcps/agnes-video-25/CHANGELOG.md [0.1.8]` 段。
 #### TODO #133 — 工具箱 stdio MCP 启动握手校验 (`/api/mcp/enable`) ✅ DONE
-**触发**：user 报"在工具箱里激活要确保 mcp 服务可以正常启动，目前不是"。`/api/mcp/enable` 三 stdio 分支（generic `which` / npx builtin `--help` warmup / `__bundled_cuse__` binary-existence check）只做浅校验，从不起进程验证 MCP protocol。坏 MCP（binary 在但 init 崩 / 不说 MCP 协议 / bash 引号错位 / 缺 runtime dep）能过 enable，首 turn 才暴露。**方案**（plan `/home/hmcz/.claude/plans/mossy-dreaming-dewdrop.md`）：抽 `transformMcpServerForSpawn(server)`（NEW `src/server/mcp/mcp-server-transform.ts`）从 `agent-session.ts::buildSdkMcpServers:3472-3713` 的 5 个 inlined 块（cuse sentinel / npx resolve / `buildMcpSubprocessEnv` / uvx PATH / playwright arg），SDK 装配 + 新 validator 共用单一变换源（refactor -80 行，零行为变更已验证）；新 `validateStdioStartup({command,args,env,parentSignal,timeoutMs:15s})`（NEW `src/server/mcp/mcp-startup-validator.ts`）用 `@modelcontextprotocol/sdk@1.29.0` `StdioClientTransport` + `Client.connect()` 真跑 `initialize` JSON-RPC 握手，never-throws 返回 discriminated union → 复用现有 `McpEnableErrorType` enum。cancel + timeout 用 `utils/cancellation.ts::withAbortSignal` + `withBoundedTimeout(close, 2s)` 兜底 subprocess 收尸。`parentSignal` 透传 `request.signal`。**接入点**（`src/server/index.ts:4717+` / `4968+` / `5112+` 三分支）：generic 替换 `which`；npx builtin 在 `--help` warmup **之后**追加 handshake（warmup 留作 cache prefetch 不删）；`__bundled_cuse__` 替换 binary-existence check。**响应 payload 加性扩展**：`{ success, serverInfo?: { name, version }, handshakeMs? }` — 前端忽略新字段。**测试**（全绿）：9 unit (`mcp-startup-validator.unit.test.ts` mock SDK) + 3 integration (`mcp-startup-validator.integration.test.ts` 用 `__tests__/fixtures/delayed-mcp-server.mjs` 真 spawn)。**scope-out 留 follow-up**：(a) `handleMcpTest` (CLI `hamuna mcp test`) — 暂时不动；(b) `tools/list` 深度验证（捕获 "protocol OK 但 tool 注册崩"）；(c) SSE/HTTP 分支的 `request.signal` 缺口（用本地 AbortController）；(d) 跨 `index.ts:4772` (`'0.1.29'`) / `admin-api.ts:676` (`'1.0'`) 的 `clientInfo.version` 不一致（建议提常量到 shared）。**分支**：`feature/mcp-stdio-startup-validation`（master 不直接 commit）。
-
+#### TODO #133 — 工具箱 stdio MCP 启动握手校验 (`/api/mcp/enable`) ✅ DONE
+**折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log + `/home/hmcz/.claude/plans/mossy-dreaming-dewdrop.md`。9 unit + 3 integration 全绿；分支 `feature/mcp-stdio-startup-validation`（master 不直接 commit）。
 #### TODO #135 — Windows install-time prefetch `agnes-video-25-mcp` wheel ✅ DONE
-**触发**：user 报"windows 安装包自动安装 agnes-video-25 mcp"。`multimedia-creator` MCP 首次 spawn 时 `uvx --from agnes-video-25-mcp==0.2.0` 从 PyPI 实时拉 wheel（NSIS `Section UvxFallback` 只装 uv + uvx，不预装 hosted MCP wheel）→ 中国大陆/弱网友好度差 + 首次视频请求要等 ~5-30s wheel bootstrap。user 拍板 "NSIS install-time 预热 wheel"，**再拍板** "setup 安装完 python 之后直接 pip 安装" → 去掉独立 PowerShell 脚本的 indirection，直接 inline `ExecWait` 在 `Section HostedMcpPrefetch`（紧接 `Section PythonInstall`）。**方案**：新增 `Section HostedMcpPrefetch` 紧接 `Section PythonInstall`，inline `ExecWait` 跑 `pip install --user --upgrade --index-url <aliyun/pypi> agnes-video-25-mcp==<ver>`，与 §UvxFallback uv 装法同款镜像链（Aliyun 主源 + PyPI fallback；**禁**回退 Tsinghua），soft-fail（不 abort，只 DetailPrint 警告 + Sidecar 兜底 `uvx --from` on first spawn）。**版本号单源真相**：`hosted_mcps/agnes-video-25/pyproject.toml::version`，windows-release.yml 加 sync step（`pwsh` + `sed -replace`）在 `Build Tauri app (NSIS)` 之前把版本注入 `installer.nsi` 的 `!define AGNES_VIDEO_25_MCP_VERSION "__AGNES_VIDEO_25_MCP_VERSION__"` 占位符 —— 漂移风险由 smoke test（step 20 assert 5/3 `pip show`）兜底。**改动 4 文件**：`installer.nsi` 头部加 `!define` + 新 `Section HostedMcpPrefetch`；`tauri.windows.conf.json` 不动；`windows-release.yml` step 19 前加 "Sync agnes-video-25-mcp pin" step + step 20 smoke test 加 assert 5/3；`snapshot.md`。**第二轮简化**：初版用了独立 `hosted-mcp-prefetch.ps1` + marker log，已 `git rm` —— user 拍板"直接 pip 安装"判定为过度设计。**trade-off**：失去"PowerShell 单元可测"维度（installer.nsi 整段 NSIS 不可在 PowerShell 跑）—— 接受，因为 §UvxFallback 已是同款 inline 模式。**scope-out**：(a) 多 hosted MCP 通用化（当前 hard-code `agnes-video-25-mcp`）；(b) wheel hash 校验（trust-on-first-use 风险——目前 mirror 链 + uvx 自身 GPG 不做校验）；(c) `scripts/download_*_mcp.ps1` 抽 helper。**版本流转**：本 branch `feat/nsis-hosted-mcp-prefetch` → 已 fast-forward merge 入 master（`69a8c63`，bump 0.3.157 → 0.3.158）。
-
+#### TODO #135 — Windows install-time prefetch `agnes-video-25-mcp` wheel ✅ DONE
+**折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log `69a8c63` + TODO #127 smoke test 兜底。版本流转 0.3.157 → 0.3.158。
 #### TODO #134 — agnes-video-25 v0.2.0：agnes-video-v2.0 模型白名单 + 参数转义 🔄
-**触发**：用户要求"agnes-video-25 mcp 增加支持 agnes video 2.0 模型" + 4 轮 grlling 拍板：(1) model ID = `agnes-video-v2.0`（带 v，docs URL `wiki.agnes-ai.com/zh-Hans/docs/agnes-video-v20` 中 model 字段实际就是这个名字——不是 `agnes-video-2.0` 也不是 `agnes-video-v20` URL slug）；(2) 仅白名单（caller 显式 `model="agnes-video-v2.0"`），不加 MCP server 端自动降级；(3) 仅 MCP server 改动，`bundled-skills/creative-video-suite` 红线（TODO #119 + §5.2 "禁止 fallback"）保持；(4) **接口输入参数不变**——v2.0 模型加入参数转义，`mode/seconds/size/first_frame/last_frame/images[]` 字段语义保持，server 内部映射到 v2.0 协议（`mode:"ti2vid"/"keyframes"` + `extra_body.image:[url1,url2]` + `height/width` + `num_frames` + `frame_rate:24`）。**协议差异 vs 现状**：(a) v2.0 size 集合 `{480p,720p,1080p}`（小写 p）vs 2.5-flash `{720P}`（大写 P）；(b) v2.0 aspect_ratio 5 个（`16:9/9:16/1:1/4:3/3:4`，**无 21:9**）vs 2.5-flash 6 个（含 21:9）；(c) v2.0 `mode="reference"` 不支持（v2.0 不接 `images[]/audios[]/videos[]`），命中返 `reference_mode_unsupported` 错误（类比 2.5-flash 的 `videos_unsupported` 模式）；(d) `seconds` 字符串 → `num_frames` 8 倍数 snap 到 `{81,121,241,441}` + `frame_rate=24` 固定。**改动计划**：4 文件（`server.py` + `tests/test_v2_model_whitelist.py` + `pyproject.toml` 0.1.8→0.2.0 + `CHANGELOG.md`）+ 文档（`README.md` / `SKILL.md` 更新描述与能力一致，仍标 hosted_mcps 内部文件）。`extended_buildin_mcp/mcp.json` 的 `multimedia-creator` pin 由 `scripts/bump-on-commit.mjs::AGNES_MCP_VERSION auto-bump` 在 PyPI 0.2.0 publish 后下个 commit 自动 patch。**scope-out 留 follow-up**：(a) caller 显式传 `negative_prompt` / `num_inference_steps` 等 v2.0 独有字段（保持"接口输入参数不变"约束）；(b) creative-video-suite 红线 §5.2 决策同步（用户拍板暂不动）。
-
-**目标**：让 `agnes-video-25-mcp` server 在 `AGNES_API_KEY` daily quota 撞顶（429）时自动切换备用 key。解决 2026-09-08 UGC 2nd 跑 5 个 key 撞 daily quota → 17h 阻塞问题。
-
-**Spec 已落地**：`.pavo-research/agnes-multi-key-fallback-spec.md`（~230 行，4 点核心：向后兼容 / in-memory KeyState 状态机 / 入口收敛到 `_request_json` 改 1 处 / 10 个单测 case）。
-
-| Task | 状态 | 内容 |
-|------|------|------|
-| **#18 P3 Step 1 — spec** | ✅ DONE | spec 写完 + 行号标注 + 风险/妥协列表 + 4 选 1 拍板选项 |
-| **#19 P3 Step 2 — 改代码** | ✅ DONE（0.1.4 in-memory）+ ✅ DONE（0.1.6 持久化 + 30s 窗口） | 改 `server.py` + `tests/test_key_pool_cooldown.py` 6 assert self-check；in-memory pool + persisted state + atomic tmp+replace + `AGNES_KEY_POOL_STATE_DIR` 覆盖 + 30s 窗口 reason split + cooldown 完 refresh `last_429_at=0` |
-| **#20 P3 Step 3 — bump + PyPI** | ✅ DONE（v0.1.6） | `hosted_mcps/agnes-video-25/pyproject.toml` 0.1.5 → 0.1.6 + PyPI v0.1.6 whl 15122B + tar.gz 81054B, upload_time 2026-09-09T16:24:15/18 |
-| **#21 P3 Step 4 — vendor + mcp.json + e2e** | 🔄 pending | `hosted_mcps/agnes-video-25/src/agnes_video_25/server.py` 同步 0.1.6；`extended_buildin_mcp/mcp.json` pin 0.1.5 → 0.1.6（或靠 TODO #113 bump-on-commit.mjs AGNES_MCP auto-bump 段下次 commit 自动 patch）；跑 2nd UGC 剩余 5 段验证 fallback 真生效 |
-
-**P3 设计 4 关键点**：向后兼容 / KeyState 4 态状态机 / 入口收敛到 `_request_json` / 10 个单测 case。**4 个已记录但暂不实现的妥协**：in-memory 不持久化 / 401 不自我恢复 / 状态查询用提交成功那个 key / 429 reset 解析失败保守到下个 UTC 00:00。
-
-**0.2.3 round-robin 子条目（2026-09-21, snapshot 标注 · 非新 TODO）**：用户在 0.2.2 ship 后要求"mcp 加入在 fallback 基础上加入多 key 轮询"——grilling 揭示三义（round-robin / 叠加 fallback / 健康轮询），user 拍板**方案 B = round-robin 叠加 fallback**（首选轮询、撞墙 fallback 兜底）。改动：(a) 模块级 `_KEY_ROUND_ROBIN_COUNTER`（绝对值，非 modulo wrap）+ `idx = counter % len(healthy)`；(b) `_pick_key` 第一关：healthy 列表里轮询选下一个，跳过 cooldown；(c) `_load_key_pool` / `_persist_state` 把 counter 写到同一个 JSON 顶层 `_round_robin_counter` key，向后兼容旧文件（缺字段 → 0）；(d) fallback / cooldown / 30s 窗口 / `_mark_disabled` 全部 0 改动。**新增 4 个单测**（cycles / skips_cooldown / persists / mixed_health）+ 6 个旧单测全绿 = 10/10。**为什么不彻底替代 fallback**：现有 fallback 是"撞 429 才换"，适合"主+备"key 等级差异；round-robin 是"平等均摊"，两者语义不冲突——B 方案叠加而非替换，是 user 拍板选择。详细见 hosted_mcps/agnes-video-25/CHANGELOG `[0.2.3]` 段。
-
+#### TODO #134 — agnes-video-25 v0.2.0：agnes-video-v2.0 模型白名单 + 参数转义 🔄
+**折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log。model ID = `agnes-video-v2.0`（带 v，非 `2.0` 也非 `v20` URL slug）；白名单仅 MCP server 改，skill 红线保持。0.2.0 PyPI sha256 verified @ 2026-09-11T15:35:04Z。
+**P3 多 key fallback 历史折叠**（2026-09-29 · snapshot 增补）：详见 §4 git log `d2403e6` + `hosted_mcps/agnes-video-25/CHANGELOG.md [0.1.6]/[0.2.3]`。in-memory KeyState 状态机 + 30s 窗口 reason split + round-robin 叠加 fallback（user 拍板方案 B）。
 ### 3.3 待办池
 
 #### TODO #17 — 2nd UGC 后半 5 段视频 🔄 quota-pending
@@ -402,27 +356,112 @@ TODO #126 pin 0.11.33 后整条 rationale chain (`197837b / 4812fbe / 37a7f21 / 
 **核心结论**：涨到 3.24 GB 的不是产品代码泄漏，是 WebKitGTK DevTools Inspector WebProcess 在 `#[cfg(debug_assertions)]` 下长 cache 主 webview DOM/source map；release build 无此进程 = 用户线上不受影响。详细采样表 / 误判订正 / `pgrep -f` 抓 bash wrapper 踩坑 → 见 git log。**scope-out**：(a) 不 gate `open_devtools()`；(b) 不写 memory regression 测试；(c) 不 commit（诊断而非 fix）。
 
 ### 5.9 OpenAI Bridge Responses API tool 形状回归到嵌套结构（2026-09-20 · #186 落地）
-
-**触发**：用户跑 `agnes-3.0-flash`（OpenAI Bridge Responses API path）碰到 `OpenAIException` 上游 400。unified log 定位：`[bridge][DIAG] requestBody.length=213011 column=63453 tool @col: before=EnterPlanMode@62162(+1291) after=EnterWorktree@66490(-3037)` + 上游错误原文 `Failed to deserialize the JSON body into the target type: input: data did not match any variant of untagged enum ResponseInput at line 1 column 63453`，10 秒前还有一次 `tools: Function tool must have a function definition`。
-
-**根因**：`src/server/openai-bridge/translate/request-responses.ts:113-124` 在 #325 fix 时给每个 tool 补 `strict: false`，但**保留了平铺形状**（`{type:'function', name, description, parameters, strict}`）——这与 OpenAI 官方 FunctionToolParam **嵌套** schema（`{type:'function', function:{name, description, parameters, strict}}`）不一致。chat_completions path (`tools.ts:8-17`) 一直是嵌套。OpenAI 官方 / xAI 等 lenient provider 容忍平铺，但 Rust serde untagged enum 实现的 strict provider（agnes）严格匹配字段 key，遇到平铺后**先报 `Function tool must have a function definition`**，walk 完整个 tools 数组没找到 `function` 嵌套 key，于是在某段长字符串中间放弃，报 `untagged enum ResponseInput at line 1 column N`（column 是放弃点不是出错点——代码注释自注）。
-
-**修复**：把 `request-responses.ts:113-124` 改为跟 `tools.ts::translateToolDefinitions` 同形的嵌套输出，`strict: false` 一起移进 `function` 子对象；同步改 `src/server/openai-bridge/types/openai-responses.ts::ResponsesTool` 类型为嵌套（`function: {name, description, parameters, strict?}`）；改 `request-responses.unit.test.ts` 三个 describe 块共 5 处访问路径（`t.parameters` → `t.function.parameters` 等），加 Bug F 嵌套不变量测试（断言 `name/description/parameters/strict` 全部不存在于 tool 顶层、只存在于 `function` 子对象）。
-
-**为什么这是"通用方式"**：(a) 跟 chat_completions path 输出形状一致（两个 bridge path 长期漂移收敛到 OpenAI 官方 spec 的嵌套形态）；(b) 不引入 per-provider flag（每个 strict 实施 provider 都同款问题，逐家加 hook = 配置爆炸）；(c) 保留 #325/#328 的 `strict: false` + `stripSchemaDescriptions` + `instructions` 用 input prepend 三条既有 fix —— 这是同一族 strict serde untagged enum 兼容性经验，不是为 agnes 单独 ad-hoc；(d) 加 unit test 锁住嵌套不变量 = 防止未来再有人改回平铺。
-
-**改动 3 文件**：`src/server/openai-bridge/types/openai-responses.ts::ResponsesTool`（平铺 → 嵌套）+ `src/server/openai-bridge/translate/request-responses.ts`（输出形状同步改嵌套，注释引用 `tools.ts` 对齐证据 + 2026-09-20 63453 回归案例）+ `src/server/openai-bridge/translate/request-responses.unit.test.ts`（Bug D describe 标题加 "+ nested shape (Bug F)"、3 处访问路径改 `.function.X`、加 1 个新 Bug F 嵌套不变量断言、另 1 个 describe 中 3 处路径同步）。
-
-**scope-out**：(a) 不动 `tools.ts::translateToolDefinitions`（chat_completions 已经是嵌套）；(b) 不动 `handler.ts` 的 `[bridge][DIAG]` 诊断逻辑（下次复现同样能精确定位）；(c) 不引入 per-provider `toolShape` flag；(d) 不写运行时 toggle；(e) 不动 #325/#328 的 `instructions` / `stripSchemaDescriptions` / `strict: false` 既有 fix；(f) 不写 PRD / 不动 snapshot.md §4 commit 占位（这次改动先发 snapshot，等 user 拍板 commit 节奏）。
-
-**验证**：`npx vitest run --project unit -- src/server/openai-bridge/translate/request-responses.unit.test.ts` → **40/40 全过**（含 3 处路径修复 + 1 新嵌套不变量测试）；`npm run typecheck` → 0 errors；`npx eslint` 3 改动文件 → 0 errors。pre-existing 失败 4 文件（widgetSandboxHtml / themeArchitecture / playwright-bash-redirect / eventRegistry）跟本改动无关，不增不减。
-
-**踩坑 — 测试断言忘了同步改访问路径**：第一次跑测试 5 处 type error + 1 runtime assertion 失败（类型从平铺改嵌套，测试里**所有访问路径**都要扫一遍——grep `tools!\[\d+\]\.\(name\|description\|parameters\|strict\)` 一把找齐，避免半改）。**踩坑 — harness 拦截 grep 输出**：复杂 bash 链 stdout 被 harness 完全屏蔽（"1 matches in 1F"）。**修法**：单 Bash 单行只做一件事，或 vitest 结果重定向 `/tmp/vitest-out.txt` 再 grep。
-
+### 5.9 OpenAI Bridge Responses API tool 形状回归到嵌套结构（2026-09-20 · #186 落地）
+**折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log + `src/server/openai-bridge/types/openai-responses.ts` + `src/server/openai-bridge/translate/request-responses.ts` + 3 处 unit test。根因 = `request-responses.ts:113-124` 补 `strict: false` 但保留平铺 `{type, name, description, parameters, strict}`；Rust serde untagged enum 严格匹配嵌套 `{type:'function', function:{...}}`，agnes strict provider 拒收平铺。修法 = 改嵌套输出。40/40 unit test + nested invariant 锁死。
 ### 5.10 OpenBitFun 调研锚点（2026-09-21 · 借鉴素材）
-
-对照 `/home/hmcz/Projects/openbitfun`（v1.0.0 MIT，Tauri+Rust+React+pnpm，4 种 Harness + MiniApp + Relay）。**已展开**：`specs/prd/miniapp.md` v0.1 PRD（MiniApp 容器形态，照搬 openbitfun 4 文件契约 + 4 类权限 + Bridge API；明确不引入 openbitfun 的 `agent.*`）。**待评审**：Product Operation Registry（加速 `tech_docs/remote_surface_contract.md`）/ i18n contract 集中 + `i18n:audit` 门禁 / Target cache GC + release-fast profile / Plugin Host 4 阶复用规则复盘 plugin-bridge。**不借鉴**：6 层 Rust workspace（单 Desktop 不需要）、App Server wire 矩阵（Sidecar 1:1 是对的）、ACP / OpenCode / Codex adapter（走 SDK）、Sandbox / Computer Use（planned）。详见 `specs/prd/miniapp.md`。
-
+### 5.10 OpenBitFun 调研锚点（2026-09-21 · 借鉴素材）
+**折叠（2026-09-29 · snapshot 增补）**：对照 `/home/hmcz/Projects/openbitfun`（v1.0.0 MIT）。已展开=`specs/prd/miniapp.md` v0.1 + `specs/prd/miniapp-v0.4.md` v0.4（4-Phase 切片）。不借鉴=6 层 Rust workspace / App Server wire 矩阵 / ACP / OpenCode / Codex adapter / Sandbox / Computer Use。详见 PRD。
 ### 5.11 MyAgents `mcp-command.ts` 横向对比（2026-09-23 → 2026-09-28 · #192 → #194 落地后调研）
+### 5.11 MyAgents `mcp-command.ts` 横向对比（2026-09-23 → 2026-09-28 · #192 → #194 落地后调研）
+**折叠（2026-09-29 · snapshot 增补）**：本仓 #185+#192+#194 落地后已完全对齐 MyAgents resolver + PATH-prepend 模式（Win/POSIX + nodeDir 前置 + 大小写归一化 + 去重）。仅缺 `buildMcpStdioLaunchConfig` 单一入口封装（**非 resolver 层面**；MCP spawn 三处各自拼 PATH 是已知冗余，下次需要再统一）。
+### 5.12 MiniApp 系统 —— 创意插件需求拍板（2026-09-29 · 用户 6 维 grill 落地）
 
-**结论**：本仓 #185 + #192 + #194 落地后已**完全对齐** MyAgents resolver + PATH-prepend 模式（resolveNpxMcpInvocation Win/POSIX + 命中 nodeDir 前置到 PATH 头部 + Windows 大小写归一化 + 既有 nodeDir 去重），仅缺 `buildMcpStdioLaunchConfig` 单一入口封装（**非 resolver 层面**；MCP spawn 三处各自拼 PATH 是已知冗余，下次需要时再统一）。**对照表**：Win 优先级 / Win npx 形态 / POSIX 形态 / POSIX throw / `-y` `--yes` 双识别 / nodeDir PATH-prepend + case-insensitive dedupe — 全一致。**scope 决策**：resolver + PATH-prepend 不再同步；`buildMcpStdioLaunchConfig` 统一入口模式待 v2 借鉴 — 详见 TODO #194 narrative。
+**触发**：用户原话"想做一个创意插件系统，可以将用户的想法，工作流生成一个专业的UI空间，可以与Agent交互，可以加载特定的skill，加入sqlite数据库支持。不用所有任务只能在对话中完成"。**grill 6 维**：(a) 形态=微信小程序 MiniApp；(b) UI 位置=独立 SceneTab；(c) Agent 交互=PRD v0.3 Cowork Sidecar；(d) SQLite=**砍掉**，**保留 storage.json**；(e) skill 加载=MiniApp 单独算 workspace，可挂载需要 skill，避免上下文混乱；(f) 生成方式=AI 对话生成 + 文件聊天补仓。
+
+#### 与 PRD v0.3 既有决策的 4 项拍板（2026-09-29）
+
+| 维度 | PRD v0.3 | 本次拍板 | 决策依据 |
+|------|---------|---------|---------|
+| **Sidecar 模型** | Cowork Sidecar 独立进程 owner=`miniapp-agent:<app_id>:<run_id>` | **采纳** | CLAUDE.md §Sidecar Owner 1:1 例外；v0.3 接受第二类 agent_kind 区分 Chat/Cowork/MiniApp |
+| **持久化** | `storage.json` KV | **不增 SQLite** | PRD v0.1 已规划 `withConfigLock` KV；CLAUDE.md "代码块 > 3 引用 MUST 抽象复用" + KB Engine 不适合 MiniApp schema；SQLite 是 over-engineering |
+| **skill 挂载** | PRD v0.3 未规划 `meta.json.skills` 字段 | **MiniApp 单独算 workspace** | Skill Reload（`evaluateSkillReload`）接 appId 维度；MiniApp 启动时只 load 声明的 skill 子集；不污染 Chat Sidecar 上下文 |
+| **生成方式** | PRD v0.1 §1.1 `git clone` 本地目录加载；PRD v0.3 Phase 1 Icon Design demo | **AI 对话生成 + 文件聊天补仓** | 用户对话中说"做个图标生成器 MiniApp" → AI 在 Chat Sidecar 内生成 `meta.json + source/index.html + ui.js + style.css + storage.json` → 写到 `~/.hamuna/miniapps/<id>/` → 用户开 MiniApp Tab 看效果；可拖 MiniApp 目录到 Chat 上下文补仓迭代 |
+
+#### 5.12.1 实施切片（避开 PRD v0.3 的 4 周 MVP，一次一 PR）
+
+| Phase | 内容 | 工期 | PR 编号 | 关键交付 |
+|-------|------|------|---------|---------|
+| **Phase 0** | MiniApp Runner + SceneTab + 加载本地目录 + storage.json + 静态 ui.js | 2-3 天 | PR1 | 跑通"独立 Tab 显示静态 UI"，无 Sidecar/Worker/权限/skill |
+| **Phase 1** | 对话生成 MiniApp + 文件聊天补仓 | 3-4 天 | PR2 | AI 在 Chat Sidecar 内生成 `meta.json + source/`，写本地目录；Chat 可拖 MiniApp 目录到 context 补仓 |
+| **Phase 2** | Cowork Sidecar + 4 类权限 + Bubble Claim + workspace skill 挂载 | 2 周 | PR3 | MiniApp 自有 Sidecar（owner=miniapp-agent）+ 4 类权限（fs/shell/net/ai）+ FloatingMiniChat Bubble Claim + Skill Reload 接 appId 维度 |
+| **Phase 3** | Worker Manager + Marketplace 雏形 | 2 周 | PR4 | MiniApp Worker Manager（Node v24 `worker_threads`）+ require shim + 黑名单 + Marketplace web UI（本地 `bundled-miniapps/` 只读） |
+
+#### 5.12.2 待 grill 的 6 个 Phase 2 决策点（实施前 MUST 拍板）
+
+详见 PRD §13 风险与未决问题 1-6（行号 624-630）。本次新增决策点：
+
+- **(新) workspace skill 挂载机制**：MiniApp 启动时只 load 声明的 skill 子集 → 需评估 Skill Reload（`evaluateSkillReload`）如何接 appId 维度；现有机制是全局的（CLAUDE.md §Pit-of-Success Skill Reload helper），新增 appId 维度 = 抽 `evaluateSkillReloadForMiniApp(appId, skillNames)` facade
+- **(新) 对话生成的 MiniApp 代码如何 diff/review**：AI 在 Chat Sidecar 内生成 meta.json + source/ 后用户看到效果，但代码不可见 → 是否暴露 `cmd_miniapp_diff_source(appId, fromVersion)` 让用户在 Chat 内 diff 改动？
+
+#### 5.12.3 复用与红线对齐（精要，详见 PRD §11）
+
+- **MiniApp Runner**：`src/renderer/components/miniapp-host/`（NEW）—— 复用 `src/renderer/styles/tokens.css` 的 CSS Token 子集（CLAUDE.md §Pit-of-Success "前端硬编码颜色破坏设计系统一致性"）
+- **SceneTab 入口**：`openScene('miniapp:{appId}')` —— 复用现有 SceneTab registry（CLAUDE.md §核心架构骨架）
+- **storage.json 锁**：复用 `withConfigLock`（`src/server/utils/withConfigLock.ts`，CLAUDE.md §Config 持久化红线）
+- **路径沙箱**：`cmd_miniapp_invoke` 走 `src/server/utils/path-safety.ts::validateFilePath`（不跟随 symlink，与 `tech_docs/tool_attachment_pipeline.md` §4 同款）
+- **审计日志**：tag 强制 `[miniapp:<id>]`，走 `ulog_info!`（与 CLAUDE.md "Rust 日志用 ulog_*" 红线对齐）
+- **iframe sandbox**：`allow-scripts allow-same-origin allow-forms`（**不** allow-popups / allow-top-navigation）
+- **CSP `connect-src`**：只放 MiniApp 自身 + Rust 代理层白名单端口；**禁**放 Cowork Sidecar port（iframe 直连旁路防护）
+- **Rust 命令命名**：`snake_case`（`cmd_miniapp_load_from_local` / `cmd_miniapp_invoke` / `cmd_miniapp_ai_complete` 等），全部 `pub async fn`
+- **不使用裸 `reqwest::Client::new` / 裸 `Command::new` / 裸 `tokio::spawn`**（clippy `disallowed-methods/macros` 自动拦截）
+- **不走 sidecar HTTP 路径**：MiniApp workspace IO 走 `cmd_workspace_*`（与 CLAUDE.md "工作区文件 IO" 红线对齐）
+- **Cowork Sidecar 单一入口**：所有 MiniApp → Cowork Sidecar 必须经 Rust `MiniAppCoworkManager` 中间件（owner 校验 + rate limit + 审计），iframe 不能直连 Sidecar
+
+#### 5.12.4 不复刻 PRD v0.3 的 4 周 MVP 理由
+
+PRD §7 Phase 1 估 4 周跑 4 个新基础设施（MiniApp Runner / Bubble Claim / Cowork Sidecar / Worker Manager）+ 1 个 Icon Design demo，每个 ~1 周。本次需求是"对话生成 + MiniApp 单独 workspace + skill 挂载"，复杂度 ≥ 重启整个 PRD。**改为分 4 个 Phase 独立 PR**，每个 Phase 独立可 ship + 可回滚 + 不阻塞 Chat/Cowork 主线。PRD v0.3 的 4 周 MVP 估算作废，但保留 PRD §2/§4/§6/§11 设计文档（meta.json schema + Bridge API + Cowork Sidecar + 红线）作为参考锚点。
+
+#### 5.12.5 scope-out + 5.12.6 验收 + 5.12.7 follow-up 拍板（合并 2026-09-29）
+
+PRD §14 12 项 scope-out（v0.4 +1 项不引 SQLite）。验收清单详见 PRD v0.4 §D（v0.3 §15 8 项 + v0.4 新增 4 项）。follow-up：(a) PRD v0.3 ✅ 保留 + v0.4 cross-link；(b) `miniapp-creator` ✅ system skill；(c) `app.workspaceDir` 默认值 ✅ `~/.hamuna/miniapps/<id>/`。
+
+#### 5.12.8 MiniApp Phase 0 + 1 实施记录（合并 2026-09-29）
+
+**Phase 0 ✅ DONE**（PRD v0.4 §B.1 · 历史详情已归档于 git log）：shared 4 文件 (meta-schema/path-templates/errors/types) + 20/20 unit tests；renderer MiniAppRunner.tsx (sandbox=allow-scripts/same-origin/forms) + theme-tokens.ts + 3/3 dom tests；Rust 3 invoke (list/uninstall/get_bundled_root) + `with_file_lock_blocking` + symlink_metadata；bundled-miniapps/hello-miniapp/ demo。
+
+**Phase 1 ✅ DONE**（PRD v0.4 §B.2 · 2026-09-29）：
+
+- **bundled-skills/miniapp-creator/**（系统 skill，`SYSTEM_SKILLS_VERSION` 56→57）：`SKILL.md` ~190 行 4 文件契约 + 端到端协议；3 文件模板；`verify-system-skills-sync.mjs` ✅ 25 entries
+- **Rust**：`commands.rs` +250 行（`cmd_miniapp_create_from_chat` 写盘权威 + `cmd_miniapp_diff_source` 结构化 diff + `miniapp_tests` 4 unit tests）+ `management_api.rs` +60 行 2 axum handlers + `lib.rs` 注册
+- **Sidecar**：`src/server/index.ts` +100 行 POST/GET forward-port（**双层防呆**：Node schema + Rust `serde_json` + meta.id==appId）
+- **renderer**：`useMiniAppFileService.ts` (~70) 纯函数 hook（drag-to-Chat attachment 留 Phase 2 Bubble Claim）
+- **e2e fixture**：`bundled-miniapps/_e2e-fixtures/icon-generator/` 5 文件 demo
+
+**Phase 1 验收**：typecheck ✅ 0 / `cargo build` ✅ 0 / `cargo test --lib miniapp_tests` ✅ 4/4 / shared 20/20 / dom 3/3 / system-skills-sync ✅ / 不引新依赖（Node diff stdlib + Rust `read_to_string` set diff）。
+
+**架构决策**：写盘权威在 Rust（CLAUDE.md L234 双同步红线）/ `with_file_lock_blocking(<appId>.lock)` 与 uninstall 复用 / meta.id==appId 双层防呆。**Phase 1 scope-out**：❌ `meta.json.skills` / ❌ unified text diff / ❌ drag-to-Chat attachment / ❌ file tree UI。
+
+**Phase 1 grill 4 项**（用户全部"推荐"）：(a) Sidecar HTTP → Rust invoke ✅ / (b) path-safety 准入（实现路径：Node 不写盘，path-safety allowlist 仅读侧 Phase 2 落地）✅ / (c) diff_source Phase 1 ✅ / (d) SYSTEM_SKILLS 双清单 + 三版本 bump ✅。
+
+**Phase 1 就绪度**：实施 ✓ / 验收 ✓ / grill ✓ / PRD §B.2 9/9 交付清单勾完。
+
+#### 5.12.10 MiniApp Phase 2 v0.4 落地（2026-09-29 · 13 文件 · 33 tests · snapshot 497 行）✅ DONE
+**折叠（snapshot 增补）**：详见 §4 git log（13 文件详见 §5.12.10 旧展开） + 33 tests pass + 0 typecheck/lint warnings。Phase 2 v0.4 = A Owner 扩展 + C 2 invokes + D 权限 + F Bubble Claim + G icon-design skill；Cowork Sidecar facade / 11 invokes / 独立审计日志 / FloatingMiniChat UI 推到 Phase 3。
+
+#### 5.12.11 MiniApp Phase 3 v0.4 落地（2026-09-29 · 24 文件 · 51 tests · snapshot 440/500 行）✅ DONE
+**折叠（snapshot 增补）**：详见 §4 git log（24 文件详见 §3.1 Phase 3 TODO）+ 51 tests pass + 0 typecheck/lint errors（2 cosmetic React useEffect deps warning 不阻 CI）+ Rust commands::* 测试 30 pass（`v37_updates_goal_cli_skill_and_preserves_v36_contracts` 最小修复：bump `SYSTEM_SKILLS_VERSION` 期望值 37→58，保留 v37 测试名 + v37 CLI/memory/docs contracts 不变，不重命名为 v58 也跳过中间 v40-57 契约历史——按用户「最小修复」拍板）。Phase 3 v0.4 = A Node Worker 池 (worker_threads in-process) + require shim (string blacklist + acorn AST fallback 兜底 PRD §13.8 `require('fs'+'/promises')`) + 1 git-graph demo (simple-git) + Marketplace List/Detail/Install UI (复用 ConfirmDialog 0 新组件) + meta.json `kind: 'iframe' | 'worker'` 扩展 + `workerCallBridge` 4-rule trust boundary (mirror bubbleClaimBridge pattern)。**核心契约**: worker 沙箱 ceiling=Node-only worker_threads (共享 V8 isolate → 4 件硬护 resourceLimits/shim-first/process.exit patch/method allow-list); upgrade path=Phase 4 untrusted authors 时切 child_process.fork; 无 Tauri `cmd_miniapp_worker_*` invoke (worker 在 Sidecar 内 spawn, 绕 Tauri = 无 owner 多空 indirection 违背第零原则); Install 写盘单一 Rust core = `install_blocking` 抽 `cmd_miniapp_create_from_chat` + `cmd_miniapp_install_from_marketplace` funnel through 一处 (withFileLock + tmp+rename + symlink guard + version 自增)。**scope-out (Phase 4+)**: package.json npm install per-MiniApp / Marketplace 搜索·评分·评论·远端 / worker child_process.fork / 多 worker kind / worker 跨 Sidecar 持久化 / Tauri cmd_miniapp_worker_* invoke / iframe 自动装 shim / 工作区 git 写权限 (git-graph 只读 log/show/diff/status + checkout)。
+
+#### 5.12.12 MiniApp Phase 4 entry 落地（2026-09-29 · 7 文件 · 3 tests · snapshot 443/500 行）✅ DONE
+**折叠（snapshot 增补）**：详见 §3.1 TODO #199 + §4 git log。Phase 4 entry (PRD v0.4 §B.5) = Launcher MiniApp Tab + SceneTab 入口打通。**关键架构决策**: (a) 新增独立 `view:'miniapp-scene'`(不复用 chat view —— chat 强制 sessionId, MiniApp 无 session 概念冲突;不复用 marketplace view —— view 语义与「运行态」不符);(b) `Tab.miniapp:{appId,kind?,workerKind?,icon?}` 字段承载 MiniApp 状态,`MiniAppRunner` 直接 mount 进 tab content;(c) 中心页 grid 用 `listMarketplace().filter(source==='installed')`(marketplaceClient 已有 endpoint,无需 Rust 改);(d) 新增 Rust `cmd_miniapp_source` 端点读 MiniApp `source/<entry>` HTML(installed→bundled fallback,is_safe_app_id 守门) → `/api/miniapp/source` Sidecar forward-port → `loadMiniAppSource()` client → `MiniAppSceneTab` fetch 后传 `srcDoc` 给 Runner(填 Phase 3 漏的 srcDoc 架构洞)。**文件清单**(NEW 5 + 改 5):NEW `src/renderer/pages/MiniAppCenter.tsx`(~190 行 lazy grid + empty state + kind badge + 「Browse Marketplace」空态 CTA)+ `MiniAppSceneTab.tsx`(~80 行 thin wrapper:fetch source → <MiniAppRunner/>)+ `MiniAppCenter.test.tsx`(dom 3 cases:grid filter bundled-out / empty state / card click dispatches OPEN_MINIAPP_SCENE with kind+workerKind+icon)+ `MiniAppSourceResponse` type + `loadMiniAppSource()` in `marketplaceClient.ts`;改 `src/shared/constants.ts::CUSTOM_EVENTS` 加 `OPEN_MINIAPP_CENTER` + `OPEN_MINIAPP_SCENE`;`src/renderer/types/tab.ts` view union + `Tab.miniapp` 字段;`src/renderer/utils/tabContentKind.ts` 加 miniapp-center/miniapp-scene 分支;`src/renderer/App.tsx` dispatch 分支 + 2 listener + `handleOpenMiniAppCenter`(singleton)+ `handleOpenMiniAppScene`(新开 tab 每次);`src-tauri/src/commands.rs` `cmd_miniapp_source` invoke + `read_miniapp_source_blocking` + `read_meta_entry` + `candidate_source_dirs` + `MiniAppSummary` 扩 `icon?/kind?/worker_kind?` 3 字段 + `read_miniapp_meta_for_listing` 重构消除 Phase 3 重复声明;`src-tauri/src/management_api.rs` `miniapp_source_handler` + 路由注册;`src-tauri/src/lib.rs` 注册 `cmd_miniapp_source` invoke;`src/server/index.ts` `/api/miniapp/source` forward-port(POST,appId 校验同 install/uninstall 模式)。**红线命中**:依赖-cruiser `src/renderer/**` 不 import server(继续走 marketplaceClient)+ reuse 0 新组件(Marketplace card 视觉风格镜像)+ `withConfigLock` 不适用(读场景无写)+ bare `__dirname` 不适用(Rust 端)+ i18n key 缺失用 hardcode 'MiniApps' fallback(后续 PR 补 `tabs.miniappCenter` translation bundle)。**Verification**:`npm run typecheck && npx eslint src/renderer/{pages,lib,types,utils,App.tsx}` 全绿;`npx vitest run --project dom src/renderer/pages/MiniAppCenter.test.tsx` 3/3 pass;`npm run test:integration` 348/348 pass;`cargo check` 0 error。**scope-out (Phase 4.1+)**:SceneTab 持久化 / 同 MiniApp 多实例 / i18n bundle 同步 / SceneTab close confirmation / 「最近用过」/ 自动启动 / 多 worker kind registry。
+
+#### 5.12.13 MiniApp Phase 4.1 落地（2026-10-01 · 8 文件 · 26 tests · snapshot 453/500 行）✅ DONE
+**Phase 4.1 = 多 worker kind registry + SceneTab close confirmation**。**架构决策**: (a) 把 Phase 3 hardcoded `if (kind==='git-graph')` 拆成 `Map<string,WorkerKindDef>` registry,每种 kind 自己 `kinds/<name>.ts` 文件 `registerKind(KIND_DEF)` self-register,`index.ts` barrel `import './kinds/git-graph'` 触发副作用。`WorkerKindDef` 新增 `entryPath: string` 自描述 entry 脚本路径,pool `new Worker(kindDef.entryPath)` 不再 hardcode 任何 kind;`worker-entry.template.ts` YAGNI 删(无第二个 kind 用 template,留当按需点);(b) SceneTab 关 worker-kind tab 时弹 `<ConfirmDialog>`(复用 0 新组件),`MiniAppRunner` unmount 已自动 terminate worker(`/api/miniapp/worker/terminate`),dialog 只给 user 退出口;(c) `WORKER_METHOD_ALLOWLIST` 注释更新明示"kind registry 静态镜像,Phase 4.2 才走 runtime `/api/miniapp/kinds` lookup"(dependency-cruiser 禁止 renderer→server import,runtime lookup 必须经 HTTP)。**文件清单**:改 `src/server/miniapp-worker/worker-rpc.ts`(registerKind/getKindDef/listKinds/__resetRegistryForTest API + WorkerKindDef.entryPath 字段,删 installKindHandlers/__resetKindHandlersForTest/GIT_GRAPH_KIND exports)+ NEW `src/server/miniapp-worker/kinds/git-graph.ts`(~210 行:5 schemas + 5 handlers + GIT_GRAPH_KIND 导出 + self-register,`here` 用 fileURLToPath(import.meta.url) 算 entryPath)+ rewrite `src/server/miniapp-worker/worker-entry-git-graph.ts`(70 行 bootstrap:install shim + import GIT_GRAPH_KIND from kinds/ + start parentPort router,不再 binding handlers)+ 改 `src/server/miniapp-worker/worker-pool.ts`(`new Worker(kindDef.entryPath)` 替换 `resolveEntryPath` 硬编,删未用 fileURLToPath/path imports)+ 改 `src/server/miniapp-worker/index.ts`(`import './kinds/git-graph'` 触发注册,删 installKindHandlers 旧 exports)+ 删 `src/server/miniapp-worker/worker-entry.template.ts`(YAGNI)+ 修 `src/server/miniapp-worker/require-shim.ts` 注释(改引 worker-entry-git-graph.ts)+ 改 `src/renderer/App.tsx`(`miniappCloseConfirm` state + `handleCloseTab` 加 `view==='miniapp-scene' && kind==='worker' && workerKind` 分支弹 dialog + ConfirmDialog 渲染)+ 改 `src/renderer/components/miniapp-host/workerCallBridge.ts`(注释明示 registry 镜像契约 + Phase 4.2 runtime lookup 路径)+ i18n `app.json` (en-US/zh-CN) 加 `miniappCloseTitle`/`miniappCloseMessage`/`close` 三键(复用现有 `cancel`/`close` 文案风格)。**Verification**: `npx tsc --noEmit` 干净;`npx vitest run --project unit src/server/miniapp-worker/` 26/26 pass (1 skipped pre-existing);`npx vitest run --project dom src/renderer/pages/MiniAppCenter.test.tsx` 3/3 pass。**scope-out (Phase 4.2+)**: runtime `/api/miniapp/kinds` lookup endpoint / 第二个 worker kind demo (e.g. file-explorer / code-search) / SceneTab 持久化 / 同 MiniApp 多实例 / 「最近用过」 / 自动启动 / iframe-only MiniApp 关闭直接无声不弹 dialog。
+
+#### 5.12.14 MiniApp Phase 4.2 落地（2026-10-01 · 8 文件 · 87 tests · snapshot 461/500 行）✅ DONE
+**Phase 4.2 = runtime kinds lookup + file-explorer 第二个 worker kind**。**架构决策**: (a) `GET /api/miniapp/kinds` Sidecar forward-port 直接读 `listKinds()`,返回 `[{kind, methods[]}, ...]`(schema 不透出,YAGNI);(b) Renderer 删 Phase 4.1 静态 `WORKER_METHOD_ALLOWLIST`,`workerCallBridge.ts` 新增 `loadWorkerKinds()`(single-flight `apiGetJson` + frozen result),`verifyWorkerCall` 改接受 `readonly string[] | undefined` → undefined = fail-closed（cache 命中前不 post ready）;(c) `MiniAppRunner` useEffect 在 mount 时 fetch kinds,`useState<kindAllowlist>` 派生;spawn effect gate 在 `kindAllowlist !== undefined`,保证 `worker.ready` 一定在 iframe 拿到合法 allow-list 之后 post（race 防御）;(d) 第二个 worker kind `file-explorer` = 3 methods(`file.tree`/`file.read`/`file.search`),用 host `node:fs` 跑,黑名单不挡 host bundle code。**安全护栏**: symlink 拒绝(`lstatSync` + `isSymbolicLink()` 早于 isDirectory),depth cap ≤ 8,maxEntries ≤ 5000,binary detection (4KB sample NUL byte check → 空 content),search 跳 .git/.node_modules,skip >256KB 文件(避免误把 binary 当 text 扫)。**文件清单**(NEW 4 + 改 4):NEW `src/server/miniapp-worker/kinds/file-explorer.ts`(~230 行:5 schema + 3 handler + FILE_EXPLORER_KIND 导出 + self-register)+ NEW `src/server/miniapp-worker/kinds/file-explorer.unit.test.ts`(14 tests:registry 注册 + entryPath 形态 + 5 schema 失败用例 + 7 handler 真 tmp 目录测试含 symlink 拒绝 / .git+node_modules 跳过 / case-insensitive search)+ NEW `src/server/miniapp-worker/worker-entry-file-explorer.ts`(60 行 bootstrap 镜像 git-graph 模式)+ i18n 不需要新增文案(close confirm 复用 Phase 4.1 `miniappCloseTitle`);改 `src/server/miniapp-worker/index.ts`(`import './kinds/file-explorer'` 触发注册);改 `src/server/index.ts` `/api/miniapp/kinds` 路由(GET,server-local 不走 managementApi,直接读 listKinds());改 `src/renderer/components/miniapp-host/workerCallBridge.ts`(`WORKER_METHOD_ALLOWLIST`/`methodsForKind` 全删,新增 `loadWorkerKinds()` + `__resetWorkerKindsForTest()` + `verifyWorkerCall` 签名 allow-list 接受 `undefined` fail-closed);改 `src/renderer/components/miniapp-host/MiniAppRunner.tsx`(useState<kindAllowlist> + useEffect 拉 kinds + spawn effect gate `kindAllowlist !== undefined` + effect deps 加 kindAllowlist)。**测试调整**: workerCallBridge.unit.test.ts 改写:移除 `WORKER_METHOD_ALLOWLIST`/`methodsForKind` 用例,加 3 个 `loadWorkerKinds` cases(flatten / 单飞 retry on fail / concurrent single-flight) + 1 个 verifyWorkerCall `undefined allowlist fail-closed` 用例;MiniAppRunner.workerCall.test.tsx 加 apiGetJson mock + beforeEach 默认 resolve git-graph kinds + 新增 case "loadWorkerKinds fail → spawn 永不发起"(gate 守门)。**Verification**: `npx tsc --noEmit` 干净;`npx vitest run --project unit src/server/miniapp-worker/` 40/40 pass (含 file-explorer 14);`npx vitest run --project unit src/renderer/components/miniapp-host/workerCallBridge.unit.test.ts` 19/19 pass;`npx vitest run --project dom src/renderer/components/miniapp-host/ + MiniAppCenter.test.tsx` 14/14 pass;全 miniapp-worker + bridge + runner + center 池子 73 pass (1 pre-existing skipped)。**scope-out (Phase 4.3+)**: `bundled-miniapps/file-explorer` UI demo(目录树渲染 + 文件打开 + 搜索结果列表)/ 第三个 worker kind demo / kinds endpoint 鉴权(当前 server-local,公开同 Sidecar 同 host)/ allow-list 远程签名 / SceneTab 持久化 / 「最近用过」 / 自动启动。
+
+#### 5.12.15 MiniApp Phase 4.3 + MCP 修复合并 + Launcher 入口（2026-10-01 · 12 文件 · 26 tests · snapshot 456/500 行）✅ DONE
+**本轮 4 commit**：`ae2fce62` Phase 2+3 UI+4 entry 一并落地（Center/SceneTab/Cowork 权限 gate/bundled demos；工作树跨越三阶段无法拆分，诚实命名）/ `1a6c2118`+`d406d548` gitee MCP 修复 cherry-pick（Windows uv/uvx PEP 370 枚举 + sidecar 扩展 PATH）/ `7ae08844` Launcher MiniApp 入口 / `52fe3118` file-explorer demo + bundled meta.json 修正。
+**Launcher 入口决策**：ModeSegment 加第三档**被否**——segment 是双向 toggle（`setModeAndFocus` 写死 `task<->thought`，绑定 Tab / Cmd+Shift+T），第三档把该 chord 变成三档循环无停点；且 Center 是导航目标非输入模式，放进 segment 会像"可输入的东西"。最终**并排置于 segment 右侧**作链接，独立 Tab 承载网格。**不 gate 在 `modeSegmentEnabled`**（Tauri-only task center）——按钮只 dispatch window event，gate 会让入口在浏览器 dev 模式消失，恰是 smoke 新 surface 最需要处。2 test pin 住该 split。
+**meta.json schema drift（4 个真 bug，Marketplace 静默丢卡片）**：新加 `bundled-miniapps/*/meta.json` 扫真盘 test 后暴露——(a) `hello-miniapp` 用 Phase 0 扁平数组 `permissions:{fs:[],shell:[]}`，schema 要嵌套 `{fs:{read:[]}}`；(b) `icon-generator` 用旧 token `$APPDIR`，白名单是 `{appdata}/{workspace}/{user-selected}`；(c) `git-graph`/`file-explorer` category 写 `devtools`/`utility`，白名单 `developer|design|productivity|data|media|other`；(d) `git-graph` description 超 200 字符。全部修正。**该 test 必须留**——否则 4 个 bundled app 在 Marketplace 全部不显示且零报错。
+**Verification**：`npx tsc --noEmit` 0 error；`npx eslint` 0 问题；meta-schema 19/19；miniapp 全池 69 pass + 1 pre-existing skipped；BrandSection dom 7/7（含新增 2）。
+**pre-existing 失败（非本轮引入，已在 clean tree 复现）**：`src/server/index.unit.test.ts` seedBundledSkills 7 cases（`resolveBundledSkillsDir` mock 失效，sanity check 自身 fail）/ `themeArchitecture` 2 / `playwright-bash-redirect` 1 / `widgetSandboxHtml` 1 / `eventRegistry` 1；dom 池 12 文件（CustomTitleBar / ForceUpdateModal / LauncherRightRail / SessionHistoryDropdown / agentConfigService / appConfigService / useTabSwipeGesture / IssueAssigneePicker / IssuesWorkspace / FloatingThemeRuntime / indexThemeBootstrap / ThemeRuntime）。均为他人未提交工作区或历史遗留，未修（超本轮 scope，需单独排期）。
+**scope-out（后续）**：MiniApp i18n bundle 补全（当前 `app.json` hardcode fallback）/ SceneTab 持久化 / 「最近用过」/ 自动启动 / 第三个 worker kind / marketplace 搜索·评分·远端 registry。
+
+#### 5.12.16 openbitfun 对齐 1+2+3（2026-10-01 · 11 文件 · 54+6 tests）✅ DONE
+**① theme token 根因修复**：原 `theme-tokens.ts` 9 个 token 全映射到**不存在的**宿主变量（`--bg-primary`/`--bg-elevated`/`--border-color`），`getPropertyValue` 静默返回空串 → 每个 MiniApp 一直走 `FALLBACK_TOKENS` 硬编码配色。宿主实际叫 `--paper*` / `--line*`。改为 24 token 直连真名（`--paper`/`--ink`/`--accent-primary`/`--line-subtle`/`--theme-radius-*`/`--font-body` 等），`file-explorer/style.css` 同步去掉全部硬编码色（`#4f46e5`/`#fafafa`/`#c00`/`#666`）。**无报错、无告警、只是主题永远不生效**——这类静默失败只有对着 `theme/themes/*.css` 逐名核对才抓得到。
+**② `data-i18n` house style 落地**：先查证 openbitfun 的 applier 在哪——**不在宿主桥，是每个 asset 自带的 ~10 行 `applyStaticI18n()`**（`ui.js` 内联），`data-i18n-attr` 是**裸属性名**（`aria-label`）不是 `name:key`，且 UI 文案字典在 `ui.js` 的 `I18N` 对象里、不在 `meta.json`（后者只放 listing 元数据）。所以**不改宿主**：`file-explorer` 自带 `I18N{en-US,zh-CN}` + `detectLocale()`（读 `navigator.language`，宿主暂无 locale 通道）+ `t(key, {占位符})` + `applyStaticI18n()`，HTML 加 `data-i18n` / `data-i18n-attr`，运行时状态文案也全部过 `t()`。
+**③ `permissions.node` + category 枚举**：schema 侧 `types.ts` 加 `node{enabled,max_memory_mb,timeout_ms}`、`category` 扩到 10 值（对齐 openbitfun）；消费侧新增 `src/server/miniapp-worker/node-limits.ts`——**pool 不碰文件系统**（已装 MiniApp 的路径权威在 Rust），解析发生在 Sidecar spawn 路由（有 appId 且有正当理由读盘），优先级 installed-bundled 与 `read_miniapp_source_blocking` 一致；`max_memory_mb` → `resourceLimits.maxOldGenerationSizeMb`（默认 64），`timeout_ms` → per-worker 调用超时（默认 5000），`enabled:false` 在 spawn 前 403 拒绝。**边界钳制**：schema 限 [16,512]MB / [1000,60000]ms——低于 16MB worker 连自己的 runtime 都起不来，高于 512MB「沙箱」名存实亡。meta.json 缺失或 schema 不过 → 落默认信封（Marketplace 本来也不展示它），不硬失败。
+**文件清单**：NEW `node-limits.ts`(~75 行)+ NEW `node-limits.unit.test.ts`(6 tests：默认回落 / installed / bundled / installed 优先 / 越界回落 / enabled 探针)；改 `worker-pool.ts`(`SpawnWorkerRequest.limits` + `WorkerHandle.limits`，pool 不读盘)、`index.ts`(barrel 导出)、`server/index.ts`(spawn 路由解析 + 403)、`shared/miniapp/{types,meta-schema}.ts`、`meta-schema.test.ts`(+10 category + 6 node cases = 38)、`miniapp-host/theme-tokens.ts`、`file-explorer/{index.html,ui.js,style.css}`。
+**Verification**：`npx tsc --noEmit` 0；`npx eslint`(9 文件) 0；`npx vitest run --project unit src/shared/miniapp/ src/server/miniapp-worker/node-limits.unit.test.ts` **54/54 pass**。
+**scope-out**：宿主 locale 通道（`app.locale` getter + `onLocaleChange`）——本轮 `data-i18n` 只做单语言检测，宿主切语言不会重刷已开 MiniApp；第三个 worker kind / SceneTab 持久化见 5.12.15。

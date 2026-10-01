@@ -16,6 +16,10 @@ const KNOWN_CATEGORIES = new Set<MiniAppMetadata['category']>([
   'productivity',
   'data',
   'media',
+  'game',
+  'education',
+  'social',
+  'finance',
   'other',
 ]);
 
@@ -90,6 +94,29 @@ function parsePermissions(raw: unknown): MiniAppPermissions | string {
       if (!arr) return 'permissions.net.allow must be string[]';
       out.net = { allow: arr };
     }
+  }
+
+  if (r.node !== undefined) {
+    const node = asRecord(r.node);
+    if (!node) return 'permissions.node must be an object';
+    const outNode: NonNullable<MiniAppPermissions['node']> = {};
+    if (node.enabled !== undefined) {
+      if (typeof node.enabled !== 'boolean') return 'permissions.node.enabled must be boolean';
+      outNode.enabled = node.enabled;
+    }
+    if (node.max_memory_mb !== undefined) {
+      if (typeof node.max_memory_mb !== 'number' || node.max_memory_mb < 16 || node.max_memory_mb > 512) {
+        return 'permissions.node.max_memory_mb must be a number in [16, 512]';
+      }
+      outNode.max_memory_mb = node.max_memory_mb;
+    }
+    if (node.timeout_ms !== undefined) {
+      if (typeof node.timeout_ms !== 'number' || node.timeout_ms < 1000 || node.timeout_ms > 60000) {
+        return 'permissions.node.timeout_ms must be a number in [1000, 60000]';
+      }
+      outNode.timeout_ms = node.timeout_ms;
+    }
+    out.node = outNode;
   }
 
   if (r.ai !== undefined) {

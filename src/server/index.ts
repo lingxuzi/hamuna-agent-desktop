@@ -5823,7 +5823,8 @@ async function main() {
       // `src/server/miniapp-worker/worker-pool.ts`. We do NOT route these
       // through the management API because workers are in-process (not
       // managed by Rust).
-      const { pool: miniAppWorkerPool, getKindDef } = await import('./miniapp-worker');
+      const { pool: miniAppWorkerPool, getKindDef, resolveNodeLimits, readMiniAppNodePermission } =
+        await import('./miniapp-worker');
 
       if (pathname === '/api/miniapp/worker/spawn' && request.method === 'POST') {
         try {
@@ -5850,10 +5851,23 @@ async function main() {
             body.init && typeof body.init === 'object' && !Array.isArray(body.init)
               ? (body.init as Record<string, unknown>)
               : undefined;
+          // `permissions.node.enabled === false` opt-out is declared in
+          // meta.json, so it has to be read before the worker exists. A
+          // missing or malformed meta.json resolves to "declared nothing",
+          // which the pool treats as permitted-with-defaults — the same
+          // fail-open-to-defaults the file has had since Phase 3.
+          const nodePerm = readMiniAppNodePermission(body.appId);
+          if (nodePerm?.enabled === false) {
+            return jsonResponse(
+              { ok: false, error: `MiniApp '${body.appId}' declares permissions.node.enabled = false` },
+              403,
+            );
+          }
           const spawnResult = await miniAppWorkerPool.spawn({
             appId: body.appId,
             kind: body.kind,
             ...(init ? { init } : {}),
+            limits: resolveNodeLimits(body.appId),
           });
           return jsonResponse({ ok: true, ...spawnResult }, 200);
         } catch (error) {

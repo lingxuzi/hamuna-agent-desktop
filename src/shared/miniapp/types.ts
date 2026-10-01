@@ -17,6 +17,17 @@ export interface MiniAppPermissions {
   net?: {
     allow?: string[];
   };
+  /**
+   * Worker resource envelope. Only meaningful for `kind: 'worker'`; the
+   * worker pool reads these instead of hardcoding a ceiling, so a MiniApp
+   * author can widen or tighten their own footprint per app. Absent fields
+   * fall back to the pool defaults (64MB old-gen / 5s call timeout).
+   */
+  node?: {
+    enabled?: boolean;
+    max_memory_mb?: number;
+    timeout_ms?: number;
+  };
   ai?: {
     enabled?: boolean;
     allowed_models?: string[];
@@ -31,7 +42,17 @@ export interface MiniAppMetadata {
   name: string;
   description: string;
   icon: string;
-  category: 'developer' | 'design' | 'productivity' | 'data' | 'media' | 'other';
+  category:
+    | 'developer'
+    | 'design'
+    | 'productivity'
+    | 'data'
+    | 'media'
+    | 'game'
+    | 'education'
+    | 'social'
+    | 'finance'
+    | 'other';
   tags?: string[];
   /**
    * Phase 2 (PRD v0.4 §B.3) — Skill subset this MiniApp pulls into its

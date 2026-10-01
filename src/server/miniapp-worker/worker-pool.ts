@@ -21,15 +21,21 @@ import { randomUUID } from 'node:crypto';
 import { withAbortSignal } from '../utils/cancellation';
 
 import { getKindDef, type WorkerCallMessage, type WorkerShutdownMessage, type WorkerOutbound } from './worker-rpc';
+import { DEFAULT_CALL_TIMEOUT_MS, DEFAULT_MAX_MEMORY_MB, type NodeLimits } from './node-limits';
 
 export const PER_APP_WORKER_CAP = 4;
-const DEFAULT_CALL_TIMEOUT_MS = 5000;
 const DEFAULT_TERMINATE_GRACE_MS = 200;
 
 export interface SpawnWorkerRequest {
   appId: string;
   kind: string;
   init?: Record<string, unknown>;
+  /**
+   * `meta.json` `permissions.node`, resolved by the caller. The pool stays
+   * filesystem-free; `node-limits.ts` is the single place that knows where
+   * installed MiniApps live.
+   */
+  limits?: Partial<NodeLimits>;
 }
 
 export interface WorkerHandle {
@@ -40,6 +46,7 @@ export interface WorkerHandle {
   methods: string[];
   spawnedAt: number;
   lastUsedAt: number;
+  limits: NodeLimits;
 }
 
 export interface SpawnWorkerResult {
@@ -108,6 +115,10 @@ class WorkerPool extends EventEmitter {
     this.enforcePerAppCap(req.appId);
 
     const id = `miniapp-worker-${++this.monotonicCounter}-${randomUUID().slice(0, 8)}`;
+    const limits: NodeLimits = {
+      maxMemoryMb: req.limits?.maxMemoryMb ?? DEFAULT_MAX_MEMORY_MB,
+      timeoutMs: req.limits?.timeoutMs ?? DEFAULT_CALL_TIMEOUT_MS,
+    };
     // Phase 4: entry path comes from the kind def (registered at startup
     // by `kinds/<name>.ts`). The pool no longer hardcodes any kind.
     const worker = new Worker(kindDef.entryPath, {
@@ -116,10 +127,11 @@ class WorkerPool extends EventEmitter {
         kind: req.kind,
         init: req.init ?? {},
       },
-      // PRD §B.4 sandbox ceilings: 64MB old gen, 16MB young gen. Cheap
+      // PRD §B.4 sandbox ceilings, tightened or widened per MiniApp via
+      // `meta.json` `permissions.node.max_memory_mb` (64MB default). Cheap
       // process-level isolation that catches runaway user code.
       resourceLimits: {
-        maxOldGenerationSizeMb: 64,
+        maxOldGenerationSizeMb: limits.maxMemoryMb,
         maxYoungGenerationSizeMb: 16,
       },
     });
@@ -132,6 +144,7 @@ class WorkerPool extends EventEmitter {
       methods: kindDef.methods.map((m) => m.name),
       spawnedAt: Date.now(),
       lastUsedAt: Date.now(),
+      limits,
     };
 
     this.wireWorkerEvents(handle);
@@ -165,7 +178,7 @@ class WorkerPool extends EventEmitter {
 
     handle.lastUsedAt = Date.now();
     const id = randomUUID();
-    const timeoutMs = req.timeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
+    const timeoutMs = req.timeoutMs ?? handle.limits.timeoutMs;
 
     return withAbortSignal(opts.signal, (signal: AbortSignal) => {
       return new Promise<CallResult>((resolve) => {

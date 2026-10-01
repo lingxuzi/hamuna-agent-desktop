@@ -23,49 +23,126 @@ import type { CSSProperties } from 'react';
 export interface MiniAppThemeTokens {
   bg: string;
   bgElevated: string;
+  bgInset: string;
   text: string;
+  textSecondary: string;
   textMuted: string;
+  textOnPrimary: string;
   accent: string;
+  accentText: string;
   border: string;
+  borderSubtle: string;
+  borderStrong: string;
+  error: string;
+  success: string;
+  warning: string;
+  info: string;
+  bgButton: string;
+  bgInput: string;
+  hoverBg: string;
+  focusBorder: string;
+  bgSurface: string;
   radiusSm: string;
+  radiusLg: string;
   radiusMd: string;
   fontSans: string;
+  fontMono: string;
 }
 
 const TOKEN_VAR_NAMES = {
-  bg: '--hamuna-bg',
+  bg: '--hamuna-bg-primary',
   bgElevated: '--hamuna-bg-elevated',
-  text: '--hamuna-text',
+  bgInset: '--hamuna-bg-inset',
+  text: '--hamuna-text-primary',
+  textSecondary: '--hamuna-text-secondary',
   textMuted: '--hamuna-text-muted',
+  textOnPrimary: '--hamuna-text-on-primary',
   accent: '--hamuna-accent',
+  accentText: '--hamuna-accent-text',
   border: '--hamuna-border',
+  borderSubtle: '--hamuna-border-subtle',
+  borderStrong: '--hamuna-border-primary',
+  error: '--hamuna-error',
+  success: '--hamuna-success',
+  warning: '--hamuna-warning',
+  info: '--hamuna-info',
+  bgButton: '--hamuna-bg-button',
+  bgInput: '--hamuna-bg-input',
+  hoverBg: '--hamuna-bg-button-hover',
+  focusBorder: '--hamuna-focus-border',
+  bgSurface: '--hamuna-bg-surface',
   radiusSm: '--hamuna-radius-sm',
+  radiusLg: '--hamuna-radius-lg',
   radiusMd: '--hamuna-radius-md',
   fontSans: '--hamuna-font-sans',
+  fontMono: '--hamuna-font-mono',
 } as const;
 
+/**
+ * Host CSS variable each MiniApp token reads from.
+ *
+ * These names are the host theme's, not the MiniApp-facing ones. Verified
+ * against `theme/themes/*.css` — an earlier version guessed `--bg-primary` /
+ * `--bg-elevated` / `--border-color`, none of which exist, so every one of
+ * those lookups silently returned empty and the iframe fell through to
+ * FALLBACK_TOKENS. The host spells surfaces `--paper*`, borders `--line*`.
+ */
 const HOST_TO_TOKEN: Record<keyof MiniAppThemeTokens, string> = {
-  bg: '--bg-primary',
-  bgElevated: '--bg-elevated',
+  bg: '--paper',
+  bgElevated: '--paper-elevated',
+  bgInset: '--paper-inset',
   text: '--ink',
+  textSecondary: '--ink-secondary',
   textMuted: '--ink-muted',
+  textOnPrimary: '--button-primary-text',
   accent: '--accent-primary',
-  border: '--border-color',
+  accentText: '--button-primary-text',
+  border: '--line',
+  borderSubtle: '--line-subtle',
+  borderStrong: '--line-strong',
+  error: '--error',
+  success: '--success',
+  warning: '--warning',
+  info: '--info',
+  bgButton: '--button-secondary-bg',
+  bgInput: '--code-bg',
+  hoverBg: '--hover-bg',
+  focusBorder: '--focus-border',
+  bgSurface: '--paper',
   radiusSm: '--theme-radius-sm',
+  radiusLg: '--theme-radius-lg',
   radiusMd: '--theme-radius-md',
   fontSans: '--font-body',
+  fontMono: '--font-code',
 };
 
 const FALLBACK_TOKENS: MiniAppThemeTokens = {
   bg: '#ffffff',
   bgElevated: '#f5f5f5',
+  bgInset: '#ececec',
   text: '#1c1612',
+  textSecondary: '#544b42',
   textMuted: '#6f6156',
+  textOnPrimary: '#ffffff',
   accent: '#7b8f6b',
-  border: '#e0e0e0',
+  accentText: '#ffffff',
+  border: 'rgba(0, 0, 0, 0.12)',
+  borderSubtle: 'rgba(0, 0, 0, 0.08)',
+  borderStrong: 'rgba(0, 0, 0, 0.20)',
+  error: '#b3261e',
+  success: '#146c2e',
+  warning: '#8a5a00',
+  info: '#0b5cad',
+  bgButton: '#f0ece6',
+  bgInput: '#ffffff',
+  hoverBg: 'rgba(0, 0, 0, 0.06)',
+  focusBorder: '#7b8f6b',
+  bgSurface: '#ffffff',
   radiusSm: '6px',
   radiusMd: '10px',
+  radiusLg: '14px',
   fontSans: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontMono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
 };
 
 /**
@@ -86,7 +163,6 @@ export function readThemeTokens(): MiniAppThemeTokens {
 
 /**
  * 生成一段 `<style>` 文本，注入到 iframe :root 上。
- * 注入内容：hamuna-* alias → host token fallback chain。
  */
 export function buildThemeTokenCss(tokens: MiniAppThemeTokens): string {
   const lines = [':root {'];

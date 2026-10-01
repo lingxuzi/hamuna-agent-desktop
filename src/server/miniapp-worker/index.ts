@@ -39,6 +39,14 @@ export {
 export { scanAst, formatAstError, type AstHit } from './ast-policy';
 
 export {
+  readMiniAppNodePermission,
+  resolveNodeLimits,
+  DEFAULT_MAX_MEMORY_MB,
+  DEFAULT_CALL_TIMEOUT_MS,
+  type NodeLimits,
+} from './node-limits';
+
+export {
   installRequireShim,
   __resetRequireShimForTest,
   __getRequireShimState,
