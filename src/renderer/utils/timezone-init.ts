@@ -12,6 +12,13 @@
  *
  * `Intl.DateTimeFormat.supportedLocalesOf` 等静态方法在 ES6 class extends 链上自动继承，
  * 不需要手动 copy。`format` / `formatToParts` / `formatRange` 走 prototype，继承也 OK。
+ *
+ * **必须保留「不用 new 也能调用」**：ECMA-402 里 `Intl.DateTimeFormat` 本身是
+ * `DateTimeFormat(...)` 和 `new DateTimeFormat(...)` 都合法的。直接拿 ES6 class 顶上去会
+ * 只剩 `new` 一种形式，于是任何裸调用（`Intl.DateTimeFormat().resolvedOptions()`）
+ * 抛 "Class constructor cannot be invoked without 'new'"，把整个 ScheduleTypeTabs 挂掉。
+ * 故用 Proxy 补一个 apply trap 把裸调用转成 `new`，其余行为（静态方法 / prototype /
+ * instanceof）全部原样转发。
  */
 
 const APP_TIMEZONE = 'Asia/Shanghai';
@@ -28,7 +35,9 @@ class AppDateTimeFormat extends OriginalDateTimeFormat {
 
 // ponytail: 不动 server 端 / Tauri Rust 端（它们用 chrono::Utc / SystemTime::now()，无 timezone 概念）；
 // 升级路径：若未来用户想要"按 OS locale 自适应"，把 override 改成读 env var / 用户设置，
-// 或用 Proxy 在构造时按语言路由（zh → Asia/Shanghai, en → America/Los_Angeles 等）。
-Intl.DateTimeFormat = AppDateTimeFormat as unknown as typeof Intl.DateTimeFormat;
+// 或在 apply/construct trap 里按语言路由（zh → Asia/Shanghai, en → America/Los_Angeles 等）。
+Intl.DateTimeFormat = new Proxy(AppDateTimeFormat, {
+  apply: (target, _thisArg, args) => new target(...args),
+}) as unknown as typeof Intl.DateTimeFormat;
 
 export {}; // 纯 side-effect module：保证 bundler 不 tree-shake

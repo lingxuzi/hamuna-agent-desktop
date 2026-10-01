@@ -71,4 +71,22 @@ describe('timezone-init', () => {
     expect(locales).toContain('en-US');
     expect(locales).toContain('zh-CN');
   });
+
+  it('不用 new 也能调用（ECMA-402 允许裸调用）', () => {
+    // 回归：override 之前是 ES6 class，只剩 `new` 一种形式，裸调用抛
+    // "Class constructor AppDateTimeFormat cannot be invoked without 'new'"，
+    // 直接把 ScheduleTypeTabs（对话输入区「定时」按钮）整个挂掉。
+    const resolved = Intl.DateTimeFormat().resolvedOptions();
+    expect(resolved.timeZone).toBe('Asia/Shanghai');
+    // 裸调用 + 显式 options 也要走通注入逻辑，而不是只对无参生效
+    const sample = new Date('2025-01-15T12:00:00Z');
+    expect(Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }).format(sample))
+      .toBe('20:00');
+    // 裸调用显式 timeZone 时用户值仍然胜出（Tokyo 21:00 vs 注入的 Shanghai 20:00）
+    const hms = { hour: '2-digit', minute: '2-digit', hour12: false } as const;
+    expect(Intl.DateTimeFormat('en-US', { ...hms, timeZone: 'Asia/Tokyo' }).format(sample))
+      .toBe('21:00');
+    expect(Intl.DateTimeFormat('en-US', hms).format(sample))
+      .toBe('20:00');
+  });
 });
