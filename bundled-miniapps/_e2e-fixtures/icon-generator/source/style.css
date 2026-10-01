@@ -1,0 +1,28 @@
+:root {
+  background: var(--bg-primary);
+  color: var(--ink);
+  border-radius: var(--theme-radius-md);
+  font-family: var(--font-body);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 24px;
+}
+
+button {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border: 0;
+  padding: 8px 16px;
+  border-radius: var(--theme-radius-sm);
+  cursor: pointer;
+}
+
+#icon-output {
+  font-size: 48px;
+  line-height: 1;
+}
