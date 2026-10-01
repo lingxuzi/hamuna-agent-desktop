@@ -20,12 +20,30 @@
  * duplicated transformation into this helper instead of copy-pasting.
  */
 import { existsSync } from 'fs';
-import { join } from 'path';
+import * as nodePath from 'path';
+
+// Mutable holder so tests can swap the path.dirname / path.join behaviour
+// via `vi.spyOn(pathModule, 'dirname')` — ESM module namespaces are
+// non-configurable, so the seam has to be a plain mutable binding rather
+// than an export. Production callers read through `dirname` / `pathJoin`
+// (local function refs) so test replacements actually take effect.
+const pathModule: { dirname: (p: string) => string; join: (...parts: string[]) => string } = {
+  dirname: (p: string) => nodePath.dirname(p),
+  join: (...parts: string[]) => nodePath.join(...parts),
+};
+const dirname: (p: string) => string = (p: string) => pathModule.dirname(p);
+const pathJoin: (...parts: string[]) => string = (...parts: string[]) => pathModule.join(...parts);
+
+// Test-only export of the mutable holder so vitest can spyOn/replace
+// individual functions. NOT intended for production callers — production
+// code uses `dirname` / `pathJoin` above.
+export const __pathModuleForTest = pathModule;
 
 import type { McpServerDefinition } from '../../shared/config-types';
 import { buildMcpSubprocessEnv } from '../session-core/mcp-env-policy';
 import { resolveNpxMcpInvocation } from '../utils/mcp-command';
 import { getHamunaAgentUserDir } from '../utils/project-user-config-sync';
+import { getShellPath } from '../utils/shell';
 import {
   findPipInstalledUvxScriptsDir,
   getBundledAgnesMcpBinDirs,
@@ -75,22 +93,68 @@ export async function transformMcpServerForSpawn(
     command = cusePath;
   }
 
+  // Build MCP config with proxy env inherited from parent Sidecar.
+  // MCP subprocesses need outbound proxy inheritance, while localhost still
+  // needs NO_PROXY protection. Per-server env has final authority so users
+  // can work around downstream proxy parser bugs for a specific MCP.
+  //
+  // PATH starts from `getShellPath()` — the platform-rebuilt PATH the Sidecar
+  // also uses for itself (bundled Node, system Node, ~/.hamuna/bin, npm
+  // global, Git, homebrew, NVM/fnm/volta, etc.). This matches what the
+  // prewarm path in `/api/mcp/enable` already does, so an npx MCP enabled
+  // via warmup and the same MCP spawned by the SDK both see identical
+  // binary resolution. Bare inherited `process.env.PATH` is unreliable
+  // when the Sidecar is launched by Tauri without a login shell.
+  //
+  // The two `delete`s are load-bearing, not defensive tidying.
+  // `buildMcpSubprocessEnv` seeds the POSIX-spelled `PATH` key from the parent,
+  // so on Windows the env object would otherwise carry BOTH `PATH` and `Path`.
+  // Node's spawn serialises a JS env object into the Win32 env block — a
+  // case-insensitive *sorted array*, not a map — and when two entries
+  // case-vary the child resolves the sort-order winner and never sees the
+  // other. `PATH` sorts before `Path`, so the raw inherited value won and
+  // every injection below (getShellPath, the npx nodeDir pin, the uv Scripts
+  // dir) was silently discarded: the MCP spawned with the parent PATH and
+  // failed to resolve `node` / `uv` with spawn ENOENT. Verified on Windows
+  // with a real `spawnSync` probe. `getShellEnv()` in utils/shell.ts deletes
+  // both keys for the same reason; keep the two in sync.
+  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+  const env: Record<string, string> = buildMcpSubprocessEnv(process.env, server.env);
+  delete env.PATH;
+  delete env.Path;
+  env[pathKey] = getShellPath();
+
   // For npx commands: prefer system npx → bundled Node.js npx → bun x.
-  // System Node.js is maintained by the user's package manager, more reliable
-  // than our bundled npm. Bundled Node.js serves as fallback.
+  // On Windows the resolver returns `node.exe` + `npx-cli.js` directly,
+  // bypassing the .cmd shim. But npx-cli.js internally spawns `node` (and
+  // npm descendants do too) — that inner `node` is resolved against the
+  // subprocess PATH, not the parent shell. `getShellPath()` puts bundled
+  // Node around slot #7 (after PROGRAMFILES/nodejs etc.) and a nvm-windows
+  // / Volta / fnm install on a non-default path can easily make the inner
+  // `node` lookup land on an uninstalled / mismatched system Node, so the
+  // child surface reports `node is not recognized as an internal or
+  // external command` even though npx-cli.js itself spawned successfully.
+  // MyAgents `buildMcpStdioLaunchConfig` solves this by pinning the
+  // resolver's chosen nodeDir to the FRONT of PATH (re-inserting the
+  // existing entry if it was already present elsewhere). We mirror that
+  // contract here — both on Windows (where the bug shows up) and POSIX
+  // (where `npx` shell shebang also resolves `node` via PATH).
   if (command === 'npx') {
     const invocation = resolveNpxMcpInvocation(args, {
       pinPresetPackages: server.isBuiltin === true,
     });
     command = invocation.command;
     args = invocation.args;
+    const nodeDir = dirname(command);
+    const separator = process.platform === 'win32' ? ';' : ':';
+    const equal = (entry: string): boolean => process.platform === 'win32'
+      ? entry.toLowerCase() === nodeDir.toLowerCase()
+      : entry === nodeDir;
+    env[pathKey] = [
+      nodeDir,
+      ...env[pathKey].split(separator).filter((entry) => entry && !equal(entry)),
+    ].join(separator);
   }
-
-  // Build MCP config with proxy env inherited from parent Sidecar.
-  // MCP subprocesses need outbound proxy inheritance, while localhost still
-  // needs NO_PROXY protection. Per-server env has final authority so users
-  // can work around downstream proxy parser bugs for a specific MCP.
-  const env = buildMcpSubprocessEnv(process.env, server.env);
 
   // uv / uvx PATH injection (Windows only). The Windows installer no longer
   // bundles a uv binary — it runs `pip install --user uv` and registers the
@@ -113,7 +177,7 @@ export async function transformMcpServerForSpawn(
     const scriptsDir = findPipInstalledUvxScriptsDir();
     if (scriptsDir) {
       const delimiter = process.platform === 'win32' ? ';' : ':';
-      env.PATH = `${scriptsDir}${delimiter}${env.PATH}`;
+      env[pathKey] = `${scriptsDir}${delimiter}${env[pathKey]}`;
     }
   }
 
@@ -144,7 +208,7 @@ export async function transformMcpServerForSpawn(
     }
     prepend.push(...getBundledAgnesMcpBinDirs());
     if (prepend.length > 0) {
-      env.PATH = `${prepend.join(delimiter)}${delimiter}${env.PATH}`;
+      env[pathKey] = `${prepend.join(delimiter)}${delimiter}${env[pathKey]}`;
     }
   }
 
@@ -155,7 +219,7 @@ export async function transformMcpServerForSpawn(
   if (server.id === 'playwright') {
     const hasIsolated = args.includes('--isolated');
     if (hasIsolated) {
-      const storageStatePath = join(getHamunaAgentUserDir(), 'browser-storage-state.json');
+      const storageStatePath = pathJoin(getHamunaAgentUserDir(), 'browser-storage-state.json');
       if (
         existsSync(storageStatePath) &&
         !args.some((a: string) => a.startsWith('--storage-state'))
