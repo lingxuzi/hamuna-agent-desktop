@@ -245,6 +245,50 @@ pub fn find_node_executable_pub<R: Runtime>(app_handle: &AppHandle<R>) -> Option
     find_node_executable(app_handle)
 }
 
+/// Put the app's augmented PATH on the Sidecar process itself.
+///
+/// The desktop app is launched from Explorer, so the Sidecar inherited the
+/// bare system PATH. On a fresh Windows install that PATH contains no
+/// Node.js at all — neither HKLM nor HKCU references the bundled `nodejs\`
+/// dir, because the installer deliberately never writes it. That stayed
+/// survivable until an MCP shim chain needed a bare `node`:
+///
+///   - `npx` itself is self-contained — the bundled `npx.cmd` sets
+///     `NODE_EXE=%~dp0\node.exe`, so resolving it by absolute path works.
+///   - But `npx` hands off to a shim npm generates in the npx *cache* dir
+///     (`%LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules\.bin\<name>.cmd`).
+///     That shim checks `<its own dir>\node.exe`, which does not exist, and
+///     falls back to bare `node` on PATH.
+///   - With no node on PATH the shim dies with
+///     `'"node"' is not recognized as an internal or external command`.
+///     The quotes are not a quoting bug on our side: npm's shim invokes
+///     `"%_prog%"` *after* a `&` separator, and cmd.exe does not strip
+///     quotes from a program name in that position, so it searches for an
+///     executable literally named `"node"`.
+///
+/// Fixing this on the Sidecar process — the thing that actually needs the
+/// PATH — rather than in each consumer (`buildMcpSubprocessEnv`, the AI's
+/// Bash env, the plugin bridge) means everything the Sidecar spawns
+/// inherits a correct PATH from one place. `system_binary::augmented_path()`
+/// already lists the bundled `nodejs` dir alongside the npm-global and
+/// `.hamuna\bin` dirs, and is the same list `system_binary::find()` searches.
+///
+/// `env_remove` before `env` is load-bearing on Windows: the inherited
+/// environment block carries `Path` while `env("PATH", ...)` adds a second,
+/// differently-cased `PATH` entry. A Windows environment block is a sorted
+/// array, not a map — duplicate case-variant keys resolve unpredictably, so
+/// both spellings have to go before the canonical one is set.
+pub(crate) fn apply_augmented_path_env(cmd: &mut std::process::Command) {
+    let augmented = crate::system_binary::augmented_path();
+    if augmented.is_empty() {
+        ulog_warn!("[sidecar] augmented PATH is empty — leaving inherited PATH in place");
+        return;
+    }
+    cmd.env_remove("PATH");
+    cmd.env_remove("Path");
+    cmd.env("PATH", augmented);
+}
+
 /// Build the canonical Node.js path relative to a given resources directory.
 /// macOS/Linux: <resources>/nodejs/bin/node
 /// Windows:     <resources>\nodejs\node.exe

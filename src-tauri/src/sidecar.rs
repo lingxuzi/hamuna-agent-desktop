@@ -111,6 +111,7 @@ pub use shutdown::{
     shutdown_for_update_verified, stop_all_sidecars,
 };
 pub use spawn::find_node_executable_pub;
+pub(crate) use spawn::apply_augmented_path_env;
 pub(crate) use spawn::normalize_external_path;
 use spawn::{
     diagnose_immediate_exit, diagnose_node_not_found, find_node_executable, find_server_script,

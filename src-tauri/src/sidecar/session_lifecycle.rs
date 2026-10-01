@@ -715,6 +715,11 @@ fn create_new_session_sidecar<R: Runtime>(
     // Apply proxy policy: user proxy / inherit system / protect localhost (pit-of-success)
     proxy_config::apply_to_subprocess(&mut cmd);
 
+    // Give the Sidecar the augmented PATH — the bare Explorer-inherited one
+    // has no Node.js on Windows, which breaks npx-spawned MCP shims. See
+    // spawn.rs::apply_augmented_path_env for the full failure chain.
+    apply_augmented_path_env(&mut cmd);
+
     // macOS: pin uv to bundled Python (mirrors instances.rs global sidecar
     // block). UV_PYTHON env tells `uv` / `uvx` which interpreter to use,
     // bypassing uv's own portable-Python download. PATH injection happens
