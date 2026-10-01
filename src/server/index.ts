@@ -5647,6 +5647,309 @@ async function main() {
       }
       // ============= END ADMIN API =============
 
+      // ============= MiniApp FORWARD-PORT (Phase 1, PRD v0.4 §B.2) =============
+      // Sidecar-side thin proxy → Rust management_api (`cmd_miniapp_*`).
+      // Node 只做 schema 预校验 + 转发；写盘权威在 Rust 侧（CLAUDE.md §Pit-of-Success fs-utils）。
+      if (pathname === '/api/miniapp/create' && request.method === 'POST') {
+        try {
+          const body = await request.json().catch(() => null) as
+            | { appId?: unknown; source?: unknown }
+            | null;
+          if (
+            !body ||
+            typeof body.appId !== 'string' ||
+            !/^[a-z0-9-]{1,64}$/.test(body.appId) ||
+            body.appId.startsWith('-') ||
+            body.appId.endsWith('-')
+          ) {
+            return jsonResponse(
+              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
+              400
+            );
+          }
+          if (!body.source || typeof body.source !== 'object' || Array.isArray(body.source)) {
+            return jsonResponse({ ok: false, error: 'source must be Record<string,string>' }, 400);
+          }
+          // 浅校验 4 文件 + storage.json 至少都存在
+          const REQUIRED_FILES = [
+            'meta.json',
+            'source/index.html',
+            'source/ui.js',
+            'source/style.css',
+            'storage.json',
+          ] as const;
+          for (const key of REQUIRED_FILES) {
+            if (typeof (body.source as Record<string, unknown>)[key] !== 'string') {
+              return jsonResponse(
+                { ok: false, error: `source is missing required file '${key}'` },
+                400
+              );
+            }
+          }
+          // meta.json.id MUST match appId（双层防呆）
+          const metaStr = (body.source as Record<string, string>)['meta.json'];
+          try {
+            const parsed = JSON.parse(metaStr) as { id?: unknown };
+            if (parsed.id !== body.appId) {
+              return jsonResponse(
+                { ok: false, error: `meta.json.id '${parsed.id}' must equal appId '${body.appId}'` },
+                400
+              );
+            }
+          } catch (e) {
+            return jsonResponse(
+              { ok: false, error: `meta.json is not valid JSON: ${(e as Error).message}` },
+              400
+            );
+          }
+          // 转发到 Rust
+          const result = await managementApi('/api/miniapp/create', 'POST', {
+            app_id: body.appId,
+            source: body.source,
+          });
+          return jsonResponse(result, result.ok === true ? 200 : 400);
+        } catch (error) {
+          console.error('[api/miniapp/create] Error:', error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'MiniApp create error' },
+            500
+          );
+        }
+      }
+      if (pathname === '/api/miniapp/diff' && request.method === 'GET') {
+        try {
+          const url = new URL(request.url);
+          const appId = url.searchParams.get('appId');
+          const fromVersionStr = url.searchParams.get('fromVersion');
+          if (!appId || !/^[a-z0-9-]{1,64}$/.test(appId)) {
+            return jsonResponse({ ok: false, error: 'appId must be kebab-case ASCII' }, 400);
+          }
+          const fromVersion = fromVersionStr ? Number(fromVersionStr) : undefined;
+          const result = await managementApi('/api/miniapp/diff', 'GET', {
+            appId,
+            fromVersion,
+          });
+          return jsonResponse(result, result.ok === true ? 200 : 400);
+        } catch (error) {
+          console.error('[api/miniapp/diff] Error:', error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'MiniApp diff error' },
+            500
+          );
+        }
+      }
+      // ============= MiniApp Marketplace + Worker FORWARD-PORT (Phase 3, PRD v0.4 §B.4) =============
+      // Phase 3: catalog (bundled + installed) + install/uninstall lifecycle +
+      // Node worker_threads spawn/call/terminate. Pool lives in Sidecar;
+      // workers are in-process (PRD §B.4 ceiling=worker_threads; upgrade path
+      // = child_process.fork when marketplace ships untrusted authors).
+      if (pathname === '/api/miniapp/list' && request.method === 'GET') {
+        try {
+          const result = await managementApi('/api/miniapp/list', 'GET', {});
+          return jsonResponse(result, result.ok === true ? 200 : 400);
+        } catch (error) {
+          console.error('[api/miniapp/list] Error:', error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'list error' },
+            500,
+          );
+        }
+      }
+
+      if (pathname === '/api/miniapp/install' && request.method === 'POST') {
+        try {
+          const body = (await request.json().catch(() => null)) as
+            | { appId?: unknown; source?: unknown }
+            | null;
+          if (
+            !body ||
+            typeof body.appId !== 'string' ||
+            !/^[a-z0-9-]{1,64}$/.test(body.appId) ||
+            body.appId.startsWith('-') ||
+            body.appId.endsWith('-')
+          ) {
+            return jsonResponse(
+              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
+              400,
+            );
+          }
+          if (!body.source || typeof body.source !== 'object' || Array.isArray(body.source)) {
+            return jsonResponse({ ok: false, error: 'source must be Record<string,string>' }, 400);
+          }
+          const result = await managementApi('/api/miniapp/install', 'POST', {
+            app_id: body.appId,
+            source: body.source,
+            from: 'marketplace',
+          });
+          return jsonResponse(result, result.ok === true ? 200 : 400);
+        } catch (error) {
+          console.error('[api/miniapp/install] Error:', error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'install error' },
+            500,
+          );
+        }
+      }
+
+      if (pathname === '/api/miniapp/uninstall' && request.method === 'POST') {
+        try {
+          const body = (await request.json().catch(() => null)) as
+            | { appId?: unknown }
+            | null;
+          if (
+            !body ||
+            typeof body.appId !== 'string' ||
+            !/^[a-z0-9-]{1,64}$/.test(body.appId)
+          ) {
+            return jsonResponse(
+              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
+              400,
+            );
+          }
+          const result = await managementApi('/api/miniapp/uninstall', 'POST', {
+            app_id: body.appId,
+          });
+          return jsonResponse(result, result.ok === true ? 200 : 400);
+        } catch (error) {
+          console.error('[api/miniapp/uninstall] Error:', error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'uninstall error' },
+            500,
+          );
+        }
+      }
+
+      // Worker pool endpoints. Pool is module-level singleton in
+      // `src/server/miniapp-worker/worker-pool.ts`. We do NOT route these
+      // through the management API because workers are in-process (not
+      // managed by Rust).
+      const { pool: miniAppWorkerPool, getKindDef } = await import('./miniapp-worker');
+
+      if (pathname === '/api/miniapp/worker/spawn' && request.method === 'POST') {
+        try {
+          const body = (await request.json().catch(() => null)) as
+            | { appId?: unknown; kind?: unknown; init?: unknown }
+            | null;
+          if (
+            !body ||
+            typeof body.appId !== 'string' ||
+            !/^[a-z0-9-]{1,64}$/.test(body.appId)
+          ) {
+            return jsonResponse(
+              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
+              400,
+            );
+          }
+          if (typeof body.kind !== 'string' || !getKindDef(body.kind)) {
+            return jsonResponse(
+              { ok: false, error: `unknown worker kind '${body.kind}'` },
+              400,
+            );
+          }
+          const init =
+            body.init && typeof body.init === 'object' && !Array.isArray(body.init)
+              ? (body.init as Record<string, unknown>)
+              : undefined;
+          const spawnResult = await miniAppWorkerPool.spawn({
+            appId: body.appId,
+            kind: body.kind,
+            ...(init ? { init } : {}),
+          });
+          return jsonResponse({ ok: true, ...spawnResult }, 200);
+        } catch (error) {
+          console.error('[api/miniapp/worker/spawn] Error:', error);
+          return jsonResponse(
+            {
+              ok: false,
+              error: error instanceof Error ? error.message : 'worker spawn error',
+            },
+            500,
+          );
+        }
+      }
+
+      if (pathname === '/api/miniapp/worker/call' && request.method === 'POST') {
+        try {
+          const body = (await request.json().catch(() => null)) as
+            | {
+                workerId?: unknown;
+                method?: unknown;
+                params?: unknown;
+                timeoutMs?: unknown;
+              }
+            | null;
+          if (!body || typeof body.workerId !== 'string' || typeof body.method !== 'string') {
+            return jsonResponse(
+              { ok: false, error: 'workerId and method are required' },
+              400,
+            );
+          }
+          const result = await miniAppWorkerPool.call({
+            workerId: body.workerId,
+            method: body.method,
+            params: body.params,
+            ...(typeof body.timeoutMs === 'number' ? { timeoutMs: body.timeoutMs } : {}),
+          });
+          // The pool's CallResult already has `ok`; we pass it as the top-level
+          // envelope rather than re-wrapping.
+          return jsonResponse(result, 200);
+        } catch (error) {
+          console.error('[api/miniapp/worker/call] Error:', error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'worker call error' },
+            500,
+          );
+        }
+      }
+
+      if (pathname === '/api/miniapp/worker/terminate' && request.method === 'POST') {
+        try {
+          const body = (await request.json().catch(() => null)) as
+            | { workerId?: unknown }
+            | null;
+          if (!body || typeof body.workerId !== 'string') {
+            return jsonResponse({ ok: false, error: 'workerId is required' }, 400);
+          }
+          await miniAppWorkerPool.terminate(body.workerId);
+          return jsonResponse({ ok: true }, 200);
+        } catch (error) {
+          console.error('[api/miniapp/worker/terminate] Error:', error);
+          return jsonResponse(
+            {
+              ok: false,
+              error: error instanceof Error ? error.message : 'worker terminate error',
+            },
+            500,
+          );
+        }
+      }
+
+      // Phase 4.2: GET /api/miniapp/kinds — renderer-side bridge pulls the
+      // registry here so WORKER_METHOD_ALLOWLIST no longer needs a static
+      // mirror (dependency-cruiser bans renderer→server import; runtime
+      // lookup has to cross the HTTP boundary). Returns a flat summary
+      // (kind + method names) — schemas are intentionally NOT exposed.
+      if (pathname === '/api/miniapp/kinds' && request.method === 'GET') {
+        try {
+          const { listKinds } = await import('./miniapp-worker');
+          const summary = listKinds().map((def) => ({
+            kind: def.kind,
+            methods: def.methods.map((m) => m.name),
+          }));
+          return jsonResponse({ ok: true, kinds: summary }, 200);
+        } catch (error) {
+          console.error('[api/miniapp/kinds] Error:', error);
+          return jsonResponse(
+            {
+              ok: false,
+              error: error instanceof Error ? error.message : 'kinds lookup error',
+            },
+            500,
+          );
+        }
+      }
+      // ============= END MiniApp Marketplace + Worker FORWARD-PORT =============
+
       // ============= SLASH COMMANDS API =============
 
       // ============= CLAUDE.md API =============
