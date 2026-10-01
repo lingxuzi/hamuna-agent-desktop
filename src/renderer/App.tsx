@@ -56,6 +56,9 @@ const Chat = lazy(() => import('@/pages/Chat'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const TaskCenter = lazy(() => import('@/pages/TaskCenter'));
 const Space = lazy(() => import('@/pages/Space'));
+const Marketplace = lazy(() => import('@/pages/Marketplace'));
+const MiniAppCenter = lazy(() => import('@/pages/MiniAppCenter'));
+const MiniAppSceneTab = lazy(() => import('@/pages/MiniAppSceneTab'));
 
 /** Layout-compatible Suspense fallback for a lazy page chunk — same paper fill
  *  as the deferred-mount placeholder, so a chunk-load is never a jarring blank. */
@@ -339,6 +342,18 @@ export const MemoizedTabContent = memo(function TabContent({
    ) : kind === 'space' ? (
     <Suspense fallback={PAGE_FALLBACK}>
      <Space isActive={isActive} />
+    </Suspense>
+   ) : kind === 'marketplace' ? (
+    <Suspense fallback={PAGE_FALLBACK}>
+     <Marketplace isActive={isActive} />
+    </Suspense>
+   ) : kind === 'miniapp-center' ? (
+    <Suspense fallback={PAGE_FALLBACK}>
+     <MiniAppCenter isActive={isActive} />
+    </Suspense>
+   ) : kind === 'miniapp-scene' ? (
+    <Suspense fallback={PAGE_FALLBACK}>
+     <MiniAppSceneTab tab={tab} isActive={isActive} />
     </Suspense>
    ) : kind === 'cold' ? (
     // Restored-but-not-yet-activated chat tab (Issue #232). Render only a
@@ -948,6 +963,16 @@ export default function App() {
  // Exit confirmation state (for cron tasks)
  const [exitConfirmState, setExitConfirmState] = useState<{
   runningTaskCount: number;
+  resolve: (value: boolean) => void;
+ } | null>(null);
+
+ // MiniApp scene-tab close confirmation. Worker-kind MiniApps spawn a
+ // worker_thread that holds open file handles (git repo reads) — closing
+ // without warning kills mid-call RPCs. Iframe-only MiniApps have no such
+ // state and close silently.
+ const [miniappCloseConfirm, setMiniappCloseConfirm] = useState<{
+  appId: string;
+  workerKind: string;
   resolve: (value: boolean) => void;
  } | null>(null);
 
@@ -3043,6 +3068,23 @@ export default function App() {
    return;
   }
 
+  // Phase 4.1: MiniApp scene tabs with worker-kind spawn a worker_thread
+  // that holds git/file handles. Closing silently would abandon in-flight
+  // RPCs. Confirm before closing.
+  if (tab?.view === 'miniapp-scene' && tab.miniapp?.kind === 'worker' && tab.miniapp.workerKind) {
+   setMiniappCloseConfirm({
+    appId: tab.miniapp.appId,
+    workerKind: tab.miniapp.workerKind,
+    resolve: (confirmed) => {
+     setMiniappCloseConfirm(null);
+     if (confirmed) {
+      void closeTabWithConfirmation(tabId);
+     }
+    },
+   });
+   return;
+  }
+
   void closeTabWithConfirmation(tabId);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks stabilized via tabsRef
  }, []);
@@ -3248,6 +3290,116 @@ export default function App() {
   window.addEventListener(CUSTOM_EVENTS.OPEN_SPACE, handleOpenSpace);
   return () => window.removeEventListener(CUSTOM_EVENTS.OPEN_SPACE, handleOpenSpace);
  }, [handleOpenSpace]);
+
+ // Phase 3 (PRD v0.4 §B.4): open the Marketplace singleton tab. Reuses the
+ // existing open-tab flow; if a marketplace tab is already open, focus it.
+ const handleOpenMarketplace = useCallback(() => {
+  const currentTabs = tabsRef.current;
+  const existing = currentTabs.find((t) => t.view === 'marketplace');
+  if (existing) {
+   setActiveTabId(existing.id);
+   return;
+  }
+  if (currentTabs.length >= MAX_TABS) {
+   console.warn(`[App] Max tabs (${MAX_TABS}) reached`);
+   return;
+  }
+  const newTab: Tab = {
+   id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+   agentDir: null,
+   sessionId: null,
+   view: 'marketplace',
+   title: t('tabs.marketplace') || 'Marketplace',
+   sidecarConfigDisposition: 'push',
+  };
+  openNewTabDeferred(newTab);
+ }, [openNewTabDeferred, setActiveTabId, t]);
+
+ useEffect(() => {
+  window.addEventListener(CUSTOM_EVENTS.OPEN_MARKETPLACE, handleOpenMarketplace);
+  return () => window.removeEventListener(CUSTOM_EVENTS.OPEN_MARKETPLACE, handleOpenMarketplace);
+ }, [handleOpenMarketplace]);
+
+ // Phase 4 entry (PRD v0.4 §B.5): open the MiniApp Center singleton tab
+ // (installed MiniApps grid). Mirror of handleOpenMarketplace — single-tab
+ // semantics, MAX_TABS guard, default title fallback.
+ const handleOpenMiniAppCenter = useCallback(() => {
+  const currentTabs = tabsRef.current;
+  const existing = currentTabs.find((t) => t.view === 'miniapp-center');
+  if (existing) {
+   setActiveTabId(existing.id);
+   return;
+  }
+  if (currentTabs.length >= MAX_TABS) {
+   console.warn(`[App] Max tabs (${MAX_TABS}) reached`);
+   return;
+  }
+  const newTab: Tab = {
+   id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+   agentDir: null,
+   sessionId: null,
+   view: 'miniapp-center',
+   title: t('tabs.miniappCenter') || 'MiniApps',
+   sidecarConfigDisposition: 'push',
+  };
+  openNewTabDeferred(newTab);
+ }, [openNewTabDeferred, setActiveTabId, t]);
+
+ useEffect(() => {
+  window.addEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, handleOpenMiniAppCenter);
+  return () => window.removeEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, handleOpenMiniAppCenter);
+ }, [handleOpenMiniAppCenter]);
+
+ // Phase 4 entry (PRD v0.4 §B.5): open a specific installed MiniApp in a new
+ // SceneTab. Each call creates a fresh tab — users can run multiple MiniApps
+ // concurrently (matches the chat-tab multi-instance model). Payload carries
+ // the `miniapp` fields the SceneTab reads to mount <MiniAppRunner>.
+ const handleOpenMiniAppScene = useCallback(
+  (detail: {
+   appId: string;
+   kind?: 'iframe' | 'worker';
+   workerKind?: string;
+   icon?: string;
+  }) => {
+   const currentTabs = tabsRef.current;
+   if (currentTabs.length >= MAX_TABS) {
+    console.warn(`[App] Max tabs (${MAX_TABS}) reached`);
+    return;
+   }
+   const newTab: Tab = {
+    id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    agentDir: null,
+    sessionId: null,
+    view: 'miniapp-scene',
+    title: detail.appId,
+    sidecarConfigDisposition: 'push',
+    miniapp: {
+     appId: detail.appId,
+     kind: detail.kind,
+     workerKind: detail.workerKind,
+     icon: detail.icon,
+    },
+   };
+   openNewTabDeferred(newTab);
+  },
+  [openNewTabDeferred],
+ );
+
+ useEffect(() => {
+  const handler = (event: Event) => {
+   const ce = event as CustomEvent<{
+    appId: string;
+    kind?: 'iframe' | 'worker';
+    workerKind?: string;
+    icon?: string;
+   }>;
+   if (ce.detail?.appId) {
+    handleOpenMiniAppScene(ce.detail);
+   }
+  };
+  window.addEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_SCENE, handler);
+  return () => window.removeEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_SCENE, handler);
+ }, [handleOpenMiniAppScene]);
 
 
  // PRD §8.3 — "AI 讨论" flow. Open a new Chat tab, auto-dispatch the
@@ -3919,6 +4071,25 @@ export default function App() {
        exitConfirmState.resolve(false);
        setExitConfirmState(null);
       }}
+     />
+    )}
+
+    {/* MiniApp scene-tab close confirmation (worker-kind only). Runner
+         unmount already terminates the worker via /api/miniapp/worker/terminate;
+         this dialog just gives the user a chance to back out before that
+         happens. */}
+    {miniappCloseConfirm && (
+     <ConfirmDialog
+      title={t('appChrome.miniappCloseTitle', { appId: miniappCloseConfirm.appId })}
+      message={t('appChrome.miniappCloseMessage', {
+       appId: miniappCloseConfirm.appId,
+       workerKind: miniappCloseConfirm.workerKind,
+      })}
+      confirmText={t('appChrome.close')}
+      cancelText={t('appChrome.cancel')}
+      confirmVariant="danger"
+      onConfirm={() => miniappCloseConfirm.resolve(true)}
+      onCancel={() => miniappCloseConfirm.resolve(false)}
      />
     )}
 

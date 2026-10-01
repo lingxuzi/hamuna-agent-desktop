@@ -1,0 +1,166 @@
+/* Icon Generator demo — CSS Token driven (CLAUDE.md §Pit-of-Success theme bridge).
+ * All visual values come from --hamuna-* tokens injected by the host via the
+ * <style id="theme-vars"> block (see MiniAppRunner). No raw hex / Tailwind. */
+
+:root {
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--hamuna-bg-surface, #fff);
+  color: var(--hamuna-text-primary, #111);
+  font-family: var(--hamuna-font-sans, system-ui);
+  font-size: 14px;
+}
+
+main {
+  display: grid;
+  gap: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--hamuna-text-lg, 18px);
+  font-weight: 600;
+}
+
+.hint {
+  margin: 4px 0 0;
+  color: var(--hamuna-text-secondary, #666);
+  font-size: var(--hamuna-text-sm, 13px);
+}
+
+.prompt-row {
+  display: flex;
+  gap: 8px;
+}
+
+.prompt-row input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--hamuna-border-default, #d0d0d0);
+  border-radius: 6px;
+  background: var(--hamuna-bg-input, #fff);
+  color: var(--hamuna-text-primary, #111);
+  font: inherit;
+}
+
+button {
+  padding: 8px 14px;
+  border: 1px solid var(--hamuna-border-default, #d0d0d0);
+  border-radius: 6px;
+  background: var(--hamuna-bg-button, #f4f4f4);
+  color: var(--hamuna-text-primary, #111);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--hamuna-bg-button-hover, #e8e8e8);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#gen-btn {
+  background: var(--hamuna-bg-primary, #2563eb);
+  color: var(--hamuna-text-on-primary, #fff);
+  border-color: transparent;
+}
+
+#gen-btn:hover:not(:disabled) {
+  background: var(--hamuna-bg-primary-hover, #1d4ed8);
+}
+
+.candidates {
+  min-height: 80px;
+}
+
+#candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+}
+
+.candidate {
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--hamuna-bg-elevated, #fafafa);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  overflow: hidden;
+}
+
+.candidate.selected {
+  border-color: var(--hamuna-border-primary, #2563eb);
+}
+
+.candidate img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.editor {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--hamuna-border-default, #d0d0d0);
+  border-radius: 8px;
+  background: var(--hamuna-bg-elevated, #fafafa);
+}
+
+#icon-output {
+  width: 256px;
+  height: 256px;
+  margin: 0 auto;
+  background: var(--hamuna-bg-input, #fff);
+  border: 1px solid var(--hamuna-border-subtle, #e5e5e5);
+  border-radius: 6px;
+}
+
+.editor-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px dashed var(--hamuna-border-default, #d0d0d0);
+  border-radius: 8px;
+}
+
+.dropzone label {
+  font-size: var(--hamuna-text-sm, 13px);
+  color: var(--hamuna-text-secondary, #666);
+}
+
+#ref-input {
+  font: inherit;
+}
+
+.status {
+  font-size: var(--hamuna-text-sm, 13px);
+  color: var(--hamuna-text-secondary, #666);
+  min-height: 20px;
+}

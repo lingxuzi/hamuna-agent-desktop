@@ -172,6 +172,14 @@ pub async fn start_management_api() -> Result<u16, String> {
         .route("/api/task/rerun", post(task_rerun_handler))
         .route("/api/task/read-doc", get(task_read_doc_handler))
         .route("/api/task/write-doc", post(task_write_doc_handler))
+        // MiniApp (Phase 1, PRD v0.4 §B.2)
+        .route("/api/miniapp/create", post(miniapp_create_handler))
+        .route("/api/miniapp/diff", get(miniapp_diff_handler))
+        // MiniApp Phase 3 (PRD v0.4 §B.4) — Marketplace list + install + uninstall
+        .route("/api/miniapp/list", get(miniapp_list_marketplace_handler))
+        .route("/api/miniapp/install", post(miniapp_install_handler))
+        .route("/api/miniapp/uninstall", post(miniapp_uninstall_handler))
+        .route("/api/miniapp/source", post(miniapp_source_handler))
         .route("/api/thought/list", get(thought_list_handler))
         .route("/api/thought/create", post(thought_create_handler))
         .route("/api/space/list", post(space_list_handler))
@@ -3525,6 +3533,155 @@ async fn session_watch_handler(
         "ok": true,
         "result": result,
     }))
+}
+
+// =====================================================================
+// MiniApp (Phase 1, PRD v0.4 §B.2) — Sidecar → Rust 转发层
+// 接收 Chat Sidecar POST /api/miniapp/create 写入 ~/.hamuna/miniapps/<appId>/
+// 接收 GET /api/miniapp/diff 返回当前 vs snapshot 结构化 diff
+// =====================================================================
+
+async fn miniapp_create_handler(
+    headers: HeaderMap,
+    Json(req): Json<crate::commands::CreateMiniAppRequest>,
+) -> Json<serde_json::Value> {
+    if let Err(resp) = request_sidecar_generation(&headers) {
+        return resp;
+    }
+    match crate::commands::cmd_miniapp_create_from_chat(req).await {
+        Ok(result) => Json(serde_json::json!({
+            "ok": true,
+            "appId": result.app_id,
+            "version": result.version,
+            "path": result.path,
+        })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct MiniAppDiffQuery {
+    app_id: String,
+    from_version: Option<i64>,
+}
+
+async fn miniapp_diff_handler(
+    headers: HeaderMap,
+    Query(q): Query<MiniAppDiffQuery>,
+) -> Json<serde_json::Value> {
+    if let Err(resp) = request_sidecar_generation(&headers) {
+        return resp;
+    }
+    match crate::commands::cmd_miniapp_diff_source(q.app_id, q.from_version).await {
+        Ok(result) => Json(serde_json::json!({
+            "ok": true,
+            "appId": result.app_id,
+            "fromVersion": result.from_version,
+            "toVersion": result.to_version,
+            "files": result.files,
+        })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+// =====================================================================
+// MiniApp Phase 3 (PRD v0.4 §B.4) — Marketplace
+// - GET  /api/miniapp/list         bundled ∪ installed with source tag
+// - POST /api/miniapp/install      copy a bundled MiniApp to ~/.hamuna/miniapps/
+// - POST /api/miniapp/uninstall    drop ~/.hamuna/miniapps/<id>/
+// =====================================================================
+
+#[derive(Debug, Deserialize)]
+struct MiniAppInstallRequest {
+    app_id: String,
+}
+
+async fn miniapp_list_marketplace_handler(
+    headers: HeaderMap,
+) -> Json<serde_json::Value> {
+    if let Err(resp) = request_sidecar_generation(&headers) {
+        return resp;
+    }
+    let Some(app_handle) = crate::logger::get_app_handle() else {
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": "global AppHandle not initialized",
+        }));
+    };
+    match crate::commands::cmd_miniapp_list_marketplace(app_handle.clone()).await {
+        Ok(items) => Json(serde_json::json!({
+            "ok": true,
+            "items": items,
+        })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+async fn miniapp_install_handler(
+    headers: HeaderMap,
+    Json(req): Json<MiniAppInstallRequest>,
+) -> Json<serde_json::Value> {
+    if let Err(resp) = request_sidecar_generation(&headers) {
+        return resp;
+    }
+    let Some(app_handle) = crate::logger::get_app_handle() else {
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": "global AppHandle not initialized",
+        }));
+    };
+    match crate::commands::cmd_miniapp_install_from_marketplace(app_handle.clone(), req.app_id).await {
+        Ok(result) => Json(serde_json::json!({
+            "ok": true,
+            "appId": result.app_id,
+            "version": result.version,
+            "path": result.path,
+        })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+async fn miniapp_uninstall_handler(
+    headers: HeaderMap,
+    Json(req): Json<MiniAppInstallRequest>,
+) -> Json<serde_json::Value> {
+    if let Err(resp) = request_sidecar_generation(&headers) {
+        return resp;
+    }
+    match crate::commands::cmd_miniapp_uninstall(req.app_id).await {
+        Ok(()) => Json(serde_json::json!({ "ok": true })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct MiniAppSourceRequest {
+    #[serde(default)]
+    app_id: String,
+}
+
+async fn miniapp_source_handler(
+    headers: HeaderMap,
+    Json(req): Json<MiniAppSourceRequest>,
+) -> Json<serde_json::Value> {
+    if let Err(resp) = request_sidecar_generation(&headers) {
+        return resp;
+    }
+    let Some(app_handle) = crate::logger::get_app_handle() else {
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": "global AppHandle not initialized",
+        }));
+    };
+    match crate::commands::cmd_miniapp_source(app_handle.clone(), req.app_id).await {
+        Ok(result) => Json(serde_json::json!({
+            "ok": true,
+            "appId": result.app_id,
+            "source": result.source,
+            "entry": result.entry,
+        })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
 }
 
 #[cfg(test)]

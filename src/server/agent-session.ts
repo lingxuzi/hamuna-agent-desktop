@@ -32,6 +32,7 @@ import {
   type InFlightAsyncCancelResult,
 } from './utils/inflight-terminal';
 import { shouldBlockToolInPlanMode, planModeDenyMessage, isPlanModeInEffect, PLAN_MODE_READONLY_TOOLS, PLAN_MODE_HOST_INTERACTION_TOOLS, applyPermissionModeSelection, computePlanExitState, computeRestoredPlanState } from './utils/plan-mode-gate';
+import { decideMiniAppTool, loadMiniAppGrantsForApp } from './miniapp-permission-gate';
 import { planRetraction } from './utils/message-retraction';
 import type { TransientProviderTextRetryDecision } from './session-core/turn-result-policy';
 import {
@@ -11256,6 +11257,32 @@ async function startStreamingSession(preWarm = false): Promise<void> {
                   updatedInput: decision.updatedInput ?? undefined,
                   additionalContext: decision.additionalContext ?? undefined,
                 },
+              };
+            },
+            // Phase 2 (PRD v0.4 §B.3) — MiniApp Cowork Sidecar permission gate.
+            // Runs BEFORE the plan-mode-gate closes its window; only acts on
+            // calls whose session_id starts with `miniapp_`. Other sessions
+            // see `allow: true` immediately. Reads grants.json via the
+            // pure-function helper so the policy stays unit-testable.
+            async (input: HookInput): Promise<HookJSONOutput> => {
+              const pre = input as PreToolUseHookInput;
+              const sessionId = pre.session_id ?? '';
+              if (!sessionId.startsWith('miniapp_')) {
+                return { continue: true };
+              }
+              const configDir = (await import('./utils/admin-config')).getConfigDir();
+              const appId = sessionId.slice('miniapp_'.length).split('_')[0] ?? '';
+              const grants = await loadMiniAppGrantsForApp({ configDir }, appId);
+              const decision = decideMiniAppTool(sessionId, pre.tool_name, grants);
+              if (decision.allow) {
+                return { continue: true };
+              }
+              console.warn(
+                `[miniapp-permission-gate] deny ${appId} ${pre.tool_name}: ${decision.reason}`,
+              );
+              return {
+                decision: 'block',
+                reason: decision.reason ?? 'MiniApp tool call denied by permission gate',
               };
             },
           ],

@@ -406,6 +406,20 @@ pub fn run() {
             commands::cmd_initialize_bundled_workspace,
             commands::cmd_create_bot_workspace,
             commands::cmd_remove_bot_workspace,
+            // MiniApp (Phase 0, PRD v0.4 §B.1 #8)
+            commands::cmd_miniapp_list_installed,
+            commands::cmd_miniapp_uninstall,
+            commands::cmd_miniapp_source,
+            commands::cmd_miniapp_get_bundled_root,
+            // Phase 1 (PRD v0.4 §B.2)
+            commands::cmd_miniapp_create_from_chat,
+            commands::cmd_miniapp_diff_source,
+            // Phase 2 (PRD v0.4 §B.3) — MiniApp Sidecar lifecycle (owner = miniapp-agent)
+            commands::cmd_miniapp_ensure_session,
+            commands::cmd_miniapp_release_session,
+            // Phase 3 (PRD v0.4 §B.4) — Marketplace install + list
+            commands::cmd_miniapp_install_from_marketplace,
+            commands::cmd_miniapp_list_marketplace,
             // Agent Runtime detection (v0.1.59)
             commands::cmd_detect_runtimes,
             managed_codex::cmd_managed_codex_status,

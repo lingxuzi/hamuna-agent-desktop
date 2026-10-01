@@ -1,0 +1,36 @@
+{
+  "id": "git-graph",
+  "name": "Git Graph",
+  "description": "Phase 3 (PRD v0.4 §B.4) demo MiniApp — visualizes the local git repository's commit graph + log, supports checkout branch. Runs in a Node worker_threads sandbox via the new MiniApp Worker pool (require shim + AST policy enforced).",
+  "icon": "git-branch",
+  "category": "devtools",
+  "version": 1,
+  "min_host_version": "0.4.0",
+  "tags": ["demo", "phase-3", "git", "worker"],
+  "kind": "worker",
+  "worker_kind": "git-graph",
+  "skills": [],
+  "permissions": {
+    "fs": {
+      "read": ["{workspace}/**"],
+      "write": []
+    },
+    "shell": {
+      "allow": ["git"]
+    },
+    "net": {
+      "allow": []
+    },
+    "ai": {
+      "enabled": false
+    }
+  },
+  "entry": "source/index.html",
+  "storage": {
+    "file": "storage.json",
+    "defaults": {
+      "cwd": "",
+      "branch": null
+    }
+  }
+}

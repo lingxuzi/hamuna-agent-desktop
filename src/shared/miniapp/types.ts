@@ -1,0 +1,79 @@
+/**
+ * MiniApp 共享类型（PRD v0.4 §B.1 #4）。
+ * Phase 0 子集：metadata + storage + 4 类权限。
+ */
+
+import type { MiniAppResponse } from './errors';
+
+/** Phase 0 4 类权限（不含 node/agent/chat，Phase 2 补）。 */
+export interface MiniAppPermissions {
+  fs?: {
+    read?: string[];
+    write?: string[];
+  };
+  shell?: {
+    allow?: string[];
+  };
+  net?: {
+    allow?: string[];
+  };
+  ai?: {
+    enabled?: boolean;
+    allowed_models?: string[];
+    max_tokens_per_request?: number;
+    rate_limit_per_minute?: number;
+  };
+}
+
+/** `meta.json` schema（PRD v0.3 §2.1.1，Phase 0 子集）。 */
+export interface MiniAppMetadata {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: 'developer' | 'design' | 'productivity' | 'data' | 'media' | 'other';
+  tags?: string[];
+  /**
+   * Phase 2 (PRD v0.4 §B.3) — Skill subset this MiniApp pulls into its
+   * Sidecar session. Validated by `meta-schema.ts` to be ≤ 5 entries drawn
+   * from `bundled-skills/` (excluding `bundled-agents/hamuna_helper`).
+   * Phase 2 v0.4 stores the declarations only; the actual reload helper
+   * lives in `src/server/utils/skill-reload.ts::evaluateSkillReloadForMiniApp`.
+   */
+  skills?: string[];
+  /**
+   * Phase 3 (PRD v0.4 §B.4): MiniApp execution kind.
+   *   - 'iframe' (default): runs entirely inside the iframe sandbox, no Node
+   *     side. CSP + postMessage trust rules apply. (Phase 0/1/2 behavior.)
+   *   - 'worker': host spawns a Node `worker_threads` instance + shimmed
+   *     require() for shell/git/fs access beyond the iframe. Worker methods
+   *     are listed in `meta.worker_kind` → `bundled-miniapps/<id>/meta.json`.
+   */
+  kind?: 'iframe' | 'worker';
+  /**
+   * Phase 3: required when `kind === 'worker'`. Maps to a registered worker
+   * kind in `src/server/miniapp-worker/worker-rpc.ts::getKindDef`. Phase 3
+   * only registers `'git-graph'`; Phase 4 will generalize via a registry.
+   */
+  worker_kind?: string;
+  version: number;
+  created_at?: number;
+  updated_at?: number;
+  min_host_version: string;
+  permissions: MiniAppPermissions;
+  ai_context?: string | null;
+}
+
+/** `storage.json` 形态（PRD v0.4 §5.12 + v0.3 §6.4）。 */
+export type MiniAppStorage = Record<string, unknown>;
+
+/** MiniApp 安装目录结构（PRD v0.3 §2.1）。 */
+export interface MiniAppSource {
+  appId: string;
+  rootPath: string;
+  meta: MiniAppMetadata;
+  storagePath: string;
+}
+
+/** invoke 通用入参/出参。 */
+export type MiniAppInvokeResult<T> = MiniAppResponse<T>;

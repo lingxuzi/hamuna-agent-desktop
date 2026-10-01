@@ -1,0 +1,21 @@
+{
+  "id": "hello-miniapp",
+  "name": "Hello MiniApp",
+  "description": "Phase 0 demo: 1 button + dialog. Zero Sidecar, zero permissions.",
+  "icon": "wave",
+  "category": "utility",
+  "version": 1,
+  "min_host_version": "0.3.0",
+  "tags": ["demo", "phase-0"],
+  "permissions": {
+    "fs": [],
+    "shell": [],
+    "net": [],
+    "ai": []
+  },
+  "entry": "source/index.html",
+  "storage": {
+    "file": "storage.json",
+    "defaults": {}
+  }
+}

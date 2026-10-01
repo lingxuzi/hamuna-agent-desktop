@@ -81,6 +81,8 @@ function getConfigDir(): string {
   return resolve(home, '.hamuna');
 }
 
+export { getConfigDir };
+
 function getConfigPath(): string {
   return resolve(getConfigDir(), 'config.json');
 }

@@ -131,7 +131,7 @@ export interface Tab {
     id: string;
     agentDir: string | null;  // null = showing Launcher
     sessionId: string | null; // null = not started
-    view: 'launcher' | 'chat' | 'settings' | 'taskcenter' | 'space';
+    view: 'launcher' | 'chat' | 'settings' | 'taskcenter' | 'space' | 'marketplace' | 'miniapp-center' | 'miniapp-scene';
     title: string;            // Display title for the tab
     isGenerating?: boolean;   // true = AI is outputting, used for close confirmation
     hasUnread?: boolean;      // true = task completed but user hasn't viewed this tab yet
@@ -150,6 +150,16 @@ export interface Tab {
     /** Runtime-only (never persisted). Set by floating-ball path actions to
      *  ask the target Chat tab to open a workspace file in its preview surface. */
     pendingFilePreview?: FilePreviewIntent;
+    /** Phase 4 entry (PRD v0.4 §B.5): MiniApp payload for `view: 'miniapp-scene'`.
+     *  Set together with `view:'miniapp-scene'`; MiniAppSceneTab reads these to
+     *  mount <MiniAppRunner/>. Mutually exclusive with chat fields — no
+     *  sessionId / sidecarConfigDisposition meaning. */
+    miniapp?: {
+        appId: string;
+        kind?: 'iframe' | 'worker';
+        workerKind?: string;
+        icon?: string;
+    };
 }
 
 export interface TabState {

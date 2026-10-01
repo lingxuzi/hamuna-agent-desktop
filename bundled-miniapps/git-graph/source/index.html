@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Git Graph</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Git Graph</h1>
+        <p class="hint">
+          Read a local git repo via the MiniApp worker pool. Branch checkout supported.
+        </p>
+      </header>
+
+      <section class="prompt-row" aria-label="Repository">
+        <input
+          id="cwd-input"
+          type="text"
+          placeholder="/path/to/your/repo"
+          aria-label="Git repository path"
+          autocomplete="off"
+        />
+        <button id="load-btn" type="button">Load</button>
+      </section>
+
+      <section class="graph" aria-label="Commit graph">
+        <div id="commit-graph" data-testid="commit-graph"></div>
+      </section>
+
+      <section class="log" aria-label="Commit log">
+        <ul id="commit-log" data-testid="commit-log"></ul>
+      </section>
+
+      <section class="branch" aria-label="Branches">
+        <select id="branch-select" data-testid="branch-select"></select>
+        <button id="checkout-btn" type="button" data-testid="checkout-btn">Checkout</button>
+      </section>
+
+      <section class="status" id="status" aria-live="polite"></section>
+    </main>
+    <script src="ui.js"></script>
+  </body>
+</html>
