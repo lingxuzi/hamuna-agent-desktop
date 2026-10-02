@@ -177,17 +177,26 @@ pub fn start_tab_sidecar<R: Runtime>(
     apply_augmented_path_env(&mut cmd);
 
     // Inject Python package mirror env into all child processes (MCP stdio
-    // spawns, external runtime CLI, etc.). Aliyun for pip + Tsinghua for uv
-    // covers both pip (used by Python skills) and uv/uvx (used by
-    // extended_buildin_mcp entries).
+    // spawns, external runtime CLI, etc.). Aliyun for both pip and uv covers
+    // Python skills and the uv/uvx-backed extended_buildin_mcp entries.
+    //
+    // uv used to be pointed at Tsinghua here, but that mirror answered 403
+    // for the project's own `agnes-video-25-mcp` (and for a control package
+    // alongside it), so a `uv tool run` MCP failed to resolve its dependency
+    // at all. Aliyun serves both, and matches PIP_INDEX_URL.
     //
     // Cross-platform: same env reaches Sidecar on macOS/Linux so Homebrew
     // / apt pip installs also go through the mirror. Env-level injection
     // takes priority over pip.ini / uv.toml (process boundary beats user
     // config), so uninstall = automatic cleanup (no lingering registry /
     // config writes).
+    //
+    // NOTE: this is a *default*, not a guarantee of reachability. A per-server
+    // `UV_INDEX_URL` in extended_buildin_mcp/mcp.json still wins, because
+    // buildMcpSubprocessEnv allowlists env keys and does not forward this one.
+    // Pinned by src/server/__tests__/miniapp-pypi-index.unit.test.ts.
     cmd.env("PIP_INDEX_URL", "https://mirrors.aliyun.com/pypi/simple");
-    cmd.env("UV_INDEX_URL", "https://pypi.tuna.tsinghua.edu.cn/simple");
+    cmd.env("UV_INDEX_URL", "https://mirrors.aliyun.com/pypi/simple");
 
     // Pin uv to the bundled Python (macOS DMG has no install-time hook; uv
     // would otherwise auto-download a portable Python on first MCP spawn).

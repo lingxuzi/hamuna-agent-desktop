@@ -3680,7 +3680,20 @@ function getMcpPrewarmWindowForMap(
  * `buildSdkMcpServers()` and BEFORE the next `enqueueUserMessage()` so the SDK
  * picks up the new tool list before processing the message.
  */
-const SDK_MCP_MUTATION_TIMEOUT_MS = 30_000;
+// Budget for `Query.setMcpServers` to publish a new transport map.
+//
+// This waits on more than the spawn: the SDK connects each server while
+// replacing the map. A stdio server that installs itself on first spawn —
+// `uv tool run --from <pkg>` resolving a Python distribution plus its
+// transitive deps — spends that time in the package manager before it can
+// speak MCP at all, and 30s killed it mid-install. The user-visible symptom
+// was the tool never opening, on a path where the enable-time handshake
+// (120s) and the CLI connect budget (60s) were both already generous and
+// both already passing.
+//
+// This is a ceiling, not a wait: a healthy server still returns as soon as it
+// is connected, and the timeout arm below still rebuilds the Query.
+const SDK_MCP_MUTATION_TIMEOUT_MS = 120_000;
 
 function latchMcpMutationRecovery(targetQuery: Query): void {
   if (lifecycleState.query !== targetQuery) return;

@@ -90,7 +90,12 @@ describe('live Query MCP mutation ownership', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(setMcpServers).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(30_000);
+    // Advance past SDK_MCP_MUTATION_TIMEOUT_MS rather than a literal: that
+    // ceiling was raised from 30s to 120s when install-on-spawn stdio servers
+    // (`uv tool run` / `npx`) needed room to finish resolving their package.
+    // A hardcoded 30s here made this test fall short of the timeout it exists
+    // to exercise.
+    await vi.advanceTimersByTimeAsync(120_000);
     await expect(synchronization).resolves.toBe(false);
 
     expect(isAbortRequested()).toBe(true);
