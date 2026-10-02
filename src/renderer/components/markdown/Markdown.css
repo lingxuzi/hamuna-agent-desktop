@@ -1,0 +1,95 @@
+/**
+ * Markdown vertical rhythm.
+ *
+ * Scoped to `.markdown-content` so nothing leaks into the CodeMirror editor or
+ * compact chat bubbles that don't opt in.
+ *
+ * Why this exists: the component previously hardcoded its spacing as Tailwind
+ * utilities per element (`mb-4 mt-6`, `my-3 ml-6 space-y-2.5`, …), which made
+ * `compact` meaningless. The compact prop only shrank the ROOT font size, so a
+ * heading inside a thinking block rendered at full 24px and a list kept its
+ * full margins — the "compact" context looked exactly like the full one except
+ * for body text.
+ *
+ * The fix is to drive the rhythm from variables set on the root, so `compact`
+ * scales headings, list gaps and table padding together with body text.
+ */
+
+.markdown-content {
+  --markdown-flow-gap: 1rem;
+  --markdown-heading-gap-top: 1.5rem;
+  --markdown-heading-gap-bottom: 1rem;
+  --markdown-list-indent: 1.5rem;
+  --markdown-list-block-gap: 0.625rem;
+  --markdown-list-item-gap: 0.5rem;
+  --markdown-blockquote-inset: 1rem;
+  --markdown-code-inset: 0.625rem;
+  --markdown-table-inset: 0.625rem;
+}
+
+/* Compact contexts (thinking blocks, task doc blocks) — every dimension of the
+   rhythm scales, not just the body font. */
+.markdown-content--compact {
+  --markdown-flow-gap: 0.5rem;
+  --markdown-heading-gap-top: 0.75rem;
+  --markdown-heading-gap-bottom: 0.5rem;
+  --markdown-list-indent: 1.25rem;
+  --markdown-list-block-gap: 0.25rem;
+  --markdown-list-item-gap: 0.25rem;
+  --markdown-blockquote-inset: 0.75rem;
+  --markdown-code-inset: 0.5rem;
+  --markdown-table-inset: 0.5rem;
+}
+
+.markdown-content > :first-child { margin-top: 0; }
+.markdown-content > :last-child { margin-bottom: 0; }
+
+.markdown-content h1 {
+  margin-top: var(--markdown-heading-gap-top);
+  margin-bottom: var(--markdown-heading-gap-bottom);
+}
+.markdown-content h2 {
+  margin-top: var(--markdown-heading-gap-top);
+  margin-bottom: var(--markdown-heading-gap-bottom);
+}
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin-top: var(--markdown-flow-gap);
+  margin-bottom: var(--markdown-flow-gap);
+}
+
+.markdown-content p { margin: var(--markdown-flow-gap) 0; }
+
+.markdown-content ul,
+.markdown-content ol {
+  margin-top: var(--markdown-list-block-gap);
+  margin-bottom: var(--markdown-list-block-gap);
+  margin-left: var(--markdown-list-indent);
+}
+.markdown-content ul > li { margin-bottom: var(--markdown-list-item-gap); }
+.markdown-content ol > li { margin-bottom: var(--markdown-list-item-gap); }
+/* GFM renders loose vs tight lists with the same element names, so the last
+   item must not carry a trailing gap. */
+.markdown-content :is(ul, ol) > li:last-child { margin-bottom: 0; }
+
+.markdown-content blockquote {
+  margin: var(--markdown-flow-gap) 0;
+  padding-left: var(--markdown-blockquote-inset);
+}
+
+.markdown-content table { margin: var(--markdown-flow-gap) 0; }
+.markdown-content th,
+.markdown-content td { padding: var(--markdown-table-inset); }
+
+/* Wide tables: a container query lets a table drop out of the message column
+   once its container is wide enough, instead of always scrolling. */
+@container markdown-surface (min-width: 860px) {
+  .markdown-wide-table {
+    overflow-x: visible;
+  }
+  .markdown-wide-table > table {
+    width: 100%;
+  }
+}

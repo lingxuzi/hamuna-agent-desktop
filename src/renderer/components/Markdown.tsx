@@ -20,6 +20,7 @@
  */
 
 import 'katex/dist/katex.min.css';
+import './markdown/Markdown.css';
 
 import { Children, isValidElement, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import type { Components } from 'react-markdown';
@@ -246,9 +247,12 @@ const PreComponent: Components['pre'] = ({ children }) => {
   return <>{children}</>;
 };
 
-// Custom table components for better styling
+// Custom table components for better styling.
+// `markdown-wide-table` opts into the container query in Markdown.css: once the
+// message column is wide enough, the scroll container stops being a scroll
+// container and the table lays out at full width instead of being squeezed.
 const TableComponent: Components['table'] = ({ children }) => (
-  <div className="my-4 overflow-x-auto rounded-lg border border-[var(--line)]">
+  <div className="markdown-wide-table overflow-x-auto rounded-lg border border-[var(--line)]">
     <table className="m-0 min-w-full divide-y divide-[var(--line)]">
       {children}
     </table>
@@ -280,57 +284,57 @@ const TableHeaderComponent: Components['th'] = ({ children }) => (
 
 // Custom blockquote for better styling
 const BlockquoteComponent: Components['blockquote'] = ({ children }) => (
-  <blockquote className="my-4 border-l-2 border-[var(--line-strong)] py-1 pl-4 pr-3 text-[var(--ink-muted)]">
+  <blockquote className="border-l-2 border-[var(--line-strong)] py-1 pl-4 pr-3 text-[var(--ink-muted)]">
     {children}
   </blockquote>
 );
 
 // Custom heading components - H1:22px H2:20px H3:18px H4-H6:16px
 const H1Component: Components['h1'] = ({ children }) => (
-  <h1 className="mb-4 mt-6 text-2xl leading-[1.3] font-bold text-[var(--ink)]">
+  <h1 className="text-2xl leading-[1.3] font-bold text-[var(--ink)]">
     {children}
   </h1>
 );
 
 const H2Component: Components['h2'] = ({ children }) => (
-  <h2 className="mb-3 mt-5 text-xl leading-[1.4] font-semibold text-[var(--ink)]">
+  <h2 className="text-xl leading-[1.4] font-semibold text-[var(--ink)]">
     {children}
   </h2>
 );
 
 const H3Component: Components['h3'] = ({ children }) => (
-  <h3 className="mb-2 mt-4 text-lg leading-[1.5] font-semibold text-[var(--ink)]">
+  <h3 className="text-lg leading-[1.5] font-semibold text-[var(--ink)]">
     {children}
   </h3>
 );
 
 const H4Component: Components['h4'] = ({ children }) => (
-  <h4 className="mb-2 mt-3 text-base leading-[1.5] font-semibold text-[var(--ink-secondary)]">
+  <h4 className="text-base leading-[1.5] font-semibold text-[var(--ink-secondary)]">
     {children}
   </h4>
 );
 
 const H5Component: Components['h5'] = ({ children }) => (
-  <h5 className="mb-2 mt-3 text-base leading-[1.5] font-medium text-[var(--ink-secondary)]">
+  <h5 className="text-base leading-[1.5] font-medium text-[var(--ink-secondary)]">
     {children}
   </h5>
 );
 
 const H6Component: Components['h6'] = ({ children }) => (
-  <h6 className="mb-2 mt-3 text-base leading-[1.5] font-medium text-[var(--ink-muted)]">
+  <h6 className="text-base leading-[1.5] font-medium text-[var(--ink-muted)]">
     {children}
   </h6>
 );
 
 // Custom list components
 const UlComponent: Components['ul'] = ({ children }) => (
-  <ul className="my-3 ml-6 block list-outside list-disc space-y-2.5 text-[var(--ink)] marker:text-[var(--ink-muted)]">
+  <ul className="block list-outside list-disc text-[var(--ink)] marker:text-[var(--ink-muted)]">
     {children}
   </ul>
 );
 
 const OlComponent: Components['ol'] = ({ children, start }) => (
-  <ol start={start} className="my-3 ml-6 block list-outside list-decimal space-y-2.5 text-[var(--ink)] marker:text-[var(--ink-muted)]">
+  <ol start={start} className="block list-outside list-decimal text-[var(--ink)] marker:text-[var(--ink-muted)]">
     {children}
   </ol>
 );
@@ -825,7 +829,18 @@ const Markdown = memo(function Markdown({ children, compact = false, preserveNew
   }, [processedContent, streaming, children]);
 
   return (
-    <div className={`break-words ${compact ? 'text-sm' : 'text-base'}`}>
+    // `min-w-0` matters: as a flex child, the default `min-width: auto` stops
+    // this box from shrinking below its content width, so a wide table or a
+    // long unbroken token pushed the whole message column sideways instead of
+    // scrolling inside it.
+    //
+    // `markdown-content` / `--compact` drive the vertical rhythm from CSS
+    // variables (see markdown/Markdown.css). Without them, `compact` shrank
+    // only the body font while headings and list gaps stayed full size, so a
+    // "compact" thinking block rendered a 24px H1 inside a small panel.
+    <div
+      className={`markdown-content min-w-0 max-w-full break-words ${compact ? 'markdown-content--compact text-sm' : 'text-base'}`}
+    >
       <ReactMarkdown
         remarkPlugins={preserveNewlines ? MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : MARKDOWN_REMARK_PLUGINS_DEFAULT}
         rehypePlugins={streaming && !raw ? REHYPE_PLUGINS_STREAMING : MARKDOWN_REHYPE_PLUGINS}
