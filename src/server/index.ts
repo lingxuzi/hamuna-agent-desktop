@@ -5631,6 +5631,41 @@ async function main() {
         }
       }
 
+      if (pathname === '/api/miniapp/source' && request.method === 'POST') {
+        // The scene tab calls this to fetch the entry HTML for a launched
+        // MiniApp. Rust resolves installed → bundled and returns the file
+        // contents; without this forward-port the renderer's POST hit the
+        // sidecar directly and 404'd, so every freshly-installed MiniApp
+        // failed to open with "Failed to load MiniApp source: HTTP 404".
+        try {
+          const body = (await request.json().catch(() => null)) as
+            | { appId?: unknown }
+            | null;
+          if (
+            !body ||
+            typeof body.appId !== 'string' ||
+            !/^[a-z0-9-]{1,64}$/.test(body.appId) ||
+            body.appId.startsWith('-') ||
+            body.appId.endsWith('-')
+          ) {
+            return jsonResponse(
+              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
+              400,
+            );
+          }
+          const result = await managementApi('/api/miniapp/source', 'POST', {
+            app_id: body.appId,
+          });
+          return jsonResponse(result, result.ok === true ? 200 : 400);
+        } catch (error) {
+          console.error('[api/miniapp/source] Error:', error);
+          return jsonResponse(
+            { ok: false, error: error instanceof Error ? error.message : 'source read error' },
+            500,
+          );
+        }
+      }
+
       if (pathname === '/api/miniapp/install' && request.method === 'POST') {
         try {
           // Marketplace install is appId-only: Rust reads the bundled source itself
