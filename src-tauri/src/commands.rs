@@ -689,6 +689,14 @@ fn read_miniapp_source_blocking<R: Runtime>(
         }
         let html = fs::read_to_string(&index_path)
             .map_err(|e| format!("read source/index.html failed: {}", e))?;
+        // The entry HTML is mounted via iframe `srcdoc`, which is a single
+        // document with the parent's base URL — so `href="style.css"` resolves
+        // against the app origin, not the MiniApp directory, and never loads.
+        // Inline the siblings the entry references before handing it over.
+        // `entry` is always a relative path under `dir`, so parent() is Some;
+        // fall back to `dir` rather than unwrap so a bare filename can't panic.
+        let source_dir = index_path.parent().unwrap_or(dir.as_path());
+        let html = inline_miniapp_siblings(&html, source_dir);
         return Ok(MiniAppSourceResponse {
             app_id: app_id.to_string(),
             source: html,
@@ -696,6 +704,132 @@ fn read_miniapp_source_blocking<R: Runtime>(
         });
     }
     Err(format!("MiniApp '{}' has no readable source/index.html", app_id))
+}
+
+/// Replace `<link rel="stylesheet" href="X">` and `<script src="X"></script>`
+/// in a MiniApp entry document with the file's own contents.
+///
+/// Fails soft: a tag whose target is missing (or is an absolute/remote URL, or
+/// a path outside the MiniApp's own directory) is left untouched, so the
+/// renderer can still see the reference instead of silently losing it.
+///
+/// Hand-rolled rather than regex-based: the `regex` crate is not a dependency
+/// of this crate and this does not justify adding one.
+fn inline_miniapp_siblings(html: &str, source_dir: &Path) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut cursor = 0usize;
+
+    while cursor < html.len() {
+        let next_link = html[cursor..].find("<link").map(|i| cursor + i);
+        let next_script = html[cursor..].find("<script").map(|i| cursor + i);
+        let (start, is_script) = match (next_link, next_script) {
+            (Some(l), Some(s)) if l <= s => (l, false),
+            (Some(_), Some(s)) => (s, true),
+            (Some(l), None) => (l, false),
+            (None, Some(s)) => (s, true),
+            (None, None) => break,
+        };
+        // End of the opening tag.
+        let Some(gt_rel) = html[start..].find('>') else {
+            break;
+        };
+        let tag_end = start + gt_rel;
+        let tag = &html[start..tag_end];
+        let after_tag = tag_end + 1;
+
+        // For `<script src=...></script>` the whole element must be consumed.
+        let element_end = if is_script {
+            let close = "</script>";
+            match html[after_tag..].find(close) {
+                Some(i) => after_tag + i + close.len(),
+                None => after_tag,
+            }
+        } else {
+            after_tag
+        };
+
+        let attr = if is_script { "src" } else { "href" };
+        match attr_value(tag, attr) {
+            Some(rel) => match read_inline_target(source_dir, &rel) {
+                Some(contents) => {
+                    out.push_str(&html[cursor..start]);
+                    let wrapper = if is_script { "script" } else { "style" };
+                    out.push('<');
+                    out.push_str(wrapper);
+                    out.push_str(">\n");
+                    out.push_str(&contents);
+                    out.push('\n');
+                    out.push_str("</");
+                    out.push_str(wrapper);
+                    out.push('>');
+                }
+                None => out.push_str(&html[cursor..element_end]),
+            },
+            None => out.push_str(&html[cursor..element_end]),
+        }
+
+        cursor = element_end;
+    }
+
+    out.push_str(&html[cursor..]);
+    out
+}
+
+/// Read `attr="value"` (or `attr='value'` / unquoted) out of a single tag.
+fn attr_value(tag: &str, attr: &str) -> Option<String> {
+    let mut from = 0usize;
+    while let Some(rel) = tag[from..].find(attr) {
+        let at = from + rel;
+        from = at + attr.len();
+        // Must be preceded by whitespace so `href` does not match `xhref`.
+        let preceded_ok = at == 0
+            || tag[..at]
+                .chars()
+                .next_back()
+                .map(|c| c.is_whitespace())
+                .unwrap_or(false);
+        if !preceded_ok {
+            continue;
+        }
+        let rest = &tag[from..];
+        let rest = rest.strip_prefix('=')?;
+        let rest = rest.trim_start();
+        if let Some(body) = rest.strip_prefix('"') {
+            return body.split_once('"').map(|(v, _)| v.to_string());
+        }
+        if let Some(body) = rest.strip_prefix('\'') {
+            return body.split_once('\'').map(|(v, _)| v.to_string());
+        }
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '>')
+            .unwrap_or(rest.len());
+        if end == 0 {
+            return None;
+        }
+        return Some(rest[..end].to_string());
+    }
+    None
+}
+
+/// Resolve a MiniApp-relative reference to file contents, or `None` when it
+/// is not ours to inline (remote / absolute / escaping the MiniApp dir).
+fn read_inline_target(source_dir: &Path, rel: &str) -> Option<String> {
+    if rel.is_empty()
+        || rel.contains("://")
+        || rel.starts_with("//")
+        || rel.starts_with("data:")
+        || rel.starts_with('/')
+        || rel.starts_with('#')
+    {
+        return None;
+    }
+    // `Path::join` does not normalise, so `/a/b/../c` still *starts_with*
+    // `/a/b` component-wise. Reject any `..` segment outright instead — the
+    // files we inline are flat siblings (`style.css`, `ui.js`).
+    if rel.split(['/', '\\']).any(|seg| seg == ".." || seg == ".") {
+        return None;
+    }
+    fs::read_to_string(source_dir.join(rel)).ok()
 }
 
 /// Read the `entry` field from `meta.json` (default `source/index.html`).
@@ -4634,9 +4768,11 @@ mod runtime_detection_cache_tests {
 #[cfg(test)]
 mod miniapp_tests {
     use super::{
-        collect_snapshot, is_safe_app_id, validate_miniapp_relative_path, CreateMiniAppRequest,
+        collect_snapshot, inline_miniapp_siblings, is_safe_app_id, validate_miniapp_relative_path,
+        CreateMiniAppRequest,
     };
     use std::collections::HashMap;
+    use std::fs;
 
     #[test]
     fn app_id_kebab_case_only() {
@@ -4682,5 +4818,108 @@ mod miniapp_tests {
         // Smoke test: collect_snapshot on a non-existent path yields empty map.
         let collected = collect_snapshot(std::path::Path::new("/nonexistent/path/does/not/exist"));
         assert!(collected.is_empty());
+    }
+
+    // ─── inline_miniapp_siblings ────────────────────────────────────────
+    // A MiniApp entry is mounted via iframe `srcdoc`, whose base URL is the
+    // parent's, so `href="style.css"` / `src="ui.js"` never resolve. These
+    // tests pin that the siblings get inlined and that nothing else is
+    // touched — an over-eager rewrite would silently swallow a remote
+    // stylesheet or follow a `..` out of the MiniApp directory.
+
+    fn scratch_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("hamuna-inline-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create scratch dir");
+        dir
+    }
+
+    #[test]
+    fn inlines_link_and_script_siblings() {
+        let dir = scratch_dir("happy");
+        fs::write(dir.join("style.css"), "body { color: red; }").unwrap();
+        fs::write(dir.join("ui.js"), "console.log(1);").unwrap();
+        let html = r#"<html><head><link rel="stylesheet" href="style.css" /></head><body><script src="ui.js"></script></body></html>"#;
+
+        let out = inline_miniapp_siblings(html, &dir);
+
+        assert!(
+            out.contains("body { color: red; }"),
+            "css not inlined: {out}"
+        );
+        assert!(out.contains("console.log(1);"), "js not inlined: {out}");
+        assert!(!out.contains("<link"), "link tag survived: {out}");
+        assert!(!out.contains("src="), "script src survived: {out}");
+    }
+
+    #[test]
+    fn leaves_remote_absolute_and_missing_targets_alone() {
+        let dir = scratch_dir("negative");
+        for frag in [
+            r#"<link rel="stylesheet" href="https://cdn.example.com/x.css">"#,
+            r#"<link rel="stylesheet" href="//cdn.example.com/x.css">"#,
+            r#"<link rel="stylesheet" href="/abs/x.css">"#,
+            r#"<link rel="stylesheet" href="missing.css">"#,
+        ] {
+            assert_eq!(
+                inline_miniapp_siblings(frag, &dir),
+                frag,
+                "should not have rewritten: {frag}"
+            );
+        }
+    }
+
+    #[test]
+    fn refuses_to_follow_traversal_out_of_the_miniapp_dir() {
+        let dir = scratch_dir("traversal");
+        // The bait must sit OUTSIDE the MiniApp dir, otherwise the tag would be
+        // left alone merely because the file is missing and the test proves
+        // nothing about the traversal guard.
+        let outside = dir.parent().unwrap().join("hamuna-inline-secret.css");
+        fs::write(&outside, "SECRET").unwrap();
+        let frag = r#"<link rel="stylesheet" href="../hamuna-inline-secret.css">"#;
+
+        let out = inline_miniapp_siblings(frag, &dir);
+        let _ = fs::remove_file(&outside);
+
+        assert_eq!(out, frag, "traversal was followed: {out}");
+        assert!(!out.contains("SECRET"));
+    }
+
+    #[test]
+    fn handles_single_quotes_and_extra_attributes() {
+        let dir = scratch_dir("attrs");
+        fs::write(dir.join("ui.js"), "JS").unwrap();
+        fs::write(dir.join("style.css"), "CSS").unwrap();
+
+        let single = inline_miniapp_siblings(r#"<script src='ui.js'></script>"#, &dir);
+        assert!(single.contains("JS"), "single quotes: {single}");
+
+        let deferred = inline_miniapp_siblings(r#"<script defer src="ui.js"></script>"#, &dir);
+        assert!(deferred.contains("JS"), "defer attr: {deferred}");
+
+        // `data-href` must not be mistaken for `href`.
+        let data_attr = inline_miniapp_siblings(
+            r#"<link data-href="x" rel="stylesheet" href="style.css">"#,
+            &dir,
+        );
+        assert!(
+            data_attr.contains("CSS"),
+            "data-href confusion: {data_attr}"
+        );
+    }
+
+    #[test]
+    fn preserves_markup_around_the_tags() {
+        let dir = scratch_dir("preserve");
+        fs::write(dir.join("ui.js"), "JS").unwrap();
+        let html = "<!doctype html><html><head><title>T</title></head><body><p>hi</p><script src=\"ui.js\"></script></body></html>";
+
+        let out = inline_miniapp_siblings(html, &dir);
+
+        assert!(out.starts_with("<!doctype html>"));
+        assert!(out.contains("<title>T</title>"));
+        assert!(out.contains("<p>hi</p>"));
+        assert!(out.ends_with("</body></html>"));
     }
 }
