@@ -41,7 +41,7 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
   },
 }));
 
-import { validateStdioStartup } from './mcp-startup-validator';
+import { stdioStartupTimeoutMs, validateStdioStartup } from './mcp-startup-validator';
 
 const baseInput = {
   command: 'node',
@@ -268,4 +268,23 @@ describe('validateStdioStartup — cancellation', () => {
     expect(closeMock).toHaveBeenCalled();
     expect(['ok', 'fail']).toContain(result.ok ? 'ok' : 'fail');
   });
+});
+describe('stdioStartupTimeoutMs — install-on-spawn budget', () => {
+  // A stdio server launched through one of these resolves + INSTALLS its
+  // package on the same spawn that has to finish the MCP handshake. Killing
+  // that at the 30s default leaves the tool permanently unopenable: the
+  // install restarts from zero on every retry.
+  it.each(['npx', 'uv', 'uvx'])(
+    'gives %s a generous budget instead of the short default',
+    (command) => {
+      expect(stdioStartupTimeoutMs(command)).toBe(120_000);
+    },
+  );
+
+  it.each(['node', 'python', 'some-local-binary'])(
+    'keeps the normal floor for %s, which installs nothing',
+    (command) => {
+      expect(stdioStartupTimeoutMs(command)).toBe(30_000);
+    },
+  );
 });

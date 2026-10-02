@@ -178,10 +178,13 @@ describe('Codex app-server protocol helpers', () => {
     expect(args).toContain('mcp_servers.fs_tool.command="node"');
     expect(args).toContain('mcp_servers.fs_tool.args=["server.js"]');
     expect(args).toContain('mcp_servers.fs_tool.env_vars=["FS_TOKEN","HTTPS_PROXY","NO_PROXY","no_proxy"]');
-    expect(args).toContain('mcp_servers.fs_tool.startup_timeout_sec=10');
+    // Generous per-server connect budget, deliberately NOT the 10s prewarm
+    // grace: a stdio server that installs itself on first spawn (uvx / uv
+    // tool run) needs far longer than 10s to finish and connect.
+    expect(args).toContain('mcp_servers.fs_tool.startup_timeout_sec=60');
     expect(args).toContain('mcp_servers.remote-http.url="https://example.com/mcp"');
     expect(args).toContain('mcp_servers.remote-http.env_http_headers={Authorization="HAMUNA_MCP_REMOTE_HTTP_AUTHORIZATION"}');
-    expect(args).toContain('mcp_servers.remote-http.startup_timeout_sec=10');
+    expect(args).toContain('mcp_servers.remote-http.startup_timeout_sec=60');
     expect(args.join('\n')).not.toContain('secret-token');
     expect(args.join('\n')).not.toContain('remote-secret');
     expect(env.FS_TOKEN).toBe('secret-token');

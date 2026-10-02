@@ -5161,7 +5161,7 @@ async function main() {
             // preflight only checked binary existence, which passed through
             // broken wrappers (bash quoting, misconfigured envs, etc.).
             const { transformMcpServerForSpawn } = await import('./mcp/mcp-server-transform');
-            const { validateStdioStartup } = await import('./mcp/mcp-startup-validator');
+            const { validateStdioStartup, stdioStartupTimeoutMs } = await import('./mcp/mcp-startup-validator');
 
             const transformed = await transformMcpServerForSpawn(server);
             if (!transformed.spawn) {
@@ -5186,12 +5186,13 @@ async function main() {
               env: transformed.spawn.env,
               serverId: server.id,
               parentSignal: request.signal,
-              // npx has to download the package on a cold cache before it can
-              // even speak MCP, and that now happens inside this one spawn
-              // (the old `npx --help` warmup pass is gone). 120s preserves the
-              // budget the warmup used to give the download step; non-npx
-              // commands keep the 30s default.
-              ...(command === 'npx' ? { timeoutMs: 120_000 } : {}),
+              // Budget must key off the DECLARED command, not the resolved
+              // one: on Windows `npx` resolves to `node.exe` + npx-cli.js
+              // (shim bypass), so the validator would otherwise see `node.exe`
+              // and fall back to the short default. The policy itself lives in
+              // stdioStartupTimeoutMs so it can't drift from the validator's
+              // own default.
+              timeoutMs: stdioStartupTimeoutMs(command),
             });
             if (!result.ok) {
               return jsonResponse({

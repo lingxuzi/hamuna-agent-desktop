@@ -29,6 +29,12 @@ const PROXY_KEYS_LOWER = ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'] 
 const PROXY_KEYS_ALL = [...PROXY_KEYS_UPPER, ...PROXY_KEYS_LOWER] as const;
 
 /**
+ * Budget handed to the Claude CLI for each MCP server's connect handshake.
+ * See the MCP_CONNECT_TIMEOUT_MS note in augmentedProcessEnv.
+ */
+const MCP_CONNECT_TIMEOUT_MS = 60_000;
+
+/**
  * Lightweight PATH-based command lookup, used by external-runtime adapters.
  *
  * On Windows, honours PATHEXT (.EXE, .CMD, .BAT, etc.) so .cmd shims from
@@ -139,6 +145,20 @@ export function augmentedProcessEnv(
   // Only keys listed in the JSON are injected; missing file = empty object = no-op.
   // .gitignored so secrets never enter the repo.
   Object.assign(env, claudeCodeEnv);
+
+  // Claude Code's MCP connect budget. Its built-in default is short enough that
+  // a stdio server which has to INSTALL itself on first spawn — `uvx <pkg>` /
+  // `uv tool run --from <pkg>` resolving a Python distribution plus transitive
+  // deps — is killed mid-install and never opens. MCP startup is non-blocking
+  // in the CLI, so a roomier ceiling costs nothing for servers that connect
+  // fast; it only stops us declaring a slow-but-healthy server dead.
+  //
+  // ponytail: one process-wide value, not per-server. The CLI reads it from
+  // env, so there is no per-server hook. Raise per-command when a real
+  // install-on-spawn package proves to need more than this.
+  if (!env.MCP_CONNECT_TIMEOUT_MS) {
+    env.MCP_CONNECT_TIMEOUT_MS = String(MCP_CONNECT_TIMEOUT_MS);
+  }
 
   return env;
 }

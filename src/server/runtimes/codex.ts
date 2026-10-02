@@ -93,6 +93,22 @@ const CODEX_MCP_PROXY_ENV_KEYS = [
 ] as const;
 const CODEX_MCP_TEMPLATE_RE = /\{\{[A-Za-z_][A-Za-z0-9_]*\}\}/;
 const CODEX_MCP_ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Per-server MCP startup budget handed to the Codex app-server.
+ *
+ * This used to be `MCP_PREWARM_GRACE_MS / 1000` (10s) — correct for servers
+ * that connect instantly, fatal for ones that INSTALL themselves on first
+ * spawn (`uvx <pkg>` / `uv tool run --from <pkg>` pulling a Python
+ * distribution): the install gets killed mid-flight, so the tool never opens
+ * and a retry restarts the download from zero.
+ *
+ * The two budgets are deliberately NOT the same number. `MCP_PREWARM_GRACE_MS`
+ * is how long we WAIT for statuses before letting a turn proceed degraded —
+ * that stays short on purpose so a slow server never blocks the user. This one
+ * is the server's own connect deadline, so it can afford to be generous.
+ */
+const CODEX_MCP_STARTUP_TIMEOUT_SEC = 60;
 const CODEX_MCP_SECRET_VALUE_RE = /\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\b/i;
 const CODEX_MCP_INLINE_SECRET_RE = /(?:api[-_]?key|token|secret|password|authorization|access[-_]?token|refresh[-_]?token)\s*[:=]\s*[^,\s]+/i;
 const CODEX_MCP_SENSITIVE_FLAG_RE = /^-{1,2}(?:api[-_]?key|key|token|access[-_]?token|refresh[-_]?token|secret|password|passwd|pwd|authorization|auth-token)(?:$|[=:])/i;
@@ -477,7 +493,7 @@ function buildManagedCodexMcpConfigArgs(
       pushCodexConfigArg(
         args,
         `mcp_servers.${name}.startup_timeout_sec`,
-        String(MCP_PREWARM_GRACE_MS / 1_000),
+        String(CODEX_MCP_STARTUP_TIMEOUT_SEC),
       );
       continue;
     }
@@ -524,7 +540,7 @@ function buildManagedCodexMcpConfigArgs(
       pushCodexConfigArg(
         args,
         `mcp_servers.${name}.startup_timeout_sec`,
-        String(MCP_PREWARM_GRACE_MS / 1_000),
+        String(CODEX_MCP_STARTUP_TIMEOUT_SEC),
       );
       continue;
     }

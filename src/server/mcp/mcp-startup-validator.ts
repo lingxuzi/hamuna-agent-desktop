@@ -34,6 +34,29 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // cap close() wait so the request thread doesn't block the HTTP loop.
 const CLOSE_TIMEOUT_MS = 2_000;
 
+// Commands that install their package ON the spawn that also has to complete
+// the MCP handshake. `npx -y <pkg>` downloads from the npm registry;
+// `uvx` / `uv tool run --from <pkg>` resolves and installs a Python
+// distribution (plus its transitive deps) before the process can even speak
+// MCP. On a cold cache that is tens of seconds — a 30s handshake kills the
+// server mid-install, so it never opens, and a retry starts the install over
+// from nothing.
+//
+// The enable handshake is also the natural pre-warm: once it succeeds the
+// package is in the local cache, so later session starts are fast. That is
+// why the budget belongs HERE rather than as a separate download step.
+const COLD_INSTALL_COMMANDS = new Set(['npx', 'uv', 'uvx']);
+const COLD_INSTALL_TIMEOUT_MS = 120_000;
+
+/**
+ * Handshake budget for a stdio MCP: generous for install-on-spawn commands,
+ * the normal floor for everything else.
+ */
+export function stdioStartupTimeoutMs(command: string): number {
+  return COLD_INSTALL_COMMANDS.has(command) ? COLD_INSTALL_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+}
+
+
 export interface StdioStartupInput {
   command: string;
   args: string[];
@@ -70,7 +93,9 @@ export async function validateStdioStartup(
   input: StdioStartupInput,
 ): Promise<StdioStartupResult> {
   const start = Date.now();
-  const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  // Default per-command so every caller (not just /api/mcp/enable) inherits the
+  // install-on-spawn budget — an explicit `timeoutMs` still wins.
+  const timeoutMs = input.timeoutMs ?? stdioStartupTimeoutMs(input.command);
   const logTag = `[mcp-validate:${input.serverId ?? input.command}]`;
 
   let transport: StdioClientTransport | null = null;
