@@ -2969,9 +2969,60 @@ mod miniapp_summary_tests {
         assert!(s.i18n.is_none());
         assert!(s.tags.is_none());
         assert!(s.icon.is_none());
+        // `permissions` and `dependencies` are the two fields the renderer's CSP
+        // decision is derived from. Losing either one fails **open-looking**
+        // rather than closed: with `permissions` gone every capability call is
+        // denied (fail-closed, visible), but with `dependencies` gone the CDN
+        // tags silently stop being injected and the MiniApp renders unstyled
+        // with no error anywhere. Pin both as None-when-absent.
+        assert!(s.permissions.is_none());
+        assert!(s.dependencies.is_none());
         // An older meta.json with no `description` must still list, not panic —
         // the card falls back to the name.
         assert_eq!(s.description, "");
+    }
+
+    // `permissions` + `dependencies` are the authorization pair: the renderer
+    // widens the iframe CSP to exactly the dependency hosts that already appear
+    // in `permissions.net.allow`. If Rust stopped forwarding either one the
+    // failure is silent — the MiniApp just loads with a stricter CSP and no CDN.
+    // These two tests pin that both survive the listing hop.
+    #[test]
+    fn carries_permissions_and_dependencies_verbatim() {
+        let s = summary_for(
+            r#"{
+              "id": "cdn-app", "name": "CDN", "description": "d", "version": 1,
+              "permissions": { "net": { "allow": ["cdn.jsdelivr.net"] } },
+              "dependencies": [
+                { "url": "https://cdn.jsdelivr.net/npm/fabric@5/dist/fabric.min.js", "type": "script" }
+              ]
+            }"#,
+        );
+        let perms = s.permissions.expect("permissions must reach the renderer");
+        assert_eq!(
+            perms["net"]["allow"][0],
+            serde_json::json!("cdn.jsdelivr.net")
+        );
+        let deps = s
+            .dependencies
+            .expect("dependencies must reach the renderer");
+        assert_eq!(deps.as_array().map(|a| a.len()), Some(1));
+        assert_eq!(deps[0]["type"], serde_json::json!("script"));
+    }
+
+    // A non-array `dependencies` must not be forwarded. The renderer's schema
+    // check would reject it, but a hand-edited meta.json can get here first and
+    // the host code indexes into this value while computing the CSP host list.
+    #[test]
+    fn non_array_dependencies_are_dropped() {
+        let s = summary_for(
+            r#"{"id":"x","name":"X","description":"d","version":1,"dependencies":"nope"}"#,
+        );
+        assert!(s.dependencies.is_none());
+
+        let s2 =
+            summary_for(r#"{"id":"x","name":"X","description":"d","version":1,"permissions":[]}"#);
+        assert!(s2.permissions.is_none());
     }
 
     // `"i18n": null` is what a failed write leaves behind; serializing it as
