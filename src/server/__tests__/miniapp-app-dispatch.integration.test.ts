@@ -25,7 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { listAppMethods } from '../../shared/miniapp/app-protocol';
+import { buildAppResult, listAppMethods } from '../../shared/miniapp/app-protocol';
+import { runAppCall } from '../../shared/miniapp/app-permissions';
 
 const APP_ID = 'e2e-probe';
 
@@ -78,6 +79,73 @@ afterEach(() => {
   } catch {
     // Windows 上文件句柄可能尚未释放；清理失败不影响断言结论
   }
+});
+
+describe('renderer gate + sidecar gate, wired together', () => {
+  /**
+   * 复现生产的真实接线：`runAppCall`（renderer 预判 + 信封透传）→
+   * `dispatchMiniAppApp`（sidecar 权威闸门）。dispatch 适配器按
+   * `createAppDispatcher` 的契约返回 `DispatchResult` 信封且**从不 throw**。
+   */
+  function viaRenderer() {
+    return async (method: string, params: unknown) => {
+      const out = await dispatchMiniAppApp(method, APP_ID, params ?? null, {});
+      return out.ok
+        ? { ok: true as const, result: out.result }
+        : { ok: false as const, error: out.error };
+    };
+  }
+
+  async function call(permissions: unknown, method: string, params: unknown) {
+    return runAppCall(method as never, params, permissions as never, viaRenderer() as never);
+  }
+
+  it('completes a real write → read round trip that the renderer no longer false-denies', async () => {
+    // 这条在修复前会红：renderer 拿未展开的 `{appdata}/**` 去做前缀比较，
+    // 恒不匹配，于是第一次写就被自己的预判拒掉，压根到不了 sidecar。
+    const perms = { fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] } };
+    writeMeta(perms);
+    const file = join(appDir(), 'e2e.txt');
+
+    const written = await call(perms, 'fs.writeFile', { path: file, data: 'through both gates' });
+    expect(written, `writeFile: ${JSON.stringify(written)}`).toEqual({ ok: true, result: null });
+    expect(readFileSync(file, 'utf8')).toBe('through both gates');
+
+    const read = await call(perms, 'fs.readFile', { path: file });
+    expect(read).toEqual({ ok: true, result: 'through both gates' });
+  });
+
+  it('rejects — never resolves — when the sidecar denies', async () => {
+    // 第二个已发货缺陷的信封版本：sidecar 的拒绝曾被 runAppCall 包成
+    // `{ok:true, result:{ok:false,...}}`，作者拿到的是 resolve 出来的信封对象，
+    // try/catch 永不触发。这里锁住作者真正看到的是 reject。
+    const perms = { fs: { read: ['{appdata}/**'] } };
+    writeMeta(perms);
+
+    const denied = await call(perms, 'fs.readFile', { path: join(appDir(), 'nope.txt') });
+    expect(denied.ok).toBe(false);
+    if (denied.ok) throw new Error('expected a failure envelope');
+    // 具体 errno（ENOENT）被 dispatch 的兜底 catch 收成 HOST_ERROR，message 里
+    // 仍带原始信息。这里锁的是"作者拿到 reject"，不断言 errno 分类 ——
+    // 那属于错误码分级的另一件事。
+    expect(denied.error.code).toBe('HOST_ERROR');
+    expect(denied.error.message).toMatch(/ENOENT|no such file/i);
+
+    // buildAppResult 必须把它翻成 ok:false，runtime 才会走 reject 分支。
+    const wire = buildAppResult('n', 'c', denied);
+    expect(wire.ok).toBe(false);
+  });
+
+  it('still refuses a path outside the declared scope at the sidecar gate', async () => {
+    // renderer 不预判 fs 不等于放行：越界判定由 sidecar 独立复算。
+    const perms = { fs: { read: ['{appdata}/**'] } };
+    writeMeta(perms);
+
+    const escaped = await call(perms, 'fs.readFile', { path: '/etc/passwd' });
+    expect(escaped.ok).toBe(false);
+    if (escaped.ok) throw new Error('expected a failure envelope');
+    expect(escaped.error.code).toBe('PERMISSION_DENIED');
+  });
 });
 
 describe('app.fs round trip through real dispatch', () => {

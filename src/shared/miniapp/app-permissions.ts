@@ -332,12 +332,28 @@ export type AppCallOutcome =
  * `dispatch` 由调用方注入（renderer 走 HTTP，测试注入假实现），因此本函数
  * 不碰任何进程特定 API，可以被两端复用。永不抛异常 —— 失败一律转成信封，
  * 否则 iframe 侧的 Promise 会永远 pending。
+ *
+ * ## `dispatch` 返回的是**信封**，不是业务结果
+ *
+ * 这个类型不是 `{ok:true,result} | {ok:false,error}` 的同义反复，而是承重结构。
+ * 它曾经被写成 `Promise<unknown>`，于是本函数把返回值无条件包成
+ * `{ok:true, result: ...}` —— 而真实的 `createAppDispatcher` 从不 throw，
+ * 它把 sidecar 的失败**作为返回值**交回来。结果每一次宿主失败都被套成成功：
+ *
+ *   {ok:true, result:{ok:false, error:{code:'PERMISSION_DENIED'}}}
+ *
+ * runtime 的 `if (d.ok) resolve(...) else reject(...)` 于是走了 resolve 分支，
+ * 作者的 `try/catch` 永不触发，`const text = await app.fs.readFile(p)` 拿到的是
+ * 一个错误信封对象而不是文件内容。全部 30 个方法一致地静默失败。
+ *
+ * 写成 `Promise<unknown>` 就是这个 bug 的根因：类型抹掉了"返回值是信封"这件
+ * 事，函数体自然也无从区分业务结果与失败信封。恢复这个类型即恢复语义。
  */
 export async function runAppCall(
   method: AppMethod,
   params: unknown,
   perms: MiniAppPermissions,
-  dispatch: (method: AppMethod, params: unknown) => Promise<unknown>,
+  dispatch: (method: AppMethod, params: unknown) => Promise<AppCallOutcome>,
 ): Promise<AppCallOutcome> {
   const decision = rendererCanDecide(method)
     ? checkAppPermission(method, params, perms)
@@ -352,7 +368,8 @@ export async function runAppCall(
     };
   }
   try {
-    return { ok: true, result: await dispatch(method, params) };
+    // 透传而不是重新包装：dispatcher 已经把失败表达成 ok:false 信封了。
+    return await dispatch(method, params);
   } catch (e) {
     return {
       ok: false,

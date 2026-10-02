@@ -210,7 +210,7 @@ describe('runAppCall', () => {
       { net: { allow: ['api.example.com'] } },
       async () => {
         called = true;
-        return 'should-not-happen';
+        return { ok: true as const, result: 'should-not-happen' };
       },
     );
     expect(called).toBe(false);
@@ -225,8 +225,81 @@ describe('runAppCall', () => {
   });
 
   it('passes the result through on success', async () => {
-    const res = await runAppCall('os.info', null, NONE, async () => ({ platform: 'win32' }));
+    const res = await runAppCall('os.info', null, NONE, async () => ({ ok: true, result: { platform: 'win32' } }));
     expect(res).toEqual({ ok: true, result: { platform: 'win32' } });
+  });
+});
+
+/**
+ * 宿主错误必须以 reject 抵达作者，而不是 resolve 一个错误信封。
+ *
+ * 这组用例锁的是第二个已发货缺陷。`createAppDispatcher` 的契约是**返回**
+ * `DispatchResult` 信封（它自己从不 throw —— 网络异常也被它 catch 成
+ * `{ok:false,error}`），但 `runAppCall` 把 dispatch 的返回值无条件包成
+ * `{ok:true, result: ...}`。于是 sidecar 的每一次失败（PERMISSION_DENIED /
+ * ENOENT / UNKNOWN_METHOD / NETWORK_ERROR）都被套成一层"成功"：
+ *
+ *   runAppCall -> {ok:true, result:{ok:false, error:{...}}}
+ *   buildAppResult -> {ok:true, result:{ok:false, error:{...}}}
+ *   runtime `if (d.ok) frame.resolve(...)` -> 作者的 Promise **resolve**
+ *
+ * 作者写 `try { await app.fs.readFile(p) } catch (e) { showError(e) }` 时
+ * catch 永远不触发；`const text = await app.fs.readFile(p)` 拿到的是
+ * `{ok:false,...}` 对象而不是文件内容。runtime 自己的注释写着"权限不足时宿主
+ * reject，作者据此提示用户，而不是静默失败"—— 实际行为与它相反，且对全部
+ * 30 个方法一致。
+ *
+ * 根因是类型签名在撒谎：dispatch 被声明为 `Promise<unknown>`，抹掉了它真正
+ * 返回信封的事实，于是 `runAppCall` 无从区分"业务结果"与"失败信封"。
+ */
+describe('host failures must reject, not resolve with an error envelope', () => {
+  /** 与 `createAppDispatcher` 的真实返回同形。 */
+  const deniedDispatcher = async () => ({
+    ok: false as const,
+    error: { code: 'PERMISSION_DENIED', message: 'path not covered by permissions.fs.read' },
+  });
+
+  it('propagates a dispatcher error envelope as ok:false', async () => {
+    const res = await runAppCall('fs.readFile', { path: '/x' }, NONE, deniedDispatcher);
+    expect(res).toEqual({
+      ok: false,
+      error: { code: 'PERMISSION_DENIED', message: 'path not covered by permissions.fs.read' },
+    });
+  });
+
+  it('never reports ok:true while carrying a nested ok:false', async () => {
+    // 这正是作者实际看到的形态：ok 为真、result 里却藏着失败信封。
+    const res = await runAppCall('storage.get', { key: 'k' }, NONE, deniedDispatcher);
+    expect(res.ok).toBe(false);
+    // 收窄后直接读 error —— 不需要 `as` 断言，正是修好契约的回报。
+    if (res.ok) throw new Error('expected a failure envelope');
+    expect(res.error.code).toBe('PERMISSION_DENIED');
+  });
+
+  it('survives the wire hop, so the runtime rejects instead of resolving', async () => {
+    // 端到端到 iframe 边界：buildAppResult 必须把失败翻成 ok:false，
+    // runtime 的 `if (d.ok) resolve else reject` 才会走 reject 分支。
+    //
+    // 用 `fs.readFile` 而不是 net：net 在 renderer 就被预判拦下（NONE 没有
+    // net.allow），dispatcher 根本不会被调用，测的就不是信封透传了。fs 恰好
+    // 相反 —— renderer 不预判 fs，失败只可能来自 dispatcher，正是本例要的路径。
+    const outcome = await runAppCall('fs.readFile', { path: '/x' }, NONE, deniedDispatcher);
+    const wire = buildAppResult('n-1', 'c-1', outcome);
+    expect(wire).toEqual({
+      kind: 'app.result',
+      nonce: 'n-1',
+      id: 'c-1',
+      ok: false,
+      error: { code: 'PERMISSION_DENIED', message: 'path not covered by permissions.fs.read' },
+    });
+  });
+
+  it('still wraps a genuinely thrown dispatcher into HOST_ERROR', async () => {
+    // 抛异常的 dispatcher（测试替身、未来的实现）不能被当成成功。
+    const res = await runAppCall('os.info', null, NONE, async () => {
+      throw new Error('boom');
+    });
+    expect(res).toEqual({ ok: false, error: { code: 'HOST_ERROR', message: 'boom' } });
   });
 });
 
@@ -252,7 +325,7 @@ describe('fs.* must not be judged in the renderer', () => {
     let reached = false;
     const res = await runAppCall('fs.readFile', { path: `${APPDATA}/icon.png` }, TEMPLATED, async () => {
       reached = true;
-      return 'bytes';
+      return { ok: true as const, result: 'bytes' };
     });
     // 修复前：{ ok: false, reason: 'path not covered by permissions.fs.read' }
     expect(reached).toBe(true);
@@ -263,7 +336,7 @@ describe('fs.* must not be judged in the renderer', () => {
     let reached = false;
     await runAppCall('fs.writeFile', { path: `${APPDATA}/note.txt`, data: 'x' }, TEMPLATED, async () => {
       reached = true;
-      return null;
+      return { ok: true as const, result: null };
     });
     expect(reached).toBe(true);
   });
