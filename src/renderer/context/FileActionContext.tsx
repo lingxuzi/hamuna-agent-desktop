@@ -43,6 +43,16 @@ interface PathInfo {
   type: 'file' | 'dir';
 }
 
+/** A cached lookup plus whether it still reflects the current filesystem. */
+interface CacheEntry extends PathInfo {
+  /**
+   * Set when `refreshTrigger` fires. A stale entry is still RETURNED to
+   * callers (so the rendered link keeps its appearance) and is re-verified in
+   * the background; only a newer backend result replaces it.
+   */
+  stale: boolean;
+}
+
 type FileActionScope = FileActionTarget['scope'];
 
 export interface FileActionContextValue {
@@ -181,12 +191,28 @@ export function FileActionProvider({ children, workspacePath, onInsertReference,
   useEffect(() => () => { isMountedRef.current = false; }, []);
 
   // ---------- Path cache ----------
-  const pathCacheRef = useRef<Map<string, PathInfo>>(new Map());
+  // `stale` entries keep their last-known PathInfo so a revalidation does not
+  // briefly render a file link as bare <code> and then flip it back. Only a
+  // WORKSPACE change discards them outright, because the old entries describe
+  // a different tree and are not merely out of date.
+  const pathCacheRef = useRef<Map<string, CacheEntry>>(new Map());
   const pendingTargetsRef = useRef<Map<string, FileActionTarget>>(new Map());
   const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cacheVersion, setCacheVersion] = useState(0);
 
-  // Clear cache when refreshTrigger changes
+  // A refresh invalidates FRESHNESS, not the displayed file identity. Wiping
+  // the map (previous behaviour) made every inline-code path in a streaming
+  // message flicker back to plain text and then re-resolve — and since a
+  // streaming turn re-renders constantly, the flicker was continuous rather
+  // than a one-off. Mark stale and let the next check re-verify in place.
+  useEffect(() => {
+    for (const entry of pathCacheRef.current.values()) entry.stale = true;
+    // Bump so consumers re-read through checkFileTarget; the values are
+    // deliberately preserved.
+    setCacheVersion(v => v + 1);
+  }, [refreshTrigger]);
+
+  // A workspace switch invalidates the tree itself, so nothing is salvageable.
   useEffect(() => {
     pathCacheRef.current.clear();
     pendingTargetsRef.current.clear();
@@ -195,7 +221,7 @@ export function FileActionProvider({ children, workspacePath, onInsertReference,
       batchTimerRef.current = null;
     }
     setCacheVersion(v => v + 1);
-  }, [refreshTrigger, workspacePath]);
+  }, [workspacePath]);
 
   // Clean up batch timer on unmount
   useEffect(() => {
@@ -242,7 +268,12 @@ export function FileActionProvider({ children, workspacePath, onInsertReference,
         if (responses.length > 0) {
           for (const response of responses) {
             for (const [p, info] of Object.entries(response.results)) {
-              pathCacheRef.current.set(targetCacheKey({ scope: response.scope, path: p }), info);
+              // A fresh answer is authoritative even for an entry another
+              // in-flight batch may have re-staled meanwhile.
+              pathCacheRef.current.set(
+                targetCacheKey({ scope: response.scope, path: p }),
+                { ...info, stale: false },
+              );
             }
           }
           setCacheVersion(v => v + 1);
@@ -256,7 +287,21 @@ export function FileActionProvider({ children, workspacePath, onInsertReference,
   const checkFileTarget = useCallback((target: FileActionTarget): PathInfo | null => {
     const key = targetCacheKey(target);
     const cached = pathCacheRef.current.get(key);
-    if (cached) return cached;
+
+    // A stale entry still renders with its last-known result, and schedules a
+    // background re-verify. Returning the value is the whole point: the link
+    // keeps its chip appearance instead of dropping to bare <code> until the
+    // batch comes back.
+    if (cached) {
+      if (cached.stale && !pendingTargetsRef.current.has(key)) {
+        cached.stale = false;
+        pendingTargetsRef.current.set(key, target);
+        if (!batchTimerRef.current) {
+          batchTimerRef.current = setTimeout(flushPendingPaths, BATCH_DELAY_MS);
+        }
+      }
+      return cached;
+    }
 
     // Already queued
     if (pendingTargetsRef.current.has(key)) return null;
