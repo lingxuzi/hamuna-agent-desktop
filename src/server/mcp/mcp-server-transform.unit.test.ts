@@ -438,3 +438,48 @@ describe('transformMcpServerForSpawn — Windows uv PATH injection', () => {
     expect(pathKeys).toEqual([PATH_KEY]);
   });
 });
+
+describe('transformMcpServerForSpawn — npx npm env', () => {
+  function npxServer(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'probe',
+      name: 'probe',
+      isBuiltin: true,
+      type: 'stdio' as const,
+      command: 'npx',
+      args: ['-y', 'some-mcp'],
+      env: {},
+      ...overrides,
+    };
+  }
+
+  it('sets prefer-offline on npx servers so a warm cache skips the registry', async () => {
+    const result = await transformMcpServerForSpawn(npxServer());
+
+    expect(result.spawn).not.toBeNull();
+    // npx revalidates the packument on every run without this — the single
+    // biggest contributor to slow MCP enable/startup on a poor link.
+    expect(result.spawn!.env.NPM_CONFIG_PREFER_OFFLINE).toBe('true');
+  });
+
+  it('does not inject npm env into non-npx servers', async () => {
+    const result = await transformMcpServerForSpawn({
+      id: 'probe',
+      name: 'probe',
+      isBuiltin: true,
+      type: 'stdio',
+      command: 'some-other-tool',
+      args: [],
+      env: {},
+    });
+
+    expect(result.spawn!.env.NPM_CONFIG_PREFER_OFFLINE).toBeUndefined();
+  });
+
+  it('leaves registry unset unless explicitly opted in', async () => {
+    const result = await transformMcpServerForSpawn(npxServer());
+
+    // No hardcoded mirror — corporate/private registries must keep resolving.
+    expect(result.spawn!.env.NPM_CONFIG_REGISTRY).toBeUndefined();
+  });
+});

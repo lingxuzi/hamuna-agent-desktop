@@ -9,6 +9,62 @@ const OUTBOUND_PROXY_ENV_KEYS = [
 
 export const MCP_LOCALHOST_NO_PROXY_VAL = 'localhost,localhost.localdomain,127.0.0.1,127.0.0.0/8,::1';
 
+/**
+ * npm/npx env applied to every stdio MCP subprocess.
+ *
+ * npx revalidates the packument against the registry on EVERY invocation,
+ * even when the tarball is already in the npm cache — that round trip
+ * dominated MCP enable/startup latency on slow links. These flags let a warm
+ * cache satisfy the install outright:
+ *
+ *  - `prefer-offline` — use the cache when it has the package; only hit the
+ *    network for something genuinely missing. Strictly better than `offline`,
+ *    which would hard-fail the first install of a new package.
+ *  - `audit`/`fund`/`update-notifier` — skip npm's post-install network calls.
+ *    Pure latency, no behaviour a stdio MCP depends on.
+ *
+ * A per-server `env` block still wins: users can force `--offline` or point at
+ * an air-gapped registry for a specific MCP without editing app config.
+ */
+const NPM_ENV_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
+  NPM_CONFIG_PREFER_OFFLINE: 'true',
+  NPM_CONFIG_AUDIT: 'false',
+  NPM_CONFIG_FUND: 'false',
+  NPM_CONFIG_UPDATE_NOTIFIER: 'false',
+});
+
+/**
+ * Registry mirror for npx-backed MCPs. NOT hardcoded to any mirror: absent an
+ * explicit opt-in we leave npm's own resolution alone, so corporate proxies,
+ * private registries, and existing user `~/.npmrc` keep working untouched.
+ * Users in mainland China can opt in via `HAMUNA_NPM_REGISTRY`.
+ */
+function resolveNpmRegistry(
+  parentEnv: NodeJS.ProcessEnv,
+  serverEnv: Record<string, string> | undefined,
+): string | undefined {
+  return nonEmpty(serverEnv?.NPM_CONFIG_REGISTRY)
+    ?? nonEmpty(serverEnv?.npm_config_registry)
+    ?? nonEmpty(parentEnv.HAMUNA_NPM_REGISTRY)
+    ?? nonEmpty(parentEnv.NPM_CONFIG_REGISTRY)
+    ?? nonEmpty(parentEnv.npm_config_registry);
+}
+
+/** Merge the npm cache-friendly env into an already-assembled MCP env. */
+export function applyNpmEnv(
+  env: Record<string, string>,
+  parentEnv: NodeJS.ProcessEnv,
+  serverEnv: Record<string, string> | undefined,
+): void {
+  for (const [key, value] of Object.entries(NPM_ENV_DEFAULTS)) {
+    if (env[key] === undefined) env[key] = value;
+  }
+  const registry = resolveNpmRegistry(parentEnv, serverEnv);
+  if (registry) {
+    env.NPM_CONFIG_REGISTRY = registry;
+  }
+}
+
 function nonEmpty(value: string | undefined): string | undefined {
   return value && value.trim().length > 0 ? value : undefined;
 }

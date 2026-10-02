@@ -40,7 +40,7 @@ const pathJoin: (...parts: string[]) => string = (...parts: string[]) => pathMod
 export const __pathModuleForTest = pathModule;
 
 import type { McpServerDefinition } from '../../shared/config-types';
-import { buildMcpSubprocessEnv } from '../session-core/mcp-env-policy';
+import { applyNpmEnv, buildMcpSubprocessEnv } from '../session-core/mcp-env-policy';
 import { resolveNpxMcpInvocation } from '../utils/mcp-command';
 import { getHamunaAgentUserDir } from '../utils/project-user-config-sync';
 import { getShellPath } from '../utils/shell';
@@ -154,6 +154,9 @@ export async function transformMcpServerForSpawn(
       nodeDir,
       ...env[pathKey].split(separator).filter((entry) => entry && !equal(entry)),
     ].join(separator);
+    // npx revalidates against the registry on every run even when the tarball
+    // is already cached; prefer-offline lets a warm cache short-circuit that.
+    applyNpmEnv(env, process.env, server.env);
   }
 
   // uv / uvx PATH injection (Windows only). The Windows installer no longer

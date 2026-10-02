@@ -4842,8 +4842,10 @@ async function main() {
       }
 
       // POST /api/mcp/enable - Validate and enable MCP server
-      // For preset MCP (npx): warmup npm/npx cache (system npx → bundled npx → bun x)
-      // For custom MCP: check if command exists
+      // Every stdio server (preset npx included) is spawned once and put through
+      // a real `initialize` handshake. The old `npx --help` warmup pass ran the
+      // whole npx resolution twice per enable; npx now runs once with
+      // prefer-offline set, so a warm npm cache no longer pays a registry round trip.
       if (pathname === '/api/mcp/enable' && request.method === 'POST') {
         try {
           const payload = await request.json() as {
@@ -5154,195 +5156,6 @@ async function main() {
           if (server.type === 'stdio' && server.command) {
             const command = server.command;
 
-            // Preset MCP (isBuiltin: true) with npx → warmup to download and cache package
-            if (server.isBuiltin && command === 'npx') {
-              const { resolveNpxMcpInvocation } = await import('./utils/mcp-command');
-              const invocation = resolveNpxMcpInvocation(server.args || [], {
-                pinPresetPackages: true,
-              });
-
-              // Route through utils/subprocess.spawn — on Windows the bundled
-              // and system npx are both `npx.cmd` shims. Calling .cmd via raw
-              // `child_process.spawn` returns EINVAL on Node ≥20.12 (CVE-2024-27980),
-              // and Node's own `shell: true` workaround does NOT escape inner
-              // quotes / metachars in args. The wrapper handles both — see
-              // utils/subprocess.ts::spawn for the cmd.exe wrapping + cross-spawn
-              // escape algorithm.
-              const { spawn: wrappedSpawn } = await import('./utils/subprocess');
-              const { getShellEnv } = await import('./utils/shell');
-              const baseEnv = getShellEnv();
-
-              const warmupCmd = invocation.command;
-              const warmupArgs = [...invocation.args, '--help'];
-              // PATH is rebuilt by `getShellEnv()` (bundled Node, system Node,
-              // ~/.hamuna/bin, Git, etc. — see utils/shell.ts). The npx shebang
-              // and npm descendants resolve `node` against this PATH, so the
-              // resolver's chosen nodeDir MUST be first — otherwise the inner
-              // `node` lookup can land on an uninstalled / mismatched system
-              // Node and surface `node is not recognized`. Mirrors the
-              // transform helper's contract (mcp-server-transform.ts) and
-              // MyAgents `buildMcpStdioLaunchConfig`.
-              const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
-              const { dirname } = await import('path');
-              const nodeDir = dirname(warmupCmd);
-              const separator = process.platform === 'win32' ? ';' : ':';
-              const equalEntry = (entry: string): boolean => process.platform === 'win32'
-                ? entry.toLowerCase() === nodeDir.toLowerCase()
-                : entry === nodeDir;
-              baseEnv[pathKey] = [
-                nodeDir,
-                ...(baseEnv[pathKey] ?? '').split(separator).filter((entry) => entry && !equalEntry(entry)),
-              ].join(separator);
-              console.log(`[api/mcp/enable] Warming up via ${invocation.source} npx: ${warmupArgs.join(' ')}`);
-
-              const handle = wrappedSpawn([warmupCmd, ...warmupArgs], {
-                env: baseEnv,
-                stdin: 'ignore',
-                stdout: 'pipe',
-                stderr: 'pipe',
-              });
-
-              // Drain stderr — wrappedSpawn exposes it as a Web ReadableStream
-              // (Bun.spawn-shape parity), not a Node Readable, so we read with
-              // the Web reader API.
-              let stderr = '';
-              const stderrDone = (async () => {
-                if (!handle.stderr) return;
-                const reader = handle.stderr.getReader();
-                const decoder = new TextDecoder();
-                try {
-                  while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    stderr += decoder.decode(value, { stream: true });
-                  }
-                } catch { /* ignore — process exit will settle handle.exited */ }
-                finally {
-                  reader.releaseLock();
-                }
-              })();
-
-              // 2 min timeout (was the old `timeout` spawn option). If npx
-              // hangs (e.g. tarball download stalled), kill the wrapper +
-              // surface a warmup failure instead of leaving the request open.
-              let timedOut = false;
-              const timer = setTimeout(() => {
-                timedOut = true;
-                try { handle.kill('SIGTERM'); } catch { /* ignore */ }
-              }, 120000);
-
-              const code = await handle.exited;
-              clearTimeout(timer);
-              await stderrDone; // make sure all stderr bytes are captured before classifying
-
-              // Spawn-failure path (ENOENT / bad arch / EINVAL): handle.error
-              // is populated and code === -1.
-              if (handle.error) {
-                console.error('[api/mcp/enable] Warmup error:', handle.error);
-                return jsonResponse({
-                  success: false,
-                  error: {
-                    type: 'warmup_failed',
-                    message: `预热失败: ${handle.error.message}`,
-                  },
-                });
-              }
-
-              if (timedOut) {
-                console.warn('[api/mcp/enable] Warmup timed out after 120s');
-                return jsonResponse({
-                  success: false,
-                  error: {
-                    type: 'warmup_failed',
-                    message: '预热超时（120s），请检查网络或代理设置',
-                  },
-                });
-              }
-
-              console.log(`[api/mcp/enable] Warmup exited with code ${code}`);
-              // Code 0 or 1 is acceptable (--help may return 1 for some packages)
-              // Check stderr for real errors (package not found, network issues, etc.)
-              const stderrLower = stderr.toLowerCase();
-              const networkKeywords = [
-                'enotfound',     // DNS resolution failed
-                'etimedout',     // Connection timeout
-                'econnrefused',  // Connection refused
-                'econnreset',    // Connection reset
-                'proxy error',   // Proxy failures
-                'proxy authentication', // Proxy auth required
-                'bad gateway',   // Proxy 502
-                'socket hang up',// Connection dropped
-              ];
-              const packageKeywords = [
-                '404',                // HTTP 404 not found
-                'package not found',  // npm/npx package resolution
-                'module not found',   // Module resolution failure
-                'err!',               // npm error indicator
-              ];
-              const isNetworkError = networkKeywords.some(kw => stderrLower.includes(kw));
-              const isPackageError = packageKeywords.some(kw => stderrLower.includes(kw));
-
-              if (isNetworkError) {
-                return jsonResponse({
-                  success: false,
-                  error: {
-                    type: 'warmup_failed',
-                    message: '网络连接失败，请检查网络或代理设置',
-                  },
-                });
-              }
-              if (isPackageError) {
-                return jsonResponse({
-                  success: false,
-                  error: {
-                    type: 'package_not_found',
-                    message: '包不存在或无法下载，请检查包名',
-                  },
-                });
-              }
-              if (code !== 0 && code !== 1) {
-                return jsonResponse({
-                  success: false,
-                  error: {
-                    type: 'warmup_failed',
-                    message: `预热异常退出 (code ${code})`,
-                  },
-                });
-              }
-
-              // Warmup passed: now do the actual MCP handshake to verify
-              // the package's entrypoint speaks the MCP protocol. This is
-              // the protection layer the old `npx --help` preflight missed
-              // — a package can successfully print `--help` but still
-              // crash on `initialize` (e.g. missing runtime dep).
-              const { transformMcpServerForSpawn } = await import('./mcp/mcp-server-transform');
-              const { validateStdioStartup } = await import('./mcp/mcp-startup-validator');
-              const transformed = await transformMcpServerForSpawn(server);
-              if (!transformed.spawn) {
-                console.warn(`[api/mcp/enable] ${server.id}: ${transformed.skipReason}; skipping post-warmup handshake.`);
-                return jsonResponse({ success: true });
-              }
-              console.log(`[api/mcp/enable] ${server.id}: post-warmup handshake → ${transformed.spawn.command} ${transformed.spawn.args.join(' ')}`);
-              const result = await validateStdioStartup({
-                command: transformed.spawn.command,
-                args: transformed.spawn.args,
-                env: transformed.spawn.env,
-                serverId: server.id,
-                parentSignal: request.signal,
-              });
-              if (!result.ok) {
-                return jsonResponse({
-                  success: false,
-                  error: result.error,
-                });
-              }
-              return jsonResponse({
-                success: true,
-                ...(result.serverInfo ? { serverInfo: result.serverInfo } : {}),
-                handshakeMs: result.handshakeMs,
-              });
-            }
-
             // Custom MCP or non-npx command → spawn the subprocess and run
             // a real `initialize` MCP handshake. The old `which <command>`
             // preflight only checked binary existence, which passed through
@@ -5373,6 +5186,12 @@ async function main() {
               env: transformed.spawn.env,
               serverId: server.id,
               parentSignal: request.signal,
+              // npx has to download the package on a cold cache before it can
+              // even speak MCP, and that now happens inside this one spawn
+              // (the old `npx --help` warmup pass is gone). 120s preserves the
+              // budget the warmup used to give the download step; non-npx
+              // commands keep the 30s default.
+              ...(command === 'npx' ? { timeoutMs: 120_000 } : {}),
             });
             if (!result.ok) {
               return jsonResponse({
