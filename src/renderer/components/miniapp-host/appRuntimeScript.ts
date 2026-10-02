@@ -57,12 +57,31 @@ export function buildAppRuntimeScript(appId: string): string {
   function send(frame) {
     var id = mintId();
     pending[id] = frame;
-    window.parent.postMessage({
-      kind: ${JSON.stringify(APP_CALL_KIND)},
-      nonce: nonce,
-      id: id,
-      payload: { method: frame.method, params: frame.params, appId: APP_ID }
-    }, '*');
+    try {
+      window.parent.postMessage({
+        kind: ${JSON.stringify(APP_CALL_KIND)},
+        nonce: nonce,
+        id: id,
+        payload: { method: frame.method, params: frame.params, appId: APP_ID }
+      }, '*');
+    } catch (e) {
+      // postMessage 走结构化克隆，克隆不了的值会在这里抛。最常见的来源是作者
+      // 按参考文档给 app.ai.chat 传回调（onChunk / onDone / onError）—— 函数
+      // 不可克隆。
+      //
+      // 为什么必须在这里兜住而不只是"文档别这么写"：flush 队列那条路径是从
+      // host.ready 的 message listener 里调的，不在 Promise executor 内。抛错
+      // 会变成 listener 里的未捕获异常，作者那侧的 Promise **永远不 settle** ——
+      // 表现是"点了没反应，也不报错"，比直接失败难查一个量级。哪怕这条调用
+      // 最终注定要失败，也必须以 reject 收场。
+      delete pending[id];
+      var err = new Error(
+        'app.' + frame.method + ' arguments are not structured-cloneable: ' +
+        ((e && e.message) || String(e))
+      );
+      err.code = 'APP_CALL_NOT_SERIALIZABLE';
+      frame.reject(err);
+    }
   }
 
   window.addEventListener('message', function (event) {

@@ -167,6 +167,34 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   真要做时，先在 `app.agent.run` 上加 `contextFiles` 入参并写清快照生命周期，
   再谈 `market_strict` 工具集。
 
+### 与 `miniapp-dev` 参考的已确认分歧（对齐审计，2025）
+
+逐条比对 `miniapp-dev/api-reference.md` 与本实现，**未对齐**的项如下。方法名
+清单（`APP_METHODS`，30 个）已全量对齐，`app.t` / `app.on` / 四个生命周期钩子
+/ `app.call` / `app.storage` / `dialog` / `clipboard` / `fs` 全部一致，以下是
+清单对不出来的**签名与语义**差异：
+
+| 项 | 参考 | 本项目 | 后果 |
+|---|---|---|---|
+| `ai.chat` 入参 | `messages: Array<{role, content}>` | `prompt: string` | 作者照文档传数组 → `p.prompt.trim()` 对数组取不到方法 → `HOST_ERROR` |
+| `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 参考的"流式 + 句柄取消"惯用法整个不可用 |
+| `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无 | 同上；且**函数参数过不了 postMessage 结构化克隆**（见下） |
+| `ai.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 传字符串 → `{run_id: undefined}` → 静默取消不到任何东西 |
+| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | 无参，返回 stream 描述 | 没有会话概念 |
+| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms}` | `sessionId` / `displayText` 被静默丢弃 |
+
+**已修的传输层缺陷**：`dispatch` 的 flush 队列在 `host.ready` 的 message
+listener 里执行 postMessage，不在 Promise executor 内。参数不可结构化克隆时
+（例如作者按参考给 `ai.chat` 传 `onChunk`）抛出的 `DataCloneError` 会变成
+listener 里的未捕获异常，作者侧的 Promise **永不 settle** —— 表现为"点了没反
+应、也不报错"。现在 `send()` 捕获并以 `APP_CALL_NOT_SERIALIZABLE` reject。
+护栏见 `appRuntimeTransport.unit.test.ts`（回退该守卫即复现 `pending`）。
+
+**待决**：上表前四行（`ai.chat` 契约）要不要整体对齐到参考的流式句柄形态，
+还是保留本项目的一次性形态并在本文档标注差异。`agent` 两行可与 `contextFiles`
+一并处理：`appDataWorkspace` 作为 appdata 下的单层子目录名实现**不与**"Agent
+workspace 强制落在 appdata 下"的安全立场冲突，两者可以共存。
+
 ---
 
 ## 6.1 `meta.json::dependencies`（CDN 依赖）
