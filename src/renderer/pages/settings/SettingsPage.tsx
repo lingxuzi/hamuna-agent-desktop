@@ -42,7 +42,6 @@ import {
  type Provider,
  type McpServerDefinition,
  type McpServerType,
- type McpEnableError,
  isVerifyExpired,
  SUBSCRIPTION_PROVIDER_ID,
  PROXY_DEFAULTS,
@@ -64,7 +63,8 @@ import {
  toggleMcpServerEnabled,
  addCustomMcpServer,
  deleteCustomMcpServer,
- saveMcpServerArgs,
+ enableMcpServer,
+ findMissingMcpConfigKeys,
  getMcpServerArgs,
  getMcpServerEnv,
  atomicModifyConfig,
@@ -1047,14 +1047,14 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
   return false;
  }, 50);
 
- // Check which MCP servers need configuration (missing required fields)
+ // Check which MCP servers need configuration (missing required fields).
+ // Shares findMissingMcpConfigKeys with the enable path so the "needs config"
+ // badge and the enable-time block can never disagree about what "missing" means.
  const checkMcpConfigStatus = async (servers: McpServerDefinition[]) => {
   const needs: Record<string, boolean> = {};
   for (const server of servers) {
    if (server.requiresConfig && server.requiresConfig.length > 0) {
-    const savedEnv = await getMcpServerEnv(server.id);
-    const missing = server.requiresConfig.some(key => !savedEnv?.[key]?.trim());
-    if (missing) needs[server.id] = true;
+    if ((await findMissingMcpConfigKeys(server)).length > 0) needs[server.id] = true;
    }
   }
   setMcpNeedsConfig(needs);
@@ -1098,9 +1098,12 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
   })();
  }, [isActive]);
 
- // Toggle MCP server enabled status
- // For preset MCP (npx): warmup bun cache
- // For custom MCP: check if command exists
+ // Toggle MCP server enabled status.
+ // Enabling runs the shared `enableMcpServer` path (requiresConfig pre-check +
+ // real stdio `initialize` handshake) — the exact same service Chat's composer
+ // tool-menu uses, so both entry points agree on what "enabled" means. Only
+ // the error SURFACE is Settings-specific: it can open the per-server config
+ // dialog and the runtime download prompt, where Chat toasts.
  const handleMcpToggle = async (server: McpServerDefinition, enabled: boolean) => {
   if (!enabled) {
    // Just disable
@@ -1110,63 +1113,41 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
    return;
   }
 
-  // Validate required config before enabling (e.g., API keys)
-  if (server.requiresConfig && server.requiresConfig.length > 0) {
-   const savedEnv = await getMcpServerEnv(server.id);
-   const missingKeys = server.requiresConfig.filter(key => !savedEnv?.[key]?.trim());
-   if (missingKeys.length > 0) {
-    toast.error(tSettings('toolbox.toasts.configureServerFirst', { name: server.name }));
-    // Auto-open settings dialog for convenience
-    handleEditBuiltinMcp(server);
-    return;
-   }
-  }
-
   // Set loading state
   setMcpEnabling(prev => ({ ...prev, [server.id]: true }));
 
   try {
-   // Call enable API to validate/warmup
-   const result = await apiPostJson<{
-    success: boolean;
-    error?: McpEnableError;
-   }>('/api/mcp/enable', { server });
+   const result = await enableMcpServer(server);
 
-   if (result.success) {
+   if (result.ok) {
     // Enable the MCP
     await toggleMcpServerEnabled(server.id, true);
-    setMcpEnabledIds(prev => [...prev, server.id]);
+    setMcpEnabledIds(prev => prev.includes(server.id) ? prev : [...prev, server.id]);
 
-    // Auto-init default args for Playwright on first enable
-    if (server.id === 'playwright') {
-     const existingArgs = await getMcpServerArgs('playwright');
-     if (existingArgs === undefined) {
-      try {
-       const defaultArgs = await getPlaywrightDefaultArgs();
-       await saveMcpServerArgs('playwright', defaultArgs);
-       const servers = await getAllMcpServers();
-       setMcpServersState(servers);
-      } catch (e) {
-       console.warn('[Settings] Failed to init default Playwright args:', e);
-      }
-     }
+    // Playwright's default args were seeded by the service on first enable —
+    // re-read the catalogue so the card's command line re-renders.
+    if (result.playwrightArgsInitialized) {
+     setMcpServersState(await getAllMcpServers());
     }
 
     toast.success(tSettings('toolbox.toasts.mcpEnabled'));
-   } else if (result.error) {
-    // Handle different error types
-    if (result.error.type === 'command_not_found' && result.error.downloadUrl) {
-     // Show dialog for runtime not found
-     setRuntimeDialog({
-      show: true,
-      runtimeName: result.error.runtimeName,
-      downloadUrl: result.error.downloadUrl,
-      command: result.error.command,
-     });
-    } else {
-     // Show toast for other errors
-     toast.error(result.error.message || tSettings('toolbox.toasts.mcpEnableFailed'));
-    }
+   } else if (result.kind === 'missing-config') {
+    toast.error(tSettings('toolbox.toasts.configureServerFirst', { name: server.name }));
+    // Auto-open settings dialog for convenience
+    handleEditBuiltinMcp(server);
+   } else if (result.kind === 'runtime-missing' && result.downloadUrl) {
+    // Show dialog for runtime not found
+    setRuntimeDialog({
+     show: true,
+     runtimeName: result.runtimeName,
+     downloadUrl: result.downloadUrl,
+     command: result.command,
+    });
+   } else {
+    toast.error(
+     (result.kind === 'failed' ? result.message : '')
+     || tSettings('toolbox.toasts.mcpEnableFailed'),
+    );
    }
   } catch (err) {
    const errorMsg = err instanceof Error ? err.message : tSettings('toolbox.toasts.mcpEnableFailed');

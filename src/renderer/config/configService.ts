@@ -50,6 +50,13 @@ export {
     updateProjectMcpServers,
 } from './services/mcpService';
 
+// mcpEnableService — the one enable path shared by Chat + Settings
+export {
+    enableMcpServer,
+    findMissingMcpConfigKeys,
+} from './services/mcpEnableService';
+export type { McpEnableOutcome } from './services/mcpEnableService';
+
 // projectService
 export {
     loadProjects,

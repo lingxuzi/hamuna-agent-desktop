@@ -69,9 +69,10 @@ import { isDebugMode } from '@/utils/debug';
 import { getChannelTypeLabel } from '@/utils/taskCenterUtils';
 import { appendCronPromptToDraft } from '@/utils/cronComposerRecovery';
 import { launchSupportDiagnostics } from '@/utils/supportDiagnostics';
-import { CODEX_SUBSCRIPTION_PROVIDER_ID, NXGD_PROVIDER_ID, type PermissionMode, type McpServerDefinition, type McpEnableError, type Provider, getEffectiveModelAliases } from '@/config/types';
+import { CODEX_SUBSCRIPTION_PROVIDER_ID, NXGD_PROVIDER_ID, type PermissionMode, type McpServerDefinition, type Provider, getEffectiveModelAliases } from '@/config/types';
 import { syncMcpServerNames } from '@/components/tools/toolBadgeConfig';
 import {
+  enableMcpServer,
   getAllMcpServers,
   getEnabledMcpServerIds,
   isProviderAvailable,
@@ -2649,12 +2650,15 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   //     v0.1.69 §4.3 rule 2: "写 Session + 向上写 Agent"). For unlocked/IM this is also
   //     the live-follow source, so the single write covers both roles.
   //
-  // PRD TODO #143 v3 — enabling path runs /api/mcp/enable first (real MCP
-  // `initialize` handshake via `validateStdioStartup`). If the handshake fails
-  // (binary missing, network down, missing API key, etc.) we keep
-  // workspaceMcpEnabled = false so the UI toggle stays OFF — there is no
-  // "enabled but not connected" grey state. Mirrors Settings page
-  // `handleMcpToggle` so both entry points agree on what "enabled" means.
+  // PRD TODO #143 v3 — enabling runs the shared `enableMcpServer` path (real
+  // MCP `initialize` handshake via `validateStdioStartup`, plus the
+  // requiresConfig pre-check). If it fails we keep workspaceMcpEnabled =
+  // false so the UI toggle stays OFF — there is no "enabled but not
+  // connected" grey state. Settings' `handleMcpToggle` runs the exact same
+  // service, so both entry points agree on what "enabled" means; only the
+  // error SURFACE differs (Chat toasts, Settings can open a download dialog).
+  // The persistence target stays distinct on purpose — see the layering note
+  // in mcpEnableService.ts.
   const handleWorkspaceMcpToggle = useCallback(async (serverId: string, enabled: boolean) => {
     if (guardCronConfigMutation()) return;
 
@@ -2669,7 +2673,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
       return;
     }
 
-    // Enabling: real handshake via /api/mcp/enable first.
+    // Enabling: real handshake via the shared enable path first.
     const server = mcpServers.find(s => s.id === serverId);
     if (!server) {
       toast.error(t('shell.toasts.mcpServerNotFound', { id: serverId }));
@@ -2684,18 +2688,26 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     });
 
     try {
-      const result = await apiPost<{ success: boolean; error?: McpEnableError }>(
-        '/api/mcp/enable',
-        { server },
-      );
-      if (!result?.success) {
-        toast.error(
-          result?.error?.message
-            ?? t('shell.toasts.mcpEnableFailed', { name: server.name }),
-        );
+      const result = await enableMcpServer(server);
+      if (!result.ok) {
+        if (result.kind === 'missing-config') {
+          toast.error(t('shell.toasts.mcpConfigureFirst', { name: server.name }));
+        } else if (result.kind === 'runtime-missing') {
+          toast.error(
+            result.downloadUrl
+              ? t('shell.toasts.mcpRuntimeMissingWithDownload', { name: server.name, url: result.downloadUrl })
+              : t('shell.toasts.mcpRuntimeMissing', { name: server.name }),
+          );
+        } else {
+          toast.error(result.message || t('shell.toasts.mcpEnableFailed', { name: server.name }));
+        }
         return;
       }
-      const newEnabled = [...workspaceMcpEnabled, serverId];
+      // Guard against a double-append: the in-flight Set is cleared in
+      // `finally`, so a fast off/on can otherwise land the same id twice.
+      const newEnabled = workspaceMcpEnabled.includes(serverId)
+        ? workspaceMcpEnabled
+        : [...workspaceMcpEnabled, serverId];
       setWorkspaceMcpEnabled(newEnabled);
       // PRD 0.2.7: persistTabConfigChange now also handles the sidecar push
       // (via the helper's `pushMcpToSidecar` callback) so this site is just a
@@ -2705,13 +2717,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
       if (!persisted) {
         setWorkspaceMcpEnabled(workspaceMcpEnabled);
       }
-    } catch (err) {
-      toast.error(
-        t('shell.toasts.mcpEnableFailed', {
-          name: server.name,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
     } finally {
       setPendingEnableMcpIds(prev => {
         if (!prev.has(serverId)) return prev;
@@ -2720,7 +2725,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
         return next;
       });
     }
-  }, [workspaceMcpEnabled, mcpServers, pendingEnableMcpIds, apiPost, persistTabConfigChange, guardCronConfigMutation, toast, t]);
+  }, [workspaceMcpEnabled, mcpServers, pendingEnableMcpIds, persistTabConfigChange, guardCronConfigMutation, toast, t]);
 
   // PRD 0.2.17 — Claude plugin per-workspace toggle. Mirrors MCP exactly:
   // optimistic local update + dual-write via persistTabConfigChange (which
