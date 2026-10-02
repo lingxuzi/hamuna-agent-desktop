@@ -4,7 +4,11 @@
 // run inside Sidecar; the marketplace UI is just a catalog + install flow.
 
 import { apiGetJson, apiPostJson } from '@/api/apiFetch';
-import type { MiniAppI18n } from '../../shared/miniapp/types';
+import type {
+  MiniAppDependency,
+  MiniAppI18n,
+  MiniAppPermissions,
+} from '../../shared/miniapp/types';
 
 export interface MiniAppMarketplaceItem {
   id: string;
@@ -29,6 +33,17 @@ export interface MiniAppMarketplaceItem {
   /** Per-locale name/description/tags, resolved through `localizeMiniApp`. */
   i18n?: MiniAppI18n;
   tags?: string[];
+  /**
+   * `meta.json::permissions`. The scene tab forwards this to `MiniAppRunner`,
+   * which is the renderer-side authorization source for `window.app.*`. Absent
+   * = no grants (every capability call is denied) — fail-closed by design.
+   */
+  permissions?: MiniAppPermissions;
+  /**
+   * `meta.json::dependencies` — CDN script/stylesheet the host injects and
+   * the sole source of CSP widening. Absent = no CDN at all.
+   */
+  dependencies?: MiniAppDependency[];
 }
 
 export interface MarketplaceListResponse {

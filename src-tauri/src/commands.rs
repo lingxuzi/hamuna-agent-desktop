@@ -486,6 +486,12 @@ pub struct MiniAppSummary {
     /// `OPEN_MINIAPP_SCENE` so the scene tab can spin up the right worker.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worker_kind: Option<String>,
+    /// CDN `<script>` / `<link>` declared in `meta.json`. Passed through
+    /// verbatim: the renderer's schema-level checks (https-only, host in
+    /// `permissions.net.allow`) are the authorization boundary, and the CSP
+    /// widening is derived from exactly this list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<serde_json::Value>,
     /// `meta.json::i18n.locales` passed through verbatim. Rust does not
     /// resolve it — locale selection is a host-UI concern and lives in one
     /// place (`shared/miniapp/localize.ts`) so every surface agrees.
@@ -612,6 +618,10 @@ fn read_miniapp_meta_for_listing(meta_path: &Path, source: &str) -> Option<MiniA
                 .filter_map(|t| t.as_str().map(|s| s.to_string()))
                 .collect()
         }),
+        dependencies: parsed
+            .get("dependencies")
+            .cloned()
+            .filter(|v| v.is_array()),
     })
 }
 
@@ -2416,8 +2426,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 //
 // SYSTEM_SKILLS_VERSION is independent — bump it only when SKILL.md
 // *content* changes that must overwrite on every existing install.
+//
+// 59: miniapp-creator — document `meta.json::dependencies` (CDN deps) as the
+// only way to load third-party libraries under `default-src 'none'`, and
+// correct the stale "ai.cancel / agent streaming don't exist" notes. Both
+// used to steer authors away from capabilities that now work.
 
-const SYSTEM_SKILLS_VERSION: &str = "58";
+const SYSTEM_SKILLS_VERSION: &str = "59";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

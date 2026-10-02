@@ -176,6 +176,12 @@ export interface Tab {
         kind?: 'iframe' | 'worker';
         workerKind?: string;
         icon?: string;
+        /** `meta.json::permissions` — the renderer-side authorization source
+         *  for `window.app.*`. Absent = no grants (fail-closed). */
+        permissions?: import('../../shared/miniapp/types').MiniAppPermissions;
+        /** `meta.json::dependencies` — CDN tags the host injects, and the
+         *  only source of iframe CSP widening. Absent = strict CSP. */
+        dependencies?: import('../../shared/miniapp/types').MiniAppDependency[];
     };
 }
 

@@ -31,6 +31,7 @@ import { buildClaudeSessionEnv, resolveClaudeCodeCli } from './agent-session';
 import { ensureDirSync } from './utils/fs-utils';
 import { applyProviderContextWindowSuffix } from './utils/model-capabilities';
 import { SUBSCRIPTION_PROVIDER_ID } from '../shared/config-types';
+import { registerCall, releaseCall } from './miniapp-ai-abort';
 
 const SYSTEM_PROMPT =
   'You are a built-in assistant for a desktop MiniApp. Answer concisely. ' +
@@ -99,6 +100,17 @@ export function resetMiniAppAiRateLimits(): void {
   buckets.clear();
 }
 
+// ── 中止注册表 ──────────────────────────────────────────────────────────────
+//
+// 实现在 `miniapp-ai-abort.ts`：注册表是**有状态的生命周期管理**，与"怎么发起
+// 一次补全"（I/O + SDK）是两个关注点。拆开后寻址逻辑可以纯逻辑单测，不必
+// mock 掉整个 SDK 才能验证"cancel 打中了正确的那个 run"。
+
+export {
+  cancelCall as cancelMiniAppAiCall,
+  resetAll as resetMiniAppAiInflight,
+} from './miniapp-ai-abort';
+
 /**
  * 补全固定走宿主已配置的那条通路。
  *
@@ -114,6 +126,8 @@ function resolveHostModel(requested: string | undefined): string | undefined {
 export interface MiniAppAiParams {
   appId: string;
   prompt: string;
+  /** 中止用的稳定标识；`app.ai.cancel({run_id})` 靠它命中在途请求。 */
+  runId: string;
   model?: string;
   maxTokens?: number;
   timeoutMs?: number;
@@ -146,6 +160,10 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
   // 补全永远走宿主已配置的那条通路，MiniApp 不注入 providerEnv —— 它没有 Key，
   // 也不该有能力把请求指向一个未在宿主配置里登记过的上游。
   const providerEnv = undefined;
+
+  // 注册到中止表，让 app.ai.cancel 有一个真实的中止点。
+  const controller = registerCall(p.appId, p.runId);
+
   const cliQuery = query({
     prompt: (async function* () {
       yield {
@@ -173,6 +191,7 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
       persistSession: false,
       mcpServers: {},
       tools: [],
+      abortController: controller,
       ...(model
         ? { model: applyProviderContextWindowSuffix(model, SUBSCRIPTION_PROVIDER_ID) }
         : {}),
@@ -192,18 +211,27 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
       new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
     ]);
     if (text === null) {
-      // 超时赢了 race：显式终止 iterator，否则 SDK 子进程会泄漏
+      // 无论超时还是被取消，都要显式终止 iterator，否则 SDK 子进程会泄漏
       // （对齐 title-generator 的同款处理）。
       try {
         cliQuery.return(undefined as never);
       } catch {
         /* ignore */
       }
+      // 取消与超时必须给出**不同**的结论：作者看到 "timed out" 会去调大
+      // timeout，而真实原因是他自己 300ms 前刚点了取消按钮。
+      if (controller.signal.aborted) {
+        return fail(APP_ERROR_CODES.HOST_ERROR, 'app.ai was cancelled');
+      }
       return fail(APP_ERROR_CODES.HOST_ERROR, `app.ai timed out after ${timeoutMs}ms`);
     }
     return ok({ text });
   } catch (e) {
     return fail(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
+  } finally {
+    // 正常完成 / 超时 / 抛错都要摘除，否则注册表会随调用次数单调增长。
+    // cancel 已经摘过一次，重复 release 是幂等的。
+    releaseCall(p.appId, p.runId);
   }
 }
 

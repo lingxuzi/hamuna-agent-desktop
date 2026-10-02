@@ -22,10 +22,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiPostJson } from '@/api/apiFetch';
 
 import { buildAppResult, verifyAppCall } from '../../../shared/miniapp/app-protocol';
-import type { MiniAppPermissions } from '../../../shared/miniapp/types';
+import { hostAllowed } from '../../../shared/miniapp/app-permissions';
+import type { MiniAppDependency, MiniAppPermissions } from '../../../shared/miniapp/types';
 
 import { runAppCall } from './appBridge';
 import { createAppDispatcher, clearWorkerId, registerWorkerId } from './appHostDispatch';
+import { createAgentBridge, type AgentEventPayload } from './agentEventBridge';
 import { buildAppRuntimeScript } from './appRuntimeScript';
 import {
   mintBubbleClaimNonce,
@@ -72,6 +74,13 @@ export interface MiniAppRunnerProps {
    * 所有能力调用都会被拒（默认空 = 无授权，fail-closed）。
    */
   permissions?: MiniAppPermissions;
+  /**
+   * `meta.json::dependencies` — CDN `<script>` / `<link>` to inject, and the
+   * *only* thing that widens the iframe CSP beyond `default-src 'none'`.
+   * Omit (or pass hosts outside `permissions.net.allow`) and loading is
+   * blocked, which is the fail-closed default.
+   */
+  dependencies?: readonly MiniAppDependency[];
   /**
    * 宿主环境事实（平台 / 语言 / 工作区路径），随 `host.ready` 下发给
    * iframe 侧 runtime，填充 `app.platform` / `app.locale` / `app.workspaceDir`。
@@ -129,6 +138,55 @@ const IFRAME_CSP = [
   "base-uri 'none'",
 ].join('; ');
 
+/**
+ * CSP with declared CDN hosts added to `script-src` / `style-src`.
+ *
+ * Deliberately NOT widened to `script-src https:` — that would let a
+ * compromised dependency fetch and execute a second-stage script from
+ * anywhere. Hosts come from `meta.json::dependencies`, which the schema
+ * already constrained to `permissions.net.allow` and https-only.
+ *
+ * font-src stays `data:` on purpose: a webfont fetched cross-origin needs
+ * CORS headers the CDN may not send, and letting arbitrary font hosts in
+ * buys nothing that inline @font-face / data: doesn't already cover.
+ */
+function buildIframeCsp(scriptHosts: readonly string[]): string {
+  if (scriptHosts.length === 0) return IFRAME_CSP;
+  const hosts = [...new Set(scriptHosts)].join(' ');
+  return [
+    "default-src 'none'",
+    `script-src 'unsafe-inline' 'self' ${hosts}`,
+    `style-src 'unsafe-inline' 'self' ${hosts}`,
+    "img-src data: blob: https:",
+    "font-src data:",
+    "connect-src 'none'",
+    "form-action 'none'",
+    "base-uri 'none'",
+  ].join('; ');
+}
+
+/**
+ * `<script src>` / `<link rel=stylesheet>` for declared CDN dependencies.
+ *
+ * `defer` on the script mirrors what a normal document does: a srcDoc
+ * srcdoc attribute is parsed as a document, so a non-deferred external
+ * script would block the parser while the network is cold, delaying the
+ * app's own inline bootstrap. Stylesheets stay blocking on purpose —
+ * FOUC on first paint is a worse artifact than a blocked one.
+ */
+function injectDependencyTags(html: string, deps: readonly MiniAppDependency[]): string {
+  if (deps.length === 0) return html;
+  const tags = deps
+    .map((d) =>
+      d.type === 'script'
+        ? `<script src="${escapeHtml(d.url)}" defer></script>`
+        : `<link rel="stylesheet" href="${escapeHtml(d.url)}">`,
+    )
+    .join('');
+  if (html.includes('</head>')) return html.replace('</head>', `${tags}</head>`);
+  return `${tags}${html}`;
+}
+
 export default function MiniAppRunner({
   appId,
   srcDoc,
@@ -137,6 +195,7 @@ export default function MiniAppRunner({
   kind = 'iframe',
   workerKind,
   permissions,
+  dependencies,
   env,
   isActive,
 }: MiniAppRunnerProps) {
@@ -199,12 +258,59 @@ export default function MiniAppRunner({
   // runtime 必须排在用户 HTML 之前：`ui.js` 在解析期就可能调用 `app.*`，
   // 放后面会撞上 "Cannot read properties of undefined"。
   const appRuntimeScript = useMemo(() => buildAppRuntimeScript(appId), [appId]);
-  const fullSrcDoc = `${themeCss}\n${injectAppId(injectCsp(injectAppRuntime(srcDoc, appRuntimeScript)), appId)}`;
+  // CDN 依赖先注入（进 `<head>`），再算 CSP —— 顺序反了 CSP 会按旧的无依赖
+  // 版本算好、放宽的源就永远用不上。两步都只在声明了依赖时改变输出。
+  // 双重过滤：schema 已经要求 https + net.allow，但 meta 是磁盘上的文件，
+  // 可能被手工改过 —— 宿主不能假设上游一定校验过。`hostAllowed` 对非法 URL
+  // 返回 false，所以走到这里的 url 必定可解析。
+  const usableDeps = useMemo(
+    () => (dependencies ?? []).filter((d) => hostAllowed(d.url, permissions?.net?.allow ?? [])),
+    [dependencies, permissions],
+  );
+  const fullSrcDoc = `${themeCss}\n${injectAppId(
+    injectCsp(
+      injectAppRuntime(injectDependencyTags(srcDoc, usableDeps), appRuntimeScript),
+      [...new Set(usableDeps.map((d) => new URL(d.url).host))],
+    ),
+    appId,
+  )}`;
 
   // `window.app.*` 派发器。绑定 appId（闭包），因此多个 MiniApp Tab 并存时
   // 互不串号。`useMemo` 而非 ref：dispatch 在 listener 里被调用，重建函数
   // 无副作用，重建代价是一次对象字面量。
-  const dispatcher = useMemo(() => createAppDispatcher(appId), [appId]);
+  //
+  // `agentBridge` 让 `app.agent.ensureSession` / `onEvent` 能在 renderer 侧起
+  // Agent sidecar —— 那是 sidecar 进程自己做不到的事（它没法给自己起 sibling）。
+  //
+  // bridge 工厂在 render 期间**不接触任何 ref**（react-hooks/refs）：`post` 的
+  // 实现要读 `iframeRef.current` / `nonceRef.current`，而构造发生在 render 里，
+  // 规则不接受把 ref 交给渲染期调用的工厂（包几层都不行）。改成 owner 在
+  // commit 后调 `setPost` 注入，工厂彻底不碰 ref，语义也对 —— 事件必然晚于
+  // commit 到达。
+  const agentBridge = useMemo(() => createAgentBridge({ appId }), [appId]);
+  useEffect(() => {
+    agentBridge.setPost((payload: AgentEventPayload) => {
+      // 展开顺序要紧：payload 自带 `type`，放在 `type:` 之后会把它覆盖成
+      // undefined，iframe 侧就再也分不出 delta / complete 了。
+      iframeRef.current?.contentWindow?.postMessage(
+        { kind: 'app.event', nonce: nonceRef.current, ...payload },
+        '*',
+      );
+    });
+  }, [agentBridge]);
+
+  const dispatcher = useMemo(
+    () => createAppDispatcher(appId, { agentBridge }),
+    [appId, agentBridge],
+  );
+
+  // 卸载时释放 Agent session 与 SSE。Agent session = 一个真实的 Node 进程，
+  // 不释放就会一直挂在后台（CLAUDE.md Sidecar Owner 模型：资源随 owner 走）。
+  useEffect(() => {
+    return () => {
+      void agentBridge.release();
+    };
+  }, [agentBridge]);
 
   // 卸载 / appId 切换时解绑 iframe 引用，触发 GC（PRD v0.3 §5.3 row 2）
   useEffect(() => {
@@ -492,7 +598,7 @@ function injectAppId(html: string, appId: string): string {
 }
 
 /** 在 srcDoc `</head>` 前注入 CSP meta。MiniApp 自带的 CSP 会被移除，避免叠加放宽。 */
-function injectCsp(html: string): string {
+function injectCsp(html: string, scriptHosts: readonly string[] = []): string {
   // A MiniApp that ships its own <meta http-equiv="Content-Security-Policy">
   // would otherwise have its policy combined with ours, and the spec takes
   // the *intersection* only for the directives both name — so a MiniApp
@@ -502,7 +608,7 @@ function injectCsp(html: string): string {
     /<meta[^>]+http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi,
     '',
   );
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(IFRAME_CSP)}">`;
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(buildIframeCsp(scriptHosts))}">`;
   if (stripped.includes('</head>')) return stripped.replace('</head>', `${meta}</head>`);
   return `${meta}${stripped}`;
 }

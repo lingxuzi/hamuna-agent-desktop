@@ -19,6 +19,7 @@ import {
 import type { AssistantEntry, EntryIntent, HistoryEntrySource, PendingSessionBirthContext, Surface } from '@/analytics';
 import { stopTabSidecar, startGlobalSidecar, initGlobalSidecarReadyPromise, markGlobalSidecarReady, getGlobalServerUrl, getSessionActivation, updateSessionTab, ensureSessionSidecar, releaseTabSession, activateSession, upgradeSessionId, getSessionPort, hasSessionSidecar, getSessionGeneration, stopSseProxy, startBackgroundCompletion, cancelBackgroundCompletion, updateGlobalServerUrl, canRestoreSession, getUserSchedulerLifecycleSnapshot, sessionHasPersistentOwners, setAppActiveCorrelation } from '@/api/tauriClient';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import type { MiniAppDependency, MiniAppPermissions } from '../shared/miniapp/types';
 import BugReportOverlay from '@/components/BugReportOverlay';
 import ForceUpdateModal from '@/components/ForceUpdateModal/ForceUpdateModal';
 import CustomTitleBar from '@/components/CustomTitleBar';
@@ -3410,6 +3411,8 @@ export default function App() {
    kind?: 'iframe' | 'worker';
    workerKind?: string;
    icon?: string;
+   permissions?: MiniAppPermissions;
+   dependencies?: MiniAppDependency[];
   }) => {
    const currentTabs = tabsRef.current;
    if (currentTabs.length >= MAX_TABS) {
@@ -3428,6 +3431,8 @@ export default function App() {
      kind: detail.kind,
      workerKind: detail.workerKind,
      icon: detail.icon,
+     permissions: detail.permissions,
+     dependencies: detail.dependencies,
     },
    };
    openNewTabDeferred(newTab);

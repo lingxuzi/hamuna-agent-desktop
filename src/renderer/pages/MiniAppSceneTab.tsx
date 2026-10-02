@@ -112,6 +112,7 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
       // `meta.json::permissions` 是 `window.app.*` 的 renderer 侧授权依据；
       // 缺省即无授权，所有能力调用 fail-closed。
       permissions={payload.permissions}
+      dependencies={payload.dependencies}
       env={runtimeEnv}
       isActive={isActive}
       srcDoc={srcDoc}

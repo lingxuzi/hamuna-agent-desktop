@@ -60,6 +60,8 @@ function dispatchOpenMiniAppScene(item: MiniAppMarketplaceItem): void {
         kind: item.kind,
         workerKind: item.worker_kind,
         icon: item.icon,
+        permissions: item.permissions,
+        dependencies: item.dependencies,
       },
     }),
   );

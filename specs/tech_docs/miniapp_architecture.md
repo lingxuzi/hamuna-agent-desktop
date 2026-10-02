@@ -146,12 +146,46 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 
 ## 6. 已知边界
 
-- **`app.ai.cancel` 未接线**：`ai.complete` 是一次性的、已自我终止。
-- **`app.agent` 无流式**：`run` 返回终态文本。流式需经 renderer 主动 push。
 - **`app.agent.workspace_scope` 当前不放开**：`agent.run` 的 workspace 强制
   落在 appdata 下。Agent 有工具、能写文件，放开就等于任意文件写。
-- **`worker_kind` 仍是白名单**：`app.call` 需要 `meta.kind='worker'` +
-  已注册的 `worker_kind`，未做通用 npm 依赖加载。
+- **`worker_kind` 是白名单**：`app.call` 需要 `meta.kind='worker'` + 已注册的
+  `worker_kind`。没有通用 npm 依赖加载，worker 只能 import 仓库内已存在的
+  entry（`kinds/*.ts`）。
+- **无市场投稿路径**：本项目 Marketplace 只做「浏览 + 安装 bundled MiniApp」，
+  没有作者投稿入口，所以「上架时拒绝 `node.enabled=true` / 宽泛 fs scope」这类
+  发布期门槛没有落点。等真出现投稿流程时再在 install 漏斗（`install_blocking`）
+  加，不要提前造一个没有生产者的校验。
+
+---
+
+## 6.1 `meta.json::dependencies`（CDN 依赖）
+
+iframe CSP 是 `default-src 'none'`，作者**没有任何办法**加载第三方库。
+`dependencies` 是唯一的放宽入口，也是唯一的放宽来源：
+
+```json
+{
+  "permissions": { "net": { "allow": ["cdn.jsdelivr.net"] } },
+  "dependencies": [
+    { "url": "https://cdn.jsdelivr.net/npm/fabric@5/dist/fabric.min.js", "type": "script" }
+  ]
+}
+```
+
+**两道闸，缺一不可**：
+
+| 闸 | 位置 | 职责 |
+|---|---|---|
+| schema | `shared/miniapp/meta-schema.ts::parseDependencies` | https-only、≤10 条、`type` 枚举、**域名必须在 `net.allow` 里** |
+| 宿主 | `MiniAppRunner.tsx::usableDeps` | meta.json 是磁盘文件可被手改，宿主不假设上游校验过 |
+
+放宽粒度是**按 host 而非 `https:`**：`script-src https:` 等于允许从任意域加载
+二级脚本，一次 CDN 投毒就能升级成任意代码执行。`connect-src` / `font-src`
+恒不放开——依赖是加载期资源，不是通道。
+
+`script` 标签带 `defer`（srcDoc 按 document 解析，非 defer 的外链脚本会在
+冷网络时阻塞解析器，拖慢 MiniApp 自己的内联 bootstrap）；样式表保持阻塞，
+首屏 FOUC 比一次阻塞更糟。
 
 ---
 
@@ -161,7 +195,8 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 |---|---|---|
 | CSS Token | `--openbitfun-*` | `--hamuna-*`（保持本项目设计系统） |
 | agent workspace | 可配 scope | 强制 appdata |
-| worker 依赖 | `source.dependencies` CDN | `worker_kind` 白名单 |
+| worker 依赖 | worker 侧 npm 依赖 | `worker_kind` 白名单（无通用加载） |
+| CDN 依赖 | `source.dependencies` | 已支持 `meta.dependencies`（等价语义） |
 | `ai_context` 快照 | `.miniapp-context/<scope>` | 声明保留，未接线 |
 
 ---

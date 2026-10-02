@@ -8,7 +8,13 @@
 
 import { err, ok, type MiniAppResponse } from './errors';
 import { validatePathTemplatePrefix } from './path-templates';
-import type { MiniAppI18n, MiniAppMetadata, MiniAppPermissions } from './types';
+import type {
+  MiniAppDependency,
+  MiniAppI18n,
+  MiniAppMetadata,
+  MiniAppPermissions,
+} from './types';
+import { hostAllowed } from './app-permissions';
 
 const KNOWN_CATEGORIES = new Set<MiniAppMetadata['category']>([
   'developer',
@@ -207,6 +213,60 @@ function parseI18n(raw: unknown): MiniAppI18n | string {
   return out;
 }
 
+/**
+ * `dependencies` — CDN script / stylesheet the host injects into the iframe.
+ *
+ * Two invariants, both enforced here rather than at injection time:
+ *  1. https-only. A `http://` or protocol-relative URL would load over a
+ *     channel the app can already observe, so the "dependency" becomes a
+ *     plain injection vector into the app's own origin.
+ *  2. The host must already be in `permissions.net.allow`. This is the one
+ *     that actually matters: the CSP widening is derived from this list, so
+ *     skipping the check would let a MiniApp declare `cdn.evil.com` and have
+ *     the host quietly open script-src for it — a permission escalation
+ *     disguised as a build-time convenience.
+ */
+function parseDependencies(raw: unknown, perms: MiniAppPermissions): MiniAppDependency[] | string {
+  if (!Array.isArray(raw)) return 'dependencies must be an array';
+  if (raw.length > 10) return 'dependencies must be ≤ 10';
+
+  const netAllow = perms.net?.allow ?? [];
+  const out: MiniAppDependency[] = [];
+
+  for (const entry of raw) {
+    const rec = asRecord(entry);
+    if (!rec) return 'each dependency must be an object';
+
+    const url = asString(rec.url);
+    if (!url) return 'dependency.url is required (string)';
+
+    const type = asString(rec.type);
+    if (type !== 'script' && type !== 'style') {
+      return "dependency.type must be 'script' | 'style'";
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return `dependency.url is not a valid absolute URL: ${url}`;
+    }
+    if (parsed.protocol !== 'https:') {
+      return `dependency.url must be https: ${url}`;
+    }
+    if (!hostAllowed(url, netAllow)) {
+      return (
+        `dependency host '${parsed.host}' must be declared in permissions.net.allow` +
+        (netAllow.length === 0 ? ' (net.allow is empty)' : '')
+      );
+    }
+
+    out.push({ url, type });
+  }
+
+  return out;
+}
+
 export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetadata> {
   const r = asRecord(raw);
   if (!r) return err('E_SCHEMA_INVALID', 'meta.json must be an object');
@@ -292,6 +352,15 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     workerKind = wk;
   }
 
+  let dependencies: MiniAppDependency[] | undefined;
+  if (r.dependencies !== undefined) {
+    const parsedDeps = parseDependencies(r.dependencies, permsOrErr);
+    if (typeof parsedDeps === 'string') {
+      return err('E_SCHEMA_INVALID', parsedDeps);
+    }
+    dependencies = parsedDeps;
+  }
+
   let i18n: MiniAppI18n | undefined;
   if (r.i18n !== undefined) {
     const parsedI18n = parseI18n(r.i18n);
@@ -314,6 +383,7 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     ...(skills ? { skills } : {}),
     ...(kind ? { kind } : {}),
     ...(workerKind ? { worker_kind: workerKind } : {}),
+    ...(dependencies && dependencies.length > 0 ? { dependencies } : {}),
     ...(i18n ? { i18n } : {}),
   };
 

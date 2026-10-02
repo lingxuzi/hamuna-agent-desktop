@@ -68,6 +68,15 @@ export interface MiniAppI18n {
   locales: Record<string, MiniAppLocaleStrings>;
 }
 
+/**
+ * One entry of `meta.json::dependencies`. The host turns it into a
+ * `<script src>` or `<link rel=stylesheet>` inside the iframe.
+ */
+export interface MiniAppDependency {
+  url: string;
+  type: 'script' | 'style';
+}
+
 /** `meta.json` schema（PRD v0.3 §2.1.1，Phase 0 子集）。 */
 export interface MiniAppMetadata {
   id: string;
@@ -109,6 +118,17 @@ export interface MiniAppMetadata {
    * only registers `'git-graph'`; Phase 4 will generalize via a registry.
    */
   worker_kind?: string;
+  /**
+   * Third-party CDN assets (script / stylesheet) the host injects into the
+   * iframe. The iframe CSP is `default-src 'none'`, so without an explicit
+   * declaration a MiniApp author literally cannot load fabric / monaco /
+   * chart.js — the API surface exists but has no way to be used.
+   *
+   * Every host MUST also appear in `permissions.net.allow`; the host only
+   * widens the CSP for already-granted hosts, so this field can never grant
+   * more network access than the author already asked for.
+   */
+  dependencies?: MiniAppDependency[];
   version: number;
   created_at?: number;
   updated_at?: number;

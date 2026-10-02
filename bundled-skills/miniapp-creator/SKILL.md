@@ -158,9 +158,13 @@ app.onDeactivate(() => clearInterval(timer));
 
 - `app.openbitfun.*` / `app.workspace.*` / `app.git.*` / `app.session.*` / `app.terminal.*` / `app.browser.*`
 - `window.__miniappStorage` —— 不存在（早期文档写错过）。用 `app.storage`。
-- 第三方 CDN 脚本 —— iframe CSP `default-src 'none'` 会直接拦掉。
-- `app.ai.cancel` —— 不存在。`app.ai.complete` 是一次性的、已自我终止。
-- `app.agent` 的流式返回 —— `run` / `turnText` 只返回终态文本（订阅用 `onEvent`）。
+- 第三方 CDN 脚本 —— **不能直接写 `<script src>`**，iframe CSP `default-src 'none'` 会拦掉。
+  改用 `meta.json` 的 `dependencies` 声明（见下方「CDN 依赖」），由宿主注入标签并按需放宽 CSP。
+- `app.ai.cancel` —— 存在，但只对**在途的** `ai.complete` 生效（按 `run_id` 中止）。
+  请求已返回后再调是正常时序，返回 `cancelled: false`，不是错误。
+- `app.agent` 的流式返回 —— `run` / `turnText` 只返回终态文本；流式走 `agent.onEvent`。
+- `agent.workspace_scope` —— 声明保留但当前不放开，`agent.run` 强制落在 appdata 下。
+- `worker_kind` —— 白名单制，没有通用 npm 依赖加载。
 
 **想让 AI 帮忙？** 二选一：
 - 纯文本处理（翻译 / 分类 / 摘要）→ `app.ai.complete`，需 `ai.enabled`
@@ -193,6 +197,12 @@ app.onDeactivate(() => clearInterval(timer));
     "net": { "allow": [] }          // 域名白名单，空 = 全禁
   },
   "entry": "source/index.html",     // 必填，相对 meta.json 的路径
+  "dependencies": [                 // 可选，≤ 10 个 CDN 依赖
+    {
+      "url": "https://cdn.jsdelivr.net/npm/fabric@5/dist/fabric.min.js",
+      "type": "script"             // script | style
+    }
+  ],
   "i18n": {                          // 可选，多语言；顶层的 name/description/tags 是默认语言
     "locales": {
       "en-US": { "name": "Gomoku", "description": "Classic board", "tags": ["game"] }
@@ -208,6 +218,30 @@ app.onDeactivate(() => clearInterval(timer));
 > **`permissions` 是嵌套对象**（`fs: {read, write}` / `shell: {allow}` / `net: {allow}`），不是扁平数组。写成 `"fs": []` 会被 schema 校验拒绝。
 >
 > **路径模板**：`{appdata}` = 本 app 数据目录（始终可读写）、`{workspace}` = 当前工作区。**不要写绝对路径**，schema 会拒。`app.fs.*` 收到的路径必须落在已声明前缀内，否则宿主返回 `PERMISSION_DENIED`。
+
+### CDN 依赖
+
+iframe 的 CSP 是 `default-src 'none'`，**在 HTML 里直接写 `<script src="https://...">` 会被静默拦掉**。要加载第三方库必须走 `meta.json` 的 `dependencies`，宿主会注入标签并按声明的域名放宽 CSP。
+
+三条硬约束（违反会被 schema 直接拒绝，app 装不上）：
+
+1. **必须是 `https://`** —— `http://` 会被拒。
+2. **域名必须同时写进 `permissions.net.allow`** —— 这是授权边界，不是重复声明。不写就等于让宿主替你开一个你没申请过的网络权限。
+3. **`type` 只能是 `script` 或 `style`**。
+
+```json
+{
+  "permissions": { "net": { "allow": ["cdn.jsdelivr.net"] } },
+  "dependencies": [
+    { "url": "https://cdn.jsdelivr.net/npm/fabric@5/dist/fabric.min.js", "type": "script" },
+    { "url": "https://cdn.jsdelivr.net/npm/fabric@5/dist/fabric.min.css", "type": "style" }
+  ]
+}
+```
+
+宿主只对**声明过的 host** 放宽 `script-src` / `style-src`，`connect-src` 恒为 `'none'`（依赖是加载期资源，不是通道）。脚本标签带 `defer`，所以它在 `DOMContentLoaded` 之前执行，但排在其它 defer 脚本之后——依赖多个库时注意顺序。
+
+> 优先选有 UMD 全局包的库。iframe 里没有 bundler，`require()` / `import` 不可用。
 >
 > **不要声明 `permissions.ai`** —— 宿主没有实现，声明它只会误导你和用户。
 >
