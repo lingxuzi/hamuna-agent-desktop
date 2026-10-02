@@ -155,6 +155,17 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   没有作者投稿入口，所以「上架时拒绝 `node.enabled=true` / 宽泛 fs scope」这类
   发布期门槛没有落点。等真出现投稿流程时再在 install 漏斗（`install_blocking`）
   加，不要提前造一个没有生产者的校验。
+- **`app.agent` 不支持 `contextFiles` 快照**：OpenBitFun 允许 MiniApp 提交若干
+  文件名，宿主在 Agent Runtime 内发布一份独立、不可变的
+  `.miniapp-context/<opaque-scope>` 虚拟只读快照，并据此在
+  `market_strict` 下额外授予限定到该快照的 `Read` / `Grep`。
+  **不做**，理由是它是一整套子系统而不是一个 API：虚拟文件系统、每 app 活跃
+  快照上限、全局内存预算、终止释放、跨进程不恢复——每一条都要有产品决策，
+  而当前没有决策依据：schema 里的 `ai_context` 从未被任何代码读取，本项目
+  4 个 bundled MiniApp 无一使用，本项目的 `miniapp-creator` skill 也从未
+  向作者提及。先造一个没有作者契约也没有消费者的机制，比不做更糟。
+  真要做时，先在 `app.agent.run` 上加 `contextFiles` 入参并写清快照生命周期，
+  再谈 `market_strict` 工具集。
 
 ---
 
@@ -197,7 +208,7 @@ iframe CSP 是 `default-src 'none'`，作者**没有任何办法**加载第三�
 | agent workspace | 可配 scope | 强制 appdata |
 | worker 依赖 | worker 侧 npm 依赖 | `worker_kind` 白名单（无通用加载） |
 | CDN 依赖 | `source.dependencies` | 已支持 `meta.dependencies`（等价语义） |
-| `ai_context` 快照 | `.miniapp-context/<scope>` | 声明保留，未接线 |
+| `contextFiles` 快照 | `.miniapp-context/<scope>` 虚拟只读快照 | **不做**（见下） |
 
 ---
 

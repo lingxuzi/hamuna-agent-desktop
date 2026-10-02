@@ -96,14 +96,34 @@ export interface MiniAppSourceResponse {
   source?: string;
   entry?: string;
   error?: string;
+  /**
+   * `~/.hamuna/miniapps/<appId>`，与 `{appdata}` 权限前缀展开用的是同一个值。
+   * 由 sidecar 下发而非 renderer 自算：`{workspace}` 展开成的是 sidecar 进程里的
+   * `currentAgentDir`，renderer 推算出来的路径会与真正执行时展开的不是同一个，
+   * 作者按它拼路径就会被判越权。
+   */
+  appdata_dir?: string;
+  /** `{workspace}` 模板展开的基准；sidecar 尚无工作区时为 null。 */
+  workspace_dir?: string | null;
 }
 
-export async function loadMiniAppSource(appId: string): Promise<string> {
+/** source 与其路径根。路径根缺失时回落为空串，runtime 侧 getter 会给到 ''。 */
+export interface MiniAppSource {
+  source: string;
+  appDataDir: string;
+  workspaceDir: string;
+}
+
+export async function loadMiniAppSourceWithRoots(appId: string): Promise<MiniAppSource> {
   const result = await apiPostJson<MiniAppSourceResponse>('/api/miniapp/source', {
     appId,
   });
   if (!result.ok || result.source === undefined) {
     throw new Error(result.error ?? `source read failed for ${appId}`);
   }
-  return result.source;
+  return {
+    source: result.source,
+    appDataDir: result.appdata_dir ?? '',
+    workspaceDir: result.workspace_dir ?? '',
+  };
 }

@@ -37,9 +37,14 @@ function ok(result: unknown): DispatchOutcome {
 function fail(code: string, message: string): DispatchOutcome {
   return { ok: false, error: { code, message } };
 }
-
-/** MiniApp 根目录：`~/.hamuna/miniapps/<appId>`。 */
-function appRoot(appId: string): string {
+/**
+ * MiniApp 根目录：`~/.hamuna/miniapps/<appId>`。
+ *
+ * 导出给 `/api/miniapp/source` 用：renderer 要把 `app.appDataDir` 下发给作者，
+ * 而这个值同时是 `{appdata}` 权限前缀展开的基准 —— 路径模板只能有一处，两处各拼
+ * 一次早晚漂移成"作者看到的目录"与"实际授权的目录"不是同一个。
+ */
+export function miniappAppRoot(appId: string): string {
   return `${getConfigDir()}/miniapps/${appId}`;
 }
 
@@ -48,7 +53,7 @@ async function loadMeta(appId: string): Promise<MiniAppMetadata | null> {
   const { readFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
   try {
-    const raw = await readFile(join(appRoot(appId), 'meta.json'), 'utf8');
+    const raw = await readFile(join(miniappAppRoot(appId), 'meta.json'), 'utf8');
     const meta = JSON.parse(raw) as MiniAppMetadata;
     // meta.id 必须与目录名一致，防目录穿越式冒名
     return meta.id === appId ? meta : null;
@@ -110,7 +115,7 @@ export async function dispatchMiniAppApp(
     return fail(APP_ERROR_CODES.PERMISSION_DENIED, `MiniApp '${appId}' has no readable meta.json`);
   }
   const resolved: Resolved = {
-    appdata: appRoot(appId),
+    appdata: miniappAppRoot(appId),
     workspaceDir: ctx.workspaceDir ?? null,
     perms: meta.permissions ?? {},
   };
@@ -180,8 +185,20 @@ async function dispatchAi(
   ctx: Resolved,
 ): Promise<DispatchOutcome> {
   // 顶层 `checkAppPermission` 已验过 `ai.enabled` 与 `allowed_models`。
-  const { runMiniAppAiComplete, listMiniAppAiModels } = await import('./miniapp-ai');
+  const { runMiniAppAiComplete, listMiniAppAiModels, cancelMiniAppAiCall } = await import(
+    './miniapp-ai'
+  );
   if (name === 'getModels') return listMiniAppAiModels();
+  if (name === 'cancel') {
+    // 未命中返回 ok({cancelled:false}) 而不是错误：作者在请求已完成后再 cancel
+    // 是网络往返的必然结果，不是异常。
+    return ok(
+      cancelMiniAppAiCall(
+        appId,
+        typeof params.run_id === 'string' && params.run_id ? params.run_id : 'default',
+      ),
+    );
+  }
   if (name === 'complete' || name === 'chat') {
     const prompt = requireString(params.prompt);
     if (!prompt) return fail(APP_ERROR_CODES.INVALID_PARAMS, `ai.${name} requires a prompt`);
@@ -189,6 +206,14 @@ async function dispatchAi(
     return runMiniAppAiComplete({
       appId,
       prompt,
+      // runId 是 cancel 的瞄准镜。不传时用 'default'：同一个 MiniApp 串行调用
+      // 时能取消，并发调用时作者应显式传 run_id（文档已说明）。
+      runId:
+        typeof params.run_id === 'string' && params.run_id
+          ? params.run_id
+          : typeof opts.run_id === 'string' && opts.run_id
+            ? opts.run_id
+            : 'default',
       model: typeof params.model === 'string' ? params.model : undefined,
       maxTokens: typeof opts.max_tokens === 'number' ? opts.max_tokens : undefined,
       timeoutMs: typeof opts.timeout_ms === 'number' ? opts.timeout_ms : undefined,
@@ -196,14 +221,7 @@ async function dispatchAi(
       maxTokensPerRequest: ctx.perms.ai?.max_tokens_per_request,
     });
   }
-  // cancel / chat 的流式变体尚未接线：显式失败好过让作者等一个永远不会 settle
-  // 的 Promise。
-  return fail(
-    APP_ERROR_CODES.UNKNOWN_METHOD,
-    name === 'cancel'
-      ? 'ai.cancel is not available: app.ai.complete calls are one-shot and already self-terminating'
-      : `Unknown ai method '${name}'`,
-  );
+  return fail(APP_ERROR_CODES.UNKNOWN_METHOD, `Unknown ai method '${name}'`);
 }
 
 async function dispatchAgent(

@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildAppResult, listAppMethods } from '../../shared/miniapp/app-protocol';
 import { runAppCall } from '../../shared/miniapp/app-permissions';
+import { workspacePathsEqual } from '../../shared/workspacePath';
 
 const APP_ID = 'e2e-probe';
 
@@ -45,7 +46,7 @@ vi.mock('../utils/admin-config', () => ({
   getConfigDir: () => sandboxHome,
 }));
 
-const { dispatchMiniAppApp } = await import('../miniapp-app-dispatch');
+const { dispatchMiniAppApp, miniappAppRoot } = await import('../miniapp-app-dispatch');
 
 function appDir(): string {
   return join(sandboxHome, 'miniapps', APP_ID);
@@ -145,6 +146,54 @@ describe('renderer gate + sidecar gate, wired together', () => {
     expect(escaped.ok).toBe(false);
     if (escaped.ok) throw new Error('expected a failure envelope');
     expect(escaped.error.code).toBe('PERMISSION_DENIED');
+  });
+
+  it('grants exactly the directory the author is told about via app.appDataDir', async () => {
+    // 闭环：`/api/miniapp/source` 下发给 renderer 的 `appdata_dir` 用的就是
+    // `miniappAppRoot`，而 `{appdata}` 权限前缀展开用的也是它。作者照
+    // `app.appDataDir + '/x'` 拼路径必须真的读得到 —— 否则症状是"声明了
+    // fs.read 却读不到自己的文件"，而 meta.json 写得完全正确。
+    //
+    // 之前这两者不是同一个来源：权限展开走 `appRoot`，下发给作者的值压根
+    // 不存在（getter 恒为 ''）。这条断言把"同一个 owner"钉死。
+    //
+    // 用 `workspacePathsEqual` 而不是 `===`：`miniappAppRoot` 按 POSIX 形态拼
+    // 字符串，`join()` 在 Windows 上给反斜杠，同一个目录两种字面量。裸 `===`
+    // 判路径正是 CLAUDE.md 点名的反模式（Win 下静默永不相等）。
+    expect(workspacePathsEqual(miniappAppRoot(APP_ID), appDir())).toBe(true);
+
+    const perms = { fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] } };
+    writeMeta(perms);
+    // 作者视角：用宿主告诉他的那个目录拼路径
+    const authorPath = join(miniappAppRoot(APP_ID), 'author-visible.txt');
+
+    const written = await call(perms, 'fs.writeFile', { path: authorPath, data: 'via app.appDataDir' });
+    expect(written, `writeFile: ${JSON.stringify(written)}`).toEqual({ ok: true, result: null });
+    expect(readFileSync(authorPath, 'utf8')).toBe('via app.appDataDir');
+
+    const read = await call(perms, 'fs.readFile', { path: authorPath });
+    expect(read).toEqual({ ok: true, result: 'via app.appDataDir' });
+  });
+
+  it('grants a {workspace} read against the very path the sidecar resolves it to', async () => {
+    // `{workspace}` 的基准是 sidecar 进程的 `currentAgentDir`，也就是
+    // `/api/miniapp/source` 作为 `workspace_dir` 下发给 renderer 的那个值。
+    // 同一个字符串喂给 dispatch，作者按 `app.workspaceDir` 拼的路径才可用。
+    const workspaceDir = join(sandboxHome, 'projects', 'demo');
+    mkdirSync(workspaceDir, { recursive: true });
+    const perms = { fs: { read: ['{workspace}/**'] } };
+    writeMeta(perms);
+
+    const authorPath = join(workspaceDir, 'notes.md');
+    writeFileSync(authorPath, 'workspace scoped', 'utf8');
+
+    const read = await dispatchMiniAppApp('fs.readFile', APP_ID, { path: authorPath }, { workspaceDir });
+    expect(read).toEqual({ ok: true, result: 'workspace scoped' });
+
+    // 没有 workspaceDir 时 `{workspace}` 展开为空串 = 恒不匹配（fail-closed），
+    // 而不是回退到 appdata 悄悄放行。
+    const noCtx = await dispatchMiniAppApp('fs.readFile', APP_ID, { path: authorPath }, {});
+    expect(noCtx.ok).toBe(false);
   });
 });
 

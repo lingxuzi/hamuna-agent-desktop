@@ -23,6 +23,7 @@ import type { DialogFilter } from '@tauri-apps/plugin-dialog';
 import { apiPostJson } from '@/api/apiFetch';
 
 import { APP_ERROR_CODES, type AppMethod } from '../../../shared/miniapp/app-protocol';
+import type { AgentBridge } from './agentEventBridge';
 
 interface DispatchResponse {
   ok: boolean;
@@ -40,8 +41,21 @@ function err(code: string, message: string): DispatchResult {
   return { ok: false, error: { code, message } };
 }
 
+export interface AppDispatcherOptions {
+  /**
+   * Agent 事件桥。`agent.ensureSession` / `agent.onEvent` 必须由 **renderer**
+   * 回答：它们要起一个真实的 Sidecar 进程（Rust `cmd_miniapp_ensure_session`），
+   * 而 sidecar 进程自己没法给自己起 sibling。缺省时这两个方法显式失败，
+   * 而不是假装成功。
+   */
+  agentBridge?: AgentBridge;
+}
+
 /** 为某个 appId 绑定一个派发器。宿主侧已验证过身份，sidecar 侧会再校验一次。 */
-export function createAppDispatcher(appId: string): AppDispatcher {
+export function createAppDispatcher(
+  appId: string,
+  options: AppDispatcherOptions = {},
+): AppDispatcher {
   return async function dispatch(method, params) {
     try {
       if (method === 'call.call') {
@@ -50,6 +64,10 @@ export function createAppDispatcher(appId: string): AppDispatcher {
       // 原生能力在离开 renderer 前就地消化，不进 sidecar。
       if (method.startsWith('dialog.') || method.startsWith('clipboard.')) {
         return await dispatchNative(method, params);
+      }
+      // Agent session 生命周期同样归 renderer：它要 invoke Rust 起进程。
+      if (method === 'agent.ensureSession' || method === 'agent.onEvent') {
+        return await dispatchAgentHost(method, params, options.agentBridge);
       }
       const res = await apiPostJson<DispatchResponse>(`/api/miniapp/app/${method}`, {
         appId,
@@ -70,6 +88,40 @@ export function createAppDispatcher(appId: string): AppDispatcher {
       };
     }
   };
+}
+
+async function dispatchAgentHost(
+  method: string,
+  params: unknown,
+  bridge: AgentBridge | undefined,
+): Promise<DispatchResult> {
+  if (!bridge) {
+    return err(
+      APP_ERROR_CODES.HOST_ERROR,
+      'app.agent session control is unavailable: the host did not provide an agent bridge',
+    );
+  }
+  const p = asRecord(params);
+  const runId = typeof p.run_id === 'string' && p.run_id ? p.run_id : 'main';
+  if (method === 'agent.ensureSession') {
+    try {
+      const sessionId = await bridge.ensureSession(runId);
+      return { ok: true, result: { session_id: sessionId } };
+    } catch (e) {
+      return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
+    }
+  }
+  // `agent.onEvent(fn)` 订阅的是 runtime 侧的本地 `agent` channel —— 事件由
+  // host 经 `app.event` postMessage 推入，**不经过 dispatch**。dispatch 在这里
+  // 只负责把流式通道拉起来：作者注册监听时通常也期待 session 与 SSE 已就绪，
+  // 否则 `subscribe` 永远没有生产者，就成了"暴露给作者却收不到事件"的空壳。
+  try {
+    const sessionId = await bridge.ensureSession(runId);
+    void bridge.subscribe(runId, () => undefined).catch(() => undefined);
+    return { ok: true, result: { session_id: sessionId } };
+  } catch (e) {
+    return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
+  }
 }
 
 function asRecord(v: unknown): Record<string, unknown> {

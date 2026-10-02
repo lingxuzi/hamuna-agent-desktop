@@ -94,7 +94,12 @@ describe('MiniApp generate + register: appId contract', () => {
       'index.ts re-inlined the appId regex. Route it through isKebabAppId ' +
         'from server/miniapp-app-id.ts so the six call sites cannot drift again.',
     ).toBeNull();
-    expect(source.match(/isKebabAppId\(/g)?.length ?? 0).toBe(6); // one per route
+    expect(
+      source.match(/isKebabAppId\(/g)?.length ?? 0).toBe(7); // one per route
+    // The seventh is the `window.app.*` capability dispatch route
+    // (`/api/miniapp/app/:method`): it takes an appId from the MiniApp iframe
+    // and resolves it to `~/.hamuna/miniapps/<appId>`, so it must go through
+    // the same validator rather than trusting the caller.
   });
 });
 

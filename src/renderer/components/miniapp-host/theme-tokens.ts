@@ -16,9 +16,6 @@ import type { CSSProperties } from 'react';
  * 抽出当前 document `:root` 上 Theme 相关 CSS 变量。
  * PRD v0.3 §5.4 列出最小子集：bg / bg-elevated / text / text-muted / accent /
  * border / radius-sm / radius-md / shadow-sm / font-sans。
- *
- * ponytail: 不抽全部 theme token（Theme 切换时全量重写 iframe :root 即可）；
- * 这里抽的子集只为 MiniApp 内 CSS 提供 fallback。
  */
 export interface MiniAppThemeTokens {
   bg: string;

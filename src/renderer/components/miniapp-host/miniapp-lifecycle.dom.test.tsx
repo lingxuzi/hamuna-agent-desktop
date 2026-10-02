@@ -1,32 +1,49 @@
 /**
- * MiniApp lifecycle, stage 2 of 2: LAUNCH, and whether a running MiniApp can
- * reach the agent or an LLM.
+ * MiniApp lifecycle, stage 2 of 2: LAUNCH.
  *
  * The generate/register half lives in
  * `src/server/__tests__/miniapp-lifecycle.unit.test.ts`.
  *
- * The headline finding this file pins: **a running MiniApp cannot talk to the
- * agent or an LLM at all.** Three separate gaps each independently break the
- * one channel that exists (Bubble Claim), and the AI permission that would
- * open a second one is declared in every meta.json but has no runtime reader.
+ * ## Historical note (read before touching the `it.fails` cases below)
  *
- * Those gaps are asserted with `it.fails`, which passes while the behaviour is
- * broken and flips to red the moment someone fixes it — at which point the
- * `.fails` has to come off. That is deliberate: a plain passing test would
- * lock the gap in as intended behaviour, and a plain red test would just sit
- * in the suite ignored.
+ * This file was written when a running MiniApp genuinely could not reach the
+ * agent or an LLM: `permissions.ai` was declared in every meta.json but had no
+ * runtime reader, and the AI channel it would have opened did not exist. The
+ * gaps were pinned with `it.fails`, which passes while broken and flips to red
+ * the moment someone fixes it.
+ *
+ * `app.ai.*` and `app.agent.*` have since landed, so some of those `.fails`
+ * have already come off. **A remaining `.fails` is not a statement about the
+ * product** — check what it asserts before assuming the capability is still
+ * missing. The same goes in reverse: do not add a passing test that locks one
+ * of these gaps in as intended behaviour.
  */
 import type { ReactElement } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import MiniAppSceneTab from '@/pages/MiniAppSceneTab';
+import { ThemeRegistry, ThemeRuntimeProvider } from '@/theme';
+import { myAgentsDefaultTheme } from '@/theme/themes/hamuna-default';
 import type { Tab } from '@/types/tab';
 
-const loadMiniAppSource = vi.fn();
+const loadMiniAppSourceWithRoots = vi.fn();
 vi.mock('@/lib/marketplaceClient', () => ({
-  loadMiniAppSource: (...args: unknown[]) => loadMiniAppSource(...args),
+  loadMiniAppSourceWithRoots: (...args: unknown[]) => loadMiniAppSourceWithRoots(...args),
 }));
+
+/**
+ * source 响应的完整形态。sidecar 随 source 一起下发两个路径根
+ * （`app.appDataDir` / `app.workspaceDir` 的来源），scene tab 会拆开分别喂给
+ * runtimeEnv，所以 mock 少一个字段就等于"作者拿不到自己的目录"。
+ */
+function src(html: string, roots: { appDataDir?: string; workspaceDir?: string } = {}) {
+  return {
+    source: html,
+    appDataDir: roots.appDataDir ?? '',
+    workspaceDir: roots.workspaceDir ?? '',
+  };
+}
 
 // Heavy page subtrees, stubbed so importing App stays cheap — same approach
 // as ColdRestoreTab.test.tsx.
@@ -93,51 +110,128 @@ const tabContentProps = {
 } as unknown as React.ComponentProps<typeof MemoizedTabContent>;
 
 afterEach(() => {
-  loadMiniAppSource.mockReset();
+  loadMiniAppSourceWithRoots.mockReset();
   for (const key of Object.keys(runnerProps)) delete runnerProps[key];
   vi.restoreAllMocks();
 });
 
+/**
+ * `MiniAppSceneTab` reads the host's appearance mode through the public Theme
+ * runtime (`useResolvedTheme`) so the value it forwards into the iframe's
+ * `app.appearanceMode` matches the real host, not a DOM guess. That runtime
+ * requires its provider, so scene-tab renders go through here.
+ */
+function withTheme(ui: ReactElement): ReactElement {
+  const registry = new ThemeRegistry([myAgentsDefaultTheme]);
+  return (
+    <ThemeRuntimeProvider
+      registry={registry}
+      selection={{ themeId: myAgentsDefaultTheme.id, appearanceMode: 'dark' }}
+    >
+      {ui}
+    </ThemeRuntimeProvider>
+  );
+}
+
 describe('MiniApp launch: scene tab → runner', () => {
   it('shows a loading state before the source arrives', () => {
-    loadMiniAppSource.mockReturnValue(new Promise(() => {}));
-    render(<MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />);
+    loadMiniAppSourceWithRoots.mockReturnValue(new Promise(() => {}));
+    render(withTheme(<MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />));
     expect(screen.getByText(/Loading git-graph/)).toBeTruthy();
   });
 
   it('mounts the runner with the fetched source once it resolves', async () => {
-    loadMiniAppSource.mockResolvedValue('<html><body><p>graph</p></body></html>');
-    render(<MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />);
+    loadMiniAppSourceWithRoots.mockResolvedValue(src('<html><body><p>graph</p></body></html>'));
+    render(withTheme(<MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />));
 
     await waitFor(() => expect(screen.getByTestId('runner')).toBeTruthy());
-    expect(loadMiniAppSource).toHaveBeenCalledWith('git-graph');
+    expect(loadMiniAppSourceWithRoots).toHaveBeenCalledWith('git-graph');
     expect(runnerProps.srcDoc).toContain('<p>graph</p>');
   });
 
+  it('forwards the declared permissions to the runner as the app.* grant source', async () => {
+    loadMiniAppSourceWithRoots.mockResolvedValue(src('<html></html>'));
+    render(
+      withTheme(
+        <MiniAppSceneTab
+          tab={sceneTab({
+            appId: 'git-graph',
+            permissions: { fs: { read: ['{workspace}/**'] }, shell: { allow: ['git'] } },
+          })}
+          isActive
+        />,
+      ),
+    );
+
+    await waitFor(() => expect(screen.getByTestId('runner')).toBeTruthy());
+    expect(runnerProps.permissions).toEqual({
+      fs: { read: ['{workspace}/**'] },
+      shell: { allow: ['git'] },
+    });
+  });
+
+  it('hands the sidecar-supplied path roots to the runtime, verbatim', async () => {
+    // `app.appDataDir` / `app.workspaceDir` 的值必须与 sidecar 展开
+    // `{appdata}` / `{workspace}` 权限前缀时用的是同一组值，所以只能透传，
+    // 不能由 scene tab 推算。推算出来的 `{workspace}` 会与真正执行时展开的
+    // `currentAgentDir` 不同，作者照它拼路径就会被判越权 —— 而症状是
+    // "声明了 fs.read 却读不到自己的文件"，极难定位。
+    loadMiniAppSourceWithRoots.mockResolvedValue(
+      src('<html></html>', {
+        appDataDir: '/home/u/.hamuna/miniapps/git-graph',
+        workspaceDir: '/home/u/projects/demo',
+      }),
+    );
+    render(withTheme(<MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />));
+
+    await waitFor(() => expect(screen.getByTestId('runner')).toBeTruthy());
+    expect(runnerProps.env).toMatchObject({
+      appDataDir: '/home/u/.hamuna/miniapps/git-graph',
+      workspaceDir: '/home/u/projects/demo',
+    });
+  });
+
+  it('degrades to empty roots rather than inventing a path when the sidecar omits them', async () => {
+    // 老 sidecar 或异常路径下 roots 可能缺失。此时必须是空串（作者据此知道
+    // "没有工作区"），而不是 renderer 兜一个猜的目录 —— 猜错的目录会让作者
+    // 往真实存在的错误位置写数据。
+    loadMiniAppSourceWithRoots.mockResolvedValue({
+      source: '<html></html>',
+      appDataDir: '',
+      workspaceDir: '',
+    });
+    render(withTheme(<MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />));
+
+    await waitFor(() => expect(screen.getByTestId('runner')).toBeTruthy());
+    expect(runnerProps.env).toMatchObject({ appDataDir: '', workspaceDir: '' });
+  });
+
   it('surfaces a source failure instead of hanging on the spinner', async () => {
-    loadMiniAppSource.mockRejectedValue(new Error('HTTP 404'));
-    render(<MiniAppSceneTab tab={sceneTab({ appId: 'ghost' })} isActive />);
+    loadMiniAppSourceWithRoots.mockRejectedValue(new Error('HTTP 404'));
+    render(withTheme(<MiniAppSceneTab tab={sceneTab({ appId: 'ghost' })} isActive />));
 
     await waitFor(() => expect(screen.getByText(/Failed to load MiniApp source/)).toBeTruthy());
   });
 
   it('refetches when the user opens a different MiniApp in the same tab', async () => {
-    loadMiniAppSource.mockResolvedValue('<html></html>');
+    loadMiniAppSourceWithRoots.mockResolvedValue(src('<html></html>'));
     const { rerender } = render(
-      <MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />,
+      withTheme(<MiniAppSceneTab tab={sceneTab({ appId: 'git-graph' })} isActive />),
     );
-    await waitFor(() => expect(loadMiniAppSource).toHaveBeenCalledWith('git-graph'));
+    await waitFor(() => expect(loadMiniAppSourceWithRoots).toHaveBeenCalledWith('git-graph'));
 
-    rerender(<MiniAppSceneTab tab={sceneTab({ appId: 'file-explorer' })} isActive />);
-    await waitFor(() => expect(loadMiniAppSource).toHaveBeenCalledWith('file-explorer'));
+    rerender(withTheme(<MiniAppSceneTab tab={sceneTab({ appId: 'file-explorer' })} isActive />));
+    await waitFor(() => expect(loadMiniAppSourceWithRoots).toHaveBeenCalledWith('file-explorer'));
   });
 
   it('falls back to a readable message when the tab carries no payload', () => {
     render(
-      <MiniAppSceneTab tab={{ id: 'tab-1', view: 'miniapp-scene' } as unknown as Tab} isActive />,
+      withTheme(
+        <MiniAppSceneTab tab={{ id: 'tab-1', view: 'miniapp-scene' } as unknown as Tab} isActive />,
+      ),
     );
     expect(screen.getByText(/Missing MiniApp payload/)).toBeTruthy();
-    expect(loadMiniAppSource).not.toHaveBeenCalled();
+    expect(loadMiniAppSourceWithRoots).not.toHaveBeenCalled();
   });
 });
 
@@ -212,14 +306,16 @@ describe('MiniApp → agent: the Bubble Claim channel', () => {
   });
 
   it('the scene tab wires onBubbleClaim through to the runner', async () => {
-    loadMiniAppSource.mockResolvedValue('<html></html>');
+    loadMiniAppSourceWithRoots.mockResolvedValue(src('<html></html>'));
     const onBubbleClaim = vi.fn();
     render(
-      <MiniAppSceneTab
-        tab={sceneTab({ appId: 'icon-generator' })}
-        isActive
-        onBubbleClaim={onBubbleClaim}
-      />,
+      withTheme(
+        <MiniAppSceneTab
+          tab={sceneTab({ appId: 'icon-generator' })}
+          isActive
+          onBubbleClaim={onBubbleClaim}
+        />,
+      ),
     );
     // The source fetch resolves asynchronously, so wait for the mount.
     await waitFor(() => expect(screen.getByTestId('runner')).toBeTruthy());
@@ -227,15 +323,17 @@ describe('MiniApp → agent: the Bubble Claim channel', () => {
   });
 
   it('App hands its claim handler to the scene tab, tagged with the source tab', async () => {
-    loadMiniAppSource.mockResolvedValue('<html></html>');
+    loadMiniAppSourceWithRoots.mockResolvedValue(src('<html></html>'));
     const onMiniAppBubbleClaim = vi.fn();
     render(
-      <MemoizedTabContent
-        {...tabContentProps}
-        tab={sceneTab({ appId: 'icon-generator' })}
-        isActive
-        onMiniAppBubbleClaim={onMiniAppBubbleClaim}
-      />,
+      withTheme(
+        <MemoizedTabContent
+          {...tabContentProps}
+          tab={sceneTab({ appId: 'icon-generator' })}
+          isActive
+          onMiniAppBubbleClaim={onMiniAppBubbleClaim}
+        />,
+      ),
     );
     await waitFor(() => expect(screen.getByTestId('runner')).toBeTruthy());
 

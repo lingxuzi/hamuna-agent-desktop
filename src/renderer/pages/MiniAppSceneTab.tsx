@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import MiniAppRunner from '@/components/miniapp-host/MiniAppRunner';
 import type { BubbleClaimMessage } from '@/components/miniapp-host/bubbleClaimBridge';
-import { loadMiniAppSource } from '@/lib/marketplaceClient';
+import { loadMiniAppSourceWithRoots } from '@/lib/marketplaceClient';
 import { useResolvedTheme } from '@/theme';
 import { isSupportedLocale } from '@/../shared/i18n';
 import type { Tab } from '@/types/tab';
@@ -33,12 +33,17 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
   const payload = tab.miniapp;
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 两个路径根由 sidecar 随 source 一起下发。它们必须与 sidecar 展开
+  // `{appdata}` / `{workspace}` 权限前缀时用的是同一组值，所以只能来自
+  // sidecar —— 见 `loadMiniAppSourceWithRoots` 的注释。
+  const [roots, setRoots] = useState({ appDataDir: '', workspaceDir: '' });
   const theme = useResolvedTheme();
   const { i18n } = useTranslation();
 
   // 宿主环境事实，随 `host.ready` 下发给 iframe 侧 runtime，填充
-  // `app.locale` / `app.appearanceMode` / `app.platform`。
-  // `app.t(...)` 与 `onLocaleChange` 依赖它，因此必须在首帧就正确。
+  // `app.locale` / `app.appearanceMode` / `app.platform` / `app.appDataDir` /
+  // `app.workspaceDir`。`app.t(...)` 与 `onLocaleChange` 依赖前三者，因此必须
+  // 在首帧就正确。
   const runtimeEnv = useMemo(
     () => ({
       appearanceMode: theme.appearanceMode,
@@ -48,8 +53,10 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
         : navigator.platform.toLowerCase().includes('mac')
           ? 'darwin'
           : 'linux',
+      workspaceDir: roots.workspaceDir,
+      appDataDir: roots.appDataDir,
     }),
-    [theme.appearanceMode, i18n.language],
+    [theme.appearanceMode, i18n.language, roots.workspaceDir, roots.appDataDir],
   );
 
   // Reload source on appId change OR when the tab becomes active again (cheap
@@ -60,9 +67,11 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
     let cancelled = false;
     setSrcDoc(null);
     setError(null);
-    void loadMiniAppSource(payload.appId)
-      .then((html) => {
-        if (!cancelled) setSrcDoc(html);
+    void loadMiniAppSourceWithRoots(payload.appId)
+      .then((loaded) => {
+        if (cancelled) return;
+        setSrcDoc(loaded.source);
+        setRoots({ appDataDir: loaded.appDataDir, workspaceDir: loaded.workspaceDir });
       })
       .catch((e: unknown) => {
         if (!cancelled) {

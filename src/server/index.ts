@@ -5605,6 +5605,39 @@ async function main() {
           );
         }
       }
+      // ============= MiniApp `window.app.*` capability dispatch =============
+      // 对齐 OpenBitFun 的 host_dispatch：MiniApp 声明的框架原语（fs / shell /
+      // net / os / storage）由 sidecar 直接执行，**不要求** MiniApp 带
+      // worker.js。renderer 侧已做过一次权限判定，这里独立复算（纵深防御：
+      // renderer 是 WebView，它的判定可被绕过）。
+      if (pathname.startsWith('/api/miniapp/app/') && request.method === 'POST') {
+        const method = pathname.slice('/api/miniapp/app/'.length);
+        try {
+          const body = (await request.json().catch(() => null)) as
+            | { appId?: unknown; params?: unknown }
+            | null;
+          if (!body || !isKebabAppId(body.appId)) {
+            return jsonResponse({ ok: false, error: APP_ID_ERROR }, 400);
+          }
+          const { dispatchMiniAppApp } = await import('./miniapp-app-dispatch');
+          const outcome = await dispatchMiniAppApp(method, body.appId, body.params ?? null, {
+            workspaceDir: currentAgentDir,
+          });
+          return jsonResponse(outcome, outcome.ok ? 200 : 400);
+        } catch (error) {
+          console.error('[api/miniapp/app] Error:', error);
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: 'HOST_ERROR',
+                message: error instanceof Error ? error.message : 'app dispatch error',
+              },
+            },
+            500,
+          );
+        }
+      }
       // ============= MiniApp Marketplace + Worker FORWARD-PORT (Phase 3, PRD v0.4 §B.4) =============
       // Phase 3: catalog (bundled + installed) + install/uninstall lifecycle +
       // Node worker_threads spawn/call/terminate. Pool lives in Sidecar;
@@ -5639,7 +5672,26 @@ async function main() {
           const result = await managementApi('/api/miniapp/source', 'POST', {
             app_id: body.appId,
           });
-          return jsonResponse(result, result.ok === true ? 200 : 400);
+          if (result.ok !== true) return jsonResponse(result, 400);
+          // 随 source 一起下发两个路径根，让 renderer 把它们交给
+          // `app.appDataDir` / `app.workspaceDir`。
+          //
+          // 为什么由 sidecar 给出而不是 renderer 自己算：这两个值同时也是
+          // `permissions.fs` 里 `{appdata}` / `{workspace}` 模板展开的基准
+          // （见 `miniapp-app-dispatch.ts::expandTemplates`），而
+          // `{workspace}` 展开成的是 sidecar 进程里的 `currentAgentDir` ——
+          // renderer 无从得知。renderer 若自行推算 `{workspace}`，得到的
+          // 路径与真正执行时展开的**不是同一个**，作者按 `app.workspaceDir`
+          // 拼出的路径会被 sidecar 判成越权。值必须来自唯一的 owner。
+          const { miniappAppRoot } = await import('./miniapp-app-dispatch');
+          return jsonResponse(
+            {
+              ...result,
+              appdata_dir: miniappAppRoot(body.appId),
+              workspace_dir: currentAgentDir ?? null,
+            },
+            200,
+          );
         } catch (error) {
           console.error('[api/miniapp/source] Error:', error);
           return jsonResponse(

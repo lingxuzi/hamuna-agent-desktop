@@ -500,6 +500,15 @@ pub struct MiniAppSummary {
     /// `meta.json::tags`, for catalog filtering.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    /// `meta.json::permissions`, passed through verbatim. The scene tab
+    /// forwards this to `MiniAppRunner`, which uses it as the renderer-side
+    /// authorization source for `window.app.*` (fs / shell / net / storage).
+    /// Serialized as a plain JSON value rather than a typed struct on purpose:
+    /// the renderer + sidecar own the permission *semantics* (`shared/miniapp/
+    /// app-permissions.ts`), and a second Rust copy of that shape would be one
+    /// more thing to drift out of sync. Absent = no grants.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<serde_json::Value>,
 }
 
 fn default_miniapp_source() -> String {
@@ -577,12 +586,51 @@ fn list_marketplace_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<Vec
     Ok(out)
 }
 
+/// Compare two `x.y.z` versions. `None` when either side is unparseable —
+/// an unparseable `min_host_version` is treated as "unknown", not as "pass".
+fn parse_semver(v: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = v.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((major, minor, patch))
+}
+
+/// True when `required` <= the running host version.
+///
+/// This is what makes `min_host_version` mean something. Before this existed
+/// the field was validated for shape only, so an app declaring a *future*
+/// minimum shipped happily and failed at first use — and three bundled apps
+/// declared `0.4.0` while the host was still `0.3.x`.
+fn miniapp_host_version_satisfies(required: &str) -> bool {
+    let req = match parse_semver(required) {
+        Some(v) => v,
+        None => return false,
+    };
+    let host = match parse_semver(env!("CARGO_PKG_VERSION")) {
+        Some(v) => v,
+        None => return false,
+    };
+    req <= host
+}
+
 fn read_miniapp_meta_for_listing(meta_path: &Path, source: &str) -> Option<MiniAppSummary> {
     if !meta_path.exists() {
         return None;
     }
     let raw = fs::read_to_string(meta_path).ok()?;
     let parsed: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    // Gate on `min_host_version` before doing any more work: an app that needs
+    // a newer host must not appear in the catalog, or the user opens it and
+    // gets a blank tab with no explanation.
+    if let Some(min) = parsed.get("min_host_version").and_then(|v| v.as_str()) {
+        if !miniapp_host_version_satisfies(min) {
+            return None;
+        }
+    }
     let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let version = parsed.get("version").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -618,6 +666,10 @@ fn read_miniapp_meta_for_listing(meta_path: &Path, source: &str) -> Option<MiniA
                 .filter_map(|t| t.as_str().map(|s| s.to_string()))
                 .collect()
         }),
+        permissions: parsed
+            .get("permissions")
+            .cloned()
+            .filter(|v| v.is_object()),
         dependencies: parsed
             .get("dependencies")
             .cloned()
@@ -3034,6 +3086,47 @@ mod miniapp_summary_tests {
             r#"{"id":"x","name":"X","description":"d","version":1,"i18n":null}"#,
         );
         assert!(s.i18n.is_none());
+    }
+}
+
+#[cfg(test)]
+mod miniapp_host_version_tests {
+    use super::{miniapp_host_version_satisfies, parse_semver};
+
+    // `min_host_version` used to be shape-checked only, which let three bundled
+    // apps declare 0.4.0 while the host was 0.3.x — they shipped, appeared in the
+    // catalog, and then had no working implementation behind them. These pin the
+    // comparison that now gates the listing.
+
+    #[test]
+    fn parses_three_segment_semver() {
+        assert_eq!(parse_semver("0.3.233"), Some((0, 3, 233)));
+        assert_eq!(parse_semver("1.0.0"), Some((1, 0, 0)));
+    }
+
+    #[test]
+    fn rejects_malformed_semver() {
+        assert_eq!(parse_semver("0.3"), None);
+        assert_eq!(parse_semver("0.3.1.2"), None);
+        assert_eq!(parse_semver("v0.3.1"), None);
+        assert_eq!(parse_semver(""), None);
+    }
+
+    #[test]
+    fn host_satisfies_versions_at_or_below_its_own() {
+        assert!(miniapp_host_version_satisfies("0.0.1"));
+        // An app declaring exactly the host version must load.
+        assert!(miniapp_host_version_satisfies(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn host_rejects_versions_above_its_own() {
+        // A far-future minimum must not pass, and neither must an unparseable one.
+        assert!(!miniapp_host_version_satisfies("999.0.0"));
+        assert!(
+            !miniapp_host_version_satisfies("not-a-version"),
+            "an unparseable min_host_version must fail closed, not silently pass"
+        );
     }
 }
 
