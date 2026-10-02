@@ -252,6 +252,7 @@ import {
   MEMORY_UPDATE_COMPLETION_MARKER,
 } from './utils/memory-update-reminder';
 import { assertOfficialSystemSkillExposed } from './utils/system-skill-readiness';
+import { APP_ID_ERROR, isKebabAppId } from './miniapp-app-id';
 import { managementApi } from './utils/management-api-client';
 import { buildGoalContinuationReminder } from '../shared/systemReminder';
 import { setImCronContext } from './tools/im-cron-tool';
@@ -5530,17 +5531,8 @@ async function main() {
           const body = await request.json().catch(() => null) as
             | { appId?: unknown; source?: unknown }
             | null;
-          if (
-            !body ||
-            typeof body.appId !== 'string' ||
-            !/^[a-z0-9-]{1,64}$/.test(body.appId) ||
-            body.appId.startsWith('-') ||
-            body.appId.endsWith('-')
-          ) {
-            return jsonResponse(
-              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
-              400
-            );
+          if (!body || !isKebabAppId(body.appId)) {
+            return jsonResponse({ ok: false, error: APP_ID_ERROR }, 400);
           }
           if (!body.source || typeof body.source !== 'object' || Array.isArray(body.source)) {
             return jsonResponse({ ok: false, error: 'source must be Record<string,string>' }, 400);
@@ -5596,8 +5588,8 @@ async function main() {
           const url = new URL(request.url);
           const appId = url.searchParams.get('appId');
           const fromVersionStr = url.searchParams.get('fromVersion');
-          if (!appId || !/^[a-z0-9-]{1,64}$/.test(appId)) {
-            return jsonResponse({ ok: false, error: 'appId must be kebab-case ASCII' }, 400);
+          if (!isKebabAppId(appId)) {
+            return jsonResponse({ ok: false, error: APP_ID_ERROR }, 400);
           }
           const fromVersion = fromVersionStr ? Number(fromVersionStr) : undefined;
           const result = await managementApi('/api/miniapp/diff', 'GET', {
@@ -5641,17 +5633,8 @@ async function main() {
           const body = (await request.json().catch(() => null)) as
             | { appId?: unknown }
             | null;
-          if (
-            !body ||
-            typeof body.appId !== 'string' ||
-            !/^[a-z0-9-]{1,64}$/.test(body.appId) ||
-            body.appId.startsWith('-') ||
-            body.appId.endsWith('-')
-          ) {
-            return jsonResponse(
-              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
-              400,
-            );
+          if (!body || !isKebabAppId(body.appId)) {
+            return jsonResponse({ ok: false, error: APP_ID_ERROR }, 400);
           }
           const result = await managementApi('/api/miniapp/source', 'POST', {
             app_id: body.appId,
@@ -5677,17 +5660,8 @@ async function main() {
           const body = (await request.json().catch(() => null)) as
             | { appId?: unknown }
             | null;
-          if (
-            !body ||
-            typeof body.appId !== 'string' ||
-            !/^[a-z0-9-]{1,64}$/.test(body.appId) ||
-            body.appId.startsWith('-') ||
-            body.appId.endsWith('-')
-          ) {
-            return jsonResponse(
-              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
-              400,
-            );
+          if (!body || !isKebabAppId(body.appId)) {
+            return jsonResponse({ ok: false, error: APP_ID_ERROR }, 400);
           }
           const result = await managementApi('/api/miniapp/install', 'POST', {
             app_id: body.appId,
@@ -5708,15 +5682,8 @@ async function main() {
           const body = (await request.json().catch(() => null)) as
             | { appId?: unknown }
             | null;
-          if (
-            !body ||
-            typeof body.appId !== 'string' ||
-            !/^[a-z0-9-]{1,64}$/.test(body.appId)
-          ) {
-            return jsonResponse(
-              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
-              400,
-            );
+          if (!body || !isKebabAppId(body.appId)) {
+            return jsonResponse({ ok: false, error: APP_ID_ERROR }, 400);
           }
           const result = await managementApi('/api/miniapp/uninstall', 'POST', {
             app_id: body.appId,
@@ -5743,15 +5710,8 @@ async function main() {
           const body = (await request.json().catch(() => null)) as
             | { appId?: unknown; kind?: unknown; init?: unknown }
             | null;
-          if (
-            !body ||
-            typeof body.appId !== 'string' ||
-            !/^[a-z0-9-]{1,64}$/.test(body.appId)
-          ) {
-            return jsonResponse(
-              { ok: false, error: 'appId must be kebab-case ASCII (a-z, 0-9, -), 1-64 chars' },
-              400,
-            );
+          if (!body || !isKebabAppId(body.appId)) {
+            return jsonResponse({ ok: false, error: APP_ID_ERROR }, 400);
           }
           if (typeof body.kind !== 'string' || !getKindDef(body.kind)) {
             return jsonResponse(
