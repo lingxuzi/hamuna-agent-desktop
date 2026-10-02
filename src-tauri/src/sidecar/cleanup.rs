@@ -43,7 +43,7 @@ pub(super) fn remove_global_port_file() {
 //
 // All forward-slash form — the matcher in `process_cleanup` normalizes
 // `\` → `/` and lowercases both sides before comparison.
-pub(super) const CHILD_CLEANUP_PATTERNS: &[crate::process_cleanup::ProcessPattern] = &[
+pub(crate) const CHILD_CLEANUP_PATTERNS: &[crate::process_cleanup::ProcessPattern] = &[
     // SDK subprocess spawned by Claude Agent SDK.
     crate::process_cleanup::ProcessPattern::new("SDK", "claude-agent-sdk"),
     // MCP servers installed under ~/.hamuna/mcp/.
@@ -51,10 +51,18 @@ pub(super) const CHILD_CLEANUP_PATTERNS: &[crate::process_cleanup::ProcessPatter
     // Well-known external MCP packages launched via `bun x` / `npx`.
     crate::process_cleanup::ProcessPattern::new("MCP-ext", "@playwright/mcp"),
     crate::process_cleanup::ProcessPattern::new("MCP-ext", "@anthropic-ai/mcp"),
-    // MCP servers running under bundled Node.js (cmd.exe intermediates on
-    // Windows can orphan these; the descendants-by-PPID walk inside
-    // `process_cleanup` catches them regardless).
-    crate::process_cleanup::ProcessPattern::new("nodejs", "/hamuna/nodejs/"),
+    // MCP servers running under the app's bundled Node.js. Two layouts exist:
+    // a dev run resolves node from `<repo>/src-tauri/resources/nodejs/bin/node`,
+    // a packaged Windows build from
+    // `%LOCALAPPDATA%\HamunaAgent\nodejs\node.exe`. The previous pattern was
+    // `/hamuna/nodejs/`, which describes NEITHER — verified live against a real
+    // orphan, which matched 0 of 5 cleanup patterns.
+    //
+    // `process_cleanup::PROTECTED_PATTERNS` is what keeps this safe to widen:
+    // 9router also runs on this bundled node but is a separately-installed
+    // service the user expects to survive.
+    crate::process_cleanup::ProcessPattern::new("nodejs", "hamunaagent/nodejs/"),
+    crate::process_cleanup::ProcessPattern::new("nodejs", "/resources/nodejs/"),
 ];
 
 pub(super) const STARTUP_CLEANUP_PATTERNS: &[crate::process_cleanup::ProcessPattern] = &[
@@ -65,7 +73,8 @@ pub(super) const STARTUP_CLEANUP_PATTERNS: &[crate::process_cleanup::ProcessPatt
     crate::process_cleanup::ProcessPattern::new("MCP", ".hamuna/mcp/"),
     crate::process_cleanup::ProcessPattern::new("MCP-ext", "@playwright/mcp"),
     crate::process_cleanup::ProcessPattern::new("MCP-ext", "@anthropic-ai/mcp"),
-    crate::process_cleanup::ProcessPattern::new("nodejs", "/hamuna/nodejs/"),
+    crate::process_cleanup::ProcessPattern::new("nodejs", "hamunaagent/nodejs/"),
+    crate::process_cleanup::ProcessPattern::new("nodejs", "/resources/nodejs/"),
 ];
 
 // ===== Startup cleanup synchronization =====

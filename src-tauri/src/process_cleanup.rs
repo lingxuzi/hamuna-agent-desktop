@@ -16,6 +16,7 @@
 //! `sysinfo` enumeration completes in ~10–50 ms vs ~5–15 s for the old
 //! PowerShell chain. On restarts with live children, ~50–200 ms total.
 
+use crate::ulog_warn;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -38,6 +39,30 @@ impl ProcessPattern {
     pub const fn new(name: &'static str, pattern: &'static str) -> Self {
         Self { name, pattern }
     }
+}
+
+/// Processes that must survive every cleanup pass, matched by command-line
+/// substring (same normalization as the kill patterns: lowercased, `\`→`/`).
+///
+/// Needed because a correct pattern set is necessarily broad: anything the app
+/// launches on the bundled Node shares one runtime path, including services
+/// the user installed themselves and expects to outlive the app. Protection is
+/// checked before root matching AND during the descendant walk, so a protected
+/// process is never killed even when it hangs off a matched root.
+pub const PROTECTED_PATTERNS: &[&str] = &[
+    // 9router runs on HamunaAgent's bundled node as its runtime but is a
+    // separately-installed tray service the user expects to keep running.
+    // Confirmed live: it survives as an orphan today only because the bundled
+    // node pattern is stale; fixing that pattern without this guard would
+    // start killing it on every app launch.
+    "9router",
+];
+
+/// True when a normalized command line names a process we must not kill.
+pub fn is_protected(cmd_norm: &str) -> bool {
+    PROTECTED_PATTERNS
+        .iter()
+        .any(|p| cmd_norm.contains(&normalize(p)))
 }
 
 #[derive(Debug, Default, Clone)]
@@ -192,6 +217,24 @@ pub fn kill_stale_processes_with_roots(
     patterns: &[ProcessPattern],
     protected_roots: &[PathBuf],
 ) -> CleanupReport {
+    kill_stale_processes_full(patterns, protected_roots, &[])
+}
+
+/// As [`kill_stale_processes_with_roots`], but also treats `seed_pids` as
+/// cleanup roots.
+///
+/// Pattern matching guesses from command-line strings, and a guess is only as
+/// good as the strings: the bundled-Node path moved between install layouts
+/// once already, which silently disabled the single most important pattern and
+/// let every MCP server survive app exit. The caller knows the sidecar PIDs
+/// exactly, so seed the walk with those instead of trying to recognise them
+/// from argv. Everything the sidecar spawned is then reachable by PPID, which
+/// does not care about `cmd.exe` wrapper layers the way `taskkill /T` does.
+pub fn kill_stale_processes_full(
+    patterns: &[ProcessPattern],
+    protected_roots: &[PathBuf],
+    seed_pids: &[u32],
+) -> CleanupReport {
     let started = Instant::now();
     let mut system = System::new();
     // Refresh with CMD info so Process::cmd() is populated.
@@ -243,7 +286,22 @@ pub fn kill_stale_processes_with_roots(
         if process_match_reason(&cmd_norm, exe_norm.as_deref(), &norm_patterns, &norm_roots)
             .is_some()
         {
-            roots.insert(*pid);
+            if !is_protected(&cmd_norm) {
+                roots.insert(*pid);
+            } else {
+                ulog_warn!(
+                    "[cleanup] matched a kill pattern but is protected; leaving pid {} alive",
+                    pid.as_u32()
+                );
+            }
+        }
+    }
+
+    // Seed roots: PIDs the caller already knows are ours (sidecar children).
+    for seed in seed_pids {
+        let pid = Pid::from_u32(*seed);
+        if *seed != self_pid.as_u32() && system.process(pid).is_some() {
+            roots.insert(pid);
         }
     }
     let matched_roots = roots.len();
@@ -256,6 +314,19 @@ pub fn kill_stale_processes_with_roots(
             for kid in kids {
                 if *kid == self_pid {
                     continue;
+                }
+                // A protected process is a hard stop for the walk, not just a
+                // skipped root: its own subtree belongs to it, not to us.
+                if let Some(kp) = system.process(*kid) {
+                    let kcmd = kp
+                        .cmd()
+                        .iter()
+                        .map(|os| os.to_string_lossy().into_owned())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if is_protected(&normalize(&kcmd)) {
+                        continue;
+                    }
                 }
                 if to_kill.insert(*kid) {
                     queue.push(*kid);
@@ -537,5 +608,65 @@ mod tests {
             &roots,
         )
         .is_some());
+    }
+
+    // ─── Protection + seeded sweep ──────────────────────────────────────
+    //
+    // Both of these exist because of a measured failure: the bundled-Node
+    // cleanup pattern pointed at an install layout the app stopped using, so a
+    // live orphan matched 0 of 5 patterns and every MCP server survived exit.
+    // Seeds fix the blind spot without guessing; protection is what makes it
+    // safe to widen the pattern to the path that is actually in use.
+
+    /// The command line of a real orphaned process captured on a dev machine.
+    fn real_orphan_cmdline() -> String {
+        r"C:\Users\Administrator\AppData\Local\HamunaAgent\nodejs\node.exe --dns-result-order=ipv4first C:\Users\Administrator\AppData\Local\HamunaAgent\nodejs\node_modules\9router\cli.js --tray --skip-update -p 20128".to_string()
+    }
+
+    #[test]
+    fn the_old_nodejs_pattern_never_matched_the_real_path() {
+        // Pins the regression: if someone reverts to `/hamuna/nodejs/` this
+        // fails, because that substring appears in neither layout.
+        let cmd = normalize(&real_orphan_cmdline());
+        assert!(cmd.contains("hamunaagent/nodejs/"));
+        assert!(
+            !cmd.contains("/hamuna/nodejs/"),
+            "expected the stale pattern to NOT match, but it did"
+        );
+    }
+
+    #[test]
+    fn protected_processes_are_never_killed_even_though_they_match() {
+        let cmd = normalize(&real_orphan_cmdline());
+        assert!(
+            is_protected(&cmd),
+            "9router runs on the bundled node and must survive the widened pattern"
+        );
+    }
+
+    #[test]
+    fn protection_does_not_leak_to_ordinary_mcp_servers() {
+        // The guard must be narrow: an unrelated MCP server on the same bundled
+        // node still has to be killable, otherwise the protection fixes the leak
+        // by disabling cleanup entirely.
+        let mcp = normalize(
+            r"C:\Users\Administrator\AppData\Local\HamunaAgent\nodejs\node.exe C:\...\node_modules\@playwright\mcp\cli.js",
+        );
+        assert!(!is_protected(&mcp), "MCP server wrongly protected");
+    }
+
+    #[test]
+    fn the_widened_nodejs_patterns_match_the_real_path() {
+        let patterns = crate::sidecar::cleanup::CHILD_CLEANUP_PATTERNS;
+        let cmd = normalize(&real_orphan_cmdline());
+        let nodejs: Vec<String> = patterns
+            .iter()
+            .filter(|p| p.name == "nodejs")
+            .map(|p| normalize(p.pattern))
+            .collect();
+        assert!(
+            nodejs.iter().any(|pat| cmd.contains(pat.as_str())),
+            "no nodejs pattern matches the real bundled-node path: {nodejs:?}"
+        );
     }
 }

@@ -175,14 +175,19 @@ pub fn stop_all_sidecars(manager: &ManagedSidecarManager) -> Result<(), String> 
     ulog_info!("[sidecar] Stopping all sidecars and cleaning up child processes...");
 
     // 1. Stop all managed sidecar instances (kills bun sidecars via Drop)
+    //    Collect the PIDs first: `stop_all` drains the maps, and they are the
+    //    only reliable anchor for the descendant sweep in step 2.
     let mut manager_guard = manager.lock().map_err(|e| e.to_string())?;
+    let sidecar_pids = manager_guard.live_sidecar_pids();
     manager_guard.stop_all();
     drop(manager_guard);
 
     // 2. Clean up any orphaned child processes (SDK and MCP)
     // This is necessary because SDK spawns child processes that don't die
-    // when the parent bun sidecar is killed
-    cleanup_child_processes();
+    // when the parent bun sidecar is killed. `sidecar_pids` seeds the walk so
+    // the sweep does not depend on recognising a command line — see
+    // `kill_stale_processes_full`.
+    cleanup_child_processes(&sidecar_pids);
 
     Ok(())
 }
@@ -209,11 +214,13 @@ fn shutdown_for_update_inner(
     // 1. Stop all sidecar instances (via Drop → kill_process → taskkill /T /F)
     stop_all_sidecars(manager)?;
 
-    // 2. Actively kill orphan processes that may survive sidecar tree-kill
-    //    (e.g., node.exe from bundled npx — cmd.exe intermediate layers break process tree)
+    // 2. Second pattern-only sweep for stragglers the seeded pass missed —
+    //    anything started by a sidecar that had already been reaped, plus
+    //    orphans left by an earlier crashed run. Unseeded on purpose: the
+    //    authoritative pass already ran inside `stop_all_sidecars`.
     #[cfg(windows)]
     {
-        cleanup_child_processes();
+        cleanup_child_processes(&[]);
     }
 
     // 3. Wait for all related processes to truly exit. Uses the same
@@ -325,8 +332,9 @@ fn shutdown_for_update_inner(
 /// sidecars are already killed through their `Child` handles in
 /// [`stop_all_sidecars`]. Sweeping by marker here would risk killing a
 /// concurrent HamunaAgent instance's sidecars during any overlap window.
-fn cleanup_child_processes() {
-    let report = crate::process_cleanup::kill_stale_processes(CHILD_CLEANUP_PATTERNS);
+fn cleanup_child_processes(seed_pids: &[u32]) {
+    let report =
+        crate::process_cleanup::kill_stale_processes_full(CHILD_CLEANUP_PATTERNS, &[], seed_pids);
     if report.total_targets() == 0 {
         ulog_info!(
             "[sidecar] Shutdown cleanup: nothing to kill ({:?})",

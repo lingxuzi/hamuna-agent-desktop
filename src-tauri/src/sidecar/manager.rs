@@ -253,6 +253,27 @@ impl SidecarManager {
         ports
     }
 
+    /// PIDs of every sidecar this manager currently owns.
+    ///
+    /// Must be collected BEFORE [`Self::stop_all`], which drains the maps. The
+    /// exit path uses these as cleanup seeds so the whole descendant tree of
+    /// each sidecar (MCP servers, SDK subprocess, npx/uv wrappers) is reachable
+    /// by PPID — `taskkill /T` alone misses those when a `cmd.exe` layer sits
+    /// in between, and command-line pattern matching cannot recognise them at
+    /// all once the bundled-Node path moves between install layouts.
+    pub fn live_sidecar_pids(&self) -> Vec<u32> {
+        let mut pids: Vec<u32> = self
+            .sidecars
+            .values()
+            .map(|s| s.process.id())
+            .chain(self.instances.values().map(|i| i.process.id()))
+            .filter(|pid| *pid != 0)
+            .collect();
+        pids.sort_unstable();
+        pids.dedup();
+        pids
+    }
+
     /// Stop all instances (session sidecars and global sidecar)
     pub fn stop_all(&mut self) {
         ulog_info!(
