@@ -5,6 +5,11 @@ export const REQUIRED_THEME_CSS_TOKENS = [
   '--paper', '--paper-elevated', '--message-user-bg', '--paper-inset',
   '--paper-a0', '--paper-elevated-a0', '--message-user-bg-a0', '--paper-inset-a0', '--hover-bg',
   '--accent', '--accent-warm', '--accent-warm-hover', '--accent-warm-subtle',
+  // Consumed by the MiniApp theme bridge: miniapp-host/theme-tokens.ts reads
+  // this for the `accent` token. Left out of this list, a theme could drop it
+  // and only the MiniApp iframe would notice — silently, rendering a hardcoded
+  // fallback colour. Pinned by theme-tokens.host-contract.test.ts.
+  '--accent-primary',
   '--accent-warm-muted', '--accent-warm-subtle-a0', '--accent-cool', '--accent-cool-hover', '--on-accent',
   '--heartbeat', '--heartbeat-bg', '--heartbeat-border',
   '--success', '--success-bg', '--on-success', '--error', '--error-bg', '--error-hover', '--error-subtle', '--on-error',

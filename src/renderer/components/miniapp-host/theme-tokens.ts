@@ -86,8 +86,13 @@ const TOKEN_VAR_NAMES = {
  * `--bg-elevated` / `--border-color`, none of which exist, so every one of
  * those lookups silently returned empty and the iframe fell through to
  * FALLBACK_TOKENS. The host spells surfaces `--paper*`, borders `--line*`.
+ *
+ * Exported so a test can assert every name here is one the theme registry
+ * actually validates — the failure this map invites is a typo'd or renamed
+ * variable, which TypeScript cannot catch and which surfaces only as the
+ * MiniApp silently rendering hardcoded fallback colours.
  */
-const HOST_TO_TOKEN: Record<keyof MiniAppThemeTokens, string> = {
+export const HOST_TO_TOKEN: Record<keyof MiniAppThemeTokens, string> = {
   bg: '--paper',
   bgElevated: '--paper-elevated',
   bgInset: '--paper-inset',

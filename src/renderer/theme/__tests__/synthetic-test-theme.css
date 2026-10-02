@@ -18,6 +18,7 @@ html[data-theme-id='synthetic-test-theme'] {
   --paper-inset-a0: rgb(239 208 245 / 0);
   --hover-bg: rgb(170 0 170 / 0.08);
   --accent: #aa00aa;
+  --accent-primary: #aa00aa;
   --accent-warm: #aa00aa;
   --accent-warm-hover: #cc22cc;
   --accent-warm-subtle: rgb(170 0 170 / 0.08);
@@ -132,6 +133,7 @@ html[data-theme-id='synthetic-test-theme'][data-color-scheme='dark'] {
   --paper-elevated: #240024;
   --paper-inset: #090009;
   --accent: #dd00dd;
+  --accent-primary: #dd00dd;
   --accent-warm: #dd00dd;
   --on-accent: #120012;
   --button-primary-bg: #ffe8ff;
