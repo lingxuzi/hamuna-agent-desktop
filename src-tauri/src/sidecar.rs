@@ -110,6 +110,13 @@ pub use shutdown::{
     begin_update_shutdown, begin_update_spawn_permit, is_update_shutdown_in_progress,
     shutdown_for_update_verified, stop_all_sidecars,
 };
+// Reached as `sidecar::shutdown::…` from the ExitRequested chokepoint in lib.rs.
+// Re-exported here too for callers that already import from `sidecar`, but the
+// names are not otherwise used inside this module.
+#[allow(unused_imports)]
+pub use shutdown::{
+    close_spawn_gate_for_exit, spawn_gate_state, SpawnGateState,
+};
 pub use spawn::find_node_executable_pub;
 pub(crate) use spawn::apply_augmented_path_env;
 pub(crate) use spawn::normalize_external_path;

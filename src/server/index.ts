@@ -274,7 +274,10 @@ import { seedBundledExtendedMcpServers } from './mcp-bundled-seed';
 // Pattern 6 §6.3.6: crash logs live under ~/.hamuna/logs/crash/ (NOT tmpdir,
 // so they're inside the unified log export bundle). Each crash gets its own
 // file; we keep the most recent CRASH_LOG_MAX_FILES and evict oldest.
-const CRASH_LOG_DIR = join(homedir(), '.hamuna', 'logs', 'crash');
+// HAMUNA_CRASH_LOG_DIR is a test seam so eviction can be exercised against a
+// tempdir without touching the real user log directory.
+const CRASH_LOG_DIR = process.env.HAMUNA_CRASH_LOG_DIR
+  ?? join(homedir(), '.hamuna', 'logs', 'crash');
 const CRASH_LOG_MAX_FILES = 20;
 // PRD #132 — hard cap on a single crash log file. The bug was: a recursive
 // EPIPE loop appended ~50–200 KB per iteration and grew a single file to
@@ -299,20 +302,32 @@ const CRASH_LOG_DIR_MAX_BYTES = 200 * 1024 * 1024;
 const CRASH_DEDUPE_WINDOW_MS = 60_000;
 const CRASH_DEDUPE_DUMP_LIMIT = 3;
 // Per-process crash log path: a single file per sidecar lifetime, holding all
-// the lifecycle/error events for THIS process. The filename uses the start
-// time so we can sort/evict by name. We append throughout the process.
-const CRASH_LOG_FILE = (() => {
+// the lifecycle/error events for THIS process.
+//
+// Created LAZILY, on the first abnormal event. A healthy STARTUP/EXIT/SIGTERM
+// lifecycle is routine, and materialising a file for it wasted a directory
+// entry, an open+append per launch, and — worse — made `logs/crash/` look
+// populated when nothing had gone wrong.
+//
+// `pid` + a short nonce keep concurrent sidecars from co-owning one file:
+// two processes starting in the same millisecond used to produce identical
+// `<timestamp>.log` names and interleave their appends into one artifact.
+let crashLogFilePath: string | null = null;
+function crashLogFile(): string {
+  if (crashLogFilePath) return crashLogFilePath;
   try {
     if (!existsSync(CRASH_LOG_DIR)) {
       // Best-effort directory creation. recursive:true handles parent dirs.
-      // Don't reach for ensureDirSync — this IIFE runs during module init
-      // before some helper's transitive deps are guaranteed warm.
+      // Don't reach for ensureDirSync — this runs during an error path where
+      // some helper's transitive deps may not be warm yet.
       mkdirSync(CRASH_LOG_DIR, { recursive: true });
     }
   } catch { /* fall through; later writes will retry */ }
   const ts = new Date().toISOString().replace(/[:]/g, '-');
-  return join(CRASH_LOG_DIR, `${ts}.log`);
-})();
+  const nonce = Math.random().toString(36).slice(2, 8);
+  crashLogFilePath = join(CRASH_LOG_DIR, `${ts}-${process.pid}-${nonce}.log`);
+  return crashLogFilePath;
+}
 
 // PRD #132 — ceiling tracker. We checkpoint file size every Nth append (not
 // every append) so the ceiling check itself is cheap: an `appendFileSync`
@@ -322,41 +337,66 @@ const CRASH_LOG_FILE = (() => {
 let crashLogCeilingHit = false;
 let crashLogAppendCount = 0;
 
+// Files older than this are dropped regardless of count/bytes. Without an age
+// cap, an install that crashes rarely keeps a handful of tiny files forever —
+// neither the count nor the byte budget ever trips on them.
+const CRASH_LOG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 function evictOldCrashLogs(): void {
   try {
     if (!existsSync(CRASH_LOG_DIR)) return;
+    // Sort by NAME, not mtime: the name leads with the creation timestamp, so
+    // it reflects when the crash happened. mtime is refreshed by every append
+    // and would keep a stale artifact looking fresh for as long as anything
+    // kept writing to it.
     const entries = readdirSync(CRASH_LOG_DIR)
       .filter(f => f.endsWith('.log'))
+      .sort()
+      .reverse(); // newest first
+    const ownFile = crashLogFilePath !== null ? basename(crashLogFilePath) : null;
+
+    // Pass 0: age cap. Our own file is exempt by name.
+    const agedOut = new Set<string>();
+    for (const f of entries) {
+      if (f === ownFile) continue;
+      try {
+        if (Date.now() - statSync(join(CRASH_LOG_DIR, f)).mtimeMs > CRASH_LOG_MAX_AGE_MS) {
+          unlinkSync(join(CRASH_LOG_DIR, f));
+          agedOut.add(f);
+        }
+      } catch { /* ignore */ }
+    }
+
+    const withSizes = entries
+      .filter(f => !agedOut.has(f))
       .map(f => {
         const p = join(CRASH_LOG_DIR, f);
-        try {
-          const st = statSync(p);
-          return { path: p, mtimeMs: st.mtimeMs, size: st.size };
-        } catch {
-          return null;
-        }
+        try { return { name: f, path: p, size: statSync(p).size }; } catch { return null; }
       })
-      .filter((x): x is { path: string; mtimeMs: number; size: number } => x !== null)
-      .sort((a, b) => b.mtimeMs - a.mtimeMs); // newest first
+      .filter((x): x is { name: string; path: string; size: number } => x !== null);
 
     // Pass 1: file-count cap (PRD #132).
-    for (const e of entries.slice(CRASH_LOG_MAX_FILES)) {
+    for (const e of withSizes.slice(CRASH_LOG_MAX_FILES)) {
+      if (e.name === ownFile) continue;
       try { unlinkSync(e.path); } catch { /* ignore */ }
     }
 
     // Pass 2: total-bytes cap (PRD #133). Walk newest→oldest summing sizes
-    // until budget exceeded, then unlink the rest. Always keep the very
-    // newest file (this process's own active crash log) so we don't kill
-    // what we're still appending to.
-    const survivors = entries.slice(0, CRASH_LOG_MAX_FILES);
+    // until budget exceeded, then unlink the rest.
+    //
+    // This process's OWN file is protected by NAME, not by position. Sidecars
+    // share one directory, so "index 0 is mine" is false whenever a sibling
+    // started more recently — and a peer running eviction would then happily
+    // unlink the file we are actively appending to.
+    const survivors = withSizes.slice(0, CRASH_LOG_MAX_FILES);
     let runningTotal = 0;
     for (let i = 0; i < survivors.length; i++) {
+      if (survivors[i].name === ownFile) continue; // never counted, never dropped
       runningTotal += survivors[i].size;
       if (i > 0 && runningTotal > CRASH_LOG_DIR_MAX_BYTES) {
-        // Drop everything from i onwards (oldest). Skip i=0 to protect the
-        // active file even if it alone is over budget — the per-file
-        // ceiling already caps that case at 50 MB.
+        // Drop everything from i onwards (oldest), skipping our own file.
         for (let j = i; j < survivors.length; j++) {
+          if (survivors[j].name === ownFile) continue;
           try { unlinkSync(survivors[j].path); } catch { /* ignore */ }
         }
         break;
@@ -414,7 +454,7 @@ function shouldDumpContextFor(err: unknown): boolean {
  *  string to avoid re-shaping. */
 function appendFileSyncSafely(line: string): void {
   if (crashLogCeilingHit) return;
-  try { appendFileSync(CRASH_LOG_FILE, line); } catch { /* ignore */ }
+  try { appendFileSync(crashLogFile(), line); } catch { /* ignore */ }
 }
 
 /** PRD #132 + #133 — re-stat current crash file and trip the ceiling +
@@ -425,12 +465,12 @@ function appendFileSyncSafely(line: string): void {
 function checkCrashLogBudgets(): void {
   if (crashLogCeilingHit) return;
   try {
-    const sz = statSync(CRASH_LOG_FILE).size;
+    const sz = statSync(crashLogFile()).size;
     if (sz > CRASH_LOG_FILE_MAX_BYTES) {
       crashLogCeilingHit = true;
       try {
         appendFileSync(
-          CRASH_LOG_FILE,
+          crashLogFile(),
           `[${new Date().toISOString()}] CEILING_HIT crash log capped at ${CRASH_LOG_FILE_MAX_BYTES} bytes; further events suppressed for this sidecar lifetime\n`,
         );
       } catch { /* ignore */ }
@@ -449,7 +489,7 @@ function crashLog(prefix: string, ...args: unknown[]) {
       if (typeof a === 'object') return JSON.stringify(a);
       return String(a);
     }).join(' ');
-    appendFileSync(CRASH_LOG_FILE, `[${new Date().toISOString()}] ${prefix} ${msg}\n`);
+    appendFileSync(crashLogFile(), `[${new Date().toISOString()}] ${prefix} ${msg}\n`);
     // Budget check every 32 appends (cheap, but frequent enough that an
     // append that overshoots by a few KB is bounded). PRD #133 — also
     // run this for crashLog-only call paths (STDIO_CLOSED, EXIT,
@@ -482,7 +522,7 @@ function dumpCrashContext(reason: string, errForFingerprint?: unknown): void {
     const lines = getRecentLogLines(200);
     if (lines.length === 0) return;
     const banner = `\n--- crash context (${reason}, last ${lines.length} unified lines) ---\n`;
-    appendFileSync(CRASH_LOG_FILE, banner + lines.join('') + '--- end crash context ---\n');
+    appendFileSync(crashLogFile(), banner + lines.join('') + '--- end crash context ---\n');
     // Re-check budgets immediately after dump — a single jumbo dump can
     // shoot past the per-file ceiling on its own and would otherwise wait
     // for the next 32-append crashLog window to notice.
@@ -535,12 +575,18 @@ try { process.stderr.on('error', onStdioError('stderr')); } catch { /* ignore */
 export function isStdioBroken(): boolean { return stdioBroken; }
 export function markStdioBroken(): void { stdioBroken = true; }
 
+// A non-zero exit IS a crash worth preserving; a clean one is routine and
+// must not materialise an artifact. Route both through unified logging and
+// only write the crash file when the code says something went wrong.
 process.on('exit', (code) => {
-  crashLog('EXIT', `code=${code}`);
+  if (code !== 0) crashLog('EXIT', `code=${code}`);
+  if (!stdioBroken) {
+    try { console.log(`[process] exited with code ${code}`); } catch { /* ignore */ }
+  }
 });
 
 process.on('beforeExit', (code) => {
-  crashLog('BEFORE_EXIT', `code=${code}`);
+  if (code !== 0) crashLog('BEFORE_EXIT', `code=${code}`);
 });
 
 // PRD #132 — uncaughtException re-entry guard + EPIPE-aware short circuit.
@@ -608,8 +654,11 @@ process.on('unhandledRejection', (reason) => {
   }
 });
 
+// A clean SIGTERM/SIGINT is a routine lifecycle event, not a crash — it goes
+// to unified logging only. Writing it to the crash artifact would re-materialise
+// a file on every ordinary shutdown, which is exactly the noise the lazy
+// path above removes.
 process.on('SIGTERM', () => {
-  crashLog('SIGNAL', 'SIGTERM');
   if (!stdioBroken) {
     try { console.log('[process] SIGTERM received, shutting down...'); } catch { /* ignore */ }
   }
@@ -617,14 +666,13 @@ process.on('SIGTERM', () => {
 });
 
 process.on('SIGINT', () => {
-  crashLog('SIGNAL', 'SIGINT');
   if (!stdioBroken) {
     try { console.log('[process] SIGINT received, shutting down...'); } catch { /* ignore */ }
   }
   process.exit(0);
 });
-
-crashLog('STARTUP', 'Server starting...');
+// No STARTUP breadcrumb: a successful boot is not a crash event, and writing
+// one made every healthy launch materialise a file under logs/crash/.
 // ============= END CRASH DIAGNOSTICS =============
 
 import {
@@ -1303,6 +1351,9 @@ export const __testing = {
   readSkillsConfig,
   writeSkillsConfig,
   resolveBundledSkillsDir,
+  evictOldCrashLogs,
+  /** Name of the file THIS process appends to, or null before first crash. */
+  currentCrashLogName: () => (crashLogFilePath !== null ? basename(crashLogFilePath) : null),
 };
 
 function writeSkillsConfig(config: SkillsConfig): void {

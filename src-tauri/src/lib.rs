@@ -1385,6 +1385,11 @@ pub fn run() {
                     ulog_info!(
                         "[App] Exit requested (Cmd+Q or Dock quit), cleaning up sidecars..."
                     );
+                    // Close the spawn gate FIRST, before any teardown. Once the
+                    // process is exiting nothing may create another sidecar, and
+                    // no later guard drop may reopen it — see
+                    // sidecar::shutdown::SpawnGateState.
+                    sidecar::shutdown::close_spawn_gate_for_exit();
                     // Record a deliberate-quit marker so the next boot starts
                     // fresh instead of restoring the session (Issue #309), UNLESS
                     // this is an update-restart. Both update paths — plugin

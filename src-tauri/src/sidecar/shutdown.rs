@@ -1,7 +1,56 @@
 use super::*;
 
-static UPDATE_SHUTDOWN_IN_PROGRESS: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+/// Whether this process may still CREATE sidecars / resources.
+///
+/// Plain `bool` was not enough: a guard that dropped *after* app exit had
+/// begun would reset the flag to `false` and silently reopen the spawn gate
+/// in the middle of a shutdown — letting a new sidecar appear while
+/// `ExitRequested` cleanup is still tearing everything down. `Exited` is
+/// terminal: once set, nothing lowers it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SpawnGateState {
+    /// Normal operation. Spawning allowed.
+    Open,
+    /// An update shutdown holds the gate. Spawning refused.
+    UpdateQuiescing,
+    /// The app is exiting. Terminal — never returns to `Open`.
+    Exited,
+}
+
+static SPAWN_GATE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+fn gate_from_u8(raw: u8) -> SpawnGateState {
+    match raw {
+        1 => SpawnGateState::UpdateQuiescing,
+        2 => SpawnGateState::Exited,
+        _ => SpawnGateState::Open,
+    }
+}
+
+pub fn spawn_gate_state() -> SpawnGateState {
+    gate_from_u8(SPAWN_GATE.load(std::sync::atomic::Ordering::SeqCst))
+}
+
+/// Mark the process as exiting. Idempotent, and irreversible on purpose: no
+/// later drop may reopen process/resource birth.
+pub fn close_spawn_gate_for_exit() {
+    // An unconditional terminal store, NOT a compare-exchange from `Open`:
+    // app exit can land while an update shutdown already holds the gate, and
+    // in that case a 0→2 exchange would silently no-op, leaving the process
+    // permanently marked "update quiescing" with no way back to Open.
+    SPAWN_GATE.store(2, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Test-only: restore the gate. Production never lowers `Exited`.
+#[cfg(test)]
+fn reset_spawn_gate_for_test() {
+    SPAWN_GATE.store(0, std::sync::atomic::Ordering::SeqCst);
+    if let Ok(mut state) = UPDATE_QUIESCE.state.lock() {
+        state.update_requested = false;
+        state.active_creations = 0;
+    }
+}
+
 static UPDATE_QUIESCE: std::sync::LazyLock<UpdateQuiesce> =
     std::sync::LazyLock::new(UpdateQuiesce::default);
 
@@ -30,10 +79,23 @@ impl Drop for UpdateShutdownGuard {
         if self.active {
             if let Ok(mut state) = UPDATE_QUIESCE.state.lock() {
                 state.update_requested = false;
-                UPDATE_SHUTDOWN_IN_PROGRESS.store(false, std::sync::atomic::Ordering::SeqCst);
+                // App exit is terminal. A guard that happens to drop after
+                // ExitRequested must NOT reopen process/resource birth — only
+                // clear the update-quiesce bit, and leave `Exited` in place.
+                let _ = SPAWN_GATE.compare_exchange(
+                    1,
+                    0,
+                    std::sync::atomic::Ordering::SeqCst,
+                    std::sync::atomic::Ordering::SeqCst,
+                );
                 UPDATE_QUIESCE.idle.notify_all();
             } else {
-                UPDATE_SHUTDOWN_IN_PROGRESS.store(false, std::sync::atomic::Ordering::SeqCst);
+                let _ = SPAWN_GATE.compare_exchange(
+                    1,
+                    0,
+                    std::sync::atomic::Ordering::SeqCst,
+                    std::sync::atomic::Ordering::SeqCst,
+                );
             }
             ulog_info!("[sidecar] Update shutdown gate released");
         }
@@ -55,6 +117,11 @@ impl Drop for UpdateSpawnPermit {
 }
 
 pub fn begin_update_spawn_permit() -> Result<UpdateSpawnPermit, String> {
+    match spawn_gate_state() {
+        SpawnGateState::Exited => return Err("APP_EXITING".to_string()),
+        SpawnGateState::UpdateQuiescing => return Err("UPDATE_SHUTDOWN_IN_PROGRESS".to_string()),
+        SpawnGateState::Open => {}
+    }
     let mut state = UPDATE_QUIESCE.state.lock().map_err(|e| e.to_string())?;
     if state.update_requested {
         return Err("UPDATE_SHUTDOWN_IN_PROGRESS".to_string());
@@ -64,12 +131,15 @@ pub fn begin_update_spawn_permit() -> Result<UpdateSpawnPermit, String> {
 }
 
 pub fn begin_update_shutdown() -> Result<UpdateShutdownGuard, String> {
+    if spawn_gate_state() == SpawnGateState::Exited {
+        return Err("APP_EXITING".to_string());
+    }
     let mut state = UPDATE_QUIESCE.state.lock().map_err(|e| e.to_string())?;
     if state.update_requested {
         return Err("UPDATE_SHUTDOWN_ALREADY_IN_PROGRESS".to_string());
     }
     state.update_requested = true;
-    UPDATE_SHUTDOWN_IN_PROGRESS.store(true, std::sync::atomic::Ordering::SeqCst);
+    SPAWN_GATE.store(1, std::sync::atomic::Ordering::SeqCst);
     while state.active_creations > 0 {
         ulog_info!(
             "[sidecar] Waiting for {} owner creation(s) before update shutdown",
@@ -80,7 +150,12 @@ pub fn begin_update_shutdown() -> Result<UpdateShutdownGuard, String> {
             Err(err) => {
                 let mut state = err.into_inner();
                 state.update_requested = false;
-                UPDATE_SHUTDOWN_IN_PROGRESS.store(false, std::sync::atomic::Ordering::SeqCst);
+                let _ = SPAWN_GATE.compare_exchange(
+                    1,
+                    0,
+                    std::sync::atomic::Ordering::SeqCst,
+                    std::sync::atomic::Ordering::SeqCst,
+                );
                 UPDATE_QUIESCE.idle.notify_all();
                 return Err("UPDATE_SHUTDOWN_GATE_POISONED".to_string());
             }
@@ -91,7 +166,7 @@ pub fn begin_update_shutdown() -> Result<UpdateShutdownGuard, String> {
 }
 
 pub fn is_update_shutdown_in_progress() -> bool {
-    UPDATE_SHUTDOWN_IN_PROGRESS.load(std::sync::atomic::Ordering::SeqCst)
+    spawn_gate_state() == SpawnGateState::UpdateQuiescing
 }
 
 /// Stop all sidecar instances and clean up child processes
@@ -470,4 +545,61 @@ fn is_windows_file_lock_error(err: &std::io::Error) -> bool {
         // ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION, ERROR_USER_MAPPED_FILE.
         Some(32 | 33 | 1224)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The regression this gate exists for: an update guard that drops AFTER
+    /// app exit began used to reset the flag to `false`, reopening process and
+    /// resource birth in the middle of `ExitRequested` teardown — a new
+    /// sidecar could appear while cleanup was still running.
+    #[test]
+    fn app_exit_cannot_be_reopened_by_a_late_update_guard_drop() {
+        reset_spawn_gate_for_test();
+
+        let guard = begin_update_shutdown().expect("first shutdown acquires the gate");
+        assert_eq!(spawn_gate_state(), SpawnGateState::UpdateQuiescing);
+
+        // Exit starts while the update guard is still alive.
+        close_spawn_gate_for_exit();
+        assert_eq!(spawn_gate_state(), SpawnGateState::Exited);
+
+        // The guard now drops — it must release the update bit WITHOUT
+        // resurrecting `Open`.
+        drop(guard);
+
+        assert_eq!(spawn_gate_state(), SpawnGateState::Exited);
+        assert!(!is_update_shutdown_in_progress());
+        assert!(begin_update_spawn_permit().is_err());
+    }
+
+    #[test]
+    fn a_normal_update_shutdown_reopens_the_gate_on_drop() {
+        reset_spawn_gate_for_test();
+
+        let guard = begin_update_shutdown().expect("acquires");
+        assert!(begin_update_spawn_permit().is_err());
+        drop(guard);
+
+        // Not exiting: the gate must genuinely reopen, or the app could never
+        // spawn a sidecar again after a cancelled/aborted update.
+        assert_eq!(spawn_gate_state(), SpawnGateState::Open);
+        assert!(begin_update_spawn_permit().is_ok());
+    }
+
+    #[test]
+    fn close_for_exit_is_idempotent_and_never_downgrades_an_update_quiesce() {
+        reset_spawn_gate_for_test();
+
+        let guard = begin_update_shutdown().expect("acquires");
+        // A second exit signal must not clobber the update-quiesce bit.
+        close_spawn_gate_for_exit();
+        close_spawn_gate_for_exit();
+        assert_eq!(spawn_gate_state(), SpawnGateState::Exited);
+
+        drop(guard);
+        assert_eq!(spawn_gate_state(), SpawnGateState::Exited);
+    }
 }
