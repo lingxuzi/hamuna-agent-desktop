@@ -970,7 +970,8 @@
       "taskDeleted": "任务已删除",
       "taskResumed": "任务已恢复",
       "newSession": "新对话",
-        "taskStopped": "任务已停止"
+      "taskStopped": "任务已停止",
+      "miniappClaimReceived": "已接收来自 {{appId}} 的请求"
     },
     "terminalReason": {
       "newSession": "新开会话",

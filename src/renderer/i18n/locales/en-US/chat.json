@@ -970,7 +970,8 @@
       "taskDeleted": "Task deleted.",
       "taskResumed": "Task resumed.",
       "newSession": "New session",
-        "taskStopped": "Task stopped."
+      "taskStopped": "Task stopped.",
+      "miniappClaimReceived": "Accepted a request from {{appId}}"
     },
     "terminalReason": {
       "newSession": "New chat",

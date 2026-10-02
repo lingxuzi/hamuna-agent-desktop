@@ -127,6 +127,19 @@ export interface FilePreviewIntent {
     initialLineNumber?: number;
 }
 
+/**
+ * Runtime-only request for Chat to adopt a MiniApp's Bubble Claim draft once
+ * after mount/activation. A MiniApp can hand the user a starting prompt but
+ * can never send one on their behalf — the draft lands in the composer and
+ * the user still presses enter.
+ */
+export interface MiniAppClaimIntent {
+    id: string;
+    appId: string;
+    draft: string;
+    attachments?: Array<{ kind: 'image' | 'file'; path: string; label?: string }>;
+}
+
 export interface Tab {
     id: string;
     agentDir: string | null;  // null = showing Launcher
@@ -150,6 +163,10 @@ export interface Tab {
     /** Runtime-only (never persisted). Set by floating-ball path actions to
      *  ask the target Chat tab to open a workspace file in its preview surface. */
     pendingFilePreview?: FilePreviewIntent;
+    /** Runtime-only (never persisted). Set when a MiniApp running in a
+     *  `miniapp-scene` tab posts a Bubble Claim, so the target Chat tab can
+     *  adopt the draft. Cleared once Chat consumes it. */
+    pendingMiniAppClaim?: MiniAppClaimIntent;
     /** Phase 4 entry (PRD v0.4 §B.5): MiniApp payload for `view: 'miniapp-scene'`.
      *  Set together with `view:'miniapp-scene'`; MiniAppSceneTab reads these to
      *  mount <MiniAppRunner/>. Mutually exclusive with chat fields — no

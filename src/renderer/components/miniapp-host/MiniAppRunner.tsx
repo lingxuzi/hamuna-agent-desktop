@@ -66,6 +66,37 @@ export interface MiniAppRunnerProps {
 const SANDBOX_FLAGS = 'allow-scripts allow-same-origin allow-forms';
 const IFRAME_NAME_PREFIX = 'miniapp-iframe';
 
+/**
+ * PRD v0.3 §11.1 — the iframe must not be able to reach the sidecar directly
+ * ("Phase 2 防 iframe 直连旁路").
+ *
+ * `'self'` is required in script-src/style-src, not optional: a MiniApp's
+ * `source/index.html` references its siblings as `<link rel="stylesheet"
+ * href="style.css">` and `<script src="ui.js">`. `default-src 'none'` +
+ * `'unsafe-inline'` alone blocks those (it only permits *inline* style/script),
+ * which strips the app bare. The source endpoint inlines both files before
+ * handing the HTML over, so in practice the tags are already gone — `'self'`
+ * is the safety net for a MiniApp whose sibling file failed to inline.
+ *
+ * `connect-src 'none'` is the directive that actually does the work: the
+ * sidecar is a different origin, so no fetch/XHR/WebSocket from the iframe can
+ * reach it. Every legitimate capability already goes through postMessage.
+ *
+ * ponytail: `img-src https:` is a covert exfil channel (URL params, beacons).
+ * Lock it to `data: blob:` when the marketplace starts shipping third-party
+ * authors — the bundled apps don't need it, but a generated one might.
+ */
+const IFRAME_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline' 'self'",
+  "style-src 'unsafe-inline' 'self'",
+  "img-src data: blob: https:",
+  "font-src data:",
+  "connect-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join('; ');
+
 export default function MiniAppRunner({
   appId,
   srcDoc,
@@ -128,8 +159,8 @@ export default function MiniAppRunner({
     return () => obs.disconnect();
   }, [appId]);
 
-  // 拼 srcDoc：Theme `<style>` + 用户 HTML + appId 注入 script
-  const fullSrcDoc = `${themeCss}\n${injectAppId(srcDoc, appId)}`;
+  // 拼 srcDoc：Theme `<style>` + CSP meta + 用户 HTML + appId 注入 script
+  const fullSrcDoc = `${themeCss}\n${injectAppId(injectCsp(srcDoc), appId)}`;
 
   // 卸载 / appId 切换时解绑 iframe 引用，触发 GC（PRD v0.3 §5.3 row 2）
   useEffect(() => {
@@ -281,6 +312,22 @@ export default function MiniAppRunner({
     return () => window.removeEventListener('message', handler);
   }, [appId, handleClaim]);
 
+  /**
+   * Hand the MiniApp the Bubble Claim nonce it cannot invent for itself.
+   *
+   * `verifyBubbleClaim` rejects any claim whose nonce doesn't match, and the
+   * nonce lives in the host's `nonceRef` — so without this the MiniApp can only
+   * guess, and every claim it posts is silently dropped. Delivered on `load`
+   * rather than on mount because a srcDoc iframe's document is not parsed yet
+   * at mount, and a postMessage into an unparsed document is lost.
+   */
+  const handleFrameLoad = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'host.ready', nonce: nonceRef.current },
+      '*',
+    );
+  }, []);
+
   return (
     <iframe
       ref={iframeRef}
@@ -288,6 +335,7 @@ export default function MiniAppRunner({
       title={`MiniApp ${appId}`}
       sandbox={SANDBOX_FLAGS}
       srcDoc={fullSrcDoc}
+      onLoad={handleFrameLoad}
       style={{
         width: '100%',
         height,
@@ -304,6 +352,22 @@ function injectAppId(html: string, appId: string): string {
   const meta = `<meta name="x-miniapp-id" content="${escapeHtml(appId)}">`;
   if (html.includes('</head>')) return html.replace('</head>', `${meta}</head>`);
   return `${meta}${html}`;
+}
+
+/** 在 srcDoc `</head>` 前注入 CSP meta。MiniApp 自带的 CSP 会被移除，避免叠加放宽。 */
+function injectCsp(html: string): string {
+  // A MiniApp that ships its own <meta http-equiv="Content-Security-Policy">
+  // would otherwise have its policy combined with ours, and the spec takes
+  // the *intersection* only for the directives both name — so a MiniApp
+  // naming a permissive `connect-src` would silently re-open the bypass this
+  // policy exists to close. Strip theirs; ours is the only one.
+  const stripped = html.replace(
+    /<meta[^>]+http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi,
+    '',
+  );
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(IFRAME_CSP)}">`;
+  if (stripped.includes('</head>')) return stripped.replace('</head>', `${meta}</head>`);
+  return `${meta}${stripped}`;
 }
 
 function escapeHtml(s: string): string {

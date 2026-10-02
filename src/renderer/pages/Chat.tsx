@@ -117,7 +117,7 @@ import {
   getDefaultRuntimePermissionMode,
 } from '../../shared/types/runtime';
 import type { RuntimeType, RuntimeDetections, RuntimeConfig, RuntimeDiagnostics } from '../../shared/types/runtime';
-import type { FilePreviewIntent, InitialMessage, SidecarConfigDisposition } from '@/types/tab';
+import type { FilePreviewIntent, InitialMessage, MiniAppClaimIntent, SidecarConfigDisposition } from '@/types/tab';
 import type { FilePreviewFocusTarget } from '@/types/filePreview';
 import { shouldAutoSendInitialMessage } from '@/utils/initialMessageAutoSend';
 import {
@@ -443,6 +443,9 @@ interface ChatProps {
   onForkSession?: (newSessionId: string, agentDir: string, title: string, initialMessage?: string) => Promise<boolean>;
   /** Runtime-only request from App/floating-ball to open a file preview once. */
   pendingFilePreview?: FilePreviewIntent;
+  /** Runtime-only: a MiniApp handed us a draft via Bubble Claim. */
+  pendingMiniAppClaim?: MiniAppClaimIntent;
+  onMiniAppClaimConsumed?: (intentId: string) => void;
   onFilePreviewIntentConsumed?: (intentId: string) => void;
   sessionNotificationBadgeCounts?: ReadonlyMap<string, number>;
 }
@@ -451,7 +454,7 @@ function isCurrentSessionGoal(goal: SessionGoal | null | undefined): goal is Ses
   return Boolean(goal);
 }
 
-export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSessionInNewTab, initialMessage, onInitialMessageConsumed, sidecarConfigDisposition, onSidecarConfigAdopted, sessionTitle, onRenameSession, onForkSession, pendingFilePreview, onFilePreviewIntentConsumed, sessionNotificationBadgeCounts }: ChatProps) {
+export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSessionInNewTab, initialMessage, onInitialMessageConsumed, sidecarConfigDisposition, onSidecarConfigAdopted, sessionTitle, onRenameSession, onForkSession, pendingFilePreview, onFilePreviewIntentConsumed, pendingMiniAppClaim, onMiniAppClaimConsumed, sessionNotificationBadgeCounts }: ChatProps) {
   // Get state from TabContext (required - Chat must be inside TabProvider)
   const {
     tabId,
@@ -812,6 +815,25 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     }
     // Keep workspace open — user can dismiss it manually
   }, [isSplitViewEnabled, agentDir, startBrowserSplitTransitionIfNeeded]);
+
+  useEffect(() => {
+    if (!pendingMiniAppClaim) return;
+    const intent = pendingMiniAppClaim;
+    const input = chatInputRef.current;
+    if (!input) {
+      // The composer isn't mounted. Don't consume — the intent stays on the
+      // tab, so a later activation can still pick it up.
+      console.warn('[Chat] MiniApp claim arrived before the composer mounted; deferring.');
+      return;
+    }
+    // Adopt the MiniApp's draft rather than sending it: the MiniApp may only
+    // ever propose, the user decides. Same trust rule as Bubble Claim itself.
+    const existing = input.getCurrentValue();
+    input.setValue(existing.trim() ? `${existing}\n${intent.draft}` : intent.draft);
+    input.focus();
+    toastRef.current?.success(t('shell.toasts.miniappClaimReceived', { appId: intent.appId }));
+    onMiniAppClaimConsumed?.(intent.id);
+  }, [pendingMiniAppClaim, onMiniAppClaimConsumed, t]);
 
   useEffect(() => {
     if (!pendingFilePreview) return;

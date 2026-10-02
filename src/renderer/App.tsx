@@ -67,7 +67,8 @@ import {
  isProjectVisibleToUser,
  type Project,
 } from '@/config/types';
-import { type Tab, type InitialMessage, type LaunchSessionBirthHint, type SidecarConfigDisposition, type FilePreviewIntent, createNewTab, getFolderName, buildChatFlipPatch, MAX_TABS } from '@/types/tab';
+import type { BubbleClaimMessage } from '@/components/miniapp-host/bubbleClaimBridge';
+import { type Tab, type InitialMessage, type LaunchSessionBirthHint, type SidecarConfigDisposition, type FilePreviewIntent, type MiniAppClaimIntent, createNewTab, getFolderName, buildChatFlipPatch, MAX_TABS } from '@/types/tab';
 import { buildRestoredTabs, saveOpenTabs, hydratePersistedState, pickDurableOverride, shouldOfferRestore, planRestoreTabs } from '@/utils/tabPersistence';
 import { persistOpenTabsDurable, loadAndClearOpenTabsDurable, clearOpenTabsDurable } from '@/utils/tabPersistenceDurable';
 import { consumeCleanExitMarker } from '@/utils/lastExitMarker';
@@ -265,6 +266,8 @@ interface TabContentProps {
  onClearInitialMessage: (tabId: string) => void;
  onSidecarConfigAdopted: (tabId: string) => void;
  onFilePreviewIntentConsumed?: (tabId: string, intentId: string) => void;
+ onMiniAppClaimConsumed?: (tabId: string, intentId: string) => void;
+ onMiniAppBubbleClaim?: (sourceTabId: string, msg: BubbleClaimMessage) => void;
  // Settings callbacks
  onSettingsSectionChange: () => void;
  updateReady: boolean;
@@ -288,7 +291,7 @@ export const MemoizedTabContent = memo(function TabContent({
  tab, isActive, isLoading, error, isDeferredMount,
  onLaunchProject, onBack, onSwitchSession, onOpenSessionInNewTab, onNewSession,
  onUpdateGenerating, onUpdateTitle, onUpdateUnread, onRenameSession, onForkSession, onUpdateSessionId, onClearInitialMessage,
- onSidecarConfigAdopted, onFilePreviewIntentConsumed,
+ onSidecarConfigAdopted, onFilePreviewIntentConsumed, onMiniAppClaimConsumed, onMiniAppBubbleClaim,
  settingsInitialSection, settingsInitialMcpId, settingsInitialOfficialToolId, settingsInitialSelect, onSettingsSectionChange,
  updateReady, updateVersion, updateChecking, updateDownloading, updateInstalling, updatePreparing,
  onCheckForUpdate, onRestartAndUpdate,
@@ -353,7 +356,11 @@ export const MemoizedTabContent = memo(function TabContent({
     </Suspense>
    ) : kind === 'miniapp-scene' ? (
     <Suspense fallback={PAGE_FALLBACK}>
-     <MiniAppSceneTab tab={tab} isActive={isActive} />
+     <MiniAppSceneTab
+      tab={tab}
+      isActive={isActive}
+      onBubbleClaim={onMiniAppBubbleClaim ? msg => onMiniAppBubbleClaim(tab.id, msg) : undefined}
+     />
     </Suspense>
    ) : kind === 'cold' ? (
     // Restored-but-not-yet-activated chat tab (Issue #232). Render only a
@@ -385,6 +392,8 @@ export const MemoizedTabContent = memo(function TabContent({
        onSidecarConfigAdopted={() => onSidecarConfigAdopted(tab.id)}
        pendingFilePreview={tab.pendingFilePreview}
        onFilePreviewIntentConsumed={(intentId) => onFilePreviewIntentConsumed?.(tab.id, intentId)}
+       pendingMiniAppClaim={tab.pendingMiniAppClaim}
+       onMiniAppClaimConsumed={(intentId) => onMiniAppClaimConsumed?.(tab.id, intentId)}
        sessionTitle={tab.title}
        onRenameSession={(newTitle: string) => onRenameSession(tab.id, newTitle)}
        onForkSession={(newSessionId: string, agentDir: string, title: string, initialMessage?: string) => onForkSession(tab.id, newSessionId, agentDir, title, initialMessage)}
@@ -2230,6 +2239,47 @@ export default function App() {
   ));
  }, []);
 
+ /**
+  * A MiniApp posted a Bubble Claim: hand its draft to a Chat tab's composer.
+  *
+  * Prefers the tab the user is already looking at, so a claim doesn't yank
+  * them away from whatever they were doing. If no Chat tab exists the claim
+  * is dropped with a warning rather than silently spawning a session —
+  * creating tabs and sidecars behind the user's back is worse than losing a
+  * draft they can regenerate.
+  */
+ const handleMiniAppBubbleClaim = useCallback((sourceTabId: string, msg: BubbleClaimMessage) => {
+  const intent: MiniAppClaimIntent = {
+   id: `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+   appId: msg.payload.appId,
+   draft: msg.payload.draft,
+   ...(msg.payload.attachments ? { attachments: msg.payload.attachments } : {}),
+  };
+  // Resolve the target OUTSIDE the setTabs updater: updaters must stay pure,
+  // and React runs them twice under StrictMode.
+  const current = tabsRef.current;
+  const target =
+   current.find(t => t.id === activeTabId && t.view === 'chat') ??
+   [...current].reverse().find(t => t.view === 'chat');
+  if (!target) {
+   console.warn(
+    `[App] MiniApp '${intent.appId}' posted a Bubble Claim but no Chat tab ` +
+     'is open; dropping the draft. Open a chat and retry.',
+   );
+   return;
+  }
+  setActiveTabId(target.id);
+  setTabs(prev => prev.map(t => (t.id === target.id ? { ...t, pendingMiniAppClaim: intent } : t)));
+ }, [activeTabId, setActiveTabId]);
+
+ const handleMiniAppClaimConsumed = useCallback((tabId: string, intentId: string) => {
+  setTabs(prev => prev.map(t =>
+   t.id === tabId && t.pendingMiniAppClaim?.id === intentId
+    ? { ...t, pendingMiniAppClaim: undefined }
+    : t
+  ));
+ }, []);
+
  // Rename session: update tab title + persist to backend + notify listeners
  const handleRenameSession = useCallback((tabId: string, newTitle: string) => {
   updateTabTitle(tabId, newTitle);
@@ -4036,6 +4086,8 @@ export default function App() {
        onClearInitialMessage={clearInitialMessage}
        onSidecarConfigAdopted={markSidecarConfigAdopted}
        onFilePreviewIntentConsumed={handleFilePreviewIntentConsumed}
+      onMiniAppClaimConsumed={handleMiniAppClaimConsumed}
+      onMiniAppBubbleClaim={handleMiniAppBubbleClaim}
        settingsInitialSection={tab.view === 'settings' ? settingsInitialSection : undefined}
        settingsInitialMcpId={tab.view === 'settings' ? settingsInitialMcpId : undefined}
        settingsInitialOfficialToolId={tab.view === 'settings' ? settingsInitialOfficialToolId : undefined}

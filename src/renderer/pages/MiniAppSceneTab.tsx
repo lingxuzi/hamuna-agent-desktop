@@ -11,15 +11,22 @@
 import { useEffect, useState } from 'react';
 
 import MiniAppRunner from '@/components/miniapp-host/MiniAppRunner';
+import type { BubbleClaimMessage } from '@/components/miniapp-host/bubbleClaimBridge';
 import { loadMiniAppSource } from '@/lib/marketplaceClient';
 import type { Tab } from '@/types/tab';
 
 export interface MiniAppSceneTabProps {
   tab: Tab;
   isActive: boolean;
+  /**
+   * Bubble Claim sink. The runner verifies the claim (source + nonce + appId)
+   * and hands it here; App routes it into a Chat tab's composer. Optional so
+   * a bare mount (tests, storybook) still renders.
+   */
+  onBubbleClaim?: (msg: BubbleClaimMessage) => void;
 }
 
-export default function MiniAppSceneTab({ tab }: MiniAppSceneTabProps) {
+export default function MiniAppSceneTab({ tab, onBubbleClaim }: MiniAppSceneTabProps) {
   const payload = tab.miniapp;
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +89,7 @@ export default function MiniAppSceneTab({ tab }: MiniAppSceneTabProps) {
       kind={payload.kind}
       workerKind={payload.workerKind}
       srcDoc={srcDoc}
+      onBubbleClaim={onBubbleClaim}
     />
   );
 }

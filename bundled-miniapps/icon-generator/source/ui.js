@@ -44,14 +44,25 @@ const els = {
 const ctx = els.canvas.getContext('2d');
 let selectedIdx = null;
 let nonce = null;
+/** Claims raised before the host's `host.ready` arrived. */
+const pendingClaims = [];
 
-// Mint a Bubble Claim nonce in sync with the host. MiniAppRunner re-mints on
-// appId change; if `__bubbleClaimNonce__` is already injected we use it,
-// otherwise we generate our own and the host discards the message (defense
-// in depth — never trust a nonce the MiniApp invents unilaterally).
-nonce =
-  window.parent?.__bubbleClaimNonce__ ||
-  `nonce-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+// The host mints a Bubble Claim nonce per iframe session and posts it as
+// `host.ready` once the frame's document has loaded. A MiniApp must NOT invent
+// its own: `verifyBubbleClaim` rejects any claim whose nonce doesn't match, so
+// a self-minted nonce means every claim is silently dropped.
+//
+// Claims raised before `host.ready` arrives are held in `pendingClaims` and
+// flushed the moment the nonce shows up.
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent) return;
+  const data = event.data;
+  if (!data || data.kind !== 'host.ready' || typeof data.nonce !== 'string') return;
+  nonce = data.nonce;
+  const queued = pendingClaims;
+  pendingClaims.length = 0;
+  queued.forEach(sendBubbleClaim);
+});
 
 const setStatus = (msg) => {
   els.status.textContent = msg;
@@ -111,6 +122,16 @@ function drawSelected(icon) {
 // BubbleClaimBridge verifies source === iframe.contentWindow + nonce +
 // appId before forwarding to Chat's composer.
 function postBubbleClaim({ draft, attachments }) {
+  // Not ready yet — the host hasn't handed us a nonce. Queue rather than drop,
+  // so a fast click right after mount still reaches the Chat composer.
+  if (!nonce) {
+    pendingClaims.push({ draft, attachments });
+    return;
+  }
+  sendBubbleClaim({ draft, attachments });
+}
+
+function sendBubbleClaim({ draft, attachments }) {
   const payload = {
     appId: APP_ID,
     draft,

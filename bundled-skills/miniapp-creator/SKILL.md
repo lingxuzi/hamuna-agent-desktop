@@ -84,7 +84,7 @@ author: HamunaAgent
 2. **起 App ID**：用户给了就用，没给按上面规则派生
 3. **写 meta.json**（用上面 schema）
 4. **写 source/index.html**（5-50 行 HTML，body 只放骨架 DOM，不内联 CSS/JS）
-5. **写 source/ui.js**（DOMContentLoaded 后再绑事件；状态读写走 `window.__miniappStorage.get/set`）
+5. **写 source/ui.js**（DOMContentLoaded 后再绑事件；状态读写走 `window.__miniappStorage.get/set`；要把活交给用户或对话里的 agent 就用 §Bubble Claim）
 6. **写 source/style.css**（**必须用 `--hamuna-*` CSS Token**，见 §snippet 与 `references/design-playbook.md` §四，禁止硬编码颜色/字号）
 7. **写 storage.json**（`{}` 空即可，或 `defaults` 初值）
 8. **提交写盘**（见 §端到端协议）
@@ -199,6 +199,56 @@ button {
   "storage": { "file": "storage.json", "defaults": {} }
 }
 ```
+
+## Bubble Claim：把活交给对话里的 agent
+
+MiniApp **不能**自己调 LLM、不能自己发消息、不能直接联网——宿主给 iframe 的 CSP 是 `connect-src 'none'`，这是安全红线。MiniApp 唯一能触达 agent 的方式，是把一段草稿交给用户的 Chat 输入框，用户自己按下回车。
+
+这意味着：**别在 MiniApp 里写"调用 AI 生成"**，要写成"把用户填的东西整理成一句 prompt，交给对话里的 agent"。
+
+宿主在 iframe 加载完成后 postMessage 一个 `host.ready`，里面带本次会话的 nonce：
+
+```js
+let nonce = null;
+const pendingClaims = [];
+
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent) return;
+  const d = event.data;
+  if (d && d.kind === 'host.ready' && typeof d.nonce === 'string') {
+    nonce = d.nonce;
+    pendingClaims.splice(0).forEach(sendBubbleClaim);
+  }
+});
+
+function postBubbleClaim({ draft, attachments }) {
+  if (!nonce) { pendingClaims.push({ draft, attachments }); return; }
+  sendBubbleClaim({ draft, attachments });
+}
+
+function sendBubbleClaim({ draft, attachments }) {
+  window.parent.postMessage(
+    {
+      kind: 'chat.claimComposer',
+      nonce,                                   // 必须用宿主给的，不能自己编
+      payload: {
+        appId: APP_ID,                          // 必须等于 meta.json 的 id
+        draft,
+        ...(attachments ? { attachments } : {}),
+      },
+    },
+    '*',
+  );
+}
+```
+
+三条硬规则，违反哪条消息都会被**静默丢弃**（不报错、不提示）：
+
+1. **nonce 不能自己编。** `verifyBubbleClaim` 逐字比对，自编的一定被拒。`host.ready` 之前发的 claim 要先排队。
+2. **`payload.appId` 必须等于 `meta.json.id`。** 防冒名顶替别的 MiniApp。
+3. **消息源必须是 `window.parent`**，宿主做 `event.source === iframe.contentWindow` 严格相等校验。
+
+`draft` 里写清楚上下文——用户看到的就是他即将发送的原文，所以别塞"请帮我"，直接写可执行的诉求。
 
 ## 何时不用这个 skill
 
