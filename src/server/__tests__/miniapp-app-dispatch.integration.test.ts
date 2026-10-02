@@ -433,15 +433,21 @@ describe('ai.cancel has a real abort point', () => {
         storage: {},
       });
 
-      // 空参数调用：fs.readFile 在路径校验处停下，shell.exec / net.fetch 在必填
-      // 参数处停下 —— 都走完「组分派 + 组内路由」而不产生副作用。
+      // ⚠️ 这条护栏的覆盖范围比它看起来的小，别把它当成「每个方法都验过了」。
       //
-      // 两个方法例外，它们会真的执行：
-      //   - i.getModels         动态 import 真 SDK 并枚举 Provider（1.9s）
-      //   - gent.ensureSession  起真实 Sidecar 进程（0.6s）
-      // 两者都是 credentialed 语义，不该由一条路由护栏付这个代价。它们确实
-      // 接了线由本文件上方的 ai/agent 闸门与 ai.cancel 两条 describe 证明；
-      // 代价是这两条路由未被本用例覆盖 —— 写明在此，好过让护栏悄悄变慢 2.5s。
+      // 它用**空参数**调用。`checkFs` 先查路径再查方法名，缺参数时先以
+      // `INVALID_PARAMS` 失败 —— `dispatchFs` 的组内 switch **根本没被进入**。
+      // 实测：删掉 `dispatchFs` 里的 `case 'access'`，本用例依然绿。
+      // shell.exec / net.fetch 同理，在必填参数处就停住了。
+      //
+      // `ai.getModels` / `agent.ensureSession` 两条路由也确实没覆盖：它们会动态
+      // import 真 SDK / 起真实 Sidecar。此前这里写的是「由本文件上方的 ai/agent
+      // 闸门证明」—— 那是假的，那两条 describe 测的是**权限闸门**，全仓库没有
+      // 任何测试 dispatch 过这两个方法。
+      //
+      // 真正的全覆盖护栏在 `miniapp-dispatch-routing.integration.test.ts`：给每个
+      // 方法喂它真正需要的参数让权限闸门放行，再把会起进程 / 开 socket 的叶子
+      // 就地打桩，于是全部方法都能零副作用地验到 switch。
       const SKIP_EXECUTION = new Set(['ai.getModels', 'agent.ensureSession']);
       const unreachable: string[] = [];
       for (const method of listAppMethods()) {
