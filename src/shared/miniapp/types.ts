@@ -34,6 +34,17 @@ export interface MiniAppPermissions {
     max_tokens_per_request?: number;
     rate_limit_per_minute?: number;
   };
+  /**
+   * MiniApp 自有隐藏 Agent 会话（`app.agent.*`）。与 `ai` 分开是因为粒度不同：
+   * `ai` 是"问一句拿一句"，无状态、无工具；`agent` 会派生一个真实的 Sidecar
+   * Session（1:1 进程），能读写工作区、跑工具，成本与逃逸面都高一档，所以必须
+   * 显式 opt-in 而不能被 `ai.enabled` 顺带带出来。
+   */
+  agent?: {
+    enabled?: boolean;
+    /** 该 MiniApp 允许 agent 触达的工作区路径前缀；空 = 不允许任何工作区工具。 */
+    workspace_scope?: string[];
+  };
 }
 
 /**

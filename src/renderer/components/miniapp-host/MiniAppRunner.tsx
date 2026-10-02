@@ -17,10 +17,16 @@
  * bridges iframe `worker.call` postMessages to the worker.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiPostJson } from '@/api/apiFetch';
 
+import { buildAppResult, verifyAppCall } from '../../../shared/miniapp/app-protocol';
+import type { MiniAppPermissions } from '../../../shared/miniapp/types';
+
+import { runAppCall } from './appBridge';
+import { createAppDispatcher, clearWorkerId, registerWorkerId } from './appHostDispatch';
+import { buildAppRuntimeScript } from './appRuntimeScript';
 import {
   mintBubbleClaimNonce,
   verifyBubbleClaim,
@@ -61,6 +67,32 @@ export interface MiniAppRunnerProps {
    * hardcodes git-graph; Phase 4 will read from `meta.json`.
    */
   workerKind?: string;
+  /**
+   * `meta.json::permissions`. 宿主侧 `window.app.*` 的授权依据 —— 没有它
+   * 所有能力调用都会被拒（默认空 = 无授权，fail-closed）。
+   */
+  permissions?: MiniAppPermissions;
+  /**
+   * 宿主环境事实（平台 / 语言 / 工作区路径），随 `host.ready` 下发给
+   * iframe 侧 runtime，填充 `app.platform` / `app.locale` / `app.workspaceDir`。
+   * 缺省时 runtime 用保守默认值，不影响能力调用。
+   */
+  env?: MiniAppRuntimeEnv;
+  /**
+   * Tab 是否为当前激活页。驱动 `app.onActivate` / `app.onDeactivate` ——
+   * MiniApp 据此暂停轮询、停止动画或断开长任务。缺省视为恒激活
+   * （裸挂载场景没有 tab 概念），不会误发 deactivate。
+   */
+  isActive?: boolean;
+}
+
+/** 宿主注入给 MiniApp 的环境事实。 */
+export interface MiniAppRuntimeEnv {
+  platform?: string;
+  locale?: string;
+  appearanceMode?: string;
+  workspaceDir?: string;
+  appDataDir?: string;
 }
 
 const SANDBOX_FLAGS = 'allow-scripts allow-same-origin allow-forms';
@@ -104,6 +136,9 @@ export default function MiniAppRunner({
   onBubbleClaim,
   kind = 'iframe',
   workerKind,
+  permissions,
+  env,
+  isActive,
 }: MiniAppRunnerProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [themeCss, setThemeCss] = useState<string>('');
@@ -159,8 +194,17 @@ export default function MiniAppRunner({
     return () => obs.disconnect();
   }, [appId]);
 
-  // 拼 srcDoc：Theme `<style>` + CSP meta + 用户 HTML + appId 注入 script
-  const fullSrcDoc = `${themeCss}\n${injectAppId(injectCsp(srcDoc), appId)}`;
+  // 拼 srcDoc：Theme `<style>` + CSP meta + `window.app` runtime + 用户 HTML
+  //
+  // runtime 必须排在用户 HTML 之前：`ui.js` 在解析期就可能调用 `app.*`，
+  // 放后面会撞上 "Cannot read properties of undefined"。
+  const appRuntimeScript = useMemo(() => buildAppRuntimeScript(appId), [appId]);
+  const fullSrcDoc = `${themeCss}\n${injectAppId(injectCsp(injectAppRuntime(srcDoc, appRuntimeScript)), appId)}`;
+
+  // `window.app.*` 派发器。绑定 appId（闭包），因此多个 MiniApp Tab 并存时
+  // 互不串号。`useMemo` 而非 ref：dispatch 在 listener 里被调用，重建函数
+  // 无副作用，重建代价是一次对象字面量。
+  const dispatcher = useMemo(() => createAppDispatcher(appId), [appId]);
 
   // 卸载 / appId 切换时解绑 iframe 引用，触发 GC（PRD v0.3 §5.3 row 2）
   useEffect(() => {
@@ -203,6 +247,10 @@ export default function MiniAppRunner({
         }
         if (result.ok && result.workerId) {
           workerIdRef.current = result.workerId;
+          // Register so `app.call(...)` inside the iframe routes to this same
+          // worker. Without this, every call would spawn an orphan — the map is
+          // keyed by appId because one iframe owns exactly one worker.
+          registerWorkerId(appId, result.workerId);
           // Tell the iframe that the worker is ready + which nonce to use.
           // iframe-side ui.js sets `window.__workerNonce` and starts calling
           // `app.worker.call(method, params)`. The nonce must match
@@ -222,6 +270,9 @@ export default function MiniAppRunner({
       cancelled = true;
       const workerId = workerIdRef.current;
       workerIdRef.current = null;
+      // Drop the routing entry even if terminate fails — a stale workerId would
+      // let `app.call` hit a dead pool and surface as a confusing RPC error.
+      clearWorkerId(appId);
       if (workerId) {
         try {
           const p = apiPostJson('/api/miniapp/worker/terminate', { workerId });
@@ -312,8 +363,47 @@ export default function MiniAppRunner({
     return () => window.removeEventListener('message', handler);
   }, [appId, handleClaim]);
 
+  // `window.app.*` 调用通道。信任判定在 `verifyAppCall`，权限判定在
+  // `runAppCall`，本 effect 只做「验证 → 派发 → 回信」。
+  //
+  // 对 `kind === 'iframe'` 与 `'worker'` 都监听：`app.fs.*` / `app.shell.exec`
+  // 这类框架原语在无 Node 模式下同样可用（对齐 OpenBitFun 的 host_dispatch
+  // 设计），不需要 MiniApp 升级成 worker kind。
+  const permissionsRef = useRef<MiniAppPermissions | undefined>(permissions);
+  useEffect(() => {
+    // Sync in an effect, not during render: writing a ref mid-render is what
+    // the react-hooks/refs rule bans, and it is also wrong — a render that is
+    // thrown away would have already mutated the ref.
+    permissionsRef.current = permissions;
+  }, [permissions]);
+  useEffect(() => {
+    const handler = async (event: MessageEvent) => {
+      const iframe = iframeRef.current;
+      const windowSource = event.source instanceof Window ? event.source : null;
+      const call = verifyAppCall(
+        { source: windowSource, origin: event.origin, data: event.data },
+        iframe?.contentWindow ?? null,
+        nonceRef.current,
+        appId,
+      );
+      if (!call) return;
+      if (!iframe?.contentWindow) return;
+      // 永远回信（含超时 / 异常），否则 iframe 的 Promise 永久 pending。
+      const result = await runAppCall(
+        call.payload.method,
+        call.payload.params,
+        permissionsRef.current ?? {},
+        dispatcher,
+      );
+      iframe.contentWindow.postMessage(buildAppResult(nonceRef.current, call.id, result), '*');
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [appId, dispatcher]);
+
   /**
-   * Hand the MiniApp the Bubble Claim nonce it cannot invent for itself.
+   * Hand the MiniApp the Bubble Claim nonce it cannot invent for itself, plus
+   * the environment facts the `window.app` runtime exposes as getters.
    *
    * `verifyBubbleClaim` rejects any claim whose nonce doesn't match, and the
    * nonce lives in the host's `nonceRef` — so without this the MiniApp can only
@@ -321,12 +411,47 @@ export default function MiniAppRunner({
    * rather than on mount because a srcDoc iframe's document is not parsed yet
    * at mount, and a postMessage into an unparsed document is lost.
    */
+  const runtimeEnv = useMemo(
+    () => ({
+      platform: env?.platform ?? 'unknown',
+      locale: env?.locale ?? 'en-US',
+      appearanceMode: env?.appearanceMode ?? 'dark',
+      workspaceDir: env?.workspaceDir ?? '',
+      appDataDir: env?.appDataDir ?? '',
+    }),
+    [env?.platform, env?.locale, env?.appearanceMode, env?.workspaceDir, env?.appDataDir],
+  );
+
   const handleFrameLoad = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage(
-      { kind: 'host.ready', nonce: nonceRef.current },
+      { kind: 'host.ready', nonce: nonceRef.current, env: runtimeEnv },
       '*',
     );
-  }, []);
+  }, [runtimeEnv]);
+
+  // `app.onActivate` / `app.onDeactivate` 的真实来源。
+  //
+  // 之前 runtime 暴露了这两个回调但宿主从不发送 —— 作者按文档写
+  // `onDeactivate(() => clearInterval(t))`，回调永远不触发，轮询在用户切走
+  // 后继续烧 CPU。这类"API 存在但没有生产者"的缺陷比缺 API 更难排查。
+  //
+  // 首帧不重复发 activate：`host.ready` 之后 runtime 立刻 emit 一个 `ready`
+  // 事件，iframe 侧把 `onActivate` 注册在 ready 之后才收得到；这里只在
+  // `isActive` 真正**变化**时推送，语义才是"状态迁移"而非"当前状态"。
+  const lastActiveRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (isActive === undefined) return;
+    if (lastActiveRef.current === isActive) return;
+    const isFirst = lastActiveRef.current === null;
+    lastActiveRef.current = isActive;
+    // 首次挂载不发：iframe 的 runtime 此刻可能还没注入完监听器，发了也是
+    // 丢失。等作者自己 onActivate/onDeactivate 注册即可。
+    if (isFirst) return;
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'app.event', type: isActive ? 'activate' : 'deactivate', nonce: nonceRef.current },
+      '*',
+    );
+  }, [isActive]);
 
   return (
     <iframe
@@ -345,6 +470,18 @@ export default function MiniAppRunner({
       }}
     />
   );
+}
+
+/**
+ * 在 srcDoc `<head>` 前注入 `window.app` runtime。
+ *
+ * CSP 是 `script-src 'unsafe-inline' 'self'`，所以内联 `<script>` 可执行。
+ * 注入点必须在用户 HTML 之前 —— `ui.js` 在解析期就可能调 `app.*`。
+ */
+function injectAppRuntime(html: string, runtimeScript: string): string {
+  const tag = `<script>${runtimeScript}</script>`;
+  if (html.includes('</head>')) return html.replace('</head>', `${tag}</head>`);
+  return `${tag}${html}`;
 }
 
 /** 在 srcDoc `</head>` 前注入 `<meta name="x-miniapp-id">` 让 iframe JS 自识身份。 */

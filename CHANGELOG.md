@@ -9,7 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- MiniApp `window.app.*` 补齐 OpenBitFun 对齐后的缺失能力面。`app.ai.*`（`complete` / `chat` / `getModels`，复用宿主已配置的 Provider，MiniApp 无需也拿不到 API Key）与 `app.agent.*`（`ensureSession` / `run` / `turnText` / `cancel` / `onEvent`，自有隐藏 Agent 会话）落地；两者权限开关**相互独立**（`permissions.ai.enabled` / `permissions.agent.enabled`），因为 `ai` 的模型 `tools: []` 无任何可调用对象，而 `agent` 有完整工具、能读写工作区，逃逸面高一档。`agent` 走 `session-engine` facade（CLAUDE.md 规定的唯一入口），工作区强制限制在 `{appdata}`，权限模式封顶 `acceptEdits`。
+- `app.dialog.*`（`open` / `save` / `message`，含 `kind:'confirm'`）与 `app.clipboard.*`（`readText` / `writeText`）实装。这两组是 Tauri 原生能力，sidecar 进程永远够不到，因此在 renderer 的 `appHostDispatch` 里**发请求之前**就地截走，而不是发去 sidecar 再返回"不可用"。
+- `app.fs` 补齐 `rmdir` / `unlink` / `lstat` / `access`，`app.storage` 补齐 `remove`。`lstat` 不跟随 symlink（MiniApp 用它做链接检测，跟随后永远返回 false）；`access` 对缺失路径返回 `false` 而非抛错。
+- 新增 `specs/tech_docs/miniapp_architecture.md`：记录能力按 owner 分流的路由、权限的双重判定、路径前缀 glob 语义、`ai` 与 `agent` 的分工与安全边界。
+- `TurnOwner` 提升到 `src/shared/sessionCompletion.ts` 作为单一真源。此前该结构在 shared 与 server 各有一份内联字面量，加一个 `kind` 时 TS 只会在其中一份上报错，另一份静默保持旧联合类型。
+
 ### Fixed
+- **MiniApp 声明的 `fs` 权限路径模板从未生效**：`isPathAllowed` 把 `{workspace}/**` 当字面量前缀比较，而所有存量 MiniApp（git-graph / file-explorer / hello-miniapp / icon-generator）声明的正是 `{workspace}/**`，导致它们的读文件能力**全线静默失效**，报出 "path not covered by permissions.fs.read" —— 而 meta 声明完全正确。现支持**仅限尾部**的 `/**`（正反斜杠皆可）；中间段通配仍不生效，因为前缀声明的价值在于"一眼看清能碰哪些目录"。prefix-confusion 防护（`{appdata}/src/**` 不放行 `{appdata}/src-secrets`）与 `..` 词法折叠保持不变。
+- `app.onActivate` / `app.onDeactivate` 此前被暴露给作者但**宿主从不发送**——按文档写 `onDeactivate(() => clearInterval(t))` 的轮询在用户切走 Tab 后继续烧 CPU。现由 `MiniAppSceneTab` 的 `isActive` prop 驱动，只在状态迁移时推送（首帧不发）。
+- `app.agent` 的 turn 归属此前无法表达：`TurnOwner.kind` 只有 `'goal' | 'task'`，一个 MiniApp 取消只能停掉整个 session。现新增 `'agent'`，`stopOwnedTurn` 可精确命中单个 turn。
+- 剪贴板改用 `arboard`（`Cargo.lock` 中已作为 `tao` 的传递依赖存在，**新增传递闭包为零**）。曾考虑 `tauri-plugin-clipboard-manager`，实测会连带引入 `wl-clipboard-rs` 并强制升级 `wry` / `webview2-com` 等核心 WebView 依赖——为两个函数动核心依赖不划算，已回滚。
 - Windows 会话启动 `skill-sync` EBUSY/EEXIST：删除项目 symlink 用 `rmSync(recursive)` 会留下残留目录项导致同进程重建失败（Windows junction 报 EBUSY，Linux 报 EEXIST）——改用 `unlinkSync` 原子删除 + 有界重试，技能/命令 symlink 不再整会话缺失。
 - SDK 已知警告（`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` / `[sdk-stderr]` / `node --trace-warnings`）经 sidecar stderr 被 Rust classifier 误标 ERROR 刷屏——降级为 Warn，真错误保持 ERROR。
 - 插件安装 `ERR_REQUIRE_ESM`：bundled npm 12 的 `@npmcli/agent` 顶层 `require()` ESM 包 `http-proxy-agent@9`，而安装器设的 `NODE_OPTIONS=--no-experimental-require-module` 禁用了 Node 24 的 require(ESM) → npm 自身崩溃（用户报 @sliverp/qqbot 失败）。移除该 flag（Node 24 已稳定支持 require(ESM)）；并加 `--allow-git=all` 放行 npm 11+ 默认拒绝的 git 依赖（qqbot 的 libsignal 来自 GitHub）。

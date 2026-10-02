@@ -61,6 +61,7 @@
 | Sidecar 启动性能 / 冷启动退化排查 | `tech_docs/sidecar_cold_start.md` |
 | 任务中心 / Task Store / Thought Store | `tech_docs/task_center.md` |
 | Cloud Space / Space Issue / Space Skill / registered agent（实验室） | `tech_docs/space_cloud.md`；改云端 API / 鉴权 / 数据 / quota 时还 MUST 读同级仓库 `../HamunaAgent_space/specs/ARCHITECTURE.md` |
+| MiniApp（`window.app.*` / meta.json 权限 / iframe 沙箱 / ai 与 agent 分工） | `tech_docs/miniapp_architecture.md` |
 | Space IssueDelivery / Registered Agent Prompt 协议 / 拼接规则 | `tech_docs/space_issue_delivery_protocol.md`；同时读 `tech_docs/space_cloud.md` 与 `tech_docs/system_reminder_protocol.md` |
 | IM Bot / Telegram / Dingtalk / 飞书 | `tech_docs/im_integration_architecture.md` |
 | Plugin Bridge / OpenClaw / SDK shim | `tech_docs/plugin_bridge_architecture.md` |

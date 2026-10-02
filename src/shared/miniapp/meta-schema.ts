@@ -1,7 +1,7 @@
 /**
  * MiniApp `meta.json` schema validator（PRD v0.4 §B.1 #1 + PRD v0.3 §2.1.1）。
  *
- * Phase 0 子集：fs/shell/net/ai 4 类权限，**不**含 node/agent/chat 三块。
+ * 权限组：fs/shell/net/node/ai/agent。**不**含 chat（聊天由宿主 Tab 承担）。
  * 手动 validator 模式（与 `src/shared/mcpConfig.ts` 同款 pattern；shared/
  * 禁顶层 import zod —— 见 CLAUDE.md §Pit-of-Success builtin MCP 懒加载）。
  */
@@ -143,6 +143,22 @@ function parsePermissions(raw: unknown): MiniAppPermissions | string {
       outAi.rate_limit_per_minute = n;
     }
     out.ai = outAi;
+  }
+
+  if (r.agent !== undefined) {
+    const agent = asRecord(r.agent);
+    if (!agent) return 'permissions.agent must be an object';
+    const outAgent: NonNullable<MiniAppPermissions['agent']> = {};
+    if (agent.enabled !== undefined) {
+      if (typeof agent.enabled !== 'boolean') return 'permissions.agent.enabled must be boolean';
+      outAgent.enabled = agent.enabled;
+    }
+    if (agent.workspace_scope !== undefined) {
+      const arr = asStringArray(agent.workspace_scope);
+      if (!arr) return 'permissions.agent.workspace_scope must be string[]';
+      outAgent.workspace_scope = arr;
+    }
+    out.agent = outAgent;
   }
 
   return out;

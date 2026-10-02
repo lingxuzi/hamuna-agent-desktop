@@ -5,6 +5,7 @@ pub mod app_dirs;
 pub mod attachment_protocol;
 pub mod browser;
 pub mod cli;
+pub mod clipboard;
 mod commands;
 pub mod config_io;
 pub mod cron_task;
@@ -420,6 +421,9 @@ pub fn run() {
             // Phase 3 (PRD v0.4 §B.4) — Marketplace install + list
             commands::cmd_miniapp_install_from_marketplace,
             commands::cmd_miniapp_list_marketplace,
+            // MiniApp `app.clipboard.*` — OS clipboard via arboard.
+            clipboard::cmd_clipboard_read_text,
+            clipboard::cmd_clipboard_write_text,
             // Agent Runtime detection (v0.1.59)
             commands::cmd_detect_runtimes,
             managed_codex::cmd_managed_codex_status,

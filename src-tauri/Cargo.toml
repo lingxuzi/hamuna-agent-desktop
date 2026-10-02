@@ -42,6 +42,11 @@ tauri = { version = "2.11.2", features = ["tray-icon", "devtools", "image-png", 
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2.4.5"
 tauri-plugin-dialog = "2.6.0"
+# System clipboard for MiniApp `app.clipboard.*`. Already present in Cargo.lock
+# as a transitive dep of tao (window drag-and-drop), so declaring it directly
+# adds no new transitive closure — unlike tauri-plugin-clipboard-manager, which
+# drags in wl-clipboard-rs and forces a wry/webview2 upgrade.
+arboard = "3.6.1"
 which = "8.0.0"
 libc = "0.2.180"
 tauri-plugin-localhost = "2"

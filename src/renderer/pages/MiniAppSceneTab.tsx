@@ -8,11 +8,14 @@
 // future per-MiniApp chrome (close confirmation, refresh, share) belongs in a
 // different wrapper, not here.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import MiniAppRunner from '@/components/miniapp-host/MiniAppRunner';
 import type { BubbleClaimMessage } from '@/components/miniapp-host/bubbleClaimBridge';
 import { loadMiniAppSource } from '@/lib/marketplaceClient';
+import { useResolvedTheme } from '@/theme';
+import { isSupportedLocale } from '@/../shared/i18n';
 import type { Tab } from '@/types/tab';
 
 export interface MiniAppSceneTabProps {
@@ -26,10 +29,28 @@ export interface MiniAppSceneTabProps {
   onBubbleClaim?: (msg: BubbleClaimMessage) => void;
 }
 
-export default function MiniAppSceneTab({ tab, onBubbleClaim }: MiniAppSceneTabProps) {
+export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAppSceneTabProps) {
   const payload = tab.miniapp;
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const theme = useResolvedTheme();
+  const { i18n } = useTranslation();
+
+  // 宿主环境事实，随 `host.ready` 下发给 iframe 侧 runtime，填充
+  // `app.locale` / `app.appearanceMode` / `app.platform`。
+  // `app.t(...)` 与 `onLocaleChange` 依赖它，因此必须在首帧就正确。
+  const runtimeEnv = useMemo(
+    () => ({
+      appearanceMode: theme.appearanceMode,
+      locale: isSupportedLocale(i18n.language) ? i18n.language : 'zh-CN',
+      platform: navigator.platform.toLowerCase().includes('win')
+        ? 'win32'
+        : navigator.platform.toLowerCase().includes('mac')
+          ? 'darwin'
+          : 'linux',
+    }),
+    [theme.appearanceMode, i18n.language],
+  );
 
   // Reload source on appId change OR when the tab becomes active again (cheap
   // mirror of Marketplace.tsx reload-on-activation — but for source it's
@@ -88,6 +109,11 @@ export default function MiniAppSceneTab({ tab, onBubbleClaim }: MiniAppSceneTabP
       appId={payload.appId}
       kind={payload.kind}
       workerKind={payload.workerKind}
+      // `meta.json::permissions` 是 `window.app.*` 的 renderer 侧授权依据；
+      // 缺省即无授权，所有能力调用 fail-closed。
+      permissions={payload.permissions}
+      env={runtimeEnv}
+      isActive={isActive}
       srcDoc={srcDoc}
       onBubbleClaim={onBubbleClaim}
     />

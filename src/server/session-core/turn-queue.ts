@@ -2,6 +2,7 @@ import {
   normalizeChatQueueResponseMode,
   type ChatQueueResponseMode,
 } from '../../shared/config-types';
+import type { TurnOwner as SharedTurnOwner } from '../../shared/sessionCompletion';
 
 export type QueueAdmissionAction =
   | 'direct'
@@ -27,10 +28,8 @@ export type DispatchGuard = (() => Promise<DispatchGuardResult>) & {
   cancel?: () => void | Promise<void>;
 };
 
-export type TurnOwner = {
-  kind: 'goal' | 'task';
-  id: string;
-};
+export type TurnOwner = SharedTurnOwner;
+export type { TurnOwner as SharedTurnOwner };
 
 export type TurnIdentity = {
   queueId: string;

@@ -1,0 +1,394 @@
+// app-permissions.unit.test.ts — `window.app.*` 授权不变量的回归护栏。
+//
+// 这些用例锁的是**安全边界**，不是覆盖率：每一条都对应一个"如果判错了会
+// 发生什么"的具体后果。改动 `isPathAllowed` / `commandAllowed` /
+// `hostAllowed` / `checkAppPermission` 时先看这里。
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  checkAppPermission,
+  commandAllowed,
+  hostAllowed,
+  isPathAllowed,
+  isPrivateHostname,
+  runAppCall,
+} from './app-permissions';
+import {
+  buildAppResult,
+  isKnownAppMethod,
+  listAppMethods,
+  verifyAppCall,
+} from './app-protocol';
+import type { MiniAppPermissions } from './types';
+
+const NONE: MiniAppPermissions = {};
+
+describe('isPathAllowed', () => {
+  it('accepts an exact path and paths under the prefix', () => {
+    expect(isPathAllowed('/data/app', ['/data/app'])).toBe(true);
+    expect(isPathAllowed('/data/app/sub/file.txt', ['/data/app'])).toBe(true);
+  });
+
+  it('rejects a sibling that merely shares a string prefix', () => {
+    // 这是 prefix-confusion：声明 /data/secret 不得放行 /data/secrets
+    expect(isPathAllowed('/data/secrets/key.pem', ['/data/secret'])).toBe(false);
+  });
+
+  it('rejects traversal that escapes the prefix', () => {
+    expect(isPathAllowed('/data/app/../../etc/passwd', ['/data/app'])).toBe(false);
+  });
+
+  it('normalizes Windows separators and trailing slashes', () => {
+    expect(isPathAllowed('C:\\data\\app\\f.txt', ['C:/data/app'])).toBe(true);
+    expect(isPathAllowed('/data/app/f.txt', ['/data/app/'])).toBe(true);
+  });
+
+  it('denies everything when the allow-list is empty', () => {
+    expect(isPathAllowed('/data/app', [])).toBe(false);
+  });
+});
+
+describe('isPathAllowed: trailing /** glob', () => {
+  // 这是真实缺陷的回归护栏：`meta.json` 里作者写的是 `{workspace}/**`，而旧实现
+  // 把它当字面量前缀比较，于是**所有**存量 MiniApp 的读文件能力全线失效，
+  // 报出 "path not covered by permissions.fs.read" —— 而它的声明完全正确。
+  it('treats a trailing /** as "everything under this prefix"', () => {
+    expect(isPathAllowed('/data/app/notes.txt', ['/data/app/**'])).toBe(true);
+    expect(isPathAllowed('/data/app/a/b/c/deep.txt', ['/data/app/**'])).toBe(true);
+  });
+
+  it('admits the prefix directory itself', () => {
+    // 作者写 '**' 的意图是"这个目录下的一切"；把目录本身排除在外是反直觉陷阱
+    expect(isPathAllowed('/data/app', ['/data/app/**'])).toBe(true);
+  });
+
+  it('still refuses to escape the globbed prefix', () => {
+    expect(isPathAllowed('/data/other/file.txt', ['/data/app/**'])).toBe(false);
+    expect(isPathAllowed('/data/app/../../etc/passwd', ['/data/app/**'])).toBe(false);
+  });
+
+  it('keeps prefix-confusion protection under a glob', () => {
+    // `{appdata}/src/**` 不得放行 `{appdata}/src-secrets` —— glob 放宽的是
+    // "深度"，不是"横向邻居"
+    expect(isPathAllowed('/data/src-secrets/key.pem', ['/data/src/**'])).toBe(false);
+    expect(isPathAllowed('/data/src/key.pem', ['/data/src/**'])).toBe(true);
+  });
+
+  it('handles the Windows separator form', () => {
+    expect(isPathAllowed('C:\\data\\app\\f.txt', ['C:\\data\\app\\**'])).toBe(true);
+  });
+
+  it('does not treat a mid-path * as a glob', () => {
+    // 只支持尾部 glob：中间段的 '*' 必须当字面量，否则 meta.json 会退化成
+    // 一个难以审计的能力声明
+    expect(isPathAllowed('/data/a/x/b.txt', ['/data/*/b.txt'])).toBe(false);
+  });
+
+  it('handles a bare ** as "deny everything" rather than "allow everything"', () => {
+    // 归一化后前缀为空串 —— 空串在比较里恒不匹配，是安全的失败方向。
+    // 若哪天把它当成"匹配一切"，一行 `{appdata}/..` 就能开全局 fs。
+    expect(isPathAllowed('/etc/passwd', ['**'])).toBe(false);
+  });
+});
+
+describe('commandAllowed', () => {
+  it('matches the first token against the allow-list', () => {
+    expect(commandAllowed('git log --oneline', ['git'])).toBe(true);
+    expect(commandAllowed('git log', ['ffmpeg', 'git'])).toBe(true);
+  });
+
+  it('rejects a command whose first token is not allowed', () => {
+    expect(commandAllowed('rm -rf /', ['git'])).toBe(false);
+    expect(commandAllowed('curl evil.com', ['git'])).toBe(false);
+  });
+
+  it('tolerates a .exe suffix on either side (Windows)', () => {
+    expect(commandAllowed('git status', ['git.exe'])).toBe(true);
+    expect(commandAllowed('git.exe status', ['git'])).toBe(true);
+  });
+
+  it('rejects an empty command', () => {
+    expect(commandAllowed('   ', ['git'])).toBe(false);
+  });
+});
+
+describe('hostAllowed', () => {
+  it('matches exact host and subdomains', () => {
+    expect(hostAllowed('https://api.example.com/x', ['api.example.com'])).toBe(true);
+    expect(hostAllowed('https://v2.api.example.com/x', ['api.example.com'])).toBe(true);
+  });
+
+  it('rejects a suffix-confusion host', () => {
+    expect(hostAllowed('https://evil-example.com/x', ['example.com'])).toBe(false);
+    expect(hostAllowed('https://example.com.evil.io/x', ['example.com'])).toBe(false);
+  });
+
+  it('rejects an unparseable url', () => {
+    expect(hostAllowed('not-a-url', ['example.com'])).toBe(false);
+  });
+});
+
+describe('isPrivateHostname', () => {
+  it('flags loopback, private ranges, link-local and cloud metadata', () => {
+    expect(isPrivateHostname('localhost')).toBe(true);
+    expect(isPrivateHostname('127.0.0.1')).toBe(true);
+    expect(isPrivateHostname('169.254.169.254')).toBe(true);
+    expect(isPrivateHostname('10.1.2.3')).toBe(true);
+    expect(isPrivateHostname('172.16.0.1')).toBe(true);
+    expect(isPrivateHostname('192.168.1.1')).toBe(true);
+    expect(isPrivateHostname('::1')).toBe(true);
+  });
+
+  it('does not flag public hosts', () => {
+    expect(isPrivateHostname('api.example.com')).toBe(false);
+    expect(isPrivateHostname('172.32.0.1')).toBe(false);
+  });
+});
+
+describe('checkAppPermission', () => {
+  it('denies fs when no scope is declared', () => {
+    expect(checkAppPermission('fs.readFile', { path: '/x' }, NONE).allowed).toBe(false);
+  });
+
+  it('allows a read inside the declared prefix but not outside', () => {
+    const perms: MiniAppPermissions = { fs: { read: ['/data/app'] } };
+    expect(checkAppPermission('fs.readFile', { path: '/data/app/a.txt' }, perms).allowed).toBe(true);
+    expect(checkAppPermission('fs.readFile', { path: '/data/other/a.txt' }, perms).allowed).toBe(
+      false,
+    );
+  });
+
+  it('does not let a read grant authorize a write', () => {
+    const perms: MiniAppPermissions = { fs: { read: ['/data/app'] } };
+    expect(checkAppPermission('fs.writeFile', { path: '/data/app/a.txt' }, perms).allowed).toBe(
+      false,
+    );
+  });
+
+  it('requires both endpoints of copyFile to be writable', () => {
+    const perms: MiniAppPermissions = { fs: { write: ['/data/app'] } };
+    expect(
+      checkAppPermission('fs.copyFile', { from: '/data/app/a', to: '/data/app/b' }, perms).allowed,
+    ).toBe(true);
+    expect(
+      checkAppPermission('fs.copyFile', { from: '/data/app/a', to: '/etc/passwd' }, perms).allowed,
+    ).toBe(false);
+  });
+
+  it('denies net.fetch for non-https even with a matching host', () => {
+    const perms: MiniAppPermissions = { net: { allow: ['api.example.com'] } };
+    expect(
+      checkAppPermission('net.fetch', { url: 'http://api.example.com/x' }, perms).allowed,
+    ).toBe(false);
+    expect(
+      checkAppPermission('net.fetch', { url: 'https://api.example.com/x' }, perms).allowed,
+    ).toBe(true);
+  });
+
+  it('denies app.call unless node is enabled', () => {
+    expect(checkAppPermission('call.call', { method: 'x' }, NONE).allowed).toBe(false);
+    expect(
+      checkAppPermission('call.call', { method: 'x' }, { node: { enabled: true } }).allowed,
+    ).toBe(true);
+  });
+
+  it('allows storage / os without declarations', () => {
+    expect(checkAppPermission('storage.get', { key: 'k' }, NONE).allowed).toBe(true);
+    expect(checkAppPermission('os.info', null, NONE).allowed).toBe(true);
+  });
+});
+
+describe('runAppCall', () => {
+  it('never reaches the dispatcher when permission is denied', async () => {
+    let called = false;
+    const res = await runAppCall('fs.readFile', { path: '/x' }, NONE, async () => {
+      called = true;
+      return 'should-not-happen';
+    });
+    expect(called).toBe(false);
+    expect(res.ok).toBe(false);
+  });
+
+  it('converts a dispatcher throw into a HOST_ERROR envelope', async () => {
+    const res = await runAppCall('os.info', null, NONE, async () => {
+      throw new Error('boom');
+    });
+    expect(res).toEqual({ ok: false, error: { code: 'HOST_ERROR', message: 'boom' } });
+  });
+
+  it('passes the result through on success', async () => {
+    const res = await runAppCall('os.info', null, NONE, async () => ({ platform: 'win32' }));
+    expect(res).toEqual({ ok: true, result: { platform: 'win32' } });
+  });
+});
+
+describe('verifyAppCall trust boundary', () => {
+  const iframeWindow = {} as Window;
+  const otherWindow = {} as Window;
+  const nonce = 'n-1';
+  const base = {
+    kind: 'app.call',
+    nonce,
+    id: 'c1',
+    payload: { method: 'os.info', params: null, appId: 'demo' },
+  };
+
+  const envelope = (data: unknown, source: Window | null = iframeWindow) => ({
+    source,
+    origin: 'null',
+    data,
+  });
+
+  it('accepts a well-formed call from the bound iframe', () => {
+    expect(verifyAppCall(envelope(base), iframeWindow, nonce, 'demo')).not.toBeNull();
+  });
+
+  it('rejects a message from a different window', () => {
+    expect(verifyAppCall(envelope(base, otherWindow), iframeWindow, nonce, 'demo')).toBeNull();
+  });
+
+  it('rejects a forged nonce', () => {
+    const forged = { ...base, nonce: 'attacker' };
+    expect(verifyAppCall(envelope(forged), iframeWindow, nonce, 'demo')).toBeNull();
+  });
+
+  it('rejects an appId that is not the bound one', () => {
+    const foreign = { ...base, payload: { ...base.payload, appId: 'other-app' } };
+    expect(verifyAppCall(envelope(foreign), iframeWindow, nonce, 'demo')).toBeNull();
+  });
+
+  it('rejects a method the host does not implement', () => {
+    const unknown = { ...base, payload: { ...base.payload, method: 'fs.exfiltrateEverything' } };
+    expect(verifyAppCall(envelope(unknown), iframeWindow, nonce, 'demo')).toBeNull();
+  });
+
+  it('rejects a malformed envelope', () => {
+    expect(verifyAppCall(envelope({ kind: 'app.call' }), iframeWindow, nonce, 'demo')).toBeNull();
+    expect(verifyAppCall(envelope(null), iframeWindow, nonce, 'demo')).toBeNull();
+  });
+
+  it('rejects everything when the iframe is gone', () => {
+    expect(verifyAppCall(envelope(base), null, nonce, 'demo')).toBeNull();
+  });
+});
+
+describe('app.ai permission gate', () => {
+  // ai 与 agent 的分离是本项目最关键的一条安全不变量：`ai` 拿到的模型
+  // `tools: []`（无任何可调用对象），`agent` 拿到的模型有完整工具、能读写
+  // 工作区。若 agent 能被 ai.enabled 顺带打开，任何一个"只想做翻译"的
+  // MiniApp 实际上都持有了任意文件写 + 命令执行能力。
+  it('denies every ai method unless ai.enabled is explicitly true', () => {
+    for (const method of ['ai.complete', 'ai.chat', 'ai.getModels', 'ai.cancel']) {
+      expect(checkAppPermission(method, { prompt: 'hi' }, {}).allowed).toBe(false);
+      expect(checkAppPermission(method, { prompt: 'hi' }, { ai: {} }).allowed).toBe(false);
+    }
+  });
+
+  it('does not let ai.enabled open the agent surface', () => {
+    const perms: MiniAppPermissions = { ai: { enabled: true } };
+    expect(checkAppPermission('agent.run', { prompt: 'hi' }, perms).allowed).toBe(false);
+  });
+
+  it('does not let agent.enabled open the ai surface (or vice versa: both are independent)', () => {
+    const perms: MiniAppPermissions = { agent: { enabled: true } };
+    expect(checkAppPermission('ai.complete', { prompt: 'hi' }, perms).allowed).toBe(false);
+  });
+
+  it('enforces allowed_models as a hard allow-list once declared', () => {
+    const perms: MiniAppPermissions = { ai: { enabled: true, allowed_models: ['model-a'] } };
+    expect(checkAppPermission('ai.complete', { prompt: 'x', model: 'model-a' }, perms).allowed).toBe(
+      true,
+    );
+    // 静默降级到别的模型比直接拒绝危险得多：作者会以为在用 A，实际拿到 B 的输出
+    const denied = checkAppPermission('ai.complete', { prompt: 'x', model: 'model-b' }, perms);
+    expect(denied.allowed).toBe(false);
+    expect(denied.reason).toContain('allowed_models');
+  });
+
+  it('supports a "*" wildcard in allowed_models', () => {
+    const perms: MiniAppPermissions = { ai: { enabled: true, allowed_models: ['*'] } };
+    expect(checkAppPermission('ai.complete', { prompt: 'x', model: 'anything' }, perms).allowed).toBe(
+      true,
+    );
+  });
+
+  it('leaves the model unconstrained when allowed_models is absent or empty', () => {
+    const perms: MiniAppPermissions = { ai: { enabled: true } };
+    expect(checkAppPermission('ai.complete', { prompt: 'x', model: 'whatever' }, perms).allowed).toBe(
+      true,
+    );
+    const empty: MiniAppPermissions = { ai: { enabled: true, allowed_models: [] } };
+    expect(checkAppPermission('ai.complete', { prompt: 'x', model: 'w' }, empty).allowed).toBe(true);
+  });
+
+  it('rejects a non-string model rather than coercing it', () => {
+    const perms: MiniAppPermissions = { ai: { enabled: true } };
+    expect(checkAppPermission('ai.complete', { prompt: 'x', model: 123 }, perms).allowed).toBe(false);
+  });
+});
+
+describe('app.agent permission gate', () => {
+  it('denies every agent method unless agent.enabled is explicitly true', () => {
+    for (const method of ['agent.run', 'agent.turnText', 'agent.cancel', 'agent.ensureSession']) {
+      expect(checkAppPermission(method, { prompt: 'hi' }, {}).allowed).toBe(false);
+    }
+  });
+
+  it('allows agent methods once agent.enabled is true', () => {
+    const perms: MiniAppPermissions = { agent: { enabled: true } };
+    expect(checkAppPermission('agent.run', { prompt: 'hi' }, perms).allowed).toBe(true);
+    expect(checkAppPermission('agent.cancel', {}, perms).allowed).toBe(true);
+  });
+});
+
+describe('fs delete-family classification', () => {
+  // 前缀用**已展开的绝对路径**而不是 `{appdata}` 模板：模板展开是 sidecar
+  // 执行层的职责（`expandTemplates`），shared 的 `isPathAllowed` 不认模板。
+  const READ_ONLY: MiniAppPermissions = { fs: { read: ['/data/app'] } };
+  const READ_WRITE: MiniAppPermissions = {
+    fs: { read: ['/data/app'], write: ['/data/app'] },
+  };
+
+  // rmdir / unlink 是删除动作。若被归入读侧，一个只申请了 fs.read 的 MiniApp
+  // 就能删掉用户文件。
+  it('treats rmdir / unlink as write operations, not read', () => {
+    for (const method of ['fs.rmdir', 'fs.unlink', 'fs.rm']) {
+      expect(checkAppPermission(method, { path: '/data/app/x' }, READ_ONLY).allowed).toBe(false);
+      expect(checkAppPermission(method, { path: '/data/app/x' }, READ_WRITE).allowed).toBe(true);
+    }
+  });
+
+  it('treats lstat / access as read operations', () => {
+    expect(checkAppPermission('fs.lstat', { path: '/data/app/x' }, READ_ONLY).allowed).toBe(true);
+    expect(checkAppPermission('fs.access', { path: '/data/app/x' }, READ_ONLY).allowed).toBe(true);
+  });
+
+  it('still bounds rmdir / lstat by the declared prefixes', () => {
+    expect(checkAppPermission('fs.rmdir', { path: '/elsewhere/x' }, READ_WRITE).allowed).toBe(false);
+    expect(checkAppPermission('fs.lstat', { path: '/elsewhere/x' }, READ_ONLY).allowed).toBe(false);
+  });
+
+  it('rejects rmdir / lstat with no path at all', () => {
+    expect(checkAppPermission('fs.rmdir', {}, READ_WRITE).allowed).toBe(false);
+    expect(checkAppPermission('fs.lstat', {}, READ_ONLY).allowed).toBe(false);
+  });
+});
+
+describe('app protocol surface', () => {
+  it('exposes only documented methods', () => {
+    expect(isKnownAppMethod('fs.readFile')).toBe(true);
+    expect(isKnownAppMethod('storage.set')).toBe(true);
+    expect(isKnownAppMethod('workspace.readFile')).toBe(false);
+  });
+
+  it('never lists a method twice', () => {
+    const all = listAppMethods();
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it('echoes the id and nonce so the iframe can pair the response', () => {
+    const msg = buildAppResult('n-1', 'c1', { ok: true, result: 42 });
+    expect(msg).toEqual({ kind: 'app.result', nonce: 'n-1', id: 'c1', ok: true, result: 42 });
+  });
+});
