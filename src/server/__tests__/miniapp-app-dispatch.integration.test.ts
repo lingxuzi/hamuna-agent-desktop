@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { listAppMethods } from '../../shared/miniapp/app-protocol';
+
 const APP_ID = 'e2e-probe';
 
 /**
@@ -262,5 +264,90 @@ describe('ai / agent permission gate is enforced at the execution layer', () => 
     writeMeta({ ai: { enabled: true } });
     const res = await dispatchMiniAppApp('ai.complete', APP_ID, { prompt: '   ' });
     expect(res.error?.code).toBe('INVALID_PARAMS');
+  });
+});
+
+describe('ai.cancel has a real abort point', () => {
+  // `ai.cancel` 曾经是"暴露给作者却没有生产者"的空壳：调用只会拿到一句
+  // "not available"。而一个可能跑满 60s 的补全恰恰是最需要能被中止的那类。
+  it('reports "nothing to cancel" instead of erroring', async () => {
+    // 作者在请求完成后再 cancel 是网络往返的必然结果，不是异常
+    const { resetMiniAppAiInflight } = await import('../miniapp-ai');
+    resetMiniAppAiInflight();
+    writeMeta({ ai: { enabled: true } });
+    const res = await dispatchMiniAppApp('ai.cancel', APP_ID, { run_id: 'ghost' });
+    expect(res.ok).toBe(true);
+    expect(res.result).toEqual({ cancelled: false, inflightCount: 0 });
+  });
+
+  it('is still gated on ai.enabled like every other ai method', async () => {
+    writeMeta({});
+    const res = await dispatchMiniAppApp('ai.cancel', APP_ID, { run_id: 'x' });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe('PERMISSION_DENIED');
+  });
+
+  it('enforces allowed_models on cancel too, so it cannot probe the model space', async () => {
+    // cancel 走的是同一个 ai.* 判定分支；漏掉会让未授权的 model 名成为一条
+    // 无副作用的探测信道
+    writeMeta({ ai: { enabled: true, allowed_models: ['model-a'] } });
+    const res = await dispatchMiniAppApp('ai.cancel', APP_ID, { run_id: 'x', model: 'model-b' });
+    expect(res.ok).toBe(false);
+  });
+
+  describe('every declared method has a real route in the execution layer', () => {
+    // `dispatchMiniAppApp` 按 **group** 分派，组内 method 名再走各自的路由。
+    // 名单里加一个 `fs.foo` 而忘了在 dispatchFs 里接住，类型系统完全沉默，
+    // 作者只在运行时拿到一句 `Unknown method`。这里把那条静默路径变成红灯。
+    //
+    // 判定用 `UNKNOWN_METHOD` 而不是 `ok`：后者的含义随方法而变（fs.mkdir 真的
+    // 建目录，dialog 在 sidecar 侧本来就该被拒），只有 UNKNOWN_METHOD 能唯一
+    // 指向「没接线」这一种故障。
+    it('never answers UNKNOWN_METHOD for a declared method with grants granted', async () => {
+      // 给一份宽到足以让每个方法都通过权限闸门的 meta。这里只关心路由可达性，
+      // 不关心调用语义。
+      writeMeta({
+        fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] },
+        shell: { allow: ['git'] },
+        net: { allow: ['api.example.com'] },
+        node: { enabled: true },
+        ai: { enabled: true },
+        agent: { enabled: true },
+        storage: {},
+      });
+
+      // 空参数调用：fs.readFile 在路径校验处停下，shell.exec / net.fetch 在必填
+      // 参数处停下 —— 都走完「组分派 + 组内路由」而不产生副作用。
+      //
+      // 两个方法例外，它们会真的执行：
+      //   - i.getModels         动态 import 真 SDK 并枚举 Provider（1.9s）
+      //   - gent.ensureSession  起真实 Sidecar 进程（0.6s）
+      // 两者都是 credentialed 语义，不该由一条路由护栏付这个代价。它们确实
+      // 接了线由本文件上方的 ai/agent 闸门与 ai.cancel 两条 describe 证明；
+      // 代价是这两条路由未被本用例覆盖 —— 写明在此，好过让护栏悄悄变慢 2.5s。
+      const SKIP_EXECUTION = new Set(['ai.getModels', 'agent.ensureSession']);
+      const unreachable: string[] = [];
+      for (const method of listAppMethods()) {
+        if (method === 'call.call') continue; // 走 worker bridge，另有归属
+        if (SKIP_EXECUTION.has(method)) continue;
+        const res = await dispatchMiniAppApp(method, APP_ID, {});
+        if (!res.ok && res.error?.code === 'UNKNOWN_METHOD') unreachable.push(method);
+      }
+      expect(unreachable).toEqual([]);
+    });
+
+    it('still rejects a method that is genuinely not declared', async () => {
+      // 反向：护栏本身不能把闸门焊死。
+      //
+      // 参数必须给一个**合法路径**：`checkFs` 先查路径再查方法名，缺参数时会
+      // 先以 INVALID_PARAMS 失败，压根走不到 UNKNOWN_METHOD 那条分支 ——
+      // 那样这条断言测的就不是「未声明方法被拒」，而是「缺参数被拒」。
+      writeMeta({ fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] } });
+      const res = await dispatchMiniAppApp('fs.definitelyNotAMethod', APP_ID, {
+        path: join(appDir(), 'x.txt'),
+      });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe('UNKNOWN_METHOD');
+    });
   });
 });
