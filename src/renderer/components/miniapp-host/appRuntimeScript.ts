@@ -124,7 +124,9 @@ export function buildAppRuntimeScript(appId: string): string {
   var env = {
     appearanceMode: 'dark',
     locale: 'en-US',
-    platform: 'unknown'
+    platform: 'unknown',
+    workspaceDir: '',
+    appDataDir: ''
   };
 
   function applyEnv(next) {
@@ -145,6 +147,12 @@ export function buildAppRuntimeScript(appId: string): string {
     get appearanceMode() { return env.appearanceMode; },
     get locale() { return env.locale; },
     get platform() { return env.platform; },
+    // 两个路径 getter。宿主已经把它们放进 host.ready 的 env，但之前这里
+    // 没有对应的 getter —— 作者按 api-reference 写 app.workspaceDir 拿到
+    // undefined，fs.writeFile(path) 于是拼出 "undefined/x"。这类"声明了但
+    // 没有出口"的字段比缺字段更难排查：类型检查不报错，运行时才炸。
+    get workspaceDir() { return env.workspaceDir; },
+    get appDataDir() { return env.appDataDir; },
 
     fs: {
       readFile: function (p, o) { return dispatch('fs.readFile', { path: p, opts: o || null }); },
@@ -186,6 +194,7 @@ export function buildAppRuntimeScript(appId: string): string {
       complete: function (prompt, o) {
         return dispatch('ai.complete', {
           prompt: prompt,
+          run_id: o && o.run_id,
           model: o && o.model,
           opts: o || null
         });
@@ -193,11 +202,17 @@ export function buildAppRuntimeScript(appId: string): string {
       chat: function (prompt, o) {
         return dispatch('ai.chat', {
           prompt: prompt,
+          run_id: o && o.run_id,
           model: o && o.model,
           opts: o || null
         });
       },
-      cancel: function () { return dispatch('ai.cancel', null); },
+      // 中止一个在途的 complete/chat。补全可能跑满 60s，作者必须有办法停。
+      // 返回 {cancelled:boolean, inflightCount:number}：cancelled=false 表示
+      // 该 runId 已经结束（正常结果，不是错误）。
+      cancel: function (o) {
+        return dispatch('ai.cancel', { run_id: o && o.run_id });
+      },
       getModels: function () { return dispatch('ai.getModels', null); }
     },
 
@@ -226,7 +241,22 @@ export function buildAppRuntimeScript(appId: string): string {
       cancel: function (o) {
         return dispatch('agent.cancel', { run_id: o && o.run_id });
       },
-      onEvent: function (fn) { return on('agent', fn); }
+      // 订阅流式事件。回调收到 { type, text?, runId? }，其中 type 是
+      // 'agent.delta' / 'agent.complete' / 'agent.stopped' / 'agent.error' 之一。
+      //
+      // 刻意**同步**返回退订函数而不是 Promise：它是事件订阅 API，作者写
+      // "const off = app.agent.onEvent(fn)" 就能拿到清理句柄。注册的同时向
+      // host 发一次握手，把 Agent sidecar 与 SSE 通道拉起来 —— 否则这条通道
+      // 没有生产者，就成了"能注册却永远收不到事件"的空壳。
+      onEvent: function (fn) {
+        if (typeof fn !== 'function') return function () {};
+        var off = on('agent', fn);
+        dispatch('agent.onEvent', null).catch(function () {
+          // 握手失败不阻断注册：host 稍后仍可能通过 app.event 推事件，
+          // 而让这里抛错会让作者以为整个订阅失效。
+        });
+        return off;
+      }
     },
 
     dialog: {

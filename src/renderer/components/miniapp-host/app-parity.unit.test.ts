@@ -1,3 +1,9 @@
+//
+// 位置说明：本文件断言 shared 的协议名单与 renderer 的 runtime 门面一致，天然跨
+// 进程边界。它曾放在 `src/shared/miniapp/`，但那会让 shared 反向依赖 renderer ——
+// dependency-cruiser 的 `shared-stays-pure` 会拦（shared 被前后端同时打包，
+// 一旦它拉进 renderer 代码就会把 React / DOM 拖进 sidecar bundle）。协议侧只
+// 作为数据源被 import，方向是 renderer → shared，合法。
 // 「声明的方法都有生产者」这条不变量的可执行版本。
 //
 // 这不是又一份方法清单测试，而是对**清单本身的结构**加护栏。本项目踩过三次
@@ -16,7 +22,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { APP_METHODS, isKnownAppMethod, listAppMethods } from './app-protocol';
+import { APP_METHODS, isKnownAppMethod, listAppMethods } from '../../../shared/miniapp/app-protocol';
 
 /**
  * runtime 脚本里出现的 `dispatch('<group>.<name>', ...)` 字面量。
@@ -31,9 +37,7 @@ function runtimeDispatchTargets(source: string): Set<string> {
 
 describe('app capability parity', () => {
   it('every declared method exists in the injected runtime facade', async () => {
-    const { buildAppRuntimeScript } = await import(
-      '../../renderer/components/miniapp-host/appRuntimeScript'
-    );
+    const { buildAppRuntimeScript } = await import('./appRuntimeScript');
     const targets = runtimeDispatchTargets(buildAppRuntimeScript('parity-probe'));
     const missing = listAppMethods().filter((m) => !targets.has(m));
     expect(missing).toEqual([]);
@@ -42,9 +46,7 @@ describe('app capability parity', () => {
   it('the runtime dispatches nothing that is not a declared method', async () => {
     // 反向同样重要：runtime 里多出一个 dispatch 而协议层没声明，意味着宿主
     // 会以 UNKNOWN_METHOD 拒绝它 —— 作者能看见函数，调用必失败。
-    const { buildAppRuntimeScript } = await import(
-      '../../renderer/components/miniapp-host/appRuntimeScript'
-    );
+    const { buildAppRuntimeScript } = await import('./appRuntimeScript');
     const targets = runtimeDispatchTargets(buildAppRuntimeScript('parity-probe'));
     const undeclared = [...targets].filter((m) => !isKnownAppMethod(m));
     expect(undeclared).toEqual([]);
