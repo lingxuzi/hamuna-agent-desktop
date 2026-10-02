@@ -300,6 +300,27 @@ function checkNet(params: unknown, perms: MiniAppPermissions): PermissionDecisio
     : deny(`host not in permissions.net.allow: ${parsed.host}`);
 }
 
+/**
+ * renderer 侧**能不能独立判定**这个方法。
+ *
+ * `fs.*` 是唯一答案为「不能」的一族：`meta.json` 的 schema 强制每条 fs 路径
+ * 以 `{appdata}` / `{workspace}` / `{user-selected}` 开头（见
+ * `meta-schema.ts` → `validatePathTemplatePrefix`），而展开成绝对前缀需要
+ * sidecar 的 `currentAgentDir` —— 那是 sidecar 进程的可变状态，renderer 拿不到。
+ *
+ * 所以 renderer 拿未展开的模板去前缀比较，结果是**恒不匹配**：作者调用
+ * `app.fs.readFile(app.appDataDir + '/x.json')` 在 renderer 这道闸就被拒，
+ * 压根到不了真正会正确展开的 sidecar。实测三个 bundled MiniApp 的
+ * `fs.read/write` 声明全部落在这个洞里 —— 能力等于不存在。
+ *
+ * 因此 fs 的唯一权威是 sidecar（它独立复算、还额外做 canonicalize 复核）。
+ * renderer 跳过预判**不削弱**纵深防御：预判本来就不是安全边界（WebView 可被
+ * 伪造），真正的边界是 sidecar 那一遍。
+ */
+export function rendererCanDecide(method: AppMethod): boolean {
+  return !method.startsWith('fs.');
+}
+
 /** `runAppCall` 的返回信封，直接喂给 `buildAppResult`。 */
 export type AppCallOutcome =
   | { ok: true; result: unknown }
@@ -318,7 +339,9 @@ export async function runAppCall(
   perms: MiniAppPermissions,
   dispatch: (method: AppMethod, params: unknown) => Promise<unknown>,
 ): Promise<AppCallOutcome> {
-  const decision = checkAppPermission(method, params, perms);
+  const decision = rendererCanDecide(method)
+    ? checkAppPermission(method, params, perms)
+    : { allowed: true };
   if (!decision.allowed) {
     return {
       ok: false,

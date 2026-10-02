@@ -202,10 +202,17 @@ describe('checkAppPermission', () => {
 describe('runAppCall', () => {
   it('never reaches the dispatcher when permission is denied', async () => {
     let called = false;
-    const res = await runAppCall('fs.readFile', { path: '/x' }, NONE, async () => {
-      called = true;
-      return 'should-not-happen';
-    });
+    // 用 net 而不是 fs：fs 族在 renderer 侧不预判（见下方 fs 回归组），
+    // 拿它来验证"拒绝时不派发"会因前提不成立而假绿。
+    const res = await runAppCall(
+      'net.fetch',
+      { url: 'https://evil.example/x' },
+      { net: { allow: ['api.example.com'] } },
+      async () => {
+        called = true;
+        return 'should-not-happen';
+      },
+    );
     expect(called).toBe(false);
     expect(res.ok).toBe(false);
   });
@@ -220,6 +227,67 @@ describe('runAppCall', () => {
   it('passes the result through on success', async () => {
     const res = await runAppCall('os.info', null, NONE, async () => ({ platform: 'win32' }));
     expect(res).toEqual({ ok: true, result: { platform: 'win32' } });
+  });
+});
+
+/**
+ * `fs.*` 的 renderer 预判回归组。
+ *
+ * 这组用例锁的是一个**已发货的缺陷**：`meta.json` 的 schema 强制 fs 路径以
+ * `{appdata}` / `{workspace}` 模板开头，而模板展开需要 sidecar 的
+ * `currentAgentDir`（sidecar 进程的可变状态）。renderer 拿不到它，却仍拿未
+ * 展开的模板去做前缀比较 —— 结果恒不匹配，合法的 `app.fs.readFile` 在
+ * renderer 这道闸就被拒，压根到不了会正确展开的 sidecar。
+ *
+ * 换句话说：在修复前，任何声明了 `fs.read` / `fs.write` 的 MiniApp 都等于
+ * 没有文件能力，而错误信息还写成 "path not covered by permissions.fs.read"，
+ * 引导作者去改自己没写错的 meta.json。
+ */
+describe('fs.* must not be judged in the renderer', () => {
+  const APPDATA = '/home/u/.hamuna/miniapps/icon-generator';
+  // 与 bundled-miniapps/*/meta.json 里的真实声明同形（未展开的模板）
+  const TEMPLATED: MiniAppPermissions = { fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] } };
+
+  it('lets a templated read reach the dispatcher instead of false-denying it', async () => {
+    let reached = false;
+    const res = await runAppCall('fs.readFile', { path: `${APPDATA}/icon.png` }, TEMPLATED, async () => {
+      reached = true;
+      return 'bytes';
+    });
+    // 修复前：{ ok: false, reason: 'path not covered by permissions.fs.read' }
+    expect(reached).toBe(true);
+    expect(res).toEqual({ ok: true, result: 'bytes' });
+  });
+
+  it('lets a templated write reach the dispatcher too', async () => {
+    let reached = false;
+    await runAppCall('fs.writeFile', { path: `${APPDATA}/note.txt`, data: 'x' }, TEMPLATED, async () => {
+      reached = true;
+      return null;
+    });
+    expect(reached).toBe(true);
+  });
+
+  it('still refuses fs for an app that declared no fs scope at all', async () => {
+    // 跳过预判不等于放行一切：判定被交给 sidecar，而 sidecar 读的是
+    // meta.json 本体（无 fs 声明 = fail-closed）。这里锁住 renderer 侧
+    // 不会因为"不预判"而对空声明也照样派发。
+    expect(NONE.fs).toBeUndefined();
+    const decision = checkAppPermission('fs.readFile', { path: `${APPDATA}/x` }, NONE);
+    expect(decision.allowed).toBe(false);
+  });
+
+  it('leaves the sidecar-side judgement authoritative and unchanged', async () => {
+    // renderer 放行之后，sidecar 用**展开后**的前缀独立复算一遍 ——
+    // 这才是真正的安全边界。展开后越界与 `..` 穿越都必须仍然被拒。
+    const expanded: MiniAppPermissions = { fs: { read: [`${APPDATA}/**`] } };
+    expect(checkAppPermission('fs.readFile', { path: `${APPDATA}/icon.png` }, expanded).allowed).toBe(
+      true,
+    );
+    expect(checkAppPermission('fs.readFile', { path: '/etc/passwd' }, expanded).allowed).toBe(false);
+    expect(
+      checkAppPermission('fs.readFile', { path: `${APPDATA}/../../etc/passwd` }, expanded).allowed,
+    ).toBe(false);
   });
 });
 
