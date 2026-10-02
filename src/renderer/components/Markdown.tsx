@@ -22,7 +22,7 @@
 import 'katex/dist/katex.min.css';
 import './markdown/Markdown.css';
 
-import { Children, isValidElement, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { Children, isValidElement, lazy, memo, Suspense, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
@@ -31,7 +31,12 @@ import { perfMark } from '@/utils/perfMark';
 
 import CodeBlock from './markdown/CodeBlock';
 import InlineCode from './markdown/InlineCode';
-import MermaidDiagram from './markdown/MermaidDiagram';
+// Mermaid's core is ~0.9 MB and is only needed for ```mermaid fences — which
+// almost no conversation contains. A static import here inlined the whole
+// library into the Markdown chunk (measured: 1.66 MB), so every chat open paid
+// to parse it. Lazy keeps it in its own chunk, fetched only when a diagram
+// actually renders.
+const MermaidDiagram = lazy(() => import('./markdown/MermaidDiagram'));
 import { openExternal, isExternalUrl } from '@/utils/openExternal';
 import { BrowserPanelContext } from '@/context/BrowserPanelContext';
 import { useFileAction, useFileLinkAction } from '@/context/FileActionContext';
@@ -227,7 +232,21 @@ const CodeComponent: Components['code'] = ({ className, children, node: _node, .
   if (isBlock) {
     // Special handling for Mermaid diagrams
     if (language === 'mermaid') {
-      return <MermaidDiagram>{codeString}</MermaidDiagram>;
+      // Suspense is required: MermaidDiagram is lazy-loaded. The fallback is
+      // the raw source rather than a spinner, so a diagram still reads as code
+      // while its chunk is in flight (and if the chunk fails to load, the
+      // conversation is not lost).
+      return (
+        <Suspense
+          fallback={
+            <pre className="overflow-auto rounded-lg bg-[var(--paper-inset)] p-4">
+              {codeString}
+            </pre>
+          }
+        >
+          <MermaidDiagram>{codeString}</MermaidDiagram>
+        </Suspense>
+      );
     }
 
     return (
