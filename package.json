@@ -28,8 +28,8 @@
   ],
   "scripts": {
     "dev": "./start_dev.sh",
-    "dev:web": "vite",
-    "build:web": "vite build && npm run verify:theme-css && npm run verify:theme-presets",
+    "dev:web": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js",
+    "build:web": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build && npm run verify:theme-css && npm run verify:theme-presets",
     "build:server": "node scripts/esbuild-bundle.mjs server && node scripts/setup-kb-runtime.mjs",
     "build:bridge": "node scripts/esbuild-bundle.mjs bridge",
     "build:cli": "node scripts/esbuild-bundle.mjs cli",
