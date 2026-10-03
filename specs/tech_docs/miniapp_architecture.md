@@ -351,6 +351,45 @@ syscall 的短路，不是承重逻辑 —— 为它硬造红断言等于给等�
 emitted worker，`git.status` 返回 branches、`git.log` 返回 commit、
 `git.checkout` 真的切了分支（再读一次 status 确认）、越界路径与未声明写权限
 双双被拒、被拒的 checkout 之后工作树未变。
+
+### 冒烟本身也要是门禁（两个"绿色但其实没测"的坑）
+
+`verify-miniapp-workers.mjs` 是上面那条验收方式的载体。它曾经只以"手动跑一下"
+的形式存在：`build:server` 产出 entry，CI 也跑 `build:server`，但**没有任何地方
+接着跑它**（没有 workflow、没有 hook、`lint` 链里也没有）。于是上面四个缺陷的
+复发路径全程绿灯。现在它是 `build:server` 的最后一步（与 `build:web` →
+`verify:theme-css` 同款），CI / 发布脚本 / 本地构建都会跑到。
+
+**坑一：上一轮构建的产物能让"产物存在"这条断言恒真。** 冒烟的第一条断言是
+"entry 文件在磁盘上"，而停发某个 entry 的构建**不会**删掉上一轮留下的同名文件。
+把清理放进构建循环里没用 —— 从循环里摘掉一个 kind，清理也跟着一起消失；改成读
+一个共享的 `workerKinds` 数组同样没用，变异改的就是那个数组。**清理必须由
+"期望产出"驱动而不是由"要构建的东西"驱动**，所以现在按 pattern 扫
+`/^worker-entry-.*\.js$/`：没有列表可以走样，这次构建没产出的东西就是不在。
+
+**坑二：冒烟全程自己 `new Worker()`，等于没测 pool。** 每次 spawn 的 workerData
+和消息协议都是脚本自己写的，与 `MiniAppWorkerPool` 是同一份契约的**两份独立实现**
+—— 而 `app.call` 只经过 pool。接上真 pool 之后立刻测出：`spawn()` 建完 Worker
+就 `return { workerId }`，**不等任何东西**，于是一个启动即死的 worker 被报成
+spawn 成功，宿主给 MiniApp 注册了一个已经死掉的 id；第一次调用才炸，且病因
+（entry 不存在）已经丢失，只剩 `exited with code 1`。这与上面第 3 条是**同一种
+幻影 spawn**，只是上移了一层。
+
+**`online` 不是就绪信号。** 它表示**线程**起来了，早于 entry 解析完 import：
+实测对一个不存在的 entry，等 `online` 仍然在 49ms 报"成功"，失败随后才以
+`error` + `exit` 到达。池侧没有任何可观测量能区分"entry 加载完"和"线程起来了"，
+所以必须由 entry 自己说 —— 每个 entry 在 handler 就位后发
+`{type:'event', event:'ready'}`，`spawn()` 等它，失败时带着真实病因抛出
+（`Cannot find module ...`，125ms）。`error` / `exit` / 10s 兜底覆盖其余启动失败。
+entry 本来就有一条没人用的 event 通道，握手放在那里不需要新机制。
+
+两条断言纪律（都是变异验证逼出来的，不是读代码看出来的）：
+
+- 跨 kind 方法那条必须断 pool 的 **message**（`not in allow-list`），不能只断
+  `METHOD_NOT_ALLOWED` —— worker 对未知方法回的是**同一个 code**，只断 code 时
+  把 pool 白名单摘掉照样绿。
+- 变异 entry **源码**必须走 `build:server` 重建，否则改的是源码、测的是上一轮
+  产物，变异"通过"只是因为它根本没到达被测代码。
 ## 6. 已知边界
 
 - **`app.agent.workspace_scope` 当前不放开**：`agent.run` 的 workspace 强制
