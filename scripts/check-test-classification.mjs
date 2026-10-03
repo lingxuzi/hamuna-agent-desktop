@@ -27,6 +27,11 @@ const CHILD_PROCESS_ALLOWLIST = new Set([
   // OpenClaw fixture and a loopback-only fake Rust ingress. It uses no secrets
   // and cannot reach an external service.
   'src/server/plugin-bridge/reply-transport.integration.test.ts',
+  // Boots the real Sidecar so the MiniApp `window.app.*` chain can be driven
+  // over real loopback HTTP (request envelope, status codes, error shape). The
+  // child runs against a temp HOME + temp workspace, needs no credentials, and
+  // the only socket involved is the reserved 127.0.0.1 port.
+  'src/server/__tests__/miniapp-app-wire.integration.test.ts',
 ]);
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g');
 
