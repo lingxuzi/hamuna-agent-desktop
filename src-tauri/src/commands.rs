@@ -891,6 +891,16 @@ fn read_inline_target(source_dir: &Path, rel: &str) -> Option<String> {
     if rel.split(['/', '\\']).any(|seg| seg == ".." || seg == ".") {
         return None;
     }
+    // 上面那道只认 POSIX 的 absolute 形状（以 / 开头）。Windows 上
+    // `C:\x`、`C:/x`、drive-relative 的 `C:x` 全都不以 / 开头、也不含 `..`，
+    // 四道 guard 一路放行，然后 `join` 把 source_dir **整个丢掉**。判组件，
+    // 和 `validate_miniapp_relative_path` 同一套判据。
+    if Path::new(rel)
+        .components()
+        .any(|c| matches!(c, Component::Prefix(_) | Component::RootDir))
+    {
+        return None;
+    }
     fs::read_to_string(source_dir.join(rel)).ok()
 }
 
@@ -5093,7 +5103,7 @@ mod miniapp_tests {
 
     use super::{
         collect_snapshot, inline_miniapp_siblings, is_safe_app_id, is_safe_run_id,
-        join_inside_app_dir, miniapp_root_dir, normalize_app_data_workspace,
+        join_inside_app_dir, miniapp_root_dir, normalize_app_data_workspace, read_inline_target,
         resolve_miniapp_agent_workspace, validate_miniapp_relative_path, CreateMiniAppRequest,
     };
     use std::collections::HashMap;
@@ -5197,6 +5207,45 @@ mod miniapp_tests {
         // 同时钉住"不是一律拒绝"：良性输入必须照常通过。
         let leaf = join_inside_app_dir(&dest, Path::new("source/ui.js")).expect("benign");
         assert!(leaf.starts_with(&dest));
+    }
+
+    // `read_inline_target` 的 doc 承诺"不是我们的就不内联（remote / absolute /
+    // 逃出 MiniApp 目录）"。实现却用 `starts_with('/')` 判 absolute —— 那只是
+    // POSIX 的形状。Windows 上 `C:\x` 既不以 / 开头、也不含 `..`，四道 guard
+    // 全过，然后 `source_dir.join(rel)` 把 source_dir **整个丢掉**，于是
+    // `fs::read_to_string` 读到任意文件，内容还被内联进 index.html —— 写进
+    // `<script src="C:\Users\x\.ssh\id_rsa">` 就等于把它显示给用户看了。
+    // 和写盘那边同一个根因：判字符串形状，而不是判路径组件。
+    #[test]
+    fn read_inline_target_refuses_drive_prefixed_absolute_paths() {
+        let base = std::env::temp_dir().join("hamuna-inline-drive-probe");
+        let source_dir = base.join("app").join("source");
+        let outside = base.join("outside");
+        for d in [&source_dir, &outside] {
+            std::fs::create_dir_all(d).expect("probe dir");
+        }
+        let secret = outside.join("secret.txt");
+        std::fs::write(&secret, "TOP-SECRET").expect("write probe");
+        std::fs::write(source_dir.join("probe-ui.js"), "ok").expect("write probe");
+
+        for hostile in [
+            secret.to_string_lossy().to_string(),
+            r"C:\Windows\win.ini".to_string(),
+            r"C:secret.txt".to_string(),
+        ] {
+            assert_eq!(
+                read_inline_target(&source_dir, &hostile),
+                None,
+                "read_inline_target inlined {:?}, which is not inside the MiniApp dir",
+                hostile
+            );
+        }
+        // 收紧不能把正常内联一起打死。
+        assert_eq!(
+            read_inline_target(&source_dir, "probe-ui.js").as_deref(),
+            Some("ok")
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
