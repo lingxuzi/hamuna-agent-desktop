@@ -66,6 +66,10 @@ const st = await app.fs.stat('{workspace}/README.md');   // {size,isFile,isDirec
 // Shell —— 需 permissions.shell.allow 声明命令名白名单
 const r = await app.shell.exec('git log --oneline -20', { cwd: '{workspace}' });
 // → { stdout, stderr, exit_code }
+// 可选 opts.timeout（毫秒）：默认 30s，宿主会夹到 1s~5min。
+// 0 和负数**不等于**"不限时"，会被抬到 1s —— 要跑长任务就分片调用。
+// 命令名按**第一个词**精确匹配白名单；`;` `&` `|` `<` `>` `^` `` ` `` `%` `!`
+// `(` `)` `$` 引号 一律拒（含引号内），所以没有管道 / 重定向 / 命令串联。
 
 // 网络 —— 需 permissions.net.allow 声明域名白名单，且只允许 https
 const res = await app.net.fetch('https://api.example.com/data');

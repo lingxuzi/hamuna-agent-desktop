@@ -600,6 +600,26 @@ async function dispatchFs(name: string, params: Record<string, unknown>): Promis
   }
 }
 
+/**
+ * `shell.exec` 的 timeout 归一化。
+ *
+ * 这个值是 **MiniApp 自己传的**，而 Node 把 `timeout: 0` 解释成"永不超时"。
+ * 原来直接 `opts.timeout ?? 30_000` 意味着一个 MiniApp 只要写 `{ timeout: 0 }`
+ * 就能起一个 sidecar 永远不回收的子进程：abort 路径不杀它，dispatch 的 promise
+ * 永远不 settle，重复调用就是资源泄漏。
+ *
+ * `shell` 本身已经是作者显式声明的能力，这里不扩权也不缩权 —— 只是不让一个**声明
+ * 过的**能力顺手变成"谁都收不掉的孤儿进程"。1s~5min：真的要跑长构建就分片，
+ * MiniApp 是交互式的，占着一个进程十分钟对谁都没好处。
+ */
+export function resolveShellTimeoutMs(raw: unknown): number {
+  const DEFAULT_MS = 30_000;
+  const MIN_MS = 1_000;
+  const MAX_MS = 300_000;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_MS;
+  return Math.min(Math.max(Math.trunc(raw), MIN_MS), MAX_MS);
+}
+
 async function dispatchShell(
   params: Record<string, unknown>,
   ctx: Resolved,
@@ -621,7 +641,7 @@ async function dispatchShell(
   try {
     const { stdout, stderr } = await run(command, {
       cwd,
-      timeout: typeof opts.timeout === 'number' ? opts.timeout : 30_000,
+      timeout: resolveShellTimeoutMs(opts.timeout),
       // 不继承 shell 环境，避免读到宿主凭据
       env: { PATH: process.env.PATH ?? '' },
     });
