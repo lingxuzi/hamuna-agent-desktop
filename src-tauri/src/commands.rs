@@ -2953,25 +2953,24 @@ mod miniapp_version_tests {
 
     #[test]
     fn increments_across_repeated_overwrites() {
-        // The AI rewrites `version: 1` every time; only the *previous* stored
-        // version may drive the next one.
+        // The AI rewrites `version: 1` into every meta.json it produces, so the
+        // stored number has to come from the meta as it was *before* this write.
+        // The caller supplies that (see `create_from_chat_blocking`), which is
+        // the only thing that can make the increment real.
         let mut stored = next_miniapp_version(None);
-        assert_eq!(stored, 1);
+        assert_eq!(stored, 1, "first install is 1");
         for expected in 2..=5 {
-            let incoming = r#"{"id":"x","name":"X","description":"d","version":1}"#;
             stored = next_miniapp_version(Some(&format!(
                 r#"{{"id":"x","name":"X","description":"d","version":{}}}"#,
                 stored
             )));
             assert_eq!(stored, expected, "overwrite should increment");
-            // Feeding the AI-authored meta back in must NOT be the input — that
-            // is precisely what pinned the version at 2 forever.
-            assert_ne!(
-                next_miniapp_version(Some(incoming)),
-                expected,
-                "reading the incoming meta must not be mistaken for the old one"
-            );
         }
+        // Four overwrites of a file the AI keeps rewriting as `version: 1` must
+        // land on 5. Reading the just-written file back instead would have fed
+        // `1` in every round and pinned the number at 2 forever — which is the
+        // regression this exists to catch.
+        assert_eq!(stored, 5);
     }
 
     #[test]
@@ -3017,7 +3016,9 @@ mod miniapp_summary_tests {
 
     #[test]
     fn missing_optional_fields_stay_none() {
-        let s = summary_for(r#"{"id": "bare", "name": "Bare", "description": "d", "version": 1}"#);
+        // No `description` on purpose: the last assertion below is about an
+        // older meta.json that predates the field.
+        let s = summary_for(r#"{"id": "bare", "name": "Bare", "version": 1}"#);
         assert!(s.i18n.is_none());
         assert!(s.tags.is_none());
         assert!(s.icon.is_none());
