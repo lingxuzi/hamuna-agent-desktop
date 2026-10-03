@@ -104,7 +104,6 @@ export function buildAppRuntimeScript(appId: string): string {
       // 会变成 listener 里的未捕获异常，作者那侧的 Promise **永远不 settle** ——
       // 表现是"点了没反应，也不报错"，比直接失败难查一个量级。哪怕这条调用
       // 最终注定要失败，也必须以 reject 收场。
-      // MUTATED: guard removed
       var err = new Error(
         'app.' + frame.method + ' arguments are not structured-cloneable: ' +
         ((e && e.message) || String(e))
