@@ -44,6 +44,13 @@ const CHILD_PROCESS_ALLOWLIST = new Set([
   // envelope) run in CI for free, so it never touches a real credential.
   'src/server/__tests__/miniapp-ai-wire.integration.test.ts',
   'src/server/__tests__/miniapp-agent-wire.integration.test.ts',
+  // Same shape again, for the authoring round trip (create/list/source). The
+  // child gets a temp HOME + temp workspace and a loopback-only fake standing in
+  // for the Rust management API, so the Node<->Rust seam is exercised without a
+  // Tauri host, a credential, or an off-loopback socket. The spawn is what makes
+  // the "validated payloads are actually forwarded under the right field names"
+  // assertion meaningful -- mocking managementApi would only prove the mock.
+  'src/server/__tests__/miniapp-authoring-wire.integration.test.ts',
 ]);
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g');
 
