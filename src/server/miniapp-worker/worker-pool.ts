@@ -20,7 +20,7 @@ import { randomUUID } from 'node:crypto';
 
 import { withAbortSignal } from '../utils/cancellation';
 
-import { getKindDef, type WorkerCallMessage, type WorkerShutdownMessage, type WorkerOutbound } from './worker-rpc';
+import { getKindDef, type WorkerCallMessage, type WorkerFsScope, type WorkerShutdownMessage, type WorkerOutbound } from './worker-rpc';
 import { DEFAULT_CALL_TIMEOUT_MS, DEFAULT_MAX_MEMORY_MB, type NodeLimits } from './node-limits';
 
 export const PER_APP_WORKER_CAP = 4;
@@ -36,6 +36,13 @@ export interface SpawnWorkerRequest {
    * installed MiniApps live.
    */
   limits?: Partial<NodeLimits>;
+  /**
+   * The spawning app's `permissions.fs`, already expanded to absolute prefixes
+   * by the sidecar. Fixed at spawn so a meta.json edit cannot widen a worker
+   * that is already running — and so the kind never has to resolve `{appdata}`
+   * itself, which is the whole reason two kinds disagreed about scope.
+   */
+  fsScope?: WorkerFsScope;
 }
 
 export interface WorkerHandle {
@@ -126,6 +133,10 @@ class WorkerPool extends EventEmitter {
         appId: req.appId,
         kind: req.kind,
         init: req.init ?? {},
+        // No scope handed in means no access: an empty scope matches nothing in
+        // `isPathAllowed`, so a spawn that forgets this degrades to a worker
+        // that can read zero files rather than one that can read the disk.
+        fsScope: req.fsScope ?? { read: [], write: [] },
       },
       // PRD §B.4 sandbox ceilings, tightened or widened per MiniApp via
       // `meta.json` `permissions.node.max_memory_mb` (64MB default). Cheap

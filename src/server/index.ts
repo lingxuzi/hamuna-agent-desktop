@@ -5787,11 +5787,16 @@ async function main() {
               403,
             );
           }
+          const { resolveMiniAppFsScope } = await import('./miniapp-app-dispatch');
           const spawnResult = await miniAppWorkerPool.spawn({
             appId: body.appId,
             kind: body.kind,
             ...(init ? { init } : {}),
             limits: resolveNodeLimits(body.appId),
+            // `app.call` never reaches `runAppCall` and this route never read
+            // meta.json, so without this the worker's file methods had no scope
+            // at all. Same resolver `app.fs.*` uses, so the two cannot disagree.
+            fsScope: await resolveMiniAppFsScope(body.appId, currentAgentDir ?? null),
           });
           return jsonResponse({ ok: true, ...spawnResult }, 200);
         } catch (error) {

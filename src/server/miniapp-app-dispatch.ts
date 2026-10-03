@@ -25,6 +25,7 @@ import { APP_ERROR_CODES } from '../shared/miniapp/app-protocol';
 import { checkAppPermission, isPrivateHostname } from '../shared/miniapp/app-permissions';
 import { normalizeAppDataWorkspace } from '../shared/miniapp/app-data-workspace';
 import type { MiniAppMetadata, MiniAppPermissions } from '../shared/miniapp/types';
+import type { WorkerFsScope } from './miniapp-worker/worker-rpc';
 
 export interface DispatchOutcome {
   ok: boolean;
@@ -123,6 +124,36 @@ function expandTemplates(
 /** 声明前缀里出现 `..` 段 = 想要模板根之外的东西，一律当不可用。 */
 function escapesTemplateRoot(raw: string): boolean {
   return raw.split(/[\\/]/).some((seg) => seg === '..');
+}
+
+/**
+ * 解析一个 MiniApp 的 `permissions.fs` 成**展开后**的绝对前缀。
+ *
+ * 存在的理由：`kind: 'worker'` 的 MiniApp 有一条独立于 `app.fs.*` 的通道 ——
+ * `app.call('file.read' | 'git.checkout', …)` 直接进 worker 线程，**不经过**
+ * `runAppCall`，sidecar 的 `/api/miniapp/worker/call` 也不看 meta.json。权限判定
+ * 在那条路上一次都没跑过，于是 worker kind 能读全盘、能写任意 git 仓库。
+ *
+ * worker 必须拿到**展开后**的前缀而不是 `{appdata}` 这种未展开模板：它跑在
+ * 另一个线程里，模板展开要用的 appdata / workspace 根它自己算不出来，而让它
+ * 自己算就等于多一份路径推导逻辑，两份必然漂移。所以在这里算一次带进去。
+ *
+ * 走的是同一个 `loadMeta` + `expandTemplates`，因此上面那条 `..` 拒收同样生效 ——
+ * 一份能写出 `{appdata}/../../..` 的 meta 对 `app.fs` 和对 worker 都一样被拒。
+ *
+ * 读不到 meta 时返回**空数组**而不是抛：spawn 路由已经会因为别的理由拒绝一个
+ * 没有 meta 的 app，这里保持 fail-closed 即可，不重复发明拒绝理由。
+ */
+export async function resolveMiniAppFsScope(
+  appId: string,
+  workspaceDir: string | null,
+): Promise<WorkerFsScope> {
+  const meta = await loadMeta(appId);
+  const ctx = { appdata: miniappAppRoot(appId), workspaceDir };
+  return {
+    read: expandTemplates(meta?.permissions?.fs?.read, ctx),
+    write: expandTemplates(meta?.permissions?.fs?.write, ctx),
+  };
 }
 
 /**

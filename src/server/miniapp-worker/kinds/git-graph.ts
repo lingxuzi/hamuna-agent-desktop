@@ -19,6 +19,8 @@ import {
   registerKind,
   type WorkerKindDef,
   type WorkerMethodHandler,
+  type WorkerFsScope,
+  assertWithinFsScope,
 } from '../worker-rpc';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -58,8 +60,9 @@ const GitStatusParams = z.object({
  * meta.json declares `permissions.fs.read: ['{workspace}/**']` (path-templates
  * expands it at install time). We just enforce "is this an actual git repo".
  */
-function assertReadableCwd(cwd: string): void {
+function assertReadableCwd(cwd: string, ctx: { appId: string; fsScope: WorkerFsScope }): void {
   const resolved = path.resolve(cwd);
+  assertWithinFsScope(resolved, ctx.fsScope, 'read', ctx);
   let stat: fs.Stats;
   try {
     stat = fs.statSync(resolved);
@@ -83,8 +86,8 @@ async function getSimpleGit() {
   return simpleGitMod;
 }
 
-const gitLog: WorkerMethodHandler<z.infer<typeof GitLogParams>> = async (params) => {
-  assertReadableCwd(params.cwd);
+const gitLog: WorkerMethodHandler<z.infer<typeof GitLogParams>> = async (params, ctx) => {
+  assertReadableCwd(params.cwd, ctx);
   const sg = (await getSimpleGit()).default(params.cwd);
   const log = await sg.log({
     maxCount: params.max ?? 50,
@@ -111,8 +114,8 @@ const gitLog: WorkerMethodHandler<z.infer<typeof GitLogParams>> = async (params)
   };
 };
 
-const gitShow: WorkerMethodHandler<z.infer<typeof GitShowParams>> = async (params) => {
-  assertReadableCwd(params.cwd);
+const gitShow: WorkerMethodHandler<z.infer<typeof GitShowParams>> = async (params, ctx) => {
+  assertReadableCwd(params.cwd, ctx);
   const sg = (await getSimpleGit()).default(params.cwd);
   const summary = await sg.show([params.hash]);
   return {
@@ -121,22 +124,28 @@ const gitShow: WorkerMethodHandler<z.infer<typeof GitShowParams>> = async (param
   };
 };
 
-const gitCheckout: WorkerMethodHandler<z.infer<typeof GitCheckoutParams>> = async (params) => {
-  assertReadableCwd(params.cwd);
+const gitCheckout: WorkerMethodHandler<z.infer<typeof GitCheckoutParams>> = async (params, ctx) => {
+  // Write scope FIRST, then `assertReadableCwd`'s read scope, then the repo
+  // shape check. "is this even a repo?" is a fact about the path; "are you
+  // allowed to change it?" is the question that must be answered first, and
+  // answering it first also means an undeclared cwd can't learn whether it
+  // happens to point at a repository.
+  assertWithinFsScope(path.resolve(params.cwd), ctx.fsScope, 'write', ctx);
+  assertReadableCwd(params.cwd, ctx);
   const sg = (await getSimpleGit()).default(params.cwd);
   await sg.checkout(params.branch);
   return { ok: true, branch: params.branch };
 };
 
-const gitDiff: WorkerMethodHandler<z.infer<typeof GitDiffParams>> = async (params) => {
-  assertReadableCwd(params.cwd);
+const gitDiff: WorkerMethodHandler<z.infer<typeof GitDiffParams>> = async (params, ctx) => {
+  assertReadableCwd(params.cwd, ctx);
   const sg = (await getSimpleGit()).default(params.cwd);
   const diff = await sg.diff([params.from ?? 'HEAD~1', params.to ?? 'HEAD']);
   return { diff: typeof diff === 'string' ? diff : String(diff) };
 };
 
-const gitStatus: WorkerMethodHandler<z.infer<typeof GitStatusParams>> = async (params) => {
-  assertReadableCwd(params.cwd);
+const gitStatus: WorkerMethodHandler<z.infer<typeof GitStatusParams>> = async (params, ctx) => {
+  assertReadableCwd(params.cwd, ctx);
   const sg = (await getSimpleGit()).default(params.cwd);
   const status = await sg.status();
   return {

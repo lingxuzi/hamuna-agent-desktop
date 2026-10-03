@@ -14,6 +14,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FILE_EXPLORER_KIND } from './file-explorer';
 import { getKindDef, listKinds } from '../worker-rpc';
 
+/**
+ * Every handler used to be called in this file with **no ctx at all**, which is
+ * precisely why the missing fs scope went unnoticed for so long: nothing ever
+ * forced the kind to look at one. Calls now go through a real scope.
+ */
+function scopeCtx(dir: string, mode: 'read' | 'write' = 'read') {
+  return {
+    appId: 'fexpl-probe',
+    fsScope: { read: mode === 'read' ? [`${dir}/**`] : [], write: mode === 'write' ? [`${dir}/**`] : [] },
+  };
+}
+
 describe('FILE_EXPLORER_KIND', () => {
   // Top-level import already triggers self-register via the side-effect
   // `registerKind(FILE_EXPLORER_KIND)` at module load. The beforeEach reset
@@ -102,8 +114,8 @@ describe('FILE_EXPLORER_KIND', () => {
       }
 
       const handler = FILE_EXPLORER_KIND.methods.find((m) => m.name === 'file.tree')!
-        .handler as (p: unknown) => Promise<{ entries: Array<{ rel: string; type: string }> }>;
-      const result = await handler({ root: tmpRoot, maxDepth: 4, maxEntries: 500 });
+        .handler as (p: unknown, c: { appId: string; fsScope: { read: string[]; write: string[] } }) => Promise<{ entries: Array<{ rel: string; type: string }> }>;
+      const result = await handler({ root: tmpRoot, maxDepth: 4, maxEntries: 500 }, scopeCtx(tmpRoot));
 
       const rels = result.entries.map((e) => e.rel).sort();
       expect(rels).toContain('hello.txt');
@@ -123,12 +135,12 @@ describe('FILE_EXPLORER_KIND', () => {
         return; // platform doesn't allow — skip silently
       }
       const handler = FILE_EXPLORER_KIND.methods.find((m) => m.name === 'file.tree')!
-        .handler as (p: unknown) => unknown;
+        .handler as (p: unknown, c: { appId: string; fsScope: { read: string[]; write: string[] } }) => unknown;
       // handler is declared as sync or async; it throws synchronously when
       // the root is a symlink, so wrap the assertion in try/catch.
       let thrown: Error | null = null;
       try {
-        await handler({ root: link });
+        await handler({ root: link }, scopeCtx(tmpRoot));
       } catch (e) {
         thrown = e as Error;
       }
@@ -138,25 +150,25 @@ describe('FILE_EXPLORER_KIND', () => {
 
     it('file.read returns content for text, empty content for binary', async () => {
       const handler = FILE_EXPLORER_KIND.methods.find((m) => m.name === 'file.read')!
-        .handler as (p: unknown) => Promise<{
+        .handler as (p: unknown, c: { appId: string; fsScope: { read: string[]; write: string[] } }) => Promise<{
           content: string;
           binary: boolean;
           size: number;
         }>;
 
-      const txt = await handler({ path: path.join(tmpRoot, 'hello.txt') });
+      const txt = await handler({ path: path.join(tmpRoot, 'hello.txt') }, scopeCtx(tmpRoot));
       expect(txt.binary).toBe(false);
       expect(txt.content).toBe('hello world\n');
       expect(txt.size).toBeGreaterThan(0);
 
-      const bin = await handler({ path: path.join(tmpRoot, 'binary.bin') });
+      const bin = await handler({ path: path.join(tmpRoot, 'binary.bin') }, scopeCtx(tmpRoot));
       expect(bin.binary).toBe(true);
       expect(bin.content).toBe('');
     });
 
     it('file.search returns matching lines with relative path + line number', async () => {
       const handler = FILE_EXPLORER_KIND.methods.find((m) => m.name === 'file.search')!
-        .handler as (p: unknown) => Promise<{
+        .handler as (p: unknown, c: { appId: string; fsScope: { read: string[]; write: string[] } }) => Promise<{
           hits: Array<{ rel: string; line: number; snippet: string }>;
           truncated: boolean;
         }>;
@@ -166,7 +178,7 @@ describe('FILE_EXPLORER_KIND', () => {
         query: 'hello',
         caseInsensitive: false,
         maxHits: 50,
-      });
+      }, scopeCtx(tmpRoot));
       expect(result.hits.length).toBeGreaterThanOrEqual(1);
       expect(result.hits[0].rel).toBe('hello.txt');
       expect(result.hits[0].line).toBe(1);
@@ -176,14 +188,14 @@ describe('FILE_EXPLORER_KIND', () => {
 
     it('file.search is case-insensitive when configured', async () => {
       const handler = FILE_EXPLORER_KIND.methods.find((m) => m.name === 'file.search')!
-        .handler as (p: unknown) => Promise<{ hits: unknown[] }>;
+        .handler as (p: unknown, c: { appId: string; fsScope: { read: string[]; write: string[] } }) => Promise<{ hits: unknown[] }>;
 
       const sensitive = await handler({
         root: tmpRoot,
         query: 'HELLO',
         caseInsensitive: false,
         maxHits: 50,
-      });
+      }, scopeCtx(tmpRoot));
       expect(sensitive.hits.length).toBe(0);
 
       const insensitive = await handler({
@@ -191,7 +203,7 @@ describe('FILE_EXPLORER_KIND', () => {
         query: 'HELLO',
         caseInsensitive: true,
         maxHits: 50,
-      });
+      }, scopeCtx(tmpRoot));
       expect(insensitive.hits.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -199,16 +211,86 @@ describe('FILE_EXPLORER_KIND', () => {
       mkdirSync(path.join(tmpRoot, 'node_modules'));
       writeFileSync(path.join(tmpRoot, 'node_modules', 'should-not-match.txt'), 'should-not-match');
       const handler = FILE_EXPLORER_KIND.methods.find((m) => m.name === 'file.search')!
-        .handler as (p: unknown) => Promise<{ hits: Array<{ rel: string }> }>;
+        .handler as (p: unknown, c: { appId: string; fsScope: { read: string[]; write: string[] } }) => Promise<{ hits: Array<{ rel: string }> }>;
 
       const result = await handler({
         root: tmpRoot,
         query: 'should-not-match',
         caseInsensitive: false,
         maxHits: 50,
-      });
+      }, scopeCtx(tmpRoot));
       // Even case-sensitive: no hit because node_modules is skipped entirely.
       expect(result.hits.length).toBe(0);
+    });
+  });
+
+  // ── fs scope ────────────────────────────────────────────────────────────────
+  //
+  // `app.call` never reaches `runAppCall` and `/api/miniapp/worker/call` never
+  // read meta.json, so before this gate a kind could read the whole disk. The
+  // only checks that existed were lstat-refuses-symlink, which is an
+  // anti-symlink rule, not a boundary.
+  describe('handlers refuse paths outside the app fs scope', () => {
+    let tmpRoot: string;
+    let outside: string;
+
+    beforeEach(() => {
+      tmpRoot = mkdtempSync(path.join(tmpdir(), 'miniapp-fexpl-scope-'));
+      mkdirSync(tmpRoot, { recursive: true });
+      writeFileSync(path.join(tmpRoot, 'inside.txt'), 'inside\n');
+      // A sibling directory the app never declared: exactly the shape of
+      // "pass the path to C:/Users/victim/.ssh/id_rsa instead".
+      outside = mkdtempSync(path.join(tmpdir(), 'miniapp-fexpl-outside-'));
+      writeFileSync(path.join(outside, 'secret.txt'), 'SECRET\n');
+    });
+
+    afterEach(() => {
+      rmSync(tmpRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    });
+
+    const call = (name: string) =>
+      FILE_EXPLORER_KIND.methods.find((m) => m.name === name)!.handler as (
+        p: unknown,
+        c: { appId: string; fsScope: { read: string[]; write: string[] } },
+      ) => Promise<unknown>;
+
+    it('file.read refuses a file outside fs.read', async () => {
+      // sync () => rather than a bare call: these handlers are sync, so the
+      // throw escapes before a Promise exists and .rejects would never see it.
+      await expect(async () =>
+        call('file.read')({ path: path.join(outside, 'secret.txt') }, scopeCtx(tmpRoot)),
+      ).rejects.toThrow(/not covered by permissions\.fs\.read/);
+    });
+
+    it('file.tree refuses a root outside fs.read', async () => {
+      await expect(async () => call('file.tree')({ root: outside }, scopeCtx(tmpRoot))).rejects.toThrow(
+        /not covered by permissions\.fs\.read/,
+      );
+    });
+
+    it('file.search refuses a root outside fs.read', async () => {
+      await expect(async () =>
+        call('file.search')({ root: outside, query: 'SECRET' }, scopeCtx(tmpRoot)),
+      ).rejects.toThrow(/not covered by permissions\.fs\.read/);
+    });
+
+    it('an empty scope reads nothing at all, not everything', async () => {
+      // The dangerous default here is "no scope means unrestricted". Assert the
+      // opposite: a worker spawned without a resolved scope can read zero files.
+      const none = { appId: 'fexpl-probe', fsScope: { read: [], write: [] } };
+      await expect(async () =>
+        call('file.read')({ path: path.join(tmpRoot, 'inside.txt') }, none),
+      ).rejects.toThrow(/not covered by permissions\.fs\.read/);
+    });
+
+    it('still reads a file that IS inside fs.read', async () => {
+      // Reverse guard: the gate must not have degenerated into a blanket refusal.
+      const r = (await call('file.read')(
+        { path: path.join(tmpRoot, 'inside.txt') },
+        scopeCtx(tmpRoot),
+      )) as { content: string };
+      expect(r.content).toContain('inside');
     });
   });
 });

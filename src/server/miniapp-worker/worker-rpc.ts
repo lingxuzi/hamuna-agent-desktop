@@ -12,6 +12,8 @@
 
 import { z } from 'zod';
 
+import { isPathAllowed } from '../../shared/miniapp/app-permissions';
+
 /** Wire envelopes (parent thread <-> worker thread). */
 
 export interface WorkerCallMessage {
@@ -47,8 +49,50 @@ export type WorkerOutbound = WorkerResponseMessage | WorkerEventMessage;
 /** Per-method handler signature. Worker entry files register one per method. */
 export type WorkerMethodHandler<TParams = unknown, TResult = unknown> = (
   params: TParams,
-  ctx: { appId: string; signal?: AbortSignal },
+  ctx: { appId: string; signal?: AbortSignal; fsScope: WorkerFsScope },
 ) => Promise<TResult> | TResult;
+
+/**
+ * 一个 MiniApp 的 `permissions.fs` 展开成绝对前缀后的样子。
+ *
+ * 由 spawn 路由在**创建 worker 之前**从 meta.json 解析好，经 `workerData` 带进来。
+ * 为什么必须在 spawn 时定死而不是每次 call 再查：worker 线程拿不到 meta.json
+ * 的权威副本（它是另一个线程里的另一个进程视图），而"读一次就固定"正好是权限
+ * 该有的语义 —— 作者改 meta 不应该让已经跑起来的 worker 突然多出能力。
+ *
+ * 两个 kind 以前完全没有这个概念，于是 `file.read` 能读全盘、`git.checkout` 能
+ * 写任意仓库，且零 fs 权限：handler 只做 `lstat` 反 symlink，那是防 symlink 的，
+ * 不是范围边界。注释里那句 "$WORKSPACE/** defines the scope" 描述的展开从来没
+ * 存在过。
+ */
+export interface WorkerFsScope {
+  /** 绝对路径前缀；空数组 = 该 app 一个字节都读不到。 */
+  read: string[];
+  /** 同上，写侧单独一份 —— `read` 不蕴含 `write`。 */
+  write: string[];
+}
+
+/**
+ * handler 碰任何路径之前必须过这一道。**不要**在 kind 里另写一套前缀比较：
+ * shared 的 `isPathAllowed` 就是 `app.fs.*` 用的那一份，语义必须一致，否则
+ * `app.fs` 与 `app.call` 会对同一个路径给出不同答案。
+ *
+ * 读侧 / 写侧分开判：能读不等于能写，这正是 `permissions.fs` 两份数组的含义。
+ */
+export function assertWithinFsScope(
+  target: string,
+  scope: WorkerFsScope,
+  mode: 'read' | 'write',
+  ctx: { appId: string },
+): string {
+  const prefixes = scope[mode];
+  if (!isPathAllowed(target, prefixes)) {
+    throw new Error(
+      `path not covered by permissions.fs.${mode} for '${ctx.appId}': ${target}`,
+    );
+  }
+  return target;
+}
 
 export interface WorkerMethodDef<TParams = unknown, TResult = unknown> {
   /** Method name as called by `app.worker.call('git.log', {...})`. */

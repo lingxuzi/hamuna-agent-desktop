@@ -20,6 +20,8 @@ import {
   registerKind,
   type WorkerKindDef,
   type WorkerMethodHandler,
+  type WorkerFsScope,
+  assertWithinFsScope,
 } from '../worker-rpc';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -53,8 +55,11 @@ const FileSearchParams = z.object({
 
 // ───── guards ─────────────────────────────────────────────────────────────────
 
-function assertReadableRoot(root: string): string {
+function assertReadableRoot(root: string, ctx: { appId: string; fsScope: WorkerFsScope }): string {
   const resolved = path.resolve(root);
+  // Scope first, then the symlink/type checks. Order matters only for which
+  // error the author sees, but "outside your grant" is the more useful one.
+  assertWithinFsScope(resolved, ctx.fsScope, 'read', ctx);
   let stat: fs.Stats;
   try {
     stat = fs.lstatSync(resolved);
@@ -86,8 +91,8 @@ interface TreeEntry {
   size: number;
 }
 
-const fileTree: WorkerMethodHandler<z.infer<typeof FileTreeParams>> = (params) => {
-  const root = assertReadableRoot(params.root);
+const fileTree: WorkerMethodHandler<z.infer<typeof FileTreeParams>> = (params, ctx) => {
+  const root = assertReadableRoot(params.root, ctx);
   const maxDepth = params.maxDepth;
   const maxEntries = params.maxEntries;
   const out: TreeEntry[] = [];
@@ -132,8 +137,9 @@ const fileTree: WorkerMethodHandler<z.infer<typeof FileTreeParams>> = (params) =
   return { root, entries: out, truncated };
 };
 
-const fileRead: WorkerMethodHandler<z.infer<typeof FileReadParams>> = (params) => {
+const fileRead: WorkerMethodHandler<z.infer<typeof FileReadParams>> = (params, ctx) => {
   const resolved = path.resolve(params.path);
+  assertWithinFsScope(resolved, ctx.fsScope, 'read', ctx);
   let stat: fs.Stats;
   try {
     stat = fs.lstatSync(resolved);
@@ -165,8 +171,8 @@ interface SearchHit {
   snippet: string;
 }
 
-const fileSearch: WorkerMethodHandler<z.infer<typeof FileSearchParams>> = (params) => {
-  const root = assertReadableRoot(params.root);
+const fileSearch: WorkerMethodHandler<z.infer<typeof FileSearchParams>> = (params, ctx) => {
+  const root = assertReadableRoot(params.root, ctx);
   const needle = params.caseInsensitive ? params.query.toLowerCase() : params.query;
   const hits: SearchHit[] = [];
   let truncated = false;

@@ -19,9 +19,13 @@ interface WorkerBootstrapData {
   appId: string;
   kind: string;
   init?: Record<string, unknown>;
+  fsScope?: { read: string[]; write: string[] };
 }
 
-const { appId } = workerData as WorkerBootstrapData;
+const { appId, fsScope } = workerData as WorkerBootstrapData;
+// Absent scope = no access. `isPathAllowed` never matches an empty prefix list,
+// so a spawn that forgot to resolve one yields a worker that reads nothing.
+const scope = fsScope ?? { read: [], write: [] };
 
 function send(msg: WorkerOutbound): void {
   parentPort?.postMessage(msg);
@@ -66,7 +70,7 @@ parentPort?.on('message', async (raw: unknown) => {
     }
 
     try {
-      const result = await def.handler(parsed.data, { appId });
+      const result = await def.handler(parsed.data, { appId, fsScope: scope });
       send({ type: 'response', id: msg.id, ok: true, result });
     } catch (e) {
       const err = e as Error;
