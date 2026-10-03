@@ -153,6 +153,15 @@ const yes = await app.dialog.message('确定删除？', { kind: 'confirm' });
 // → { confirmed: true | false }
 ```
 
+`open` / `save` 都能带 `filters`，把选择范围收窄到某几类文件。`extensions` 不带点；
+写坏的条目（缺 `name`，或 `extensions` 里混进非字符串）会被整条丢掉，其余照常生效：
+
+```javascript
+const img = await app.dialog.open({
+  filters: [{ name: '图片', extensions: ['png', 'jpg', 'webp'] }],
+});
+```
+
 `app.clipboard.*` **必须显式 opt-in**，不声明直接被拒：
 
 ```json
