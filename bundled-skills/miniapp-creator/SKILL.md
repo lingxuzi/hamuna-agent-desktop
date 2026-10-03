@@ -421,8 +421,14 @@ const status = document.getElementById('status');
 
 // 状态走 app.storage —— 宿主已注入 window.app，无需握手
 async function load() {
-  const items = (await app.storage.get('items')) || [];
-  render(items);
+  // get 同样会 reject（appdata 不可写时）。只把 set 包起来是最常见的漏法：
+  // 首屏那次 get 裸奔，失败时用户看到的是一个空清单，没有任何提示。
+  try {
+    const items = (await app.storage.get('items')) || [];
+    render(items);
+  } catch (err) {
+    status.textContent = `Load failed: ${err.message}`;
+  }
 }
 
 function render(items) {
@@ -439,9 +445,9 @@ document.getElementById('add-form').addEventListener('submit', async (e) => {
   const input = document.getElementById('new-item');
   const text = input.value.trim();
   if (!text) return;
-  const items = (await app.storage.get('items')) || [];
-  items.push(text);
   try {
+    const items = (await app.storage.get('items')) || [];
+    items.push(text);
     await app.storage.set('items', items);
     input.value = '';
     render(items);
