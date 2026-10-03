@@ -131,7 +131,7 @@ await app.agent.cancel({ run_id: 'r1' });
 
 ### 原生对话框与剪贴板
 
-无需权限声明（都是用户显式操作）：
+`app.dialog.*` **无需权限声明**（都是用户显式操作）：
 
 ```javascript
 const picked = await app.dialog.open({ title: '选择文件', multiple: true });
@@ -140,16 +140,32 @@ const target = await app.dialog.save({ defaultPath: '~/out.txt' });
 await app.dialog.message('导出完成', { kind: 'info' });
 const yes = await app.dialog.message('确定删除？', { kind: 'confirm' });
 // → { confirmed: true | false }
+```
 
+`app.clipboard.*` **必须显式 opt-in**，不声明直接被拒：
+
+```json
+{ "permissions": { "clipboard": { "enabled": true } } }
+```
+
+```javascript
 await app.clipboard.writeText('复制的内容');
 const clip = await app.clipboard.readText();
 ```
+
+> **剪贴板不能和 dialog 算一档。** dialog 拿不到任何东西，剪贴板里是**宿主的**
+> 用户状态——典型就是刚复制出来的密码。一个既能读剪贴板又能 `net.fetch` 外发的
+> MiniApp 就是一条现成的凭据外泄链，所以它和 `ai` / `agent` 一样要显式声明。
 
 ### 自定义后端（可选）
 
 需要复杂计算或 npm 依赖时，把 `meta.json` 设成 `kind: "worker"` + `worker_kind`，代码写在 `source/worker.js`，用 `app.call('method', params)` 调用。**默认不要用** —— 上面的 `app.fs` / `app.shell` / `app.net` / `app.os` / `app.storage` 已覆盖绝大多数工具型需求，不需要 worker 运行时。
 
-参考 `bundled-miniapps/git-graph/`（`worker_kind: "git-graph"`）与 `bundled-miniapps/file-explorer/`。
+> **`app.call` 必须配 `permissions.node.enabled = true`**，否则宿主直接拒：
+> `app.call requires meta.permissions.node.enabled = true`。`kind: "worker"` 只决定代码
+> 跑在哪，不会替你打开这个权限。
+
+参考 `bundled-miniapps/git-graph/`（`worker_kind: "git-graph"`）与 `bundled-miniapps/file-explorer/` —— 这两个都是 worker，它们的 `meta.json` 里都带着 `"node": { "enabled": true }`。
 
 ### 主题与 i18n
 
@@ -209,7 +225,11 @@ app.onDeactivate(() => clearInterval(timer));
       "write": []                   // 不需要就别写；权限最小化
     },
     "shell": { "allow": [] },       // 命令名白名单，空 = 全禁
-    "net": { "allow": [] }          // 域名白名单，空 = 全禁
+    "net": { "allow": [] },         // 域名白名单，空 = 全禁
+    "clipboard": { "enabled": true },// 要用 app.clipboard.* 才写；不写 = 拒绝
+    "ai": { "enabled": true },       // 要用 app.ai.* 才写
+    "agent": { "enabled": true },    // 要用 app.agent.* 才写
+    "node": { "enabled": true }      // 要用 app.call（worker）才写
   },
   "entry": "source/index.html",     // 必填，相对 meta.json 的路径
   "dependencies": [                 // 可选，≤ 10 个 CDN 依赖
