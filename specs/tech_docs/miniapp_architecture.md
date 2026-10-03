@@ -79,11 +79,29 @@ Node 侧（`shared/miniapp/app-permissions.ts`）的 `normalizePath` 显式处�
 盘符与 UNC，这条在 shared 层；**Rust 侧曾经完全没有对应的东西**，而 Rust
 才是真正 `join` + `fs` 落盘的那一侧。
 
-Windows 上 `Path::join` 遇到**带盘符或带根**的参数会**整个丢弃 base** ——
-不报错、不落日志、返回的就是参数本身。于是"这个字符串看起来是相对的"完全
-不蕴含"拼出来的路径在 base 之内"：`C:\Users\x\a` 与 drive-relative 的
-`C:a` 既不以 `/` 开头、也不以 `\` 开头、还不含 `..`，所有基于字符的守卫
-全部放行。实测连续三处同一根因：
+**先分清是哪个 `join` —— Rust 和 Node 行为相反。** 本机实测（`A =
+C:\Users\v\.hamuna\attachments`）：
+
+| 调用 | `C:\Windows\win.ini` | `C:win.ini` | `..\..\etc\passwd` |
+|------|----------------------|-------------|--------------------|
+| Rust `Path::join` | **丢弃 base** → `C:\Windows\win.ini` | **丢弃 base** | 逃逸 |
+| Node `path.join` | 拼接 → `A\C:\Windows\win.ini` | 拼接 | 逃逸 |
+| Node `path.resolve` | **丢弃 base** → `C:\Windows\win.ini` | 留在 A 内 | 逃逸 |
+
+所以：**会静默丢弃 base 的是 Rust 的 `Path::join` 和 Node 的 `path.resolve`，
+不是 Node 的 `path.join`**（后者只是拼接 + 归一化）。两个后果：
+
+- 别把 Rust 的结论套到 Node `join` 上。`src/server/index.ts` 的
+  `/api/attachment/*` 路由用的正是 `path.join`，加上它已有的
+  `includes('..')` 守卫，**盘符并不能逃逸** —— 那里不需要"修"。
+- 反过来也别因为 Node `join` 安全就放过 `resolve`。哪天有人把那个
+  `join` 换成更"正确"的 `resolve`，`C:\...` 立刻变成活的任意文件读。
+
+Rust 侧"丢弃 base"的具体后果：Windows 上 `Path::join` 遇到**带盘符或带根**
+的参数会整个丢掉 base —— 不报错、不落日志、返回的就是参数本身。于是
+"这个字符串看起来是相对的"完全不蕴含"拼出来的路径在 base 之内"：
+`C:\Users\x\a` 与 drive-relative 的 `C:a` 既不以 `/` 开头、也不以 `\`
+开头、还不含 `..`，所有基于字符的守卫全部放行。实测连续三处同一根因：
 
 | 位置 | 后果 |
 |------|------|
