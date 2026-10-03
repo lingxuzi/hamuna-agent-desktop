@@ -515,10 +515,32 @@ MiniApp 本身也是全死的**，且失效完全静默（拒绝是正确行为�
 必须认 `app.call(method, params)` 这种两段式形态，且必须**逐文件**剥注释
 （`worker-blacklist.ts` 模板串里的 `/**` 会被当成块注释开头，吞掉 7187 个字符）。
 
-**一个测试环境的坑，值得记下来省得重踩**：组件层的
-`event.source instanceof Window` 在 jsdom 下**恒为 false**（跨 realm），于是写出来
-的负向断言会全绿、正向断言永远失败，两边都不代表生产行为。信任判定与回信都是纯
-逻辑，直接单测即可，这也是把它们从组件里提到 `app-protocol.ts` 的原因。
+**一个测试环境的坑，值得记下来省得重踩（2026-10 实测订正）**：组件级的
+`event.source instanceof Window` 在 jsdom 下**恒为 false**（跨 realm），负向断言会
+全绿、正向断言永远失败。**但这不是根因，别顺着它往下修。**
+
+曾据此推断"把 `instanceof` 收窄去掉就能在组件层跑通往返"，实测推翻了：jsdom 的
+`postMessage` 把 `event.source` 置为 **`null`**（实测 `sourceIsParent: false,
+sourceIsNull: true, origin: ""`），而协议的**两端都依赖 `event.source`**：
+
+- iframe 侧 `appRuntimeScript.ts` 收消息时 `if (event.source !== window.parent) return;`
+- 宿主侧 `app-protocol.ts` 的 `envelope.source !== iframeContentWindow` 严格相等才是闸门
+
+于是无论收窄怎么写，jsdom 下这条通道**都**不可能跑通端到端往返 —— 与本项目代码
+无关，是环境能力缺失。
+
+其他两条一并实测的 jsdom 限制（都别当成产品缺陷去"修"）：
+
+- **不解析 `srcdoc`**：设了属性也不加载，`contentDocument.body` 是空的。绕法是先读出
+  组件组装出的 `srcdoc` 字符串再 `document.write` 灌进去。
+- **`document.write` 之后不触发 iframe 的 `load` 事件**：而宿主正是在 `load` 里发
+  `host.ready`（`handleFrameLoad`），不补就会永远排着队。
+
+结论：`window.app.*` 的形状一致性目前**只**由三段各自的单测保证
+（`app-protocol` 纯函数 / `appRuntimeTransport` 脚本 / `appHostDispatch` 派发层）。
+它们之间**没有**任何东西保证三段形状对得上 —— 这是已知的结构性缺口，`appDataWorkspace`
+当初正是被 `appRuntimeScript.ts` 无参硬传 `null` 吞掉、且三段单测全绿而暴露不出来的。
+想补这段，载体只能是一个真实浏览器（Playwright / WebDriver），不是 vitest jsdom。
 
 **仍未验证（需要真实 Provider，属于 credentialed）**：
 
