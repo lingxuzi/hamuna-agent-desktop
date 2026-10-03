@@ -543,10 +543,37 @@ listener 里的未捕获异常，作者侧的 Promise **永不 settle** —— �
    `APP_UNSUPPORTED_CALLBACK` 拒掉回调。唯一消费者 icon-generator 要的是
    Phase 3 出图桥接，流式对它没有价值；而流式要求 sidecar 常驻一条 SSE，还要解决
    "iframe 已经卸载时怎么收尾"。定这个之前，上表 `ai.chat` 的两行保持现状。
-2. **`appDataWorkspace` 在 builtin runtime 上要不要真生效**。见 §6 ⚠️：判定、
-   接线、回显、建目录都做全了，但 builtin 的 `runInjectedTurn` 不读 per-turn 的
-   `workspacePath`，所以 Agent 的 cwd 不动。四个选项：显式拒收并记为有意不对齐 /
-   把 per-turn cwd 穿到 SDK（架构变更）/ 摘掉字段 / 维持现状只记文档。
+2. **`appDataWorkspace` 在 builtin runtime 上要不要真生效**。判定、接线、回显、
+   建目录都做全了，但 builtin 的 `runInjectedTurn` 不读 per-turn 的
+   `workspacePath`，所以 Agent 的 cwd 不动。
+
+   **把阻塞点查实了，四个选项其实塌成两个**（之前记的"把 per-turn cwd 穿到 SDK"
+   不是一个可选项，而是一个做不到的选项）：
+
+   - `agent-session.ts` 里 `query({ cwd: agentDir })` 只在 **SDK 子进程 spawn 时**
+     调用一次，而 MiniApp 走的是持久 Session（`enqueueUserMessage`）。所以
+     **per-turn cwd 在这套架构里根本无法表达** —— 不是"没传"，是 SDK 没有这个概念。
+   - `agentDir`（`agent-session.ts:715`）本身是模块级变量，但**每个 session 会从
+     `sessionMeta.agentDir` 重新赋值**（`:8019`），所以它确实是 per-session 的。
+     也就是说"per-turn 不行、per-session 可以"。
+   - 卡点因此落在：MiniApp 的 sidecar 由 `cmd_miniapp_ensure_session` **1:1 建在
+     `appId` 上**（`--agent-dir = ~/.hamuna/miniapps/<appId>`），而
+     `agent.ensureSession` 又是 renderer 就地截走的。要让 workspace 变成
+     `appdata/<segment>`，得让 sidecar 的 agentDir 变成 per-(appId, workspace) ——
+     这动的是进程/会话生命周期，属于 CLAUDE.md 明令"必须先讨论、不得自行引入"的
+     架构变更。
+
+   于是真正要定的只剩两个：
+   - **(A) 把 `appDataWorkspace` 挪到 session 语义**：按参考实现那样放在
+     `ensureSession` 上，由它决定该 session 的 `agentDir`，`agent.run` 不再收这个
+     参数（或要求与 session 一致）。要对齐 OpenBitFun 就选这条，代价是 sidecar 从
+     per-appId 变成 per-(appId, workspace)。
+   - **(B) 显式拒收并记为有意不对齐**：builtin 上直接报错，让作者当场知道这个
+     字段在当前 runtime 不生效，而不是拿到一个"回显了名字但没生效"的假确认。
+
+   现状的坏处要说清楚：`ensureSession` 会把作者请求的**原名**回显进
+   `app_data_workspace`，于是作者会合理地以为收窄生效了。静默地"回显一个没生效的
+   值"比直接报错更糟，因为它把不确定变成了错误的确定。
 
 3. **✅ 已定并已修：去掉 iframe 的 `allow-same-origin`**。这是本清单里唯一一个
    "修完之后整个 `window.app.*` 权限模型才真正成立"的条目，现在已落地
