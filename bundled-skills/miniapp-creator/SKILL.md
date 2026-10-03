@@ -74,6 +74,9 @@ const r = await app.shell.exec('git log --oneline -20', { cwd: '{workspace}' });
 // 网络 —— 需 permissions.net.allow 声明域名白名单，且只允许 https
 const res = await app.net.fetch('https://api.example.com/data');
 // → { status, body }
+// 可选 opts.timeout_ms（毫秒）：默认 30s，同样被宿主夹到 1s~5min。
+// 写 `0` 不是"不限时"而是**根本不设定时器** —— 这条请求会一直挂着。
+// 另外不接受 3xx：返回跳转请直接请求最终 URL。
 
 // 只读系统信息 —— 无需权限
 const os = await app.os.info();   // { platform, homedir, tmpdir, hostname }
@@ -118,6 +121,10 @@ const { text } = await app.agent.run('总结这个目录的结构', { run_id: 'r
 const more = await app.agent.turnText('那前端入口在哪？', { run_id: 'r1' });
 // 取消（只停这一个 turn，不影响同进程其它 turn）
 await app.agent.cancel({ run_id: 'r1' });
+// 可选 timeout_ms（毫秒）：默认 300s（5min），宿主夹到 1s~60min。
+// 与 shell / net 的 5min 上限**故意不同**：agent turn 是带工具的 LLM 回合，
+// 跑满 5 分钟很正常，按 5min 夹会打断合法长回合。
+// 别指望它兜底：写 0 是"立刻超时"而不是"不限时"；真要停就用上面的 cancel。
 ```
 
 **与 `app.ai` 的关键区别**：Agent 是**有状态**的会话（`run_id` 相同则上下文延续），

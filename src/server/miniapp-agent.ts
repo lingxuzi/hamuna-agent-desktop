@@ -61,6 +61,39 @@ export interface MiniAppAgentRunParams {
 }
 
 /**
+ * MiniApp 自报 `timeout_ms` 的归一化。
+ *
+ * 同一个 MiniApp 边界上，`shell.exec` 与 `net.fetch` 的 timeout 都已经夹过
+ * （`miniapp-app-dispatch.ts::resolveMiniAppTimeoutMs`），这里是第三个兄弟。
+ * 危害形状也一样：`runInjectedTurn` 把它算成 `deadline`，再喂给三处
+ * `setTimeout`（builtin / external adapter 的 `waitForDeadline`），而
+ * `timeoutMs <= 0` 在那里是"立即超时"、不是"不限时"，所以真正危险的又是上界 ——
+ * `timeout_ms: 2147483647` 就是一个 24.8 天的定时器，turn 永远不 settle，
+ * 一个 sidecar + SDK 子进程跟着挂住。
+ *
+ * ## 为什么上限是 1h 而不是 5min
+ *
+ * 不能直接复用 `resolveMiniAppTimeoutMs` 的 5min：那道闸是为"一次命令 / 一次
+ * HTTP 请求"定的，而 agent turn 是**带工具的 LLM 回合**，跑满 5 分钟是正常的，
+ * 按 5min 夹会直接打断合法长回合。1h 取自本仓已有的回合上限
+ * （`runtimes/external-watchdog-policy.ts::CODEX_LONG_CONTEXT_MAX_TIMEOUT_MS`
+ * —— 目前给最长回合用的就是 60 分钟），所以这不是一个新发明的数字，而是与
+ * 仓库既有策略对齐。代价要说清：作者仍然**可以**把自己写进一个跑不完的 turn，
+ * 出口是 `app.agent.cancel(run_id)`，而这条路径和 timeout 一样是作者可控的。
+ *
+ * 夹取放在这里（MiniApp 边界）而不是 adapter 里：`runInjectedTurn` 还服务 cron /
+ * goal / IM，那些调用方有各自的预算语义，动 adapter 会波及它们。
+ */
+const MINIAPP_AGENT_TIMEOUT_MIN_MS = 1_000;
+const MINIAPP_AGENT_TIMEOUT_MAX_MS = 60 * 60 * 1000;
+const DEFAULT_AGENT_TIMEOUT_MS = 300_000;
+
+export function resolveMiniAppAgentTimeoutMs(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_AGENT_TIMEOUT_MS;
+  return Math.min(Math.max(Math.trunc(raw), MINIAPP_AGENT_TIMEOUT_MIN_MS), MINIAPP_AGENT_TIMEOUT_MAX_MS);
+}
+
+/**
  * MiniApp 的 Agent turn 走 `plan`：读得到自己的 appdata，写一律被硬拒。
  *
  * ## 为什么不是 acceptEdits
@@ -94,8 +127,6 @@ export interface MiniAppAgentRunParams {
  */
 const MINIAPP_AGENT_PERMISSION_MODE = 'plan';
 
-const DEFAULT_AGENT_TIMEOUT_MS = 300_000;
-
 export async function runMiniAppAgentTurn(p: MiniAppAgentRunParams): Promise<AgentOutcome> {
   if (!p.prompt.trim()) {
     return fail(APP_ERROR_CODES.INVALID_PARAMS, 'app.agent.run requires a non-empty prompt');
@@ -121,7 +152,7 @@ export async function runMiniAppAgentTurn(p: MiniAppAgentRunParams): Promise<Age
     scenario: { type: 'desktop' },
     permissionMode: p.permissionMode ?? MINIAPP_AGENT_PERMISSION_MODE,
     model: p.model,
-    timeoutMs: p.timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS,
+    timeoutMs: resolveMiniAppAgentTimeoutMs(p.timeoutMs),
     pollMs: 500,
     // turnOwner 让 stopOwnedTurn 能精确命中这一个 turn，而不是把整个 session
     // 停掉 —— 否则一个 MiniApp 取消会连带打断同进程里的其它 turn。
