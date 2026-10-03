@@ -43,6 +43,29 @@ const SYSTEM_PROMPT =
   'You have no tools and cannot access the filesystem or the network.';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+/**
+ * 作者自报 timeout 的上界。默认值不变（60s），只夹上界。
+ *
+ * 这是同一个 MiniApp 边界上的第四个无上限 timeout：`opts.timeout_ms` 经
+ * `numberOpt(opts, 'timeoutMs', 'timeout_ms')` 原样进来，在 `Promise.race`
+ * 里变成 `setTimeout(..., timeoutMs)`，而 Node 接受 2^31-1 以内的任何值 ——
+ * `timeout_ms: 86400000` 就是一条挂一天的补全。
+ *
+ * 为什么上界取 5min 而不是复用 `resolveMiniAppTimeoutMs`：那个函数的**默认
+ * 值**是 30s（命令 / HTTP 的量级），而补全的默认是 60s，直接复用会把没传值
+ * 的作者莫名其妙地从 60s 降到 30s。所以这里只共用上界这一个数字。
+ *
+ * 同一段代码里 `rate_limit_per_minute` 与 `max_tokens_per_request` 都取自
+ * `ctx.perms`（meta 声明）并强制生效，`maxTokens` 也会被上界校验拒绝；只有
+ * timeout 是作者说了算且无人管。补上这一处不是为了更严，是为了和邻居一致 ——
+ * 作者要更慢可以调大，但调不到"永远"。
+ */
+const MAX_AI_TIMEOUT_MS = 5 * 60 * 1000;
+
+export function resolveAiTimeoutMs(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_TIMEOUT_MS;
+  return Math.min(Math.max(Math.trunc(raw), 1_000), MAX_AI_TIMEOUT_MS);
+}
 
 interface AiOutcome {
   ok: boolean;
@@ -258,7 +281,7 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
   // 注册到中止表，让 app.ai.cancel 有一个真实的中止点。
   const controller = registerCall(p.appId, p.runId);
 
-  const timeoutMs = p.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = resolveAiTimeoutMs(p.timeoutMs);
   // 中止与超时的结论只在这里成型。收尾有两条路径 —— iterator 正常收尾，以及
   // SDK 因 abort 直接抛出（实测是后者）—— 它们共用同一个判断，才不会各说各话。
   //

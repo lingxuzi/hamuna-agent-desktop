@@ -12,8 +12,10 @@
  * 原文裁剪。
  */
 
+import { readFileSync } from 'node:fs';
+
 import { describe, it, expect } from 'vitest';
-import { classifySdkMessage } from '../miniapp-ai';
+import { classifySdkMessage, resolveAiTimeoutMs } from '../miniapp-ai';
 
 /** 实跑捕获到的认证失败消息。 */
 const AUTH_FAILED_MESSAGE = {
@@ -137,5 +139,80 @@ describe('classifySdkMessage', () => {
     ])('reports %s as empty', (_label, message) => {
       expect(classifySdkMessage(message)).toEqual({ kind: 'empty' });
     });
+  });
+});
+
+/**
+ * 作者自报 `timeout_ms` 的夹取。
+ *
+ * `opts.timeout_ms` 经 `numberOpt(opts, ...)` 原样进 `runMiniAppAiComplete`，
+ * 在 `Promise.race` 里变成 `setTimeout(..., timeoutMs)`。Node 接受 2^31-1 以内
+ * 的任何值，所以 `86400000` 会挂满一天。
+ *
+ * 与 `resolveMiniAppTimeoutMs`（shell / net）只共用上界这一个数字，默认值不同：
+ * 补全是 60s，那两个是 30s。共用函数会把没传值的作者从 60s 悄悄降到 30s。
+ */
+describe('resolveAiTimeoutMs', () => {
+  it('keeps the 60s default when the author says nothing', () => {
+    // 与 shell/net 的 30s 默认**故意不同**，不要顺手"统一"成 30s。
+    expect(resolveAiTimeoutMs(undefined)).toBe(60_000);
+    expect(resolveAiTimeoutMs(null)).toBe(60_000);
+    expect(resolveAiTimeoutMs('5000')).toBe(60_000);
+    expect(resolveAiTimeoutMs(Number.NaN)).toBe(60_000);
+  });
+
+  it('clamps a one-day request to the 5min ceiling', () => {
+    // 86400000 远在 2^31-1 以内，Node 原样接受 —— 只测"超大数字"会误以为安全。
+    expect(resolveAiTimeoutMs(86_400_000)).toBe(5 * 60 * 1000);
+    expect(resolveAiTimeoutMs(2 ** 31 - 1)).toBe(5 * 60 * 1000);
+  });
+
+  it('lifts 0 and negatives off the floor instead of passing them to setTimeout', () => {
+    expect(resolveAiTimeoutMs(0)).toBe(1_000);
+    expect(resolveAiTimeoutMs(-5_000)).toBe(1_000);
+  });
+
+  it('still lets the author ask for longer than the default, but not unbounded', () => {
+    expect(resolveAiTimeoutMs(120_000)).toBe(120_000);
+    expect(resolveAiTimeoutMs(1_500.9)).toBe(1_500);
+  });
+});
+
+/**
+ * 调用点本身的结构闸。
+ *
+ * ## 为什么这里是**扫源码**而不是跑一遍
+ *
+ * 上面那组纯函数测试有个已实测确认的漏洞：把调用点改回
+ * `p.timeoutMs ?? DEFAULT_TIMEOUT_MS`，它们照样 18 个全绿 —— 它们不知道
+ * `p.timeoutMs` 有没有被接进 `resolveAiTimeoutMs`。
+ *
+ * 本来打算用假定时器驱动一次真实 `runMiniAppAiComplete`、断言作者可见的
+ * `app.ai timed out after Nms` 来钉住它（那是最强的断言面）。但实测那条路
+ * **跑不起来**：`runMiniAppAiComplete` 走 `await import(SDK)` + 一串
+ * agent-session 环境助手，配上假定时器后整个文件挂死 5 分钟无输出。
+ * `miniapp-ai-abort.unit.test.ts` 开头的注释早就记了这件事（"那组 mock 在本
+ * 仓库的 vitest 配置下拿不到干净的隔离，容易退化成看起来在测、其实在等真实
+ * 超时的假测试"）—— 撞过一遍之后选择尊重那条既有结论，而不是交付一个会挂的
+ * 或名不副实的测试。
+ *
+ * 所以退到扫源码。这是**比行为断言弱**的仪器：它不知道 clamp 的语义，只知道
+ * 那行还在。留着它是因为它能挡住唯一现实的回归形态（有人顺手把调用点改回
+ * 直通），而这正是上面那组测不到的。用 `expect` 写死字符串是为了重构时能立刻
+ * 看到它在报什么，而不是静默失效。
+ *
+ * 哪天有人把 `runMiniAppAiComplete` 的依赖拆干净、假定时器能跑通了，就把这条
+ * 换成真的行为断言 —— 那时它才配得上和 net / agent 那两条调用点测试并列。
+ */
+describe('the ai timeout call site stays wired to the clamp', () => {
+  const source = readFileSync(new URL('../miniapp-ai.ts', import.meta.url), 'utf8');
+
+  it('routes the author-supplied timeout through the clamp', () => {
+    expect(source).toContain('resolveAiTimeoutMs(p.timeoutMs)');
+  });
+
+  it('never lets p.timeoutMs reach the race as a bare default fallback', () => {
+    // 这一条才是真正的断言：第一条只证明 clamp 存在，这条证明它被用上了。
+    expect(source).not.toMatch(/p\.timeoutMs\s*\?\?/);
   });
 });
