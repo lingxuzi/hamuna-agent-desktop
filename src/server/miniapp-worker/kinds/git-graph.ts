@@ -148,9 +148,20 @@ const gitStatus: WorkerMethodHandler<z.infer<typeof GitStatusParams>> = async (p
   assertReadableCwd(params.cwd, ctx);
   const sg = (await getSimpleGit()).default(params.cwd);
   const status = await sg.status();
+  // `branches` 是作者契约的一部分：git-graph 的分支下拉框 gate 在
+  // `Array.isArray(status.branches)` 上，缺了它下拉框永远是 "(no branches)"，
+  // 而 checkout 按钮从下拉框取值 —— 于是整个 checkout 功能是死的，且**无声**：
+  // 加载成功、图画出来、只是没法切分支。`sg.status()` 本身不带分支列表（实测
+  // 它的 key 里没有 branches），分支列表来自 `branchLocal()`，所以这里必须
+  // 显式合并进去。
+  const local = await sg.branchLocal();
   return {
     current: status.current,
     tracking: status.tracking,
+    // `branchLocal().all` 是**字符串**数组，不是 `{ name }` 对象 —— 这里写成
+    // `.map(b => b.name)` 会得到一整排 `undefined`，而 `Array.isArray` 仍然
+    // 为真，于是下拉框列出 "(no branches)" 之外的一堆空项。已实测确认形状。
+    branches: local.all,
     files: status.files.map((f: { path: string; index: string; working_dir: string }) => ({
       path: f.path,
       index: f.index,

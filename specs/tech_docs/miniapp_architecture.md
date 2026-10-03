@@ -200,6 +200,32 @@ app 少传 cwd；app 改用 { ...base } 动态构造（此时护栏判不了，*
 
 **边界**：只认静态可判定的 key。{ ...spread } / uildParams() 拿不到，报告
 「无法静态判定」并转红，不假装通过。
+### 真实缺陷：`git.status` 少返回 `branches`，checkout 是死的
+
+git-graph 的分支下拉框 gate 在 `Array.isArray(status.branches)` 上，checkout 又
+从下拉框的 value 取分支名。而 `gitStatus` 当时只返回
+`{ current, tracking, files }` —— **没有** `branches`。于是下拉框永远渲染
+"(no branches)"，checkout 永远走不到：repo 加载成功、commit 图画出来、状态栏
+一切正常，只是**切不了分支**，且没有任何一层报错（JS 里"字段不存在"不是错误）。
+"branches" 这个字符串在全仓只出现在 app 里，worker 侧一次都没有 —— 这是它能被
+漏掉的原因。
+
+sg.status() 本身不带分支列表（实测 key：ahead, behind, conflicted, created,
+current, deleted, detached, files, ignored, isClean, modified, not_added,
+renamed, staged, tracking），要另取 sg.branchLocal()。**注意它的 .all 是
+字符串数组**，写成 `.map(b => b.name)` 会得到一排 `undefined`，而
+`Array.isArray` 仍为真 —— 于是下拉框列出一堆空项，症状几乎一样。这个错是本轮
+真写出来过、被 git-status-branches.unit.test.ts 逮住的。
+
+**护栏为什么不写字段清单断言**：照着自己以为的契约写"handler 返回了这些 key"，
+断言会和实现一起错 —— 这正是当初漏掉 branches 的方式。所以
+git-status-branches.unit.test.ts **拿真 repo 调真 handler**（git init 建临时
+仓库），并拿 git branch --format 的输出做权威对照。
+
+代价：它 import `node:child_process`，所以要进
+check-test-classification.mjs::CHILD_PROCESS_ALLOWLIST（固定 argv、只打本地临时
+repo、不碰网络与凭据）。mock 掉 git 反而会废掉这条护栏 —— 它要抓的恰恰是"与
+真 git 返回不一致"。
 ## 6. 已知边界
 
 - **`app.agent.workspace_scope` 当前不放开**：`agent.run` 的 workspace 强制
