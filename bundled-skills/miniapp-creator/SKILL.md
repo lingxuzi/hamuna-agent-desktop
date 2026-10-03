@@ -229,8 +229,6 @@ app.onDeactivate(() => clearInterval(timer));
 - `window.__miniappStorage` —— 不存在（早期文档写错过）。用 `app.storage`。
 - 第三方 CDN 脚本 —— **不能直接写 `<script src>`**，iframe CSP `default-src 'none'` 会拦掉。
   改用 `meta.json` 的 `dependencies` 声明（见下方「CDN 依赖」），由宿主注入标签并按需放宽 CSP。
-- `app.ai.cancel` —— 存在，但只对**在途的** `ai.complete` 生效（按 `run_id` 中止）。
-  请求已返回后再调是正常时序，返回 `cancelled: false`，不是错误。
 - `app.agent` 的流式返回 —— `run` / `turnText` 只返回终态文本；流式走 `agent.onEvent`。
 - `agent.workspace_scope` —— 声明保留但当前不放开，`agent.run` 强制落在 appdata 下。
 - `worker_kind` —— 白名单制，没有通用 npm 依赖加载。
