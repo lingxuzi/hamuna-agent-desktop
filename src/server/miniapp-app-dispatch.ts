@@ -440,28 +440,36 @@ async function dispatchStorage(
   if (!key) return fail(APP_ERROR_CODES.INVALID_PARAMS, `storage.${name} requires a key`);
   const { readFile, writeFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
+  const { withFileLock } = await import('./utils/file-lock');
   // 固定落在 appdata 下的 storage.json —— MiniApp 不能通过 key 越出该文件。
   const store = join(ctx.appdata, 'storage.json');
-  let data: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(await readFile(store, 'utf8')) as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      data = parsed as Record<string, unknown>;
+  // 整个读-改-写必须在锁内：`await readFile` 与 `await writeFile` 之间存在挂起
+  // 窗口，两个并发 set 各自读到同一份旧快照，后写的把先写的整个覆盖掉，而两个
+  // Promise 都会 resolve —— 作者那边完全看不出丢了一次写。同理 get 也要在锁内，
+  // 否则可能读到写了一半的文件。
+  // （CLAUDE.md Pit-of-Success「单写者文件裸 read-modify-write」）
+  return withFileLock({ lockPath: `${store}.lock` }, async () => {
+    let data: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(await readFile(store, 'utf8')) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        data = parsed as Record<string, unknown>;
+      }
+    } catch {
+      data = {};
     }
-  } catch {
-    data = {};
-  }
-  if (name === 'get') return ok(data[key]);
-  if (name === 'remove') {
-    if (!(key in data)) return ok(false);
-    delete data[key];
-    await writeFile(store, JSON.stringify(data, null, 2), 'utf8');
-    return ok(true);
-  }
-  if (name === 'set') {
-    data[key] = params.value ?? null;
-    await writeFile(store, JSON.stringify(data, null, 2), 'utf8');
-    return ok(null);
-  }
-  return fail(APP_ERROR_CODES.UNKNOWN_METHOD, `Unknown storage method '${name}'`);
+    if (name === 'get') return ok(data[key]);
+    if (name === 'remove') {
+      if (!(key in data)) return ok(false);
+      delete data[key];
+      await writeFile(store, JSON.stringify(data, null, 2), 'utf8');
+      return ok(true);
+    }
+    if (name === 'set') {
+      data[key] = params.value ?? null;
+      await writeFile(store, JSON.stringify(data, null, 2), 'utf8');
+      return ok(null);
+    }
+    return fail(APP_ERROR_CODES.UNKNOWN_METHOD, `Unknown storage method '${name}'`);
+  });
 }

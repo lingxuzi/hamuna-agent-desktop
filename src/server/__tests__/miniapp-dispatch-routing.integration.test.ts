@@ -206,3 +206,46 @@ describe('every declared method reaches a real producer', () => {
     expect(call.error?.message).toContain('worker bridge');
   });
 });
+
+/**
+ * `storage.set` 的读-改-写必须整体持锁。
+ *
+ * 失败形态特别隐蔽：20 个并发 set 各自 `await readFile` 拿到同一份空快照，
+ * 各自 resolve，最后一个写 wins —— **所有 Promise 都成功**，作者那边看不出任何
+ * 异常，只有回读时才发现 19 个 key 没了。路由类断言永远看不到这一层：它们只
+ * 检查方法有没有接上，不检查并发下的正确性。
+ */
+describe('storage mutations are serialized', () => {
+  it('every concurrent set survives instead of last-writer-wins', async () => {
+    const keys = Array.from({ length: 20 }, (_, i) => `k${i}`);
+
+    const results = await Promise.all(
+      keys.map((key, i) => dispatchMiniAppApp('storage.set', APP_ID, { key, value: i })),
+    );
+    // 全部 resolve —— 丢写不是错误，是静默的数据消失。
+    expect(results.every((r) => r.ok)).toBe(true);
+
+    const readBack = await Promise.all(
+      keys.map((key) => dispatchMiniAppApp('storage.get', APP_ID, { key })),
+    );
+    // 逐个比对：只抽查一个 key 看不出"只剩最后一个"的失败形态。
+    expect(readBack.map((r) => r.result)).toEqual(keys.map((_, i) => i));
+  });
+
+  it('a concurrent set is not lost behind a remove', async () => {
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: 'keep', value: 'v' });
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: 'drop', value: 'v' });
+
+    const [, , read] = await Promise.all([
+      dispatchMiniAppApp('storage.remove', APP_ID, { key: 'drop' }),
+      dispatchMiniAppApp('storage.set', APP_ID, { key: 'fresh', value: 1 }),
+      dispatchMiniAppApp('storage.get', APP_ID, { key: 'keep' }),
+    ]);
+
+    expect(read.result).toBe('v');
+    const fresh = await dispatchMiniAppApp('storage.get', APP_ID, { key: 'fresh' });
+    expect(fresh.result).toBe(1);
+    const dropped = await dispatchMiniAppApp('storage.get', APP_ID, { key: 'drop' });
+    expect(dropped.result).toBeUndefined();
+  });
+});
