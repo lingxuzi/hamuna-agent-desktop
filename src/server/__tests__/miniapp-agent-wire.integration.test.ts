@@ -47,6 +47,26 @@ let mock: Server | undefined;
 /** mock 收到的每个 `/v1/messages` 请求体，用来证明 prompt / workspace 真的到位了。 */
 const mockBodies: string[] = [];
 
+/**
+ * 掐住 `/v1/messages` 的响应，让一次 Agent turn 真的停在"在途"状态。
+ *
+ * `app.agent.cancel` 只能打中一个已经注册成 turn owner 的在途 turn，而 mock
+ * 默认秒回 —— `agent.run` 早已收尾，中止表里没有这条 owner，cancel 命中不了，
+ * 于是"取消 Agent"这条能力在整份测试里从来没有被真正执行过一次。
+ */
+let holdResponses: Promise<void> | null = null;
+let releaseHold: (() => void) | null = null;
+
+function armHold(): void {
+  holdResponses = new Promise<void>(res => { releaseHold = res; });
+}
+
+function disarmHold(): void {
+  releaseHold?.();
+  holdResponses = null;
+  releaseHold = null;
+}
+
 const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
 async function reservePort(): Promise<number> {
@@ -63,13 +83,18 @@ function startMockProvider(): Promise<{ server: Server; port: number }> {
     res.on('error', () => {});
     let body = '';
     req.on('data', c => { body += c; });
-    req.on('end', () => {
+    req.on('end', async () => {
       if (!String(req.url ?? '').includes('/v1/messages')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end('{}');
         return;
       }
       mockBodies.push(body);
+      // 先记账再挂起：调用方就是靠 mockBodies 增长来判定"turn 已经在途"。
+      if (holdResponses) await holdResponses;
+      // SDK 被 interrupt 后会拆掉这条连接，对已断开的 res 写会抛
+      // ERR_STREAM_WRITE_AFTER_END，冒泡成 mock 的未捕获异常。
+      if (res.destroyed || res.writableEnded) return;
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -246,7 +271,7 @@ afterAll(async () => {
 
 interface Envelope {
   ok: boolean;
-  result?: { text?: string; had_message?: boolean; session_id?: string | null };
+  result?: { text?: string; had_message?: boolean; session_id?: string | null; stopped?: boolean };
   error?: { code: string; message: string };
 }
 
@@ -427,5 +452,74 @@ describe('app.agent over real HTTP against a real Sidecar and a loopback provide
       expect(mockBodies.length).toBe(before);
     },
     60_000,
+  );
+
+  it(
+    'interrupts the in-flight turn, and the run does not simply finish anyway',
+    async () => {
+      // `app.agent.cancel` 此前没有任何端到端证据。
+      //
+      // 路由本身是对的：`miniapp:${runId}` 两边拼得一致，`stopOwnedTurn` 走的
+      // 是 session-engine facade，ID 形状也有单测。缺的是"**它真的停掉了一个
+      // 正在跑的 turn**" —— mock provider 秒回的时候 turn 早就结束了，cancel
+      // 命中不了任何东西，而这种情况下它照样回 `{stopped:true}`。也就是说，
+      // 一个恒返回 true 的空实现能骗过任何只看返回值的测试。
+      //
+      // 所以这里掐住 provider：cancel 之后 hold 仍然挂着，如果中断没生效，
+      // agent.run 绝不可能自己回来 —— 它会一直等一个不会到的响应。测试因此
+      // 不用去断言时间（那在慢 CI 上会假红），而是断言"在放行之前它就结束了"。
+      armHold();
+      const before = mockBodies.length;
+      const inflight = call('agent.run', { prompt: PROMPT, run_id: 'run-cancel' });
+
+      // 等 provider 真的收到请求 = turn 已经在途，此时 cancel 才有对象。
+      // 抢在 turn 注册成 owner 之前发，会命中空气并假绿。
+      const deadline = Date.now() + 30_000;
+      while (mockBodies.length === before) {
+        if (Date.now() > deadline) {
+          disarmHold();
+          throw new Error(`the turn never reached the provider:\n${sidecarOutput}`);
+        }
+        await delay(50);
+      }
+
+      try {
+        const cancelRes = await call('agent.cancel', { run_id: 'run-cancel' });
+        expect(cancelRes.ok, JSON.stringify(cancelRes.error)).toBe(true);
+        expect(cancelRes.result?.stopped).toBe(true);
+
+        const settled = await Promise.race([
+          inflight,
+          delay(30_000).then(
+            () =>
+              ({
+                ok: false,
+                error: { code: 'RUN_NEVER_SETTLED', message: 'timed out waiting for the run' },
+              }) as Envelope,
+          ),
+        ]);
+
+        // 关键断言：被中断的 turn 必须**如实报失败**。
+        // facade 的 success 不等于"真的有输出"（miniapp-agent.ts 的注释），
+        // 反过来同理 —— 中断后若还回 ok:true + had_message，作者会以为 Agent
+        // 正常干完了活，于是把一份半截结果当完整结果用。
+        expect(settled.ok, JSON.stringify(settled.error)).toBe(false);
+        // 断 code 而不断文案：文案是 CLI 自己的字符串（实测 "Execution stopped"），
+        // 随 CLI 升级就会变；code 是我们 envelope 的稳定契约。
+        //
+        // 这条同时挡住"根本没结束"那个 sentinel —— 它的 code 故意取一个永远不会
+        // 与真实失败重合的名字。**第一版这里踩了坑**：sentinel 原本写成 ok:false +
+        // "the run ignored the cancel"，结果它同时满足了除 code 外的每一条断言，
+        // 三个"取消根本没生效"的变异全部绿灯通过。测不出东西的测试比没有测试更
+        // 危险，因为它会让人以为取消已被覆盖。
+        expect(settled.error?.code).toBe('HOST_ERROR');
+        expect(settled.result?.had_message).not.toBe(true);
+        // 作者据此分辨"被取消了"和"跑挂了"，所以措辞要留着这个信号。
+        expect(settled.error?.message).toMatch(/stop|abort|cancel/i);
+      } finally {
+        disarmHold();
+      }
+    },
+    120_000,
   );
 });

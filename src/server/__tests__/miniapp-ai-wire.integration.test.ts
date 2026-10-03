@@ -361,7 +361,7 @@ describe('app.ai over real HTTP against a real Sidecar and a loopback provider',
             () =>
               ({
                 ok: false,
-                error: { code: 'NEVER_SETTLED', message: 'the completion ignored the cancel' },
+                error: { code: 'RUN_NEVER_SETTLED', message: 'timed out waiting for the run' },
               }) as Envelope,
           ),
         ]);
@@ -375,6 +375,11 @@ describe('app.ai over real HTTP against a real Sidecar and a loopback provider',
         // 会被 :310 的 catch 接住，把 SDK 的原始 abort 字符串原样甩给作者，
         // 注释里防的那件事就发生了。abort 跨了子进程，这个假设必须实测。
         expect(settled.ok, JSON.stringify(settled.error)).toBe(false);
+        // code 断的是"这次补全到底结束没有"。sentinel 的 code 故意取一个不会
+        // 与真实失败重合的名字：否则一条"根本没结束"的结果会伪装成一次漂亮的
+        // 取消（它同样是 ok:false，文案里也带 cancel 字样），让"取消没生效"读起来
+        // 像通过。详见 agent 那份测试里的同类记录。
+        expect(settled.error?.code).toBe('HOST_ERROR');
         expect(settled.error?.message).toMatch(/cancel/i);
         expect(settled.error?.message).not.toMatch(/timed out/i);
       } finally {
