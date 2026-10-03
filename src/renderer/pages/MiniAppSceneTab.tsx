@@ -59,9 +59,12 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
     [theme.appearanceMode, i18n.language, roots.workspaceDir, roots.appDataDir],
   );
 
-  // Reload source on appId change OR when the tab becomes active again (cheap
-  // mirror of Marketplace.tsx reload-on-activation — but for source it's
-  // strictly cosmetic; the runner keeps state across toggles).
+  // Reload source when the appId changes — and only then. `isActive` is
+  // deliberately NOT a dependency: the runner keeps its own state across tab
+  // toggles, and re-fetching srcDoc would tear that state down for nothing.
+  // (An earlier comment here claimed this also reloaded on re-activation; it
+  // never did, and anyone reading it would wire `isActive` in expecting a
+  // refresh that a create would not actually produce.)
   useEffect(() => {
     if (!payload) return;
     let cancelled = false;
@@ -81,8 +84,7 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
     return () => {
       cancelled = true;
     };
-    // Reload only when the appId changes — `isActive` is intentional no-op
-    // (the runner handles its own mount/cleanup).
+    // Reload only when the appId changes — see the note above the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload?.appId]);
 

@@ -320,7 +320,12 @@ Content-Type: application/json
 }
 ```
 
-Sidecar 收到后会：① 转发到 Rust `cmd_miniapp_create_from_chat`；② Rust 校验 appId 格式 + 5 个必需文件存在且非空 + `meta.json.id` 等于 appId，然后写入 `~/.hamuna/miniapps/icon-generator/`，**先卸载旧版本再写新版本**（每次覆盖 = version++）；③ 返回 `{ok, appId, version}`，触发 MiniAppRunner reload。
+Sidecar 收到后会：① 转发到 Rust `cmd_miniapp_create_from_chat`；② Rust 校验 appId 格式 + 5 个必需文件存在且非空 + `meta.json.id` 等于 appId，然后写入 `~/.hamuna/miniapps/icon-generator/`，**先卸载旧版本再写新版本**（每次覆盖 = version++）；③ 返回 `{ok, appId, version, path}`。
+
+> **已经打开的 SceneTab 不会自动刷新。** create 不发任何事件，SceneTab 只在
+> `appId` 变化时重新加载，切走再切回**不会**重载。所以改完已有 MiniApp 后要告诉
+> 用户「关掉旧 Tab、从 MiniApp Center 重新打开一次」——再打开会新开一个 Tab，
+> 那次才是加载新版本。只切 Tab 是看不到改动的。
 
 > **每次 `create` = 整体覆盖**，不是增量 patch。修改已有 MiniApp 时，把它的 4 个文件读出来、改完再整体 POST 回去。
 
@@ -330,7 +335,7 @@ Sidecar 收到后会：① 转发到 Rust `cmd_miniapp_create_from_chat`；② R
 - **权限最小化**：`fs` / `shell` / `net` 留空 = 全禁。只申请真正用到的
 - **AI 要显式 opt-in**：`app.ai.*` 需 `permissions.ai.enabled = true`（见 §宿主 AI）。它复用宿主已配好的 Provider，MiniApp 永远不持有 API Key；模型不带任何工具，只适合翻译 / 分类 / 摘要这类纯文本
 - **要读写文件就别用 AI**：`app.ai` 读不到文件也跑不了命令，这是安全设计（prompt 由第三方作者控制）。要读写走 `app.fs` / `app.shell` + 对应权限声明
-- **不大体积**：4 文件总计 ≤ 50KB
+- **不大体积**：**每个**文件 ≤ 64KB（Rust 逐个校验，超了直接拒；没有"总数"上限）
 - **错误要显示**：`app.*` 调用失败会 reject（带 `.code`）。UI 上要 catch 并提示，别静默吞掉——静默失败是 MiniApp 最常见的坏体验
 
 ## Bubble Claim：把活交给对话里的 agent
