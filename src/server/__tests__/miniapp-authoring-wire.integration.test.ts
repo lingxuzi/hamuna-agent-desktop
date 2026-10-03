@@ -41,6 +41,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const APP_ID = 'e2e-authoring';
 
+/** 假 Rust 对这个 appId 恒定回 ok:false，用来确定性地走到"Rust 拒绝"那条分支。 */
+const RUST_REJECTS = 'rust-rejects-this';
+
 /** 与 `index.ts` 的 REQUIRED_FILES 一一对应，少一个都该 400。 */
 const REQUIRED_FILES = [
   'meta.json',
@@ -128,6 +131,21 @@ async function postSource(appId: string): Promise<{ status: number; body: Record
   return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, unknown> };
 }
 
+/**
+ * Marketplace 两个端点。请求体**只有** `{ appId }` —— 这不是简化，是照抄
+ * `marketplaceClient.ts` 里 `installMarketplace` / `uninstallMarketplace` 真正发出去的
+ * 东西。少一个字段曾经就让每一次安装 400（见 index.ts 里那段注释），所以这里
+ * 刻意不补任何 renderer 不会发的字段。
+ */
+async function postLifecycle(route: string, appId: string): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetch(`${baseUrl}/api/miniapp/${route}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ appId }),
+  });
+  return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, unknown> };
+}
+
 /** 只看某个 path 上被转发过的请求 —— 断言"没有转发"时用它，别用全量长度。 */
 function forwardedTo(path: string): Forwarded[] {
   return forwards.filter(f => f.path === path);
@@ -161,7 +179,15 @@ beforeAll(async () => {
             ? { ok: true, apps: [{ id: APP_ID, name: 'Authoring Probe' }] }
             : path === '/api/miniapp/source'
               ? { ok: true, files: validSource() }
-              : { ok: false, error: `unmocked path ${path}` };
+              : path === '/api/miniapp/install'
+                ? { ok: true, installed: true }
+                : path === '/api/miniapp/uninstall'
+                  // 哨兵：让"Rust 拒绝"这条路径可以被确定性地走到，而不是靠
+                  // 猜一个未 mock 的 path（uninstall 本身是 mock 了的）。
+                  ? (body.app_id === RUST_REJECTS
+                      ? { ok: false, error: 'MiniApp is bundled and cannot be uninstalled' }
+                      : { ok: true, uninstalled: true })
+                  : { ok: false, error: `unmocked path ${path}` };
       res.writeHead(canned.ok === true ? 200 : 400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(canned));
     });
@@ -320,5 +346,64 @@ describe('MiniApp 作者回路：create → list → source', () => {
     const { status } = await postSource('../escape');
     expect(status).toBe(400);
     expect(forwardedTo('/api/miniapp/source').length).toBe(before);
+  });
+});
+
+describe('MiniApp 市场生命周期：install / uninstall', () => {
+  // 这两条是 renderer 真正会走的路径（marketplaceClient.ts 的 installMarketplace /
+  // uninstallMarketplace），请求体只有 { appId }。曾经 Node 侧多要了一个
+  // `source`，于是每一次安装都 400 —— 而当时的 renderer 侧测试是绿的。
+  it('installs from an appId-only body and tags the forward as marketplace', async () => {
+    const before = forwardedTo('/api/miniapp/install').length;
+    const { status, body } = await postLifecycle('install', APP_ID);
+    const diag = `status=${status} body=${JSON.stringify(body)}`;
+    expect(status, diag).toBe(200);
+    expect(body.ok, diag).toBe(true);
+
+    const sent = forwardedTo('/api/miniapp/install');
+    expect(sent.length, diag).toBe(before + 1);
+    const fwd = sent[sent.length - 1];
+    expect(fwd.body.app_id, diag).toBe(APP_ID);
+    // `from: 'marketplace'` 是告诉 Rust 去 bundled-miniapps/<appId> 读源文件的
+    // 唯一线索。掉了它，Rust 收到一个没说来源的安装请求。
+    expect(fwd.body.from, diag).toBe('marketplace');
+    // renderer 不发 source，Node 也不该转发 —— Rust 自己读 bundled 资源。
+    expect(fwd.body.source, diag).toBeUndefined();
+  });
+
+  it('uninstalls from an appId-only body', async () => {
+    const before = forwardedTo('/api/miniapp/uninstall').length;
+    const { status, body } = await postLifecycle('uninstall', APP_ID);
+    const diag = `status=${status} body=${JSON.stringify(body)}`;
+    expect(status, diag).toBe(200);
+    expect(body.ok, diag).toBe(true);
+
+    const sent = forwardedTo('/api/miniapp/uninstall');
+    expect(sent.length, diag).toBe(before + 1);
+    expect(sent[sent.length - 1].body.app_id, diag).toBe(APP_ID);
+  });
+
+  it('rejects a non-kebab appId on both, and never forwards either', async () => {
+    for (const route of ['install', 'uninstall'] as const) {
+      const before = forwardedTo(`/api/miniapp/${route}`).length;
+      const { status } = await postLifecycle(route, '../escape');
+      const diag = `route=${route} status=${status}`;
+      expect(status, diag).toBe(400);
+      expect(forwardedTo(`/api/miniapp/${route}`).length, diag).toBe(before);
+    }
+  });
+
+  it('surfaces a Rust-side rejection as 400 rather than an ok envelope', async () => {
+    // Rust 说装不了的时候，Node 必须照实回 400。反过来（Rust 拒了、Node 回 200
+    // ok:true）的话，marketplaceClient 的 `if (!result.ok) throw` 永远不会触发，
+    // UI 会显示安装成功而盘上什么都没有。
+    const before = forwardedTo('/api/miniapp/uninstall').length;
+    const { status, body } = await postLifecycle('uninstall', RUST_REJECTS);
+    const diag = `status=${status} body=${JSON.stringify(body)}`;
+    expect(status, diag).toBe(400);
+    expect(body.ok, diag).toBe(false);
+    expect(String(body.error ?? ''), diag).toContain('cannot be uninstalled');
+    // 拒绝也要真的转发过去 —— 不转发的话这条断言测的是一个根本没到 Rust 的请求。
+    expect(forwardedTo('/api/miniapp/uninstall').length, diag).toBe(before + 1);
   });
 });
