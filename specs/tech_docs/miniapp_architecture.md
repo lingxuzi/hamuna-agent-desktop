@@ -238,14 +238,19 @@ Win32 静默剥掉，于是 `work.` 与 `work` 是同一个目录，作者会拿
 参考文档明写的那个调用——作者传了非法名字时，该在参考叫他用的那个调用上就
 看到报错，而不是被静默忽略、以为自己挑了子目录。
 
-**两条路径都要接线，缺一条作者就拿不到一致行为**：`agent.run` / `turnText` 由
-renderer `proxyFetch` 派到 MiniApp 自己的 sidecar，参数原样带过去，所以
-`appDataWorkspace` 由 sidecar 落地；但 `agent.ensureSession` / `onEvent` 被
-`appHostDispatch.ts` 在 **renderer 里就地截走**，请求根本到不了 sidecar。
-只改 sidecar 的话，作者照参考在 `ensureSession` 上传 workspace 会被静默吞掉，
-下一个 `run` 照样跑在 appdata 根上 —— 这正是"传了但被忽略"。因此 renderer 那条
-分支用**同一份** shared 判定函数校验并回显，`onEvent` 不长出这个字段。
-sidecar 那份仍然保留（纵深 + 直接打 sidecar 的工具链）。
+**三条路径都要接线，缺一条作者就拿不到一致行为**：`app.agent.ensureSession` /
+`run` / `turnText` 的**作者门面**在 `appRuntimeScript.ts`（iframe 里的
+`window.app`）。`run` / `turnText` 由 renderer `proxyFetch` 派到 MiniApp 自己的
+sidecar，参数原样带过去，所以 `appDataWorkspace` 由 sidecar 落地；但
+`agent.ensureSession` / `onEvent` 被 `appHostDispatch.ts` 在 **renderer 里就地
+截走**，请求根本到不了 sidecar。
+
+只改一层的话作者都拿不到：iframe 门面曾经无参硬传 `null`（作者传了就在最外层
+被吞），只改 sidecar 的话 renderer 又会把它读成 `run_id` 之外的空气丢掉 ——
+表现为"我明明挑了子目录，run 却跑在 appdata 根上"，且**没有任何一层会报错**。
+因此三层各司其职：门面**转发**、renderer 用同一份 shared 判定函数**校验并回显**
+（`onEvent` 不长出这个字段，它没这个入参）、sidecar **落地并建目录**。
+sidecar 那份同时是纵深与直连工具链的落点（renderer 是 WebView，不是唯一信任源）。
 
 ### 验证状态（截至本轮）
 
@@ -261,7 +266,8 @@ sidecar 那份仍然保留（纵深 + 直接打 sidecar 的工具链）。
   转红；把路由的 400 改成 200 只有路由那条转红。
 - `appDataWorkspace` 的判定与接线——18 条单测钉住每种拒绝理由（关掉
   `FORBIDDEN_CHARS` 有 2 条转红），E2E 用第二个声明了 `agent.enabled` 的 fixture
-  app 实跑归一、回显、按需建目录、越界拒绝与无副作用。
+  app 实跑归一、回显、按需建目录、越界拒绝与无副作用；renderer 与 iframe 门面
+  各有单测锁住"参数确实被转发 / 回显"（把门面改回无参硬传 `null` 会转红）。
   **未实跑**：`agent.run` 真正把它交给 Agent 的那一段（要花真实 token）。
 
 **未验证（不是"没写"，是"跑了要花用户的钱"）**：
@@ -403,7 +409,7 @@ os error 87、`managed_codex` 的 pubkey 漂移、`space_cloud` / `system_skills
 | `src/shared/miniapp/app-protocol.ts` | 方法名单 + 4 条信任规则（纯协议） |
 | `src/shared/miniapp/app-permissions.ts` | 纯权限判定（两端共用） |
 | `src/shared/miniapp/app-data-workspace.ts` | `appDataWorkspace` 纯字符串判定（两端共用） |
-| `src/renderer/components/miniapp-host/appRuntimeScript.ts` | 注入 iframe 的 `window.app` |
+| `src/renderer/components/miniapp-host/appRuntimeScript.ts` | 注入 iframe 的 `window.app`（作者门面，参数在这里被转发或丢弃） |
 | `src/renderer/components/miniapp-host/appHostDispatch.ts` | 派发路由 + native 截走 |
 | `src/server/miniapp-app-dispatch.ts` | sidecar 执行层（判定 #2） |
 | `src/server/miniapp-ai.ts` | `app.ai.*`（一次性 query） |

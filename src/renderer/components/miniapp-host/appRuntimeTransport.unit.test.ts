@@ -32,7 +32,12 @@ interface Harness {
       complete: (prompt: unknown, opts?: unknown) => Promise<unknown>;
       cancel: (id: unknown) => Promise<unknown>;
     };
-    agent: { cancel: (id: unknown) => Promise<unknown> };
+    agent: {
+      cancel: (id: unknown) => Promise<unknown>;
+      ensureSession: (opts?: unknown) => Promise<unknown>;
+      run: (prompt: unknown, opts?: unknown) => Promise<unknown>;
+      turnText: (text: unknown, opts?: unknown) => Promise<unknown>;
+    };
     storage: { set: (key: string, value: unknown) => Promise<unknown> };
   };
   ready: (nonce: string) => void;
@@ -221,6 +226,56 @@ describe('app.ai callback options fail with a directed message', () => {
     expect(h.sent[0].payload).toMatchObject({
       method: 'ai.complete',
       params: { prompt: 'hi' },
+    });
+  });
+});
+
+/**
+ * 作者真正能碰到的那一层：iframe 里的 `app.agent.*` 门面。
+ *
+ * 这一层曾经把 `appDataWorkspace` 直接吞掉 —— `ensureSession` 无参硬传 `null`，
+ * 于是作者照参考文档传的子目录名在 iframe 边界就没了，renderer 与 sidecar
+ * 谁都收不到，表现是"我明明挑了子目录，run 却跑在 appdata 根上"。
+ *
+ * 之所以要单独钉：host 侧（renderer / sidecar）修得再对，这一层漏了照样是
+ * 静默丢弃，而且**没有任何一层会报错**。
+ */
+describe('runtime surface: app.agent forwards appDataWorkspace', () => {
+  it('ensureSession passes the workspace the author asked for', async () => {
+    const h = mountRuntime();
+    h.ready('n1');
+
+    void h.app.agent.ensureSession({ appDataWorkspace: 'notes' });
+
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0].payload).toMatchObject({
+      method: 'agent.ensureSession',
+      params: { appDataWorkspace: 'notes' },
+    });
+  });
+
+  it('ensureSession without options still sends a params object, not a dropped null', async () => {
+    const h = mountRuntime();
+    h.ready('n1');
+
+    void h.app.agent.ensureSession();
+
+    // 传 null 与传 {appDataWorkspace: undefined} 在下游 asRecord 后一样，
+    // 但这条断言锁的是"作者不传时也别把调用变成另一种形状"。
+    expect(h.sent[0].payload).toMatchObject({ method: 'agent.ensureSession' });
+  });
+
+  it.each(['run', 'turnText'] as const)('%s forwards appDataWorkspace in opts', async method => {
+    const h = mountRuntime();
+    h.ready('n1');
+
+    void (method === 'run'
+      ? h.app.agent.run('hi', { appDataWorkspace: 'notes' })
+      : h.app.agent.turnText('hi', { appDataWorkspace: 'notes' }));
+
+    expect(h.sent[0].payload).toMatchObject({
+      method: `agent.${method}`,
+      params: { appDataWorkspace: 'notes' },
     });
   });
 });

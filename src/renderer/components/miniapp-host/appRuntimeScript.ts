@@ -276,7 +276,15 @@ export function buildAppRuntimeScript(appId: string): string {
     // MiniApp 自有隐藏 Agent 会话：有工具、能读写工作区、多轮有状态。
     // 与 ai 的权限开关相互独立（meta.permissions.agent.enabled）。
     agent: {
-      ensureSession: function () { return dispatch('agent.ensureSession', null); },
+      // 参考文档给的是 ensureSession({sessionName, appDataWorkspace})。本项目
+      // 没有 sessionName（会话 id 由 miniapp_<appId>_<runId> 决定），但
+      // appDataWorkspace 要**接住** —— 之前这里无参硬传 null，作者传了就在
+      // iframe 这层被吞掉，后面 renderer 与 sidecar 谁都看不见，表现为
+      // "我明明挑了子目录，run 却跑在 appdata 根上"。
+      // 注意：本文件整体是一个模板字符串，注释里不能出现反引号。
+      ensureSession: function (o) {
+        return dispatch('agent.ensureSession', { appDataWorkspace: o && o.appDataWorkspace });
+      },
       run: function (prompt, o) {
         return dispatch('agent.run', {
           prompt: prompt,
@@ -285,7 +293,8 @@ export function buildAppRuntimeScript(appId: string): string {
           timeout_ms: o && o.timeout_ms,
           // 参考文档把 ensureSession 的返回值回传过来。传了就必须对得上
           // 本 MiniApp 的会话（sidecar 侧校验），不会再被静默忽略。
-          sessionId: o && o.sessionId
+          sessionId: o && o.sessionId,
+          appDataWorkspace: o && o.appDataWorkspace
         });
       },
       // turnText 是 run 的语义化别名：强调"接上一轮继续说"，让作者不必
@@ -296,7 +305,8 @@ export function buildAppRuntimeScript(appId: string): string {
           run_id: o && o.run_id,
           model: o && o.model,
           timeout_ms: o && o.timeout_ms,
-          sessionId: o && o.sessionId
+          sessionId: o && o.sessionId,
+          appDataWorkspace: o && o.appDataWorkspace
         });
       },
       cancel: function (id) {
