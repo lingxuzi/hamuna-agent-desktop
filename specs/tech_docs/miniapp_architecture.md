@@ -240,6 +240,48 @@ iframe CSP 是 `default-src 'none'`，作者**没有任何办法**加载第三�
 
 ---
 
+## 7. Windows 上 `cargo test` 跑不起来（根因已定位）
+
+**症状**：`cargo test` 编译链接都过，但测试二进制一启动就死，退出码
+`0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`），没有任何测试输出。看起来像
+"这台机器坏了"，而 `cargo build` / `cargo check` 全绿。**Windows CI 上同样
+会红。**
+
+**根因**（逐层实测，不是推测）：
+
+1. 解析测试二进制的 PE import table，它静态 import 了
+   `comctl32.dll!TaskDialogIndirect`。
+2. 逐个 import 校验 28 个 DLL 的导出表，只有这一个对不上。
+3. 本机 `C:\Windows\System32\comctl32.dll` 只有 119 个导出，是 **v5** 版本，
+   没有 `TaskDialog*`。
+4. v6 版本在 `WinSxS\amd64_microsoft.windows.common-controls_..._6.0.19041.6926_...`
+   下，**只有当可执行文件内嵌了声明 `Microsoft.Windows.Common-Controls` 6.0.0.0
+   依赖的 manifest 时**，装载器才会激活它。
+5. `hamuna.exe` 内嵌了这份 manifest（能跑），**测试二进制完全没有 manifest**
+   （连 `assemblyIdentity` 都没有）→ 装载器退回 System32 的 v5 → 入口点丢失。
+
+来源是 `tauri-plugin-dialog` → `rfd`：它用 `TaskDialogIndirect`，而 Tauri 只给
+**app 二进制**内嵌 manifest，不给测试二进制。
+
+**为什么没有直接修掉**：试过在 `build.rs` 里用
+`cargo:rustc-link-arg=/MANIFESTINPUT:<file>` 给所有目标补一份 manifest。
+`--lib` 目标确实修好了（777 个测试可以 `--list`），但 **bin 目标会
+`CVT1100` / `LNK1123`**——tauri 自己那份 manifest 与外加的那份在 CVTRES 阶段
+冲突，连 `cargo build` 都会被弄挂。已回滚，不要重犯同一个想法。
+（`cargo:rustc-link-arg-tests` 也不可用：Cargo 没有这个指令，只有
+`-bins` / `-benches` / `-examples` / `-cdylib` / `-bin=NAME`，
+无法只作用于测试目标。）
+
+**要修的话**，正解是让 Tauri 侧或一个资源嵌入 crate（`winresource` 之类）把
+manifest 写进**测试目标**的 `.res`，而不是再给链接器加一份输入。
+
+**影响面**：MiniApp 的 Rust 管理层（`create` / `install` / `list` / `source` /
+`uninstall`）因此**未经执行验证**，只过了 `cargo check --offline --tests`。
+sidecar 侧的全部能力不受影响，已由 `miniapp-app-dispatch.integration.test.ts`
+与 `miniapp-dispatch-routing.integration.test.ts` 覆盖。
+
+---
+
 ## 相关文件
 
 | 文件 | 职责 |
