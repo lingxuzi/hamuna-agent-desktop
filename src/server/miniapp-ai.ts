@@ -126,6 +126,14 @@ function resolveHostModel(requested: string | undefined): string | undefined {
 export interface MiniAppAiParams {
   appId: string;
   prompt: string;
+  /**
+   * 作者自带的 system prompt。缺省才用 `SYSTEM_PROMPT`。
+   *
+   * 允许整体替换而不只是追加，是因为安全性不依赖这句话：真正的闸门是
+   * `tools: []` + `mcpServers: {}` + `maxTurns: 1`，模型手上没有任何可调用
+   * 对象，把提示词整段换掉也换不出工具来。
+   */
+  systemPrompt?: string;
   /** 中止用的稳定标识；`app.ai.cancel({run_id})` 靠它命中在途请求。 */
   runId: string;
   model?: string;
@@ -147,6 +155,18 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
   }
 
   // meta 声明的 max_tokens_per_request 是**上限**，作者可请求更小但不能更大。
+  //
+  // 已知边界（不要误读成"已强制"）：这个上限当前**只做校验，不下发给模型**。
+  // `@anthropic-ai/claude-agent-sdk` 的 `query()` Options 没有按请求限制输出
+  // token 的选项 —— 只有 `maxBudgetUsd`（美元预算）与 alpha 的 `taskBudget`
+  //（软提示）。`maxOutputTokens` 属于 provider 级配置，作用于该 provider 的
+  // 全部请求，不适合按 MiniApp 逐次覆盖。所以作者写的 `maxTokens` 会被校验、
+  // 然后丢弃。
+  //
+  // 保留校验而不是删掉：它确实拒绝"声明了 8192 却要 100000"这种越权请求，
+  // 是一条真实的策略断言。要真正按 token 封顶，需要先给 provider env 增加
+  // 按次覆盖的口子 —— 那条路要动 provider 配置解析，且真实模型调用属于
+  // `credentialed` 池，本机无法验证，不在能盲改的范围里。
   const requested = p.maxTokens ?? p.maxTokensPerRequest;
   if (requested !== undefined && p.maxTokensPerRequest !== undefined && requested > p.maxTokensPerRequest) {
     return fail(
@@ -184,7 +204,7 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
       env: buildClaudeSessionEnv(providerEnv, model, {
         providerId: SUBSCRIPTION_PROVIDER_ID,
       }),
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: p.systemPrompt?.trim() || SYSTEM_PROMPT,
       thinking: { type: 'disabled' },
       effort: 'low',
       includePartialMessages: false,

@@ -176,6 +176,14 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   向作者提及。先造一个没有作者契约也没有消费者的机制，比不做更糟。
   真要做时，先在 `app.agent.run` 上加 `contextFiles` 入参并写清快照生命周期，
   再谈 `market_strict` 工具集。
+- **`permissions.ai.max_tokens_per_request` 只校验、不下发**：
+  `@anthropic-ai/claude-agent-sdk` 的 `query()` Options **没有**按请求限制输出
+  token 的选项（只有 `maxBudgetUsd` 美元预算与 alpha 的 `taskBudget` 软提示；
+  `maxOutputTokens` 是 provider 级配置，作用于该 provider 的全部请求）。所以
+  作者写的 `maxTokens` 会被校验（超上限则 `PERMISSION_DENIED`）然后丢弃。
+  保留校验是因为它确实拒绝越权请求，是一条真实的策略断言；要真正按 token
+  封顶得先给 provider env 加按次覆盖的口子，而真实模型调用属 `credentialed`
+  池、本机无法验证，不在能盲改的范围里。**不要把这个字段当成已强制的上限。**
 
 ### 与 `miniapp-dev` 参考的已确认分歧（对齐审计，2025）
 
@@ -186,7 +194,7 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 
 | 项 | 参考 | 本项目 | 后果 |
 |---|---|---|---|
-| `ai.chat` 入参 | `messages: Array<{role, content}>` | `prompt: string` | 作者照文档传数组 → `p.prompt.trim()` 对数组取不到方法 → `HOST_ERROR` |
+| `ai.chat` 入参 | `messages: Array<{role, content}>` | 两种都收：字符串与 `messages` 数组（拍平成对话文本） | 已对齐。旧实现两条路都走 `requireString`，照文档写 `chat` 的作者拿到 `INVALID_PARAMS` |
 | `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 参考的"流式 + 句柄取消"惯用法整个不可用 |
 | `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无 | 同上；且**函数参数过不了 postMessage 结构化克隆**（见下） |
 | `ai.cancel` / `agent.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 已对齐：两种入参都收（`runIdOf`），只收字符串否则静默打空 |

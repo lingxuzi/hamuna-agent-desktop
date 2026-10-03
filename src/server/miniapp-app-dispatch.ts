@@ -178,6 +178,48 @@ export async function dispatchMiniAppApp(
   }
 }
 
+/**
+ * `ai.complete(prompt)` 与 `ai.chat(messages)` 的入参归一。
+ *
+ * 参考文档给的就是这两种形态，而只有 `complete` 用字符串 —— 照文档写
+ * `app.ai.chat([{role, content}], {...})` 的作者会在 `requireString` 处拿到
+ * `INVALID_PARAMS`：文档里的标准写法直接跑不通。
+ *
+ * `messages` 被**拍平成一段对话文本**而不是当成真正的多轮：`app.ai` 是
+ * `maxTurns: 1` + `tools: []` 的一次性补全，作者传回来的数组是他自己攒的历史，
+ * 宿主并不维护会话（那是 `app.agent` 的事）。
+ */
+function normalizeAiPrompt(raw: unknown): string | null {
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const turns: string[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const rec = entry as Record<string, unknown>;
+    const role = typeof rec.role === 'string' ? rec.role.trim() : '';
+    const content = typeof rec.content === 'string' ? rec.content.trim() : '';
+    if (!role || !content) continue;
+    turns.push(`${role}: ${content}`);
+  }
+  return turns.length > 0 ? turns.join('\n\n') : null;
+}
+
+/**
+ * 数字型 opts 取值。参考文档用 camelCase（`maxTokens`），本项目一贯用
+ * snake_case —— 两种都收，否则作者照文档写的那个键会被静默忽略，表现为
+ * "我设了上限，模型照样超"。
+ */
+function numberOpt(opts: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = opts[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
 async function dispatchAi(
   name: string,
   params: Record<string, unknown>,
@@ -200,8 +242,13 @@ async function dispatchAi(
     );
   }
   if (name === 'complete' || name === 'chat') {
-    const prompt = requireString(params.prompt);
-    if (!prompt) return fail(APP_ERROR_CODES.INVALID_PARAMS, `ai.${name} requires a prompt`);
+    const prompt = normalizeAiPrompt(params.prompt);
+    if (!prompt) {
+      return fail(
+        APP_ERROR_CODES.INVALID_PARAMS,
+        `ai.${name} requires a prompt string or a non-empty messages array`,
+      );
+    }
     const opts = asRecord(params.opts);
     return runMiniAppAiComplete({
       appId,
@@ -215,8 +262,12 @@ async function dispatchAi(
             ? opts.run_id
             : 'default',
       model: typeof params.model === 'string' ? params.model : undefined,
-      maxTokens: typeof opts.max_tokens === 'number' ? opts.max_tokens : undefined,
-      timeoutMs: typeof opts.timeout_ms === 'number' ? opts.timeout_ms : undefined,
+      // 作者给了就用作者的。默认 SYSTEM_PROMPT 只是段自我介绍，安全不靠它 ——
+      // 真正的闸门是 `tools: []` + `mcpServers: {}`：模型没有任何可调用对象，
+      // 换掉提示词也换不出工具来。
+      systemPrompt: typeof opts.systemPrompt === 'string' ? opts.systemPrompt : undefined,
+      maxTokens: numberOpt(opts, 'maxTokens', 'max_tokens'),
+      timeoutMs: numberOpt(opts, 'timeoutMs', 'timeout_ms'),
       rateLimitPerMinute: ctx.perms.ai?.rate_limit_per_minute,
       maxTokensPerRequest: ctx.perms.ai?.max_tokens_per_request,
     });

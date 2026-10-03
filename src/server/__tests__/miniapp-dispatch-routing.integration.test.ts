@@ -52,7 +52,7 @@ let sandboxHome = '';
 
 // 这两个叶子会起真实进程。桩只回形状，路由是否可达才是这里要断言的东西。
 const aiProducers = {
-  runMiniAppAiComplete: vi.fn(async () => ({ ok: true, result: { text: '', usage: null } })),
+  runMiniAppAiComplete: vi.fn(async (_params: Record<string, unknown>) => ({ ok: true, result: { text: '', usage: null } })),
   listMiniAppAiModels: vi.fn(async () => ({ ok: true, result: [] })),
   cancelMiniAppAiCall: vi.fn(() => ({ cancelled: false, inflightCount: 0 })),
 };
@@ -247,5 +247,96 @@ describe('storage mutations are serialized', () => {
     expect(fresh.result).toBe(1);
     const dropped = await dispatchMiniAppApp('storage.get', APP_ID, { key: 'drop' });
     expect(dropped.result).toBeUndefined();
+  });
+});
+
+/**
+ * `app.ai` 的入参归一。
+ *
+ * 参考文档给的是两种形态：`complete(prompt, opts)` 用字符串，`chat(messages,
+ * opts)` 用 `Array<{role, content}>`。旧实现两条路都用 `requireString`，于是
+ * 照文档写 `chat` 的作者拿到 `INVALID_PARAMS` —— 文档里的标准写法跑不通。
+ *
+ * 这些断言只看**归一后的入参**，不碰模型：`runMiniAppAiComplete` 在本文件里
+ * 是桩，真实模型调用属于 `credentialed` 池。
+ */
+describe('app.ai accepts the argument shapes the reference documents', () => {
+  it('ai.chat accepts a messages array and flattens it into the prompt', async () => {
+    const res = await dispatchMiniAppApp('ai.chat', APP_ID, {
+      prompt: [
+        { role: 'user', content: '设计一个首页图标' },
+        { role: 'assistant', content: '好的' },
+        { role: 'user', content: '圆角风格' },
+      ],
+    });
+
+    expect(res.ok).toBe(true);
+    expect(aiProducers.runMiniAppAiComplete).toHaveBeenCalledTimes(1);
+    expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].prompt).toBe(
+      'user: 设计一个首页图标\n\nassistant: 好的\n\nuser: 圆角风格',
+    );
+  });
+
+  it('ai.complete still accepts the plain string form', async () => {
+    await dispatchMiniAppApp('ai.complete', APP_ID, { prompt:  '  hello  ' });
+
+    expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].prompt).toBe('hello');
+  });
+
+  it('malformed message entries are dropped rather than stringified into the prompt', async () => {
+    const res = await dispatchMiniAppApp('ai.chat', APP_ID, {
+      prompt: [
+        { role: 'user' },
+        { content: '没有 role' },
+        null,
+        '字符串条目',
+        { role: 'user', content: '   ' },
+        { role: 'user', content: '唯一有效的一条' },
+      ],
+    });
+
+    expect(res.ok).toBe(true);
+    expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].prompt).toBe('user: 唯一有效的一条');
+  });
+
+  it('an entirely unusable prompt is still INVALID_PARAMS', async () => {
+    for (const prompt of [null, '', '   ', [], [{ role: 'user' }], 42, {}]) {
+      const res = await dispatchMiniAppApp('ai.chat', APP_ID, { prompt });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe('INVALID_PARAMS');
+    }
+    expect(aiProducers.runMiniAppAiComplete).not.toHaveBeenCalled();
+  });
+
+  it('opts.systemPrompt reaches the producer instead of being dropped', async () => {
+    await dispatchMiniAppApp('ai.complete', APP_ID, {
+      prompt: 'hi',
+      opts: { systemPrompt: '你是一个图标设计专家' },
+    });
+
+    expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].systemPrompt).toBe(
+      '你是一个图标设计专家',
+    );
+  });
+
+  it('absent systemPrompt stays undefined so the default still applies downstream', async () => {
+    await dispatchMiniAppApp('ai.complete', APP_ID, { prompt: 'hi' });
+
+    expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].systemPrompt).toBeUndefined();
+  });
+
+  it('maxTokens is honoured in both the reference camelCase and our snake_case', async () => {
+    await dispatchMiniAppApp('ai.complete', APP_ID, {
+      prompt: 'hi',
+      opts: { maxTokens: 4096 },
+    });
+    expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].maxTokens).toBe(4096);
+
+    vi.clearAllMocks();
+    await dispatchMiniAppApp('ai.complete', APP_ID, {
+      prompt: 'hi',
+      opts: { max_tokens: 2048 },
+    });
+    expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].maxTokens).toBe(2048);
   });
 });
