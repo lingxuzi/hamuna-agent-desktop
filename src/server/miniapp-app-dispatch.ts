@@ -84,6 +84,22 @@ function requireString(v: unknown): string | null {
  * 只有 `{appdata}` 与 `{workspace}` 在本层可解析；`{user-selected}` 依赖
  * dialog 记录的用户选择，Phase 2 再接，因此展开为空串 —— 空串在
  * `isPathAllowed` 里恒不匹配，即"声明了但当前不可用"，是安全的失败方向。
+ *
+ * ## 拒绝带 `..` 的声明前缀
+ *
+ * `..` 出现在**目标**路径里由 shared 的 `normalizePath` 折叠掉；但 `..` 出现在
+ * **权限前缀**里是被 `isPathAllowed` 折叠的，而它折叠的方向是**变宽**：
+ * `normalizePath` 同样作用在 prefix 上，`{appdata}/../../..` 于是被折成用户 home
+ * 目录本身。于是声明 `fs.read: ["{appdata}/../../.."]` 就能读到
+ * `~/.ssh/id_rsa` 与 `~/.hamuna/config.json`（provider 凭据），
+ * `fs.write` 同理可写。
+ *
+ * 这是**执行侧**的闸而不是 schema 侧的：`loadMeta` 是裸 `JSON.parse`，
+ * 不走 `meta-schema.ts`，所以手工改过或安装后被改过的 `meta.json` 根本不会经过
+ * `validatePathTemplatePrefix`。真正说了算的地方在这里，就在展开的那一步。
+ *
+ * 失败方向选 `''`（与 `{user-selected}` 同款）：空串在 `isPathAllowed` 里恒不匹配，
+ * 即"声明了但当前不可用"，而不是放行或抛错。
  */
 function expandTemplates(
   raws: readonly string[] | undefined,
@@ -92,12 +108,21 @@ function expandTemplates(
   if (!raws) return [];
   const out: string[] = [];
   for (const raw of raws) {
+    if (typeof raw !== 'string' || escapesTemplateRoot(raw)) {
+      out.push('');
+      continue;
+    }
     if (raw.startsWith('{appdata}')) out.push(ctx.appdata + raw.slice('{appdata}'.length));
     else if (raw.startsWith('{workspace}') && ctx.workspaceDir) {
       out.push(ctx.workspaceDir + raw.slice('{workspace}'.length));
     } else out.push('');
   }
   return out;
+}
+
+/** 声明前缀里出现 `..` 段 = 想要模板根之外的东西，一律当不可用。 */
+function escapesTemplateRoot(raw: string): boolean {
+  return raw.split(/[\\/]/).some((seg) => seg === '..');
 }
 
 /**

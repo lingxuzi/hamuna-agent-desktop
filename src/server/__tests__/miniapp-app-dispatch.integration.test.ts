@@ -274,6 +274,42 @@ describe('path containment is enforced against the expanded prefix', () => {
       expect(res.ok, `${method} must be denied`).toBe(false);
     }
   });
+
+  // 上一条挡的是**目标路径**里的 `..`（shared 的 normalizePath 折叠掉）。
+  // 这一条挡的是**权限前缀**里的 `..`：那里 normalizePath 同样作用，但折叠的
+  // 方向是**变宽** —— `{appdata}/../../..` 被折成用户 home 目录本身，于是声明
+  // `fs.read: ["{appdata}/../../.."]` 就能读到 ~/.ssh 与 ~/.hamuna/config.json。
+  //
+  // 之所以要在这里测而不在 shared 的 isPathAllowed 测：调用方必须先展开模板，
+  // 而"展开"这一步本身就是漏洞所在。`loadMeta` 是裸 JSON.parse，不走
+  // meta-schema，所以 meta.json 可以声明一个安装期校验根本不会拦的形状。
+  it('refuses a permission prefix that climbs out of the template root', async () => {
+    const outOfRoot = `${'{appdata}'}/${'../'.repeat(3)}`;
+    writeMeta({ fs: { read: [outOfRoot], write: [outOfRoot] } });
+
+    // 目标取 home 目录下一个真实存在与否都无所谓的位置：关键是**授权**本身
+    // 不该成立，所以这里连"路径存不存在"都不该成为拒绝的理由。
+    const outside = join(appDir(), '..', '..', '..', '.ssh', 'id_rsa');
+    for (const method of ['fs.readFile', 'fs.writeFile']) {
+      const res = await dispatchMiniAppApp(method, APP_ID, {
+        path: outside,
+        data: 'owned',
+      });
+      expect(res.ok, `${method} must be denied by a climbing prefix`).toBe(false);
+      expect(res.error?.code).toBe('PERMISSION_DENIED');
+    }
+  });
+
+  it('still honours a plain appdata prefix after the climbing-prefix guard', async () => {
+    // 反向护栏：这道闸不能退化成"带 .. 的 meta 一律整个 app 失效"。
+    writeMeta({ fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] } });
+    const inside = join(appDir(), 'ok.txt');
+    const res = await dispatchMiniAppApp('fs.writeFile', APP_ID, {
+      path: inside,
+      data: 'owned',
+    });
+    expect(res.ok, JSON.stringify(res.error)).toBe(true);
+  });
 });
 
 describe('storage round trip', () => {
