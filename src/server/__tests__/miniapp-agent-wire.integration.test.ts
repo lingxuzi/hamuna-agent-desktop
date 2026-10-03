@@ -60,6 +60,17 @@ const mockBodies: string[] = [];
 let holdResponses: Promise<void> | null = null;
 let releaseHold: (() => void) | null = null;
 
+/**
+ * 工具回合脚本：非 null 时，mock 的**第一次** `/v1/messages` 回一个真的
+ * `tool_use`，SDK 侧会真的去执行那个工具；带 `tool_result` 回来的第二次请求
+ * 才收尾成文本。
+ *
+ * 之前这份 fixture 只会回纯文本，于是 `app.agent` 最有价值的那一半 —— 模型
+ * 真的动手改文件 —— 在整条链路上**一次都没有跑过**。只断言"回合成功 + 文本对"
+ * 的话，工具集被清空、cwd 传错、tool_result 没回灌，这些都会照样绿灯。
+ */
+let toolScript: { id: string; name: string; input: Record<string, unknown> } | null = null;
+
 function armHold(): void {
   holdResponses = new Promise<void>(res => { releaseHold = res; });
 }
@@ -119,6 +130,36 @@ function startMockProvider(): Promise<{ server: Server; port: number }> {
           usage: { input_tokens: 1, output_tokens: 0 },
         },
       });
+      // 工具回合脚本。`body.includes('tool_result')` 是"这一轮已经跑过工具了"的
+      // 判据：SDK 把工具结果回灌进下一次请求，body 里就会出现这个字段。
+      if (toolScript) {
+        const armed = toolScript;
+        // 只服务一次。**不能**用 `!body.includes('tool_result')` 判断"这轮还没跑过
+        // 工具"：agent 会话是持久的，前面某一轮的 tool_result 会一直留在对话历史
+        // 里，于是从第二轮起这个判据恒为 false、脚本再也不触发 —— 而回合照样
+        // 正常收尾，测试全绿。踩过一次：三条工具用例因此全部空转，变异验证
+        // （plan→acceptEdits / plan→fullAgency）一条都杀不掉才暴露出来。
+        toolScript = null;
+        ev('content_block_start', {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: armed.id, name: armed.name, input: {} },
+        });
+        ev('content_block_delta', {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: JSON.stringify(armed.input) },
+        });
+        ev('content_block_stop', { type: 'content_block_stop', index: 0 });
+        ev('message_delta', {
+          type: 'message_delta',
+          delta: { stop_reason: 'tool_use', stop_sequence: null },
+          usage: { output_tokens: 2 },
+        });
+        ev('message_stop', { type: 'message_stop' });
+        res.end();
+        return;
+      }
       ev('content_block_start', {
         type: 'content_block_start',
         index: 0,
@@ -194,7 +235,10 @@ beforeAll(async () => {
   mkdirSync(appdata, { recursive: true });
   mkdirSync(workspace, { recursive: true });
   mkdirSync(join(scratch, 'tmp'), { recursive: true });
-  writeApp(AGENT_APP, { agent: { enabled: true } });
+  // fs.read 是给"Agent 写的文件能用 app.fs 读回来"那条用例用的。Agent 自带的
+  // 工具**不**受 meta.permissions 约束（沙箱由 --agent-dir 夹住，见下面那条
+  // cwd 用例的注释），这里的 grant 只管宿主 `app.fs.*` 那一侧。
+  writeApp(AGENT_APP, { agent: { enabled: true }, fs: { read: ['{appdata}/**'] } });
   writeApp(DENIED_APP, { agent: { enabled: false } });
 
   const port = await reservePort();
@@ -434,6 +478,137 @@ describe('app.agent over real HTTP against a real Sidecar and a loopback provide
       expect(res.result?.had_message).toBe(true);
       // 而且真的走了网络，别名没有绕过 provider。
       expect(mockBodies.length).toBe(before + 1);
+    },
+    120_000,
+  );
+
+  // 工具回合：模型请求工具 → CLI 真的执行 → 结果回灌 → 回合收尾。这一段此前在
+  // 整条链路上没有任何实跑证据，cwd 用例只读了 system prompt 里
+  // `Primary working directory:` 那一行，证明的是"路径传对了"，不是"内容真的
+  // 被读到了"。
+  // 读侧能不能真跑，决定 MiniApp 的 agent 到底有没有用。SKILL.md 给的示例是
+  // `app.agent.run('总结这个目录的结构')` —— 纯读。只测写会得出"agent 被锁死"
+  // 的错误结论，只测读又会漏掉写侧的真实边界，所以两条都要。
+  it(
+    'runs a real read tool, so the model can inspect the app own sandbox',
+    async () => {
+      const fileName = `read-probe-${Date.now()}.txt`;
+      const bytes = 'READ_PROBE_MARKER bytes';
+      // 先把文件放进 appdata：agent 的 cwd 就是这里，它读的是自己的沙箱。
+      writeFileSync(join(appdata, AGENT_APP, fileName), bytes, 'utf8');
+
+      toolScript = {
+        id: `toolu_read_${Date.now()}`,
+        name: 'Read',
+        input: { file_path: fileName },
+      };
+      const before = mockBodies.length;
+      let res: Envelope | undefined;
+      try {
+        res = await call('agent.run', {
+          prompt: PROMPT,
+          run_id: 'run-read',
+          timeout_ms: 30_000,
+        });
+      } finally {
+        toolScript = null;
+      }
+      const diag = () =>
+        `bodies=${mockBodies.length - before}\n` +
+        `PERM=${(sidecarOutput.match(/\[permission\].*/g) ?? []).slice(-6).join(' | ')}\n` +
+        `TAIL=${sidecarOutput.split('\n').slice(-20).join('\n')}`;
+      expect(res?.ok, `${JSON.stringify(res?.error)}\n${diag()}`).toBe(true);
+      // 工具回合：模型要一次 Read，拿到 tool_result 才收尾。
+      expect(mockBodies.length, diag()).toBe(before + 2);
+      // 回灌的那次请求里带着**文件真实内容** —— 读侧真的执行了，不是被拒后
+      // 把错误文案当结果。
+      expect(mockBodies[mockBodies.length - 1], diag()).toContain(bytes);
+    },
+    120_000,
+  );
+
+  // 写侧。MiniApp 是第三方代码，而 agent 拿到的是**有工具的模型**，所以宿主
+  // 不给它写权限（见 miniapp-agent.ts 的 MINIAPP_AGENT_PERMISSION_MODE）。
+  //
+  // 这条真正要钉的是"**不许写，而且不许卡住**"。修之前（acceptEdits）实测是：
+  // sidecar 发出 `permission` SSE 向**用户**要批准，而 MiniApp 这条链上没有任何
+  // UI 能回答，于是挂到整轮 5 分钟超时才以 aborted_tools / is_error 收场。
+  // 纯文本回合照样绿，所以这个缺陷此前从未被任何测试看见。
+  it(
+    'refuses to let the agent write, and refuses immediately instead of stalling for a user',
+    async () => {
+      const fileName = `write-probe-${Date.now()}.txt`;
+      toolScript = {
+        id: `toolu_write_${Date.now()}`,
+        name: 'Write',
+        input: { file_path: fileName, content: 'WRITE_PROBE_MARKER bytes' },
+      };
+      const before = mockBodies.length;
+      let res: Envelope | undefined;
+      try {
+        res = await call('agent.run', {
+          prompt: PROMPT,
+          run_id: 'run-write',
+          timeout_ms: 30_000,
+        });
+      } finally {
+        toolScript = null;
+      }
+      const diag = () =>
+        `bodies=${mockBodies.length - before}\n` +
+        `PERM=${(sidecarOutput.match(/\[permission\].*/g) ?? []).slice(-6).join(' | ')}\n` +
+        `TAIL=${sidecarOutput.split('\n').slice(-20).join('\n')}`;
+      // 回合自己收尾了。挂死的实现会走到 permission:expired + aborted_tools，
+      // 所以"回合确实结束了"必须被显式断言 —— 只断言"文件没出现"的话，一个
+      // 挂到超时的实现照样能过。
+      expect(sidecarOutput, diag()).not.toContain('aborted_tools');
+      // 沙箱里确实没有这份文件。
+      expect(existsSync(join(appdata, AGENT_APP, fileName)), diag()).toBe(false);
+      // 被拒的回合要么明确失败、要么如实报告，绝不能"假装成功"。
+      if (!res?.ok) {
+        expect(res?.error?.message ?? '', diag()).toMatch(/plan|permission|read-only|denied/i);
+      }
+    },
+    120_000,
+  );
+
+  it(
+    'refuses an absolute-path write that would land outside the app sandbox',
+    async () => {
+      // 反面：绝对路径能不能把 agent 带出 appdata。宿主侧 `app.fs.*` 有路径
+      // 闸门，但 agent 走的是 SDK 自己的工具，不经过那道闸门。
+      //
+      // 断言要覆盖**两个**落点。只查沙箱内的话，"写到 appdata 之外"这种更糟
+      // 的结局反而能过 —— 那正是这条用例要排除的东西。写侧整体被拒（当前
+      // plan 策略），所以两处都应该不存在。
+      const escapeName = `escape-probe-${Date.now()}.txt`;
+      const outsidePath = join(appdata, escapeName);
+      toolScript = {
+        id: `toolu_escape_${Date.now()}`,
+        name: 'Write',
+        input: { file_path: outsidePath, content: 'ESCAPE_MARKER bytes' },
+      };
+      let res: Envelope | undefined;
+      try {
+        res = await call('agent.run', {
+          prompt: PROMPT,
+          run_id: 'run-escape',
+          timeout_ms: 30_000,
+        });
+      } finally {
+        toolScript = null;
+      }
+      const diag = () =>
+        `TAIL=${sidecarOutput.split('\n').slice(-20).join('\n')}`;
+      // 回合自己收尾，没有挂死。
+      expect(sidecarOutput, diag()).not.toContain('aborted_tools');
+      // 沙箱外：没写出去。
+      expect(existsSync(outsidePath), diag()).toBe(false);
+      // 沙箱内：也没写进来。
+      expect(existsSync(join(appdata, AGENT_APP, escapeName)), diag()).toBe(false);
+      if (!res?.ok) {
+        expect(res?.error?.message ?? '', diag()).toMatch(/plan|permission|read-only|denied/i);
+      }
     },
     120_000,
   );

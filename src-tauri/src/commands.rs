@@ -2601,7 +2601,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // applied to a model the author names explicitly. Left in place it teaches authors
 // that omitting `model` still confines them to their list, which is false.
 
-const SYSTEM_SKILLS_VERSION: &str = "61";
+const SYSTEM_SKILLS_VERSION: &str = "62";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3279,13 +3279,16 @@ mod system_skills_tests {
     #[test]
     fn v37_updates_goal_cli_skill_and_preserves_v36_contracts() {
         // After Phase 1/2 added icon-design / miniapp-creator / ppt-master,
-        // SYSTEM_SKILLS_VERSION bumped to 58, and it has moved on since (60 as of
-        // the MiniApp sandbox same-origin fix — miniapp-creator's SKILL.md told
-        // authors the iframe carried `allow-same-origin`, which it no longer
-        // does). The v37 contracts on CLI / memory-update / docs are still valid;
-        // only the version anchor has to track the constant.
+        // SYSTEM_SKILLS_VERSION bumped to 58, and it has moved on since: 60 for the
+        // MiniApp sandbox same-origin fix (miniapp-creator's SKILL.md told authors
+        // the iframe carried `allow-same-origin`, which it no longer does), 61 when
+        // `allowed_models` stopped being documented as a hard ceiling, and 62 when
+        // the `app.agent` section stopped promising a writable, command-capable
+        // agent — it is read-only; writes and shell are hard-denied. The v37
+        // contracts on CLI / memory-update / docs are still valid; only the version
+        // anchor has to track the constant.
         assert_eq!(CLI_VERSION, "40");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "60");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "62");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));

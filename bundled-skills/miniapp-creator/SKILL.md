@@ -102,7 +102,7 @@ MiniApp 的 prompt 完全由第三方作者控制，若模型带着工具，一�
 就不受这一层限制，实际走的是宿主当前配置的模型。想要一个封死的模型集合，请在
 每次调用里显式写 `model`。
 
-### 隐藏 Agent 会话（`app.agent`）—— 有状态、能用工具
+### 隐藏 Agent 会话（`app.agent`）—— 有状态、能读自己的沙箱
 
 需 `meta.json` 声明 `permissions.agent.enabled = true`。**与 `ai.enabled`
 相互独立** —— 想用 Agent 必须单独开，不会被 `ai` 顺带带出来。
@@ -116,9 +116,15 @@ const more = await app.agent.turnText('那前端入口在哪？', { run_id: 'r1'
 await app.agent.cancel({ run_id: 'r1' });
 ```
 
-**与 `app.ai` 的关键区别**：Agent 的模型**有完整工具**，能读写工作区、跑命令。
-工作区被强制限制在本 app 的 `{appdata}` 目录内 —— 它写不到你项目里的文件。
-破坏性命令仍需用户确认（不会静默执行）。
+**与 `app.ai` 的关键区别**：Agent 是**有状态**的会话（`run_id` 相同则上下文延续），
+并且**能读** —— 它的 cwd 被强制钉在本 app 的 `{appdata}` 目录内，所以"总结这个
+目录的结构""找出入口文件"这类活可以直接做，不用你自己先把文件读出来塞进 prompt。
+
+**它是只读的**：写文件与跑命令一律被硬拒（`plan` 权限模式 + PreToolUse 闸门）。
+这是有意的 —— MiniApp 的 prompt 由第三方作者控制，而拿到的是带工具的模型，
+放开写/执行等于把用户机器交给市场里的任意 app。需要改文件请用 `app.fs.*`
+（那套有显式权限声明与路径闸门）；需要 AI 动手改东西，请把任务通过
+§Bubble Claim 交给对话里的 agent。
 
 需要流式输出时用 `app.agent.onEvent(fn)` 订阅（`agent.*` 事件走独立通道）。
 当前 `run` / `turnText` 返回终态文本。
@@ -176,7 +182,8 @@ app.onDeactivate(() => clearInterval(timer));
 
 **想让 AI 帮忙？** 二选一：
 - 纯文本处理（翻译 / 分类 / 摘要）→ `app.ai.complete`，需 `ai.enabled`
-- 需要读写文件、跑命令的真活 → `app.agent.run`，需 `agent.enabled`
+- 需要**读**自己 appdata 里的文件来分析 → `app.agent.run`，需 `agent.enabled`
+- 需要**写**文件 → `app.fs.writeFile`（需 `fs.write` 权限），不是 `app.agent`
 - 只是想把一段草稿交给对话里的 agent → 用下面的 §Bubble Claim
 
 ## Schema

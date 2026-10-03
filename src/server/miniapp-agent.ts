@@ -61,17 +61,38 @@ export interface MiniAppAgentRunParams {
 }
 
 /**
- * MiniApp 的 Agent turn 一律走 `acceptEdits`，不给 `bypassPermissions`。
+ * MiniApp 的 Agent turn 走 `plan`：读得到自己的 appdata，写一律被硬拒。
  *
- * 理由：MiniApp 的 prompt 完全由第三方作者控制，而它拿到的是**有工具的模型**。
- * 若这里放开 bypassPermissions，一个恶意（或仅仅是被注入的）MiniApp 就能在
- * 用户机器上无确认地执行任意命令。`acceptEdits` 让文件编辑自动进行但**破坏性
- * 命令仍需用户点头** —— 这是第三方代码能拿到的上限。
+ * ## 为什么不是 acceptEdits
  *
- * 注意这与 `app.ai.*` 的 `bypassPermissions` 不矛盾：那边 `tools: []`，模型
- * 根本没有可调用对象，权限模式是空谈。
+ * 之前这里是 `acceptEdits`，理由写的是"文件编辑自动进行、破坏性命令仍需用户
+ * 点头"。**这个前提是错的，而且被实跑证伪了**：acceptEdits 下模型请求 `Write`
+ * 同样会进 `canUseTool` → `checkToolPermission` → 向用户弹批准。MiniApp 这条
+ * 链上没有任何 UI 能回答它，于是每一次工具调用都挂到整轮 5 分钟超时，以
+ * `terminal_reason: aborted_tools` / `is_error: true` 收场。
+ *
+ * 也就是说 acceptEdits **既没买到它声称的"编辑自动进行"，也没买到"破坏性命令
+ * 要人点头"** —— 它只买到了一个挂死。模型一次工具都用不了，而 SKILL.md 恰恰
+ * 把"有完整工具"写成 app.agent 区别于 app.ai 的唯一卖点。
+ *
+ * ## 为什么不是 fullAgency
+ *
+ * 本仓库其它无人值守回合（cron / agent-channel / memory-update）都用
+ * fullAgency，那条 `canUseTool` 快路径放行除交互类工具以外的一切。MiniApp 不
+ * 适用：那些回合的任务是**用户自己写**的，而 MiniApp 的 prompt 由**第三方
+ * 作者**控制。fullAgency 含 `Bash`，等于把市场里的任意 MiniApp 变成用户机器
+ * 上的无确认命令执行，完全越出 agent-dir 这层沙箱。
+ *
+ * ## plan 为什么够用、且不会重蹈挂死
+ *
+ * 写侧由 `plan-mode-gate.ts` 的 PreToolUse 硬闸兜底（跑在原生解析器之前，deny
+ * 无条件采纳），因此不依赖 SDK 哪条路径调不调 canUseTool。读侧仍然可用 ——
+ * SKILL.md 给的示例 `app.agent.run('总结这个目录的结构')` 正是纯读。
+ *
+ * 若将来要让 MiniApp agent 写文件，正确的做法不是改回 acceptEdits，而是显式
+ * 定义"沙箱内可写"的白名单（含路径闸门），并单独决定 Bash 是否放行。
  */
-const MINIAPP_AGENT_PERMISSION_MODE = 'acceptEdits';
+const MINIAPP_AGENT_PERMISSION_MODE = 'plan';
 
 const DEFAULT_AGENT_TIMEOUT_MS = 300_000;
 

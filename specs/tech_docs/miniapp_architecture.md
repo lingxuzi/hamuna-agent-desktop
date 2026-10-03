@@ -354,7 +354,19 @@ emitted worker，`git.status` 返回 branches、`git.log` 返回 commit、
 ## 6. 已知边界
 
 - **`app.agent.workspace_scope` 当前不放开**：`agent.run` 的 workspace 强制
-  落在 appdata 下。Agent 有工具、能写文件，放开就等于任意文件写。
+  落在 appdata 下。放开就等于任意文件写。
+- **`app.agent` 是只读的**（写/执行被硬拒）：`miniapp-agent.ts` 的
+  `MINIAPP_AGENT_PERMISSION_MODE = 'plan'`，写侧由 `plan-mode-gate.ts` 的
+  PreToolUse 硬闸兜底，读侧仍可用 —— cwd 钉在本 app 的 `{appdata}`。
+  **不要改回 `acceptEdits`**：实测（2026-10）模型请求 `Write` 在 acceptEdits 下
+  同样进 `canUseTool` → `checkToolPermission` → 向**用户**弹批准，而 MiniApp 这条
+  链上没有任何 UI 能回答，于是每一次工具调用都挂到整轮 5 分钟超时，以
+  `aborted_tools` / `is_error` 收场；`acceptEdits` 既没买到它注释里声称的"编辑
+  自动进行"，也没买到"破坏性命令要人点头"，只买到一个挂死。
+  **也不直接用 `fullAgency`**（cron / agent-channel / memory-update 用的那个）：
+  那条快路径含 `Bash`，等于把市场里的任意 MiniApp 变成用户机器上的无确认命令
+  执行，完全越出 agent-dir 沙箱。若将来要放开写，正确做法是显式定义"沙箱内可写"
+  的白名单（含路径闸门），并单独决定 `Bash` 是否放行。
 - **`worker_kind` 是白名单**：`app.call` 需要 `meta.kind='worker'` + 已注册的
   `worker_kind`。没有通用 npm 依赖加载，worker 只能 import 仓库内已存在的
   entry（`kinds/*.ts`）。
