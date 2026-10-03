@@ -47,7 +47,7 @@ window.app.*                  MiniAppRunner                    dispatchMiniAppAp
 |---|---|---|
 | `fs` | `read[]` / `write[]` | 路径前缀。`{appdata}` `{workspace}` 模板 + **可选尾部 `/**`** |
 | `shell` | `allow[]` | 命令名白名单（只取首个 token） |
-| `net` | `allow[]` | https-only + 域名白名单 + 禁私网 |
+| `net` | `allow[]` | https-only + 域名白名单 + 禁私网，**且不跟随重定向**（逐跳判定不做，理由见 §6「修掉的网络层缺陷」） |
 | `node` | `enabled` `max_memory_mb` `timeout_ms` | worker 资源上限 |
 | `ai` | `enabled` `allowed_models` `max_tokens_per_request` `rate_limit_per_minute` | 宿主 AI 补全 |
 | `agent` | `enabled` `workspace_scope` | 自有隐藏 Agent 会话 |
@@ -311,9 +311,9 @@ SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的�
 ### 验证状态（截至本轮）
 
 **已实际执行验证**：
-
 - Rust 管理层（`create` / `install` / `list` / `source` / `uninstall`）——
-  21/21，见 §7。
+  24/24，见 §7（含 3 条沙箱第一跳的路径推导断言，见下）。
+  （Windows 上必须走 `scripts\test_rust_windows.ps1`，裸 `cargo test` 会假绿，见 §7。）
 - 端到端 wire 契约——`src/server/__tests__/miniapp-app-wire.integration.test.ts`
   起真实 Sidecar 子进程，用真实 loopback HTTP 驱动整个 `app.*` 面：请求信封、
   状态码、错误载荷形状、跨进程 storage/fs 往返、权限 fail-closed、越界路径拒绝、
@@ -384,6 +384,38 @@ DataCloneError 发不出去，作者的 Promise 永久 pending —— 表现是"
 等于同一个坑只修了一半。现在降级成纯对象错误信封（可克隆），逻辑收在
 `app-protocol.ts::postAppResult` 里以便单测直接喂它一个不可克隆的值；把降级
 去掉会有 3 条转红。
+
+
+**修掉的网络层缺陷（第三个）**：`app.net.fetch` 只对**第一跳**判定，然后交给 undici
+默认的 `redirect: 'follow'` 去跑。作者声明的 host 确实满足 https-only、在
+`net.allow` 里、且 `isPrivateHostname` 为 false——但它完全可以回
+`302 Location: https://169.254.169.254/latest/meta-data/`，而那一跳从头到尾没被
+检查过。于是 §2 表里那行「https-only + 域名白名单 + 禁私网」等于形同虚设，
+MiniApp 作者能把 sidecar 当跳板去读云 metadata / 探内网。
+
+这不是新风险形状，是本仓已有约定漏了一处：`tool-attachments.ts` / `kb-ingest.ts` /
+`provider-probe.ts` 早就为同一理由关掉了跟随重定向（provider-probe 的注释原话：
+「host says https, hops internal」），`app.net.fetch` 是唯一还在跟的一处。
+
+选 `redirect: 'manual'` 而不是那三处的 `'error'`：安全语义等价，但这一处**面向
+作者**，`'error'` 抛出来的是 undici 包过的 "fetch failed"，作者只看到一句没头没尾的
+`HOST_ERROR`。manual 把 3xx 原样交回来，下游才能给一句指名道姓的拒绝：
+`net.fetch refuses redirects (got HTTP 302) — request the final URL directly`。
+
+**故意不做**「逐跳重新判定 + 允许跟」：那会把 `net.allow` 的语义从"可以去这里"变成
+"最终可以落到这里"，比 `meta.json` 承诺的契约更弱。失败关闭更简单，也正是权限文件
+承诺的那条。真有 app 需要多跳登录（OAuth 跳转）时再加，届时必须**同时**改
+`app-permissions.ts` 的语义，别只改一半。
+
+护栏 `src/server/__tests__/miniapp-net-redirect.integration.test.ts`（4 条）注入
+transport 而非起一个真的重定向服务器，这是**限制而非偷懒**，值得写清楚：要让第一跳
+通过三道判定，它必须既 https 又非私网，而本机没有 openssl 也没有 selfsigned /
+node-forge 可签证书；拿 `127.0.0.1` 当第一跳则在 `isPrivateHostname` 就被拒，压根
+走不到重定向那步——所以端到端版本目前**写不出来**，不只是没写。测试因此断言**机制**
+（`init.redirect === 'manual'`）**与作者可见面**（3xx 变成指名 redirect 的
+`PERMISSION_DENIED`，且 `Location` 不回传给作者）两条，另加 200 / 403 透传，确保这
+道闸不是一刀切拒绝。三处变异（删掉 `redirect`、改回 `'follow'`、删掉 3xx 判定）
+各自转红。
 
 **一个测试环境的坑，值得记下来省得重踩**：组件层的
 `event.source instanceof Window` 在 jsdom 下**恒为 false**（iframe 的
@@ -528,7 +560,7 @@ manifest 机制），再直接执行 harness。支持 `-Filter` / `-TestThreads`
 - 往 `build.rs` 里塞 `/MANIFESTINPUT`：同样是与 tauri 那份在 CVTRES 阶段冲突。
 
 **影响面**：无。MiniApp 的 Rust 管理层（`create` / `install` / `list` /
-`source` / `uninstall`）现已**实际执行验证**，MiniApp Rust 测试 21/21 通过。
+`source` / `uninstall`）现已**实际执行验证**，MiniApp Rust 测试 24/24 通过。
 全量 758 passed / 17 failed，剩下的 17 条都是既有问题且都在 MiniApp 之外
 （`process_cleanup` 的 Windows 盘符大小写、`workspace_files::path_safety` 的
 os error 87、`managed_codex` 的 pubkey 漂移、`space_cloud` / `system_skills` /
