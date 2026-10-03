@@ -362,16 +362,16 @@ window.addEventListener('message', (event) => {
   const d = event.data;
   if (d && d.kind === 'host.ready' && typeof d.nonce === 'string') {
     nonce = d.nonce;
-    pendingClaims.splice(0).forEach(sendBubbleClaim);
+    pendingClaims.splice(0).forEach((draft) => sendBubbleClaim(draft));
   }
 });
 
-function postBubbleClaim({ draft, attachments }) {
-  if (!nonce) { pendingClaims.push({ draft, attachments }); return; }
-  sendBubbleClaim({ draft, attachments });
+function postBubbleClaim(draft) {
+  if (!nonce) { pendingClaims.push(draft); return; }
+  sendBubbleClaim(draft);
 }
 
-function sendBubbleClaim({ draft, attachments }) {
+function sendBubbleClaim(draft) {
   window.parent.postMessage(
     {
       kind: 'chat.claimComposer',
@@ -379,7 +379,6 @@ function sendBubbleClaim({ draft, attachments }) {
       payload: {
         appId: APP_ID,                          // 必须等于 meta.json 的 id
         draft,
-        ...(attachments ? { attachments } : {}),
       },
     },
     '*',
@@ -394,6 +393,11 @@ function sendBubbleClaim({ draft, attachments }) {
 3. **消息源必须是 `window.parent`**，宿主做 `event.source === iframe.contentWindow` 严格相等校验。
 
 `draft` 里写清楚上下文——用户看到的就是他即将发送的原文，所以别塞"请帮我"，直接写可执行的诉求。
+
+**别在 `payload` 里传 `attachments`。** 参考文档里有这个字段，宿主也会原样收下并
+校验，但**当前不会使用**——它没有接到合成器上。传了不会报错，作者却会以为图片
+或文件已经随草稿一起递进对话了，实际什么都没发生。要把内容交给用户，就写进
+`draft` 文本本身（路径 / 链接 / 需要的操作），那是唯一确定会被看到的东西。
 
 ## 与 Chat Sidecar 的关系
 
