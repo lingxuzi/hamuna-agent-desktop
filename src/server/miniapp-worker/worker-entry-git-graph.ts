@@ -91,3 +91,8 @@ parentPort?.on('message', async (raw: unknown) => {
     return;
   }
 });
+
+// Announce readiness. See `WorkerEventMessage['event']`: the pool waits for this
+// before reporting a successful spawn, because nothing else it can observe
+// (`online`) distinguishes "the entry loaded" from "the thread started".
+send({ type: 'event', event: 'ready' });

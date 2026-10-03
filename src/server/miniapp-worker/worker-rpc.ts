@@ -40,7 +40,14 @@ export interface WorkerResponseMessage {
 
 export interface WorkerEventMessage {
   type: 'event';
-  event: 'shutdown-ack' | 'error';
+  /**
+   * `ready` = the entry resolved, the kind imported, and the message handler is
+   * live. It is the *only* signal that means the worker can actually answer,
+   * and `MiniAppWorkerPool.spawn` refuses to report success without it.
+   * (`online` is not: it fires when the thread starts, which is before the
+   * entry's imports have resolved.)
+   */
+  event: 'shutdown-ack' | 'error' | 'ready';
   detail?: string;
 }
 

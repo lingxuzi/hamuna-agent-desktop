@@ -25,6 +25,12 @@ import { DEFAULT_CALL_TIMEOUT_MS, DEFAULT_MAX_MEMORY_MB, type NodeLimits } from 
 
 export const PER_APP_WORKER_CAP = 4;
 const DEFAULT_TERMINATE_GRACE_MS = 200;
+/**
+ * Backstop for "the entry never came up". A real boot failure surfaces within
+ * single-digit milliseconds via `error` / `exit`, so this is only reached when
+ * Node itself fails to start the thread at all.
+ */
+const WORKER_BOOT_TIMEOUT_MS = 10_000;
 
 export interface SpawnWorkerRequest {
   appId: string;
@@ -160,8 +166,87 @@ class WorkerPool extends EventEmitter {
 
     this.wireWorkerEvents(handle);
     this.workers.set(id, handle);
+
+    // `new Worker()` hands back a thread handle before the entry has even been
+    // resolved, and a worker that dies during boot does not throw here — the
+    // `error` / `exit` events arrive later, on a future tick. Returning now
+    // therefore reports a *successful* spawn for a worker that can never answer
+    // a single call, and the caller only finds out on its first request, by
+    // which point the real cause ("Cannot find module ...") is gone and the
+    // only thing left to report is "exited with code 1".
+    //
+    // That is the same shape as the incident recorded in `esbuild-bundle.mjs`:
+    // a worker id that exists and never answers. The build gate catches the
+    // missing artifact; this catches every *other* way a worker fails to come up
+    // (broken entry, missing dependency, memory ceiling) at the one place where
+    // the cause is still available — the spawn itself.
+    try {
+      await this.awaitReady(worker);
+    } catch (err) {
+      this.workers.delete(id);
+      try {
+        await worker.terminate();
+      } catch {
+        // 已经死了，terminate 报错无所谓。
+      }
+      throw err;
+    }
+
     this.emitTyped('worker:spawned', handle);
     return { workerId: id, methods: handle.methods };
+  }
+
+  /**
+   * Resolve once the entry has actually loaded — i.e. on the worker's own
+   * `ready` event, not on `online`.
+   *
+   * `online` fires when the *thread* starts, which is strictly earlier than the
+   * entry resolving its imports, so it cannot tell a healthy worker from one
+   * about to die on a missing module. Measured on a non-existent entry: waiting
+   * on `online` reported a **successful** spawn in 49ms, and the real cause
+   * surfaced only on the caller's first request as "exited with code 1" — the
+   * phantom-spawn failure mode all over again, one layer up. The entry's `ready`
+   * is posted after its handler is live, so receiving it means a call *will* be
+   * answered.
+   */
+  private awaitReady(worker: Worker): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      // Declaration order is what makes `timer` a `const`: every reference below
+      // lives in a closure that Node only calls after this whole executor has run
+      // (`settle` is unreachable synchronously, and the timeout fires seconds
+      // later), so the TDZ is never actually entered.
+      const timer = setTimeout(
+        () =>
+          settle(
+            new Error(`MiniApp worker did not become ready within ${WORKER_BOOT_TIMEOUT_MS}ms`),
+          ),
+        WORKER_BOOT_TIMEOUT_MS,
+      );
+      const cleanup = (): void => {
+        clearTimeout(timer);
+        worker.off('message', onMessage);
+        worker.off('error', onError);
+        worker.off('exit', onExit);
+      };
+      const settle = (err?: Error): void => {
+        cleanup();
+        if (err) reject(err);
+        else resolve();
+      };
+      function onMessage(raw: unknown): void {
+        const msg = raw as Partial<WorkerOutbound> | null;
+        if (msg && msg.type === 'event' && msg.event === 'ready') settle();
+      }
+      function onError(err: Error): void {
+        settle(new Error(`MiniApp worker failed to start: ${err.message}`));
+      }
+      function onExit(code: number): void {
+        settle(new Error(`MiniApp worker exited during startup with code ${code}`));
+      }
+      worker.on('message', onMessage);
+      worker.once('error', onError);
+      worker.once('exit', onExit);
+    });
   }
 
   /**

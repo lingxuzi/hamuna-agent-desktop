@@ -279,6 +279,129 @@ try {
   rmSync(tree, { recursive: true, force: true });
 }
 
+// ── 走一遍真正的 pool（app.call 实际经过的那条路）───────────────────────────
+//
+// 上面每一次 spawn 都是本脚本自己 `new Worker(...)`：workerData 自己拼、消息协议
+// 自己实现。它证明的是**产物**能用，完全不证明 **pool** 能用 —— 而 MiniApp 的每
+// 一次 `app.call` 都只经过 pool（`appHostDispatch.ts` → `/api/miniapp/worker/call`
+// → `pool.call`）。pool 与 entry 是同一份契约的**两份独立实现**，字段名漂了、
+// ready 握手对不上、方法白名单放行了别的 kind，上面的冒烟全都测不出来。
+console.log('through the real MiniAppWorkerPool (the path app.call actually takes)');
+const { pool } = await import('../src/server/miniapp-worker/worker-pool.ts');
+const { FILE_EXPLORER_KIND } = await import('../src/server/miniapp-worker/kinds/file-explorer.ts');
+const { GIT_GRAPH_KIND } = await import('../src/server/miniapp-worker/kinds/git-graph.ts');
+
+const poolTree = makeTree();
+let poolWorkerId = '';
+try {
+  // 进程内 `here` 解析到源码的 kinds/ 目录（那里永远不会有 .js 产物），生产里解析
+  // 到 bundle 所在目录。指回产物，才是在测生产那条路径。
+  FILE_EXPLORER_KIND.entryPath = path.join(RESOURCES, 'worker-entry-file-explorer.js');
+  const spawned = await pool.spawn({
+    appId: 'verify-pool',
+    kind: 'file-explorer',
+    fsScope: { read: [poolTree], write: [] },
+  });
+  poolWorkerId = spawned.workerId;
+  const names = [...spawned.methods].sort().join(',');
+  if (names === 'file.read,file.search,file.tree') ok(`pool.spawn returned the kind's methods (${names})`);
+  else fail(`pool.spawn returned methods "${names}"`);
+
+  const treeRes = await pool.call({ workerId: poolWorkerId, method: 'file.tree', params: { root: poolTree } });
+  if (treeRes.ok && treeRes.result?.entries?.length === 3) {
+    ok('pool file.tree returned 3 real entries through the built entry');
+  } else {
+    fail(`pool file.tree failed: ${JSON.stringify(treeRes).slice(0, 200)}`);
+  }
+
+  const readRes = await pool.call({
+    workerId: poolWorkerId,
+    method: 'file.read',
+    params: { path: path.join(poolTree, 'a.txt') },
+  });
+  if (readRes.ok && readRes.result?.content === 'hello world\n') {
+    ok('pool file.read returned the exact bytes');
+  } else {
+    fail(`pool file.read failed: ${JSON.stringify(readRes).slice(0, 200)}`);
+  }
+
+  // 必须钉在 pool 这一层：worker 自己也会回 METHOD_NOT_ALLOWED（"not registered"），
+  // 只断言错误码的话，pool 白名单被摘掉这条断言照样绿。两层的 message 不同，所以
+  // 断 message 才能证明是 pool 在**没问 worker** 的情况下就拒了。
+  const cross = await pool.call({ workerId: poolWorkerId, method: 'git.status', params: {} });
+  if (!cross.ok && cross.error?.code === 'METHOD_NOT_ALLOWED' && /allow-list/.test(cross.error?.message ?? '')) {
+    ok("pool refused a method belonging to another kind (git.status on file-explorer)");
+  } else {
+    fail(`pool did not refuse a cross-kind method at the allow-list: ${JSON.stringify(cross).slice(0, 200)}`);
+  }
+
+  const oos = await pool.call({
+    workerId: poolWorkerId,
+    method: 'file.read',
+    params: { path: 'C:/Windows/win.ini' },
+  });
+  if (!oos.ok) ok('pool enforced fs scope (out-of-scope read refused)');
+  else fail('pool allowed an out-of-scope read');
+
+  // git-graph 也要过一遍 pool：ready 握手是**每个 entry 自己**发的一行，写错或漏掉
+  // 在只测 file-explorer 的情况下完全隐形，而这个 worker 同样会退化成"起得来但
+  // spawn 不给 ready"的幻影。
+  const poolRepo = makeRepo('pool-');
+  let gitWorkerId = '';
+  try {
+    GIT_GRAPH_KIND.entryPath = path.join(RESOURCES, 'worker-entry-git-graph.js');
+    const gitSpawned = await pool.spawn({
+      appId: 'verify-pool-git',
+      kind: 'git-graph',
+      fsScope: { read: [poolRepo], write: [] },
+    });
+    gitWorkerId = gitSpawned.workerId;
+    const st = await pool.call({ workerId: gitWorkerId, method: 'git.status', params: { cwd: poolRepo } });
+    const branches = [...(st.result?.branches ?? [])].sort();
+    if (st.ok && st.result?.current === 'main' && branches.includes('feature-x')) {
+      ok(`pool git.status through the real git-graph entry (${JSON.stringify(branches)})`);
+    } else {
+      fail(`pool git.status failed: ${JSON.stringify(st).slice(0, 200)}`);
+    }
+  } catch (e) {
+    fail(`pool git-graph threw unexpectedly: ${String(e).slice(0, 200)}`);
+  } finally {
+    if (gitWorkerId) await pool.terminate(gitWorkerId).catch(() => {});
+    rmSync(poolRepo, { recursive: true, force: true });
+  }
+
+  // 起不来的 worker 必须**显式失败**。返回一个 id 就是幻影 spawn：MiniApp 拿到一个
+  // 永远不会应答的 id，而真正的病因（entry 不存在 / 依赖缺失）在那一刻已经不可追，
+  // 宿主只会看到 "exited with code 1"。这正是本脚本开头记录的那次生产事故，
+  // 只是上移了一层。
+  FILE_EXPLORER_KIND.entryPath = path.join(RESOURCES, 'worker-entry-file-explorer.js.does-not-exist');
+  let phantomId = '';
+  try {
+    phantomId = (
+      await pool.spawn({
+        appId: 'verify-pool-dead',
+        kind: 'file-explorer',
+        fsScope: { read: [poolTree], write: [] },
+      })
+    ).workerId;
+  } catch (e) {
+    const msg = String(e);
+    if (/Cannot find module|failed to start|exited during startup/.test(msg)) {
+      ok('pool.spawn rejected a worker that cannot start, naming the real cause');
+    } else {
+      fail(`pool.spawn rejected a dead worker, but not with a usable cause: ${msg.slice(0, 200)}`);
+    }
+  }
+  if (phantomId) {
+    fail('pool.spawn reported success for a worker that can never answer (phantom spawn)');
+  }
+} catch (e) {
+  fail(`the pool threw unexpectedly: ${String(e).slice(0, 300)}`);
+} finally {
+  if (poolWorkerId) await pool.terminate(poolWorkerId).catch(() => {});
+  rmSync(poolTree, { recursive: true, force: true });
+}
+
 console.log('');
 if (failures.length > 0) {
   console.error(`verify:miniapp-workers FAILED (${failures.length}):`);
