@@ -270,12 +270,19 @@ sidecar 那份同时是纵深与直连工具链的落点（renderer 是 WebView�
   各有单测锁住"参数确实被转发 / 回显"（把门面改回无参硬传 `null` 会转红）。
   **未实跑**：`agent.run` 真正把它交给 Agent 的那一段（要花真实 token）。
 
+- `app.ai` 的**入参归一**（零成本那一半）——`ai.complete` / `ai.chat` 在
+  `normalizeAiPrompt` 处就拒掉空 prompt，压根走不到 `query()`，所以这部分可以
+  留在 integration 池实跑而不花任何 token：空串 / 缺参 / 空 messages 数组 /
+  全无有效轮的数组都返回 `INVALID_PARAMS`。这一层值得覆盖是因为参考文档给
+  `ai.chat` 的标准写法就是 `messages` 数组，而早期实现两条路都走
+  `requireString`，照文档写的作者直接拿 `INVALID_PARAMS`。
+
 **未验证（不是"没写"，是"跑了要花用户的钱"）**：
 
 - `app.ai.complete` / `app.agent.run` 的**真实模型回合**。这两条会调用
   `~/.hamuna/config.json` 里的真实 Provider 凭据产生付费请求，属 `credentialed`
-  池。当前只验证到"参数校验 + 权限判定 + 分发路由"这一层，**从 SDK 真正返回
-  completion / turn 成功这一段没有实跑证据**。要补就在 `credentialed` 池加一条
+  池。当前只验证到"参数校验 + 权限判定 + 分发路由 + 入参归一"这一层，**从 SDK
+  真正返回 completion / turn 成功这一段没有实跑证据**。要补就在 `credentialed` 池加一条
   无凭据时 self-skip 的冒烟测试，不要塞进默认 CI。
 
 本节其余条目（`contextFiles` 快照、流式回调、`displayText`、

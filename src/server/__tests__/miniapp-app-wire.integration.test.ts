@@ -58,6 +58,10 @@ const AGENT_APP_ID = 'wire-agent-probe';
 
 const AGENT_APP_PERMISSIONS = {
   agent: { enabled: true },
+  // 声明 ai 只是为了能打到 `normalizeAiPrompt` 那一层。下面的用例全部用
+  // **不可能触发真实请求**的入参（空 prompt / 空 messages），所以这条声明
+  // 不会让本文件产生任何 token 开销。
+  ai: { enabled: true },
   fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] },
 };
 
@@ -353,6 +357,47 @@ describe('MiniApp app.* over real HTTP against a real Sidecar process', () => {
  * 生产路径由 `appHostDispatch.unit.test.ts` 覆盖 —— 两边都要有，因为任一边
  * 单独修好都不代表作者拿到的行为一致。
  */
+/**
+ * `app.ai` 的**零成本**那一半：入参归一。
+ *
+ * `ai.complete` / `ai.chat` 在 `normalizeAiPrompt` 处就会拒掉空 prompt，压根
+ * 走不到 `query()`，所以下面这些用例**不会产生任何 token 开销**，可以安全地
+ * 留在 integration 池里（不是 credentialed）。真正发起补全的那一段要花用户
+ * 的 Provider 额度，仍未实跑 —— 见 tech_docs 的「验证状态」。
+ *
+ * 值得覆盖是因为参考文档的标准写法是 `ai.chat([{role, content}])`，而早期实现
+ * 两条路都走 `requireString`，照文档写的作者拿到的是 `INVALID_PARAMS`。
+ */
+describe('MiniApp app.ai prompt normalization over real HTTP', () => {
+  it('rejects a missing prompt before anything can reach the provider', async () => {
+    for (const params of [{}, { prompt: '' }, { prompt: '   ' }, { prompt: null }]) {
+      const res = await call('ai.complete', params, AGENT_APP_ID);
+      expect(res.ok, JSON.stringify(params)).toBe(false);
+      if (res.ok) continue;
+      expect(res.error?.code).toBe('INVALID_PARAMS');
+    }
+  });
+
+  it('rejects an empty or unusable messages array, which the reference shape allows', async () => {
+    // 数组形态是参考文档给 `ai.chat` 的标准入参；空数组与全无有效轮的数组都
+    // 必须被明确拒绝，而不是被拍平成空字符串后照发。
+    for (const prompt of [[], [{ role: 'user' }], [{ role: '', content: 'x' }], [null, 'x']]) {
+      const res = await call('ai.chat', { prompt }, AGENT_APP_ID);
+      expect(res.ok, JSON.stringify(prompt)).toBe(false);
+      if (res.ok) continue;
+      expect(res.error?.code).toBe('INVALID_PARAMS');
+    }
+  });
+
+  it('still denies ai on the app that never declared it', async () => {
+    const res = await call('ai.complete', { prompt: 'hi' }, APP_ID);
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('expected a failure envelope');
+    expect(res.error?.message).toMatch(/ai\.enabled/);
+  });
+});
+
 describe('MiniApp appDataWorkspace over real HTTP', () => {
   const agentAppDir = () => join(home, '.hamuna', 'miniapps', AGENT_APP_ID);
 
@@ -416,8 +461,7 @@ describe('MiniApp appDataWorkspace over real HTTP', () => {
     expect(res.ok).toBe(false);
   });
 
-  it('still denies agent on the app that never declared it', async () => {
-    // 回归护栏：加了 AGENT_APP_ID 之后，"未声明即拒绝"这条观察点不能被稀释。
+  it('still denies agent on the app that never declared it', async () => {    // 回归护栏：加了 AGENT_APP_ID 之后，"未声明即拒绝"这条观察点不能被稀释。
     const res = await call('agent.ensureSession', { appDataWorkspace: 'notes' }, APP_ID);
 
     expect(res.ok).toBe(false);
