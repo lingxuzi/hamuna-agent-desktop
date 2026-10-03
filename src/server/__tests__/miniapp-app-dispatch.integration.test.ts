@@ -393,6 +393,29 @@ describe('storage round trip', () => {
     expect(existsSync(join(appDir(), 'storage.json'))).toBe(false);
   });
 
+  it('re-arms the default after remove, so a key round-trips back to its initial value', async () => {
+    // SKILL.md 承诺「remove 之后回落重新生效」。这条链路要串三步才看得出来：单看
+    // get 覆盖不到「先有真实值、再删掉」这个状态转换，而它恰恰是回落最容易退化成
+    // 一次性生效的地方 —— 把 defaults 当种子写进 storage.json、或在 remove 时连
+    // 默认值一起清掉，都会让作者第二次就拿不到初值，而宿主每次都 ok:true。
+    writeMeta({}, { defaults: { items: ['preset'] } });
+
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: 'items', value: ['mine'] });
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'items' })).result).toEqual([
+      'mine',
+    ]);
+
+    expect((await dispatchMiniAppApp('storage.remove', APP_ID, { key: 'items' })).result).toBe(true);
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'items' })).result).toEqual([
+      'preset',
+    ]);
+
+    // 落盘的 storage.json 里不该留下这个键 —— 回落是读侧的，不该被固化成真实值
+    expect(
+      JSON.parse(readFileSync(join(appDir(), 'storage.json'), 'utf8')),
+    ).toEqual({});
+  });
+
   it('stores __proto__ as a real key instead of mutating the object prototype', async () => {
     // 赋值语义下 `data['__proto__'] = v` 走的是 Object.prototype 上的 setter，
     // 不产生自有属性：写完 JSON.stringify 仍是 `{}`，值凭空消失。
