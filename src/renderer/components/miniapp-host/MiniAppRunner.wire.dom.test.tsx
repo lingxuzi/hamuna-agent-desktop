@@ -37,6 +37,8 @@ import { render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import MiniAppRunner from './MiniAppRunner';
+import { clearWorkerId, registerWorkerId } from './appHostDispatch';
+import { __resetWorkerKindsForTest } from './workerCallBridge';
 
 const apiPostJson = vi.fn();
 const apiGetJson = vi.fn();
@@ -175,6 +177,7 @@ interface Mounted {
 async function mountAndBoot(
   call: string,
   permissions: Record<string, unknown>,
+  runnerProps: Record<string, unknown> = {},
 ): Promise<Mounted> {
   const { container } = render(
     <MiniAppRunner
@@ -182,6 +185,7 @@ async function mountAndBoot(
       srcDoc={authorSrcDoc(call)}
       height={200}
       permissions={permissions as never}
+      {...runnerProps}
     />,
   );
   const iframe = container.querySelector('iframe') as HTMLIFrameElement;
@@ -216,10 +220,15 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     bridgeSetPost.mockReset();
     bridgeRelease.mockReset();
     proxyFetch.mockReset();
+    // worker kinds 是模块级单例缓存：前面那些用例已经用 kinds: [] 把它填成空了，
+    // 不重置的话本用例设的 kinds 永远不生效，spawn effect 会静默 early-return。
+    __resetWorkerKindsForTest();
     apiGetJson.mockResolvedValue({ ok: true, kinds: [] });
   });
 
   afterEach(() => {
+    // 注册表是模块级的：不清掉，下一条用例会拿到一个"已经就绪的 worker"。
+    clearWorkerId(APP_ID);
     vi.restoreAllMocks();
   });
 
@@ -484,6 +493,137 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
       'http://127.0.0.1:51999/api/miniapp/app/agent.cancel',
       expect.objectContaining({ method: 'POST' }),
     );
+  }, 15000);
+
+  it('passes fs.readFile straight through to the sidecar instead of deciding in the renderer', async () => {
+    // `fs.*` 是唯一 renderer 判不了的一族（rendererCanDecide）：路径模板要靠 sidecar 的
+    // currentAgentDir 展开成绝对前缀，renderer 拿未展开的模板去比前缀恒不匹配，于是
+    // 曾经把三个 bundled MiniApp 的 fs 能力全部变成"等于不存在"。
+    // 这里钉的是**它确实透传**了：renderer 不预判，但也不能吞掉。
+    apiPostJson.mockResolvedValue({ ok: true, result: 'file bytes' });
+    const { reports } = await mountAndBoot(
+      "window.app.fs.readFile('notes.txt')",
+      { fs: { read: ['{appdata}/**'] } },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/app/fs.readFile', {
+      appId: APP_ID,
+      // `opts: null` 是 runtime 的真实形状（第二个参数缺省时归一成 null）。
+      params: { path: 'notes.txt', opts: null },
+    });
+    expect(reports[0]).toEqual({ ok: true, value: 'file bytes' });
+  }, 15000);
+
+  it('sends ai.chat to the host AI and returns the completion to the author', async () => {
+    // 复用宿主 Provider，MiniApp 不自带 Key；allowed_models 之外的模型要被拒。
+    const hostAnswer = { text: 'hello from the model' };
+    apiPostJson.mockResolvedValue({ ok: true, result: hostAnswer });
+    const { reports } = await mountAndBoot("window.app.ai.chat('hi')", {
+      ai: { enabled: true },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/app/ai.chat', {
+      appId: APP_ID,
+      params: expect.objectContaining({ prompt: 'hi' }),
+    });
+    expect(reports[0]).toEqual({ ok: true, value: hostAnswer });
+  }, 15000);
+
+  it('refuses ai.chat when the app never enabled ai', async () => {
+    const { reports } = await mountAndBoot("window.app.ai.chat('hi')", {});
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean; code?: string };
+    expect(reported.ok).toBe(false);
+    expect(typeof reported.code).toBe('string');
+  }, 15000);
+
+  it('refuses app.call when the app has no running worker, naming the fix', async () => {
+    // 没有 worker 时必须**拒**并说清怎么修，而不是静默 —— 作者看到的是一个带指引的
+    // 错误，而不是一个永远 pending 的 Promise。
+    const { reports } = await mountAndBoot("window.app.call('anything', {})", {
+      node: { enabled: true },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean; message?: string };
+    expect(reported.ok).toBe(false);
+    // 错误文案要指向真正的修法（meta.kind = "worker" + worker_kind），不是原始异常。
+    expect(reported.message).toContain('worker');
+  }, 15000);
+
+  it('refuses app.call unless the app declared the node capability', async () => {
+    // node 是 worker MiniApp 的命脉：没声明就不许起自定义方法。
+    const { reports } = await mountAndBoot("window.app.call('anything', {})", {});
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean; message?: string };
+    expect(reported.ok).toBe(false);
+    expect(reported.message).toContain('node');
+  }, 15000);
+
+  it('answers a worker call that arrives before the worker is ready, instead of hanging', async () => {
+    // 作者脚本是在文档解析时就跑的，worker spawn 是异步的 —— 这个竞态是真实的。
+    // bundled 的 worker MiniApp（git-graph / file-explorer）都自己把调用排到
+    // `worker.ready` 之后；但作者忘了排队的后果必须是**一句能照着改的话**，
+    // 不是永久 pending（这正是"app.call 没生效"最难查的那一类症状）。
+    apiGetJson.mockResolvedValue({ ok: true, kinds: [{ kind: 'git-graph', methods: ['git.log'] }] });
+    apiPostJson.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/miniapp/worker/spawn'
+          ? { ok: true, workerId: 'w-42', methods: ['git.log'] }
+          : { ok: true, result: null },
+      ),
+    );
+
+    const { reports } = await mountAndBoot(
+      "window.app.call('git.log', { limit: 1 })",
+      { node: { enabled: true } },
+      { kind: 'worker', workerKind: 'git-graph' },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 5000 });
+
+    const reported = reports[0] as { ok: boolean; message?: string };
+    expect(reported.ok).toBe(false);
+    expect(reported.message).toContain('worker_kind');
+    // 没有 worker 可打时绝不能去调 RPC —— 那样只会得到一个更难懂的错。
+    expect(apiPostJson).not.toHaveBeenCalledWith('/api/miniapp/worker/call', expect.anything());
+  }, 20000);
+
+  it('routes an established worker call to that app’s own worker, by method name', async () => {
+    // 第五条派发路：app.call → worker 池 RPC。这里直接注册 workerId，绕开 spawn
+    // effect（那一半由 MiniAppRunner.workerCall.test.tsx 负责），只测**派发**这一半 ——
+    // 之前 `callWorkerMethod` 的方法名提取在整个仓里一处断言都没有。
+    //
+    // workerId 从注册表按 appId 取：同一个 iframe 的所有 app.call 必须命中**同一个**
+    // worker 实例，每次调用都 spawn 一个孤儿进程就是从这儿错的。
+    registerWorkerId(APP_ID, 'w-42');
+    const hostAnswer = { entries: ['c0ffee'] };
+    apiPostJson.mockResolvedValue({ ok: true, result: hostAnswer });
+
+    const { reports } = await mountAndBoot("window.app.call('git.log', { limit: 1 })", {
+      node: { enabled: true },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/worker/call', {
+      workerId: 'w-42',
+      method: 'git.log',
+      params: { limit: 1 },
+    });
+    expect(reports[0]).toEqual({ ok: true, value: hostAnswer });
   }, 15000);
 
   it('refuses an allow-listed command that smuggles a second command in', async () => {

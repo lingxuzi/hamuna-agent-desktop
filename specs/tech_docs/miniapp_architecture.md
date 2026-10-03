@@ -520,19 +520,26 @@ MiniApp 本身也是全死的**，且失效完全静默（拒绝是正确行为�
 `window.app.*` 通道此前只有三段各自的单测（`app-protocol` 纯函数 /
 `appRuntimeTransport` 脚本 / `appHostDispatch` 派发层），**没有任何东西保证三段形状
 对得上** —— `appDataWorkspace` 当初正是被 `appRuntimeScript.ts` 无参硬传 `null` 吞掉，
-而三段全绿。现已补上 `MiniAppRunner.wire.dom.test.tsx`（16 条）：真 iframe、真
+而三段全绿。现已补上 `MiniAppRunner.wire.dom.test.tsx`（23 条）：真 iframe、真
 postMessage、真回信，三段同时在场，且**覆盖 `appHostDispatch` 的每一条派发路径** ——
-`apiPostJson`（fs / net / shell / ai）、Tauri 原生（dialog / clipboard）、renderer 就地
-截走的 Agent 生命周期（`agent.ensureSession` / `onEvent`），以及 Agent **回合**那条
-`proxyFetch` 直连 MiniApp 专用 sidecar 端口的第四路（回合跑错进程 = SSE 与 abort
-命中不了同一个 turn = 看起来成功、实际空转）。只验其中一条等于把同样的洞留在其它几条上。
+`apiPostJson`（fs / net / shell / ai / storage / os）、Tauri 原生（dialog / clipboard）、
+renderer 就地截走的 Agent 生命周期（`agent.ensureSession` / `onEvent`）、Agent **回合**
+那条 `proxyFetch` 直连 MiniApp 专用 sidecar 端口的第四路（回合跑错进程 = SSE 与 abort
+命中不了同一个 turn = 看起来成功、实际空转）、以及 `app.call` 的 worker 池 RPC 第五路。
+只验其中一条等于把同样的洞留在其它几条上。
 
-> 变异验证里有两处"测试没测到"，结论是**别急着补测试，先分清是洞还是本来如此**：
+> 变异验证里有几处"测试没测到"，**结论都是先分清是洞还是本来如此**，别急着补测试：
 > 派发层 `if (method !== 'agent.cancel')` 那道 workspace 校验删掉后全绿 —— 因为
 > runtime 的 `agent.cancel(id)` 只转发 `{run_id}`，public API 根本走不到那个分支，
 > 它是**冗余的第二道防线**（真正承重的是 runtime，实测把 runtime 改成转发 workspace
-> 会转红）。而 `hostAllowed` 那个变异把测试收集都打挂、无法判定，交给
-> `app-permissions.unit.test.ts` 直接钉。
+> 会转红）。`hostAllowed` 那个变异把测试收集都打挂、无法判定，交给
+> `app-permissions.unit.test.ts` 直接钉。而 `app.call` 的**成功**路径一度也是全绿，
+> 查下去是真洞：`callWorkerMethod` 的方法名提取在整个仓里一处断言都没有，现已补上。
+>
+> 还有两条是**我自己的测试写错**，都由变异抓出来而不是靠读代码：
+> 伪造信封用了瞎编的 nonce（先被 nonce 关挡掉，于是"删掉来源校验"照样绿）；
+> 断言在信封 `{method, params, appId}` 上找 `appDataWorkspace`（永远找不到，
+> 应该在 `payload.params` 上）。
 
 写它要跨过 jsdom 的三条限制（**都别当成产品缺陷去"修"**）：
 
