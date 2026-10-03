@@ -244,15 +244,35 @@ worker 才走 esbuild + 真 `Worker`。结果：git-graph 与 file-explorer 在�
 3. **`new Worker(<不存在的路径>)` 不抛异常。** 它返回一个 Worker 并**异步**
    发 `error`，于是 `pool.spawn()` 报成功，把一个永远答不了话的 worker id 交给
    MiniApp。这是最阴的一环：整条错误链上没有任何一处会失败。
-4. **worker 真起来之后又露出两个**：require shim 的 AST 扫描把 **worker 自己
-   那个 bundle** 也扫了，在 handler 合法的 `require('fs')` 上把 worker 打死
-   （`module require blocked by MiniApp sandbox: module='fs'`）；以及
-   `await import('simple-git')` 解析到了**别的模块**的 `__esm` init。
+4. **worker 真起来之后又露出两个**：`await import('simple-git')` 让 simple-git
+   在 **shim 装好之后**才被懒加载，于是它内部的 `require('fs')` 撞上 deny list，
+   把 worker 打死（`module require blocked by MiniApp sandbox: module='fs'`）；
+   以及该动态 import 解析到了**别的模块**的 `__esm` init。
 
-**shim 豁免的边界必须是精确的**：按 realpath 与自身文件**相等**判定，绝不用前缀
-匹配 —— 前缀会把 server bundle 目录整片放行，而那恰恰**不是**不可信 per-app
-entry 所在的目录；身份解析不出来时 fail-closed。`require-shim.unit.test.ts` 是
-新文件（此前 shim 完全没有测试），变异验证：恒真 / 前缀匹配 / fail-open 三个都红。
+> **此前把根因写成「AST 扫描把 worker 自己的 bundle 也扫了」是错的**，这里更正。
+> 报错的 `module='fs'` 来自 **Patch 1（`Module.prototype.require` deny list）**，
+> 不是 AST hook（AST hook 抛的是 `...: ${astHit.reason}`，没有 `='...'` 后缀）。
+> 被拦的也**不是 worker 自己的 bundle**，而是 simple-git 自己的 `require('fs')`。
+> 真正修掉它的是**改成静态 import**（见下），不是当时加的 shim 豁免。
+
+**打包产物实测（`verify:miniapp-workers` + 一次性探针）**：worker entry 是
+`format: 'esm'`，而 `Module._extensions['.js']` 是 **CJS loader** 的钩子，ESM 根本
+不走它；且 shim 装好之后产物里 **require 调用数为 0**（simple-git 已被静态 import
+并内联进 bundle）。于是在**当前**配置下 **Patch 1 与 Patch 1b 都不会触发** ——
+给一个放行路径实测跑通 `git.status`，两个探针一个都没打印。
+
+因此：`isTrustedWorkerSelf` 豁免在已发布产物里**不可达**，删掉它对行为**无影响**
+（变异 D2 不红属于**语义等价**，不是覆盖漏洞）。但它是 fail-closed 的 realpath
+精确比对、5 行、且为 Phase 4（`worker_kind` 放开到不可信作者）预埋，所以**保留**
+不删。真正要记住的是：**这两个 module 闸门目前是 defense-in-depth，不是承重墙**。
+今天 worker 里跑的是仓库内置 `kinds/*.ts`（可信），MiniApp 作者的代码在 iframe
+沙箱里、从不进 worker；一旦 Phase 4 让不可信代码进 worker，这两闸才成为第一道防线
+（`worker-pool.ts` 顶部注释已写明届时换 `child_process.fork`）。
+
+豁免的**边界**仍必须是精确的：按 realpath 与自身文件**相等**判定，绝不用前缀匹配
+—— 前缀会把 server bundle 目录整片放行，而那恰恰**不是**不可信 per-app entry
+所在的目录；身份解析不出来时 fail-closed。`require-shim.unit.test.ts` 是新文件
+（此前 shim 完全没有测试），变异验证：恒真 / 前缀匹配 / fail-open 三个都红。
 
 一条变异判定为**语义等价**、不补测试：删掉 `if (!self) return false` 测不出来，
 因为 `realpathSync` 返回 string 或抛异常，永远不可能 `=== null`。那行是省一次
