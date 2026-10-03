@@ -68,6 +68,15 @@ const bridgeEnsureSession = vi.fn();
 const bridgeSubscribe = vi.fn();
 const bridgeSetPost = vi.fn();
 const bridgeRelease = vi.fn();
+
+// Agent **回合**走的是第四条路：proxyFetch 直连 MiniApp 专用 sidecar 的端口，
+// 不是 apiPostJson 的全局 sidecar。回合跑在哪个进程，决定了 SSE 事件与 abort
+// 能不能命中同一个 turn —— 走错进程就是"看起来成功、实际空转"。
+const proxyFetch = vi.fn();
+vi.mock('@/api/tauriClient', () => ({
+  proxyFetch: (...args: unknown[]) => proxyFetch(...args),
+}));
+
 vi.mock('./agentEventBridge', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./agentEventBridge')>();
   return {
@@ -206,6 +215,7 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     bridgeSubscribe.mockReset();
     bridgeSetPost.mockReset();
     bridgeRelease.mockReset();
+    proxyFetch.mockReset();
     apiGetJson.mockResolvedValue({ ok: true, kinds: [] });
   });
 
@@ -420,6 +430,109 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     expect(apiPostJson).not.toHaveBeenCalled();
     const reported = reports[0] as { ok: boolean };
     expect(reported.ok).toBe(false);
+  }, 15000);
+
+  it('runs an agent turn on the MiniApp sidecar port, never the global sidecar', async () => {
+    // 回合必须发到**专用** sidecar：跑在全局 sidecar 上时 SSE 事件与 abort 命中不了
+    // 同一个 turn，作者看到的是"调用成功、回合从没发生"。
+    bridgeEnsureSession.mockResolvedValue({ sessionId: 'miniapp_wire-probe_main', port: 51999 });
+    proxyFetch.mockResolvedValue({ json: async () => ({ ok: true, result: { text: 'done' } }) });
+    const { reports } = await mountAndBoot(
+      "window.app.agent.run({ prompt: 'hi' })",
+      { agent: { enabled: true } },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    // 端口来自 bridge，路径带方法名 —— 两者错了就是打错进程。
+    expect(proxyFetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:51999/api/miniapp/app/agent.run',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    // 绝不能同时走 apiPostJson（那是全局 sidecar）。
+    expect(apiPostJson).not.toHaveBeenCalled();
+    expect(reports[0]).toEqual({ ok: true, value: { text: 'done' } });
+  }, 15000);
+
+  it('never lets a workspace travel with agent.cancel, so cancel keeps working', async () => {
+    // cancel 只瞄准一个已有 turn，既不建 session 也不该关心 workspace。给 cancel 带上
+    // workspace 校验，会让"挑过子目录"之后**所有** cancel 都失败 —— 纯属自伤。
+    //
+    // 防线在 runtime：`agent.cancel(id)` 只转发 `{run_id}`，workspace 根本到不了宿主。
+    // 所以这里钉的是那个**真实**的保证（cancel 仍然成功，且出站信封里没有
+    // workspace 键），而不是去测派发层那个 public API 根本走不到的分支。
+    bridgeEnsureSession.mockResolvedValue({ sessionId: 'miniapp_wire-probe_main', port: 51999 });
+    proxyFetch.mockResolvedValue({ json: async () => ({ ok: true, result: { cancelled: true } }) });
+    const { reports, outbound } = await mountAndBoot('window.app.agent.cancel()', {
+      agent: { enabled: true },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    const call = outbound.find((m) => m.kind === 'app.call') as
+      | { payload: { method: string; params: Record<string, unknown> } }
+      | undefined;
+    expect(call, 'cancel never reached the host').toBeTruthy();
+    // 注意断的是 `payload.params`，不是 `payload`：信封本身是
+    // {method, params, appId}，在它上面找 appDataWorkspace 永远找不到 ——
+    // 这条断言第一版就写错了地方，变异 U1（让 runtime 真的把 workspace 带上）
+    // 跑出来是绿的才发现。
+    expect(call!.payload.method).toBe('agent.cancel');
+    expect(Object.keys(call!.payload.params)).toEqual(['run_id']);
+    expect(reports[0]).toEqual({ ok: true, value: { cancelled: true } });
+    expect(proxyFetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:51999/api/miniapp/app/agent.cancel',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  }, 15000);
+
+  it('refuses an allow-listed command that smuggles a second command in', async () => {
+    // allow-list 只看**第一个词**，于是 'echo && rm -rf /' 的第一个词是 echo、在名单上。
+    // 挡住它的是 metacharacter 那道闸 —— 少了它，这条就是一个能删盘的许可。
+    const { reports } = await mountAndBoot("window.app.shell.exec('echo hi && del /')", {
+      shell: { allow: ['echo'] },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean };
+    expect(reported.ok).toBe(false);
+  }, 15000);
+
+  it('refuses shell.exec when the command is not on the allow list', async () => {
+    // shell 是最危险的一档：无 Node 的 iframe 也能起进程。
+    // 注意作者侧签名是 `exec(cmd, opts)` —— 第一个参数是**字符串**，不是对象
+    // （runtime 内部才拼成 `{command, opts}`）。传对象会被 checkShell 以
+    // INVALID_PARAMS 拒掉，于是这条用例会"因为错的原因绿"，什么都测不到。
+    const { reports } = await mountAndBoot(
+      "window.app.shell.exec('curl https://evil.example')",
+      { shell: { allow: ['echo'] } },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean; code?: string };
+    expect(reported.ok).toBe(false);
+    expect(typeof reported.code).toBe('string');
+  }, 15000);
+
+  it('runs an allow-listed shell command and hands the output back to the author', async () => {
+    const hostAnswer = { stdout: 'hello\n', exitCode: 0 };
+    apiPostJson.mockResolvedValue({ ok: true, result: hostAnswer });
+    const { reports } = await mountAndBoot("window.app.shell.exec('echo hello')", {
+      shell: { allow: ['echo'] },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    // `opts: null` 是 runtime 的真实形状（第二个参数缺省时归一成 null）。
+    expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/app/shell.exec', {
+      appId: APP_ID,
+      params: { command: 'echo hello', opts: null },
+    });
+    expect(reports[0]).toEqual({ ok: true, value: hostAnswer });
   }, 15000);
 
   it('rejects a call whose nonce is not this session, even from the real iframe', async () => {
