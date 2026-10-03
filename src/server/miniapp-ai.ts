@@ -268,6 +268,12 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
   });
 
   const timeoutMs = p.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  // 中止与超时的结论只在这里成型。收尾有两条路径 —— iterator 正常收尾，以及
+  // SDK 因 abort 直接抛出（实测是后者）—— 它们共用同一个判断，才不会各说各话。
+  const terminalFailure = () =>
+    controller.signal.aborted
+      ? fail(APP_ERROR_CODES.HOST_ERROR, 'app.ai was cancelled')
+      : fail(APP_ERROR_CODES.HOST_ERROR, `app.ai timed out after ${timeoutMs}ms`);
   try {
     const outcome = await Promise.race([
       (async (): Promise<CompletionOutcome> => {
@@ -304,11 +310,17 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
     }
     // 取消与超时必须给出**不同**的结论：作者看到 "timed out" 会去调大
     // timeout，而真实原因是他自己 300ms 前刚点了取消按钮。
-    if (controller.signal.aborted) {
-      return fail(APP_ERROR_CODES.HOST_ERROR, 'app.ai was cancelled');
-    }
-    return fail(APP_ERROR_CODES.HOST_ERROR, `app.ai timed out after ${timeoutMs}ms`);
+    return terminalFailure();
   } catch (e) {
+    // 同样先问"是不是我们自己中止的"。这个 catch 原本无条件回 `e.message`，
+    // 而 abort 恰恰是**抛**出来的（`for await` 循环整个 reject），于是上面那句
+    // 注释防的事原样发生：作者拿到 SDK 的 "Operation aborted"，MiniApp 自己
+    // 定的消息从来没到过作者眼前。
+    //
+    // 但也不能无脑换成 terminalFailure：401、端点不可达同样落在这里，谎称
+    // "timed out" 会把人带进沟里 —— 他只会去调大 timeout。abort 归 abort，
+    // 其余照旧原样上报。
+    if (controller.signal.aborted) return terminalFailure();
     return fail(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
   } finally {
     // 正常完成 / 超时 / 抛错都要摘除，否则注册表会随调用次数单调增长。

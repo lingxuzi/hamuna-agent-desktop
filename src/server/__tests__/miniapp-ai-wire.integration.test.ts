@@ -41,7 +41,7 @@ const COMPLETION = 'PROBE_COMPLETION_TEXT';
 
 interface Envelope {
   ok: boolean;
-  result?: { text?: string };
+  result?: { text?: string; cancelled?: boolean };
   error?: { code: string; message: string };
 }
 
@@ -52,6 +52,25 @@ let sidecarOutput = '';
 let mock: Server | undefined;
 /** mock 收到的路径，用来证明请求真的走过网络而不是被短路。 */
 const mockPaths: string[] = [];
+
+/**
+ * 掐住 `/v1/messages` 的响应，让一次补全真的停在"在途"状态。
+ *
+ * 不用它就测不了 `app.ai.cancel`：mock 默认秒回，`ai.complete` 在测试能来得及
+ * 发第二个请求之前就已经收尾，中止表里早已没有这条 run，cancel 永远命中不了。
+ */
+let holdResponses: Promise<void> | null = null;
+let releaseHold: (() => void) | null = null;
+
+function armHold(): void {
+  holdResponses = new Promise<void>(res => { releaseHold = res; });
+}
+
+function disarmHold(): void {
+  releaseHold?.();
+  holdResponses = null;
+  releaseHold = null;
+}
 
 const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
@@ -65,7 +84,7 @@ async function reservePort(): Promise<number> {
 
 /** 极简 Anthropic Messages 流式端点，外加 SDK 的连通性探针。 */
 function startMockProvider(): Promise<{ server: Server; port: number }> {
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     mockPaths.push(`${req.method} ${req.url ?? ''}`);
     req.on('error', () => {});
     res.on('error', () => {});
@@ -77,6 +96,12 @@ function startMockProvider(): Promise<{ server: Server; port: number }> {
       res.end('{}');
       return;
     }
+
+    // 被 hold 住的那次请求会一直挂在这里，直到测试放行（或 SDK 先一步 abort
+    // 把 socket 拆了）。后者必须直接 return：对已断开的 res 调 writeHead 会
+    // 抛 ERR_STREAM_WRITE_AFTER_END，冒泡成 mock 的未捕获异常。
+    if (holdResponses) await holdResponses;
+    if (res.destroyed || res.writableEnded) return;
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -296,5 +321,66 @@ describe('app.ai over real HTTP against a real Sidecar and a loopback provider',
       expect(added).toHaveLength(0);
     },
     60_000,
+  );
+
+  it(
+    'cancels the in-flight completion it is aimed at, and reports it as cancelled',
+    async () => {
+      // 这是 `app.ai.cancel` 唯一的端到端证据。
+      //
+      // `miniapp-ai-abort.ts` 的注册表本身有单测，但那只证明 map 的增删查对。
+      // 中止点其实横跨三段：POST /api/miniapp/app/ai.cancel → dispatch 里
+      // `params.run_id` → 注册表里那条 AbortController → SDK 子进程里的 fetch。
+      // 任何一段接线错了，单测都照绿，作者侧症状却完全一样：点取消没反应，
+      // 只能等它自己跑完。而 mock provider 默认秒回，测试根本来不及在
+      // "在途"窗口里插一个 cancel —— 所以这里用 armHold 把响应掐住。
+      armHold();
+      const hitsBefore = mockPaths.filter(p => p.includes('/v1/messages')).length;
+      const inflight = call('ai.complete', { prompt: 'hold the response', run_id: 'run-cancel' });
+
+      // 等 provider 真的收到请求 = SDK 子进程已经 spawn 并发出去了 = 这次补全
+      // 确定在途，此时 cancel 才有对象可打。抢在注册之前发 cancel 会假绿。
+      const deadline = Date.now() + 20_000;
+      while (mockPaths.filter(p => p.includes('/v1/messages')).length === hitsBefore) {
+        if (Date.now() > deadline) {
+          disarmHold();
+          throw new Error(`provider never saw the request:\n${sidecarOutput}`);
+        }
+        await delay(50);
+      }
+
+      try {
+        const cancelRes = await call('ai.cancel', { run_id: 'run-cancel' });
+        expect(cancelRes.ok, JSON.stringify(cancelRes.error)).toBe(true);
+        // 命中了才会是 true；作者侧"没反应"最常见的成因就是 run_id 没对上。
+        expect(cancelRes.result?.cancelled).toBe(true);
+
+        const settled = await Promise.race([
+          inflight,
+          delay(20_000).then(
+            () =>
+              ({
+                ok: false,
+                error: { code: 'NEVER_SETTLED', message: 'the completion ignored the cancel' },
+              }) as Envelope,
+          ),
+        ]);
+
+        // 关键断言是**措辞**，不只是"没成功"。miniapp-ai.ts:304 的注释说明
+        // 取消与超时必须给出不同结论：作者看到 "timed out" 会去调大 timeout，
+        // 而真实原因是他自己 300ms 前刚点了取消。
+        //
+        // 而这条注释能不能兑现，取决于 SDK 在 abort 时是让 iterator 正常
+        // 收尾（走 :306 的 signal.aborted 分支）还是直接抛 —— 抛的话
+        // 会被 :310 的 catch 接住，把 SDK 的原始 abort 字符串原样甩给作者，
+        // 注释里防的那件事就发生了。abort 跨了子进程，这个假设必须实测。
+        expect(settled.ok, JSON.stringify(settled.error)).toBe(false);
+        expect(settled.error?.message).toMatch(/cancel/i);
+        expect(settled.error?.message).not.toMatch(/timed out/i);
+      } finally {
+        disarmHold();
+      }
+    },
+    90_000,
   );
 });
