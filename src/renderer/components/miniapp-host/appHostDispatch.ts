@@ -24,6 +24,7 @@ import { apiPostJson } from '@/api/apiFetch';
 import { proxyFetch } from '@/api/tauriClient';
 
 import { APP_ERROR_CODES, type AppMethod } from '../../../shared/miniapp/app-protocol';
+import { normalizeAppDataWorkspace } from '../../../shared/miniapp/app-data-workspace';
 import type { AgentBridge, AgentSessionTarget } from './agentEventBridge';
 
 interface DispatchResponse {
@@ -112,11 +113,30 @@ async function dispatchAgentHost(
   // 参考文档给的是 `session.sessionId`（camelCase），本项目内部一路 snake_case。
   // 两个键都返回：作者照文档读 sessionId 才不会拿到 undefined，而读
   // session_id 的既有 MiniApp 不受影响。
-  const sessionResult = (sessionId: string) => ({ session_id: sessionId, sessionId });
+  const sessionResult = (sessionId: string, appDataWorkspace?: string | null) => ({
+    session_id: sessionId,
+    sessionId,
+    // 只在 ensureSession 上出现。`agent.onEvent` 没有这个入参，硬塞一个恒为
+    // null 的字段进去只是让它的返回形状无谓地变一次。
+    ...(appDataWorkspace === undefined ? {} : { app_data_workspace: appDataWorkspace }),
+  });
   if (method === 'agent.ensureSession') {
+    // 参考文档把 `appDataWorkspace` 放在 ensureSession 上。本项目里 workspace 是
+    // **每回合**参数（session 已按 `miniapp_<appId>_<runId>` 隔离），所以这里
+    // 不落状态、也不建目录 —— 建目录发生在 `agent.run` 真正被派到 sidecar 的
+    // 那一刻，那边才有文件系统。
+    //
+    // 但仍然要**校验并回显**：这个分支在 renderer 里就地截走了，请求根本不会到
+    // sidecar（见下方 dispatchAgentTurn 的注释）。放任参数被吞掉的话，作者会
+    // 以为挑了子目录，实际下一个 run 静默跑在 appdata 根上 —— 正是本文件其它地方
+    // 反复在防的"传了但被忽略"。判定用 shared 里那一份纯函数，两条路径同规则。
+    const workspace = normalizeAppDataWorkspace(p.appDataWorkspace);
+    if (!workspace.ok) {
+      return err(APP_ERROR_CODES.INVALID_PARAMS, workspace.reason);
+    }
     try {
       const target = await bridge.ensureSession(runId);
-      return { ok: true, result: sessionResult(target.sessionId) };
+      return { ok: true, result: sessionResult(target.sessionId, workspace.segment || null) };
     } catch (e) {
       return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
     }

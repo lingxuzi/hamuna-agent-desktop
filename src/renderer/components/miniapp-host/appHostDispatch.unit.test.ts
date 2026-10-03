@@ -169,13 +169,19 @@ describe('appHostDispatch: session lifecycle stays renderer-side', () => {
   it('ensureSession exposes the camelCase alias the reference reads', async () => {
     // 参考文档写的是 `session.sessionId`。只回 session_id 的话，照文档写的作者
     // 拿到 undefined，然后把它回传给 run —— 一路 undefined 传下去。
+    // `app_data_workspace: null` 是"作者没挑子目录，用 appdata 根"，与 undefined
+    // 区分：后者会让人以为读错了字段。
     const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
 
     const res = await dispatch('agent.ensureSession', null);
 
     expect(res).toEqual({
       ok: true,
-      result: { session_id: 'miniapp_demo_main', sessionId: 'miniapp_demo_main' },
+      result: {
+        session_id: 'miniapp_demo_main',
+        sessionId: 'miniapp_demo_main',
+        app_data_workspace: null,
+      },
     });
   });
 
@@ -184,14 +190,57 @@ describe('appHostDispatch: session lifecycle stays renderer-side', () => {
 
     const res = await dispatch('agent.onEvent', null);
 
+    // onEvent 没有 appDataWorkspace 入参，所以**不得**多出那个字段。
+    // 反向护栏：这里若也长出 app_data_workspace，说明分支共用错了。
     expect(res).toEqual({
       ok: true,
       result: { session_id: 'miniapp_demo_main', sessionId: 'miniapp_demo_main' },
     });
   });
 
-  it('non-agent methods still use the global sidecar', async () => {
-    apiPostJsonMock.mockResolvedValue({ ok: true, result: { isFile: true } });
+  it('echoes the normalized appDataWorkspace instead of dropping it', async () => {
+    // ensureSession 在 renderer 里就地截走，请求**不会**到 sidecar。参数若被
+    // 吞掉，作者会以为挑了子目录，下一个 run 实际静默跑在 appdata 根上。
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    const res = await dispatch('agent.ensureSession', { appDataWorkspace: '  notes  ' });
+
+    expect(res).toEqual({
+      ok: true,
+      result: {
+        session_id: 'miniapp_demo_main',
+        sessionId: 'miniapp_demo_main',
+        app_data_workspace: 'notes',
+      },
+    });
+  });
+
+  it('rejects an illegal appDataWorkspace at ensureSession, before any session is created', async () => {
+    const bridge = makeBridge();
+    const dispatch = createAppDispatcher('demo', { agentBridge: bridge });
+
+    const res = await dispatch('agent.ensureSession', { appDataWorkspace: '../escape' });
+
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error.code).toBe('INVALID_PARAMS');
+    // 校验没过就不该去起 sidecar —— 非法名字不该留下一个空跑的后台进程。
+    expect(bridge.ensureSession).not.toHaveBeenCalled();
+  });
+
+  it('forwards appDataWorkspace verbatim to the sidecar on run', async () => {
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    await dispatch('agent.run', { prompt: 'hi', appDataWorkspace: 'notes' });
+
+    const init = proxyFetchMock.mock.calls[0][1] as RequestInit;
+    // sidecar 那边要自己再判一次：renderer 是 WebView，它的判定不是唯一信任源。
+    expect(JSON.parse(init.body as string).params).toEqual({
+      prompt: 'hi',
+      appDataWorkspace: 'notes',
+    });
+  });
+
+  it('non-agent methods still use the global sidecar', async () => {    apiPostJsonMock.mockResolvedValue({ ok: true, result: { isFile: true } });
     const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
 
     const res = await dispatch('fs.stat', { path: 'a.txt' });

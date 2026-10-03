@@ -346,6 +346,12 @@ describe('MiniApp app.* over real HTTP against a real Sidecar process', () => {
  * 只覆盖 `ensureSession`：它是**零成本**的那一半（校验 + 归一 + 回显 + 建目录，
  * 不起模型回合），所以能在 integration 池里实跑。`run` 真正把 workspace 交给
  * Agent 那一段要花真实 token，属 credentialed 池，本文件不碰。
+ *
+ * **注意这条路径在生产里不是作者实际会走的那条**：`appHostDispatch.ts` 在
+ * renderer 里就把 `agent.ensureSession` 截走了，请求根本到不了 sidecar。本文件
+ * 验的是 sidecar 自己那份处理（防御性一致，且直接打 sidecar 的工具链会用到）。
+ * 生产路径由 `appHostDispatch.unit.test.ts` 覆盖 —— 两边都要有，因为任一边
+ * 单独修好都不代表作者拿到的行为一致。
  */
 describe('MiniApp appDataWorkspace over real HTTP', () => {
   const agentAppDir = () => join(home, '.hamuna', 'miniapps', AGENT_APP_ID);

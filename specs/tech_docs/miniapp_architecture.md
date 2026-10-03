@@ -196,15 +196,56 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   保留校验是因为它确实拒绝越权请求，是一条真实的策略断言；要真正按 token
   封顶得先给 provider env 加按次覆盖的口子，而真实模型调用属 `credentialed`
   池、本机无法验证，不在能盲改的范围里。**不要把这个字段当成已强制的上限。**
-- **`app.agent.run` 的 `displayText` / `appDataWorkspace` 不做**：
+- **`app.agent.run` 的 `displayText` 不做**：
   - `displayText`（“用户气泡显示的文本 ≠ 发给模型的 prompt”）在本项目**没有落点**：
     `InjectedTurnRequest` 里没有这个字段，注入的 user 消息就是 prompt 本身，全仓库
     `displayText` 的命中项全是会话标题与工具输出，无一属于回合。要做就得给
     `session-engine` facade → adapter → 气泡渲染一路加字段，而真实 turn 属
-    `credentialed` 池、本机无法验证。
-  - `appDataWorkspace`（在 appdata 下选子目录）要动路径判定。它和
-    `workspace_scope` 是同一类口子：Agent 有工具、能写文件，放开就等于任意文件写。
-    当前没有可信的授权记录来源，空开不如锁死。
+    `credential` 池、本机无法验证。
+  - ~~`appDataWorkspace`~~ **已实现**（见下方「`appDataWorkspace`」小节）。之前
+    记成"和 `workspace_scope` 是同一类口子"是判错了：约束是"必须在 appdata 内"，
+    不是"必须等于 appdata 根"，作者能挑 appdata 里的一个直接子目录，出不了
+    appdata。`workspace_scope` 仍然是锁死的（那才是真正的越权口子）。
+
+### `appDataWorkspace`（已实现）
+
+参考文档让作者在 `agent.ensureSession` / `agent.run` 上传一个 workspace 名，让
+MiniApp 在**自己 appdata 底下**挑个子目录当 Agent workspace。
+
+**它和「Agent workspace 强制落在 appdata 下」不冲突。** 之前把这两件事当成
+同一个口子是判错了：约束是"必须在 appdata 内"，不是"必须等于 appdata 根"。
+作者能挑的是 appdata 里的一个**直接子目录**。真正锁死不放的是
+`workspace_scope`（让 Agent 写到用户显式授权的任意目录），那个仍然锁着。
+
+| 位置 | 职责 |
+|---|---|
+| `shared/miniapp/app-data-workspace.ts::normalizeAppDataWorkspace` | 纯字符串判定，renderer 与 sidecar 共读，无 `node:path` 依赖 |
+| `miniapp-app-dispatch.ts::resolveAgentWorkspace` | 拼路径 + 兜底断言 + 按需 `mkdir` |
+
+**拒绝表里真正容易漏的是两条只在 Windows 上犯的**：尾随点 / 尾随空格会被
+Win32 静默剥掉，于是 `work.` 与 `work` 是同一个目录，作者会拿到一个指向别处的
+名字；保留设备名按"第一个点之前那段"判定，所以 `CON.txt` 同样打开 CON 设备。
+这两类在 Linux / macOS 上无害，跨平台 CI 抓不到回归。反过来 `console`
+**必须放行**——判定是整段相等而非前缀匹配，早期的前缀写法会误杀它。
+
+派发层在拼完之后再断言一次 `dirname(目标) === appdata`。当前判定表下这一层
+够不到，属**兜底**而非 chokepoint：它防的是"将来给判定表放宽了某个字符"变成
+路径逃逸。端到端测试**无法**区分是哪一层拦的（两层返回同样的 code 与形状），
+所以那里只断言"被拒 + 无副作用"，不演假的分层断言。
+
+`ensureSession` 只**校验并回显**归一后的值，不落状态：本项目的 workspace 是
+每回合参数（session 已按 `miniapp_<appId>_<runId>` 隔离）。回显好过直接拒绝
+参考文档明写的那个调用——作者传了非法名字时，该在参考叫他用的那个调用上就
+看到报错，而不是被静默忽略、以为自己挑了子目录。
+
+**两条路径都要接线，缺一条作者就拿不到一致行为**：`agent.run` / `turnText` 由
+renderer `proxyFetch` 派到 MiniApp 自己的 sidecar，参数原样带过去，所以
+`appDataWorkspace` 由 sidecar 落地；但 `agent.ensureSession` / `onEvent` 被
+`appHostDispatch.ts` 在 **renderer 里就地截走**，请求根本到不了 sidecar。
+只改 sidecar 的话，作者照参考在 `ensureSession` 上传 workspace 会被静默吞掉，
+下一个 `run` 照样跑在 appdata 根上 —— 这正是"传了但被忽略"。因此 renderer 那条
+分支用**同一份** shared 判定函数校验并回显，`onEvent` 不长出这个字段。
+sidecar 那份仍然保留（纵深 + 直接打 sidecar 的工具链）。
 
 ### 验证状态（截至本轮）
 
@@ -216,8 +257,12 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   起真实 Sidecar 子进程，用真实 loopback HTTP 驱动整个 `app.*` 面：请求信封、
   状态码、错误载荷形状、跨进程 storage/fs 往返、权限 fail-closed、越界路径拒绝、
   非 kebab appId 在路由层被拒，以及 `listAppMethods()` 里每个方法都有决定且不 500。
-  两次变异验证确认它不是空跑：把权限闸改成 `if (false)` 只有两条安全用例转红；
-  把路由的 400 改成 200 只有路由那条转红。
+  16/16。两次变异验证确认它不是空跑：把权限闸改成 `if (false)` 只有两条安全用例
+  转红；把路由的 400 改成 200 只有路由那条转红。
+- `appDataWorkspace` 的判定与接线——18 条单测钉住每种拒绝理由（关掉
+  `FORBIDDEN_CHARS` 有 2 条转红），E2E 用第二个声明了 `agent.enabled` 的 fixture
+  app 实跑归一、回显、按需建目录、越界拒绝与无副作用。
+  **未实跑**：`agent.run` 真正把它交给 Agent 的那一段（要花真实 token）。
 
 **未验证（不是"没写"，是"跑了要花用户的钱"）**：
 
@@ -228,13 +273,13 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   无凭据时 self-skip 的冒烟测试，不要塞进默认 CI。
 
 本节其余条目（`contextFiles` 快照、流式回调、`displayText`、
-`appDataWorkspace`、`max_tokens_per_request`）都是**有意不对齐**，理由见上；
+`max_tokens_per_request`）都是**有意不对齐**，理由见上；
 不要在没有新证据的情况下把它们当 bug 修掉。
 
 ### 与 `miniapp-dev` 参考的已确认分歧（对齐审计，2025）
 
 逐条比对 `miniapp-dev/api-reference.md` 与本实现，**未对齐**的项如下。方法名
-清单（`APP_METHODS`，30 个）已全量对齐，`app.t` / `app.on` / 四个生命周期钩子
+清单（`APP_METHODS`，**34** 个）已全量对齐，`app.t` / `app.on` / 四个生命周期钩子
 / `app.call` / `app.storage` / `dialog` / `clipboard` / `fs` 全部一致，以下是
 清单对不出来的**签名与语义**差异：
 
@@ -244,8 +289,8 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 | `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 唯一消费者 icon-generator 要的是 Phase 3 出图桥接，见 §6 已知边界 |
 | `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无（显式 `APP_UNSUPPORTED_CALLBACK`） | 同上；不是不做，是没有对应契约 —— 见 §6 |
 | `ai.cancel` / `agent.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 已对齐：两种入参都收（`runIdOf`），只收字符串否则静默打空 |
-| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | 无参；返回 `{session_id, sessionId}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` 不放开，workspace 强制 appdata。camelCase 别名已加 |
-| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`displayText` / `appDataWorkspace` / `contextFiles` 不做，理由见 §6 |
+| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | `{appDataWorkspace?}`；返回 `{session_id, sessionId, app_data_workspace}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` **已实现**（校验 + 归一 + 回显，不落状态，见 §6）。camelCase 别名已加 |
+| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId, appDataWorkspace}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`appDataWorkspace` **已实现**；`displayText` / `contextFiles` 不做，理由见 §6 |
 
 **已修的传输层缺陷**：`dispatch` 的 flush 队列在 `host.ready` 的 message
 listener 里执行 postMessage，不在 Promise executor 内。参数不可结构化克隆时
@@ -255,9 +300,9 @@ listener 里的未捕获异常，作者侧的 Promise **永不 settle** —— �
 护栏见 `appRuntimeTransport.unit.test.ts`（回退该守卫即复现 `pending`）。
 
 **待决**：上表前四行（`ai.chat` 契约）要不要整体对齐到参考的流式句柄形态，
-还是保留本项目的一次性形态并在本文档标注差异。`agent` 两行可与 `contextFiles`
-一并处理：`appDataWorkspace` 作为 appdata 下的单层子目录名实现**不与**"Agent
-workspace 强制落在 appdata 下"的安全立场冲突，两者可以共存。
+还是保留本项目的一次性形态并在本文档标注差异。`agent` 行现在只剩
+`displayText`（无落点）与 `contextFiles`（整套子系统）两项；`appDataWorkspace`
+已实现，见 §6「`appDataWorkspace`」。
 
 ---
 
@@ -357,6 +402,7 @@ os error 87、`managed_codex` 的 pubkey 漂移、`space_cloud` / `system_skills
 |---|---|
 | `src/shared/miniapp/app-protocol.ts` | 方法名单 + 4 条信任规则（纯协议） |
 | `src/shared/miniapp/app-permissions.ts` | 纯权限判定（两端共用） |
+| `src/shared/miniapp/app-data-workspace.ts` | `appDataWorkspace` 纯字符串判定（两端共用） |
 | `src/renderer/components/miniapp-host/appRuntimeScript.ts` | 注入 iframe 的 `window.app` |
 | `src/renderer/components/miniapp-host/appHostDispatch.ts` | 派发路由 + native 截走 |
 | `src/server/miniapp-app-dispatch.ts` | sidecar 执行层（判定 #2） |
