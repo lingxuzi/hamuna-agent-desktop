@@ -317,6 +317,80 @@ describe('MiniApp app.* over real HTTP against a real Sidecar process', () => {
     expect(readFileSync(inside, 'utf8')).toBe('stay put');
     expect(existsSync(outside)).toBe(false);
   });
+
+  // 下面三个方法此前只有"能被路由到、能拿到答复"那条扫到，从没有被断言检查过
+  // 它们**做对了事**。`dispatchFs` 是一串 case，把 `copyFile` 接到 `rename` 上、
+  // 把 `rm` 接到 `unlink` 上、把 `mkdir` 写成 no-op，三种都照样返回 ok:true。
+  // 所以每条都断言磁盘上的**结果**，而不只是信封。
+  it('creates the directory, and honours recursive instead of always recursing', async () => {
+    const deep = join(appDir, 'a', 'b', 'c');
+
+    // 不带 recursive 时中间层不存在就该失败 —— 断言它失败才能证明 recursive
+    // 这个参数真的被读到了；只断言成功的话，"永远 recursive" 与 "no-op" 都过。
+    const shallow = await call('fs.mkdir', { path: deep });
+    expect(shallow.ok).toBe(false);
+    if (shallow.ok) throw new Error('expected a failure envelope');
+    expect(existsSync(join(appDir, 'a'))).toBe(false);
+
+    const deep2 = await call('fs.mkdir', { path: deep, opts: { recursive: true } });
+    expect(deep2).toEqual({ ok: true, result: null });
+    expect(existsSync(deep)).toBe(true);
+
+    // 对已存在的目录再 recursive 一次必须仍然成功（Node 的 recursive 语义）。
+    expect(await call('fs.mkdir', { path: deep, opts: { recursive: true } })).toEqual({
+      ok: true,
+      result: null,
+    });
+  });
+
+  it('copies the bytes and leaves the source in place, instead of moving them', async () => {
+    const from = join(appDir, 'copy-from.txt');
+    const to = join(appDir, 'copy-to.txt');
+    writeFileSync(from, 'duplicate me', 'utf8');
+
+    expect(await call('fs.copyFile', { from, to })).toEqual({ ok: true, result: null });
+
+    // 源必须还在：接到 rename 上时这一条会失败。
+    expect(readFileSync(from, 'utf8')).toBe('duplicate me');
+    expect(readFileSync(to, 'utf8')).toBe('duplicate me');
+  });
+
+  it('removes a non-empty directory tree, and only tolerates a missing path with force', async () => {
+    // `fs.rm` 对齐 Node 的 `fs.promises.rm`：目录**必须**带 recursive，空目录也不行
+    // （那是 `rmdir` 的语义）。所以"删掉一棵非空的树"这条同时锁住了它确实是 rm
+    // ——`unlink` 永远做不到，而 `rmdir` 在非空树上会 ENOTEMPTY。
+    const file = join(appDir, 'rm-me.txt');
+    writeFileSync(file, 'bye', 'utf8');
+    expect(await call('fs.rm', { path: file })).toEqual({ ok: true, result: null });
+    expect(existsSync(file)).toBe(false);
+
+    const tree = join(appDir, 'to-remove');
+    mkdirSync(join(tree, 'nested'), { recursive: true });
+    writeFileSync(join(tree, 'nested', 'leaf.txt'), 'leaf', 'utf8');
+
+    // 不带 recursive 删目录必须失败，且失败里要能看出是 EISDIR —— 只断言 ok:false
+    // 的话，"因为参数错了"也会同样通过。
+    const noRecursive = await call('fs.rm', { path: tree });
+    expect(noRecursive.ok).toBe(false);
+    if (noRecursive.ok) throw new Error('expected a failure envelope');
+    expect(noRecursive.error?.message).toContain('EISDIR');
+    expect(existsSync(tree)).toBe(true);
+
+    expect(await call('fs.rm', { path: tree, opts: { recursive: true } })).toEqual({
+      ok: true,
+      result: null,
+    });
+    expect(existsSync(tree)).toBe(false);
+
+    // force 读到了：不存在 + force 才不报错；不存在且没 force 必须报错。
+    expect(await call('fs.rm', { path: tree, opts: { force: true } })).toEqual({
+      ok: true,
+      result: null,
+    });
+    const strict = await call('fs.rm', { path: tree });
+    expect(strict.ok).toBe(false);
+  });
+
   it('answers os.info with facts about the real host, not a fixture', async () => {
     const res = await call('os.info', null);
 
