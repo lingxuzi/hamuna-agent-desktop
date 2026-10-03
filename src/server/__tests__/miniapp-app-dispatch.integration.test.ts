@@ -464,6 +464,35 @@ describe('ai / agent permission gate is enforced at the execution layer', () => 
     expect(res.error?.message).toContain('allowed_models');
   });
 
+  it('does NOT apply allowed_models when the author names no model', async () => {
+    // 上面那条钉的是"传了不在名单里的 model -> 拒"。这条钉的是**反方向**，而且方向
+    // 与直觉相反，所以要单独一条：声明了 `allowed_models`、作者**不传** model 时，
+    // 这一层根本不会因为模型而拒，请求照常往下走。
+    //
+    // 起因是写 credentialed 真上游用例时实测撞见的：带 `allowed_models` 的 meta +
+    // 不带 model 的调用，没有拿到 PERMISSION_DENIED，而是打到了上游才失败。
+    // 原因在 `checkAi`（`src/shared/miniapp/app-permissions.ts`）：上限那个分支整体
+    // 挂在 `if (model && allowed && allowed.length > 0)` 里，`model` 取的是作者传的
+    // `params.model`；不传就是 undefined，整个判定被短路，随后落到宿主自选模型。
+    //
+    // 所以文档里"allowed_models 声明后即成硬上限"只对**显式指定**的模型成立。这条
+    // 让"不指定"这一路不再是个没人注意的缝隙 —— 行为保持现状，但从此是可见且被钉住
+    // 的契约，改不改是产品决定（改的话最简用法必须显式命名模型）。
+    //
+    // 安全上不构成提权：MiniApp 拿不到 Key，也不能把请求指向宿主没登记的上游，最坏
+    // 情况只是用宿主自己的默认模型。
+    writeMeta({ ai: { enabled: true, allowed_models: ['model-a'] } });
+
+    const res = await dispatchMiniAppApp('ai.complete', APP_ID, { prompt: 'hi' });
+
+    // 关键断言是"没被模型这一层拒"，而不是"请求成功"：真发请求需要凭据（credentialed
+    // 池），本机没有，所以这里只钉权限层的判定结果。
+    expect(res.error?.message ?? '', 'must not be denied by the allowed_models gate').not.toContain(
+      'allowed_models',
+    );
+    expect(res.error?.code).not.toBe('PERMISSION_DENIED');
+  });
+
   it('reaches the ai layer (not a routing gap) once the gate passes', async () => {
     // 不验证模型输出（需要真实凭据，属 credentialed 池），只验证路由可达：
     // 一个空 prompt 必须在 ai 层被拒成 INVALID_PARAMS，而不是 UNKNOWN_METHOD。

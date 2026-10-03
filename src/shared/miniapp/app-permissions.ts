@@ -340,9 +340,15 @@ function checkFs(name: string, params: unknown, perms: MiniAppPermissions): Perm
 }
 
 /**
- * `app.ai.*`：必须显式 `ai.enabled`。`allowed_models` 声明后即成硬上限 ——
- * MiniApp 传了未声明的 model 直接拒，不做"降级到默认模型"这种静默替换
- * （作者会以为自己在用 A 模型，实际拿到 B 的输出，排查成本极高）。
+ * `app.ai.*`：必须显式 `ai.enabled`。`allowed_models` 对**作者显式传入的 model**
+ * 生效：传了就必须命中，没传则整段判定被跳过，最终用宿主当前配置的模型。
+ *
+ * 做了"传了未声明的 model 直接拒"，不做静默降级 —— 作者会以为自己在用 A 模型，
+ * 实际拿到 B 的输出，排查成本极高。
+ *
+ * 注意"不传 model"这一路**不**走上限（`allowed.length` 那段整体挂在
+ * `if (model && ...)` 上）。这是当前行为而非设计意图上的"不限制"，所以被
+ * `miniapp-app-dispatch.integration.test.ts` 钉成了显式契约。
  */
 function checkAi(params: unknown, perms: MiniAppPermissions): PermissionDecision {
   if (perms.ai?.enabled !== true) {

@@ -39,6 +39,14 @@ export interface MiniAppPermissions {
   };
   ai?: {
     enabled?: boolean;
+    /**
+     * 显式可用的 model 名单（支持 `'*'` 通配）。判定**只针对作者在调用里显式
+     * 传入的 `model`**：传了就必须命中，没传则整段判定不参与，最终用宿主当前
+     * 配置的模型。
+     *
+     * 所以它是"点名要用的模型"的上限，不是"最终落到哪个模型"的上限。想要一个
+     * 真正封死的模型集合，调用时必须显式写 `model`。
+     */
     allowed_models?: string[];
     max_tokens_per_request?: number;
     rate_limit_per_minute?: number;

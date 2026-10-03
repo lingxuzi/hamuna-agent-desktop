@@ -2595,8 +2595,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // only way to load third-party libraries under `default-src 'none'`, and
 // correct the stale "ai.cancel / agent streaming don't exist" notes. Both
 // used to steer authors away from capabilities that now work.
+//
+// 61: miniapp-creator — correct the `allowed_models` claim. It said "声明后即硬上限",
+// but the gate in `checkAi` hangs entirely off `if (model && ...)`, so it only ever
+// applied to a model the author names explicitly. Left in place it teaches authors
+// that omitting `model` still confines them to their list, which is false.
 
-const SYSTEM_SKILLS_VERSION: &str = "60";
+const SYSTEM_SKILLS_VERSION: &str = "61";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

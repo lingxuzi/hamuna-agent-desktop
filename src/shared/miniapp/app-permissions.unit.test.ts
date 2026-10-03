@@ -509,7 +509,7 @@ describe('app.ai permission gate', () => {
     expect(checkAppPermission('ai.complete', { prompt: 'hi' }, perms).allowed).toBe(false);
   });
 
-  it('enforces allowed_models as a hard allow-list once declared', () => {
+  it('enforces allowed_models against the model the caller actually names', () => {
     const perms: MiniAppPermissions = { ai: { enabled: true, allowed_models: ['model-a'] } };
     expect(checkAppPermission('ai.complete', { prompt: 'x', model: 'model-a' }, perms).allowed).toBe(
       true,

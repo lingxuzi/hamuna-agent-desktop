@@ -93,8 +93,17 @@ Bash。`tools: []` 之后模型只能产出文本，bypassPermissions 自然失�
 
 `agent` 侧**绝不**给 `bypassPermissions` —— 这是第三方代码能拿到的上限。
 
-`ai.allowed_models` 声明后即硬上限：传了未声明的 model **直接拒**，不做
-"降级到默认模型"这种静默替换（作者会以为在用 A，实际拿到 B 的输出）。
+`ai.allowed_models` 对**作者显式传入的 model** 生效：传了未声明的 **直接拒**，
+不做"降级到默认模型"这种静默替换（作者会以为在用 A，实际拿到 B 的输出）。
+
+边界要说清：**不传 `model` 时这段判定整体被跳过**，最终用宿主当前配置的模型。
+也就是说它是"点名要用的模型"的上限，不是"最终落到哪个模型"的上限。这是当前行为
+（`checkAi` 里整段挂在 `if (model && ...)` 上），不是"作者可以随便用"的设计意图，
+所以由 `does NOT apply allowed_models when the author names no model` 钉住。
+
+不构成提权：MiniApp 拿不到 Key，也不能把请求指向宿主没登记的上游，最坏情况只是
+用宿主自己的默认模型。要不要把"不指定"也纳入上限是**产品决定** —— 收紧的代价是
+最简用法必须显式命名模型。
 
 ### agent 为什么走 session-engine facade
 

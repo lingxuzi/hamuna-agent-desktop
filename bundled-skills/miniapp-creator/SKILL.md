@@ -97,8 +97,10 @@ const models = await app.ai.getModels();   // { models: [...], display: [...] }
 MiniApp 的 prompt 完全由第三方作者控制，若模型带着工具，一次间接注入就能在
 用户机器上执行命令。所以 `app.ai` 只适合翻译 / 分类 / 摘要这类纯文本处理。
 
-可选声明 `permissions.ai.allowed_models`（数组，支持 `"*"`）：声明后即硬上限，
-传未声明的 model 会被**直接拒绝**而不是静默降级。
+可选声明 `permissions.ai.allowed_models`（数组，支持 `"*"`）：传了未声明的 model
+会被**直接拒绝**而不是静默降级。判定只看你**显式传入**的 `model` —— 不传 `model`
+就不受这一层限制，实际走的是宿主当前配置的模型。想要一个封死的模型集合，请在
+每次调用里显式写 `model`。
 
 ### 隐藏 Agent 会话（`app.agent`）—— 有状态、能用工具
 
