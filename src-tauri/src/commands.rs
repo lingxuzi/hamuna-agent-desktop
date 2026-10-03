@@ -755,14 +755,15 @@ fn read_miniapp_source_blocking<R: Runtime>(
         // document with the parent's base URL — so `href="style.css"` resolves
         // against the app origin, not the MiniApp directory, and never loads.
         // Inline the siblings the entry references before handing it over.
-        // `entry` is always a relative path under `dir`, so parent() is Some;
-        // fall back to `dir` rather than unwrap so a bare filename can't panic.
+        // `read_meta_entry` guarantees `entry` is relative and `..`-free, so it
+        // stays under `dir`; the fallback is for a bare filename whose parent()
+        // would be empty, not for an escape.
         let source_dir = index_path.parent().unwrap_or(dir.as_path());
         let html = inline_miniapp_siblings(&html, source_dir);
         return Ok(MiniAppSourceResponse {
             app_id: app_id.to_string(),
             source: html,
-            entry,
+            entry: entry.to_string_lossy().into_owned(),
         });
     }
     Err(format!("MiniApp '{}' has no readable source/index.html", app_id))
@@ -905,7 +906,18 @@ fn read_inline_target(source_dir: &Path, rel: &str) -> Option<String> {
 }
 
 /// Read the `entry` field from `meta.json` (default `source/index.html`).
-fn read_meta_entry(meta_path: &Path) -> Result<String, String> {
+///
+/// `entry` 由 AI 写进 meta.json，且**不在 `MiniAppMeta` schema 里** —— 也就是说
+/// 从写入到读取全链路没有任何一层校验它。唯一的消费者要拿它 `dir.join(entry)`
+/// 去读文件，而 Windows 的 `join` 遇到带盘符的 entry 会静默丢掉 `dir`，返回值
+/// 于是就是任意文件的内容，且这份内容会作为 MiniApp 的 source 送进 iframe 的
+/// srcdoc —— 读原语自带外泄。
+///
+/// 校验放在这里而不是调用点：`read_meta_entry` 是唯一出口，把返回值变成
+/// `PathBuf`（而不是 `String`）之后，新调用方在类型上就拿不到未校验的字符串。
+/// 复用 `validate_miniapp_relative_path` 而不是再写一份判据 —— 同一份形状判断
+/// 只维护一处。
+fn read_meta_entry(meta_path: &Path) -> Result<PathBuf, String> {
     let raw = fs::read_to_string(meta_path).map_err(|e| format!("read meta.json: {}", e))?;
     let parsed: serde_json::Value =
         serde_json::from_str(&raw).map_err(|e| format!("parse meta.json: {}", e))?;
@@ -913,7 +925,7 @@ fn read_meta_entry(meta_path: &Path) -> Result<String, String> {
         .get("entry")
         .and_then(|v| v.as_str())
         .unwrap_or("source/index.html");
-    Ok(entry.to_string())
+    validate_miniapp_relative_path(entry)
 }
 
 /// Compute candidate source directories for an appId in installed → bundled
@@ -5104,7 +5116,8 @@ mod miniapp_tests {
     use super::{
         collect_snapshot, inline_miniapp_siblings, is_safe_app_id, is_safe_run_id,
         join_inside_app_dir, miniapp_root_dir, normalize_app_data_workspace, read_inline_target,
-        resolve_miniapp_agent_workspace, validate_miniapp_relative_path, CreateMiniAppRequest,
+        read_meta_entry, resolve_miniapp_agent_workspace, validate_miniapp_relative_path,
+        CreateMiniAppRequest,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -5244,6 +5257,49 @@ mod miniapp_tests {
         assert_eq!(
             read_inline_target(&source_dir, "probe-ui.js").as_deref(),
             Some("ok")
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // `meta.json` 的 `entry` 是 **AI 写的**字段，而且根本不在 `MiniAppMeta` schema
+    // 里 —— 全链路零校验。调用方拿它 `dir.join(&entry)` 直接读文件，而 Windows 的
+    // join 遇到带盘符的 entry 会静默丢掉 dir，于是返回值成了任意文件读原语，
+    // 且这份内容会被当作 MiniApp 的 source 塞进 iframe 的 srcdoc，自带外泄。
+    // 调用点那句注释"entry 总是 dir 下的相对路径"正是这条洞的说明书。
+    #[test]
+    fn meta_entry_must_be_a_relative_path_inside_the_app_dir() {
+        let base = std::env::temp_dir().join("hamuna-meta-entry-probe");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("source")).expect("probe source dir");
+        let meta = base.join("meta.json");
+        let outside = base.join("outside.html");
+        std::fs::write(&outside, "<h1>TOP-SECRET</h1>").expect("write probe");
+        std::fs::write(base.join("source").join("index.html"), "<h1>ok</h1>").expect("probe");
+
+        for hostile in [
+            outside.to_string_lossy().to_string(),
+            r"C:\Windows\win.ini".to_string(),
+            r"C:win.ini".to_string(),
+            r"..\..\evil.html".to_string(),
+            "/etc/passwd".to_string(),
+        ] {
+            std::fs::write(&meta, format!("{{\"entry\": {:?}}}", hostile)).expect("write meta");
+            assert!(
+                read_meta_entry(&meta).is_err(),
+                "meta.json entry {:?} must be rejected: it escapes the MiniApp dir",
+                hostile
+            );
+        }
+
+        std::fs::write(&meta, r#"{"entry":"source/index.html"}"#).expect("write meta");
+        assert_eq!(
+            read_meta_entry(&meta).expect("benign entry"),
+            Path::new("source/index.html")
+        );
+        std::fs::write(&meta, "{}").expect("write meta");
+        assert_eq!(
+            read_meta_entry(&meta).expect("default entry"),
+            Path::new("source/index.html")
         );
         let _ = std::fs::remove_dir_all(&base);
     }
