@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiPostJson } from '@/api/apiFetch';
 
-import { buildAppResult, verifyAppCall } from '../../../shared/miniapp/app-protocol';
+import { postAppResult, verifyAppCall } from '../../../shared/miniapp/app-protocol';
 import { hostAllowed } from '../../../shared/miniapp/app-permissions';
 import type { MiniAppDependency, MiniAppPermissions } from '../../../shared/miniapp/types';
 
@@ -506,7 +506,16 @@ export default function MiniAppRunner({
         permissionsRef.current ?? {},
         dispatcher,
       );
-      iframe.contentWindow.postMessage(buildAppResult(nonceRef.current, call.id, result), '*');
+      // 回信本身也可能抛：postMessage 走结构化克隆，结果里有不可克隆的值时
+      // 会抛 DataCloneError，这条回信就发不出去，作者侧永远 pending。降级成
+      // 纯对象错误信封的逻辑与理由见 app-protocol.ts::postAppResult。
+      postAppResult(
+        iframe.contentWindow,
+        nonceRef.current,
+        call.id,
+        result,
+        call.payload.method,
+      );
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);

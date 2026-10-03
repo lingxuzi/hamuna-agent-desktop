@@ -177,3 +177,51 @@ export function buildAppResult(
       : { ok: false, error: result.error }),
   };
 }
+
+/** postMessage 的最小结构面。真实传 iframe.contentWindow，测试传替身。 */
+export interface AppResultTarget {
+  postMessage(message: unknown, targetOrigin: string): void;
+}
+
+/**
+ * 把回信投回 iframe，**保证作者那侧不会永远 pending**。
+ *
+ * postMessage 走结构化克隆：结果里有函数、Proxy、DOM 节点之类不可克隆的值时它
+ * 抛 DataCloneError，回信就发不出去。iframe 侧的 `dispatch` 是 `new Promise`
+ * 包着的，收不到回信就永远不 settle —— 表现是「点了没反应、控制台也干净」，
+ * 和网络卡住无法区分。
+ *
+ * 所以克隆失败时降级重发一条**纯对象**错误信封（可克隆），让作者的 catch
+ * 至少能触发。两次都失败（比如 iframe 已经卸载）只能吞掉：作者连同 iframe
+ * 一起没了，没有任何可通知的对象。
+ *
+ * 提取成函数而不是内联在组件里，是因为这条契约必须能被单测钉住：它防的是
+ * 静默挂起，而挂起在集成层面「什么都不发生」，不主动制造一个不可克隆的结果
+ * 就永远碰不到。
+ */
+export function postAppResult(
+  target: AppResultTarget,
+  nonce: string,
+  id: string,
+  result: { ok: true; result: unknown } | { ok: false; error: { code: string; message: string } },
+  methodForMessage = 'call',
+): void {
+  const tryPost = (payload: AppResultMessage): boolean => {
+    try {
+      target.postMessage(payload, '*');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (tryPost(buildAppResult(nonce, id, result))) return;
+  tryPost(
+    buildAppResult(nonce, id, {
+      ok: false,
+      error: {
+        code: APP_ERROR_CODES.HOST_ERROR,
+        message: `app.${methodForMessage} result is not structured-cloneable`,
+      },
+    }),
+  );
+}

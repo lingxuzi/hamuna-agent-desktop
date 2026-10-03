@@ -350,6 +350,33 @@ SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的�
   外来的 id 被 `INVALID_PARAMS` 拒掉），`agent.enabled: false` 的 app 在真实
   HTTP 链路上**叫不起模型**（断言 mock 没收到新请求，不只是断言报错）。**零成本**。
   这条同时查出了上面记的 `appDataWorkspace` 在 builtin 上的 no-op。
+- **iframe 传输层的两半程**——`shared/miniapp/app-protocol.unit.test.ts` 19 条：
+  `verifyAppCall` 的四条信任规则逐条钉住（source 必须是本 iframe 的
+  contentWindow、nonce 由宿主铸造无法自造、appId 与本 iframe 绑定、method 在
+  名单内），外加 8 种畸形信封「不抛、只拒」。这层此前**完全没有测试文件**，而
+  它是第三方代码进不了别的 MiniApp 语境的唯一屏障。四条规则逐个去掉，各自
+  恰好打红 1 条。
+  门面侧 `appRuntimeTransport.unit.test.ts` 26 条补上回信方向：回信对上就
+  resolve/reject、对不上（nonce 错、id 未知）必须**不 settle**（宁可挂着也不能
+  串台）、并发调用倒序回信各归各位、事件按 appearance/locale/agent 三条通道
+  分流。
+
+**修掉的传输层缺陷（第二个）**：宿主侧回信**没有守卫**。`postMessage` 走结构化
+克隆，`runAppCall` 的结果里一旦有不可克隆的值（函数 / Proxy），回信就抛
+DataCloneError 发不出去，作者的 Promise 永久 pending —— 表现是"点了没反应、
+控制台也干净"，和网络卡住无法区分。这与门面侧早就修掉的缺陷是**同一种**，
+等于同一个坑只修了一半。现在降级成纯对象错误信封（可克隆），逻辑收在
+`app-protocol.ts::postAppResult` 里以便单测直接喂它一个不可克隆的值；把降级
+去掉会有 3 条转红。
+
+**一个测试环境的坑，值得记下来省得重踩**：组件层的
+`event.source instanceof Window` 在 jsdom 下**恒为 false**（iframe 的
+contentWindow 与测试环境的 `Window` 不是同一个 realm），于是 handler 会把每一次
+调用都判成"不是本 iframe 发的"而丢弃。真实浏览器里 srcDoc + allow-same-origin
+的 iframe 是同 realm，判定成立。所以**不要**在 jsdom 里驱动这条消息通道来测信任
+判定——写出来的负向断言会全绿，而正向断言永远失败，两边都不代表生产行为。
+信任判定与回信都是纯逻辑，直接单测即可，这也是把它们从组件里提到
+`app-protocol.ts` 的原因。
 
 **仍未验证（需要真实 Provider，属于 credentialed）**：
 
