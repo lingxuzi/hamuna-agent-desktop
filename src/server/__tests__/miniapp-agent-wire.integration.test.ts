@@ -480,6 +480,69 @@ describe('app.agent over real HTTP against a real Sidecar and a loopback provide
   );
 
   it(
+    'sends a request the real Messages API would accept, not one this mock tolerates',
+    async () => {
+      // 上一条是对**原始 JSON 串**做子串匹配，它证明不了"请求是合法的"。
+      // 这个 loopback mock 对**任何**请求体都回 200 + 一段完整 SSE，而真正的
+      // Anthropic Messages API 缺 `model` / `max_tokens` / `messages` 会直接 400。
+      // 也就是说：请求形状坏掉时，这套 e2e 仍然全绿，只有真实上游才会发现。
+      //
+      // 所以这里把 body 解析出来，逐条断真实 API 的**必填**字段。这是全套
+      // loopback 证据里唯一能替真实上游说话的一段 —— 它把"mock 什么都收"这个
+      // 盲区收窄到"字段在、类型对、prompt 真的落在 messages 里"。
+      //
+      // 注意这条断的是**契约**而不是我们的代码：`max_tokens` 由 SDK 填，我们改不动。
+      // 所以它的价值在于 —— 将来 SDK 升级把必填字段改了，这里会红。
+      const before = mockBodies.length;
+      const res = await call('agent.run', { prompt: PROMPT, run_id: 'run-shape' });
+      expect(res.ok, JSON.stringify(res.error)).toBe(true);
+
+      const raw = mockBodies[before];
+      expect(raw, 'the provider was never contacted').toBeTruthy();
+      const body = JSON.parse(raw as string) as {
+        model?: unknown;
+        max_tokens?: unknown;
+        messages?: unknown;
+        stream?: unknown;
+      };
+
+      expect(typeof body.model, 'model must be a string').toBe('string');
+      expect(String(body.model).length).toBeGreaterThan(0);
+      // 真实 API 缺这一条会 400，而且错误信息不会提到 MiniApp。
+      expect(typeof body.max_tokens, 'the real API 400s without max_tokens').toBe('number');
+      expect(body.max_tokens as number).toBeGreaterThan(0);
+
+      // mock 回的是 SSE，所以请求必须是 stream:true —— 不是的话这条 mock 自己就不自洽。
+      expect(body.stream, 'this mock only ever answers in SSE').toBe(true);
+      expect(Array.isArray(body.messages), 'messages must be an array').toBe(true);
+      expect((body.messages as unknown[]).length).toBeGreaterThan(0);
+
+      // 这里**只**断结构，不断"role 只能是 user/assistant"。
+      // 一开始就是这么写的，然后它红了：SDK 真的会在 messages 里放
+      // `role: "system"` 的条目，内容是它自己的账本（`<total_tokens>` 余额、
+      // 可用 agent 类型清单）。按我以为的 API 契约这就是 400，但生产链路一直
+      // 正常 —— 说明我对真实上游的 role 约束的理解并不完整。
+      // 把一条自己没核实过的模型写成断言，等于给后人埋一个"改对了反而变红"的雷，
+      // 所以这里退回到能证实的部分：每条消息都有非空 role 与非空 content。
+      const seen = body.messages as { role?: unknown; content?: unknown }[];
+      for (const m of seen) {
+        expect(typeof m.role, 'every message needs a role').toBe('string');
+        expect(String(m.role).length).toBeGreaterThan(0);
+        expect(m.content, 'every message needs content').toBeTruthy();
+      }
+      // 顺带记一笔：这个 mock 与真实上游并非形状完全一致（见上），所以"loopback
+      // 全绿"能证明的是**我们的链路自洽**，不能替代真实上游的验收。
+      expect(seen.some((m) => m.role === 'user'), 'the author turn must be a user message')
+        .toBe(true);
+
+      // 最后回到作者视角：prompt 必须是**一条消息的内容**，而不是漂在 metadata
+      // 或别处的某个字符串。子串匹配整个 blob 分不出这两种。
+      expect(JSON.stringify(body.messages)).toContain(PROMPT);
+    },
+    120_000,
+  );
+
+  it(
     'runs the Agent inside the appDataWorkspace subdirectory once that has been chosen',
     async () => {
       // `appDataWorkspace` 真正生效的那一端。
