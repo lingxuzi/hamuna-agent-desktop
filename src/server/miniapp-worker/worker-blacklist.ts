@@ -71,7 +71,16 @@ export function scanBlacklist(src: string, moduleId: string): BlacklistHit | nul
   // Bypass tokens: case-sensitive substring match against the full source.
   // We do NOT use regex here — the goal is "if these tokens appear at all,
   // refuse". An attacker can't hide `process.binding` in a string and later
-  // eval it under this layer; the eval content is opaque (covered by AST).
+  // eval it under this layer; the eval content is opaque to the AST layer.
+  //
+  // 修正一处曾经为假的断言：上面括号里的 "covered by AST" 说的是 `ast-policy.ts`
+  // 会兜住 eval 的内容。实测不会 —— `scanAst('eval("require(\'fs\')")')` 返回
+  // `null`（AST 看得到 `eval` 这个 CallExpression，但它的参数是个 Literal 字符串，
+  // 规则 1 只匹配 callee 为 `require` 的调用，规则 3 只覆盖 `new Function`）。
+  // 换句话说这层是**唯一**能看见字符串字面量里藏 token 的地方，而它当时没被接线。
+  //
+  // 同时提醒：本函数在生产路径上**目前没有任何调用方**（只有 `index.ts` 的再导出与
+  // 单测），真正生效的只有 `require-shim.ts` 里的 `scanAst`。
   for (const token of DENY_BYPASS_TOKENS) {
     if (src.includes(token)) {
       return { reason: 'bypass-token', pattern: token };
