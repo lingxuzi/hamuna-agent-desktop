@@ -36,6 +36,7 @@ const CHILD_PROCESS_ALLOWLIST = new Set([
   // the model provider. It lets the real app.ai chain (SDK spawn, SSE parse,
   // envelope) run in CI for free, so it never touches a real credential.
   'src/server/__tests__/miniapp-ai-wire.integration.test.ts',
+  'src/server/__tests__/miniapp-agent-wire.integration.test.ts',
 ]);
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g');
 

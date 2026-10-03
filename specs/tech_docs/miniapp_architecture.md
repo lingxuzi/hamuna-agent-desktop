@@ -228,6 +228,27 @@ Win32 静默剥掉，于是 `work.` 与 `work` 是同一个目录，作者会拿
 这两类在 Linux / macOS 上无害，跨平台 CI 抓不到回归。反过来 `console`
 **必须放行**——判定是整段相等而非前缀匹配，早期的前缀写法会误杀它。
 
+**⚠️ 已实跑发现：这个字段在默认的 builtin runtime 上是静默 no-op。**
+`runInjectedTurn` 根本不读 `request.workspacePath`——builtin adapter 的
+`getBuiltinWorkspacePath()` 取的是 `getAgentState().agentDir`，也就是**进程级**
+的 agent dir，只有 external adapter 读了那个 per-turn 字段。所以作者传
+`appDataWorkspace: 'notes'`，目录照样建了、`ensureSession` 照样回显
+`app_data_workspace: 'notes'`，但 Agent 的 cwd 仍在 appdata 根。
+
+它**不是越权**：appdata 本身已是沙箱边界，收窄只是范围细化。问题在于作者会以为
+自己收窄了而实际没有。要让 builtin 也生效，得把 per-turn cwd 一路穿到 SDK 的
+`query({cwd})`，而那条路径与桌面 Tab、同进程共存 turn、session 持久化、
+`enabledOfficialToolIds` 的 workspace 归属共用——属于架构变更，按 CLAUDE.md
+「需要架构变更 MUST 先与用户讨论」不能顺手改。**待决**。
+
+**真正锁住 Agent 范围的不是这个字段，而是 Rust 那一侧**：
+`cmd_miniapp_ensure_session` 把 `--agent-dir` 设成
+`~/.hamuna/miniapps/<appId>`，sidecar 与 appdata 1:1，于是 builtin 的进程级
+agent dir 天然就是 appdata。这条已由
+`miniapp-agent-wire.integration.test.ts` 实跑钉住（断言 SDK 请求体里的
+`Primary working directory` 落在 appdata 内、且不是起 sidecar 用的宿主
+workspace；把 harness 的 agent-dir 换回宿主 workspace 会有 2 条立刻转红）。
+
 派发层在拼完之后再断言一次 `dirname(目标) === appdata`。当前判定表下这一层
 够不到，属**兜底**而非 chokepoint：它防的是"将来给判定表放宽了某个字符"变成
 路径逃逸。端到端测试**无法**区分是哪一层拦的（两层返回同样的 code 与形状），
@@ -320,15 +341,20 @@ SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的�
   `ai.complete` 真的 spawn SDK 子进程、真的打 `POST /v1/messages?beta=true`、
   真的解析 SSE 回来，并断言**拿到的就是 mock 回的那段文本**且 mock 确实收到过
   requests。`ai.chat` 的参考 messages 数组形态也实跑通了。**零成本**。
+- **`app.agent` 全链路**——`src/server/__tests__/miniapp-agent-wire.integration.test.ts`
+  起一个 `role=session` 的 sidecar（照 Rust 的样子把 `--agent-dir` 设成 appdata），
+  `agent.run` 真的跑完一个 turn：`had_message: true`、prompt 原文进了 SDK 请求体、
+  cwd 落在 appdata 内。`sessionId` 往返也打通了（`onEvent` 拿到的真 id 能跑，
+  外来的 id 被 `INVALID_PARAMS` 拒掉），`agent.enabled: false` 的 app 在真实
+  HTTP 链路上**叫不起模型**（断言 mock 没收到新请求，不只是断言报错）。**零成本**。
+  这条同时查出了上面记的 `appDataWorkspace` 在 builtin 上的 no-op。
 
 **仍未验证（需要真实 Provider，属于 credentialed）**：
 
-- **真实模型回合**（`app.ai.complete` / `app.agent.run` 打到真实 Anthropic 或
-  用户配置的第三方 Provider）。上面那条验证覆盖到 HTTP 边界为止：请求怎么组装、
-  SDK 怎么 spawn、SSE 怎么解析、信封怎么回全都验过了，**没有**覆盖的是
-  "真实上游是否接受这个请求形状、真实模型是否真的返回内容"——那是上游的契约，
-  不是我们的代码。`app.agent.run` 还要额外经过 Rust 起的**专用 sidecar**，
-  路径与 `app.ai` 不同，仍未实跑。
+- **真实模型回合**打到真实 Anthropic 或用户配置的第三方 Provider。上面两条验证
+  覆盖到 HTTP 边界为止：请求怎么组装、SDK 怎么 spawn、SSE / turn 怎么解析、
+  信封怎么回全都验过了，**没有**覆盖的是"真实上游是否接受这个请求形状、真实
+  模型是否真的返回内容"——那是上游的契约，不是我们的代码。
 
 本节其余条目（`contextFiles` 快照、流式回调、`displayText`、
 `max_tokens_per_request`）都是**有意不对齐**，理由见上；
