@@ -493,10 +493,17 @@ it('carries appDataWorkspace from the author all the way to the Agent session', 
   it('runs an agent turn on the MiniApp sidecar port, never the global sidecar', async () => {
     // 回合必须发到**专用** sidecar：跑在全局 sidecar 上时 SSE 事件与 abort 命中不了
     // 同一个 turn，作者看到的是"调用成功、回合从没发生"。
+    //
+    // 调用形态必须是 SKILL.md:110 教作者的**位置参数**形态。facade 是
+    // run(prompt, o)；第一版这里写的是 run({prompt:'hi'}) —— 对象进了 prompt 槽，
+    // 真 sidecar 的 requireString 会当场拒掉。这个用例一直是绿的，只因为
+    // proxyFetch 被 mock、sidecar 根本没参与，于是"作者根本写不出这种调用"
+    // 没有任何一层会报。改正形态的同时补上 prompt 转发断言 —— 否则"prompt 压根没送出去"
+    // 和"prompt 是个对象"测起来没区别。
     bridgeEnsureSession.mockResolvedValue({ sessionId: 'miniapp_wire-probe_main', port: 51999 });
     proxyFetch.mockResolvedValue({ json: async () => ({ ok: true, result: { text: 'done' } }) });
     const { reports } = await mountAndBoot(
-      "window.app.agent.run({ prompt: 'hi' })",
+      "window.app.agent.run('hi')",
       { agent: { enabled: true } },
     );
 
@@ -507,9 +514,38 @@ it('carries appDataWorkspace from the author all the way to the Agent session', 
       'http://127.0.0.1:51999/api/miniapp/app/agent.run',
       expect.objectContaining({ method: 'POST' }),
     );
+    // prompt 必须真的进了请求体。"调用成功"和"模型收到了这句话"是两件事。
+    const runBody = JSON.parse((proxyFetch.mock.calls[0][1] as { body: string }).body);
+    expect(runBody.params).toEqual(expect.objectContaining({ prompt: 'hi' }));
     // 绝不能同时走 apiPostJson（那是全局 sidecar）。
     expect(apiPostJson).not.toHaveBeenCalled();
     expect(reports[0]).toEqual({ ok: true, value: { text: 'done' } });
+  }, 15000);
+
+  it('reaches the host as agent.turnText, keeping the alias name the author called', async () => {
+    // turnText 与 run 在 sidecar 是同一个 case，**但是两个入口**：作者调用的方法名
+    // 必须原样出现在 URL 里。把它偷偷改成 agent.run 在功能上等价（同一个 case 收），
+    // 于是没有任何一侧会红 —— 除非有人在这里钉住名字。这正是本条存在的理由。
+    //
+    // 形态取自 SKILL.md:112 的位置参数写法。
+    bridgeEnsureSession.mockResolvedValue({ sessionId: 'miniapp_wire-probe_main', port: 51999 });
+    proxyFetch.mockResolvedValue({ json: async () => ({ ok: true, result: { text: 'more' } }) });
+    const { reports } = await mountAndBoot(
+      "window.app.agent.turnText('hi again')",
+      { agent: { enabled: true } },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(proxyFetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:51999/api/miniapp/app/agent.turnText',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    // 别名有自己独立的参数拼装（prompt 取自 text 而非 prompt）。字段名拼错时
+    // sidecar 报的是 requires a prompt，症状同样伪装成"能调用"。
+    const body = JSON.parse((proxyFetch.mock.calls[0][1] as { body: string }).body);
+    expect(body.params).toEqual(expect.objectContaining({ prompt: 'hi again' }));
+    expect(reports[0]).toEqual({ ok: true, value: { text: 'more' } });
   }, 15000);
 
   it('never lets a workspace travel with agent.cancel, so cancel keeps working', async () => {

@@ -414,6 +414,30 @@ describe('app.agent over real HTTP against a real Sidecar and a loopback provide
     120_000,
   );
 
+  // turnText 是 run 的语义化别名（facade 里两个方法体逐字段相同，只是派发的
+  // 方法名不同）。正因为是别名，它此前**一条真实回合测试都没有** —— 现有覆盖
+  // 全是 mock 掉回合生产者的路由测试。
+  //
+  // 风险是具体的：别名路径上任何只属于它的一处断裂（facade 少传一个字段、
+  // sidecar 的 case 被改名、renderer 把 turnText 路由到别处）都不会被
+  // agent.run 的真实用例看见 —— 两条断言的是同一个 case，但走的是**不同
+  // 的入口**。所以这条不是重复，是补入口。
+  it(
+    'runs a real turn through the agent.turnText alias, not just the run entry',
+    async () => {
+      const before = mockBodies.length;
+      const res = await call('agent.turnText', { prompt: PROMPT, run_id: 'run-alias' });
+
+      expect(res.ok, JSON.stringify(res.error)).toBe(true);
+      expect(res.result?.text).toBe(COMPLETION);
+      // 与 run 同款的真输出断言：facade 的 ok:true 不代表真的有输出。
+      expect(res.result?.had_message).toBe(true);
+      // 而且真的走了网络，别名没有绕过 provider。
+      expect(mockBodies.length).toBe(before + 1);
+    },
+    120_000,
+  );
+
   it(
     'runs the Agent inside the app own appdata, never the host workspace',
     async () => {
