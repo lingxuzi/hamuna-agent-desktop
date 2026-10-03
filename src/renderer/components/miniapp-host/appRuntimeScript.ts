@@ -145,9 +145,13 @@ export function buildAppRuntimeScript(appId: string): string {
     }
 
     // 宿主主动事件（主题 / 语言变更 / Agent 流式输出）
+    // 先 applyEnv 再 emit：监听者通常在自己的 handler 里重新渲染，而 app.t()
+    // 读的是 env.locale。若先 emit，回调跑起来时 env 还是旧语言，onLocaleChange
+    // 只能让作者自己拼字符串绕开 app.t —— 那就等于白给了一个"语言变了"的通知。
+    // applyEnv 内部跳过 undefined，畸形事件不会把 env 洗成 undefined。
     if (d.kind === 'app.event' && typeof d.type === 'string') {
-      if (d.type === 'theme.change') emit('appearance', d);
-      else if (d.type === 'locale.change') emit('locale', d.locale);
+      if (d.type === 'theme.change') { applyEnv({ appearanceMode: d.appearanceMode }); emit('appearance', d); }
+      else if (d.type === 'locale.change') { applyEnv({ locale: d.locale }); emit('locale', d.locale); }
       // agent.* 走独立通道：Agent 的流式 delta 频率很高，混进通用 event
       // 会让只想监听主题变更的作者被迫过滤大量无关负载。
       else if (d.type.indexOf('agent.') === 0) emit('agent', d);

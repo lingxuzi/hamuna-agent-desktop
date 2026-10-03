@@ -43,6 +43,9 @@ interface Harness {
     on: (fn: (e: unknown) => void) => () => void;
     onAppearanceChange: (fn: (e: unknown) => void) => () => void;
     onLocaleChange: (fn: (locale: unknown) => void) => () => void;
+    t: (table: unknown, fallback?: unknown) => unknown;
+    readonly locale: string;
+    readonly appearanceMode: string;
   };
   ready: (nonce: string) => void;
   /** 模拟宿主回信：把 runtime 真正收到的那条 app.result 投进它的 listener。 */
@@ -465,6 +468,64 @@ describe('host events reach the right author channel', () => {
     h.emit({ kind: 'app.event', type: 'locale.change', locale: 'zh-CN' });
 
     expect(locale).toEqual(['zh-CN']);
+  });
+
+  // 上面那条只断言"通知到了"，不断言"值变了" —— 正是这个缺口让一个
+  // onLocaleChange 会触发、但 app.t() 永远停在首帧语言的产品 bug 绿灯通过。
+  // 事件的价值在于它描述的状态已生效，所以下面每条都断言效果本身。
+  it('locale.change actually moves app.locale and app.t(), not just the notification', () => {
+    const h = mountRuntime();
+    h.ready(NONCE);
+    // harness 的 ready() 不带 env，所以这里就是 runtime 的默认值
+    expect(h.app.locale).toBe('en-US');
+
+    const table = { 'en-US': 'Hello', 'zh-CN': '你好' };
+    expect(h.app.t(table, '?')).toBe('Hello');
+
+    h.emit({ kind: 'app.event', type: 'locale.change', locale: 'zh-CN' });
+
+    expect(h.app.locale).toBe('zh-CN');
+    expect(h.app.t(table, '?')).toBe('你好');
+  });
+
+  it('the new locale is already visible from inside the onLocaleChange callback', () => {
+    // applyEnv 与 emit 的顺序是这条的全部意义：先 emit 再 apply，作者在回调里
+    // 调 app.t() 拿到的还是旧语言，只能绕过 app.t 自己拼字符串。
+    const h = mountRuntime();
+    h.ready(NONCE);
+
+    const table = { 'en-US': 'Hello', 'zh-CN': '你好' };
+    const seenInsideCallback: unknown[] = [];
+    h.app.onLocaleChange(() => {
+      seenInsideCallback.push(h.app.t(table, '?'));
+    });
+
+    h.emit({ kind: 'app.event', type: 'locale.change', locale: 'zh-CN' });
+
+    expect(seenInsideCallback).toEqual(['你好']);
+  });
+
+  it('theme.change actually moves app.appearanceMode', () => {
+    const h = mountRuntime();
+    h.ready(NONCE);
+    expect(h.app.appearanceMode).toBe('dark');
+
+    h.emit({ kind: 'app.event', type: 'theme.change', appearanceMode: 'light' });
+
+    expect(h.app.appearanceMode).toBe('light');
+  });
+
+  it('a change event carrying no value does not wipe env to undefined', () => {
+    // applyEnv 跳过 undefined 是这条的安全网：畸形事件不能把 app.locale 洗成
+    // undefined，那样 app.t() 会静默退到 fallback，看起来像"翻译表写错了"。
+    const h = mountRuntime();
+    h.ready(NONCE);
+
+    h.emit({ kind: 'app.event', type: 'locale.change' });
+    h.emit({ kind: 'app.event', type: 'theme.change' });
+
+    expect(h.app.locale).toBe('en-US');
+    expect(h.app.appearanceMode).toBe('dark');
   });
 
   it('agent.* streaming events reach agent.onEvent, not the generic channel', () => {

@@ -43,7 +43,8 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
   // 宿主环境事实，随 `host.ready` 下发给 iframe 侧 runtime，填充
   // `app.locale` / `app.appearanceMode` / `app.platform` / `app.appDataDir` /
   // `app.workspaceDir`。`app.t(...)` 与 `onLocaleChange` 依赖前三者，因此必须
-  // 在首帧就正确。
+  // 在首帧就正确。首帧之外由 MiniAppRunner 在 `runtimeEnv.locale` 变化时补推一条
+  // locale.change —— 那一半在宿主侧，别以为首帧之后就没人管了。
   const runtimeEnv = useMemo(
     () => ({
       appearanceMode: theme.appearanceMode,

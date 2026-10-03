@@ -592,6 +592,24 @@ export default function MiniAppRunner({
     );
   }, [runtimeEnv]);
 
+  // 语言变更下发。`host.ready` 只在 iframe load 时发一次，发完 iframe 内的 `env`
+  // 就冻结了。Theme 切换会顺带自愈：themeCss 变 → srcDoc 变 → iframe 重载 →
+  // host.ready 重发。但语言切换不动 themeCss，也就不重载，于是 `app.t()` 永远
+  // 返回首帧语言，而 `onLocaleChange` 在此之前连生产者都没有 —— 作者注册了
+  // 监听也只能收到一个永远不会来的事件。
+  //
+  // 用 ref 记上次下发的值，而不是跳过首次的布尔量：iframe 因别的原因重载时
+  // `host.ready` 会重新带上最新 locale，此时不该补发一条多余的 locale.change。
+  const lastPushedLocaleRef = useRef(runtimeEnv.locale);
+  useEffect(() => {
+    if (lastPushedLocaleRef.current === runtimeEnv.locale) return;
+    lastPushedLocaleRef.current = runtimeEnv.locale;
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'app.event', type: 'locale.change', locale: runtimeEnv.locale },
+      '*',
+    );
+  }, [runtimeEnv.locale]);
+
   // `app.onActivate` / `app.onDeactivate` 的真实来源。
   //
   // 之前 runtime 暴露了这两个回调但宿主从不发送 —— 作者按文档写

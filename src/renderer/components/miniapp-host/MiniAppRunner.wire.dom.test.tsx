@@ -34,6 +34,7 @@
 // @vitest-environment-options { "runScripts": "dangerously" }
 
 import { render, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import MiniAppRunner from './MiniAppRunner';
@@ -171,6 +172,8 @@ interface Mounted {
   reports: unknown[];
   /** iframe -> host 方向**真实**发出来的信封（driver 旁路记录）。 */
   outbound: Record<string, unknown>[];
+  /** 重渲染同一个 runner（换 prop 而不重新 mount）。 */
+  rerender: (el: ReactElement) => void;
 }
 
 /** 渲染 → 灌真 srcdoc → 装 driver → 补 load（触发 host.ready）。 */
@@ -179,7 +182,7 @@ async function mountAndBoot(
   permissions: Record<string, unknown>,
   runnerProps: Record<string, unknown> = {},
 ): Promise<Mounted> {
-  const { container } = render(
+  const { container, rerender } = render(
     <MiniAppRunner
       appId={APP_ID}
       srcDoc={authorSrcDoc(call)}
@@ -203,7 +206,7 @@ async function mountAndBoot(
   installMessageDriver(iframe, reports, outbound);
   // jsdom 不触发 load；宿主在 load 里发 host.ready，冲刷作者排队的调用。
   iframe.dispatchEvent(new Event('load'));
-  return { iframe, reports, outbound };
+  return { iframe, reports, outbound, rerender };
 }
 
 describe('MiniAppRunner / window.app.* survives the real iframe round trip', () => {
@@ -859,5 +862,60 @@ it('carries appDataWorkspace from the author all the way to the Agent session', 
     );
 
     expect(apiPostJson).not.toHaveBeenCalled();
+  }, 15000);
+});
+
+// 语言变更的下发链路。宿主 `host.ready` 只在 iframe load 时发一次，发完 iframe 内的
+// `env` 就冻结了。Theme 切换会顺带自愈（themeCss 变 → srcDoc 变 → iframe 重载 →
+// host.ready 重发），但语言切换不动 themeCss，也就不重载 —— 以前没有任何东西把新
+// 语言送进去，`app.t()` 永远返回首帧语言，而 `onLocaleChange` 连生产者都没有。
+//
+// 一条用例同时钉住两件事：宿主**确实推了**，以及推送被处理的那一刻 `app.t()`
+// **已经是新值**。后者是 applyEnv 与 emit 的顺序问题，单元测试和本用例都会红。
+describe('MiniAppRunner pushes a locale change into a running MiniApp', () => {
+  const localeProbe = `new Promise(function (res) {
+    app.onLocaleChange(function () {
+      res({ locale: app.locale, hello: app.t({ 'en-US': 'Hello', 'zh-CN': 'Ni hao' }, '?') });
+    });
+  })`;
+
+  const runnerEl = (locale: string): ReactElement => (
+    <MiniAppRunner
+      appId={APP_ID}
+      srcDoc={authorSrcDoc(localeProbe)}
+      height={200}
+      permissions={{} as never}
+      env={{ locale } as never}
+    />
+  );
+
+  it('a locale change reaches the iframe, and app.t() already sees the new value', async () => {
+    const { reports, rerender } = await mountAndBoot(localeProbe, {}, {
+      env: { locale: 'en-US' },
+    });
+
+    // 首帧不该有 locale 事件：host.ready 已经把 en-US 送进去了
+    expect(reports).toHaveLength(0);
+
+    rerender(runnerEl('zh-CN'));
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+    expect(reports[0]).toEqual({
+      ok: true,
+      value: { locale: 'zh-CN', hello: 'Ni hao' },
+    });
+  }, 15000);
+
+  it('re-rendering with an unchanged locale pushes nothing', async () => {
+    // 少了这条，一次无关的父级重渲染就会把作者所有 onLocaleChange 监听打一遍，
+    // 而作者没理由知道自己写的一次性初始化逻辑会被反复触发。
+    const { reports, rerender } = await mountAndBoot(localeProbe, {}, {
+      env: { locale: 'en-US' },
+    });
+
+    rerender(runnerEl('en-US'));
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(reports).toHaveLength(0);
   }, 15000);
 });
