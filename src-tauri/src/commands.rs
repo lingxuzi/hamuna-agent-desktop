@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -1073,7 +1073,33 @@ fn resolve_miniapp_agent_workspace(
     Ok(path)
 }
 
-/// Validate a relative file path inside `~/.hamana/miniapps/<appId>/`.
+/// 把已校验的相对路径接到 MiniApp 目录上，并断言结果仍在目录之内。
+///
+/// 这是写盘那条路的唯一出口，也是承重墙。Windows 上 `join` 遇到带盘符或带根的
+/// 路径会**静默**丢弃 base —— 不报错、不落日志，文件就写到 miniapps/ 外面去了。
+/// 所以这里断言的是"最终写到哪儿"这个性质本身，而不是再判一次字符串形状
+/// （validator 已经在判形状了，两处各判一次容易只改一处）。
+fn join_inside_app_dir(dest: &Path, rel: &Path) -> Result<PathBuf, String> {
+    // `starts_with` 是**纯词法**的前缀比较，`..` 在它眼里只是个普通组件，
+    // 所以 `dest/../../x` 照样 starts_with dest —— 光判 starts_with 等于没判。
+    // 归一化要碰文件系统（symlink、尚未落盘的路径），这里不做，只把 `..` 拒掉。
+    if rel.components().any(|c| c == Component::ParentDir) {
+        return Err(format!(
+            "refusing to write '{}': it contains a parent-directory component",
+            rel.display()
+        ));
+    }
+    let leaf = dest.join(rel);
+    if !leaf.starts_with(dest) {
+        return Err(format!(
+            "refusing to write '{}': it resolves outside the MiniApp directory",
+            rel.display()
+        ));
+    }
+    Ok(leaf)
+}
+
+/// Validate a relative file path inside `~/.hamuna/miniapps/<appId>/`.
 /// Reject: path traversal (`..`), absolute paths, symlink-leaf on parent, empty path.
 /// The caller's full destination is `<miniapp_root>/<appId>/<relative>`.
 fn validate_miniapp_relative_path(rel: &str) -> Result<PathBuf, String> {
@@ -1087,6 +1113,18 @@ fn validate_miniapp_relative_path(rel: &str) -> Result<PathBuf, String> {
         return Err("path must be relative".to_string());
     }
     let p = PathBuf::from(rel);
+    // 上面两条只挡得住 POSIX 形状的绝对路径。Windows 上 `base.join(p)` 遇到带盘符
+    // 或带根的 p 会**整个丢弃 base**，于是 `C:\x`（不以 / 或 \ 开头、也不含 ..）
+    // 能把文件写到 miniapps/ 之外，`C:x` 这种 drive-relative 的也一样。判组件
+    // 而不是判首字符：Prefix / RootDir 一律拒。
+    if p.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::Prefix(_) | std::path::Component::RootDir
+        )
+    }) {
+        return Err("path must be relative (no drive letter and no root)".to_string());
+    }
     // 规范化路径前缀（不接受绝对 + 反斜杠路径）
     let normalized: PathBuf = p
         .components()
@@ -1334,7 +1372,9 @@ fn create_from_chat_blocking(req: &CreateMiniAppRequest) -> Result<CreateMiniApp
                 if path == Path::new("meta.json") {
                     continue;
                 }
-                let leaf = dest.join(path);
+                let leaf = join_inside_app_dir(&dest, path).map_err(|e| {
+                    crate::utils::file_lock::FileLockError::Io(std::io::Error::other(e))
+                })?;
                 if let Some(parent) = leaf.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
                         crate::utils::file_lock::FileLockError::Io(std::io::Error::other(format!(
@@ -5049,10 +5089,12 @@ mod runtime_detection_cache_tests {
 
 #[cfg(test)]
 mod miniapp_tests {
+    use std::path::Path;
+
     use super::{
         collect_snapshot, inline_miniapp_siblings, is_safe_app_id, is_safe_run_id,
-        miniapp_root_dir, normalize_app_data_workspace, resolve_miniapp_agent_workspace,
-        validate_miniapp_relative_path, CreateMiniAppRequest,
+        join_inside_app_dir, miniapp_root_dir, normalize_app_data_workspace,
+        resolve_miniapp_agent_workspace, validate_miniapp_relative_path, CreateMiniAppRequest,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -5084,6 +5126,77 @@ mod miniapp_tests {
         assert!(validate_miniapp_relative_path("../etc/passwd").is_err());
         assert!(validate_miniapp_relative_path("/etc/passwd").is_err());
         assert!(validate_miniapp_relative_path("source\\..\\evil").is_err());
+    }
+
+    // Windows 上 `dest.join(rel)` 遇到**带盘符**的 rel 会整个丢弃 dest，所以
+    // "rel 看起来是相对的" 并不等于 "拼出来的叶子在 dest 之内"：既不以 '/' 开头、
+    // 也不以 '\\' 开头、还不含 '..' 的 `C:\x` 与 `C:x` 都能把文件写到
+    // miniapps/ 外面。上面那条用例只试了 POSIX 形状的绝对路径（`/etc/passwd`），
+    // 漏的正是这个 —— 实测 `dest.join("C:\\...\\evil.lnk")` 返回 evil.lnk 本身。
+    #[test]
+    fn drive_prefixed_and_rooted_paths_are_rejected_by_the_validator() {
+        for rel in [
+            r"C:\Users\victim\Desktop\evil.lnk",
+            r"C:/Users/victim/Desktop/evil.lnk",
+            r"C:evil.txt",
+            r"\\server\share\x",
+            r"\Windows\evil.txt",
+            "/etc/passwd",
+        ] {
+            assert!(
+                validate_miniapp_relative_path(rel).is_err(),
+                "{:?} must be rejected: it is absolute (or drive-prefixed) on Windows, \
+                 so joining it onto the app dir discards the app dir",
+                rel
+            );
+        }
+    }
+
+    // 良性输入不能被上面那次收紧误伤 —— 否则"多拒一点"就能把整个 MiniApp 装不进来。
+    #[test]
+    fn ordinary_relative_paths_are_still_accepted() {
+        for rel in [
+            "meta.json",
+            "source/index.html",
+            "source\\ui.js",
+            "source/./ui.js",
+            "a/b/c/deep.js",
+        ] {
+            assert!(
+                validate_miniapp_relative_path(rel).is_ok(),
+                "{:?} should still be accepted",
+                rel
+            );
+        }
+    }
+
+    // 第二层。上面那条测的是 validator；这条**绕过 validator 直接调**
+    // `join_inside_app_dir`，因为一旦第一层生效，第二层在这条攻击路径上永远走不到
+    // —— 走 validator 的写法会让这个断言变成永真，测了个寂寞。
+    // 这层存在的意义就是"哪天 validator 被改松了，写盘那条路自己也拦得住"。
+    #[test]
+    fn join_inside_app_dir_refuses_anything_landing_outside() {
+        let dest = miniapp_root_dir().expect("home dir").join("demo-app");
+        for hostile in [
+            Path::new(r"C:\Users\victim\Desktop\evil.lnk"),
+            Path::new(r"C:evil.txt"),
+            Path::new(r"\\server\share\x"),
+            Path::new("/etc/passwd"),
+            Path::new(r"..\..\Desktop\evil.lnk"),
+        ] {
+            match join_inside_app_dir(&dest, hostile) {
+                Ok(leaf) => panic!(
+                    "join_inside_app_dir accepted {:?} and produced {}, which escapes {}",
+                    hostile,
+                    leaf.display(),
+                    dest.display()
+                ),
+                Err(_) => {}
+            }
+        }
+        // 同时钉住"不是一律拒绝"：良性输入必须照常通过。
+        let leaf = join_inside_app_dir(&dest, Path::new("source/ui.js")).expect("benign");
+        assert!(leaf.starts_with(&dest));
     }
 
     #[test]
