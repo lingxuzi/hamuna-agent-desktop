@@ -109,6 +109,25 @@ MiniApp 的 prompt 完全由第三方作者控制，若模型带着工具，一�
 就不受这一层限制，实际走的是宿主当前配置的模型。想要一个封死的模型集合，请在
 每次调用里显式写 `model`。
 
+`complete` 与 `chat` 是**同一条路**：`chat` 只是把 `[{ role, content }]` 拍平成一段
+文本再送进一次性补全，宿主不维护任何会话（多轮是 `app.agent` 的事）。想"记住上一轮"
+就自己把历史攒进数组一起传，别指望 `chat` 替你记。
+
+一次补全可能跑满 60s，所以作者要能自己停：
+
+```javascript
+// 并发调用时每个都要自己的 run_id，否则 cancel 只会命中最近一个
+const p = app.ai.complete('把这篇摘要翻成英文', { run_id: 'job-1' });
+setTimeout(() => app.ai.cancel('job-1'), 3000);
+await p;   // 被中止或超时会 reject
+```
+
+- 可选 `timeout_ms`（毫秒）：默认 **60s**，宿主夹到 1s~5min。这个默认值与 `shell` /
+  `net` 的 30s **故意不同** —— 补全是在等模型出字，30s 太紧。
+- 可选 `run_id`：不传按 `'default'` 算，所以串行调用直接 `app.ai.cancel('default')`
+  就能停。`cancel` 返回 `{ cancelled, inflightCount }`，`cancelled: false` 表示那次
+  已经结束 —— 正常结果，不是错误。
+
 ### 隐藏 Agent 会话（`app.agent`）—— 有状态、能读自己的沙箱
 
 需 `meta.json` 声明 `permissions.agent.enabled = true`。**与 `ai.enabled`
