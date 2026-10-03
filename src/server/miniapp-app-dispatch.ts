@@ -518,9 +518,27 @@ async function dispatchNet(params: Record<string, unknown>): Promise<DispatchOut
       method: typeof opts.method === 'string' ? opts.method : 'GET',
       headers: asRecord(opts.headers) as Record<string, string>,
       body: typeof opts.body === 'string' ? opts.body : undefined,
+      // 用 'manual' 而不是仓库另外三处的 'error'，是因为这一处**面向作者**：
+      // 'error' 抛出来的是 undici 包过的 "fetch failed"，作者看到的是
+      // HOST_ERROR + 一句没头没尾的话。'manual' 把 3xx 原样交回来，下面能给
+      // 一句指名道姓的拒绝理由。安全语义两者等价。
+      //
+      // 为什么必须关掉：上面那次私网判定只看**第一跳**。作者声明的 host 确实是
+      // https、第一跳也确实是 https，但它完全可以 302 到 169.254.169.254，
+      // 而那一跳我们从头到尾没检查过 —— 于是「只允许 https + 不许私网」这条
+      // 约束等于形同虚设，`net.fetch` 成了把 sidecar 当跳板去读云 metadata 的
+      // 通道。仓库里 tool-attachments / kb-ingest / provider-probe 早就为同一个
+      // 理由关掉了它（见 provider-probe.ts 的注释），这里是唯一漏掉的一处。
+      redirect: 'manual',
     },
     { timeoutMs },
   );
+  if (res.status >= 300 && res.status < 400) {
+    return fail(
+      APP_ERROR_CODES.PERMISSION_DENIED,
+      `net.fetch refuses redirects (got HTTP ${res.status}) — request the final URL directly`,
+    );
+  }
   return ok({ status: res.status, body: await res.text() });
 }
 
