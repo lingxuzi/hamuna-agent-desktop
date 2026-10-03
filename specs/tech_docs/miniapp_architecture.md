@@ -318,13 +318,15 @@ SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的�
   起真实 Sidecar 子进程，用真实 loopback HTTP 驱动整个 `app.*` 面：请求信封、
   状态码、错误载荷形状、跨进程 storage/fs 往返、权限 fail-closed、越界路径拒绝、
   非 kebab appId 在路由层被拒，以及 `listAppMethods()` 里每个方法都有决定且不 500。
-  16/16。两次变异验证确认它不是空跑：把权限闸改成 `if (false)` 只有两条安全用例
+  19/19。两次变异验证确认它不是空跑：把权限闸改成 `if (false)` 只有两条安全用例
   转红；把路由的 400 改成 200 只有路由那条转红。
 - `appDataWorkspace` 的判定与接线——18 条单测钉住每种拒绝理由（关掉
   `FORBIDDEN_CHARS` 有 2 条转红），E2E 用第二个声明了 `agent.enabled` 的 fixture
   app 实跑归一、回显、按需建目录、越界拒绝与无副作用；renderer 与 iframe 门面
   各有单测锁住"参数确实被转发 / 回显"（把门面改回无参硬传 `null` 会转红）。
-  **未实跑**：`agent.run` 真正把它交给 Agent 的那一段（要花真实 token）。
+  **实跑结论**：真接上去之后发现它在 builtin runtime 上不生效，见本节下方
+  「`appDataWorkspace`（已实现）」里的 ⚠️。所以判定层与接线层是对的，缺的是
+  builtin 侧的落地——那一半是待决的架构改动。
 
 - `app.ai` 的**入参归一**（零成本那一半）——`ai.complete` / `ai.chat` 在
   `normalizeAiPrompt` 处就拒掉空 prompt，压根走不到 `query()`，所以这部分可以
