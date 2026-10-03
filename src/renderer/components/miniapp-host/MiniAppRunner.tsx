@@ -216,13 +216,18 @@ export default function MiniAppRunner({
   // methods). The spawn effect gates on this state so `worker.ready` isn't
   // posted before the host knows which methods are legal.
   const [kindAllowlist, setKindAllowlist] = useState<readonly string[] | undefined>(undefined);
+  // 「没有 workerKind ⇒ 没有 allow-list」是**派生**出来的，不是存出来的。
+  //
+  // 之前这里在 effect 里同步 `setKindAllowlist(undefined)`，被
+  // react-hooks/set-state-in-effect 拦下（同步 setState 会触发级联渲染）。改成
+  // 派生顺带消掉一个真实的陈旧窗口：workerKind 从 'a' 变 null 时，旧 allowlist
+  // 仍留在 state 里，而 listener 那个 effect 只判了 `kind !== 'worker'`、没判
+  // workerKind，可能拿上一轮的名单去校验新的一轮。现在两种情况都直接 fail-closed。
+  const effectiveKindAllowlist = workerKind ? kindAllowlist : undefined;
   useEffect(() => {
     nonceRef.current = mintBubbleClaimNonce();
     workerNonceRef.current = mintWorkerCallNonce();
-    if (!workerKind) {
-      setKindAllowlist(undefined);
-      return;
-    }
+    if (!workerKind) return;
     let cancelled = false;
     void loadWorkerKinds()
       .then((map) => {
@@ -336,7 +341,7 @@ export default function MiniAppRunner({
   // host has the allow-list, and verifyWorkerCall will reject everything.
   useEffect(() => {
     if (kind !== 'worker' || !workerKind) return;
-    if (kindAllowlist === undefined) return; // kinds cache not loaded yet
+    if (effectiveKindAllowlist === undefined) return; // kinds cache not loaded yet
     let cancelled = false;
     (async () => {
       try {
@@ -392,7 +397,7 @@ export default function MiniAppRunner({
         }
       }
     };
-  }, [appId, kind, workerKind, kindAllowlist]);
+  }, [appId, kind, workerKind, effectiveKindAllowlist]);
 
   // Bubble Claim postMessage listener（PRD v0.4 §B.3 + CLAUDE.md §Pit-of-Success
   // postMessage 红线）。trust decisions live in `verifyBubbleClaim`; this
@@ -422,7 +427,7 @@ export default function MiniAppRunner({
         iframe?.contentWindow ?? null,
         workerNonceRef.current,
         appId,
-        kindAllowlist,
+        effectiveKindAllowlist,
       );
       if (!call) return;
       const workerId = workerIdRef.current;
@@ -452,7 +457,7 @@ export default function MiniAppRunner({
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [appId, kind, kindAllowlist]);
+  }, [appId, kind, effectiveKindAllowlist]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
