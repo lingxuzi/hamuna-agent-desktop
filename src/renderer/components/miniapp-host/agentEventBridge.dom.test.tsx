@@ -80,7 +80,60 @@ describe('agentBridge: session lifecycle', () => {
       (c) => c[0] === 'cmd_miniapp_ensure_session',
     );
     expect(ensureCalls).toHaveLength(1);
-    expect(ensureCalls[0][1]).toEqual({ appId: 'probe', runId: 'main' });
+    // `appDataWorkspace: null` = 用 appdata 根。显式发出去（而不是省略键）是刻意的：
+    // Rust 侧读的是这个字段，省略与 null 必须落在同一个分支上。
+    expect(ensureCalls[0][1]).toEqual({
+      appId: 'probe',
+      runId: 'main',
+      appDataWorkspace: null,
+    });
+  });
+
+  it('sends the requested appDataWorkspace to Rust so the agent dir becomes appdata/<segment>', async () => {
+    // 这条是 `appDataWorkspace` 真正生效的那一跳：它必须跟着 ensure 走，因为
+    // builtin adapter 的 cwd 是进程级 `--agent-dir`，SDK 子进程 spawn 时读一次。
+    // 只校验不回传的话，作者挑的子目录根本到不了文件系统。
+    const bridge = makeBridge('probe');
+    await bridge.ensureSession('main', 'notes');
+    const ensureCalls = invokeMock.mock.calls.filter(
+      (c) => c[0] === 'cmd_miniapp_ensure_session',
+    );
+    expect(ensureCalls).toHaveLength(1);
+    expect(ensureCalls[0][1]).toEqual({
+      appId: 'probe',
+      runId: 'main',
+      appDataWorkspace: 'notes',
+    });
+  });
+
+  it('refuses to move a live session to a different workspace instead of silently reusing it', async () => {
+    // 不拦的话：Rust 的 ensure_session_sidecar 看到 session 还活着就直接复用、
+    // **完全不看新路径**，而 bridge 照样回显作者这次请求的名字 —— 作者以为收窄
+    // 生效了，实际 sidecar 还跑在旧目录。这正是本项目反复在治的"传了但没生效"。
+    const bridge = makeBridge('probe');
+    await bridge.ensureSession('main', 'notes');
+
+    await expect(bridge.ensureSession('main', 'other')).rejects.toThrow(
+      /cannot be moved/,
+    );
+    // 同一个 workspace 再问一次是允许的：那是幂等，不是冲突。
+    await expect(bridge.ensureSession('main', 'notes')).resolves.toMatchObject({
+      sessionId: 'miniapp_probe_main',
+    });
+    // 没表达偏好（不传）也不该报错 —— 那是作者最常见的用法。
+    await expect(bridge.ensureSession('main')).resolves.toMatchObject({
+      sessionId: 'miniapp_probe_main',
+    });
+  });
+
+  it('lets the workspace be chosen again after release', async () => {
+    // release 之后 session 没了，新 workspace 就是一个全新的选择，不是冲突。
+    const bridge = makeBridge('probe');
+    await bridge.ensureSession('main', 'notes');
+    await bridge.release();
+    await expect(bridge.ensureSession('main', 'other')).resolves.toMatchObject({
+      sessionId: 'miniapp_probe_main',
+    });
   });
 
   it('reuses the same session on a second ensure (no re-invoke)', async () => {

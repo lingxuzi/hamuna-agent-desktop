@@ -982,6 +982,97 @@ fn is_safe_app_id(app_id: &str) -> bool {
         && !app_id.ends_with('-')
 }
 
+/// `appDataWorkspace` 子目录名长度上限，与 shared 那份保持一致。
+const APP_DATA_WORKSPACE_MAX_LEN: usize = 64;
+
+/// Win32 保留设备名。判定按"第一个点之前那段"，所以 `CON.txt` 同样打向 CON 设备。
+const WINDOWS_RESERVED_NAMES: [&str; 22] = [
+    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7",
+    "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+];
+
+/// 归一作者给的 `appDataWorkspace`，返回 `Some(segment)` 或 `None`（用 appdata 根）。
+///
+/// **必须与 `src/shared/miniapp/app-data-workspace.ts::normalizeAppDataWorkspace`
+/// 逐条同规则。** 两边是各自独立的信任边界：renderer 校验一遍是为了当场给作者
+/// 一条能照着改的错误，Rust 再校验一遍是因为 renderer 的入参不可信，而这里
+/// 拼出来的路径**就是** Agent 的 cwd（它带工具、`acceptEdits` 允许自动落盘）。
+/// 少一边的后果是"另一侧静默放行"，所以改规则时 MUST 两处同步。
+///
+/// 拒绝表里最容易漏的两条只在 Windows 上犯：尾随点 / 尾随空格会被 Win32 静默
+/// 剥掉，于是 `work.` 与 `work` 指向同一个目录，作者拿到一个指向别处的名字。
+/// 跨平台 CI 抓不到这类回归，所以它们必须在这个表里被显式挡住。
+fn normalize_app_data_workspace(raw: Option<&str>) -> Result<Option<String>, String> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let segment = raw.trim();
+    if segment.is_empty() {
+        return Err("appDataWorkspace must not be empty".to_string());
+    }
+    if segment.chars().count() > APP_DATA_WORKSPACE_MAX_LEN {
+        return Err(format!(
+            "appDataWorkspace must be at most {} characters, got {}",
+            APP_DATA_WORKSPACE_MAX_LEN,
+            segment.chars().count()
+        ));
+    }
+    if segment
+        .chars()
+        .any(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+    {
+        return Err(format!(
+            "appDataWorkspace must be a single directory name; '{segment}' contains a path separator or reserved character"
+        ));
+    }
+    if segment.chars().any(|c| (c as u32) < 0x20 || c as u32 == 0x7f) {
+        return Err("appDataWorkspace must not contain control characters".to_string());
+    }
+    if segment == "." || segment == ".." {
+        return Err("appDataWorkspace must not be '.' or '..'".to_string());
+    }
+    if segment.starts_with('.') || segment.ends_with('.') {
+        return Err(format!(
+            "appDataWorkspace must not start or end with '.'; Win32 strips it and would alias '{segment}' onto a different directory"
+        ));
+    }
+    let stem = segment
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if WINDOWS_RESERVED_NAMES.contains(&stem.as_str()) {
+        return Err(format!(
+            "'{stem}' is a reserved Windows device name and cannot be a directory"
+        ));
+    }
+    Ok(Some(segment.to_string()))
+}
+
+/// 解析 MiniApp 的 Agent workspace 绝对路径。
+///
+/// 这是 `appDataWorkspace` 落地成 cwd 的**唯一** chokepoint：先判 segment 合法，
+/// 再断言拼出来的路径是 `<miniapps>/<appId>` 的**直接**子目录。多一层就说明
+/// segment 偷偷带进了分隔符，断言比"再判一次字符串"强 —— 它判的是最终路径这个
+/// 性质本身。
+fn resolve_miniapp_agent_workspace(
+    app_id: &str,
+    app_data_workspace: Option<&str>,
+) -> Result<PathBuf, String> {
+    let base = miniapp_root_dir()?.join(app_id);
+    let Some(segment) = normalize_app_data_workspace(app_data_workspace)? else {
+        return Ok(base);
+    };
+    let path = base.join(&segment);
+    // 承重墙：直接子目录。判最终路径而不是再判一次字符串。
+    if path.parent() != Some(base.as_path()) {
+        return Err(format!(
+            "appDataWorkspace '{segment}' resolved outside the app's own appdata directory"
+        ));
+    }
+    Ok(path)
+}
+
 /// Validate a relative file path inside `~/.hamana/miniapps/<appId>/`.
 /// Reject: path traversal (`..`), absolute paths, symlink-leaf on parent, empty path.
 /// The caller's full destination is `<miniapp_root>/<appId>/<relative>`.
@@ -1404,6 +1495,16 @@ pub async fn cmd_miniapp_diff_source(
 /// the per-appId cap (≤ 3) lives in `sidecar::session_lifecycle` and LRU-evicts
 /// the oldest sibling before a 4th spawn would allocate a fresh port.
 ///
+/// ## `app_data_workspace`
+///
+/// 参考文档让作者在 appdata 底下挑一个子目录当 Agent workspace。这个选择只能
+/// 在**建 session 时**落地，因为 builtin adapter 的 cwd 是进程级 `agentDir`
+/// （`--agent-dir`，SDK 子进程 spawn 时读一次），per-turn 参数表达不了。
+/// 所以 `--agent-dir` 本身就是这个语义的落点，不是副作用。
+///
+/// 之前它被忽略、`ensureSession` 却照样回显作者请求的名字，于是作者以为收窄
+/// 生效了。现在由 `resolve_miniapp_agent_workspace` 判定并拼路径，判完再建目录。
+///
 /// Returns the resolved `session_id`, the `port` to point subsequent renderer
 /// requests at, and the `generation` header value the renderer must echo on
 /// those requests (so a stop-event for an evicted sibling can't race).
@@ -1413,6 +1514,7 @@ pub async fn cmd_miniapp_ensure_session<R: Runtime>(
     state: State<'_, ManagedSidecarManager>,
     app_id: String,
     run_id: String,
+    app_data_workspace: Option<String>,
 ) -> Result<MiniAppSessionEnsureOutcome, String> {
     if !is_safe_app_id(&app_id) {
         return Err(format!("appId '{}' must be kebab-case ASCII", app_id));
@@ -1423,24 +1525,34 @@ pub async fn cmd_miniapp_ensure_session<R: Runtime>(
             run_id
         ));
     }
+    // 判定必须发生在建 session **之前**：非法名字不许留下一个已起的 Node 进程。
+    let workspace_path = resolve_miniapp_agent_workspace(&app_id, app_data_workspace.as_deref())?;
     let session_id = format!("miniapp_{}_{}", app_id, run_id);
     let owner_id = format!("miniapp-agent:{}:{}", app_id, run_id);
-    let workspace_path = miniapp_root_dir()?
-        .join(&app_id)
-        .to_string_lossy()
-        .into_owned();
+    // SDK 的 cwd 就是这个目录，缺了它首个 turn 会因 cwd 不存在而失败。
+    if let Err(e) = std::fs::create_dir_all(&workspace_path) {
+        return Err(format!(
+            "failed to create the MiniApp agent workspace {}: {}",
+            workspace_path.display(),
+            e
+        ));
+    }
     let result = crate::sidecar::ensure_session_sidecar(
         &app_handle,
         &state,
         &session_id,
-        std::path::Path::new(&workspace_path),
+        &workspace_path,
         crate::sidecar::SidecarOwner::Agent(owner_id.clone()),
     )?;
     logger::debug(
         &app_handle,
         format!(
-            "[miniapp:{}] ensure_session ok: session={} port={} new={}",
-            app_id, session_id, result.port, result.is_new
+            "[miniapp:{}] ensure_session ok: session={} port={} new={} workspace={}",
+            app_id,
+            session_id,
+            result.port,
+            result.is_new,
+            workspace_path.display()
         ),
     );
     Ok(MiniAppSessionEnsureOutcome {
@@ -4931,7 +5043,8 @@ mod runtime_detection_cache_tests {
 mod miniapp_tests {
     use super::{
         collect_snapshot, inline_miniapp_siblings, is_safe_app_id, is_safe_run_id,
-        miniapp_root_dir, validate_miniapp_relative_path, CreateMiniAppRequest,
+        miniapp_root_dir, normalize_app_data_workspace, resolve_miniapp_agent_workspace,
+        validate_miniapp_relative_path, CreateMiniAppRequest,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -5055,6 +5168,134 @@ mod miniapp_tests {
         // runId 同样参与判定：它虽然不进路径，但决定 session_id 与 owner token。
         assert!(resolved_workspace_path("ok-app", "run:7").is_none());
         assert!(resolved_workspace_path("ok-app", "../evil").is_none());
+    }
+
+    // ─── appDataWorkspace：Agent workspace 收窄到 appdata 里的一个子目录 ────
+    //
+    // 上面那组只锁住"appId 不许带分隔符"。`appDataWorkspace` 是作者**主动**传的
+    // 子目录名，它拼出来的路径就是 Agent 的 cwd，所以这层要单独锁：判的是最终
+    // 路径仍然是 `<miniapps>/<appId>` 的**直接**子目录 —— 多一层就是逃逸。
+    //
+    // 拒绝表还要与 shared 那份逐条同规则，两边各自是独立信任边界。
+
+    #[test]
+    fn accepted_segments_land_directly_under_the_apps_appdata() {
+        let app_root = miniapp_root_dir().expect("home dir").join("seg-app");
+        for segment in ["notes", "workspace", "a", "with space", "UPPER", "n-1"] {
+            let path = resolve_miniapp_agent_workspace("seg-app", Some(segment))
+                .unwrap_or_else(|e| panic!("{segment:?} should be accepted: {e}"));
+            assert_eq!(path.parent(), Some(app_root.as_path()), "{segment:?} escaped");
+            assert_eq!(path.file_name().and_then(|s| s.to_str()), Some(segment));
+        }
+        // 不传 = appdata 根（作者没挑子目录）。
+        let root = resolve_miniapp_agent_workspace("seg-app", None).expect("root");
+        assert_eq!(root, app_root);
+        // 首尾空白按 TS 那份一样 trim 掉，而不是产生一个叫 " notes" 的目录。
+        let trimmed = resolve_miniapp_agent_workspace("seg-app", Some("  notes  ")).expect("trim");
+        assert_eq!(trimmed.file_name().and_then(|s| s.to_str()), Some("notes"));
+        // 尾随空格是**归一**而不是拒绝 —— 它在 Win32 上本来就会被静默剥掉，
+        // trim 之后两平台拿到的是同一个名字，没有别名可言。shared 那份曾有一条
+        // `endsWith(' ')` 的拒绝分支，但它跑在 `raw.trim()` 之后，永远不成立，
+        // 只会让人误以为尾随空格被拒。留在这里是为了把"归一"这个真实行为钉住。
+        let space = resolve_miniapp_agent_workspace("seg-app", Some("trailing ")).expect("space");
+        assert_eq!(space.file_name().and_then(|s| s.to_str()), Some("trailing"));
+    }
+
+    #[test]
+    fn rejected_segments_never_reach_the_filesystem() {
+        for bad in [
+            "",              // 显式空串是"写了没意义的东西"，与不传区分开
+            "   ",           // 全空白同理
+            "..",
+            ".",
+            "../escape",     // 分隔符
+            "a/b",
+            "a\\b",
+            "C:evil",
+            "with\0null",
+            "with\nnewline",
+            ".hidden",       // 起始点会被 Win32 静默剥掉 → 别名到别的目录
+            "trailing.",     // 同理，尾随点 trim 剥不掉，必须显式挡
+            "con",           // 保留设备名
+            "CON.txt",       // 判定看第一个点之前那段
+            "LPT9",
+            "nul",
+        ] {
+            assert!(
+                resolve_miniapp_agent_workspace("seg-app", Some(bad)).is_err(),
+                "{bad:?} must be rejected"
+            );
+        }
+        // 超长名字多半是误传了一整条路径。
+        assert!(resolve_miniapp_agent_workspace("seg-app", Some(&"x".repeat(65))).is_err());
+        assert!(resolve_miniapp_agent_workspace("seg-app", Some(&"x".repeat(64))).is_ok());
+    }
+
+    #[test]
+    fn console_is_a_directory_not_a_device() {
+        // 判定必须是整段相等而不是前缀匹配 —— 早期的前缀写法会误杀 `console`。
+        assert!(resolve_miniapp_agent_workspace("seg-app", Some("console")).is_ok());
+        assert!(resolve_miniapp_agent_workspace("seg-app", Some("con")).is_err());
+    }
+
+    /// 直接断判定表本身。
+    ///
+    /// 为什么不靠上面那个路径级测试就够：路径级测试只看"被拒了没有"，而
+    /// `normalize_app_data_workspace` 与 `resolve_miniapp_agent_workspace` 里的
+    /// 直接子目录断言**会互相掩护** —— 拿掉判定表里的分隔符检查，父目录断言照样
+    /// 兜住，反之亦然，两边返回同样的 Err。端到端层面分不出是谁拦的，所以
+    /// 这里断**判定表自己**的每一条规则。
+    ///
+    /// 直接子目录断言因此是**兜底**而不是 chokepoint（与 sidecar 那层同款定位）：
+    /// 它防的是"将来给判定表放宽了某个字符"变成路径逃逸，而不是今天就拦什么。
+    #[test]
+    fn the_validator_itself_enforces_every_rule() {
+        // 放行
+        for good in ["notes", "workspace", "a", "with space", "UPPER", "n-1", "console"] {
+            assert_eq!(
+                normalize_app_data_workspace(Some(good)),
+                Ok(Some(good.to_string())),
+                "{good:?} should be accepted verbatim"
+            );
+        }
+        // 归一（不是拒绝）
+        assert_eq!(
+            normalize_app_data_workspace(Some("  notes  ")),
+            Ok(Some("notes".to_string()))
+        );
+        assert_eq!(
+            normalize_app_data_workspace(Some("trailing ")),
+            Ok(Some("trailing".to_string()))
+        );
+        assert_eq!(normalize_app_data_workspace(None), Ok(None));
+        // 拒绝：逐条对到 shared 那份，两边 MUST 同规则
+        for bad in [
+            "",
+            "   ",
+            "..",
+            ".",
+            "../escape",
+            "a/b",
+            "a\\b",
+            "C:evil",
+            "with\0null",
+            "with\nnewline",
+            "with\ttab",
+            ".hidden",
+            "trailing.",
+            "con",
+            "CON",
+            "CON.txt",
+            "lpt9",
+            "nul",
+        ] {
+            assert!(
+                normalize_app_data_workspace(Some(bad)).is_err(),
+                "{bad:?} must be rejected by the validator itself"
+            );
+        }
+        assert!(normalize_app_data_workspace(Some(&"x".repeat(65))).is_err());
+        assert!(normalize_app_data_workspace(Some(&"x".repeat(64))).is_ok());
     }
 
     #[test]

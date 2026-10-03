@@ -61,8 +61,17 @@ export interface AgentBridge {
    * 工厂彻底不碰 ref，规则与真实时序（事件只在 commit 之后到达）对齐。
    */
   setPost(post: (payload: AgentEventPayload) => void): void;
-  /** 确保 Agent session 存在，返回它的落点。幂等。 */
-  ensureSession(runId: string): Promise<AgentSessionTarget>;
+  /**
+   * 确保 Agent session 存在，返回它的落点。幂等。
+   *
+   * `appDataWorkspace` 是**建 session 时**才落地的选择：builtin adapter 的 cwd 是
+   * 进程级 `--agent-dir`，SDK 子进程 spawn 时读一次，per-turn 改不了。所以它必须
+   * 跟着 ensure 一起走，而不是等到 `run` 才生效。
+   */
+  ensureSession(
+    runId: string,
+    appDataWorkspace?: string,
+  ): Promise<AgentSessionTarget>;
   /** 订阅流式事件。返回退订函数。 */
   subscribe(runId: string, handler: (payload: AgentEventPayload) => void): Promise<() => void>;
   /** 释放 session + 断开 SSE。 */
@@ -86,6 +95,8 @@ const DEFAULT_RUN_ID = 'main';
 export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
   let sessionId: string | null = null;
   let sessionPort: number | null = null;
+  /** 建这个 session 时用的 `appDataWorkspace`（`''` = appdata 根）。 */
+  let sessionWorkspace = '';
   let sse: SseConnection | null = null;
   let pending: Promise<AgentSessionTarget> | null = null;
   const handlers = new Set<(payload: AgentEventPayload) => void>();
@@ -116,15 +127,38 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
     post(payload);
   }
 
-  async function doEnsure(): Promise<AgentSessionTarget> {
+  async function doEnsure(appDataWorkspace?: string): Promise<AgentSessionTarget> {
     const outcome = await invoke<EnsureOutcome>('cmd_miniapp_ensure_session', {
       appId: deps.appId,
       runId: DEFAULT_RUN_ID,
+      // 空串 = 用 appdata 根。Rust 侧按"没传"处理，两边不要各自发明默认值。
+      appDataWorkspace: appDataWorkspace ?? null,
     });
     sessionId = outcome.session_id;
     sessionPort = outcome.port;
+    sessionWorkspace = appDataWorkspace ?? '';
     sessionIdRef.current = outcome.session_id;
     return { sessionId: outcome.session_id, port: outcome.port };
+  }
+
+  /**
+   * 已经建好的 session 不许换 workspace。
+   *
+   * 不拦的话会退化成最阴的那类 bug：Rust 的 `ensure_session_sidecar` 看到 session
+   * 还活着就直接复用、**完全不看新传的路径**，于是 sidecar 的 `--agent-dir` 仍是
+   * 建它时的那个，而 `ensureSession` 照样回显作者这次请求的名字 —— 作者看到
+   * "收窄生效了"，实际没生效。宁可当场报错。
+   */
+  function assertWorkspaceMatches(appDataWorkspace?: string): void {
+    // 没表达偏好 = "用现在这个"。作者不带参数再调一次 ensureSession 是最常见的
+    // 用法，不该因为之前挑过子目录就报错。
+    if (sessionId === null || appDataWorkspace === undefined) return;
+    if (appDataWorkspace === sessionWorkspace) return;
+    throw new Error(
+      `the Agent session is already running in appdata workspace ` +
+        `'${sessionWorkspace || '(root)'}' and cannot be moved to ` +
+        `'${appDataWorkspace || '(root)'}'; a session's workspace is fixed when it is created`,
+    );
   }
 
   function ensureSse(): SseConnection | null {
@@ -164,10 +198,14 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
 
   // `runId` 恒为 DEFAULT_RUN_ID（见上方说明），保留参数是为了让 interface
   // 与 dispatch 侧的签名一致；这里显式忽略而不是留一个未用参数给 lint 报。
-  async function ensureSession(_runId: string): Promise<AgentSessionTarget> {
+  async function ensureSession(
+    _runId: string,
+    appDataWorkspace?: string,
+  ): Promise<AgentSessionTarget> {
+    assertWorkspaceMatches(appDataWorkspace);
     if (sessionId && sessionPort !== null) return { sessionId, port: sessionPort };
     // 并发去重：iframe 里连着调两次 ensureSession 不该起两个 Node 进程。
-    pending ??= doEnsure().finally(() => {
+    pending ??= doEnsure(appDataWorkspace).finally(() => {
       pending = null;
     });
     return pending;
@@ -177,8 +215,8 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
     setPost(fn) {
       post = fn;
     },
-    async ensureSession(runId: string) {
-      const target = await ensureSession(runId);
+    async ensureSession(runId: string, appDataWorkspace?: string) {
+      const target = await ensureSession(runId, appDataWorkspace);
       if (handlers.size > 0) void ensureSse()?.connect().catch(() => {
         // SSE 起不来不该让 ensureSession 失败：作者仍可用 run() 拿终态文本，
         // 只是没有流式。静默降级好过整个 Agent 能力不可用。
@@ -220,6 +258,7 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
         }).catch(() => undefined);
         sessionId = null;
         sessionPort = null;
+        sessionWorkspace = '';
         sessionIdRef.current = null;
       }
     },

@@ -42,6 +42,9 @@ let baseUrl = '';
 let scratch = '';
 let appdata = '';
 let child: ChildProcess | undefined;
+/** agent-dir 落在 appdata 子目录上的第二个 sidecar（`appDataWorkspace` 生效后的形态）。 */
+let segmentChild: ChildProcess | undefined;
+let segmentBaseUrl = '';
 let sidecarOutput = '';
 let mock: Server | undefined;
 /** mock 收到的每个 `/v1/messages` 请求体，用来证明 prompt / workspace 真的到位了。 */
@@ -251,15 +254,81 @@ beforeAll(async () => {
   });
   expect(setRes.ok, `provider/set failed:\n${sidecarOutput}`).toBe(true);
   await delay(1_500);
-}, 120_000);
+
+  // 第二个 sidecar：agent-dir 落在 appdata 的**子目录**上，也就是
+  // `appDataWorkspace: 'notes'` 生效后 Rust 会拼出来的那个路径。
+  //
+  // 为什么必须另起一个进程而不是复用上面那个：cwd 是 SDK 子进程 spawn 时从
+  // `--agent-dir` 读一次的，同一个进程里改不了。生产上同一个 MiniApp 只会有一
+  // 个 Agent session，所以"根"与"子目录"本来就分属两个 session —— 这里照搬。
+  const segmentDir = join(appdata, AGENT_APP, 'notes');
+  mkdirSync(segmentDir, { recursive: true });
+  const segPort = await reservePort();
+  segmentBaseUrl = `http://127.0.0.1:${segPort}`;
+  segmentChild = spawn(
+    process.execPath,
+    [
+      '--import',
+      'tsx/esm',
+      resolve('src/server/index.ts'),
+      '--agent-dir',
+      segmentDir,
+      '--port',
+      String(segPort),
+      '--no-pre-warm',
+      '--sidecar-role',
+      'session',
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        HOME: home,
+        USERPROFILE: home,
+        TMPDIR: join(scratch, 'tmp'),
+        TEMP: join(scratch, 'tmp'),
+        TMP: join(scratch, 'tmp'),
+        NO_PROXY: '127.0.0.1,localhost',
+        no_proxy: '127.0.0.1,localhost',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  segmentChild.stdout?.on('data', chunk => { sidecarOutput += chunk.toString(); });
+  segmentChild.stderr?.on('data', chunk => { sidecarOutput += chunk.toString(); });
+  // 复用 waitForReady：它读模块级 baseUrl，所以临时换一下再换回来。
+  const primaryUrl = baseUrl;
+  baseUrl = segmentBaseUrl;
+  try {
+    await waitForReady();
+    const segSet = await fetch(`${segmentBaseUrl}/api/provider/set`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerEnv: {
+          providerId: 'probe-loopback',
+          baseUrl: `http://127.0.0.1:${started.port}`,
+          apiKey: 'sk-probe-not-a-real-key',
+          authType: 'api_key',
+        },
+      }),
+    });
+    expect(segSet.ok, `segment provider/set failed:\n${sidecarOutput}`).toBe(true);
+    await delay(1_500);
+  } finally {
+    baseUrl = primaryUrl;
+  }
+}, 180_000);
 
 afterAll(async () => {
-  if (child && child.exitCode === null) {
-    child.kill('SIGKILL');
-    await new Promise<void>(r => {
-      const timer = setTimeout(r, 3_000);
-      child?.once('exit', () => { clearTimeout(timer); r(); });
-    });
+  for (const c of [segmentChild, child]) {
+    if (c && c.exitCode === null) {
+      c.kill('SIGKILL');
+      await new Promise<void>(r => {
+        const timer = setTimeout(r, 3_000);
+        c.once('exit', () => { clearTimeout(timer); r(); });
+      });
+    }
   }
   mock?.close();
   try {
@@ -279,8 +348,9 @@ async function call(
   method: string,
   params: unknown,
   appId = AGENT_APP,
+  base = baseUrl,
 ): Promise<Envelope> {
-  const res = await fetch(`${baseUrl}/api/miniapp/app/${method}`, {
+  const res = await fetch(`${base}/api/miniapp/app/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ appId, params }),
@@ -299,9 +369,25 @@ async function call(
  * 形态**不稳定**：agent dir 以正斜杠传进去时会出现重复分隔符（`C://Users//…`），
  * 以 Windows 原生路径传进去时则是反斜杠。两种都要归一，否则断言会在不同平台上
  * 各自假红。Windows 上还有 8.3 短名（`ADMINI~1`），所以只比对尾部段而不是全路径。
+ *
+ * **必须先 JSON.parse 再匹配。** 早先直接对原始 body 用 `[^\s"]+`，而请求体里的
+ * 换行是 JSON 转义 `\n`（反斜杠 + n 两个字符），**不是空白** —— 正则会一路吃进
+ * 下一个字符。实测把 `.../notes` 读成了 `.../notes/n`：归一那一步把转义里的反斜杠
+ * 也换成了正斜杠，于是多出来一个 `/n` 段。
+ *
+ * 这个 bug 一直没被发现，是因为当时所有 cwd 断言都只是 `toContain('/<appId>')`
+ * —— 弱断言对多出来的尾巴照单全收。收窄到子目录后必须断 `endsWith`，弱断言就
+ * 兜不住了，所以解析顺序也一并修正：parse 之后换行是真的空白，正则自然停对。
  */
 function agentCwd(body: string): string {
-  const m = /Primary working directory:\s*([^\s"]+)/.exec(body);
+  const strings: string[] = [];
+  const collect = (v: unknown): void => {
+    if (typeof v === 'string') strings.push(v);
+    else if (Array.isArray(v)) v.forEach(collect);
+    else if (v && typeof v === 'object') Object.values(v).forEach(collect);
+  };
+  collect(JSON.parse(body) as unknown);
+  const m = /Primary working directory:\s*([^\s"]+)/.exec(strings.join('\n'));
   expect(m, 'SDK request body carried no "Primary working directory" line').toBeTruthy();
   return (m as RegExpExecArray)[1]
     .replace(/\\/g, '/')
@@ -370,24 +456,57 @@ describe('app.agent over real HTTP against a real Sidecar and a loopback provide
   );
 
   it(
+    'runs the Agent inside the appDataWorkspace subdirectory once that has been chosen',
+    async () => {
+      // `appDataWorkspace` 真正生效的那一端。
+      //
+      // 之前这里只锁"不会越界"，并把 builtin 上的静默 no-op 记成待决 —— 因为当时
+      // 结论是"per-turn cwd 在这套架构里无法表达"。那条结论的前提是错的：
+      // MiniApp 的 sidecar 是 per-`miniapp_<appId>_<runId>` 建的，agent dir 又是
+      // **建 session 时**定的，所以这个字段根本不需要 per-turn —— 它由
+      // `cmd_miniapp_ensure_session` 写进 `--agent-dir` 就完事。
+      //
+      // 所以这里起第二个 sidecar，agent-dir 直接指到 `appdata/<appId>/notes`
+      // （Rust 收到 `appDataWorkspace: 'notes'` 后拼出来的正是这条路径），然后
+      // 断言 SDK 请求体里的 `Primary working directory` 就是那个子目录。
+      //
+      // 这条断的是链子的最后一环"agent dir → SDK cwd"。前面几环各有自己的测试：
+      // 判定与拼路径在 `commands.rs`（Rust），"renderer 真的把它发给 Rust"在
+      // `agentEventBridge.dom.test.tsx`。端到端不需要（也不应该）自己复刻一遍
+      // Rust 的路径拼接 —— 那只会造出第二份会漂移的实现。
+      const before = mockBodies.length;
+      const res = await call('agent.run', { prompt: PROMPT, run_id: 'run-seg' }, AGENT_APP, segmentBaseUrl);
+      expect(res.ok, JSON.stringify(res.error)).toBe(true);
+      expect(res.result?.had_message).toBe(true);
+
+      // 两个 sidecar 共用一个 mock provider，所以 `mockBodies[before]` 未必就是
+      // 这一回合的请求（另一个进程可能刚好补了别的请求进来）。按"带 marker 的
+      // 那个"筛，而不是按绝对下标 —— 筛完仍然是精确断言：只有用子目录起的那个
+      // 进程才可能报出以 /notes 结尾的 cwd。
+      const mine = mockBodies
+        .slice(before)
+        .filter((b) => b.includes('Primary working directory'));
+      expect(mine.length, 'the segment sidecar never reached the provider').toBeGreaterThan(0);
+      const cwd = agentCwd(mine[0]);
+      // 子目录**本身**，不是"还在 appdata 里"那种弱断言 —— 弱断言正是当初让这个
+      // no-op 藏了很久的原因。
+      expect(cwd.endsWith(`/${AGENT_APP.toLowerCase()}/notes`)).toBe(true);
+      // 并且仍然被夹在 appdata 内（收窄是范围细化，不是换沙箱）。
+      expect(cwd).toContain(`/${AGENT_APP.toLowerCase()}`);
+      expect(cwd).not.toContain('/workspace');
+    },
+    120_000,
+  );
+
+  it(
     'accepts appDataWorkspace without letting the cwd escape appdata',
     async () => {
-      // 刻意**不断言** notes 子目录成了 cwd。理由见下面，先把已知事实说清楚：
+      // 上面那条断的是"子目录成为 cwd"。这条断另一半：**不传**时 cwd 就是 appdata
+      // 根，而且目录按需创建（作者第一次用某个名字不该先手工建目录）。
       //
-      //   `appDataWorkspace` 算出的 `workspacePath` 是 per-turn 参数，而 builtin
-      //   adapter 的 `runInjectedTurn` 根本不读 `request.workspacePath`（它只用
-      //   进程级 agentDir）。external adapter 读了。
-      //
-      //   也就是说这个字段在**默认的 builtin runtime 上是静默 no-op**：目录照样
-      //   建了、ensureSession 照样回显 `app_data_workspace`，但 Agent 的 cwd
-      //   仍在 appdata 根。它不是越权（appdata 本身已是沙箱边界），但作者会
-      //   以为自己收窄了范围而实际没有。
-      //
-      // 要让 builtin 也生效，得把 per-turn cwd 一路穿到 SDK 的 query({cwd})，
-      // 而那条路径和桌面 Tab、共存 turn、session 持久化、
-      // `enabledOfficialToolIds` 的 workspace 归属共用 —— 属于架构变更，按
-      // CLAUDE.md 要先讨论，不能顺手改。所以这里锁的是**不会越界**这一半，
-      // 并且把这个待决状态钉在测试里，免得日后无声漂移。
+      // 两者必须都在：只断收窄不断默认，会让"默认也悄悄跑进子目录"这类漂移
+      // 长期无人察觉 —— 那意味着一个没挑 workspace 的 MiniApp 文件落在作者
+      // 没预期的目录里。
       const before = mockBodies.length;
       const res = await call('agent.run', {
         prompt: PROMPT,
@@ -400,7 +519,9 @@ describe('app.agent over real HTTP against a real Sidecar and a loopback provide
       const created = join(appdata, AGENT_APP, 'notes');
       expect(existsSync(created), 'appDataWorkspace did not create its directory').toBe(true);
 
-      // 不管收窄有没有生效，cwd 都必须还在 appdata 内
+      // 这个 sidecar 是用 appdata **根**起的：per-turn 的 appDataWorkspace 不改
+      // builtin 的进程级 cwd（那是 --agent-dir 的事，见上面那条）。所以这里断言
+      // cwd 落在 appdata 内即可 —— 收窄由 session 决定，不由每个 turn 决定。
       const cwd = agentCwd(mockBodies[before]);
       expect(cwd).toContain(`/${AGENT_APP.toLowerCase()}`);
     },

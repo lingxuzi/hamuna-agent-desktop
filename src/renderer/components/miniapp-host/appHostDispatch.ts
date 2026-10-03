@@ -121,22 +121,30 @@ async function dispatchAgentHost(
     ...(appDataWorkspace === undefined ? {} : { app_data_workspace: appDataWorkspace }),
   });
   if (method === 'agent.ensureSession') {
-    // 参考文档把 `appDataWorkspace` 放在 ensureSession 上。本项目里 workspace 是
-    // **每回合**参数（session 已按 `miniapp_<appId>_<runId>` 隔离），所以这里
-    // 不落状态、也不建目录 —— 建目录发生在 `agent.run` 真正被派到 sidecar 的
-    // 那一刻，那边才有文件系统。
+    // 参考文档把 `appDataWorkspace` 放在 ensureSession 上。本项目的 Agent cwd 是
+    // 进程级 `--agent-dir`，SDK 子进程 spawn 时读一次，所以这个选择**必须**跟着
+    // ensure 一起走 —— 它决定建出来的 session 跑在哪个目录，不能等到 run 再补。
     //
-    // 但仍然要**校验并回显**：这个分支在 renderer 里就地截走了，请求根本不会到
-    // sidecar（见下方 dispatchAgentTurn 的注释）。放任参数被吞掉的话，作者会
-    // 以为挑了子目录，实际下一个 run 静默跑在 appdata 根上 —— 正是本文件其它地方
-    // 反复在防的"传了但被忽略"。判定用 shared 里那一份纯函数，两条路径同规则。
-    const workspace = normalizeAppDataWorkspace(p.appDataWorkspace);
+    // 仍然要在这里**校验**：这个分支在 renderer 里就地截走了，请求根本不会到
+    // sidecar。放任参数被吞掉的话，作者会以为挑了子目录，实际下一个 run 静默
+    // 跑在 appdata 根上 —— 正是本文件其它地方反复在防的"传了但被忽略"。
+    // 判定用 shared 里那一份纯函数，与 sidecar、Rust 三处同规则。
+    const raw = p.appDataWorkspace;
+    const workspace = normalizeAppDataWorkspace(raw);
     if (!workspace.ok) {
       return err(APP_ERROR_CODES.INVALID_PARAMS, workspace.reason);
     }
+    // undefined = 作者没表达偏好 → bridge 用现有 session 的 workspace（或建在根上）；
+    // 显式字符串（含 `''`，即"我要 appdata 根"）= 一条会被校验的请求。
+    const requested = raw === undefined || raw === null ? undefined : workspace.segment;
     try {
-      const target = await bridge.ensureSession(runId);
-      return { ok: true, result: sessionResult(target.sessionId, workspace.segment || null) };
+      const target = await bridge.ensureSession(runId, requested);
+      // 回显必须**说真话**：没有偏好时回显这个 session 实际待着的目录，而不是
+      // 假装作者挑的 `''` 生效了。bridge 建的 session 就是唯一那个。
+      return {
+        ok: true,
+        result: sessionResult(target.sessionId, requested ?? null),
+      };
     } catch (e) {
       return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
     }
@@ -185,9 +193,28 @@ async function dispatchAgentTurn(
   }
   const p = asRecord(params);
   const runId = typeof p.run_id === 'string' && p.run_id ? p.run_id : 'main';
+  // `run` 也可能先于 `ensureSession` 成为**第一个**用到 Agent 的调用。若不把
+  // workspace 一起带去建 session，那个 session 就会固定在 appdata 根上，之后
+  // 作者再 `ensureSession({appDataWorkspace})` 也搬不动（bridge 会明确报错）。
+  //
+  // 但 `agent.cancel` 不参与这件事：它只瞄准一个已有的 turn，既不建 session 也不该
+  // 关心 workspace。带一条校验进来会让"这个 app 挑过子目录"之后**所有 cancel 都
+  // 失败** —— 一个纯属自伤的限制。
+  //
+  // `requested` 保留"作者没表达偏好"这层意思：归一函数把 undefined 与显式空串都
+  // 收敛成 `''`，而这两者对 bridge 的含义不同（前者 = 用现有的，后者 = 我要根）。
+  let requested: string | undefined;
+  if (method !== 'agent.cancel') {
+    const raw = p.appDataWorkspace;
+    const workspace = normalizeAppDataWorkspace(raw);
+    if (!workspace.ok) {
+      return err(APP_ERROR_CODES.INVALID_PARAMS, workspace.reason);
+    }
+    requested = raw === undefined || raw === null ? undefined : workspace.segment;
+  }
   let target: AgentSessionTarget;
   try {
-    target = await bridge.ensureSession(runId);
+    target = await bridge.ensureSession(runId, requested);
   } catch (e) {
     return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
   }

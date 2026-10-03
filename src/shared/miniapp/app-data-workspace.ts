@@ -93,9 +93,12 @@ export function normalizeAppDataWorkspace(raw: unknown): AppDataWorkspaceResult 
       reason: `appDataWorkspace must not start or end with '.'; Win32 strips it and would alias '${segment}' onto a different directory`,
     };
   }
-  if (segment.endsWith(' ')) {
-    return { ok: false, reason: "appDataWorkspace must not end with a space; Win32 strips it" };
-  }
+  // 尾随空格**不在这里**拒：上面已经 `raw.trim()`，那条分支永远不成立。
+  // 归一掉反而是更安全的契约 —— trim 之后两平台拿到的是同一个名字，没有 Win32
+  // 别名可言；反过来"在 Linux 上建一个 Windows 根本没法寻址的目录"才是真坑。
+  // Rust 那边（`resolve_miniapp_agent_workspace`）同样只 trim，两边一致。
+  // 曾在这里留过一条 `endsWith(' ')` 的拒绝分支：它跑在 trim 之后，恒为 false，
+  // 于是两边的规则表看起来不一致（一边像是拒绝、一边其实是归一）。已删。
 
   // 保留设备名按"第一个点前的那段"判定：`CON.txt` 同样打向 CON 设备。
   const stem = (segment.split('.')[0] ?? '').toLowerCase();

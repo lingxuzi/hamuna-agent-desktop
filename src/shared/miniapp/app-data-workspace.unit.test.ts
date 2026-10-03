@@ -22,6 +22,23 @@ describe('normalizeAppDataWorkspace', () => {
       expect(normalizeAppDataWorkspace('  notes  ')).toEqual({ ok: true, segment: 'notes' });
     });
 
+    it('normalizes a trailing space, which used to look rejected but never was', () => {
+      // 曾经有一条 `endsWith(' ')` 的拒绝分支，但它跑在 `raw.trim()` **之后**，
+      // 所以恒为 false —— 尾随空格其实一直被归一成不带空格的同名目录。
+      //
+      // 归一是对的：Win32 本来就会静默剥掉尾随空格，trim 之后各平台拿到的是同一个
+      // 名字，没有别名可言；而"在 Linux 上建一个 Windows 根本没法寻址的目录"
+      // （`'trailing '` 与 `'trailing'` 在 Linux 上是两个不同目录）才是真坑。
+      //
+      // 那条死分支已删。留这条测试是为了把**归一**钉成显式契约，而不是让下一个人
+      // 看着文档以为尾随空格被拒、转头去 Rust 那侧加一条对不上的规则。
+      expect(normalizeAppDataWorkspace('trailing ')).toEqual({ ok: true, segment: 'trailing' });
+      // 与 Rust `resolve_miniapp_agent_workspace` 的断言同形：两边必须一致。
+      expect(normalizeAppDataWorkspace('trailing ')).toEqual(
+        normalizeAppDataWorkspace('trailing'),
+      );
+    });
+
     it('allows interior dots, which are ordinary filename characters', () => {
       expect(normalizeAppDataWorkspace('my.notes.v2')).toEqual({ ok: true, segment: 'my.notes.v2' });
     });

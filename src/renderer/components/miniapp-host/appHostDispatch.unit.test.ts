@@ -94,7 +94,9 @@ describe('appHostDispatch: agent turns target the MiniApp sidecar', () => {
 
     const res = await dispatch('agent.run', { prompt: 'hi' });
 
-    expect(bridge.ensureSession).toHaveBeenCalledWith('main');
+    // 第二个参数是 appDataWorkspace。`undefined` 表示"作者没表达偏好"，与显式
+    // 请求 appdata 根（`''`）对 bridge 的含义不同，所以这里断的是 undefined 本身。
+    expect(bridge.ensureSession).toHaveBeenCalledWith('main', undefined);
     // ensureSession 返回的 port 必须被 run 用上 —— 这就是"同一个会话"的全部含义。
     expect(proxyFetchMock.mock.calls[0][0]).toContain(String(MINIAPP_PORT));
     expect(res.ok).toBe(true);

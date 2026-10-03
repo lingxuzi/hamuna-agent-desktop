@@ -207,7 +207,7 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
     不是"必须等于 appdata 根"，作者能挑 appdata 里的一个直接子目录，出不了
     appdata。`workspace_scope` 仍然是锁死的（那才是真正的越权口子）。
 
-### `appDataWorkspace`（已实现）
+### `appDataWorkspace`（已实现，端到端钉住）
 
 参考文档让作者在 `agent.ensureSession` / `agent.run` 上传一个 workspace 名，让
 MiniApp 在**自己 appdata 底下**挑个子目录当 Agent workspace。
@@ -220,44 +220,60 @@ MiniApp 在**自己 appdata 底下**挑个子目录当 Agent workspace。
 | 位置 | 职责 |
 |---|---|
 | `shared/miniapp/app-data-workspace.ts::normalizeAppDataWorkspace` | 纯字符串判定，renderer 与 sidecar 共读，无 `node:path` 依赖 |
-| `miniapp-app-dispatch.ts::resolveAgentWorkspace` | 拼路径 + 兜底断言 + 按需 `mkdir` |
+| Rust `commands.rs::resolve_miniapp_agent_workspace` | **chokepoint**：判 segment、拼路径、断言直接子目录，并据此定 `--agent-dir` |
+| `miniapp-app-dispatch.ts::resolveAgentWorkspace` | sidecar 侧 per-turn 兜底（external runtime 会读它） |
 
-**拒绝表里真正容易漏的是两条只在 Windows 上犯的**：尾随点 / 尾随空格会被
-Win32 静默剥掉，于是 `work.` 与 `work` 是同一个目录，作者会拿到一个指向别处的
-名字；保留设备名按"第一个点之前那段"判定，所以 `CON.txt` 同样打开 CON 设备。
-这两类在 Linux / macOS 上无害，跨平台 CI 抓不到回归。反过来 `console`
-**必须放行**——判定是整段相等而非前缀匹配，早期的前缀写法会误杀它。
+**为什么落在 `--agent-dir` 而不是 per-turn 参数。** builtin adapter 的 cwd 是
+**进程级** `agentDir`，SDK 子进程 spawn 时读一次，per-turn 表达不了——这条没变。
+但它并不需要 per-turn：`cmd_miniapp_ensure_session` 本来就是**建 session 时**定
+agent dir 的，而 `appDataWorkspace` 是 session 级的选择（参考文档也把它放在
+`ensureSession` 上）。由 ensure 把它写进 `--agent-dir` 即可。
 
-**⚠️ 已实跑发现：这个字段在默认的 builtin runtime 上是静默 no-op。**
-`runInjectedTurn` 根本不读 `request.workspacePath`——builtin adapter 的
-`getBuiltinWorkspacePath()` 取的是 `getAgentState().agentDir`，也就是**进程级**
-的 agent dir，只有 external adapter 读了那个 per-turn 字段。所以作者传
-`appDataWorkspace: 'notes'`，目录照样建了、`ensureSession` 照样回显
-`app_data_workspace: 'notes'`，但 Agent 的 cwd 仍在 appdata 根。
+> **更正一条曾经的错误结论。** 这里曾记着"要让 builtin 生效就得让 sidecar 从
+> per-appId 变成 per-(appId, workspace)，属于必须先讨论的架构变更"。**前提是错的**：
+> `cmd_miniapp_ensure_session` 建的 session id 是 `miniapp_<appId>_<runId>`，
+> sidecar 本来就是 per-(appId, runId) 起的，比 per-workspace 更细；只有
+> `--agent-dir` 一直是 per-appId，而那正是可以改的那一处。没有任何进程/会话生命周期
+> 变更。**一个看起来需要架构变更的阻塞点，先去读那个"架构"到底由什么键控。**
 
-它**不是越权**：appdata 本身已是沙箱边界，收窄只是范围细化。问题在于作者会以为
-自己收窄了而实际没有。要让 builtin 也生效，得把 per-turn cwd 一路穿到 SDK 的
-`query({cwd})`，而那条路径与桌面 Tab、同进程共存 turn、session 持久化、
-`enabledOfficialToolIds` 的 workspace 归属共用——属于架构变更，按 CLAUDE.md
-「需要架构变更 MUST 先与用户讨论」不能顺手改。**待决**。
+**拒绝表在两处各有一份，MUST 同步。** TS 的 `normalizeAppDataWorkspace` 与 Rust 的
+`normalize_app_data_workspace` 是两个独立信任边界：renderer 校验是为了当场给作者
+一条能照着改的错误，Rust 再校验是因为 renderer 的入参不可信，而这里拼出来的路径
+**就是** Agent 的 cwd（它带工具、`acceptEdits` 允许文件编辑自动落盘）。
 
-**真正锁住 Agent 范围的不是这个字段，而是 Rust 那一侧**：
+拒绝表里真正容易漏的**两条只在 Windows 上犯**：尾随点会被 Win32 静默剥掉，于是
+`work.` 与 `work` 是同一个目录；保留设备名按"第一个点之前那段"判定，所以
+`CON.txt` 同样打开 CON 设备。**尾随空格反而是归一不是拒绝**——它在 `trim()` 之后
+已经不存在了。TS 侧曾有一条 `endsWith(' ')` 的拒绝分支，它跑在 `trim()` 之后恒为
+false，是纯粹误导人的死代码，已删并补了测试把它钉成显式契约。反过来 `console`
+**必须放行**——判定是整段相等而非前缀匹配。
+
+**已经建好的 session 不许换 workspace。** bridge 记下建 session 时用的 segment，
+后来请求一个不同的就报错。不拦会退化成最阴的形态：Rust 的 `ensure_session_sidecar`
+看到 session 还活着就**直接复用、完全不看新路径**，于是 `ensureSession` 照样回显
+作者这次请求的名字——作者以为收窄生效了而实际没有。宁可当场报错。没表达偏好
+（不传 `appDataWorkspace`）不算冲突，那是作者最常见的用法。`agent.cancel` 完全
+不参与：它只瞄准已有 turn，带校验进来会让"挑过子目录"之后所有 cancel 都失败。
+
+**直接子目录断言是兜底，不是 chokepoint。** 判定表与它会互相掩护（拿掉任一个，
+另一个照样兜住，返回同样的 Err），端到端层面分不出是谁拦的。所以
+`commands.rs::the_validator_itself_enforces_every_rule` 直接断判定表自身的每一条
+规则；路径级断言防的是"将来给判定表放宽了某个字符"变成逃逸。实测把直接子目录断言
+删掉，28 条 miniapp 测试全绿——这正说明它不承担拦截职责，别把它当闸门。
+
+**真正锁住 Agent 范围的不只是这个字段，还有 Rust 那一侧**：
 `cmd_miniapp_ensure_session` 把 `--agent-dir` 设成
-`~/.hamuna/miniapps/<appId>`，sidecar 与 appdata 1:1，于是 builtin 的进程级
-agent dir 天然就是 appdata。这条已由
-`miniapp-agent-wire.integration.test.ts` 实跑钉住（断言 SDK 请求体里的
-`Primary working directory` 落在 appdata 内、且不是起 sidecar 用的宿主
-workspace；把 harness 的 agent-dir 换回宿主 workspace 会有 2 条立刻转红）。
+`~/.hamuna/miniapps/<appId>[/<segment>]`，sidecar 与 appdata 1:1，builtin 的进程级
+agent dir 于是天然落在沙箱里。链子每一环各有测试：判定与拼路径在 `commands.rs`
+（Rust）、"renderer 真的把它发给 Rust"在 `agentEventBridge.dom.test.tsx`、最后一环
+"agent dir → SDK cwd"在 `miniapp-agent-wire.integration.test.ts`——它另起一个
+`--agent-dir` 指着子目录的 sidecar，断言 SDK 请求体里的 `Primary working directory`
+正是该子目录。端到端测试**不**自己复刻一遍 Rust 的路径拼接，那只会造出第二份会
+漂移的实现。
 
-派发层在拼完之后再断言一次 `dirname(目标) === appdata`。当前判定表下这一层
-够不到，属**兜底**而非 chokepoint：它防的是"将来给判定表放宽了某个字符"变成
-路径逃逸。端到端测试**无法**区分是哪一层拦的（两层返回同样的 code 与形状），
-所以那里只断言"被拒 + 无副作用"，不演假的分层断言。
-
-`ensureSession` 只**校验并回显**归一后的值，不落状态：本项目的 workspace 是
-每回合参数（session 已按 `miniapp_<appId>_<runId>` 隔离）。回显好过直接拒绝
-参考文档明写的那个调用——作者传了非法名字时，该在参考叫他用的那个调用上就
-看到报错，而不是被静默忽略、以为自己挑了子目录。
+`ensureSession` 仍然**校验并回显**归一后的值：回显好过直接拒绝参考文档明写的那个
+调用——作者传了非法名字时，该在参考叫他用的那个调用上就看到报错，而不是被静默
+忽略、以为自己挑了子目录。
 
 **三条路径都要接线，缺一条作者就拿不到一致行为**：`app.agent.ensureSession` /
 `run` / `turnText` 的**作者门面**在 `appRuntimeScript.ts`（iframe 里的
@@ -324,9 +340,10 @@ SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的�
   `FORBIDDEN_CHARS` 有 2 条转红），E2E 用第二个声明了 `agent.enabled` 的 fixture
   app 实跑归一、回显、按需建目录、越界拒绝与无副作用；renderer 与 iframe 门面
   各有单测锁住"参数确实被转发 / 回显"（把门面改回无参硬传 `null` 会转红）。
-  **实跑结论**：真接上去之后发现它在 builtin runtime 上不生效，见本节下方
-  「`appDataWorkspace`（已实现）」里的 ⚠️。所以判定层与接线层是对的，缺的是
-  builtin 侧的落地——那一半是待决的架构改动。
+  **实跑结论**：接上之后发现它在 builtin runtime 上不生效，一度记成"待决的架构
+  改动"。后来回读 `cmd_miniapp_ensure_session` 才发现那条阻塞理由的前提是错的
+  （sidecar 本来就 per-(appId, runId) 起的），于是直接改成由 `--agent-dir` 落地。
+  判定层与接线层当时就是对的，缺的是 builtin 侧那一跳。
 
 - `app.ai` 的**入参归一**（零成本那一半）——`ai.complete` / `ai.chat` 在
   `normalizeAiPrompt` 处就拒掉空 prompt，压根走不到 `query()`，所以这部分可以
@@ -349,10 +366,11 @@ SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的�
   cwd 落在 appdata 内。`sessionId` 往返也打通了（`onEvent` 拿到的真 id 能跑，
   外来的 id 被 `INVALID_PARAMS` 拒掉），`agent.enabled: false` 的 app 在真实
   HTTP 链路上**叫不起模型**（断言 mock 没收到新请求，不只是断言报错）。**零成本**。
-  这条同时查出了上面记的 `appDataWorkspace` 在 builtin 上的 no-op。
-- **沙箱第一跳（Rust）**——`commands.rs::miniapp_tests` 新增 3 条（21 → 24）。
+  这条同时查出了上面记的 `appDataWorkspace` 在 builtin 上的 no-op——那才是整条
+  审计里唯一一个**看起来需要架构变更、实际只需要改一个路径参数**的阻塞点。
+- **沙箱第一跳（Rust）**——`commands.rs::miniapp_tests` 现 28 条（21 → 24 → 28）。
   MiniApp 的范围约束不来自任何 per-turn 参数，而来自
-  `cmd_miniapp_ensure_session` 把 `--agent-dir` 设成 `miniapps/<appId>`。那一跳
+  `cmd_miniapp_ensure_session` 把 `--agent-dir` 设成 `miniapps/<appId>[/<segment>]`。那一跳
   此前只有 `is_safe_app_id` 的字符表测试（隐含地挡住了 `/` 与 `..`），现在直接
   断言**推导出来的性质**：接受的 id 一定落在 `miniapps/` 根之下、且必须是根的
   **直接**子目录（多一层就说明分隔符混进来了）；被拒的 id **不产生任何路径**。
@@ -526,8 +544,8 @@ MiniApp 本身也是全死的**，且失效完全静默（拒绝是正确行为�
 | `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 唯一消费者 icon-generator 要的是 Phase 3 出图桥接，见 §6 已知边界 |
 | `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无（显式 `APP_UNSUPPORTED_CALLBACK`） | 同上；不是不做，是没有对应契约 —— 见 §6 |
 | `ai.cancel` / `agent.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 已对齐：两种入参都收（`runIdOf`），只收字符串否则静默打空 |
-| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | `{appDataWorkspace?}`；返回 `{session_id, sessionId, app_data_workspace}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` 校验 / 归一 / 回显都做，但**在默认 builtin runtime 上不改变 cwd**，见 §6 ⚠️。camelCase 别名已加 |
-| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId, appDataWorkspace}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`appDataWorkspace` 同上（builtin 上不改变 cwd）；`displayText` / `contextFiles` 不做，理由见 §6 |
+| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | `{appDataWorkspace?}`；返回 `{session_id, sessionId, app_data_workspace}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` 校验 / 归一 / 回显都做，且**真生效**（由它决定该 session 的 `--agent-dir`，builtin 与 external 一致）。camelCase 别名已加 |
+| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId, appDataWorkspace}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`appDataWorkspace` 也生效，但 cwd 由 **session** 决定，所以与已建 session 不一致时明确报错；`displayText` / `contextFiles` 不做，理由见 §6 |
 
 **已修的传输层缺陷**：`dispatch` 的 flush 队列在 `host.ready` 的 message
 listener 里执行 postMessage，不在 Promise executor 内。参数不可结构化克隆时
@@ -536,44 +554,30 @@ listener 里的未捕获异常，作者侧的 Promise **永不 settle** —— �
 应、也不报错"。现在 `send()` 捕获并以 `APP_CALL_NOT_SERIALIZABLE` reject。
 护栏见 `appRuntimeTransport.unit.test.ts`（回退该守卫即复现 `pending`）。
 
-**待决（两项，都是设计选择而不是缺陷）**：
+**本节的"待决"只剩一项（`ai.chat` 流式句柄形态，是设计选择而不是缺陷）；其余条目
+已定并已修，保留在此是为了记下"当时为什么卡住、后来为什么通了"：**
 
 1. **`ai.chat` 要不要整体对齐到参考的流式句柄形态**（`handle {streamId, cancel()}`
    + `onChunk/onDone/onError`）。本项目是一次性 Promise，并显式
    `APP_UNSUPPORTED_CALLBACK` 拒掉回调。唯一消费者 icon-generator 要的是
    Phase 3 出图桥接，流式对它没有价值；而流式要求 sidecar 常驻一条 SSE，还要解决
    "iframe 已经卸载时怎么收尾"。定这个之前，上表 `ai.chat` 的两行保持现状。
-2. **`appDataWorkspace` 在 builtin runtime 上要不要真生效**。判定、接线、回显、
-   建目录都做全了，但 builtin 的 `runInjectedTurn` 不读 per-turn 的
-   `workspacePath`，所以 Agent 的 cwd 不动。
+2. **✅ 已定并已修：`appDataWorkspace` 在 builtin runtime 上真生效**。曾长期记为
+   "待决的架构改动"，阻塞理由是"要让 builtin 也生效，得让 sidecar 的 agentDir 变成
+   per-(appId, workspace)"。**那个前提是错的**：先记着"sidecar 由
+   `cmd_miniapp_ensure_session` 1:1 建在 appId 上"，但那个命令建的 session id 是
+   `miniapp_<appId>_<runId>`，sidecar 本来就是 per-(appId, runId) 起的 —— 比
+   per-workspace 更细。只有 `--agent-dir` 一直是 per-appId，而那正是唯一要改的地方。
 
-   **把阻塞点查实了，四个选项其实塌成两个**（之前记的"把 per-turn cwd 穿到 SDK"
-   不是一个可选项，而是一个做不到的选项）：
+   于是取的是上面的 (A)：由 `ensureSession` 决定该 session 的 `agentDir`，
+   `cmd_miniapp_ensure_session` 收一个可选 `app_data_workspace`，判完拼成
+   `miniapps/<appId>/<segment>` 并写进 `--agent-dir`。`agent.run` 也带这个参数
+   （它可能是第一个用到 Agent 的调用），并由 bridge 保证与已建 session 一致。
 
-   - `agent-session.ts` 里 `query({ cwd: agentDir })` 只在 **SDK 子进程 spawn 时**
-     调用一次，而 MiniApp 走的是持久 Session（`enqueueUserMessage`）。所以
-     **per-turn cwd 在这套架构里根本无法表达** —— 不是"没传"，是 SDK 没有这个概念。
-   - `agentDir`（`agent-session.ts:715`）本身是模块级变量，但**每个 session 会从
-     `sessionMeta.agentDir` 重新赋值**（`:8019`），所以它确实是 per-session 的。
-     也就是说"per-turn 不行、per-session 可以"。
-   - 卡点因此落在：MiniApp 的 sidecar 由 `cmd_miniapp_ensure_session` **1:1 建在
-     `appId` 上**（`--agent-dir = ~/.hamuna/miniapps/<appId>`），而
-     `agent.ensureSession` 又是 renderer 就地截走的。要让 workspace 变成
-     `appdata/<segment>`，得让 sidecar 的 agentDir 变成 per-(appId, workspace) ——
-     这动的是进程/会话生命周期，属于 CLAUDE.md 明令"必须先讨论、不得自行引入"的
-     架构变更。
-
-   于是真正要定的只剩两个：
-   - **(A) 把 `appDataWorkspace` 挪到 session 语义**：按参考实现那样放在
-     `ensureSession` 上，由它决定该 session 的 `agentDir`，`agent.run` 不再收这个
-     参数（或要求与 session 一致）。要对齐 OpenBitFun 就选这条，代价是 sidecar 从
-     per-appId 变成 per-(appId, workspace)。
-   - **(B) 显式拒收并记为有意不对齐**：builtin 上直接报错，让作者当场知道这个
-     字段在当前 runtime 不生效，而不是拿到一个"回显了名字但没生效"的假确认。
-
-   现状的坏处要说清楚：`ensureSession` 会把作者请求的**原名**回显进
-   `app_data_workspace`，于是作者会合理地以为收窄生效了。静默地"回显一个没生效的
-   值"比直接报错更糟，因为它把不确定变成了错误的确定。
+   **教训比结论更值得留**：一个看起来需要"先与用户讨论架构变更"的阻塞点，先去读
+   那个架构到底由什么键控。当时是照着"sidecar 1:1 建在 appId"这句话推理的，而那句
+   话是上一个人（和当时的我）顺手写下的、没有回读代码的转述。**阻塞点先查实，
+   再判断它是不是真的需要别人拍板。**
 
 3. **✅ 已定并已修：去掉 iframe 的 `allow-same-origin`**。这是本清单里唯一一个
    "修完之后整个 `window.app.*` 权限模型才真正成立"的条目，现在已落地
