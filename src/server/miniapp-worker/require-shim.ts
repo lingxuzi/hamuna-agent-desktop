@@ -16,7 +16,9 @@
 // `ast-policy.ts` via the bundler. The bundled output is plain JS that the
 // worker thread loads directly.
 
+import { realpathSync } from 'node:fs';
 import Module from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 import {
   DENY_MODULES,
@@ -40,9 +42,61 @@ const state: RequireShimState = {
 };
 
 /**
- * Patch Module.prototype.require and process.exit on this worker thread.
- * Idempotent: calling twice is a no-op (returns immediately).
+ * The worker's OWN entry bundle is not user code, so it must not be scanned.
+ *
+ * The AST hook below fires for every `.js` the worker loads, and in the
+ * shipped build the entry, the kind, simple-git and the require shim are all
+ * inlined into ONE file. The kind's handlers legitimately do `require('fs')`
+ * (that is how file-explorer reads a directory), so once the shim installs,
+ * the first lazy require from a handler is scanned, flagged, and the worker
+ * dies with `module require blocked by MiniApp sandbox: module='fs'`.
+ *
+ * Scanning the entry is also pointless: its source is the trusted server build,
+ * not something a MiniApp author controls. MiniApp user code is loaded
+ * separately (per-app worker entry from the installed app dir) and is still
+ * scanned -- only the trusted bootstrap is exempt.
+ *
+ * Identity is exact (same realpath as this module's own file), not a prefix
+ * match: a prefix would exempt anything under the server bundle directory,
+ * which is exactly the directory untrusted per-app entries do NOT live in.
  */
+const SELF_FILENAME = ((): string | null => {
+  try {
+    return realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return null;
+  }
+})();
+
+function isTrustedWorkerSelf(filename: string): boolean {
+  return __isTrustedForTest(filename);
+}
+
+/**
+ * The predicate, with identity injectable so the "identity could not be
+ * resolved" branch is reachable from a test.
+ *
+ * Exported because otherwise it is unreachable: `installRequireShim` only
+ * patches the loader, so exercising the branch needs a file that *is* this
+ * module, and in vitest the loader sees the test file, never the shim. Without
+ * this, every mutation of the predicate (trust everything, match by prefix,
+ * fail open, drop the exemption) leaves the suite green -- verified, not
+ * assumed.
+ */
+export function __isTrustedForTest(filename: string, self: string | null = SELF_FILENAME): boolean {
+  if (!self) return false;
+  try {
+    return realpathSync(filename) === self;
+  } catch {
+    return false;
+  }
+}
+
+/** Test-only view of the resolved identity. */
+export function __trustedSelfForTest(): { self: string | null } {
+  return { self: SELF_FILENAME };
+}
+
 export function installRequireShim(options: RequireShimOptions = {}): void {
   if (installed) return;
   installed = true;
@@ -85,6 +139,12 @@ export function installRequireShim(options: RequireShimOptions = {}): void {
       raw = fs.readFileSync(filename, 'utf8');
     } catch {
       // Native or non-FS-backed modules fall through to original loader.
+      return ext(mod, filename);
+    }
+
+    // The worker's own bootstrap bundle is trusted server code, not MiniApp user
+    // code -- see isTrustedWorkerSelf. Everything else is still scanned.
+    if (isTrustedWorkerSelf(filename)) {
       return ext(mod, filename);
     }
 

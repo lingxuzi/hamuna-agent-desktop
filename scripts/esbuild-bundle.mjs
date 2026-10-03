@@ -19,7 +19,7 @@
 
 import { build } from 'esbuild';
 import { copyFile, readFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 // Read package.json version once and inject as a compile-time constant.
 // This is the ONLY way `hamuna version` can show the real shipped
@@ -83,6 +83,43 @@ const TARGETS = {
             `  Source must use import.meta.url / utils.getScriptDir(), not __dirname.`,
         );
         process.exit(1);
+      }
+
+      // MiniApp worker-thread entries are **separate bundles**, not part of
+      // server-dist.js. Each kind's `entryPath` is loaded by `new Worker(...)`,
+      // which needs a real file on disk — so they must be emitted next to the
+      // server bundle. Nothing in the import graph reaches
+      // `worker-entry-*.ts` (the entries are loaded by *path*, never
+      // imported), so esbuild cannot follow them into the main bundle and this
+      // second pass is the only thing that produces them.
+      //
+      // This was silently missing: `npm run build:server` succeeded, and every
+      // test passed, while `worker-entry-git-graph.js` existed nowhere on
+      // disk. `new Worker(<missing path>)` does NOT throw — it returns a
+      // Worker that emits `error` asynchronously — so `pool.spawn()` reported
+      // success and handed the MiniApp a worker id that could never answer.
+      // Both worker MiniApps were dead in production with no failing signal.
+      for (const kind of ['git-graph', 'file-explorer']) {
+        const entry = `src/server/miniapp-worker/worker-entry-${kind}.ts`;
+        // `outdir` (not `outfile`): the entry is the only input, but esbuild
+        // keeps the name it derives from the entry unless told otherwise, and
+        // an explicit `outfile` is what makes the emitted filename exactly
+        // match what `entryPath` joins.
+        const workerOut = join(dirname(outfile), `worker-entry-${kind}.js`);
+        await build({
+          bundle: true,
+          platform: 'node',
+          target: 'node22',
+          format: 'esm',
+          sourcemap: false,
+          entryPoints: [entry],
+          outfile: workerOut,
+          // Same CJS natives the sidecar can't inline: they resolve real files
+          // relative to their own location inside `kb-runtime/node_modules`.
+          external: ['better-sqlite3', 'jieba-wasm'],
+          banner: { js: ESM_INTEROP_BANNER },
+        });
+        console.log(`  ↳ built ${entry} → ${workerOut}`);
       }
     },
   },

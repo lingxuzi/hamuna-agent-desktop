@@ -226,6 +226,46 @@ git-status-branches.unit.test.ts **拿真 repo 调真 handler**（git init 建�
 check-test-classification.mjs::CHILD_PROCESS_ALLOWLIST（固定 argv、只打本地临时
 repo、不碰网络与凭据）。mock 掉 git 反而会废掉这条护栏 —— 它要抓的恰恰是"与
 真 git 返回不一致"。
+### 4 个只在**打包后**才现形的缺陷：worker 线程曾经根本跑不起来
+
+`worker_threads` 那条链（app → runtime → host → pool → **真 worker 线程** →
+entry → handler）此前**一次都没有被真跑过**：`worker-pool.unit.test.ts` 里
+`new Worker` 的那条是 `it.skip`，注释说"要真 fixture / 真 repo"。于是四个缺陷
+叠在一起，而**每一个测试都是绿的** —— 因为 vitest 直接加载源码，只有打包后的
+worker 才走 esbuild + 真 `Worker`。结果：git-graph 与 file-explorer 在生产里
+**全死**，不报错、不写日志。
+
+1. **entry 从未被构建。** 没有任何地方 import `worker-entry-*.ts`（它们是按
+   **路径**加载的，不是被 import 的），esbuild 无从跟随；也没有任何 build 脚本
+   产出它们。`npm run build:server` 报成功，`worker-entry-*.js` 却**全仓不存在**。
+2. **`entryPath` 指向 bundle 的上一级。** `here` 是运行中 bundle 所在目录，生产
+   里就是安装根，于是 `'..'` 落到 app 的**父目录** —— 那里永远不会有文件，
+   Program Files 下甚至不可写。
+3. **`new Worker(<不存在的路径>)` 不抛异常。** 它返回一个 Worker 并**异步**
+   发 `error`，于是 `pool.spawn()` 报成功，把一个永远答不了话的 worker id 交给
+   MiniApp。这是最阴的一环：整条错误链上没有任何一处会失败。
+4. **worker 真起来之后又露出两个**：require shim 的 AST 扫描把 **worker 自己
+   那个 bundle** 也扫了，在 handler 合法的 `require('fs')` 上把 worker 打死
+   （`module require blocked by MiniApp sandbox: module='fs'`）；以及
+   `await import('simple-git')` 解析到了**别的模块**的 `__esm` init。
+
+**shim 豁免的边界必须是精确的**：按 realpath 与自身文件**相等**判定，绝不用前缀
+匹配 —— 前缀会把 server bundle 目录整片放行，而那恰恰**不是**不可信 per-app
+entry 所在的目录；身份解析不出来时 fail-closed。`require-shim.unit.test.ts` 是
+新文件（此前 shim 完全没有测试），变异验证：恒真 / 前缀匹配 / fail-open 三个都红。
+
+一条变异判定为**语义等价**、不补测试：删掉 `if (!self) return false` 测不出来，
+因为 `realpathSync` 返回 string 或抛异常，永远不可能 `=== null`。那行是省一次
+syscall 的短路，不是承重逻辑 —— 为它硬造红断言等于给等价变异造假红。
+
+**simple-git 改成静态 import**：一个 bundle 里对**多个** ESM 模块做 lazy import
+时，esbuild 只给**第一个**包 `__esm` init，其余的直接发射成裸 `esm_exports`，
+于是动态 import 处调到**别的模块**的 init。静态 import 根本没有 interop 这一步。
+
+**验收方式**：对**打包产物**做端到端，不是只在 vitest 里绿就算。真 spawn
+emitted worker，`git.status` 返回 branches、`git.log` 返回 commit、
+`git.checkout` 真的切了分支（再读一次 status 确认）、越界路径与未声明写权限
+双双被拒、被拒的 checkout 之后工作树未变。
 ## 6. 已知边界
 
 - **`app.agent.workspace_scope` 当前不放开**：`agent.run` 的 workspace 强制

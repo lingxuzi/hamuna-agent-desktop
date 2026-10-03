@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 
+import { simpleGit as createSimpleGit } from 'simple-git';
 import { z } from 'zod';
 
 import {
@@ -78,17 +79,38 @@ function assertReadableCwd(cwd: string, ctx: { appId: string; fsScope: WorkerFsS
   }
 }
 
-let simpleGitMod: typeof import('simple-git') | null = null;
-async function getSimpleGit() {
-  if (!simpleGitMod) {
-    simpleGitMod = await import('simple-git');
-  }
-  return simpleGitMod;
-}
+/**
+ * simple-git instance factory.
+ *
+ * This is a **static** import on purpose. A lazy `await import('simple-git')`
+ * works under vitest and breaks in the shipped worker bundle, and the reason is
+ * worth keeping in mind before "optimising" it back:
+ *
+ *   esbuild emits a lazily-imported ESM module as a bare `esm_exports` object
+ *   plus a `__esm` lazy-init wrapper. With several ESM modules in one bundle only
+ *   the FIRST gets a wrapper -- later ones are emitted without their init
+ *   function, so the dynamic import site calls the *wrong* module's init.
+ *   simple-git's `esm_default` therefore stayed `undefined`, `.default` was not
+ *   a function, and every handler died with
+ *   `(intermediate value).default is not a function`.
+ *
+ *   That failure is invisible to every test in the repo: vitest resolves
+ *   simple-git through Node's own loader, where `.default` works. It appears
+ *   only in the built worker -- i.e. only in the shipped app.
+ *
+ * A static import has no interop step at all: esbuild wires the binding
+ * directly, and vitest and the bundle observe the same function.
+ *
+ * ponytail: ceiling = none of the above applies while the import is static.
+ * Upgrade path: if simple-git ever needs to be lazy for startup cost, measure
+ * first, and prefer a static import in the worker entry over restoring the
+ * dynamic one.
+ */
+const getSimpleGit = createSimpleGit;
 
 const gitLog: WorkerMethodHandler<z.infer<typeof GitLogParams>> = async (params, ctx) => {
   assertReadableCwd(params.cwd, ctx);
-  const sg = (await getSimpleGit()).default(params.cwd);
+  const sg = getSimpleGit(params.cwd);
   const log = await sg.log({
     maxCount: params.max ?? 50,
     ...(params.branch ? { from: params.branch, to: params.branch } : {}),
@@ -116,7 +138,7 @@ const gitLog: WorkerMethodHandler<z.infer<typeof GitLogParams>> = async (params,
 
 const gitShow: WorkerMethodHandler<z.infer<typeof GitShowParams>> = async (params, ctx) => {
   assertReadableCwd(params.cwd, ctx);
-  const sg = (await getSimpleGit()).default(params.cwd);
+  const sg = getSimpleGit(params.cwd);
   const summary = await sg.show([params.hash]);
   return {
     hash: params.hash,
@@ -132,21 +154,21 @@ const gitCheckout: WorkerMethodHandler<z.infer<typeof GitCheckoutParams>> = asyn
   // happens to point at a repository.
   assertWithinFsScope(path.resolve(params.cwd), ctx.fsScope, 'write', ctx);
   assertReadableCwd(params.cwd, ctx);
-  const sg = (await getSimpleGit()).default(params.cwd);
+  const sg = getSimpleGit(params.cwd);
   await sg.checkout(params.branch);
   return { ok: true, branch: params.branch };
 };
 
 const gitDiff: WorkerMethodHandler<z.infer<typeof GitDiffParams>> = async (params, ctx) => {
   assertReadableCwd(params.cwd, ctx);
-  const sg = (await getSimpleGit()).default(params.cwd);
+  const sg = getSimpleGit(params.cwd);
   const diff = await sg.diff([params.from ?? 'HEAD~1', params.to ?? 'HEAD']);
   return { diff: typeof diff === 'string' ? diff : String(diff) };
 };
 
 const gitStatus: WorkerMethodHandler<z.infer<typeof GitStatusParams>> = async (params, ctx) => {
   assertReadableCwd(params.cwd, ctx);
-  const sg = (await getSimpleGit()).default(params.cwd);
+  const sg = getSimpleGit(params.cwd);
   const status = await sg.status();
   // `branches` 是作者契约的一部分：git-graph 的分支下拉框 gate 在
   // `Array.isArray(status.branches)` 上，缺了它下拉框永远是 "(no branches)"，
@@ -174,10 +196,17 @@ const gitStatus: WorkerMethodHandler<z.infer<typeof GitStatusParams>> = async (p
 
 export const GIT_GRAPH_KIND: WorkerKindDef = {
   kind: 'git-graph',
-  // Entry script lives next to the pool (sibling of `kinds/`) so worker_threads
-  // can `new Worker(fileURLToPath(...))` it. esbuild follows the import chain
-  // from `src/server/index.ts` so the file is bundled into server-dist.js.
-  entryPath: path.join(here, '..', 'worker-entry-git-graph.js'),
+  // `new Worker(entryPath)` needs a real file, so the entry is emitted as its
+  // own bundle **next to** server-dist.js by scripts/esbuild-bundle.mjs.
+  //
+  // The '..' that used to be here was wrong: `here` is the directory of the
+  // *running bundle*, which in a packaged app is the install root, so '..'
+  // resolved to the app's **parent** directory. Nothing is ever written there,
+  // and under Program Files it is not even writable. `new Worker(<missing
+  // path>)` does not throw -- it emits `error` asynchronously -- so `spawn()`
+  // reported success and handed the MiniApp a worker id that could never
+  // answer. Sibling, not parent.
+  entryPath: path.join(here, 'worker-entry-git-graph.js'),
   methods: [
     { name: 'git.log', schema: GitLogParams, handler: gitLog as never },
     { name: 'git.show', schema: GitShowParams, handler: gitShow as never },

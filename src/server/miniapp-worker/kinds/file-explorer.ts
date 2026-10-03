@@ -232,7 +232,10 @@ const fileSearch: WorkerMethodHandler<z.infer<typeof FileSearchParams>> = (param
 
 export const FILE_EXPLORER_KIND: WorkerKindDef = {
   kind: 'file-explorer',
-  entryPath: path.join(here, '..', 'worker-entry-file-explorer.js'),
+  // Sibling of the running bundle, not its parent -- see GIT_GRAPH_KIND for
+  // why the old parent-relative form resolved outside the install root and
+  // silently produced a worker that could never answer a call.
+  entryPath: path.join(here, 'worker-entry-file-explorer.js'),
   methods: [
     { name: 'file.tree', schema: FileTreeParams, handler: fileTree as never },
     { name: 'file.read', schema: FileReadParams, handler: fileRead as never },
