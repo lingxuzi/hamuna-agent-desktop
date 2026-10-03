@@ -18,8 +18,9 @@
  *     app 碰 `localStorage`（icon-generator 早期那份 `window.__miniappStorage`
  *     模板从来就不存在，早就换成 `app.storage` 了）。
  *   留着它的代价则是整个沙箱形同虚设，见 SANDBOX_FLAGS 处的说明。
- * - CSP `connect-src` 只放 MiniApp 自身 + Rust 代理层白名单端口；不放
- *   Cowork Sidecar port（Phase 2 防 iframe 直连旁路）
+ * - CSP `connect-src 'none'`：不是"只放白名单端口"，是一个端口都不放。sidecar 是
+ *   另一个 origin，iframe 里的 fetch / XHR / WebSocket 全都够不着，合法能力一律走
+ *   postMessage
  * - postMessage `event.source === iframe.contentWindow` 严格相等
  *
  * Phase 3 (PRD §B.4): when `kind === 'worker'`, the runner also spawns a

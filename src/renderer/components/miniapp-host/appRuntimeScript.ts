@@ -19,8 +19,8 @@ import { APP_CALL_KIND, APP_RESULT_KIND } from '../../../shared/miniapp/app-prot
  * 生成 runtime 脚本文本。
  *
  * 刻意写成不依赖任何 bundler runtime 的经典脚本：MiniApp iframe 的 CSP 是
- * `script-src 'unsafe-inline' 'self'`，本段以字符串内联注入，用模板字面量而非
- * import/export。
+ * `script-src 'unsafe-inline'` —— **不含** `'self'`，iframe 是 opaque origin，且兄弟
+ * 文件早在 Rust 侧就内联掉了。本段以字符串内联注入，用模板字面量而非 import/export。
  *
  * @param appId 绑定到本 iframe 的应用 id；每条请求都会带上，宿主据此防冒名。
  */
