@@ -87,8 +87,9 @@ export interface AgentBridgeDeps {
  *
  * `runId` 固定为 `'main'`：一个 iframe = 一个 Agent 会话。作者想并发多轮就用
  * `turnText` 接上下文，而不是开多个 run —— 多 run 会各自起一个 Node 进程，
- * 而 MiniApp 的 `agent.workspace_scope` 又把工作区锁在同一个 appdata 下，
- * 并发 run 之间会互相踩文件。
+ * 而 MiniApp agent 的 workspace 是被 `resolveAgentWorkspace` 硬钉在同一个
+ * appdata 下的（**不是** `agent.workspace_scope`，那字段声明保留但不参与判定，
+ * 见 `shared/miniapp/types.ts`），并发 run 之间会互相踩文件。
  */
 const DEFAULT_RUN_ID = 'main';
 

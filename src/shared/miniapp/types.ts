@@ -59,7 +59,22 @@ export interface MiniAppPermissions {
    */
   agent?: {
     enabled?: boolean;
-    /** 该 MiniApp 允许 agent 触达的工作区路径前缀；空 = 不允许任何工作区工具。 */
+    /**
+     * 声明保留，当前**不参与判定**。
+     *
+     * 它曾经被写成"该 MiniApp 允许 agent 触达的工作区路径前缀；空 = 不允许任何
+     * 工作区工具" —— 那是错的，而且错在安全方向上：没有声明 `workspace_scope`
+     * 的 app 照样拿得到一个**带工具**的 agent，只是 cwd 被硬钉在自己的 appdata
+     * 里。真正的收窄发生在两处，都与本字段无关：
+     * `miniapp-app-dispatch.ts::resolveAgentWorkspace` 把 workspace 强制落在
+     * appdata 内（理由见该处注释：agent 有工具，放开目录外就是任意文件写），再由
+     * `appDataWorkspace` 在 appdata **之内**收窄一层。
+     *
+     * 留着一个不生效的字段不是疏忽：将来"用户显式授权某个目录"要有可信的授权
+     * 记录来源才能开，而空开等于没有。SKILL.md 对作者的说法（"声明保留但当前不
+     * 放开"）是准确的；这里曾经是唯一说错的地方，而说错的是**类型定义** ——
+     * 下一个加判定的人正是照着它判断这字段是否已被强制。
+     */
     workspace_scope?: string[];
   };
 }
