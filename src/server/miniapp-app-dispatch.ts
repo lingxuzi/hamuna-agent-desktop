@@ -23,6 +23,7 @@
 import { getConfigDir } from './utils/admin-config';
 import { APP_ERROR_CODES } from '../shared/miniapp/app-protocol';
 import { checkAppPermission, isPrivateHostname } from '../shared/miniapp/app-permissions';
+import { normalizeAppDataWorkspace } from '../shared/miniapp/app-data-workspace';
 import type { MiniAppMetadata, MiniAppPermissions } from '../shared/miniapp/types';
 
 export interface DispatchOutcome {
@@ -275,6 +276,40 @@ async function dispatchAi(
   return fail(APP_ERROR_CODES.UNKNOWN_METHOD, `Unknown ai method '${name}'`);
 }
 
+/**
+ * 把作者给的 `appDataWorkspace` 解析成 Agent 的 workspace 绝对路径。
+ *
+ * 纯字符串那层（`normalizeAppDataWorkspace`）已经挡住了分隔符、`..`、尾随点与
+ * 保留设备名。这里再加一道**文件系统级**断言：拼完之后 `dirname` 必须仍等于
+ * appdata 本身。纵深的意义是，纯判定层哪天被改松了，这里仍然不会让 workspace
+ * 落到 appdata 之外 —— 那是"任意文件写"，不是"目录选错了"。
+ *
+ * 目录会按需创建：Agent 的 cwd 必须真实存在，作者第一次用某个名字时不该先手工
+ * 建目录。创建的是 appdata 下的一个直接子目录，不接受任何来自作者的可写路径。
+ */
+async function resolveAgentWorkspace(
+  raw: unknown,
+  appdata: string,
+): Promise<{ ok: true; path: string; segment: string } | { ok: false; reason: string }> {
+  const normalized = normalizeAppDataWorkspace(raw);
+  if (!normalized.ok) return { ok: false, reason: normalized.reason };
+  if (!normalized.segment) return { ok: true, path: appdata, segment: '' };
+
+  const { join, resolve, dirname } = await import('node:path');
+  const { mkdir } = await import('node:fs/promises');
+
+  const target = join(appdata, normalized.segment);
+  // appdata 自身可能是相对路径或带 symlink 的形态，两边都取 resolve 后再比。
+  if (dirname(resolve(target)) !== resolve(appdata)) {
+    return {
+      ok: false,
+      reason: `appDataWorkspace '${normalized.segment}' resolves outside this MiniApp's appdata`,
+    };
+  }
+  await mkdir(target, { recursive: true });
+  return { ok: true, path: target, segment: normalized.segment };
+}
+
 async function dispatchAgent(
   name: string,
   params: Record<string, unknown>,
@@ -284,18 +319,32 @@ async function dispatchAgent(
     './miniapp-agent'
   );
   if (name === 'ensureSession' || name === 'onEvent') {
-    return describeMiniAppAgentStream();
+    const stream = describeMiniAppAgentStream();
+    if (name === 'ensureSession' && stream.ok) {
+      // 参考文档把 appDataWorkspace 放在 ensureSession 上。本项目的 workspace 是
+      // **每回合**参数（session 本身已按 miniapp_<appId>_<runId> 隔离），所以这里
+      // 不落状态 —— 但仍然校验并回显归一后的值：作者传了个非法名字应该当场看到
+      // 报错，而不是等到 run 时才失败，或者更糟：被静默忽略、他以为挑了子目录。
+      const ws = await resolveAgentWorkspace(params.appDataWorkspace, ctx.appdata);
+      if (!ws.ok) return fail(APP_ERROR_CODES.INVALID_PARAMS, ws.reason);
+      return ok({ ...(stream.result as Record<string, unknown>), app_data_workspace: ws.segment || null });
+    }
+    return stream;
   }
   if (name === 'run' || name === 'turnText') {
     const prompt = requireString(params.prompt);
     if (!prompt) return fail(APP_ERROR_CODES.INVALID_PARAMS, `agent.${name} requires a prompt`);
+    const ws = await resolveAgentWorkspace(params.appDataWorkspace, ctx.appdata);
+    if (!ws.ok) return fail(APP_ERROR_CODES.INVALID_PARAMS, ws.reason);
     // workspace 强制落在 MiniApp 自己的 appdata 下：Agent 有工具，能读写文件，
     // 让它写 MiniApp 目录之外就是完整的任意文件写。声明了 workspace_scope 也
     // 不放开 —— 那是给未来"用户显式授权某个目录"留的口子，现在没有可信的授权
     // 记录来源，空开等于没有。
+    // `appDataWorkspace` 只在 appdata **之内**再收窄一层，与上面那条不冲突：
+    // 约束是"必须在 appdata 内"，不是"必须等于 appdata 根"。
     return runMiniAppAgentTurn({
       prompt,
-      workspacePath: ctx.appdata,
+      workspacePath: ws.path,
       model: typeof params.model === 'string' ? params.model : undefined,
       timeoutMs: typeof params.timeout_ms === 'number' ? params.timeout_ms : undefined,
       runId: typeof params.run_id === 'string' ? params.run_id : 'default',

@@ -28,7 +28,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -47,6 +47,37 @@ const PERMISSIONS = {
   storage: { enabled: true },
   fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] },
 };
+
+/**
+ * 第二个 fixture，专门用来验 `appDataWorkspace`。
+ *
+ * 单独开一个 app 而不是给上面那个加 `agent.enabled`：那个 app 刻意不声明 agent，
+ * 「未声明即拒绝」是它存在的意义，加上去就把这条观察点毁了。
+ */
+const AGENT_APP_ID = 'wire-agent-probe';
+
+const AGENT_APP_PERMISSIONS = {
+  agent: { enabled: true },
+  fs: { read: ['{appdata}/**'], write: ['{appdata}/**'] },
+};
+
+function writeApp(dir: string, id: string, name: string, permissions: unknown): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'meta.json'),
+    JSON.stringify({
+      id,
+      name,
+      description: 'end-to-end fixture',
+      icon: 'p',
+      category: 'other',
+      version: 1,
+      min_host_version: '0.0.1',
+      permissions,
+    }),
+    'utf8',
+  );
+}
 
 interface Envelope {
   ok: boolean;
@@ -116,23 +147,15 @@ beforeAll(async () => {
   home = join(scratch, 'home');
   workspace = join(scratch, 'workspace');
   appDir = join(home, '.hamuna', 'miniapps', APP_ID);
-  mkdirSync(appDir, { recursive: true });
   mkdirSync(workspace, { recursive: true });
   mkdirSync(join(scratch, 'tmp'), { recursive: true });
 
-  writeFileSync(
-    join(appDir, 'meta.json'),
-    JSON.stringify({
-      id: APP_ID,
-      name: 'Wire Probe',
-      description: 'end-to-end fixture',
-      icon: 'p',
-      category: 'other',
-      version: 1,
-      min_host_version: '0.0.1',
-      permissions: PERMISSIONS,
-    }),
-    'utf8',
+  writeApp(appDir, APP_ID, 'Wire Probe', PERMISSIONS);
+  writeApp(
+    join(home, '.hamuna', 'miniapps', AGENT_APP_ID),
+    AGENT_APP_ID,
+    'Wire Agent Probe',
+    AGENT_APP_PERMISSIONS,
   );
   writeFileSync(
     join(appDir, 'storage.json'),
@@ -313,5 +336,86 @@ describe('MiniApp app.* over real HTTP against a real Sidecar process', () => {
 
     // 未知方法不该留下任何磁盘副作用。
     expect((await call('fs.stat', { path: join(appDir, 'definitelyNotAMethod') })).ok).toBe(false);
+  });
+});
+
+/**
+ * `appDataWorkspace` —— 参考文档里 `agent.ensureSession` / `agent.run` 的可选
+ * 参数，让 MiniApp 在自己 appdata 底下挑一个子目录当 Agent workspace。
+ *
+ * 只覆盖 `ensureSession`：它是**零成本**的那一半（校验 + 归一 + 回显 + 建目录，
+ * 不起模型回合），所以能在 integration 池里实跑。`run` 真正把 workspace 交给
+ * Agent 那一段要花真实 token，属 credentialed 池，本文件不碰。
+ */
+describe('MiniApp appDataWorkspace over real HTTP', () => {
+  const agentAppDir = () => join(home, '.hamuna', 'miniapps', AGENT_APP_ID);
+
+  it('echoes back a normalized name and creates the directory inside appdata', async () => {
+    const res = await call(
+      'agent.ensureSession',
+      { appDataWorkspace: '  notes  ' },
+      AGENT_APP_ID,
+    );
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error(`expected success, got ${JSON.stringify(res.error)}`);
+    // 回显的是归一后的值：作者能确认宿主到底认了什么，而不是把原串再吐一遍。
+    expect((res.result as Record<string, unknown>).app_data_workspace).toBe('notes');
+    // 真的建出来了 —— Agent 的 cwd 必须存在，作者不该被要求先手工建目录。
+    expect(existsSync(join(agentAppDir(), 'notes'))).toBe(true);
+  });
+
+  it('falls back to the appdata root when the author does not ask for a subdirectory', async () => {
+    const res = await call('agent.ensureSession', {}, AGENT_APP_ID);
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('expected success');
+    expect((res.result as Record<string, unknown>).app_data_workspace).toBeNull();
+  });
+
+  it('refuses a name that would escape appdata, and creates nothing', async () => {
+    // 断言锁的是「被拒 + 无副作用」这个不变量，不断言由哪一层拦的 —— 两层都返回
+    // 同一个 code 与形状，分层断言只会把实现细节写死。
+    //
+    // 归一层（`normalizeAppDataWorkspace`）有 18 条单测逐条钉住每种拒绝理由，
+    // 并且关掉 `FORBIDDEN_CHARS` 时那两条会红，所以它是真正的 chokepoint。
+    // 派发层那道 `dirname(目标) === appdata` 在当前判定表下够不到，属于兜底：
+    // 它防的是"将来给判定表放宽了某个字符"这类回归。本文件**无法**用它区分
+    // 哪一层拦的（结果相同），也不试图去区分 —— 想验兜底本身请直接单测
+    // `resolveAgentWorkspace`，别在这里演一层假的分层断言。
+    for (const bad of ['../escape', 'a/b', 'C:/Users', '..', '.', 'a\\b']) {
+      const res = await call('agent.ensureSession', { appDataWorkspace: bad }, AGENT_APP_ID);
+      expect(res.ok, `${bad} must be rejected`).toBe(false);
+      if (res.ok) continue;
+      expect(res.error?.code).toBe('INVALID_PARAMS');
+    }
+    // 拒绝必须是**没有副作用**的拒绝：不能先建了目录再报错。
+    expect(existsSync(join(agentAppDir(), 'escape'))).toBe(false);
+    expect(existsSync(join(agentAppDir(), 'a'))).toBe(false);
+  });
+
+  it('refuses a Windows-reserved device name, which Win32 would turn into a handle', async () => {
+    const res = await call('agent.ensureSession', { appDataWorkspace: 'CON' }, AGENT_APP_ID);
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('expected a failure envelope');
+    expect(res.error?.message).toMatch(/reserved/i);
+  });
+
+  it('refuses a trailing dot, which Win32 strips into an alias for another directory', async () => {
+    // `work.` 与 `work` 在 NTFS 上是同一个目录；放行等于给作者一个会静默指向
+    // 别处的名字，跨平台只在 Windows 上暴露。
+    const res = await call('agent.ensureSession', { appDataWorkspace: 'work.' }, AGENT_APP_ID);
+
+    expect(res.ok).toBe(false);
+  });
+
+  it('still denies agent on the app that never declared it', async () => {
+    // 回归护栏：加了 AGENT_APP_ID 之后，"未声明即拒绝"这条观察点不能被稀释。
+    const res = await call('agent.ensureSession', { appDataWorkspace: 'notes' }, APP_ID);
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('expected a failure envelope');
+    expect(res.error?.message).toMatch(/agent\.enabled/);
   });
 });
