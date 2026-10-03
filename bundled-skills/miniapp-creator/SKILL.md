@@ -127,6 +127,10 @@ await p;   // 被中止或超时会 reject
 - 可选 `run_id`：不传按 `'default'` 算，所以串行调用直接 `app.ai.cancel('default')`
   就能停。`cancel` 返回 `{ cancelled, inflightCount }`，`cancelled: false` 表示那次
   已经结束 —— 正常结果，不是错误。
+- `maxTokens` **当前不会真的限制输出长度**。宿主只拿它和 meta 里声明的
+  `permissions.ai.max_tokens_per_request` 比一次（超了直接拒），然后就丢掉了 ——
+  SDK 没有按请求限制输出 token 的口子。要控制长度，把要求写进 prompt
+  （"三句话以内"、"不超过 200 字"），别指望这个参数。
 
 ### 隐藏 Agent 会话（`app.agent`）—— 有状态、能读自己的沙箱
 
