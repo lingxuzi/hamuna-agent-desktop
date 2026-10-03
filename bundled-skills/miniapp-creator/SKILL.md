@@ -163,6 +163,22 @@ await app.agent.cancel({ run_id: 'r1' });
 需要流式输出时用 `app.agent.onEvent(fn)` 订阅（`agent.*` 事件走独立通道）。
 当前 `run` / `turnText` 返回终态文本。
 
+要在自己的 appdata 下挑一个子目录当 Agent workspace，把**目录名**（不是路径）作为
+`appDataWorkspace` 传给 `ensureSession` 或 `run` / `turnText`：
+
+```javascript
+// 第一次就要带对 —— session 的 workspace 在创建时就定死了
+await app.agent.ensureSession({ appDataWorkspace: 'notes' });
+const { text } = await app.agent.run('总结 notes 目录里的内容', { run_id: 'r1' });
+```
+
+- 它只能是 appdata 下的**一个直接子目录名**：最长 64 字符，不含 `/ \ : * ? " < > |`
+  与控制字符，不能以 `.` 开头或结尾（Win32 会静默剥掉，`work.` 与 `work` 会指向同一
+  个目录），也不能是 Windows 保留设备名的第一段（`con` / `nul` / `com1`…，连
+  `CON.txt` 同样算）。首尾空格会被 trim 掉，不是报错。
+- **必须第一次就带对。** session 建好后 workspace 搬不动：换个目录再调
+  `ensureSession` 会**直接抛错**，不是静默忽略。不带参数重复调是安全的（沿用现有那个）。
+
 ### 原生对话框与剪贴板
 
 `app.dialog.*` **无需权限声明**（都是用户显式操作）：
