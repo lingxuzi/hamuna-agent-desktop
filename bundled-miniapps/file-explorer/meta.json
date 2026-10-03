@@ -15,6 +15,9 @@
       "read": ["{workspace}/**"],
       "write": []
     },
+    "node": {
+      "enabled": true
+    },
     "shell": {
       "allow": []
     },

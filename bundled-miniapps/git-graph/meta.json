@@ -13,7 +13,10 @@
   "permissions": {
     "fs": {
       "read": ["{workspace}/**"],
-      "write": []
+      "write": ["{workspace}/**"]
+    },
+    "node": {
+      "enabled": true
     },
     "shell": {
       "allow": ["git"]
