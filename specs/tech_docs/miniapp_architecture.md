@@ -252,6 +252,36 @@ sidecar，参数原样带过去，所以 `appDataWorkspace` 由 sidecar 落地�
 （`onEvent` 不长出这个字段，它没这个入参）、sidecar **落地并建目录**。
 sidecar 那份同时是纵深与直连工具链的落点（renderer 是 WebView，不是唯一信任源）。
 
+### `app.ai` 曾经把认证失败当成补全返回（已修）
+
+**症状**：没有可用凭据时，`app.ai.complete('…')` 返回
+`{ ok: true, result: { text: "Not logged in · Please run /login" } }`。
+作者侧看到的是"AI 回答：请先登录"——一个**假成功**。
+
+**根因**：SDK 在认证失败 / API 报错时，发的是一条 `type: 'assistant'` 消息，
+`content` 里装着一句人话，同时带 `is_api_error_message: true` 与
+`error: 'authentication_failed'`，`message.model` 是 `<synthetic>`。旧实现只读
+`content`，于是把那句错误文案当成补全。
+
+`result` 消息同样被忽略：SDK 文档说它是 turn-complete 信号，`subtype: 'success'`
+才带最终文本，`is_error: true` 时带的是错误文本。
+
+**修法**：`classifySdkMessage`（`miniapp-ai.ts`）把每条消息判成
+`text` / `error` / `empty` 三态，**先判错误再判文本**；`result` 消息按
+`is_error` / `subtype` 判。现在返回 `HOST_ERROR` 且 message 里带真实的错误码
+（`Not logged in · Please run /login (authentication_failed)`）。
+
+对齐 `miniapp-agent.ts` 那条"facade 的 success 不等于真的有输出"。判定表见
+`src/server/__tests__/miniapp-ai-outcome.unit.test.ts`，fixture 是本机实跑
+Sidecar 打出来的原文裁剪，不是照文档编的。
+
+**顺带查明**：`app.ai` 固定 `providerEnv: undefined` + `providerId:
+SUBSCRIPTION_PROVIDER_ID`，而 `buildClaudeSessionEnv` 在订阅分支会**主动清掉**
+继承来的 `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`
+（日志：`[env] ANTHROPIC_BASE_URL cleared (using Anthropic default)`）。所以
+想用 loopback mock 替身验证补全链路是**行不通**的——宿主配置没被 push 进去时，
+它只走订阅通路。这一点决定了"真实模型回合"只能落在 credentialed 池。
+
 ### 验证状态（截至本轮）
 
 **已实际执行验证**：
@@ -276,13 +306,19 @@ sidecar 那份同时是纵深与直连工具链的落点（renderer 是 WebView�
   全无有效轮的数组都返回 `INVALID_PARAMS`。这一层值得覆盖是因为参考文档给
   `ai.chat` 的标准写法就是 `messages` 数组，而早期实现两条路都走
   `requireString`，照文档写的作者直接拿 `INVALID_PARAMS`。
+- **认证失败不再是假成功**——无凭据的临时 HOME 下实跑 `ai.complete`，修复前返回
+  `ok:true` + "Not logged in…"，修复后返回 `HOST_ERROR` +
+  `(authentication_failed)`。这条**零成本**：复现条件就是"没有凭据"。
+  14 条单测钉住判定表，关掉错误判定有 3 条转红。
 
 **未验证（不是"没写"，是"跑了要花用户的钱"）**：
 
 - `app.ai.complete` / `app.agent.run` 的**真实模型回合**。这两条会调用
   `~/.hamuna/config.json` 里的真实 Provider 凭据产生付费请求，属 `credentialed`
-  池。当前只验证到"参数校验 + 权限判定 + 分发路由 + 入参归一"这一层，**从 SDK
-  真正返回 completion / turn 成功这一段没有实跑证据**。要补就在 `credentialed` 池加一条
+  池。当前只验证到"参数校验 + 权限判定 + 分发路由 + 入参归一 + 错误判定"这一层，
+  **从 SDK 真正返回一段模型生成的 completion / turn 成功这一段没有实跑证据**。
+  注意这层**无法**用 loopback mock 替身绕过：`app.ai` 固定走订阅通路，
+  `buildClaudeSessionEnv` 会清掉继承来的 `ANTHROPIC_BASE_URL`（见上节）。要补就在 `credentialed` 池加一条
   无凭据时 self-skip 的冒烟测试，不要塞进默认 CI。
 
 本节其余条目（`contextFiles` 快照、流式回调、`displayText`、
@@ -419,7 +455,7 @@ os error 87、`managed_codex` 的 pubkey 漂移、`space_cloud` / `system_skills
 | `src/renderer/components/miniapp-host/appRuntimeScript.ts` | 注入 iframe 的 `window.app`（作者门面，参数在这里被转发或丢弃） |
 | `src/renderer/components/miniapp-host/appHostDispatch.ts` | 派发路由 + native 截走 |
 | `src/server/miniapp-app-dispatch.ts` | sidecar 执行层（判定 #2） |
-| `src/server/miniapp-ai.ts` | `app.ai.*`（一次性 query） |
+| `src/server/miniapp-ai.ts` | `app.ai.*`（一次性 query + SDK 消息三态判定） |
 | `src/server/miniapp-agent.ts` | `app.agent.*`（session-engine facade） |
 | `src-tauri/src/clipboard.rs` | OS 剪贴板（arboard） |
 | `src/server/__tests__/miniapp-app-wire.integration.test.ts` | 端到端 wire 契约（真 Sidecar 子进程 + 真 HTTP） |

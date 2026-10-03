@@ -53,12 +53,61 @@ function fail(code: string, message: string): AiOutcome {
 }
 
 /** 从 SDK 流式消息里抽出 assistant 纯文本（与 title-generator 同构）。 */
-function extractText(message: unknown): string | null {
-  if (!message || typeof message !== 'object') return null;
+type CompletionOutcome =
+  | { kind: 'text'; text: string }
+  | { kind: 'error'; message: string }
+  | { kind: 'empty' }
+  | { kind: 'timeout' };
+
+export type { CompletionOutcome };
+
+/**
+ * 判定一条 SDK 消息是"补全结果"、"错误"还是"还不是结果"。
+ *
+ * 关键在于**错误也会长得像结果**。SDK 在认证失败或 API 报错时，会发一条
+ * `type: 'assistant'` 消息，`content` 里是一句人话（实测无凭据时是
+ * `"Not logged in · Please run /login"`），同时带 `is_api_error_message: true`
+ * 与 `error: 'authentication_failed'`，`message.model` 是 `<synthetic>`。
+ *
+ * 早期实现只读 `content`，于是把那句错误文案当成补全交给作者，返回
+ * `ok: true`。作者侧看到的是"AI 回答：请先登录"——一个**假成功**，比直接
+ * 报错难查得多。对齐 `miniapp-agent.ts` 那条"facade 的 success 不等于真的有
+ * 输出"的判断。
+ *
+ * `result` 消息同样要看：SDK 文档说它是 turn-complete 信号，`subtype: 'success'`
+ * 才带最终文本，`is_error: true` 时带的是错误文本。
+ */
+export function classifySdkMessage(message: unknown): CompletionOutcome {
+  if (!message || typeof message !== 'object') return { kind: 'empty' };
   const rec = message as Record<string, unknown>;
-  if (rec.type !== 'assistant' && rec.type !== 'result') return null;
-  const message_ = rec.message as Record<string, unknown> | undefined;
-  const content = (message_?.content ?? rec.content) as unknown;
+
+  if (rec.type === 'result') {
+    const isError = rec.is_error === true;
+    const subtype = typeof rec.subtype === 'string' ? rec.subtype : '';
+    const text = typeof rec.result === 'string' ? rec.result.trim() : '';
+    if (isError || (subtype && subtype !== 'success')) {
+      return { kind: 'error', message: text || `app.ai turn failed (${subtype || 'unknown'})` };
+    }
+    return text ? { kind: 'text', text } : { kind: 'empty' };
+  }
+
+  if (rec.type !== 'assistant') return { kind: 'empty' };
+
+  // 先判错误，再判文本 —— 顺序反了就会把错误文案当补全。
+  if (rec.is_api_error_message === true || (typeof rec.error === 'string' && rec.error)) {
+    const text = joinTextBlocks(rec.message) ?? '';
+    const code = typeof rec.error === 'string' ? rec.error : 'api_error';
+    return { kind: 'error', message: text ? `${text} (${code})` : `app.ai failed: ${code}` };
+  }
+
+  const text = joinTextBlocks(rec.message);
+  return text ? { kind: 'text', text } : { kind: 'empty' };
+}
+
+/** 拼一条 assistant 消息里所有 `text` 块；没有就返回 null。 */
+function joinTextBlocks(message: unknown): string | null {
+  if (!message || typeof message !== 'object') return null;
+  const content = (message as Record<string, unknown>).content;
   if (!Array.isArray(content)) return null;
   const parts: string[] = [];
   for (const block of content) {
@@ -220,32 +269,45 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
 
   const timeoutMs = p.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   try {
-    const text = await Promise.race([
-      (async () => {
+    const outcome = await Promise.race([
+      (async (): Promise<CompletionOutcome> => {
         for await (const message of cliQuery) {
-          const t = extractText(message);
-          if (t) return t;
+          const verdict = classifySdkMessage(message);
+          // 错误优先于文本：SDK 把认证 / API 失败也塞进一条 assistant 消息的
+          // content 里（`is_api_error_message: true`）。先判文本会把
+          // "Not logged in · Please run /login" 当成补全结果交给作者。
+          if (verdict.kind === 'error') return verdict;
+          if (verdict.kind === 'text') return verdict;
         }
-        return null;
+        return { kind: 'empty' };
       })(),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+      new Promise<CompletionOutcome>((resolve) =>
+        setTimeout(() => resolve({ kind: 'timeout' }), timeoutMs),
+      ),
     ]);
-    if (text === null) {
-      // 无论超时还是被取消，都要显式终止 iterator，否则 SDK 子进程会泄漏
-      // （对齐 title-generator 的同款处理）。
+    if (outcome.kind === 'error') {
       try {
         cliQuery.return(undefined as never);
       } catch {
         /* ignore */
       }
-      // 取消与超时必须给出**不同**的结论：作者看到 "timed out" 会去调大
-      // timeout，而真实原因是他自己 300ms 前刚点了取消按钮。
-      if (controller.signal.aborted) {
-        return fail(APP_ERROR_CODES.HOST_ERROR, 'app.ai was cancelled');
-      }
-      return fail(APP_ERROR_CODES.HOST_ERROR, `app.ai timed out after ${timeoutMs}ms`);
+      return fail(APP_ERROR_CODES.HOST_ERROR, outcome.message);
     }
-    return ok({ text });
+    if (outcome.kind === 'text') return ok({ text: outcome.text });
+    // `empty` 与 `timeout` 共用这一段，与旧实现一致（旧的 `null` 同时覆盖这两种）。
+    // 无论超时还是被取消，都要显式终止 iterator，否则 SDK 子进程会泄漏
+    // （对齐 title-generator 的同款处理）。
+    try {
+      cliQuery.return(undefined as never);
+    } catch {
+      /* ignore */
+    }
+    // 取消与超时必须给出**不同**的结论：作者看到 "timed out" 会去调大
+    // timeout，而真实原因是他自己 300ms 前刚点了取消按钮。
+    if (controller.signal.aborted) {
+      return fail(APP_ERROR_CODES.HOST_ERROR, 'app.ai was cancelled');
+    }
+    return fail(APP_ERROR_CODES.HOST_ERROR, `app.ai timed out after ${timeoutMs}ms`);
   } catch (e) {
     return fail(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
   } finally {
