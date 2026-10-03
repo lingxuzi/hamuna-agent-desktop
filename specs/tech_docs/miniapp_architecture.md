@@ -73,6 +73,41 @@ window.app.*                  MiniAppRunner                    dispatchMiniAppAp
 > "看一眼就知道能碰哪些目录"。`{appdata}/src/**` 也**不会**放行
 > `{appdata}/src-secrets`（prefix confusion 防护依然生效）。
 
+### 绝对路径要判组件，不判字符串形状
+
+Node 侧（`shared/miniapp/app-permissions.ts`）的 `normalizePath` 显式处理了
+盘符与 UNC，这条在 shared 层；**Rust 侧曾经完全没有对应的东西**，而 Rust
+才是真正 `join` + `fs` 落盘的那一侧。
+
+Windows 上 `Path::join` 遇到**带盘符或带根**的参数会**整个丢弃 base** ——
+不报错、不落日志、返回的就是参数本身。于是"这个字符串看起来是相对的"完全
+不蕴含"拼出来的路径在 base 之内"：`C:\Users\x\a` 与 drive-relative 的
+`C:a` 既不以 `/` 开头、也不以 `\` 开头、还不含 `..`，所有基于字符的守卫
+全部放行。实测连续三处同一根因：
+
+| 位置 | 后果 |
+|------|------|
+| `create_from_chat_blocking` 写 `source` map | 任意文件写（`cmd_miniapp_create_from_chat`，webview 可达） |
+| `read_inline_target` 内联 `<link>` / `<script>` | 任意文件读，且内容被**拼进渲染用的 HTML** |
+| `read_meta_entry` → `dir.join(entry)` | 任意文件读，且内容作为 `source` 挂进 iframe `srcdoc` |
+
+后两个自带外泄：文件内容直接出现在 MiniApp 界面上，不需要任何网络出口。
+
+正确做法是判**组件**而不是判首字符：Rust 侧一律走
+`validate_miniapp_relative_path`（拒 `Component::Prefix` / `RootDir`），
+写盘点额外过 `join_inside_app_dir`。两点容易漏：
+
+- **`starts_with` 是纯词法前缀比较。** `base/../x` 照样 `starts_with(base)`
+  ——`..` 在它眼里只是又一个组件。所以只判 `starts_with` 等于没判，必须
+  显式拒 `ParentDir`。
+- **注释里写了不等于代码做了。** `read_miniapp_source_blocking` 当时写着
+  "`entry` is always a relative path under `dir`"，而 `entry` 根本不在
+  `MiniAppMeta` schema 里，全链路零校验。**文档声明但不强制的不变量，
+  应当直接当 bug 报** —— 它对每个相信注释的 reviewer 都读起来像保证。
+
+回归测试必须**绕过上游 validator 直接调被测函数**，否则第一层一旦生效，
+第二层在攻击路径上永远走不到，断言就变成永真。
+
 ---
 
 ## 3. `ai` 与 `agent` 的分工
