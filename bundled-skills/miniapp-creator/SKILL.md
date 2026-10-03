@@ -281,8 +281,6 @@ iframe 的 CSP 是 `default-src 'none'`，**在 HTML 里直接写 `<script src="
 
 > 优先选有 UMD 全局包的库。iframe 里没有 bundler，`require()` / `import` 不可用。
 >
-> **不要声明 `permissions.ai`** —— 宿主没有实现，声明它只会误导你和用户。
->
 > **`min_host_version` 填当前版本或更低**。填一个高于宿主版本的值，MiniApp 会直接从列表里消失（用户看不到、也打不开）。
 
 `id` 是目录名，**必须是 kebab-case ASCII**，全局唯一。如果用户没起名，根据 `name` 自动转（中文 → 拼音 / 拆词；如"图标生成器"→ `icon-generator`）。
@@ -330,7 +328,8 @@ Sidecar 收到后会：① 转发到 Rust `cmd_miniapp_create_from_chat`；② R
 
 - **默认断网**：iframe CSP 是 `connect-src 'none'`，MiniApp 自己发不出任何请求。要联网必须用 `app.net.fetch` + 声明 `net.allow` 域名白名单
 - **权限最小化**：`fs` / `shell` / `net` 留空 = 全禁。只申请真正用到的
-- **AI 权限不存在**：不要在 meta 里写 `permissions.ai`，不要写"调用 AI 生成"的代码
+- **AI 要显式 opt-in**：`app.ai.*` 需 `permissions.ai.enabled = true`（见 §宿主 AI）。它复用宿主已配好的 Provider，MiniApp 永远不持有 API Key；模型不带任何工具，只适合翻译 / 分类 / 摘要这类纯文本
+- **要读写文件就别用 AI**：`app.ai` 读不到文件也跑不了命令，这是安全设计（prompt 由第三方作者控制）。要读写走 `app.fs` / `app.shell` + 对应权限声明
 - **不大体积**：4 文件总计 ≤ 50KB
 - **错误要显示**：`app.*` 调用失败会 reject（带 `.code`）。UI 上要 catch 并提示，别静默吞掉——静默失败是 MiniApp 最常见的坏体验
 

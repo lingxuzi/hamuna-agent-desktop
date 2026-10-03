@@ -31,21 +31,40 @@ const SCHEMA_SECTION = (() => {
 })();
 
 /** 每个探针都是该 group 下一个必然被拒的调用，空 permissions 即可。 */
-const GATED: ReadonlyArray<{ probe: string; schemaKey: string }> = [
-  { probe: 'clipboard.readText', schemaKey: '"clipboard":' },
-  { probe: 'ai.complete', schemaKey: '"ai":' },
-  { probe: 'agent.run', schemaKey: '"agent":' },
+const GATED: ReadonlyArray<{ probe: string; group: string }> = [
+  { probe: 'clipboard.readText', group: 'clipboard' },
+  { probe: 'ai.complete', group: 'ai' },
+  { probe: 'agent.run', group: 'agent' },
   // worker 的能力名是 app.call，但开关挂在 permissions.node 上——两处名字不一样。
-  { probe: 'call.anything', schemaKey: '"node":' },
+  { probe: 'call.anything', group: 'node' },
 ];
+
+/** 作者照抄的地方：Schema 章节的 permissions 块。 */
+const schemaKey = (group: string) => `"${group}":`;
 
 describe('SKILL.md 的权限说明必须和 checkAppPermission 一致', () => {
   it.each(GATED)('$probe 空权限下确实被拒（前提，变了就说明闸门改了）', ({ probe }) => {
     expect(checkAppPermission(probe as never, {}, {}).allowed).toBe(false);
   });
 
-  it.each(GATED)('Schema 章节必须列出 $schemaKey（作者照抄的地方）', ({ schemaKey }) => {
-    expect(SCHEMA_SECTION).toContain(schemaKey);
+  it.each(GATED)('Schema 章节必须列出 $schemaKey（作者照抄的地方）', ({ group }) => {
+    expect(SCHEMA_SECTION).toContain(schemaKey(group));
+  });
+
+  /**
+   * 反向断言：文档不得教作者**别声明**一个闸门强制要求的权限。
+   *
+   * 这条是被真实事故逼出来的——同一份 SKILL.md 里曾经同时写着「需声明
+   * `permissions.ai.enabled = true`」和「AI 权限不存在，不要写 `permissions.ai`」，
+   * 两处都在，代码只认前者。作者读��哪条取决于他翻到哪一节，于是 `app.ai`
+   * 对一部分人直接不可用。
+   */
+  it.each(GATED)('不得出现劝作者别声明 permissions.$group 的话', ({ group }) => {
+    const negation = /不要|别|禁止|不存在|没实现/;
+    for (const line of SKILL.split('\n')) {
+      if (!negation.test(line)) continue;
+      expect(line.includes(`permissions.${group}`), `line forbids a required permission: ${line}`).toBe(false);
+    }
   });
 
   it('clipboard 不得再被归进「无需权限声明」——它是宿主的用户状态，不是 dialog 那档', () => {
