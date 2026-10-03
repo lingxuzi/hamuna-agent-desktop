@@ -45,6 +45,23 @@ vi.mock('@/api/apiFetch', () => ({
   apiGetJson: (...args: unknown[]) => apiGetJson(...args),
 }));
 
+// 原生 owner（dialog / clipboard）在离开 renderer 之前就地消化，不走 sidecar。
+// 它们的信封形状同样要验 —— 前面那些用例只覆盖了 apiPostJson 那一个 owner。
+const invoke = vi.fn();
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: unknown[]) => invoke(...args),
+}));
+const dialogOpen = vi.fn();
+const dialogSave = vi.fn();
+const dialogAsk = vi.fn();
+const dialogMessage = vi.fn();
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: (...args: unknown[]) => dialogOpen(...args),
+  save: (...args: unknown[]) => dialogSave(...args),
+  ask: (...args: unknown[]) => dialogAsk(...args),
+  message: (...args: unknown[]) => dialogMessage(...args),
+}));
+
 const APP_ID = 'wire-probe';
 
 /**
@@ -161,6 +178,11 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
   beforeEach(() => {
     apiPostJson.mockReset();
     apiGetJson.mockReset();
+    invoke.mockReset();
+    dialogOpen.mockReset();
+    dialogSave.mockReset();
+    dialogAsk.mockReset();
+    dialogMessage.mockReset();
     apiGetJson.mockResolvedValue({ ok: true, kinds: [] });
   });
 
@@ -271,6 +293,52 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     );
 
     expect(apiPostJson).not.toHaveBeenCalled();
+  }, 15000);
+
+  it('routes clipboard to the Tauri owner rather than the sidecar, and hands the text back', async () => {
+    // 剪贴板里是**宿主的**用户状态（典型场景：刚复制的密码），所以要显式 opt-in。
+    invoke.mockResolvedValue('copied-secret');
+    const { reports } = await mountAndBoot('window.app.clipboard.readText()', {
+      clipboard: { enabled: true },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(invoke).toHaveBeenCalledWith('cmd_clipboard_read_text');
+    // 原生能力在离开 renderer 前就被消化，绝不能再发一份到 sidecar。
+    expect(apiPostJson).not.toHaveBeenCalled();
+    expect(reports[0]).toEqual({ ok: true, value: 'copied-secret' });
+  }, 15000);
+
+  it('refuses clipboard.readText without explicit opt-in, and never reaches Tauri', async () => {
+    const { reports } = await mountAndBoot('window.app.clipboard.readText()', {});
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    // 两头都不能碰：不能 invoke（那是宿主的真剪贴板），也不能发到 sidecar。
+    expect(invoke).not.toHaveBeenCalled();
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean; code?: string };
+    expect(reported.ok).toBe(false);
+    expect(typeof reported.code).toBe('string');
+  }, 15000);
+
+  it("carries the user's answer to a confirm dialog back to the author", async () => {
+    dialogAsk.mockResolvedValue(true);
+    const { reports } = await mountAndBoot(
+      "window.app.dialog.message({ message: 'Sure?', kind: 'confirm' })",
+      {},
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    // confirm 走 ask()（Yes/No），其余 kind 走 message()（单 Ok）—— Tauri 的
+    // MessageDialogKind 里并没有 confirm 这一档，所以必须分开调。
+    expect(dialogAsk).toHaveBeenCalledWith('Sure?', { title: undefined, kind: 'warning' });
+    expect(dialogMessage).not.toHaveBeenCalled();
+    expect(apiPostJson).not.toHaveBeenCalled();
+    // 作者拿到的是 `{confirmed: true}`，不是一个裸布尔 —— 形状错了作者就会写错分支。
+    expect(reports[0]).toEqual({ ok: true, value: { confirmed: true } });
   }, 15000);
 
   it('rejects a call whose nonce is not this session, even from the real iframe', async () => {
