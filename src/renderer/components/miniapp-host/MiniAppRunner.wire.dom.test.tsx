@@ -919,3 +919,179 @@ describe('MiniAppRunner pushes a locale change into a running MiniApp', () => {
     expect(reports).toHaveLength(0);
   }, 15000);
 });
+
+// ── API 面覆盖补齐 ────────────────────────────────────────────────────────
+// 本文件此前只覆盖 34 个 method 中的 13 个。每个 method 都有三段"形状"要对：
+// runtime 拼出的 params、宿主 listener 认的字段、dispatch 读的字段。任一段写错，
+// 另外两段的单测都绿，而作者看到的是 Promise 永久 pending、或一个语义悄悄变了
+// 的参数 —— 正是本文件开头说的那类事故。
+//
+// 表是照着 `appRuntimeScript.ts` 的 facade 抄的，**不是**照着 dispatch 抄的：
+// 两边不一致正是要抓的东西，照 dispatch 抄就永远发现不了。
+const SIDE_CAR_ROUND_TRIP: ReadonlyArray<{
+  method: string;
+  call: string;
+  params: unknown;
+  permissions?: Record<string, unknown>;
+  result: unknown;
+}> = [
+  // fs 读侧。注意 readdir / stat / lstat / access 四种签名不同：前两个带 opts，
+  // 后两个不带。facade 若给它们也塞了 opts，dispatch 读到的就是多余字段。
+  {
+    method: 'fs.readdir',
+    call: "window.app.fs.readdir('sub')",
+    params: { path: 'sub', opts: null },
+    permissions: { fs: { read: ['{appdata}/**'] } },
+    result: ['a.txt'],
+  },
+  { method: 'fs.stat', call: "window.app.fs.stat('a.txt')", params: { path: 'a.txt' }, permissions: { fs: { read: ['{appdata}/**'] } }, result: { size: 3 } },
+  { method: 'fs.lstat', call: "window.app.fs.lstat('a.txt')", params: { path: 'a.txt' }, permissions: { fs: { read: ['{appdata}/**'] } }, result: { size: 3 } },
+  { method: 'fs.access', call: "window.app.fs.access('a.txt')", params: { path: 'a.txt' }, permissions: { fs: { read: ['{appdata}/**'] } }, result: true },
+  // fs 写侧
+  {
+    method: 'fs.writeFile',
+    call: "window.app.fs.writeFile('a.txt', 'hi')",
+    params: { path: 'a.txt', data: 'hi', opts: null },
+    permissions: { fs: { write: ['{appdata}/**'] } },
+    result: null,
+  },
+  {
+    method: 'fs.appendFile',
+    // appendFile 的 facade 没有 opts 参数位 —— 给了就说明签名抄错了
+    call: "window.app.fs.appendFile('a.txt', 'x')",
+    params: { path: 'a.txt', data: 'x' },
+    permissions: { fs: { write: ['{appdata}/**'] } },
+    result: null,
+  },
+  { method: 'fs.mkdir', call: "window.app.fs.mkdir('sub')", params: { path: 'sub', opts: null }, permissions: { fs: { write: ['{appdata}/**'] } }, result: null },
+  { method: 'fs.rm', call: "window.app.fs.rm('sub')", params: { path: 'sub', opts: null }, permissions: { fs: { write: ['{appdata}/**'] } }, result: null },
+  { method: 'fs.rmdir', call: "window.app.fs.rmdir('sub')", params: { path: 'sub' }, permissions: { fs: { write: ['{appdata}/**'] } }, result: null },
+  { method: 'fs.unlink', call: "window.app.fs.unlink('a.txt')", params: { path: 'a.txt' }, permissions: { fs: { write: ['{appdata}/**'] } }, result: null },
+  // 双路径两个：facade 用 from/to，不是 path。写成 path 的话宿主 gate 收到的
+  // paths 数组会空掉一条，checkFs 的 every 少校验一半。
+  { method: 'fs.copyFile', call: "window.app.fs.copyFile('a.txt', 'b.txt')", params: { from: 'a.txt', to: 'b.txt' }, permissions: { fs: { write: ['{appdata}/**'] } }, result: null },
+  { method: 'fs.rename', call: "window.app.fs.rename('a.txt', 'b.txt')", params: { from: 'a.txt', to: 'b.txt' }, permissions: { fs: { write: ['{appdata}/**'] } }, result: null },
+  // storage：key/value 形状，且完全没有权限门
+  { method: 'storage.set', call: "window.app.storage.set('k', 1)", params: { key: 'k', value: 1 }, result: null },
+  { method: 'storage.remove', call: "window.app.storage.remove('k')", params: { key: 'k' }, result: true },
+  // ai
+  { method: 'ai.complete', call: "window.app.ai.complete('hi')", params: { prompt: 'hi', opts: null }, permissions: { ai: { enabled: true } }, result: { text: 'ok' } },
+  // cancel 收字符串是向后兼容的超集：runIdOf('r1') 必须原样透传，不能是 undefined
+  { method: 'ai.cancel', call: "window.app.ai.cancel('r1')", params: { run_id: 'r1' }, permissions: { ai: { enabled: true } }, result: { cancelled: true, inflightCount: 0 } },
+  { method: 'ai.getModels', call: 'window.app.ai.getModels()', params: null, permissions: { ai: { enabled: true } }, result: ['gpt-x'] },
+];
+
+describe('every sidecar-routed app method completes the three-segment round trip', () => {
+  beforeEach(() => {
+    apiPostJson.mockReset();
+    apiGetJson.mockReset();
+    invoke.mockReset();
+    dialogOpen.mockReset();
+    dialogSave.mockReset();
+    dialogAsk.mockReset();
+    dialogMessage.mockReset();
+  });
+
+  it.each(SIDE_CAR_ROUND_TRIP)(
+    '$method sends its own params shape and hands the result back to the author',
+    async ({ method, call, params, permissions, result }) => {
+      apiPostJson.mockResolvedValue({ ok: true, result });
+      const { reports } = await mountAndBoot(call, permissions ?? {});
+
+      await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+      expect(apiPostJson).toHaveBeenCalledWith(`/api/miniapp/app/${method}`, {
+        appId: APP_ID,
+        params,
+      });
+      expect(reports[0]).toEqual({ ok: true, value: result });
+    },
+    15000,
+  );
+});
+
+describe('the natively-routed app methods reach Tauri with the right arguments', () => {
+  beforeEach(() => {
+    apiPostJson.mockReset();
+    apiGetJson.mockReset();
+    invoke.mockReset();
+    dialogOpen.mockReset();
+    dialogSave.mockReset();
+  });
+
+  it('clipboard.writeText sends the string to the native owner, not the sidecar', async () => {
+    invoke.mockResolvedValue(undefined);
+    const { reports } = await mountAndBoot("window.app.clipboard.writeText('copied')", {
+      clipboard: { enabled: true },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(invoke).toHaveBeenCalledWith('cmd_clipboard_write_text', { text: 'copied' });
+    expect(apiPostJson).not.toHaveBeenCalled();
+    expect(reports[0]).toEqual({ ok: true, value: null });
+  }, 15000);
+
+  it('clipboard.writeText without opt-in never reaches the real clipboard', async () => {
+    // 与 readText 对称：剪贴板是宿主的用户状态，两头都不能碰。
+    const { reports } = await mountAndBoot("window.app.clipboard.writeText('x')", {});
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(apiPostJson).not.toHaveBeenCalled();
+    expect((reports[0] as { ok: boolean }).ok).toBe(false);
+  }, 15000);
+
+  it('dialog.open forwards the picker options and passes a cancel through as null', async () => {
+    // 用户取消是正常结果，必须是 null 而不是错误 —— 否则作者得为每次按 Esc 写
+    // catch。顺带钉住 multiple/directory 真的传到了原生选择器。
+    dialogOpen.mockResolvedValue(null);
+    const { reports } = await mountAndBoot(
+      "window.app.dialog.open({ title: 'Pick a file', multiple: true })",
+      {},
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(dialogOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Pick a file', multiple: true, directory: false }),
+    );
+    expect(apiPostJson).not.toHaveBeenCalled();
+    expect(reports[0]).toEqual({ ok: true, value: null });
+  }, 15000);
+
+  it('dialog.open hands back the picked path as-is', async () => {
+    dialogOpen.mockResolvedValue('/tmp/picked.txt');
+    const { reports } = await mountAndBoot('window.app.dialog.open({ title: "Pick" })', {});
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(reports[0]).toEqual({ ok: true, value: '/tmp/picked.txt' });
+  }, 15000);
+
+  it('dialog.save forwards title and default_path and passes a cancel through as null', async () => {
+    dialogSave.mockResolvedValue(null);
+    const { reports } = await mountAndBoot(
+      "window.app.dialog.save({ title: 'Save as', default_path: 'out.json' })",
+      {},
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(dialogSave).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Save as', defaultPath: 'out.json' }),
+    );
+    expect(apiPostJson).not.toHaveBeenCalled();
+    expect(reports[0]).toEqual({ ok: true, value: null });
+  }, 15000);
+
+  it('dialog.save hands back the chosen target path as-is', async () => {
+    dialogSave.mockResolvedValue('/tmp/out.json');
+    const { reports } = await mountAndBoot('window.app.dialog.save({ title: "Save" })', {});
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(reports[0]).toEqual({ ok: true, value: '/tmp/out.json' });
+  }, 15000);
+});
