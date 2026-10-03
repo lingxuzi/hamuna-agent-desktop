@@ -174,6 +174,32 @@ kinds/bundled-worker-calls.unit.test.ts 用**真注册表** listKinds() 判定�
 **为什么不用「调用总数」当不变式**：总数会把合法的**新增**调用打成红，报错指向
 一个不存在的问题（并发 session 正在改 bundled-miniapps 时尤其容易撞上）。只钉
 「每个 worker app 都扫到了东西」+ 写侧那条路径被点到。
+### 参数形状：`.max: 50` 被静默丢弃
+
+方法名对得上不代表参数对得上。z.object() 默认 **strip** 未知键（不是
+.strict()），worker-entry-*.ts 又把 parsed.data 直接交给 handler，所以
+一个被改名 / 拼错的字段不会报错 —— 它被丢掉，handler 拿到 undefined，
+.default() 顶上来。实测 GitLogParams.safeParse({ cwd, maxx: 50 }) 返回
+success: true + {cwd}：app 要 50 条 commit，安静地拿到另一个数。
+
+方向：app 多传（拼错 / schema 改名）→ 静默错值；app 少传必填 → 抛
+INVALID_PARAMS（可见，但仍是一次就能修的错）。
+
+kinds/bundled-worker-params.unit.test.ts 两个方向都钉。参数是对象字面量、跨行、
+带嵌套调用（{ path: joinPath(treeRoot, rel) }）与变量简写（{ cwd }），所以用
+**acorn 解析真源码**取 key，不写正则（st-policy.ts 已在用 acorn）。
+
+WorkerMethodDef.schema 声明成 z.ZodType，.shape 只在 ZodObject 上，所以取
+shape 前先 instanceof z.ZodObject 过一道：直接 s { shape } 被 tsc 拒，
+s unknown as 会把真类型错误一起吞掉；判不出来就返回 null，调用方当成「这条
+判不了」而非「通过」。
+
+变异验证（四个都红）：app 把 max 拼成 maxx；schema 把 max 改名成 limit；
+app 少传 cwd；app 改用 { ...base } 动态构造（此时护栏判不了，**必须红**而不是
+静默变成真空通过）。
+
+**边界**：只认静态可判定的 key。{ ...spread } / uildParams() 拿不到，报告
+「无法静态判定」并转红，不假装通过。
 ## 6. 已知边界
 
 - **`app.agent.workspace_scope` 当前不放开**：`agent.run` 的 workspace 强制
