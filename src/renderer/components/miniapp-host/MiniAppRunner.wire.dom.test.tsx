@@ -626,6 +626,57 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     expect(reports[0]).toEqual({ ok: true, value: hostAnswer });
   }, 15000);
 
+  it('pushes an agent event into the iframe and delivers it to the author’s listener', async () => {
+    // 通道的**推送**方向：`app.event` 没有回信，作者的 onEvent 回调是被宿主推进来的。
+    // 之前所有用例都只验了请求-应答那一半，这一半整个没被测过。
+    // 风险点是展开顺序：payload 自带 type，放在 `type:` 之后会被覆盖成 undefined，
+    // iframe 侧就再也分不出 delta / complete（作者收到一串 type 缺失的事件）。
+    bridgeEnsureSession.mockResolvedValue({ sessionId: 'miniapp_wire-probe_main', port: 51999 });
+    bridgeSubscribe.mockResolvedValue(() => undefined);
+    const { reports, iframe } = await mountAndBoot(
+      `(function () {
+         window.__wireEvents = [];
+         window.app.agent.onEvent(function (e) { window.__wireEvents.push(e); });
+         return 1;
+       })()`,
+      { agent: { enabled: true } },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+    // 注册事件时 session 与 SSE 都得就绪，否则订阅是个"能注册却永远收不到事件"的空壳。
+    expect(bridgeEnsureSession).toHaveBeenCalled();
+    expect(bridgeSubscribe).toHaveBeenCalled();
+
+    // 模拟一条 SSE 事件：宿主用 setPost 注入的转发器把它推进 iframe。
+    const post = bridgeSetPost.mock.calls.at(-1)?.[0] as
+      | ((payload: unknown) => void)
+      | undefined;
+    expect(post, 'the bridge never received a post function').toBeTruthy();
+    post!({ type: 'agent.delta', text: 'hi', runId: 'main' });
+
+    const frameEvents = () =>
+      (iframe.contentWindow as unknown as { __wireEvents?: Record<string, unknown>[] })
+        .__wireEvents ?? [];
+    await waitFor(() => expect(frameEvents()).toHaveLength(1), { timeout: 3000 });
+    // payload 自带的 type 必须活下来。
+    expect(frameEvents()[0]).toMatchObject({ type: 'agent.delta', text: 'hi' });
+  }, 15000);
+
+  it('round-trips a storage value, which has no path and no permission gate', async () => {
+    // storage 是唯一"无路径、无授权"的一族：它存的是这个 MiniApp 自己的东西。
+    // 形状也不同（key/value，不是 {path, opts}），所以要单独钉。
+    apiPostJson.mockResolvedValue({ ok: true, result: 'stored-value' });
+    const { reports } = await mountAndBoot("window.app.storage.get('k')", {});
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/app/storage.get', {
+      appId: APP_ID,
+      params: { key: 'k' },
+    });
+    expect(reports[0]).toEqual({ ok: true, value: 'stored-value' });
+  }, 15000);
+
   it('refuses an allow-listed command that smuggles a second command in', async () => {
     // allow-list 只看**第一个词**，于是 'echo && rm -rf /' 的第一个词是 echo、在名单上。
     // 挡住它的是 metacharacter 那道闸 —— 少了它，这条就是一个能删盘的许可。
