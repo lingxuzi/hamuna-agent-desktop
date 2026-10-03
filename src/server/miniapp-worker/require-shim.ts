@@ -116,7 +116,15 @@ export function installRequireShim(options: RequireShimOptions = {}): void {
   // below, BEFORE user code is evaluated. That's how we catch
   // `require('fs' + '/promises')` etc.
   Module.prototype.require = function patchedRequire(this: unknown, id: string) {
-    if (typeof id === 'string' && denyModules.has(id)) {
+    // Normalize the `node:` prefix before the deny lookup. Node treats
+    // `require('fs')` and `require('node:fs')` as the same module, so a
+    // literal-only Set lookup let every denied builtin through its own
+    // canonical spelling — `require('node:fs')` returned a real, working
+    // `fs` (verified end-to-end; see the regression test). Denying one
+    // spelling of a builtin while allowing the other is not a policy, it is
+    // a typo with a sandbox-shaped hole in it.
+    const bare = typeof id === 'string' && id.startsWith('node:') ? id.slice(5) : id;
+    if (typeof bare === 'string' && denyModules.has(bare)) {
       throw new Error(formatBlacklistError({ reason: 'module', pattern: id }));
     }
     return originalRequire.call(this, id);

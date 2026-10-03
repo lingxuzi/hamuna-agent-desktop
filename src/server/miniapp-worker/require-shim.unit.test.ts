@@ -92,6 +92,28 @@ describe('require shim: the worker bootstrap is exempt, user code is not', () =>
     expect(() => nodeRequire(file)).toThrow(/blocked by MiniApp sandbox/);
   });
 
+  it("rejects the `node:`-prefixed spelling of a denied module too", () => {
+    // DENY_MODULES 只列了裸名（'fs' / 'path' / ...）。Node 把 require('fs') 和
+    // require('node:fs') 当成同一个模块，于是只查裸名的 Set 等于给每个内建模块
+    // 开了一扇以它自己规范写法命名的门：实测装上 shim 之后 require('node:fs')
+    // 拿到的是真 fs，readFileSync 能用（裸写法的对照组正确抛错，所以不是 shim
+    // 整体失灵）。这里把两种拼法都钉住 —— 只钉裸名的话，把 patchedRequire 里
+    // 那行 slice(5) 删掉，本条仍然全绿。
+    const denied = ['fs', 'path', 'os', 'child_process'] as const;
+    for (const mod of denied) {
+      for (const spelling of [mod, `node:${mod}`]) {
+        const d = mkdtempSync(path.join(tmpdir(), 'shim-prefix-'));
+        const file = path.join(d, 'offender.js');
+        writeFileSync(file, `module.exports = require('${spelling}');\n`);
+        installRequireShim();
+        expect(() => nodeRequire(file), `${spelling} must be blocked`).toThrow(
+          /blocked by MiniApp sandbox/,
+        );
+        rmSync(d, { recursive: true, force: true });
+      }
+    }
+  });
+
   describe('the exemption predicate itself', () => {
     // 这一组才是真正咬得住的。上面那些用例**无论豁免判定怎么改都全绿**
     // （实测三个变异 exit=0：恒真、前缀匹配、整段删掉）—— 因为
