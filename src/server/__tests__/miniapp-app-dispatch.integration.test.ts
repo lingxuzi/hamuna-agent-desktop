@@ -697,6 +697,51 @@ describe('app.shell.exec really executes', () => {
     expect(out?.exit_code).toBe(0);
   });
 
+  it('keeps a rejected cwd from escaping the workspace, for a sibling prefix and for `..`', async () => {
+    // 两类输入都能骗过裸 `startsWith(ctx.workspaceDir)`，却在解析后落到工作区之外：
+    //   1. `<workspace>-backup` —— 与工作区**同前缀**的兄弟目录
+    //   2. `<workspace>/..`     —— 回溯（`expandAuthorPath` 只做拼接，不折叠 `..`）
+    //
+    // 断言方式是**真跑一条命令**并看它究竟在哪个目录执行，而不是断言某个布尔值。
+    // `whereami.js` 分别放进工作区、合法子目录与兄弟目录，三份都只打印自己的
+    // cwd，于是"逃逸"和"退回工作区"成为两种可区分的输出；纯判定层的断言分不出
+    // "被拒"和"被改成别的东西"。
+    writeMeta(perms);
+    const workspaceDir = join(sandboxHome, 'projects', 'shell-cwd');
+    const innerDir = join(workspaceDir, 'inner');
+    const siblingDir = `${workspaceDir}-backup`;
+    const whereami = 'console.log(process.cwd())';
+    for (const dir of [workspaceDir, innerDir, siblingDir]) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'whereami.js'), whereami, 'utf8');
+    }
+
+    const runIn = async (cwd: string | undefined) => {
+      const res = await runAppCall(
+        'shell.exec' as never,
+        { command: 'node whereami.js', opts: cwd === undefined ? null : { cwd } },
+        perms as never,
+        (async (method: string, p: unknown) => {
+          const out = await dispatchMiniAppApp(method, APP_ID, p, { workspaceDir });
+          return out.ok
+            ? { ok: true as const, result: out.result }
+            : { ok: false as const, error: out.error };
+        }) as never,
+      );
+      return (res.ok ? (res.result as { stdout: string }) : { stdout: '' }).stdout.trim();
+    };
+
+    // 不传 cwd 的基线：dispatchShell 会退回 workspaceDir。
+    const baseline = await runIn(undefined);
+    expect(baseline).not.toBe('');
+    // 合法子目录必须**生效**，否则下面两条"退回基线"就没有意义 ——
+    // 一个把所有 cwd 都拒掉的实现也能让它们通过。
+    expect(await runIn(innerDir)).not.toBe(baseline);
+    // 两个越界输入都必须退回基线，而不是在兄弟目录 / 父目录里执行。
+    expect(await runIn(siblingDir)).toBe(baseline);
+    expect(await runIn(join(workspaceDir, '..'))).toBe(baseline);
+  });
+
   it('reports a non-zero exit as ok:true + exit_code, not as a host error', async () => {
     // 这是最容易做错的一处：命令**跑了**但失败了，不是宿主出错。作者要靠
     // exit_code 区分"命令失败"与"权限被拒"，压成异常就丢了这条信息。

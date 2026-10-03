@@ -24,7 +24,7 @@
 
 import { getConfigDir } from './utils/admin-config';
 import { APP_ERROR_CODES } from '../shared/miniapp/app-protocol';
-import { checkAppPermission, isPrivateHostname } from '../shared/miniapp/app-permissions';
+import { checkAppPermission, isPathAllowed, isPrivateHostname } from '../shared/miniapp/app-permissions';
 import { normalizeAppDataWorkspace } from '../shared/miniapp/app-data-workspace';
 import type { MiniAppMetadata, MiniAppPermissions } from '../shared/miniapp/types';
 import type { WorkerFsScope } from './miniapp-worker/worker-rpc';
@@ -642,10 +642,18 @@ async function dispatchShell(
   const { promisify } = await import('node:util');
   const run = promisify(exec);
   const opts = asRecord(params.opts);
-  // Never let a MiniApp-chosen cwd escape the workspace — a relative `..` in
-  // opts.cwd would otherwise run commands anywhere on the user's disk.
+  // Never let a MiniApp-chosen cwd escape the workspace.
+  //
+  // 走 `isPathAllowed` 而不是裸 `startsWith`：cwd 是作者可控的，而前缀本身来自
+  // 一次模板展开，两者都是字符串。`startsWith` 会被两种输入同时骗过 ——
+  // `<workspace>-backup` 这种**同前缀的兄弟目录**，和 `{workspace}/../..` 这种
+  // **回溯**（`expandAuthorPath` 只是拼接，不折叠 `..`）。两种都满足 startsWith，
+  // 却在解析后落到工作区之外，于是这个注释承诺的"绝不逃逸"当时并没有成立。
+  //
+  // `isPathAllowed` 先折叠 `..`、再要求分隔符边界，与 fs 那一族用的是同一个判定，
+  // 于是这里只有一个 chokepoint 而不是两套近似规则。
   const cwd =
-    typeof opts.cwd === 'string' && ctx.workspaceDir && opts.cwd.startsWith(ctx.workspaceDir)
+    typeof opts.cwd === 'string' && ctx.workspaceDir && isPathAllowed(opts.cwd, [ctx.workspaceDir])
       ? opts.cwd
       : ctx.workspaceDir ?? undefined;
   try {
