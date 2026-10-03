@@ -308,7 +308,7 @@ export default function MiniAppRunner({
     () => (dependencies ?? []).filter((d) => hostAllowed(d.url, permissions?.net?.allow ?? [])),
     [dependencies, permissions],
   );
-  const fullSrcDoc = `${themeCss}\n${injectAppId(
+  const fullSrcDoc = `<style>${themeCss}</style>\n${injectAppId(
     injectCsp(
       injectAppRuntime(injectDependencyTags(srcDoc, usableDeps), appRuntimeScript),
       [...new Set(usableDeps.map((d) => new URL(d.url).host))],

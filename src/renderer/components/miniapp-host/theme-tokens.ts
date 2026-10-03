@@ -164,13 +164,31 @@ export function readThemeTokens(): MiniAppThemeTokens {
 }
 
 /**
+ * CSS 值里不能出现 `<`。
+ *
+ * 这段 CSS 会被原样塞进 MiniApp iframe 的 `<style>` 元素，而宿主给 iframe 的 CSP
+ * 恰恰是 `script-src 'unsafe-inline'`（否则作者的 ui.js 内联脚本跑不了）。值来自
+ * `getComputedStyle` 读宿主 CSS 变量 —— 也就是**装上来的第三方 Theme**。一个 Theme
+ * 只要把某个 token 写成 `</style><script>…</script><style>`，就会在每一个 MiniApp
+ * 里执行。
+ *
+ * iframe 是 opaque origin，父文档和 cookie 摸不到，但 `allow-forms` 还在，
+ * `connect-src` 之外的通道（表单提交、图片、导航）也都还在。
+ *
+ * 转成 CSS 的 `<` 转义：值本身对作者仍是同一个字符串，标签则永远组不出来。
+ */
+function cssSafeValue(value: string): string {
+  return value.replace(/</g, '\\3c ');
+}
+
+/**
  * 生成一段 `<style>` 文本，注入到 iframe :root 上。
  */
 export function buildThemeTokenCss(tokens: MiniAppThemeTokens): string {
   const lines = [':root {'];
   (Object.keys(TOKEN_VAR_NAMES) as Array<keyof MiniAppThemeTokens>).forEach((key) => {
     const varName = TOKEN_VAR_NAMES[key];
-    lines.push(`  ${varName}: ${tokens[key]};`);
+    lines.push(`  ${varName}: ${cssSafeValue(tokens[key])};`);
   });
   lines.push('}');
   return lines.join('\n');

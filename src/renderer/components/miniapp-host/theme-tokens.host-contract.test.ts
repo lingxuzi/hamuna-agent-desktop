@@ -24,7 +24,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { HOST_TO_TOKEN } from './theme-tokens';
+import { buildThemeTokenCss, HOST_TO_TOKEN, type MiniAppThemeTokens } from './theme-tokens';
 import { REQUIRED_THEME_CSS_TOKENS } from '../../theme/registry-contract';
 
 const REQUIRED = new Set<string>(REQUIRED_THEME_CSS_TOKENS);
@@ -67,5 +67,36 @@ describe('MiniApp theme tokens — host variable contract', () => {
         keys.length,
       );
     }
+  });
+
+/** A complete token set, so a test only has to name the one key it cares about. */
+function tokensWith(overrides: Partial<MiniAppThemeTokens> = {}): MiniAppThemeTokens {
+  const base: Record<string, string> = {};
+  for (const key of Object.keys(HOST_TO_TOKEN)) base[key] = '#123456';
+  return { ...base, ...overrides } as MiniAppThemeTokens;
+}
+
+  it('neutralises `<` in token values so an installed theme cannot break out', () => {
+    // token 值会进到 iframe 的 `<style>` 原文里，而 iframe 的 CSP 恰恰是
+    // `script-src 'unsafe-inline'`（作者的内联 ui.js 要能跑）。值来自
+    // getComputedStyle 读宿主 CSS 变量 —— 也就是**装上来的第三方 Theme**。
+    // Theme 只要把某个 token 写成 `</style><script>…</script><style>`，就会在
+    // 每一个 MiniApp 里执行：没有错误、没有告警，作者的 UI 直接被换掉。
+    const css = buildThemeTokenCss(
+      tokensWith({ bg: '</style><script>window.__pwned=1</script><style>' }),
+    );
+
+    expect(css).not.toContain('</style>');
+    expect(css).not.toContain('<script');
+    expect(css).toContain('\\3c ');
+    // 变量名与结构不受影响 —— 逃逸不能顺手把 token 打散
+    expect(css).toMatch(/--hamuna-bg-primary:/);
+  });
+
+  it('leaves ordinary colour values byte-identical', () => {
+    // 转义只针对 `<`。日常的色值 / 字体栈一个字符都不能变，否则主题会被改坏。
+    const css = buildThemeTokenCss(tokensWith({ bg: '#fff', fontSans: 'system-ui, sans-serif' }));
+    expect(css).toContain('--hamuna-bg-primary: #fff;');
+    expect(css).toContain('--hamuna-font-sans: system-ui, sans-serif;');
   });
 });

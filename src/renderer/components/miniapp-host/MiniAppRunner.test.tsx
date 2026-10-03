@@ -71,4 +71,40 @@ describe('MiniAppRunner', () => {
     expect(csp).not.toMatch(/script-src[^;]*'self'/);
     expect(csp).not.toMatch(/style-src[^;]*'self'/);
   });
+
+  it('wraps the theme tokens in a <style> element — bare CSS in a document is inert', () => {
+    // 没有 <style> 包裹时，`:root { --x: … }` 只是 body 里的一段文本，浏览器一行
+    // CSS 都不会应用。PRD v0.3 §5.3 的主题 token 特性从落地那天起就是死的，而本文件
+    // 上面那句"Theme token CSS is prepended by the runner"一直把它当已验证事实。
+    const { container } = render(
+      <MiniAppRunner appId="a" srcDoc="<html><head></head><body><p>hi</p></body></html>" height={50} />,
+    );
+    const doc = container.querySelector('iframe')?.getAttribute('srcdoc') ?? '';
+
+    expect(doc).toMatch(/<style>\s*:root\s*\{/);
+    expect(doc).toContain('--hamuna-bg-primary');
+  });
+
+  it('an installed theme cannot inject a script into the MiniApp iframe', () => {
+    // 端到端：Theme 的 CSS 变量值 → readThemeTokens → buildThemeTokenCss → srcDoc。
+    // 只测纯函数不够 —— 拼装那一步才是当初漏掉 <style> 的地方，两处都要断。
+    const payload = '</style><script>window.__pwned=1</script><style>';
+    const real = window.getComputedStyle;
+    window.getComputedStyle = ((_el: Element) => ({
+      getPropertyValue: (name: string) => (name === '--paper' ? payload : ''),
+    })) as unknown as typeof window.getComputedStyle;
+    try {
+      const { container } = render(
+        <MiniAppRunner appId="a" srcDoc="<html><head></head><body><p>hi</p></body></html>" height={50} />,
+      );
+      const doc = container.querySelector('iframe')?.getAttribute('srcdoc') ?? '';
+
+      // 整个文档只允许有 runtime 那一个 <script>；payload 拼不出第二个
+      expect(doc.match(/<script>/g) ?? []).toHaveLength(1);
+      expect(doc).not.toContain('window.__pwned=1</script>');
+      expect(doc).toContain('\\3c ');
+    } finally {
+      window.getComputedStyle = real;
+    }
+  });
 });
