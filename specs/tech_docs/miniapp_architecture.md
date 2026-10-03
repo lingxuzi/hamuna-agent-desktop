@@ -515,32 +515,41 @@ MiniApp 本身也是全死的**，且失效完全静默（拒绝是正确行为�
 必须认 `app.call(method, params)` 这种两段式形态，且必须**逐文件**剥注释
 （`worker-blacklist.ts` 模板串里的 `/**` 会被当成块注释开头，吞掉 7187 个字符）。
 
-**一个测试环境的坑，值得记下来省得重踩（2026-10 实测订正）**：组件级的
-`event.source instanceof Window` 在 jsdom 下**恒为 false**（跨 realm），负向断言会
-全绿、正向断言永远失败。**但这不是根因，别顺着它往下修。**
+**组件级往返测试：jsdom 的三条限制与绕法（2026-10 实测）**：
 
-曾据此推断"把 `instanceof` 收窄去掉就能在组件层跑通往返"，实测推翻了：jsdom 的
-`postMessage` 把 `event.source` 置为 **`null`**（实测 `sourceIsParent: false,
-sourceIsNull: true, origin: ""`），而协议的**两端都依赖 `event.source`**：
+`window.app.*` 通道此前只有三段各自的单测（`app-protocol` 纯函数 /
+`appRuntimeTransport` 脚本 / `appHostDispatch` 派发层），**没有任何东西保证三段形状
+对得上** —— `appDataWorkspace` 当初正是被 `appRuntimeScript.ts` 无参硬传 `null` 吞掉，
+而三段全绿。现已补上 `MiniAppRunner.wire.dom.test.tsx`：真 iframe、真 postMessage、
+真回信，三段同时在场。
 
-- iframe 侧 `appRuntimeScript.ts` 收消息时 `if (event.source !== window.parent) return;`
-- 宿主侧 `app-protocol.ts` 的 `envelope.source !== iframeContentWindow` 严格相等才是闸门
+写它要跨过 jsdom 的三条限制（**都别当成产品缺陷去"修"**）：
 
-于是无论收窄怎么写，jsdom 下这条通道**都**不可能跑通端到端往返 —— 与本项目代码
-无关，是环境能力缺失。
+- **`postMessage` 把 `event.source` 置为 `null`**（实测 `sourceIsParent:false,
+  sourceIsNull:true`）。协议两端都依赖它：iframe 侧
+  `appRuntimeScript.ts` 要 `event.source === window.parent`，宿主侧 `verifyAppCall`
+  要 `envelope.source === iframe.contentWindow` 严格相等。
+- **realm 隔离**：`iframe.contentWindow` 与 iframe 脚本里的 `window` 不是同一个 JS
+  对象 —— `instanceof window.Window` 恒为 false，顶窗上挂的函数在 frame realm 里
+  看不见（`window.parent.__fn is not a function`），跨 realm 塞进 `MessageEvent` 的
+  `source` 也 `===` 不成立。
+- **不解析 `srcdoc`**，且 `document.write` 之后**不触发** iframe 的 `load` 事件 ——
+  而宿主正是在 `load` 里发 `host.ready`（`handleFrameLoad`）。
 
-其他两条一并实测的 jsdom 限制（都别当成产品缺陷去"修"）：
+绕法：**两个方向都在 iframe 自己的 realm 里派发 `MessageEvent`**
+（`frameWindow.Function(...)`）。这样收信方拿到的 `source` 身份与浏览器一致（实测
+两侧 `===` 均成立），`srcdoc` / `load` 两处则用"读出组件组装好的 srcdoc 再
+`document.write` + 手工补 `load`"补齐。被替换的只是 jsdom 写错或没实现的那几处；
+被测的三段生产代码一行没动。
 
-- **不解析 `srcdoc`**：设了属性也不加载，`contentDocument.body` 是空的。绕法是先读出
-  组件组装出的 `srcdoc` 字符串再 `document.write` 灌进去。
-- **`document.write` 之后不触发 iframe 的 `load` 事件**：而宿主正是在 `load` 里发
-  `host.ready`（`handleFrameLoad`），不补就会永远排着队。
+`MiniAppRunner.tsx` 里 `event.source instanceof Window ? ... : null` 这个收窄因此被
+去掉（**只有 app.call 那处**）：它不增加安全性 —— 闸门是 `verifyAppCall` 的严格相等，
+MessagePort 之类永远不等于 `contentWindow`。而留着它这条通道在组件层一次都跑不通。
+变异 M8 证明这处是**承重**的：把它改回去，5 条用例全红。
 
-结论：`window.app.*` 的形状一致性目前**只**由三段各自的单测保证
-（`app-protocol` 纯函数 / `appRuntimeTransport` 脚本 / `appHostDispatch` 派发层）。
-它们之间**没有**任何东西保证三段形状对得上 —— 这是已知的结构性缺口，`appDataWorkspace`
-当初正是被 `appRuntimeScript.ts` 无参硬传 `null` 吞掉、且三段单测全绿而暴露不出来的。
-想补这段，载体只能是一个真实浏览器（Playwright / WebDriver），不是 vitest jsdom。
+> 教训：上一版这里写的是"想补这段只能上真实浏览器"。那是**只试了一次就下的结论** ——
+> 当时没测出 `MessageEvent` 构造器可以显式带 `source`，也没想到可以在 iframe 自己的
+> realm 里造派发器。别把"我试了没成"写成"环境做不到"。
 
 **仍未验证（需要真实 Provider，属于 credentialed）**：
 

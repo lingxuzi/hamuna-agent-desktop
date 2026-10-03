@@ -526,7 +526,14 @@ export default function MiniAppRunner({
   useEffect(() => {
     const handler = async (event: MessageEvent) => {
       const iframe = iframeRef.current;
-      const windowSource = event.source instanceof Window ? event.source : null;
+      // 这里**不**做 `instanceof Window` 收窄：它不增加安全性 —— 真正的闸门是
+      // `verifyAppCall` 里的 `source === iframe.contentWindow` 严格相等（MessagePort
+      // 之类永远不等于 contentWindow，已经被挡掉了）。而它有实实在在的代价：iframe 的
+      // contentWindow 在 jsdom 里是**另一个 realm** 的对象（实测 `instanceof` 恒为
+      // false），于是这条通道在组件层一次都跑不通 —— 只能退回测三段各自的纯函数，
+      // 而那种测法保不住"iframe 脚本发的形状"与"宿主 listener 认的形状"是否对得上
+      // （`appDataWorkspace` 就是这么被一个硬写的 `null` 参数吞掉的，三段单测全绿）。
+      const windowSource = (event.source ?? null) as Window | null;
       const call = verifyAppCall(
         { source: windowSource, origin: event.origin, data: event.data },
         iframe?.contentWindow ?? null,
