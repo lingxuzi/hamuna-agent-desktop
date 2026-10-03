@@ -78,4 +78,35 @@ describe('SKILL.md 的权限说明必须和 checkAppPermission 一致', () => {
   it('dialog 仍然免权限——文档对它的说法必须是真的', () => {
     expect(checkAppPermission('dialog.open' as never, {}, {}).allowed).toBe(true);
   });
+
+  /**
+   * 路径模板的同类断言，方向相反：这次是**文档多写了一个根**。
+   *
+   * SKILL.md 的 `meta.json` 注释曾经把 `{user-selected}` 与 `{appdata}` /
+   * `{workspace}` 并列。宿主其实展开不了它 —— `expandAuthorPath` 对不认识的根
+   * 返回 `null`（fail-closed），`expandTemplates` 退化成 `''`。于是作者照抄声明
+   * 之后：schema 放行、app 装得上，然后每一条落在该前缀下的 `app.fs.*` 都被
+   * `PERMISSION_DENIED` 拒掉。"声明了却不生效"比直接拒掉更难查，因为没有任何
+   * 一处会告诉他声明本身是空的。
+   *
+   * 期望从**代码**倒推：可用的根就是宿主展开函数认的那两个。第三个根是 Phase 2
+   * 才接的（`specs/tech_docs/miniapp_architecture.md`），fail-closed 行为本身
+   * 已由 `miniapp-fs-path-template.integration.test.ts` 钉住。
+   */
+  it('作者照抄的 fs.read 示例只列出宿主真正展开得了的根', () => {
+    const exampleLine = SKILL.split('\n').find(
+      (line) => line.includes('"read":') && line.includes('{appdata}'),
+    );
+    expect(exampleLine, 'SKILL.md no longer has the fs.read example line').toBeTruthy();
+    expect(exampleLine).not.toContain('{user-selected}');
+  });
+
+  it('{user-selected} 必须在文档里被标成不可用，而不是被删掉不提', () => {
+    // 另一半：光把注释里的它删掉，作者仍可能从别处听说这个模板。所以要有一处
+    // 明确说它当前不可用 —— 这是"少写"和"写清楚"之间的区别。
+    expect(SKILL).toContain('{user-selected}');
+    const caveat = SKILL.split('\n').find((line) => line.includes('{user-selected}'));
+    expect(caveat).toBeTruthy();
+    expect(caveat).toMatch(/不能|尚未|还没|未接|Phase 2/);
+  });
 });

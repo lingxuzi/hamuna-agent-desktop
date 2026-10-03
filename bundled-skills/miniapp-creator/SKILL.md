@@ -232,7 +232,7 @@ app.onDeactivate(() => clearInterval(timer));
   "worker_kind": "git-graph",       // kind=worker 时必填，对应 src/server/miniapp-worker/worker-rpc.ts 注册的 kind
   "permissions": {                  // 必填，嵌套对象（不是扁平数组）
     "fs": {
-      "read": ["{appdata}/**"],     // 每条路径必须以 {appdata} / {workspace} / {user-selected} 开头
+      "read": ["{appdata}/**"],     // 每条路径必须以 {appdata} 或 {workspace} 开头
       "write": []                   // 不需要就别写；权限最小化
     },
     "shell": { "allow": [] },       // 命令名白名单，空 = 全禁
@@ -263,6 +263,7 @@ app.onDeactivate(() => clearInterval(timer));
 > **`permissions` 是嵌套对象**（`fs: {read, write}` / `shell: {allow}` / `net: {allow}`），不是扁平数组。写成 `"fs": []` 会被 schema 校验拒绝。
 >
 > **路径模板**：`{appdata}` = 本 app 数据目录（始终可读写）、`{workspace}` = 当前工作区。**不要写绝对路径**，schema 会拒。`app.fs.*` 收到的路径必须落在已声明前缀内，否则宿主返回 `PERMISSION_DENIED`。
+> **`{user-selected}` 现在还不能用**：宿主还没接入「用户授权某个目录」这条链路。`meta.json` 里写 `{user-selected}/**` 能过 schema 校验，但宿主展开不了这个前缀，于是凡是落在它下面的 `app.fs.*` 调用每一次都会被 `PERMISSION_DENIED` 拒掉 —— 声明了、装得上、却一条都用不了，比直接拒掉更难查。当前可用的根只有 `{appdata}` 与 `{workspace}` 两个。
 >
 > **持久化落点固定**：KV 恒定写在 `<appdata>/storage.json`，**不由 meta.json 指定**。`storage.file` 曾被标成"必填"，但宿主从来不读它 —— 声明什么名字都还是 `storage.json`。落哪个文件是安全边界：`app.storage` 是免权限 API，不该由作者决定它写哪。`app.fs.*` 才是要自己管文件的那条路。
 >
