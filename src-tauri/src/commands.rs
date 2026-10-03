@@ -4928,8 +4928,8 @@ mod runtime_detection_cache_tests {
 #[cfg(test)]
 mod miniapp_tests {
     use super::{
-        collect_snapshot, inline_miniapp_siblings, is_safe_app_id, validate_miniapp_relative_path,
-        CreateMiniAppRequest,
+        collect_snapshot, inline_miniapp_siblings, is_safe_app_id, is_safe_run_id,
+        miniapp_root_dir, validate_miniapp_relative_path, CreateMiniAppRequest,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -4961,6 +4961,98 @@ mod miniapp_tests {
         assert!(validate_miniapp_relative_path("../etc/passwd").is_err());
         assert!(validate_miniapp_relative_path("/etc/passwd").is_err());
         assert!(validate_miniapp_relative_path("source\\..\\evil").is_err());
+    }
+
+    #[test]
+    fn run_id_kebab_case_only() {
+        assert!(is_safe_run_id("r1"));
+        assert!(is_safe_run_id("run-7"));
+        assert!(is_safe_run_id("a1-b2-c3"));
+        // 与 appId 同一套字符规则：'/' 与 '.' 会让拼出来的路径跳出 miniapps/。
+        assert!(!is_safe_run_id("Hello"));
+        assert!(!is_safe_run_id("run_7"));
+        assert!(!is_safe_run_id("run.7"));
+        assert!(!is_safe_run_id("run/7"));
+        assert!(!is_safe_run_id("-run"));
+        assert!(!is_safe_run_id("run-"));
+        assert!(!is_safe_run_id(""));
+        assert!(!is_safe_run_id(&"a".repeat(65)));
+        // 冒号是 owner token `miniapp-agent:<appId>:<runId>` 的分隔符，放进来
+        // 会让 sidecar::types 的解析撞车，所以比 appId 多这一条。
+        assert!(!is_safe_run_id("run:7"));
+    }
+
+    // ─── 沙箱第一跳：拼出来的 workspace 必须在 miniapps/ 之内 ──────────
+    //
+    // MiniApp 沙箱不靠 per-turn 参数，而是靠 `cmd_miniapp_ensure_session` 把
+    // `--agent-dir` 设成 `miniapps/<appId>`：sidecar 与 appdata 是 1:1 的，
+    // builtin adapter 的进程级 agentDir 于是天然落在沙箱里。
+    //
+    // 所以这一跳是整条约束的承重墙 —— appId 一旦能带 '/' 或 '..'，Agent 的
+    // cwd 就直接落在用户的真实工作区上，而它带工具、`acceptEdits` 允许文件
+    // 编辑自动落盘。上面的字符表测试隐含地挡住了它，但那是**推出来的**；
+    // 这里直接断言被推导出来的那个性质：接受 ⇒ 路径一定在 root 之内。
+    //
+    // 顺带把"拒绝"那一侧也钉住：不合法的 id 根本不该产生任何路径，而不是
+    // 产生一个"看起来可疑但先用了再说"的路径。
+
+    fn resolved_workspace_path(app_id: &str, run_id: &str) -> Option<std::path::PathBuf> {
+        if !is_safe_app_id(app_id) || !is_safe_run_id(run_id) {
+            return None;
+        }
+        // 与 cmd_miniapp_ensure_session 保持同一形状。
+        let _session_id = format!("miniapp_{}_{}", app_id, run_id);
+        miniapp_root_dir().ok().map(|root| root.join(app_id))
+    }
+
+    #[test]
+    fn accepted_ids_resolve_inside_the_miniapps_root() {
+        let root = miniapp_root_dir().expect("home dir");
+        for (app_id, run_id) in [
+            ("hello-miniapp", "r1"),
+            ("a", "run-7"),
+            ("icon-generator-v2", "a1-b2-c3"),
+            ("123", "x"),
+        ] {
+            let path = resolved_workspace_path(app_id, run_id)
+                .unwrap_or_else(|| panic!("{app_id}/{run_id} should be accepted"));
+            assert!(
+                path.starts_with(&root),
+                "{app_id} resolved outside the miniapps root: {path:?}"
+            );
+            // 必须是 root 的**直接**子目录：多一层就说明 appId 偷偷带进了分隔符。
+            assert_eq!(
+                path.parent(),
+                Some(root.as_path()),
+                "{app_id} did not resolve to a direct child of the root"
+            );
+            assert_eq!(path.file_name().and_then(|s| s.to_str()), Some(app_id));
+        }
+    }
+
+    #[test]
+    fn rejected_ids_never_yield_a_workspace_path() {
+        for bad in [
+            "../escape",
+            "..",
+            "a/b",
+            "a\\b",
+            "C:evil",
+            "Hello",
+            "hello_mini",
+            "hello.mini",
+            "-lead",
+            "trail-",
+            "",
+        ] {
+            assert!(
+                resolved_workspace_path(bad, "r1").is_none(),
+                "{bad:?} must not resolve to a workspace path"
+            );
+        }
+        // runId 同样参与判定：它虽然不进路径，但决定 session_id 与 owner token。
+        assert!(resolved_workspace_path("ok-app", "run:7").is_none());
+        assert!(resolved_workspace_path("ok-app", "../evil").is_none());
     }
 
     #[test]

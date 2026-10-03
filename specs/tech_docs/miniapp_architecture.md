@@ -350,7 +350,23 @@ SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的�
   外来的 id 被 `INVALID_PARAMS` 拒掉），`agent.enabled: false` 的 app 在真实
   HTTP 链路上**叫不起模型**（断言 mock 没收到新请求，不只是断言报错）。**零成本**。
   这条同时查出了上面记的 `appDataWorkspace` 在 builtin 上的 no-op。
-- **iframe 传输层的两半程**——`shared/miniapp/app-protocol.unit.test.ts` 19 条：
+- **沙箱第一跳（Rust）**——`commands.rs::miniapp_tests` 新增 3 条（21 → 24）。
+  MiniApp 的范围约束不来自任何 per-turn 参数，而来自
+  `cmd_miniapp_ensure_session` 把 `--agent-dir` 设成 `miniapps/<appId>`。那一跳
+  此前只有 `is_safe_app_id` 的字符表测试（隐含地挡住了 `/` 与 `..`），现在直接
+  断言**推导出来的性质**：接受的 id 一定落在 `miniapps/` 根之下、且必须是根的
+  **直接**子目录（多一层就说明分隔符混进来了）；被拒的 id **不产生任何路径**。
+  `is_safe_run_id` 此前完全没有测试。变异验证：放开 `is_safe_app_id` 的字符表
+  → 2 条转红。
+
+  顺带一条读代码得到的结论，供后人省事：`is_safe_run_id` 里那条
+  `!run_id.contains(':')` 是**不可达的**——`:` 已经被前面的
+  `chars().all(小写|数字|-)` 拒掉了，所以这个合取项从不改变返回值（实测把它删掉，
+  24 条测试一条都不转红）。它只是把"冒号是 owner token 分隔符"这件事写在了代码
+  里。**故意保留**：删掉它看着是去冗余，实际是拆掉一个绊线 —— 万一将来有人放宽
+  字符表，这条就是拦住 `miniapp-agent:<appId>:<runId>` 撞车的那道。
+- **传输层 / 信任边界**——`src/shared/miniapp/app-protocol.unit.test.ts` 19 条
+（新建，此前**没有这个测试文件**）：
   `verifyAppCall` 的四条信任规则逐条钉住（source 必须是本 iframe 的
   contentWindow、nonce 由宿主铸造无法自造、appId 与本 iframe 绑定、method 在
   名单内），外加 8 种畸形信封「不抛、只拒」。这层此前**完全没有测试文件**，而
@@ -402,8 +418,8 @@ contentWindow 与测试环境的 `Window` 不是同一个 realm），于是 hand
 | `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 唯一消费者 icon-generator 要的是 Phase 3 出图桥接，见 §6 已知边界 |
 | `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无（显式 `APP_UNSUPPORTED_CALLBACK`） | 同上；不是不做，是没有对应契约 —— 见 §6 |
 | `ai.cancel` / `agent.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 已对齐：两种入参都收（`runIdOf`），只收字符串否则静默打空 |
-| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | `{appDataWorkspace?}`；返回 `{session_id, sessionId, app_data_workspace}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` **已实现**（校验 + 归一 + 回显，不落状态，见 §6）。camelCase 别名已加 |
-| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId, appDataWorkspace}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`appDataWorkspace` **已实现**；`displayText` / `contextFiles` 不做，理由见 §6 |
+| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | `{appDataWorkspace?}`；返回 `{session_id, sessionId, app_data_workspace}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` 校验 / 归一 / 回显都做，但**在默认 builtin runtime 上不改变 cwd**，见 §6 ⚠️。camelCase 别名已加 |
+| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId, appDataWorkspace}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`appDataWorkspace` 同上（builtin 上不改变 cwd）；`displayText` / `contextFiles` 不做，理由见 §6 |
 
 **已修的传输层缺陷**：`dispatch` 的 flush 队列在 `host.ready` 的 message
 listener 里执行 postMessage，不在 Promise executor 内。参数不可结构化克隆时
@@ -412,10 +428,21 @@ listener 里的未捕获异常，作者侧的 Promise **永不 settle** —— �
 应、也不报错"。现在 `send()` 捕获并以 `APP_CALL_NOT_SERIALIZABLE` reject。
 护栏见 `appRuntimeTransport.unit.test.ts`（回退该守卫即复现 `pending`）。
 
-**待决**：上表前四行（`ai.chat` 契约）要不要整体对齐到参考的流式句柄形态，
-还是保留本项目的一次性形态并在本文档标注差异。`agent` 行现在只剩
-`displayText`（无落点）与 `contextFiles`（整套子系统）两项；`appDataWorkspace`
-已实现，见 §6「`appDataWorkspace`」。
+**待决（两项，都是设计选择而不是缺陷）**：
+
+1. **`ai.chat` 要不要整体对齐到参考的流式句柄形态**（`handle {streamId, cancel()}`
+   + `onChunk/onDone/onError`）。本项目是一次性 Promise，并显式
+   `APP_UNSUPPORTED_CALLBACK` 拒掉回调。唯一消费者 icon-generator 要的是
+   Phase 3 出图桥接，流式对它没有价值；而流式要求 sidecar 常驻一条 SSE，还要解决
+   "iframe 已经卸载时怎么收尾"。定这个之前，上表 `ai.chat` 的两行保持现状。
+2. **`appDataWorkspace` 在 builtin runtime 上要不要真生效**。见 §6 ⚠️：判定、
+   接线、回显、建目录都做全了，但 builtin 的 `runInjectedTurn` 不读 per-turn 的
+   `workspacePath`，所以 Agent 的 cwd 不动。四个选项：显式拒收并记为有意不对齐 /
+   把 per-turn cwd 穿到 SDK（架构变更）/ 摘掉字段 / 维持现状只记文档。
+
+`agent` 行剩下的 `displayText`（`InjectedTurnRequest` 没有这个字段）与
+`contextFiles`（整套子系统，`ai_context` 从未被任何代码读取）已定性为**有意不
+对齐**，不是待决。
 
 ---
 
