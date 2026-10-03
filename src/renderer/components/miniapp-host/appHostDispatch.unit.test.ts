@@ -160,9 +160,34 @@ describe('appHostDispatch: session lifecycle stays renderer-side', () => {
 
     const res = await dispatch('agent.ensureSession', null);
 
-    expect(res).toEqual({ ok: true, result: { session_id: 'miniapp_demo_main' } });
+    // 完整形状由下面那条 camelCase 别名用例断言；这里只关心"谁来答"和"没走 HTTP"。
+    expect(res).toMatchObject({ ok: true, result: { session_id: 'miniapp_demo_main' } });
     expect(apiPostJsonMock).not.toHaveBeenCalled();
     expect(proxyFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('ensureSession exposes the camelCase alias the reference reads', async () => {
+    // 参考文档写的是 `session.sessionId`。只回 session_id 的话，照文档写的作者
+    // 拿到 undefined，然后把它回传给 run —— 一路 undefined 传下去。
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    const res = await dispatch('agent.ensureSession', null);
+
+    expect(res).toEqual({
+      ok: true,
+      result: { session_id: 'miniapp_demo_main', sessionId: 'miniapp_demo_main' },
+    });
+  });
+
+  it('agent.onEvent returns the same session shape as ensureSession', async () => {
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    const res = await dispatch('agent.onEvent', null);
+
+    expect(res).toEqual({
+      ok: true,
+      result: { session_id: 'miniapp_demo_main', sessionId: 'miniapp_demo_main' },
+    });
   });
 
   it('non-agent methods still use the global sidecar', async () => {

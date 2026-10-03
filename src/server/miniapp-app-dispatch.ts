@@ -299,6 +299,9 @@ async function dispatchAgent(
       model: typeof params.model === 'string' ? params.model : undefined,
       timeoutMs: typeof params.timeout_ms === 'number' ? params.timeout_ms : undefined,
       runId: typeof params.run_id === 'string' ? params.run_id : 'default',
+      // 参考文档让作者回传 ensureSession 的 sessionId。空串按"没传"处理 ——
+      // 参考示例里 `session.sessionId` 在旧版本上就是 undefined，不该因此报错。
+      sessionId: typeof params.sessionId === 'string' && params.sessionId ? params.sessionId : undefined,
     });
   }
   if (name === 'cancel') {

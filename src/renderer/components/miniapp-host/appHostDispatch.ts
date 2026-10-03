@@ -109,10 +109,14 @@ async function dispatchAgentHost(
   }
   const p = asRecord(params);
   const runId = typeof p.run_id === 'string' && p.run_id ? p.run_id : 'main';
+  // 参考文档给的是 `session.sessionId`（camelCase），本项目内部一路 snake_case。
+  // 两个键都返回：作者照文档读 sessionId 才不会拿到 undefined，而读
+  // session_id 的既有 MiniApp 不受影响。
+  const sessionResult = (sessionId: string) => ({ session_id: sessionId, sessionId });
   if (method === 'agent.ensureSession') {
     try {
       const target = await bridge.ensureSession(runId);
-      return { ok: true, result: { session_id: target.sessionId } };
+      return { ok: true, result: sessionResult(target.sessionId) };
     } catch (e) {
       return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
     }
@@ -124,7 +128,7 @@ async function dispatchAgentHost(
   try {
     const target = await bridge.ensureSession(runId);
     void bridge.subscribe(runId, () => undefined).catch(() => undefined);
-    return { ok: true, result: { session_id: target.sessionId } };
+    return { ok: true, result: sessionResult(target.sessionId) };
   } catch (e) {
     return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
   }

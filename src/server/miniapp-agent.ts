@@ -48,6 +48,16 @@ export interface MiniAppAgentRunParams {
   timeoutMs?: number;
   /** 稳定标识同一 run 的多次调用，让 facade 能定位 turn 身份并精确停止。 */
   runId: string;
+  /**
+   * 参考文档让作者把 `ensureSession()` 返回的 sessionId 回传给 `run`。
+   *
+   * 本项目**只有一个** Agent 会话（Rust 按 `miniapp_<appId>_<runId>` 起 1:1
+   * Sidecar），所以这里不按 id 选会话 —— 但也不能静默忽略：作者传一个别的
+   * MiniApp 的 sessionId，说明他理解错了会话边界，那应该报错而不是照跑。
+   * id 由 (appId, runId) 决定、跨挂载稳定，所以"重新加载后拿到的还是同一个
+   * id"这种正常情况不会误伤。
+   */
+  sessionId?: string;
 }
 
 /**
@@ -73,6 +83,14 @@ export async function runMiniAppAgentTurn(p: MiniAppAgentRunParams): Promise<Age
   const sessionId = engine.getCurrentSessionContext().sessionId;
   if (!sessionId) {
     return fail(APP_ERROR_CODES.HOST_ERROR, 'no session is bound to this MiniApp agent sidecar');
+  }
+  // 传了就必须对得上。静默忽略会把"我以为在跟哪个会话说话"这个错误一直带到
+  // 结果里 —— 作者拿到一段无法解释来源的输出，比当场报错难查得多。
+  if (p.sessionId !== undefined && p.sessionId !== sessionId) {
+    return fail(
+      APP_ERROR_CODES.INVALID_PARAMS,
+      `app.agent.run sessionId '${p.sessionId}' is not this MiniApp's agent session ('${sessionId}')`,
+    );
   }
 
   const result = await engine.runInjectedTurn({

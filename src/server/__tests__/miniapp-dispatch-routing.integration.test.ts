@@ -57,7 +57,7 @@ const aiProducers = {
   cancelMiniAppAiCall: vi.fn(() => ({ cancelled: false, inflightCount: 0 })),
 };
 const agentProducers = {
-  runMiniAppAgentTurn: vi.fn(async () => ({ ok: true, result: { run_id: 'r1' } })),
+  runMiniAppAgentTurn: vi.fn(async (_params: Record<string, unknown>) => ({ ok: true, result: { run_id: 'r1' } as Record<string, unknown> })),
   stopMiniAppAgentTurn: vi.fn(async () => ({ ok: true, result: { stopped: true } })),
   describeMiniAppAgentStream: vi.fn(async () => ({ ok: true, result: { session_id: 'stub' } })),
 };
@@ -340,3 +340,43 @@ describe('app.ai accepts the argument shapes the reference documents', () => {
     expect(aiProducers.runMiniAppAiComplete.mock.calls[0][0].maxTokens).toBe(2048);
   });
 });
+
+/**
+ * `app.agent.run` 的 `sessionId` 契约。
+ *
+ * 参考文档让作者把 `ensureSession()` 的返回值回传给 `run`。本项目每个 MiniApp
+ * 只有一个 Agent 会话，所以不按 id 选会话 —— 但**静默忽略**同样不行：作者传
+ * 别的 MiniApp 的 sessionId 时，拿到的是一段他自己无法解释来源的输出。
+ * 传了就必须对得上。
+ */
+describe('app.agent.run validates the sessionId it is handed', () => {
+  it('forwards a non-empty sessionId to the producer', async () => {
+    await dispatchMiniAppApp('agent.run', APP_ID, {
+      prompt: 'hi',
+      sessionId: 'miniapp_routing-probe_main',
+    });
+
+    expect(agentProducers.runMiniAppAgentTurn.mock.calls[0][0].sessionId).toBe(
+      'miniapp_routing-probe_main',
+    );
+  });
+
+  it('an empty or absent sessionId means "not provided", not a mismatch', async () => {
+    // 参考示例写的是 session.sessionId；在返回 camelCase 别名之前那就是
+    // undefined，作者照抄会传一个空值进来 —— 不能因此报 INVALID_PARAMS。
+    for (const params of [
+      { prompt: 'hi' },
+      { prompt: 'hi', sessionId: '' },
+      { prompt: 'hi', sessionId: undefined },
+    ]) {
+      vi.clearAllMocks();
+      const res = await dispatchMiniAppApp('agent.run', APP_ID, params);
+      expect(res.ok).toBe(true);
+      expect(agentProducers.runMiniAppAgentTurn.mock.calls[0][0].sessionId).toBeUndefined();
+    }
+  });
+});
+
+// 「传了但对不上」这条判定住在 miniapp-agent.ts（只有它知道本进程绑的是哪个
+// 会话），本文件把 `../miniapp-agent` 整个 mock 掉了，所以那条判定由
+// `miniapp-agent-session-guard.unit.test.ts` 直接测真正的实现。

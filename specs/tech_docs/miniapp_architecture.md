@@ -188,6 +188,7 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   唯一会用到它的消费者要的不是这个契约，先按参考实现一遍文本流等于造一套没有
   作者契约的机制（同 `contextFiles` 的判断）。作者若照参考传回调，现在拿到的是
   `APP_UNSUPPORTED_CALLBACK` 与一句可照做的说明，而不是笼统的"参数不可克隆"。
+- **`permissions.ai.max_tokens_per_request` 只校验、不下发**：
   `@anthropic-ai/claude-agent-sdk` 的 `query()` Options **没有**按请求限制输出
   token 的选项（只有 `maxBudgetUsd` 美元预算与 alpha 的 `taskBudget` 软提示；
   `maxOutputTokens` 是 provider 级配置，作用于该 provider 的全部请求）。所以
@@ -195,6 +196,15 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   保留校验是因为它确实拒绝越权请求，是一条真实的策略断言；要真正按 token
   封顶得先给 provider env 加按次覆盖的口子，而真实模型调用属 `credentialed`
   池、本机无法验证，不在能盲改的范围里。**不要把这个字段当成已强制的上限。**
+- **`app.agent.run` 的 `displayText` / `appDataWorkspace` 不做**：
+  - `displayText`（“用户气泡显示的文本 ≠ 发给模型的 prompt”）在本项目**没有落点**：
+    `InjectedTurnRequest` 里没有这个字段，注入的 user 消息就是 prompt 本身，全仓库
+    `displayText` 的命中项全是会话标题与工具输出，无一属于回合。要做就得给
+    `session-engine` facade → adapter → 气泡渲染一路加字段，而真实 turn 属
+    `credentialed` 池、本机无法验证。
+  - `appDataWorkspace`（在 appdata 下选子目录）要动路径判定。它和
+    `workspace_scope` 是同一类口子：Agent 有工具、能写文件，放开就等于任意文件写。
+    当前没有可信的授权记录来源，空开不如锁死。
 
 ### 与 `miniapp-dev` 参考的已确认分歧（对齐审计，2025）
 
@@ -209,8 +219,8 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 | `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 唯一消费者 icon-generator 要的是 Phase 3 出图桥接，见 §6 已知边界 |
 | `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无（显式 `APP_UNSUPPORTED_CALLBACK`） | 同上；不是不做，是没有对应契约 —— 见 §6 |
 | `ai.cancel` / `agent.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 已对齐：两种入参都收（`runIdOf`），只收字符串否则静默打空 |
-| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | 无参，返回 stream 描述 | 没有会话概念 |
-| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms}` | `sessionId` / `displayText` 被静默丢弃 |
+| `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | 无参；返回 `{session_id, sessionId}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` 不放开，workspace 强制 appdata。camelCase 别名已加 |
+| `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`displayText` / `appDataWorkspace` / `contextFiles` 不做，理由见 §6 |
 
 **已修的传输层缺陷**：`dispatch` 的 flush 队列在 `host.ready` 的 message
 listener 里执行 postMessage，不在 Promise executor 内。参数不可结构化克隆时

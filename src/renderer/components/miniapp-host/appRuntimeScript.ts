@@ -282,7 +282,10 @@ export function buildAppRuntimeScript(appId: string): string {
           prompt: prompt,
           run_id: o && o.run_id,
           model: o && o.model,
-          timeout_ms: o && o.timeout_ms
+          timeout_ms: o && o.timeout_ms,
+          // 参考文档把 ensureSession 的返回值回传过来。传了就必须对得上
+          // 本 MiniApp 的会话（sidecar 侧校验），不会再被静默忽略。
+          sessionId: o && o.sessionId
         });
       },
       // turnText 是 run 的语义化别名：强调"接上一轮继续说"，让作者不必
@@ -292,7 +295,8 @@ export function buildAppRuntimeScript(appId: string): string {
           prompt: text,
           run_id: o && o.run_id,
           model: o && o.model,
-          timeout_ms: o && o.timeout_ms
+          timeout_ms: o && o.timeout_ms,
+          sessionId: o && o.sessionId
         });
       },
       cancel: function (id) {
