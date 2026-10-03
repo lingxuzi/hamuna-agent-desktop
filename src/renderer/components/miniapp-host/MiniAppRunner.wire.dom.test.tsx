@@ -383,7 +383,56 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     expect(reports[0]).toEqual({ ok: true, value: { confirmed: true } });
   }, 15000);
 
-  it('carries appDataWorkspace from the author all the way to the Agent session', async () => {
+  it('accepts the documented 2-arg dialog.message(text, opts) and keeps the kind', async () => {
+  // `bundled-skills/miniapp-creator/SKILL.md:132-133` 教的就是这个写法：
+  //   app.dialog.message('导出完成', { kind: 'info' })
+  // 而 facade 此前只取第一个参数，于是文本与 kind **一起**被丢掉，宿主收到裸
+  // 字符串 → asRecord 变 {} → INVALID_PARAMS。上一条用例只覆盖对象形态，所以
+  // 文档教的写法一次都没被执行过。
+  dialogMessage.mockResolvedValue(undefined);
+  const { reports } = await mountAndBoot(
+    "window.app.dialog.message('Exported.', { kind: 'warning' })",
+    {},
+  );
+
+  await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+  // kind 必须真的活到原生调用上——只传通文本、丢掉 kind 仍然是坏的。
+  expect(dialogMessage).toHaveBeenCalledWith('Exported.', { title: undefined, kind: 'warning' });
+  expect(dialogAsk).not.toHaveBeenCalled();
+  expect(reports[0]).toEqual({ ok: true, value: { confirmed: null } });
+}, 15000);
+
+it('routes a 2-arg confirm to ask() and still returns the boolean', async () => {
+  dialogAsk.mockResolvedValue(false);
+  const { reports } = await mountAndBoot(
+    "window.app.dialog.message('Delete it?', { kind: 'confirm' })",
+    {},
+  );
+
+  await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+  expect(dialogAsk).toHaveBeenCalledWith('Delete it?', { title: undefined, kind: 'warning' });
+  expect(dialogMessage).not.toHaveBeenCalled();
+  // 作者写的是 `const yes = await app.dialog.message(...)`，拿到 false 时应当
+  // 写得出 `if (!yes)`——所以是 {confirmed:false} 而不是 false 或 null。
+  expect(reports[0]).toEqual({ ok: true, value: { confirmed: false } });
+}, 15000);
+
+it('object-form dialog.message still works (the 2-arg form must not break it)', async () => {
+  dialogMessage.mockResolvedValue(undefined);
+  const { reports } = await mountAndBoot(
+    "window.app.dialog.message({ message: 'Object form.' })",
+    {},
+  );
+
+  await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+  expect(dialogMessage).toHaveBeenCalledWith('Object form.', { title: undefined, kind: 'info' });
+  expect(reports[0]).toEqual({ ok: true, value: { confirmed: null } });
+}, 15000);
+
+it('carries appDataWorkspace from the author all the way to the Agent session', async () => {
     // 这条正是当初被 `appRuntimeScript.ts` 一个硬写的 null 吞掉的参数：作者挑了
     // 子目录、界面回显了，实际 Agent 还跑在 appdata 根上。Agent cwd 是进程级
     // `--agent-dir`，SDK 子进程 spawn 时读一次，run 时补不上 —— 所以必须跟着

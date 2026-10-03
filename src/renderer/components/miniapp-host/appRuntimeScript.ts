@@ -332,7 +332,21 @@ export function buildAppRuntimeScript(appId: string): string {
     dialog: {
       open: function (o) { return dispatch('dialog.open', o || null); },
       save: function (o) { return dispatch('dialog.save', o || null); },
-      message: function (o) { return dispatch('dialog.message', o || null); }
+      // 两种写法都收：对象形态 message({message, kind})，以及
+      // message(text, {kind})。后者是 SKILL.md 教给作者的写法，此前这里只取
+      // 第一个参数，于是那句调用把文本和 kind **一起**丢掉，宿主收到裸字符串
+      // → asRecord 变 {} → INVALID_PARAMS。两种形态在宿主侧汇合成同一个信封，
+      // 作者不必知道内部是哪一种。
+      message: function (text, opts) {
+        if (typeof text === 'string') {
+          var merged = {};
+          var k;
+          for (k in opts) if (Object.prototype.hasOwnProperty.call(opts, k)) merged[k] = opts[k];
+          merged.message = text;
+          return dispatch('dialog.message', merged);
+        }
+        return dispatch('dialog.message', text || null);
+      }
     },
 
     clipboard: {

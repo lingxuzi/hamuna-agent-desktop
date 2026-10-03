@@ -200,6 +200,62 @@ app 少传 cwd；app 改用 { ...base } 动态构造（此时护栏判不了，*
 
 **边界**：只认静态可判定的 key。{ ...spread } / uildParams() 拿不到，报告
 「无法静态判定」并转红，不假装通过。
+
+### 真实缺陷：作者传入的**目标路径**从不展开模板，`{appdata}` 写法 100% 被拒
+
+`permissions.fs.*` 的**声明前缀**一直是展开的（`expandTemplates`），但作者在
+`app.fs.readFile('{appdata}/notes.md')` 里传的**目标路径**从来没人展开 —— 它原样
+进 `isPathAllowed` 与 `node:fs`。模板串不可能匹配展开后的绝对前缀，所以这不是
+「某些情况失效」，是**这一族调用 100% 失效**。实测：
+
+    fs.readFile {path:'{appdata}/notes.md'} -> PERMISSION_DENIED
+                                    "fs.readFile path not covered by permissions.fs.read"
+    fs.readFile {path:'<appdir>/notes.md'}  -> "secret notes\n"   （同一时刻）
+
+`bundled-skills/miniapp-creator/SKILL.md:61-63` 教的正是这个写法，所以这是
+**作者能照文档写、但宿主必然拒绝**的洞。`app.shell.exec(cmd, {cwd:'{workspace}'})`
+同病：展开前 `dispatchShell` 的 `startsWith(workspaceDir)` 恒不成立，静默退回
+`workspaceDir` —— 表面能用，但作者传别的模板时同样静默失效且无从排查。
+
+**展开点选在 `dispatchMiniAppApp` 入口（判定之前），不放执行层**：放执行层的话判定
+已经用未展开的串判过了，展开等于绕过权限。判定与执行必须是**同一个字符串**。
+变异 M6（只对执行展开、不对判定展开）确认这条：转红。
+
+**失败方向与声明前缀相反**：不可解析的模板（`{user-selected}`，Phase 2 才接）在
+前缀里可以退化成 `''`（空串在 `isPathAllowed` 里恒不匹配，安全），在**目标路径**
+里退化成 `''` 则会被 `node:fs` 解析成**进程 cwd**，等于凭空多出一个「读当前目录」
+的能力。所以目标路径一律 `null` → fail-closed。
+
+**目标里的 `..` 不在展开处拒**：与前缀相反，`..` 出现在目标里由 `normalizePath`
+折叠、方向是**变窄**（`{appdata}/../../x` 折出 appdata，与 `<appdata>/**` 不匹配
+→ 拒）。展开只负责换前缀，判定仍然只有一个权威。
+
+新文件 `miniapp-fs-path-template.integration.test.ts` 13 条，每条都**判定侧与执行侧
+各验一次**（不信返回值，只信文件系统）。变异四个全红：回退整个修复 / 只展开
+`path` 漏掉 `from`+`to`（copyFile、rename）/ 只对执行展开不对判定展开 / 拆掉
+`escapesTemplateRoot` 的前缀 `..` 闸门。
+
+一条变异判定为**语义等价**、不补测试：把 `expandAuthorPath` 的 `return null` 改成
+`return ''` **测不出来**（实测存活）—— `isPathAllowed` 第 94 行 `if (!target)
+return false` 已经先拒掉空串，shell 那侧也有 `startsWith` 兜底，两条路都判否。
+保留显式 `null` 是因为它给出可读错误、且不依赖另一个模块的远端不变量；不为等价
+变异硬造红断言。
+
+### 真实缺陷：`dialog.message` 不收文档教的 2 参形态
+
+`SKILL.md:132-133` 教 `app.dialog.message('导出完成', { kind: 'info' })`，而
+`appRuntimeScript.ts` 的 facade 此前是 `message: function (o) {...}` —— **只取第一个
+参数**。于是文本与 `kind` **一起**被丢掉，宿主收到裸字符串 → `asRecord` 变 `{}` →
+`INVALID_PARAMS 'dialog.message requires a message'`。
+
+既有测试全部用对象形态，所以文档教的写法**一次都没被执行过**。修法是 facade 两态
+都收并汇成同一个信封（对象形态 `message({message, kind})` 保持可用）。
+
+`MiniAppRunner.wire.dom.test.tsx` 是唯一三段同时在场的测试，正是该放这条的地方。
+新增 3 条（2 参 info / 2 参 confirm 拿到 `{confirmed:false}` / 对象形态不被弄坏）。
+变异三个全红：facade 退回单参 / 传了文本丢掉 opts（kind 静默丢失）/ 让
+`opts.message` 覆盖文本。
+
 ### 真实缺陷：`git.status` 少返回 `branches`，checkout 是死的
 
 git-graph 的分支下拉框 gate 在 `Array.isArray(status.branches)` 上，checkout 又

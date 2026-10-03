@@ -127,6 +127,84 @@ function escapesTemplateRoot(raw: string): boolean {
 }
 
 /**
+ * 展开**作者传入的**一条路径里的模板。
+ *
+ * 为什么需要它，且必须发生在权限判定**之前**：`expandTemplates` 只作用于
+ * `permissions.fs.*` 的**声明前缀**（`meta.json` 那一侧），而作者在
+ * `app.fs.readFile('{appdata}/notes.md')` 里传的**目标路径**从来没人展开过，
+ * 于是它原样进 `isPathAllowed` 与 `node:fs`：
+ *
+ *   - 判定侧：模板串与展开后的前缀比 prefix，恒不匹配 → `PERMISSION_DENIED`
+ *   - 执行侧：即便绕过判定，`fs.readFile('{appdata}/notes.md')` 也是 ENOENT
+ *
+ * `bundled-skills/miniapp-creator/SKILL.md:61-63` 教的正是这个写法，所以这是
+ * **作者能照文档写、但宿主必然拒绝**的洞。
+ *
+ * 展开点选在 `dispatchMiniAppApp` 入口（判定之前）而不是 `dispatchFs` 里，
+ * 是为了让**闸门与执行看到同一个字符串**。放执行层的话判定已经用未展开的串
+ * 判过了，展开等于绕过权限。
+ *
+ * ## 失败方向：不可解析的模板返回 `null`（调用方 fail-closed），不是 `''`
+ *
+ * `{user-selected}` 依赖 dialog 记录的用户选择，本层无法解析。对**声明前缀**
+ * 而言空串是安全的（空串在 `isPathAllowed` 里恒不匹配）；对**目标路径**而言
+ * 空串是危险的 —— `fs.readFile('')` 会被 `node:fs` 解析成进程 cwd，等于给了
+ * 一个"当前目录"的能力。所以这里一律拒，不制造这个歧义。
+ *
+ * ## 目标路径里的 `..` 不在此处拒
+ *
+ * 与声明前缀相反，`..` 出现在**目标**里由 `normalizePath` 折叠、且折叠方向是
+ * **变窄**：判定作用在折叠后的路径上，`{appdata}/../../.ssh/id_rsa` 折成
+ * `<home>/.ssh/id_rsa`，与 `<appdata>/**` 不匹配 → 拒。这里的展开只负责换前缀，
+ * 不负责判定，判定仍然只有一个权威。
+ */
+function expandAuthorPath(raw: string, ctx: Resolved): string | null {
+  if (!raw.includes('{')) return raw; // 绝对路径：原样，行为不变
+  if (raw.startsWith('{appdata}')) return ctx.appdata + raw.slice('{appdata}'.length);
+  if (raw.startsWith('{workspace}')) {
+    return ctx.workspaceDir ? ctx.workspaceDir + raw.slice('{workspace}'.length) : null;
+  }
+  return null; // 含模板但根不认识（含 {user-selected}、中段模板）
+}
+
+/** `fs.*` 的哪些字段是路径。copyFile / rename 有两个，与 `checkFs` 同源。 */
+const FS_PATH_FIELDS = ['path', 'from', 'to'] as const;
+
+/**
+ * 把作者传入的路径参数展开成绝对路径，供**判定与执行共用**。
+ *
+ * 返回 `null` 表示有模板无法解析，调用方据此 fail-closed。
+ */
+function expandAuthorParams(
+  group: string,
+  params: Record<string, unknown>,
+  ctx: Resolved,
+): Record<string, unknown> | null {
+  if (group === 'fs') {
+    const out = { ...params };
+    for (const field of FS_PATH_FIELDS) {
+      const raw = out[field];
+      if (typeof raw !== 'string') continue;
+      const expanded = expandAuthorPath(raw, ctx);
+      if (expanded === null) return null;
+      out[field] = expanded;
+    }
+    return out;
+  }
+  if (group === 'shell') {
+    // `shell.exec(cmd, { cwd: '{workspace}' })` 是文档教法；不展开时
+    // dispatchShell 的 startsWith 判定恒不成立，静默退回 workspaceDir，
+    // 表面能用，但作者传 `{appdata}` 之类时同样静默失效且无从排查。
+    const opts = asRecord(params.opts);
+    if (typeof opts.cwd !== 'string') return params;
+    const expanded = expandAuthorPath(opts.cwd, ctx);
+    if (expanded === null) return null;
+    return { ...params, opts: { ...opts, cwd: expanded } };
+  }
+  return params;
+}
+
+/**
  * 解析一个 MiniApp 的 `permissions.fs` 成**展开后**的绝对前缀。
  *
  * 存在的理由：`kind: 'worker'` 的 MiniApp 有一条独立于 `app.fs.*` 的通道 ——
@@ -190,7 +268,17 @@ export async function dispatchMiniAppApp(
       write: expandTemplates(resolved.perms.fs?.write, resolved),
     },
   };
-  const decision = checkAppPermission(method, rawParams, policy);
+  // 作者传入的目标路径同样要展开，且必须在**判定之前** —— 判定与执行必须是
+  // 同一个字符串，否则展开就等于绕过权限。详见 expandAuthorPath。
+  const expandedParams = expandAuthorParams(group, params, resolved);
+  if (!expandedParams) {
+    return fail(
+      APP_ERROR_CODES.PERMISSION_DENIED,
+      'path template is not available in this context; use {appdata}, an absolute path, ' +
+        'or declare the prefix you need in meta.permissions.fs',
+    );
+  }
+  const decision = checkAppPermission(method, expandedParams, policy);
   if (!decision.allowed) {
     return fail(decision.code ?? APP_ERROR_CODES.PERMISSION_DENIED, decision.reason ?? 'denied');
   }
@@ -198,19 +286,19 @@ export async function dispatchMiniAppApp(
   try {
     switch (group) {
       case 'fs':
-        return await dispatchFs(name ?? '', params);
+        return await dispatchFs(name ?? '', expandedParams);
       case 'shell':
-        return await dispatchShell(params, resolved);
+        return await dispatchShell(expandedParams, resolved);
       case 'net':
-        return await dispatchNet(params);
+        return await dispatchNet(expandedParams);
       case 'os':
         return await dispatchOs();
       case 'storage':
-        return await dispatchStorage(name ?? '', params, resolved);
+        return await dispatchStorage(name ?? '', expandedParams, resolved);
       case 'ai':
-        return await dispatchAi(name ?? '', params, appId, resolved);
+        return await dispatchAi(name ?? '', expandedParams, appId, resolved);
       case 'agent':
-        return await dispatchAgent(name ?? '', params, resolved);
+        return await dispatchAgent(name ?? '', expandedParams, resolved);
       case 'dialog':
       case 'clipboard':
         // 这两组是 Tauri 原生能力，sidecar 进程永远够不到 OS 对话框 / 剪贴板。
