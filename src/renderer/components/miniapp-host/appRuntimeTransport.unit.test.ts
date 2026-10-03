@@ -7,12 +7,15 @@
 // 脚本真的跑起来、且调用发生在 host.ready 之前的**排队路径**上才会出现。名单
 // 测试永远看不到它。
 //
-// 触发它的就是参考文档里的标准写法：
-//   const handle = await app.ai.chat([{role,content}], { onChunk(){} })
-// 函数不可结构化克隆，postMessage 抛 DataCloneError。关键在于 flush 队列是在
-// host.ready 的 message listener 里执行的，不在 Promise executor 内 —— 抛错
-// 变成 listener 里的未捕获异常，作者侧的 Promise 永远不 settle，表现为"点了
-// 没反应、也不报错"，比直接失败难查一个量级。
+// 触发它的就是**参数里带函数**的调用 —— postMessage 抛 DataCloneError。关键
+// 在于 flush 队列是在 host.ready 的 message listener 里执行的，不在 Promise
+// executor 内 —— 抛错变成 listener 里的未捕获异常，作者侧的 Promise 永远不
+// settle，表现为"点了没反应、也不报错"，比直接失败难查一个量级。
+//
+// 曾经用参考文档里的 `app.ai.chat(messages, { onChunk(){} })` 当触发例；现在
+// ai.* 会被 callbackRejection 提前拦下（给一句能照着改的说明，见下方
+// describe），进不了这条路径。通用护栏本身仍然必须成立，所以改用
+// `storage.set(key, () => {})` —— 任何函数值都会撞上同堵墙。
 //
 // 这条断言与"ai.chat 该长什么样"的设计选择无关：无论最终对齐到参考的流式
 // handle，还是保留本项目的一次性形态，不可克隆的参数都必须显式失败。
@@ -26,6 +29,7 @@ interface Harness {
   app: {
     ai: {
       chat: (messages: unknown, opts?: unknown) => Promise<unknown>;
+      complete: (prompt: unknown, opts?: unknown) => Promise<unknown>;
       cancel: (id: unknown) => Promise<unknown>;
     };
     agent: { cancel: (id: unknown) => Promise<unknown> };
@@ -86,9 +90,12 @@ describe('runtime call transport', () => {
   it('a queued call whose arguments cannot be structured-cloned rejects instead of hanging', async () => {
     const h = mountRuntime();
 
-    // 先排队（host 还没 ready），再 ready：缺陷只在 flush 这条路径上出现。
-    const p = h.app.ai.chat([{ role: 'user', content: 'hi' }], { onChunk: () => {} });
+    // 走 `storage.set` 而不是 `ai.chat`：后者现在被 callbackRejection 提前拦下
+    // （见下方 describe），根本进不了队列，flush 那条路径就没人守了。
+    // 通用克隆护栏仍然必须成立 —— 任何带函数值的调用都会撞上。
+    const p = h.app.storage.set('k', () => {});
 
+    // 先排队（host 还没 ready），再 ready：缺陷只在 flush 这条路径上出现。
     h.ready('nonce-1');
 
     expect(await settle(p)).toBe('rejected');
@@ -96,7 +103,7 @@ describe('runtime call transport', () => {
 
   it('that rejection names the cause instead of surfacing a bare host error', async () => {
     const h = mountRuntime();
-    const p = h.app.ai.chat([{ role: 'user', content: 'hi' }], { onChunk: () => {} });
+    const p = h.app.storage.set('k', () => {});
 
     h.ready('nonce-1');
 
@@ -167,5 +174,53 @@ describe('runtime cancel argument shape', () => {
     // 不做 String(o) 之类的"尽力归一"：把 0 / null 变成 '0' / 'null' 会瞄准
     // 一个根本不存在的 runId，比明确丢弃更难查。
     expect((h.sent[0].payload as { params: { run_id?: unknown } }).params.run_id).toBeUndefined();
+  });
+});
+
+// 参考文档给 app.ai.chat 配了 onChunk / onDone / onError。函数过不了 postMessage
+// 的结构化克隆，作者撞上时看到的是一句"参数不可克隆"—— 不知道该往哪改。
+// 这里要的是**能照着做的说明**，以及以 reject（不是同步 throw）收场：作者多半
+// 写的是 await app.ai.chat(...).catch(...)，同步抛出接不住。
+describe('app.ai callback options fail with a directed message', () => {
+  it('ai.chat rejects onChunk with APP_UNSUPPORTED_CALLBACK and never reaches the host', async () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    await expect(
+      h.app.ai.chat([{ role: 'user', content: 'hi' }], { onChunk: () => {} }),
+    ).rejects.toMatchObject({ code: 'APP_UNSUPPORTED_CALLBACK' });
+    expect(h.sent).toHaveLength(0);
+  });
+
+  it('the rejection names the offending option and what to do instead', async () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    await expect(
+      h.app.ai.chat([{ role: 'user', content: 'hi' }], { onDone: () => {} }),
+    ).rejects.toThrow(/onDone[\s\S]*postMessage/);
+  });
+
+  it('ai.complete rejects callbacks too', async () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    await expect(
+      h.app.ai.complete('hi', { onError: () => {} }),
+    ).rejects.toMatchObject({ code: 'APP_UNSUPPORTED_CALLBACK' });
+    expect(h.sent).toHaveLength(0);
+  });
+
+  it('non-function options are untouched and still reach the host', () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    void h.app.ai.complete('hi', { systemPrompt: 'be terse', maxTokens: 128 });
+
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0].payload).toMatchObject({
+      method: 'ai.complete',
+      params: { prompt: 'hi' },
+    });
   });
 });

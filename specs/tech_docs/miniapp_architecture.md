@@ -176,7 +176,18 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
   向作者提及。先造一个没有作者契约也没有消费者的机制，比不做更糟。
   真要做时，先在 `app.agent.run` 上加 `contextFiles` 入参并写清快照生命周期，
   再谈 `market_strict` 工具集。
-- **`permissions.ai.max_tokens_per_request` 只校验、不下发**：
+- **`app.ai.chat` 的流式回调不做，且与本项目 Phase 3 规划冲突**：参考文档给
+  `chat(messages, {onChunk/onDone/onError}) → {streamId, cancel}`，但 ① 回调
+  函数过不了 postMessage 的结构化克隆；② sidecar 的 SSE 是**进程级广播**
+  （`sse.ts::broadcast`），要让某个 MiniApp 只收到自己的 AI 分片，就得把
+  `app.ai` 也挪到它的专用 sidecar —— 那会连带搬走速率限制表与中止注册表。
+  更关键的是**仓库自己的规划已经把同一块 API 指向另一个用途**：
+  `bundled-miniapps/icon-generator/source/ui.js` 明写 "Phase 3 replaces these
+  with calls through `app.ai.chat` (the host bridges to `cmd_miniapp_ai_complete`
+  → gemini-image-tool SSE)" —— 它要的是**出图**桥接，不是文本流。
+  唯一会用到它的消费者要的不是这个契约，先按参考实现一遍文本流等于造一套没有
+  作者契约的机制（同 `contextFiles` 的判断）。作者若照参考传回调，现在拿到的是
+  `APP_UNSUPPORTED_CALLBACK` 与一句可照做的说明，而不是笼统的"参数不可克隆"。
   `@anthropic-ai/claude-agent-sdk` 的 `query()` Options **没有**按请求限制输出
   token 的选项（只有 `maxBudgetUsd` 美元预算与 alpha 的 `taskBudget` 软提示；
   `maxOutputTokens` 是 provider 级配置，作用于该 provider 的全部请求）。所以
@@ -195,8 +206,8 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 | 项 | 参考 | 本项目 | 后果 |
 |---|---|---|---|
 | `ai.chat` 入参 | `messages: Array<{role, content}>` | 两种都收：字符串与 `messages` 数组（拍平成对话文本） | 已对齐。旧实现两条路都走 `requireString`，照文档写 `chat` 的作者拿到 `INVALID_PARAMS` |
-| `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 参考的"流式 + 句柄取消"惯用法整个不可用 |
-| `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无 | 同上；且**函数参数过不了 postMessage 结构化克隆**（见下） |
+| `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 唯一消费者 icon-generator 要的是 Phase 3 出图桥接，见 §6 已知边界 |
+| `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无（显式 `APP_UNSUPPORTED_CALLBACK`） | 同上；不是不做，是没有对应契约 —— 见 §6 |
 | `ai.cancel` / `agent.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 已对齐：两种入参都收（`runIdOf`），只收字符串否则静默打空 |
 | `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | 无参，返回 stream 描述 | 没有会话概念 |
 | `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms}` | `sessionId` / `displayText` 被静默丢弃 |

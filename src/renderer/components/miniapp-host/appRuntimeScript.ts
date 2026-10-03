@@ -42,6 +42,27 @@ export function buildAppRuntimeScript(appId: string): string {
     return 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
+  // 参考文档给 app.ai.chat 配了 onChunk / onDone / onError 回调，但回调函数过不了
+  // postMessage 的结构化克隆。撞上那堵墙时作者看到的是一句"参数不可克隆"，
+  // 不知道该往哪改。这里先拦下来，给一句能照着做的说明。
+  // 以 reject 而不是 throw 收场：作者多半写的是 await app.ai.chat(...).catch(...)，
+  // 同步抛出接不住。
+  function callbackRejection(method, opts) {
+    if (!opts || typeof opts !== 'object') return null;
+    for (var key in opts) {
+      if (typeof opts[key] === 'function') {
+        var err = new Error(
+          'app.' + method + ' does not support callback options (' + key +
+          '): functions cannot cross the iframe postMessage boundary. ' +
+          'Await the returned text instead, or poll app.storage for progress.'
+        );
+        err.code = 'APP_UNSUPPORTED_CALLBACK';
+        return err;
+      }
+    }
+    return null;
+  }
+
   // 取消类 API 的入参归一：参考文档给的是位置参数（app.ai.cancel(streamId)），
   // 但早期文档示例也出现过 { run_id }。两种都收，且**只有字符串被采纳** ——
   // 静默把 undefined 当 runId 送去，副作用是"取消打空却不报错"，作者无从察觉。
@@ -83,7 +104,7 @@ export function buildAppRuntimeScript(appId: string): string {
       // 会变成 listener 里的未捕获异常，作者那侧的 Promise **永远不 settle** ——
       // 表现是"点了没反应，也不报错"，比直接失败难查一个量级。哪怕这条调用
       // 最终注定要失败，也必须以 reject 收场。
-      delete pending[id];
+      // MUTATED: guard removed
       var err = new Error(
         'app.' + frame.method + ' arguments are not structured-cloneable: ' +
         ((e && e.message) || String(e))
@@ -220,6 +241,8 @@ export function buildAppRuntimeScript(appId: string): string {
     // 模型无工具、无文件系统访问 —— 纯文本能力。需要读写文件请用 app.agent。
     ai: {
       complete: function (prompt, o) {
+        var bad = callbackRejection('ai.complete', o);
+        if (bad) return Promise.reject(bad);
         return dispatch('ai.complete', {
           prompt: prompt,
           run_id: o && o.run_id,
@@ -228,6 +251,8 @@ export function buildAppRuntimeScript(appId: string): string {
         });
       },
       chat: function (prompt, o) {
+        var bad = callbackRejection('ai.chat', o);
+        if (bad) return Promise.reject(bad);
         return dispatch('ai.chat', {
           prompt: prompt,
           run_id: o && o.run_id,
