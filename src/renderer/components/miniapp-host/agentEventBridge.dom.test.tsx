@@ -87,7 +87,9 @@ describe('agentBridge: session lifecycle', () => {
     const bridge = makeBridge('probe');
     const first = await bridge.ensureSession('main');
     const second = await bridge.ensureSession('main');
-    expect(second).toBe(first);
+    // 落点是每次现造的对象，所以比的是它指向的会话与端口 —— 身份才是这条要守的。
+    expect(second).toEqual(first);
+    expect(first.sessionId).toBe('miniapp_probe_main');
     expect(invokeMock.mock.calls.filter((c) => c[0] === 'cmd_miniapp_ensure_session')).toHaveLength(1);
   });
 

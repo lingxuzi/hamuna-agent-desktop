@@ -24,7 +24,11 @@ import { buildAppRuntimeScript } from './appRuntimeScript';
 interface Harness {
   sent: Array<Record<string, unknown>>;
   app: {
-    ai: { chat: (messages: unknown, opts?: unknown) => Promise<unknown> };
+    ai: {
+      chat: (messages: unknown, opts?: unknown) => Promise<unknown>;
+      cancel: (id: unknown) => Promise<unknown>;
+    };
+    agent: { cancel: (id: unknown) => Promise<unknown> };
     storage: { set: (key: string, value: unknown) => Promise<unknown> };
   };
   ready: (nonce: string) => void;
@@ -110,5 +114,58 @@ describe('runtime call transport', () => {
       method: 'storage.set',
       params: { key: 'k', value: { a: 1 } },
     });
+  });
+});
+
+// 取消类 API 的入参形态。参考文档给的是**位置参数**
+// （app.ai.cancel(handle.streamId)），只认 { run_id } 的话，照文档写的作者会
+// 发出 run_id: undefined —— sidecar 侧退回 'default'，取消静默打空且不报错。
+// 这是纯入参归一，与 ai.chat 该不该流式无关。
+describe('runtime cancel argument shape', () => {
+  it('ai.cancel takes the positional stream id from the reference', () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    void h.app.ai.cancel('stream-42');
+
+    expect(h.sent[0].payload).toMatchObject({
+      method: 'ai.cancel',
+      params: { run_id: 'stream-42' },
+    });
+  });
+
+  it('ai.cancel still accepts the object form (backward compatible)', () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    void h.app.ai.cancel({ run_id: 'stream-42' });
+
+    expect(h.sent[0].payload).toMatchObject({
+      method: 'ai.cancel',
+      params: { run_id: 'stream-42' },
+    });
+  });
+
+  it('agent.cancel takes a bare run id', () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    void h.app.agent.cancel('run-7');
+
+    expect(h.sent[0].payload).toMatchObject({
+      method: 'agent.cancel',
+      params: { run_id: 'run-7' },
+    });
+  });
+
+  it('a non-string, non-object argument is dropped rather than stringified', () => {
+    const h = mountRuntime();
+    h.ready('nonce-1');
+
+    void h.app.ai.cancel(undefined);
+
+    // 不做 String(o) 之类的"尽力归一"：把 0 / null 变成 '0' / 'null' 会瞄准
+    // 一个根本不存在的 runId，比明确丢弃更难查。
+    expect((h.sent[0].payload as { params: { run_id?: unknown } }).params.run_id).toBeUndefined();
   });
 });

@@ -29,7 +29,8 @@ window.app.*                  MiniAppRunner                    dispatchMiniAppAp
 
 | 能力族 | owner | 理由 |
 |---|---|---|
-| `fs` `shell` `net` `os` `storage` `ai` `agent` | sidecar | Node 的 fs / child_process / SDK |
+| `fs` `shell` `net` `os` `storage` `ai` | 全局 sidecar | Node 的 fs / child_process / SDK |
+| `agent` | **该 MiniApp 自己的 sidecar** | 回合必须跑在 `ensureSession` 建的会话里，否则事件与 abort 都对不上（见 §3） |
 | `dialog` `clipboard` | renderer (Tauri) | OS 原生对话框与剪贴板，sidecar **永远够不到** |
 | `call` | worker 池 | 自定义代码必须跑在 `worker_threads` 沙箱里 |
 
@@ -107,6 +108,15 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 所以从 MiniApp 端口打过来的 `agent.run`，`getSessionEngine()` 拿到的正是它
 自己的会话。
 
+**这个前提曾经只是文档里的前提，代码没兑现**：`agent.run` / `turnText` /
+`cancel` 与其它能力族一起走了 `apiPostJson`（= 全局 sidecar），于是回合跑进
+**用户的全局会话**，而 SSE 订阅挂在专用 sidecar 上。一个缺陷同时表现成三件事：
+`agent.onEvent` 收不到任何事件、MiniApp 的提示词落进用户聊天历史、
+`agent.cancel` 静默停不下来（abort registry 是进程内状态）。现在
+`appHostDispatch.ts::dispatchAgentTurn` 先 `bridge.ensureSession()` 拿
+`{sessionId, port}`，再用 `proxyFetch` 直发 `127.0.0.1:<port>`；由
+`appHostDispatch.unit.test.ts` 直接断言 URL 守着这条。
+
 `turnOwner: {kind:'agent', id}` 让 `stopOwnedTurn` 能精确命中这一个 turn，
 而不是把整个 session 停掉。
 
@@ -179,7 +189,7 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 | `ai.chat` 入参 | `messages: Array<{role, content}>` | `prompt: string` | 作者照文档传数组 → `p.prompt.trim()` 对数组取不到方法 → `HOST_ERROR` |
 | `ai.chat` 返回 | `handle {streamId, cancel()}` | 普通 Promise（一次性 resolve） | 参考的"流式 + 句柄取消"惯用法整个不可用 |
 | `ai.chat` 流式 | `opts.onChunk / onDone / onError` | 无 | 同上；且**函数参数过不了 postMessage 结构化克隆**（见下） |
-| `ai.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 传字符串 → `{run_id: undefined}` → 静默取消不到任何东西 |
+| `ai.cancel` / `agent.cancel` | 位置参数 `cancel(streamId)` | `cancel({run_id})` | 已对齐：两种入参都收（`runIdOf`），只收字符串否则静默打空 |
 | `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | 无参，返回 stream 描述 | 没有会话概念 |
 | `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms}` | `sessionId` / `displayText` 被静默丢弃 |
 

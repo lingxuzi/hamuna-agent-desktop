@@ -21,9 +21,10 @@ import { invoke } from '@tauri-apps/api/core';
 import type { DialogFilter } from '@tauri-apps/plugin-dialog';
 
 import { apiPostJson } from '@/api/apiFetch';
+import { proxyFetch } from '@/api/tauriClient';
 
 import { APP_ERROR_CODES, type AppMethod } from '../../../shared/miniapp/app-protocol';
-import type { AgentBridge } from './agentEventBridge';
+import type { AgentBridge, AgentSessionTarget } from './agentEventBridge';
 
 interface DispatchResponse {
   ok: boolean;
@@ -69,6 +70,11 @@ export function createAppDispatcher(
       if (method === 'agent.ensureSession' || method === 'agent.onEvent') {
         return await dispatchAgentHost(method, params, options.agentBridge);
       }
+      // Agent **回合**必须发到上面那个专用 sidecar，而不是走下面的全局 sidecar。
+      // 回合跑在哪个进程，决定了 SSE 事件和 abort 能不能命中同一个 turn。
+      if (method === 'agent.run' || method === 'agent.turnText' || method === 'agent.cancel') {
+        return await dispatchAgentTurn(appId, method, params, options.agentBridge);
+      }
       const res = await apiPostJson<DispatchResponse>(`/api/miniapp/app/${method}`, {
         appId,
         params: params ?? null,
@@ -105,8 +111,8 @@ async function dispatchAgentHost(
   const runId = typeof p.run_id === 'string' && p.run_id ? p.run_id : 'main';
   if (method === 'agent.ensureSession') {
     try {
-      const sessionId = await bridge.ensureSession(runId);
-      return { ok: true, result: { session_id: sessionId } };
+      const target = await bridge.ensureSession(runId);
+      return { ok: true, result: { session_id: target.sessionId } };
     } catch (e) {
       return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
     }
@@ -116,11 +122,71 @@ async function dispatchAgentHost(
   // 只负责把流式通道拉起来：作者注册监听时通常也期待 session 与 SSE 已就绪，
   // 否则 `subscribe` 永远没有生产者，就成了"暴露给作者却收不到事件"的空壳。
   try {
-    const sessionId = await bridge.ensureSession(runId);
+    const target = await bridge.ensureSession(runId);
     void bridge.subscribe(runId, () => undefined).catch(() => undefined);
-    return { ok: true, result: { session_id: sessionId } };
+    return { ok: true, result: { session_id: target.sessionId } };
   } catch (e) {
     return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
+  }
+}
+
+/**
+ * `agent.run` / `agent.turnText` / `agent.cancel` —— 发到 MiniApp 自己的 sidecar。
+ *
+ * ## 为什么不能走默认的全局 sidecar
+ *
+ * sidecar 侧 `runMiniAppAgentTurn` 用的是 **本进程** 的
+ * `getCurrentSessionContext().sessionId`。发到全局 sidecar 意味着：
+ *
+ * 1. 回合跑进**用户的全局会话** —— MiniApp（第三方代码）的提示词与产出写进
+ *    用户自己的聊天历史，这是隔离失效，不只是"流式不工作"；
+ * 2. `chat:message-chunk` 发在全局 sidecar 的 SSE 上，而 bridge 订阅的是专用
+ *    sidecar 的 SSE → `agent.onEvent` 永远收不到任何事件；
+ * 3. `stopOwnedTurn` 的 abort registry 是进程内状态，`agent.cancel` 发到全局
+ *    sidecar 会报"停不下"，而作者已经收到过一次 run，看起来像竞态。
+ *
+ * 三条同源：`ensureSession` 建的会话必须就是 `run` 执行的会话。
+ */
+async function dispatchAgentTurn(
+  appId: string,
+  method: string,
+  params: unknown,
+  bridge: AgentBridge | undefined,
+): Promise<DispatchResult> {
+  if (!bridge) {
+    return err(
+      APP_ERROR_CODES.HOST_ERROR,
+      'app.agent is unavailable: the host did not provide an agent bridge',
+    );
+  }
+  const p = asRecord(params);
+  const runId = typeof p.run_id === 'string' && p.run_id ? p.run_id : 'main';
+  let target: AgentSessionTarget;
+  try {
+    target = await bridge.ensureSession(runId);
+  } catch (e) {
+    return err(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
+  }
+  try {
+    const res = await proxyFetch(`http://127.0.0.1:${target.port}/api/miniapp/app/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appId, params: p }),
+    });
+    const payload = (await res.json().catch(() => ({}))) as DispatchResponse;
+    if (payload.ok) return { ok: true, result: payload.result };
+    return {
+      ok: false,
+      error: payload.error ?? { code: APP_ERROR_CODES.HOST_ERROR, message: 'agent dispatch failed' },
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: {
+        code: APP_ERROR_CODES.NETWORK_ERROR,
+        message: e instanceof Error ? e.message : String(e),
+      },
+    };
   }
 }
 

@@ -37,6 +37,21 @@ export interface AgentEventPayload {
   runId?: string;
 }
 
+/**
+ * Agent 会话的落点。
+ *
+ * `port` 存在的理由不是"顺手把返回值传出去"：`app.agent.run` 必须发到这个
+ * sidecar。若它走全局 sidecar（普通 dispatch 的默认去向），回合就跑在**全局
+ * sidecar 自己的会话**里，而事件订阅挂在专用 sidecar 的 SSE 上 —— run 与
+ * onEvent 分处两个进程，流式永远对不上，MiniApp 的提示词还会落进用户的
+ * 全局会话历史。`agent.cancel` 同理：abort registry 是进程内的，发错进程
+ * 就是静默停不下来。
+ */
+export interface AgentSessionTarget {
+  sessionId: string;
+  port: number;
+}
+
 export interface AgentBridge {
   /**
    * 注入「把事件送进 iframe」的转发器。由 owner（MiniAppRunner）在 commit 后
@@ -46,8 +61,8 @@ export interface AgentBridge {
    * 工厂彻底不碰 ref，规则与真实时序（事件只在 commit 之后到达）对齐。
    */
   setPost(post: (payload: AgentEventPayload) => void): void;
-  /** 确保 Agent session 存在，返回 sessionId。幂等。 */
-  ensureSession(runId: string): Promise<string>;
+  /** 确保 Agent session 存在，返回它的落点。幂等。 */
+  ensureSession(runId: string): Promise<AgentSessionTarget>;
   /** 订阅流式事件。返回退订函数。 */
   subscribe(runId: string, handler: (payload: AgentEventPayload) => void): Promise<() => void>;
   /** 释放 session + 断开 SSE。 */
@@ -70,8 +85,9 @@ const DEFAULT_RUN_ID = 'main';
 
 export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
   let sessionId: string | null = null;
+  let sessionPort: number | null = null;
   let sse: SseConnection | null = null;
-  let pending: Promise<string> | null = null;
+  let pending: Promise<AgentSessionTarget> | null = null;
   const handlers = new Set<(payload: AgentEventPayload) => void>();
   // owner 通过 setPost 注入。未注入时是 no-op 而不是 throw：bridge 可能比
   // owner 的 effect 先被调用（ensureSession 由 capability dispatch 触发），
@@ -100,14 +116,15 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
     post(payload);
   }
 
-  async function doEnsure(): Promise<string> {
+  async function doEnsure(): Promise<AgentSessionTarget> {
     const outcome = await invoke<EnsureOutcome>('cmd_miniapp_ensure_session', {
       appId: deps.appId,
       runId: DEFAULT_RUN_ID,
     });
     sessionId = outcome.session_id;
+    sessionPort = outcome.port;
     sessionIdRef.current = outcome.session_id;
-    return outcome.session_id;
+    return { sessionId: outcome.session_id, port: outcome.port };
   }
 
   function ensureSse(): SseConnection | null {
@@ -147,8 +164,8 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
 
   // `runId` 恒为 DEFAULT_RUN_ID（见上方说明），保留参数是为了让 interface
   // 与 dispatch 侧的签名一致；这里显式忽略而不是留一个未用参数给 lint 报。
-  async function ensureSession(_runId: string): Promise<string> {
-    if (sessionId) return sessionId;
+  async function ensureSession(_runId: string): Promise<AgentSessionTarget> {
+    if (sessionId && sessionPort !== null) return { sessionId, port: sessionPort };
     // 并发去重：iframe 里连着调两次 ensureSession 不该起两个 Node 进程。
     pending ??= doEnsure().finally(() => {
       pending = null;
@@ -161,12 +178,12 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
       post = fn;
     },
     async ensureSession(runId: string) {
-      const id = await ensureSession(runId);
+      const target = await ensureSession(runId);
       if (handlers.size > 0) void ensureSse()?.connect().catch(() => {
         // SSE 起不来不该让 ensureSession 失败：作者仍可用 run() 拿终态文本，
         // 只是没有流式。静默降级好过整个 Agent 能力不可用。
       });
-      return id;
+      return target;
     },
 
     async subscribe(runId, handler) {
@@ -202,6 +219,7 @@ export function createAgentBridge(deps: AgentBridgeDeps): AgentBridge {
           runId: DEFAULT_RUN_ID,
         }).catch(() => undefined);
         sessionId = null;
+        sessionPort = null;
         sessionIdRef.current = null;
       }
     },

@@ -42,6 +42,15 @@ export function buildAppRuntimeScript(appId: string): string {
     return 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
+  // 取消类 API 的入参归一：参考文档给的是位置参数（app.ai.cancel(streamId)），
+  // 但早期文档示例也出现过 { run_id }。两种都收，且**只有字符串被采纳** ——
+  // 静默把 undefined 当 runId 送去，副作用是"取消打空却不报错"，作者无从察觉。
+  function runIdOf(id) {
+    if (typeof id === 'string') return id;
+    if (id && typeof id === 'object' && typeof id.run_id === 'string') return id.run_id;
+    return undefined;
+  }
+
   // 宿主未就绪时的调用先入队。host.ready 到达后统一冲刷 —— iframe 解析完成前
   // 发的 postMessage 会被浏览器丢弃，排队是唯一可靠做法。
   var queued = [];
@@ -229,8 +238,12 @@ export function buildAppRuntimeScript(appId: string): string {
       // 中止一个在途的 complete/chat。补全可能跑满 60s，作者必须有办法停。
       // 返回 {cancelled:boolean, inflightCount:number}：cancelled=false 表示
       // 该 runId 已经结束（正常结果，不是错误）。
-      cancel: function (o) {
-        return dispatch('ai.cancel', { run_id: o && o.run_id });
+      //
+      // 两种入参都收：参考文档写的是位置参数 app.ai.cancel(handle.streamId)，
+      // 只认 {run_id} 的话照文档写的作者会拿到 undefined —— 取消静默打空，
+      // 而不是报错。接受字符串是向后兼容的超集。
+      cancel: function (id) {
+        return dispatch('ai.cancel', { run_id: runIdOf(id) });
       },
       getModels: function () { return dispatch('ai.getModels', null); }
     },
@@ -257,8 +270,8 @@ export function buildAppRuntimeScript(appId: string): string {
           timeout_ms: o && o.timeout_ms
         });
       },
-      cancel: function (o) {
-        return dispatch('agent.cancel', { run_id: o && o.run_id });
+      cancel: function (id) {
+        return dispatch('agent.cancel', { run_id: runIdOf(id) });
       },
       // 订阅流式事件。回调收到 { type, text?, runId? }，其中 type 是
       // 'agent.delta' / 'agent.complete' / 'agent.stopped' / 'agent.error' 之一。
