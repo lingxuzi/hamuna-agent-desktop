@@ -510,3 +510,119 @@ describe('ai.cancel has a real abort point', () => {
     });
   });
 });
+
+/**
+ * `app.shell.exec` 的**真实执行**。
+ *
+ * 本文件此前只测 shell 的**闸门**（命令名白名单、元字符拒收），执行侧一个断言
+ * 都没有 —— 也就是说"命令跑了但 stdout 是空的""非零退出被当成成功""stderr 丢失"
+ * 这三类故障全部测不出来。真 spawn 一条命令很便宜（`echo` / `git`），所以这里
+ * 不用 mock。
+ *
+ * ## 断言的是**真输出**，不是"没抛"
+ *
+ * renderer 层那条用例是纯透传，stub 的形状宿主根本不会发（`exitCode` vs
+ * `exit_code`）；而真正决定作者拿到什么字段的是这里的 dispatch 侧。
+ */
+describe('app.shell.exec really executes', () => {
+  const perms = { shell: { allow: ['echo', 'git', 'node'] } };
+
+  /**
+   * 走**两道闸**再执行，与本文件其它用例同一条路：renderer 的 `runAppCall`
+   * 预判 + sidecar 的 `dispatchMiniAppApp` 权威复算。
+   *
+   * 本文件原有的 `call` helper 定义在另一个 describe 的作用域里（它连同
+   * `viaRenderer` 一起被圈进去了），所以这里自带一份而不是把它提到模块级 ——
+   * 提上去会改动既有 28 条用例的作用域，不值得为一个 helper 扩大影响面。
+   */
+  async function exec(permissions: unknown, params: unknown) {
+    return runAppCall(
+      'shell.exec' as never,
+      params,
+      permissions as never,
+      (async (method: string, p: unknown) => {
+        const out = await dispatchMiniAppApp(method, APP_ID, p, {});
+        return out.ok
+          ? { ok: true as const, result: out.result }
+          : { ok: false as const, error: out.error };
+      }) as never,
+    );
+  }
+
+  it('returns the real stdout of an allow-listed command', async () => {
+    writeMeta(perms);
+
+    const res = await exec(perms, { command: 'echo hello-from-the-sandbox' });
+
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    const out = res.ok ? (res.result as { stdout: string; stderr: string; exit_code: number }) : null;
+    // 真内容，不是"非空"这种碰巧也成立的断言
+    expect(out?.stdout.trim()).toBe('hello-from-the-sandbox');
+    expect(out?.exit_code).toBe(0);
+  });
+
+  it('reports a non-zero exit as ok:true + exit_code, not as a host error', async () => {
+    // 这是最容易做错的一处：命令**跑了**但失败了，不是宿主出错。作者要靠
+    // exit_code 区分"命令失败"与"权限被拒"，压成异常就丢了这条信息。
+    //
+    // 脚本落盘再 `node <path>`，而不是 `node -e "..."`：元字符闸门
+    // (`SHELL_METACHARACTERS` 收 `; & | < > ^ \` % ! ( ) $ " '`) 连引号和括号
+    // 一起拒，所以内联写法压根到不了执行层 —— 这是**设计**，不是缺陷。
+    writeMeta(perms);
+    const script = join(sandboxHome, 'exit3.js');
+    writeFileSync(script, 'process.exit(3);', 'utf8');
+
+    const res = await exec(perms, { command: `node ${script}` });
+
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    const out = res.ok ? (res.result as { stdout: string; exit_code: number }) : null;
+    expect(out?.exit_code).toBe(3);
+  });
+
+  it('keeps stderr instead of swallowing it into an empty string', async () => {
+    writeMeta(perms);
+    const script = join(sandboxHome, 'boom.js');
+    writeFileSync(script, "console.error('boom'); process.exit(1);", 'utf8');
+
+    const res = await exec(perms, { command: `node ${script}` });
+
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    const out = res.ok ? (res.result as { stdout: string; stderr: string }) : null;
+    expect(out?.stderr).toContain('boom');
+  });
+
+  it('does not hand the MiniApp the host environment', async () => {
+    // env 只给 PATH。宿主进程里的变量（含 provider 凭据相关的）不能流进
+    // MiniApp 起的进程 —— 这一条是执行侧唯一的凭据边界。
+    writeMeta(perms);
+    const marker = 'HAMUNA_MINIAPP_ENV_PROBE_9d2f';
+    const script = join(sandboxHome, 'envprobe.js');
+    writeFileSync(script, 'process.stdout.write(String(process.env.HAMUNA_MINIAPP_ENV_PROBE_9d2f));', 'utf8');
+    const previous = process.env[marker];
+    process.env[marker] = 'host-secret';
+    try {
+      const res = await exec(perms, { command: `node ${script}` });
+
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+      const out = res.ok ? (res.result as { stdout: string }) : null;
+      // 宿主里有值，子进程里读出来必须是 undefined —— 传下去就成了泄漏。
+      expect(out?.stdout).toBe('undefined');
+    } finally {
+      if (previous === undefined) delete process.env[marker];
+      else process.env[marker] = previous;
+    }
+  });
+
+  it('refuses an inline -e script, because quotes and parens are metacharacters', async () => {
+    // 上一两条本来都写成 `node -e "..."`，结果被元字符闸门挡在执行层之前。
+    // 顺手把这条约束钉住：作者最容易先试的就是内联写法，而它**永远**不成立，
+    // 症状是 PERMISSION_DENIED 而不是一句「引号不支持」。
+    writeMeta(perms);
+
+    const res = await exec(perms, { command: 'node -e "process.exit(3)"' });
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('expected a denial');
+    expect(res.error.code).toBe('PERMISSION_DENIED');
+  });
+});

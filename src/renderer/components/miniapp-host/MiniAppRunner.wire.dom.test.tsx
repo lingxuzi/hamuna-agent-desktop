@@ -759,7 +759,12 @@ it('carries appDataWorkspace from the author all the way to the Agent session', 
   }, 15000);
 
   it('runs an allow-listed shell command and hands the output back to the author', async () => {
-    const hostAnswer = { stdout: 'hello\n', exitCode: 0 };
+    // 形状必须是 sidecar **真的**发出来的那一份（miniapp-app-dispatch.ts 的
+    // {stdout, stderr, exit_code}，SKILL.md:68 也是这么写的）。此前这里 stub 的是
+    // {stdout, exitCode} —— 一个宿主永远不会发出的形状：断言照样绿，因为这一层
+    // 是纯透传，但它对『作者拿到的字段名对不对』零保护。真作者读 r.exitCode 拿到
+    // 的是 undefined，而没有任何一条用例会红。
+    const hostAnswer = { stdout: 'hello\n', stderr: '', exit_code: 0 };
     apiPostJson.mockResolvedValue({ ok: true, result: hostAnswer });
     const { reports } = await mountAndBoot("window.app.shell.exec('echo hello')", {
       shell: { allow: ['echo'] },
@@ -767,12 +772,33 @@ it('carries appDataWorkspace from the author all the way to the Agent session', 
 
     await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
 
-    // `opts: null` 是 runtime 的真实形状（第二个参数缺省时归一成 null）。
+    // opts: null 是 runtime 的真实形状（第二个参数缺省时归一成 null）。
     expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/app/shell.exec', {
       appId: APP_ID,
       params: { command: 'echo hello', opts: null },
     });
-    expect(reports[0]).toEqual({ ok: true, value: hostAnswer });
+    // 逐字段断言而不是整体 toEqual：纯透传下整体相等恒成立，等于什么都没验。
+    const value = (reports[0] as { ok: boolean; value: Record<string, unknown> }).value;
+    expect(value.stdout).toBe('hello\n');
+    expect(value.stderr).toBe('');
+    expect(value.exit_code).toBe(0);
+  }, 15000);
+
+  it('carries a non-zero exit_code and stderr back instead of flattening failure', async () => {
+    // 非零退出在 sidecar 是 ok:true + exit_code（命令跑了，只是失败了）。这一层若
+    // 把它压成异常、或丢掉 exit_code，作者就没法区分『命令失败』与『宿主出错』。
+    const hostAnswer = { stdout: '', stderr: 'fatal: not a git repository', exit_code: 128 };
+    apiPostJson.mockResolvedValue({ ok: true, result: hostAnswer });
+    const { reports } = await mountAndBoot("window.app.shell.exec('git log')", {
+      shell: { allow: ['git'] },
+    });
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    const reported = reports[0] as { ok: boolean; value: Record<string, unknown> };
+    expect(reported.ok).toBe(true);
+    expect(reported.value.exit_code).toBe(128);
+    expect(reported.value.stderr).toBe('fatal: not a git repository');
   }, 15000);
 
   it('rejects a call whose nonce is not this session, even from the real iframe', async () => {
