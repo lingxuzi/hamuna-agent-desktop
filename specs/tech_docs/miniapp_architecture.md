@@ -520,8 +520,11 @@ MiniApp 本身也是全死的**，且失效完全静默（拒绝是正确行为�
 `window.app.*` 通道此前只有三段各自的单测（`app-protocol` 纯函数 /
 `appRuntimeTransport` 脚本 / `appHostDispatch` 派发层），**没有任何东西保证三段形状
 对得上** —— `appDataWorkspace` 当初正是被 `appRuntimeScript.ts` 无参硬传 `null` 吞掉，
-而三段全绿。现已补上 `MiniAppRunner.wire.dom.test.tsx`：真 iframe、真 postMessage、
-真回信，三段同时在场。
+而三段全绿。现已补上 `MiniAppRunner.wire.dom.test.tsx`（11 条）：真 iframe、真
+postMessage、真回信，三段同时在场，且**覆盖 `appHostDispatch` 的全部三个 owner** ——
+`apiPostJson`（fs / net / shell / ai 那一路）、Tauri 原生（dialog / clipboard）、
+renderer 就地截走的 Agent（`agent.ensureSession`）。只验其中一个 owner 等于把同样的洞
+留在另外两个上。
 
 写它要跨过 jsdom 的三条限制（**都别当成产品缺陷去"修"**）：
 

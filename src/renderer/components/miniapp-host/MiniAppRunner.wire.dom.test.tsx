@@ -62,6 +62,25 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   message: (...args: unknown[]) => dialogMessage(...args),
 }));
 
+// Agent owner。bridge 由 MiniAppRunner 在 render 期间自己建（不能把 ref 以任何形式
+// 交给渲染期调用的工厂），所以只能替掉工厂本身，而不是注一个 prop。
+const bridgeEnsureSession = vi.fn();
+const bridgeSubscribe = vi.fn();
+const bridgeSetPost = vi.fn();
+const bridgeRelease = vi.fn();
+vi.mock('./agentEventBridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./agentEventBridge')>();
+  return {
+    ...actual,
+    createAgentBridge: () => ({
+      setPost: bridgeSetPost,
+      ensureSession: bridgeEnsureSession,
+      subscribe: bridgeSubscribe,
+      release: bridgeRelease,
+    }),
+  };
+});
+
 const APP_ID = 'wire-probe';
 
 /**
@@ -183,6 +202,10 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     dialogSave.mockReset();
     dialogAsk.mockReset();
     dialogMessage.mockReset();
+    bridgeEnsureSession.mockReset();
+    bridgeSubscribe.mockReset();
+    bridgeSetPost.mockReset();
+    bridgeRelease.mockReset();
     apiGetJson.mockResolvedValue({ ok: true, kinds: [] });
   });
 
@@ -339,6 +362,64 @@ describe('MiniAppRunner / window.app.* survives the real iframe round trip', () 
     expect(apiPostJson).not.toHaveBeenCalled();
     // 作者拿到的是 `{confirmed: true}`，不是一个裸布尔 —— 形状错了作者就会写错分支。
     expect(reports[0]).toEqual({ ok: true, value: { confirmed: true } });
+  }, 15000);
+
+  it('carries appDataWorkspace from the author all the way to the Agent session', async () => {
+    // 这条正是当初被 `appRuntimeScript.ts` 一个硬写的 null 吞掉的参数：作者挑了
+    // 子目录、界面回显了，实际 Agent 还跑在 appdata 根上。Agent cwd 是进程级
+    // `--agent-dir`，SDK 子进程 spawn 时读一次，run 时补不上 —— 所以必须跟着
+    // ensure 一起走。
+    bridgeEnsureSession.mockResolvedValue({ sessionId: 'miniapp_wire-probe_main', port: 4321 });
+    const { reports } = await mountAndBoot(
+      "window.app.agent.ensureSession({ appDataWorkspace: 'notes' })",
+      { agent: { enabled: true } },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    // 这个分支在 renderer 就地截走，请求根本不该到 sidecar。
+    expect(apiPostJson).not.toHaveBeenCalled();
+    // 作者挑的子目录真的跟着 ensure 走了（runId 固定 'main'：一个 iframe = 一个会话）。
+    expect(bridgeEnsureSession).toHaveBeenCalledWith('main', 'notes');
+    // 两个键都返回：照参考文档读 sessionId 的作者才拿得到值。
+    expect(reports[0]).toEqual({
+      ok: true,
+      value: {
+        session_id: 'miniapp_wire-probe_main',
+        sessionId: 'miniapp_wire-probe_main',
+        app_data_workspace: 'notes',
+      },
+    });
+  }, 15000);
+
+  it('refuses an appDataWorkspace that would escape appdata, before the session exists', async () => {
+    const { reports } = await mountAndBoot(
+      "window.app.agent.ensureSession({ appDataWorkspace: '../evil' })",
+      { agent: { enabled: true } },
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    // 校验在**建 session 之前**：非法名不该留下一个后台 Node 进程。
+    expect(bridgeEnsureSession).not.toHaveBeenCalled();
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean; code?: string };
+    expect(reported.ok).toBe(false);
+    expect(reported.code).toBe('INVALID_PARAMS');
+  }, 15000);
+
+  it('refuses app.agent entirely when the app never declared it', async () => {
+    const { reports } = await mountAndBoot(
+      'window.app.agent.ensureSession({})',
+      {},
+    );
+
+    await waitFor(() => expect(reports).toHaveLength(1), { timeout: 3000 });
+
+    expect(bridgeEnsureSession).not.toHaveBeenCalled();
+    expect(apiPostJson).not.toHaveBeenCalled();
+    const reported = reports[0] as { ok: boolean };
+    expect(reported.ok).toBe(false);
   }, 15000);
 
   it('rejects a call whose nonce is not this session, even from the real iframe', async () => {
