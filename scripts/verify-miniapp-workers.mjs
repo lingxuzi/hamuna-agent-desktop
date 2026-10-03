@@ -24,7 +24,11 @@
 // 退出码非 0 = 产物不可用。这个脚本没有测试套件可挂 —— 它测的是"构建 + 运行"
 // 这件事本身，只有作为构建后的门禁才有意义。
 //
-// 用法：npm run build:server && npm run verify:miniapp-workers
+// 它现在是 `build:server` 的最后一步（与 `build:web` → `verify:theme-css` 同款），
+// 所以 CI、发布脚本和本地构建都会跑到。曾经它只以"手动跑一下"的形式存在：
+// `build:server` 产出 entry，CI 也跑 `build:server`，但没有任何地方接着跑这个
+// 冒烟 —— 也就是说上面那四个缺陷复发的路径依然是全绿的。保留 `verify:miniapp-workers`
+// 这个独立入口，是为了想单独重跑时不用先重新打包。
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

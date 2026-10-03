@@ -18,7 +18,7 @@
 // half-fixed bundle.
 
 import { build } from 'esbuild';
-import { copyFile, readFile, mkdir } from 'node:fs/promises';
+import { copyFile, readFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 // Read package.json version once and inject as a compile-time constant.
@@ -99,6 +99,22 @@ const TARGETS = {
       // Worker that emits `error` asynchronously — so `pool.spawn()` reported
       // success and handed the MiniApp a worker id that could never answer.
       // Both worker MiniApps were dead in production with no failing signal.
+      // Wipe the previously-emitted worker entries before building, matched by
+      // pattern rather than by list. Two earlier shapes of this clean both failed
+      // the same way: inside the build loop it disappears when a kind is dropped
+      // from that loop, and driven by a shared `workerKinds` variable it
+      // disappears for the same reason — the one mutation that matters edits the
+      // very list the clean reads. Either way the artifact left by the *previous*
+      // build is still on disk, `verify-miniapp-workers` finds a file at
+      // `entryPath`, reports success, and both worker MiniApps are dead again
+      // with no signal anywhere. A pattern has no list to go stale, so whatever
+      // this build fails to produce is simply absent afterwards, and the
+      // independent check fails for the real reason.
+      const resDir = dirname(outfile);
+      for (const name of await readdir(resDir)) {
+        if (/^worker-entry-.*\.js$/.test(name)) await rm(join(resDir, name), { force: true });
+      }
+
       for (const kind of ['git-graph', 'file-explorer']) {
         const entry = `src/server/miniapp-worker/worker-entry-${kind}.ts`;
         // `outdir` (not `outfile`): the entry is the only input, but esbuild
