@@ -833,11 +833,28 @@ listener 里的未捕获异常，作者侧的 Promise **永不 settle** —— �
 **本节的"待决"只剩一项（`ai.chat` 流式句柄形态，是设计选择而不是缺陷）；其余条目
 已定并已修，保留在此是为了记下"当时为什么卡住、后来为什么通了"：**
 
-1. **`ai.chat` 要不要整体对齐到参考的流式句柄形态**（`handle {streamId, cancel()}`
-   + `onChunk/onDone/onError`）。本项目是一次性 Promise，并显式
-   `APP_UNSUPPORTED_CALLBACK` 拒掉回调。唯一消费者 icon-generator 要的是
-   Phase 3 出图桥接，流式对它没有价值；而流式要求 sidecar 常驻一条 SSE，还要解决
-   "iframe 已经卸载时怎么收尾"。定这个之前，上表 `ai.chat` 的两行保持现状。
+1. **待 owner 拍板：`ai.chat` 要不要整体对齐到参考的流式句柄形态**（`handle {streamId,
+   cancel()}` + `onChunk/onDone/onError`）。本项目是一次性 Promise，并显式
+   `APP_UNSUPPORTED_CALLBACK` 拒掉回调。这是**设计选择，不是缺陷** —— 当前行为有测试
+   钉住（`appRuntimeTransport.unit.test.ts`），作者拿到的是一句可照着改的说明。
+
+   重新核实过一遍支撑理由（结论与本节上文一致，补两条更硬的证据）：
+
+   - **树内今天没有任何 bundled app 调 `app.ai`**。4 个 app 的 `meta.json` 全都没有
+     `permissions.ai`；`icon-generator/source/ui.js` 里那三处 `app.ai.chat` /
+     `app.shell.exec` / `app.fs.*`（L8-9、L29-32）**全是注释**，`bundled-apps-permissions.test.ts`
+     的注释剥离扫描据此判定它不调 ai（该测试刻意只断言不调 `ai.getModels` 与
+     `shell.exec`，没断言 `ai.chat` —— 是因为要读注释才知道那是注释）。所以"唯一
+     消费者"准确说是**将来的**消费者，现在消费者数是 0。
+   - **它将来要桥接的 Rust 命令还不存在**。`cmd_miniapp_ai_complete` 全仓只出现在
+     本文档、`snapshot.md`、`icon-design/SKILL.md` 和上面那条注释里，`src-tauri/` 与
+     `src/server/` 都没有实现。消费侧不存在，传输侧就没有理由先建。
+
+   两条路都要求**先讨论**（CLAUDE.md：新通信模式 MUST 先与用户讨论）：回调过不了
+   postMessage 的结构化克隆，要支持就得新增一条 host→iframe 回调通道 + 注册表生命周期
+   （注册 / app deactivate 清理 / 取消语义），并解决 sidecar 常驻 SSE 与"iframe 已卸载
+   怎么收尾"；轮询式（`ai.getChunk(streamId, i)`）不动通道但发明了第三种契约，既不等于
+   参考文档也没有真实使用者。在 owner 拍板前，上表 `ai.chat` 的两行保持现状。
 2. **✅ 已定并已修：`appDataWorkspace` 在 builtin runtime 上真生效**。曾长期记为
    "待决的架构改动"，阻塞理由是"要让 builtin 也生效，得让 sidecar 的 agentDir 变成
    per-(appId, workspace)"。**那个前提是错的**：先记着"sidecar 由
