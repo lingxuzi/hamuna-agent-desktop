@@ -71,6 +71,7 @@ import { appendCronPromptToDraft } from '@/utils/cronComposerRecovery';
 import { launchSupportDiagnostics } from '@/utils/supportDiagnostics';
 import { CODEX_SUBSCRIPTION_PROVIDER_ID, NXGD_PROVIDER_ID, type PermissionMode, type McpServerDefinition, type Provider, getEffectiveModelAliases } from '@/config/types';
 import { syncMcpServerNames } from '@/components/tools/toolBadgeConfig';
+import { useMiniAppClaimAdoption } from '@/hooks/useMiniAppClaimAdoption';
 import {
   enableMcpServer,
   getAllMcpServers,
@@ -817,25 +818,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   }, [isSplitViewEnabled, agentDir, startBrowserSplitTransitionIfNeeded]);
 
   useEffect(() => {
-    if (!pendingMiniAppClaim) return;
-    const intent = pendingMiniAppClaim;
-    const input = chatInputRef.current;
-    if (!input) {
-      // The composer isn't mounted. Don't consume — the intent stays on the
-      // tab, so a later activation can still pick it up.
-      console.warn('[Chat] MiniApp claim arrived before the composer mounted; deferring.');
-      return;
-    }
-    // Adopt the MiniApp's draft rather than sending it: the MiniApp may only
-    // ever propose, the user decides. Same trust rule as Bubble Claim itself.
-    const existing = input.getCurrentValue();
-    input.setValue(existing.trim() ? `${existing}\n${intent.draft}` : intent.draft);
-    input.focus();
-    toastRef.current?.success(t('shell.toasts.miniappClaimReceived', { appId: intent.appId }));
-    onMiniAppClaimConsumed?.(intent.id);
-  }, [pendingMiniAppClaim, onMiniAppClaimConsumed, t]);
-
-  useEffect(() => {
     if (!pendingFilePreview) return;
     let cancelled = false;
     const intent = pendingFilePreview;
@@ -1166,6 +1148,8 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
 
   // Ref for SimpleChatInput to call processDroppedFiles
   const chatInputRef = useRef<SimpleChatInputHandle>(null);
+
+  useMiniAppClaimAdoption({ pendingMiniAppClaim, chatInputRef, toastRef, t, onMiniAppClaimConsumed });
 
   // Ref for DirectoryPanel to trigger refresh
   const directoryPanelRef = useRef<DirectoryPanelHandle>(null);
