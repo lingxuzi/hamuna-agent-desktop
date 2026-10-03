@@ -23,7 +23,14 @@
  * 不测什么：`ai.*` 的模型输出与 `agent.*` 的回合需要真实 Provider 凭据，属于
  * `credentialed` 池；`dialog.*` / `clipboard.*` 是 renderer 侧 Tauri 原生能力，
  * 生产上根本不会到达 sidecar（sidecar 对它们显式失败，见 miniapp-app-dispatch）。
- * 本文件对全部 30 个方法只断言"**必须给出决定，绝不能 500**"。
+ * 这两族另有两个文件用 loopback mock 替身在零成本下覆盖：
+ * `miniapp-ai-wire.integration.test.ts` 与 `miniapp-agent-wire.integration.test.ts`。
+ *
+ * 全部 34 个方法里，只有一条扫全部方法、且只断言"**必须给出决定，绝不能 500**"。
+ * 其余用例逐个断言**做对了事** —— 因为"有决定"证明不了语义：少传一个字段、
+ * 把 from/to 弄反、把 append 接到 writeFile 上，三种都能拿到 ok:true 而扫过。
+ * 三个方法（`fs.appendFile` / `fs.readdir` / `fs.rename`）原本只被那条扫覆盖，
+ * 现已各补真实磁盘往返。
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -254,6 +261,62 @@ describe('MiniApp app.* over real HTTP against a real Sidecar process', () => {
     expect(await call('fs.readFile', { path: file })).toEqual({ ok: true, result: 'wire content' });
   });
 
+
+  // 下面三个方法此前只被"全部方法都必须有决定、绝不能 500"那条扫到：跑到了，
+  // 但没有任何断言检查它**做对了事**。那种扫法对"路由存在"是证据，对"语义正确"
+  // 不是 —— 少传一个字段、把 from/to 弄反、把 append 接到 writeFile 上，三种都
+  // 能拿到 ok:true 而扫过。这里各补一条真正读写磁盘的往返。
+  it('appends rather than truncating, and keeps both halves in order', async () => {
+    const file = join(appDir, 'append.txt');
+
+    expect(await call('fs.writeFile', { path: file, data: 'first' })).toEqual({ ok: true, result: null });
+    expect(await call('fs.appendFile', { path: file, data: '-second' })).toEqual({ ok: true, result: null });
+
+    // 关键断言是内容而不是 ok：接到 writeFile 上时上面那行同样是 ok:true。
+    expect(readFileSync(file, 'utf8')).toBe('first-second');
+    expect(await call('fs.readFile', { path: file })).toEqual({ ok: true, result: 'first-second' });
+  });
+
+  it('lists every entry in the directory, not just the first or none', async () => {
+    const dir = join(appDir, 'listing');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'a.txt'), 'a', 'utf8');
+    writeFileSync(join(dir, 'b.txt'), 'bb', 'utf8');
+
+    const res = await call('fs.readdir', { path: dir });
+
+    expect(res).toEqual({ ok: true, result: ['a.txt', 'b.txt'] });
+  });
+
+  it('moves the file, so the old path is gone and the new path holds the bytes', async () => {
+    const from = join(appDir, 'rename-from.txt');
+    const to = join(appDir, 'rename-to.txt');
+    writeFileSync(from, 'movable', 'utf8');
+
+    const res = await call('fs.rename', { from, to });
+
+    expect(res).toEqual({ ok: true, result: null });
+    // 两面都断言：只看新路径存在的话，"复制了一份但没删旧的"也会通过。
+    expect(existsSync(from)).toBe(false);
+    expect(readFileSync(to, 'utf8')).toBe('movable');
+  });
+
+  it('refuses a rename whose source is outside the declared {appdata} scope', async () => {
+    // 越界检查对 copy 类方法同样成立：from 在界内而 to 在界外时必须整条拒绝，
+    // 否则就是个把文件搬出沙箱的洞。
+    const inside = join(appDir, 'inside.txt');
+    const outside = join(scratch, 'moved-out.txt');
+    writeFileSync(inside, 'stay put', 'utf8');
+
+    const res = await call('fs.rename', { from: inside, to: outside });
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('expected a failure envelope');
+    expect(res.error?.code).toBe('PERMISSION_DENIED');
+    // 拒绝必须没有副作用：源还在，目标没被造出来。
+    expect(readFileSync(inside, 'utf8')).toBe('stay put');
+    expect(existsSync(outside)).toBe(false);
+  });
   it('answers os.info with facts about the real host, not a fixture', async () => {
     const res = await call('os.info', null);
 
