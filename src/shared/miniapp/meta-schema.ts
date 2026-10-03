@@ -370,6 +370,22 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     dependencies = parsedDeps;
   }
 
+  // meta.json 是作者完全可控的输入，storage 是信任边界：形状不对必须当场拒，
+  // 不能"解析不出来就当没声明"。作者会照着 SKILL.md 的例子写，形状写错却静默
+  // 变回 undefined，表现和"没写 storage"完全一样。
+  let storage: MiniAppMetadata["storage"] | undefined;
+  if (r.storage !== undefined) {
+    const rec = asRecord(r.storage);
+    if (!rec) return err('E_SCHEMA_INVALID', 'storage must be an object');
+    let defaults: Record<string, unknown> | undefined;
+    if (rec.defaults !== undefined) {
+      const d = asRecord(rec.defaults);
+      if (!d) return err('E_SCHEMA_INVALID', 'storage.defaults must be an object');
+      defaults = d;
+    }
+    storage = { ...(defaults ? { defaults } : {}) };
+  }
+
   let i18n: MiniAppI18n | undefined;
   if (r.i18n !== undefined) {
     const parsedI18n = parseI18n(r.i18n);
@@ -394,6 +410,7 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     ...(workerKind ? { worker_kind: workerKind } : {}),
     ...(dependencies && dependencies.length > 0 ? { dependencies } : {}),
     ...(i18n ? { i18n } : {}),
+    ...(storage ? { storage } : {}),
   };
 
   const createdAt = asNumber(r.created_at);

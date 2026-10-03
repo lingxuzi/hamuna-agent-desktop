@@ -19,7 +19,7 @@
  * 与路由可达性，不验证模型输出 —— 那属于另一类测试。
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -52,7 +52,7 @@ function appDir(): string {
   return join(sandboxHome, 'miniapps', APP_ID);
 }
 
-function writeMeta(permissions: unknown): void {
+function writeMeta(permissions: unknown, storage?: unknown): void {
   mkdirSync(appDir(), { recursive: true });
   writeFileSync(
     join(appDir(), 'meta.json'),
@@ -65,6 +65,7 @@ function writeMeta(permissions: unknown): void {
       version: 1,
       min_host_version: '0.0.1',
       permissions,
+      ...(storage === undefined ? {} : { storage }),
     }),
     'utf8',
   );
@@ -338,6 +339,58 @@ describe('storage round trip', () => {
     writeFileSync(join(appDir(), 'storage.json'), '{ not json', 'utf8');
     const res = await dispatchMiniAppApp('storage.get', APP_ID, { key: 'a' });
     expect(res).toEqual({ ok: true, result: undefined });
+  });
+
+  it('falls back to meta.json storage.defaults when the key was never written', async () => {
+    // SKILL.md:458 教的例子就是 defaults: {items: []}，作者据此写 get('items')
+    // 并直接 .map()。修复前宿主读都不读这个键，返回 undefined，作者的代码在
+    // 自己那边炸，而宿主全程 ok:true —— 声明过却不生效比不声明更难查。
+    writeMeta({}, { defaults: { items: [], theme: 'dark' } });
+
+    expect(await dispatchMiniAppApp('storage.get', APP_ID, { key: 'items' })).toEqual({
+      ok: true,
+      result: [],
+    });
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'theme' })).result).toBe(
+      'dark',
+    );
+    // 没声明过的键仍然是 undefined —— defaults 是回落，不是通配。
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'ghost' })).result)
+      .toBeUndefined();
+  });
+
+  it('never lets a default paper over a real write, including a stored null', async () => {
+    // 用 ?? 回落会在这里错：作者 set(key, null) 存的就是 null，那是一次真实写入，
+    // 不是"没有值"。回落必须由键是否存在决定，而不是由值是否 falsy 决定。
+    writeMeta({}, { defaults: { items: ['preset'], label: 'preset' } });
+
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: 'items', value: ['mine'] });
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'items' })).result).toEqual(
+      ['mine'],
+    );
+
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: 'label', value: null });
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'label' })).result).toBeNull();
+
+    // remove 之后回落重新生效：默认值只在"键不存在"时兜底，删掉就是删掉了。
+    expect((await dispatchMiniAppApp('storage.remove', APP_ID, { key: 'label' })).result).toBe(
+      true,
+    );
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'label' })).result).toBe(
+      'preset',
+    );
+  });
+
+  it('keeps defaults off the write path so they never reach storage.json', async () => {
+    // defaults 是只读回落。把它们当种子写进 storage.json，会让 get 永远命中"真实"
+    // 值，作者再 remove 掉也回不到初值 —— 回落就只对第一次调用有效。
+    //
+    // 变异注记：只往内存 data 上塞而不落盘（M3）**测不出来也不用测** —— get 分支
+    // 必然就地 return，后面的 remove/set 分支根本走不到，那个赋值是死代码。
+    // 真正会漏的是落盘那一步，本条正是钉它。
+    writeMeta({}, { defaults: { items: [] } });
+    await dispatchMiniAppApp('storage.get', APP_ID, { key: 'items' });
+    expect(existsSync(join(appDir(), 'storage.json'))).toBe(false);
   });
 
   it('rejects a storage call with no key', async () => {

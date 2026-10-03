@@ -27,6 +27,49 @@ describe('parseMiniAppMetadata', () => {
     }
   });
 
+  it('parses storage.defaults so the declared fallback actually reaches dispatch', () => {
+    // 这条存在的理由：storage 块此前**整个**被 parseMiniAppMetadata 静默丢掉，
+    // 于是 5 个 bundled meta 与 SKILL.md 都在教作者一个不存在的配置。schema
+    // 层先钉住"声明能进到 meta 里"，dispatch 层再钉住"get 真的回落"。
+    const r = parseMiniAppMetadata({
+      ...VALID,
+      storage: { defaults: { items: [], theme: 'dark' } },
+    });
+    expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+    if (r.ok) {
+      expect(r.result.storage?.defaults).toEqual({ items: [], theme: 'dark' });
+    }
+  });
+
+  it('keeps a storage block with no defaults, without inventing a file name', () => {
+    // 5 个 bundled meta 都写 {file, defaults}。file 是**不兑现**的字段（宿主恒定
+    // 写 <appdata>/storage.json），所以它不该出现在类型里 —— 放进类型只会让
+    // "schema 认得"和"运行时有用"脱钩。这里钉住 defaults 缺省时不报错、也不
+    // 凭空造出 file。
+    const r = parseMiniAppMetadata({ ...VALID, storage: {} });
+    expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+    if (r.ok) {
+      expect(r.result.storage).toEqual({});
+    }
+  });
+
+  it('rejects a malformed storage block instead of silently treating it as absent', () => {
+    // meta.json 是作者完全可控的输入。形状写错却静默当"没声明"，症状和作者
+    // 忘了写 storage 一模一样 —— 这是最难查的那一类。
+    for (const bad of ['storage.json', 42, [], null]) {
+      expect(
+        parseMiniAppMetadata({ ...VALID, storage: bad }).ok,
+        `storage: ${JSON.stringify(bad)} should be rejected`,
+      ).toBe(false);
+    }
+    for (const bad of ['x', 7, []]) {
+      expect(
+        parseMiniAppMetadata({ ...VALID, storage: { defaults: bad } }).ok,
+        `storage.defaults: ${JSON.stringify(bad)} should be rejected`,
+      ).toBe(false);
+    }
+  });
+
   it('rejects non-object input', () => {
     expect(parseMiniAppMetadata('hi').ok).toBe(false);
     expect(parseMiniAppMetadata(null).ok).toBe(false);

@@ -215,8 +215,7 @@ app.onDeactivate(() => clearInterval(timer));
     }
   },
   "storage": {
-    "file": "storage.json",         // 必填
-    "defaults": {}                  // 可选，默认 KV
+    "defaults": {}                  // 可选。get(key) 未命中时回落的初值
   }
 }
 ```
@@ -224,6 +223,10 @@ app.onDeactivate(() => clearInterval(timer));
 > **`permissions` 是嵌套对象**（`fs: {read, write}` / `shell: {allow}` / `net: {allow}`），不是扁平数组。写成 `"fs": []` 会被 schema 校验拒绝。
 >
 > **路径模板**：`{appdata}` = 本 app 数据目录（始终可读写）、`{workspace}` = 当前工作区。**不要写绝对路径**，schema 会拒。`app.fs.*` 收到的路径必须落在已声明前缀内，否则宿主返回 `PERMISSION_DENIED`。
+>
+> **持久化落点固定**：KV 恒定写在 `<appdata>/storage.json`，**不由 meta.json 指定**。`storage.file` 曾被标成"必填"，但宿主从来不读它 —— 声明什么名字都还是 `storage.json`。落哪个文件是安全边界：`app.storage` 是免权限 API，不该由作者决定它写哪。`app.fs.*` 才是要自己管文件的那条路。
+>
+> **`storage.defaults` 是真的会生效的**：`app.storage.get(key)` 在该 key 从未写入时返回这里的初值（照上面的例子写，`get('items')` 拿到 `[]` 而不是 `undefined`）。它只做回落：作者 `set(key, null)` 存下的 `null` 就是存下的值，不会被默认值顶掉；`remove` 之后回落重新生效。声明了但形状写错（不是对象）会被 schema 当场拒掉。
 
 ### CDN 依赖
 
@@ -455,7 +458,7 @@ button {
     "net": { "allow": [] }
   },
   "entry": "source/index.html",
-  "storage": { "file": "storage.json", "defaults": { "items": [] } }
+  "storage": { "defaults": { "items": [] } }
 }
 ```
 

@@ -792,6 +792,37 @@ MessagePort 之类永远不等于 `contentWindow`。而留着它这条通道在�
 | `agent.ensureSession` | `({sessionName, appDataWorkspace})` → 返回带 `sessionId` 的会话 | `{appDataWorkspace?}`；返回 `{session_id, sessionId, app_data_workspace}` | `sessionName` 无对应（会话 id 由 `miniapp_<appId>_<runId>` 决定）；`appDataWorkspace` 校验 / 归一 / 回显都做，且**真生效**（由它决定该 session 的 `--agent-dir`，builtin 与 external 一致）。camelCase 别名已加 |
 | `agent.run` opts | `{sessionId, appDataWorkspace, displayText, contextFiles}` | `{run_id, model, timeout_ms, sessionId, appDataWorkspace}` | `sessionId` **传了就校验**（对不上即 `INVALID_PARAMS`，不再静默忽略）；`appDataWorkspace` 也生效，但 cwd 由 **session** 决定，所以与已建 session 不一致时明确报错；`displayText` / `contextFiles` 不做，理由见 §6 |
 
+### `meta.json` 的 `storage` 块：兑现一半，删掉另一半
+
+对照 `bundled-skills/miniapp-creator/SKILL.md` 与 5 个 bundled meta 时发现的
+死配置，**两个字段此前都没被兑现过**：`parseMiniAppMetadata` 逐字段挑读，
+从来没读过 `r.storage`，所以整个块被静默丢掉 —— 不是拒绝，是当它不存在。
+
+| 字段 | 文档承诺 | 修复前实际 | 现在的处置 |
+|---|---|---|---|
+| `storage.file` | SKILL.md 标"必填" | 恒定写 `<appdata>/storage.json` | **从文档与类型中删除** |
+| `storage.defaults` | SKILL.md 给 `{items: []}` 的例子 | `get('items')` 返回 `undefined` | **已实现** |
+
+**为什么 `file` 是删而不是实现。** 它零产品价值（每个作者都要 `storage.json`），
+却要把一条路径穿越面加进**免权限**的 API —— `app.fs.*` 还要先过 `permissions.fs`，
+`app.storage` 不需要。落哪个文件是安全边界，恒定比可配更正确。连带删掉全仓
+0 引用的 `MiniAppSource.storagePath`：一个没人读的字段是关于"数据落在哪"的
+第二句、更安静的谎。tsc 全绿即证明它确实没有引用方。
+
+**`defaults` 为什么必须实现。** 这是会**静默弄坏作者代码**的那一半：作者照
+SKILL.md 的例子写 `get('items')` 直接 `.map()`，拿到 `undefined` 崩在作者那边，
+而宿主全程 `ok:true` —— 声明过却不生效比不声明更难查。回落由**键是否存在**决定，
+不是值是否 falsy：作者 `set(key, null)` 存下的 `null` 是真实写入，不能被默认值顶掉。
+回落也**不落盘**（否则 `get` 一次就把初值变成"真实值"，作者 `remove` 后再也回不去）。
+meta.json 是作者完全可控的输入，所以 `storage` / `storage.defaults` 形状不对
+**当场拒**（`E_SCHEMA_INVALID`），不静默当"没声明"。
+
+护栏：`meta-schema.test.ts`（解析 + 形状拒绝）、`miniapp-app-dispatch.integration.test.ts`
+（回落 / 真实写入优先 / 不落盘）。变异 M1 忽略 defaults、M2 用 `??` 判回落、
+M4 schema 丢字段、M5 形状不拒、M6 回落时落盘 —— 全部被杀。M3（只往内存 `data`
+塞而不落盘）**存活但语义等价**：`get` 分支必然就地 return，赋值是死代码，
+已在测试注释里记明。
+
 **已修的传输层缺陷**：`dispatch` 的 flush 队列在 `host.ready` 的 message
 listener 里执行 postMessage，不在 Promise executor 内。参数不可结构化克隆时
 （例如作者按参考给 `ai.chat` 传 `onChunk`）抛出的 `DataCloneError` 会变成

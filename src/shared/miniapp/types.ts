@@ -145,6 +145,15 @@ export interface MiniAppMetadata {
   permissions: MiniAppPermissions;
   /** Optional per-locale overrides for `name` / `description` / `tags`. */
   i18n?: MiniAppI18n;
+  /**
+   * `storage.defaults` —— `app.storage.get(key)` 在键缺失时回落的初值。
+   *
+   * 只声明真正兑现的那一半。`storage.file` 曾被 SKILL.md 标成"必填"，但宿主
+   * 恒定写 <appdata>/storage.json，从来没读过这个键：把它放进类型只会让
+   * "类型里有"和"运行时有用"彻底脱钩。持久化文件名是安全边界 —— 免权限的
+   * API 不该由作者决定落哪个文件，恒定比可配更正确。
+   */
+  storage?: { defaults?: Record<string, unknown> };
   ai_context?: string | null;
 }
 
@@ -156,7 +165,6 @@ export interface MiniAppSource {
   appId: string;
   rootPath: string;
   meta: MiniAppMetadata;
-  storagePath: string;
 }
 
 /** invoke 通用入参/出参。 */

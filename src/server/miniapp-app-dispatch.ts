@@ -68,6 +68,7 @@ interface Resolved {
   appdata: string;
   workspaceDir: string | null;
   perms: MiniAppPermissions;
+  storageDefaults: Record<string, unknown>;
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -253,6 +254,7 @@ export async function dispatchMiniAppApp(
     appdata: miniappAppRoot(appId),
     workspaceDir: ctx.workspaceDir ?? null,
     perms: meta.permissions ?? {},
+    storageDefaults: meta.storage?.defaults ?? {},
   };
   const params = asRecord(rawParams);
   const [group, name] = method.split('.');
@@ -723,7 +725,18 @@ async function dispatchStorage(
     } catch {
       data = {};
     }
-    if (name === 'get') return ok(data[key]);
+    // meta.json 声明的 storage.defaults：键缺失时回落到初值，而不是 undefined。
+    // 作者照 SKILL.md 的例子写 get('items') 期望拿到 []，拿到 undefined 时
+    // 崩在作者自己的代码里，而宿主全程 ok —— 声明过却不生效比不声明更难查。
+    // 注意用 hasOwnProperty 而不是 ??：作者显式 set(key, null) 存的就是 null，
+    // 那是一次真实写入，不能被默认值悄悄顶掉。
+    if (name === 'get') {
+      if (key in data) return ok(data[key]);
+      if (Object.prototype.hasOwnProperty.call(ctx.storageDefaults, key)) {
+        return ok(ctx.storageDefaults[key]);
+      }
+      return ok(undefined);
+    }
     if (name === 'remove') {
       if (!(key in data)) return ok(false);
       delete data[key];
