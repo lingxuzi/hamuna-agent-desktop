@@ -27,7 +27,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { APP_ERROR_CODES } from '../shared/miniapp/app-protocol';
-import { buildClaudeSessionEnv, resolveClaudeCodeCli } from './agent-session';
+import {
+  buildClaudeSessionEnv,
+  getSessionProviderEnv,
+  resolveClaudeCodeCli,
+  startOneShotBridge,
+} from './agent-session';
 import { ensureDirSync } from './utils/fs-utils';
 import { applyProviderContextWindowSuffix } from './utils/model-capabilities';
 import { SUBSCRIPTION_PROVIDER_ID } from '../shared/config-types';
@@ -227,54 +232,83 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
   const { query } = await import('@anthropic-ai/claude-agent-sdk');
   const model = resolveHostModel(p.model);
   // 补全永远走宿主已配置的那条通路，MiniApp 不注入 providerEnv —— 它没有 Key，
-  // 也不该有能力把请求指向一个未在宿主配置里登记过的上游。
+  // 也不该有能力把请求指向一个未在宿主配置里登记过的上游。传 `undefined` 在
+  // `buildClaudeSessionEnv` 里读作"沿用会话当前 provider"，正是这里要的安全性质。
   const providerEnv = undefined;
+
+  // 上面那句"沿用当前 provider"是有代价的：调用方**必须自己**把这个 provider
+  // 配套的两样东西补齐。之前这里硬传 `providerId: SUBSCRIPTION_PROVIDER_ID`，
+  // 而真正决定走直连还是 bridge 的是 `effectiveProviderEnv`（即 configState 里
+  // 那个真实 provider）—— 两者一旦对不上，OpenAI 协议的上游会同时命中
+  // "按订阅处理"（providerId）和"需要 bridge token"（apiProtocol === 'openai'）
+  // 两条规则，而 token 从来没人注册，`buildClaudeSessionEnv` 当场抛。
+  // 后果是 app.ai 对**任何**跑在 OpenAI 兼容 provider 上的用户都是坏的，
+  // 而自定义 provider 里这类占多数（实测：宿主默认 provider 正是 apiProtocol
+  // 'openai'，一次真实补全直接抛 "requires a bridgeToken"）。
+  const activeProvider = getSessionProviderEnv();
+  const providerId = activeProvider?.providerId ?? SUBSCRIPTION_PROVIDER_ID;
+
+  // bridge 是 per-subprocess 的，不能复用活动会话那个 token —— 两个子进程共享
+  // 一条路由时，上游切换与中止会互相干扰。与 title-generator 同款处理。
+  const bridge =
+    activeProvider?.apiProtocol === 'openai'
+      ? startOneShotBridge(activeProvider, model, 'miniapp-ai')
+      : null;
 
   // 注册到中止表，让 app.ai.cancel 有一个真实的中止点。
   const controller = registerCall(p.appId, p.runId);
 
-  const cliQuery = query({
-    prompt: (async function* () {
-      yield {
-        type: 'user' as const,
-        message: { role: 'user' as const, content: p.prompt },
-        parent_tool_use_id: null,
-        session_id: randomUUID(),
-      };
-    })(),
-    options: {
-      maxTurns: 1,
-      sessionId: randomUUID(),
-      cwd: appAiCwd(),
-      settingSources: ['project'],
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      pathToClaudeCodeExecutable: resolveClaudeCodeCli(),
-      env: buildClaudeSessionEnv(providerEnv, model, {
-        providerId: SUBSCRIPTION_PROVIDER_ID,
-      }),
-      systemPrompt: p.systemPrompt?.trim() || SYSTEM_PROMPT,
-      thinking: { type: 'disabled' },
-      effort: 'low',
-      includePartialMessages: false,
-      persistSession: false,
-      mcpServers: {},
-      tools: [],
-      abortController: controller,
-      ...(model
-        ? { model: applyProviderContextWindowSuffix(model, SUBSCRIPTION_PROVIDER_ID) }
-        : {}),
-    },
-  });
-
   const timeoutMs = p.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // 中止与超时的结论只在这里成型。收尾有两条路径 —— iterator 正常收尾，以及
   // SDK 因 abort 直接抛出（实测是后者）—— 它们共用同一个判断，才不会各说各话。
+  //
+  // 刻意留在 try **外面**：`const` 的作用域是块级，声明在 try 块里的常量在
+  // catch / finally 里根本不可见，而下面两处收尾都要用它。
   const terminalFailure = () =>
     controller.signal.aborted
       ? fail(APP_ERROR_CODES.HOST_ERROR, 'app.ai was cancelled')
       : fail(APP_ERROR_CODES.HOST_ERROR, `app.ai timed out after ${timeoutMs}ms`);
+
+  // try 从这里就开始，而不是从下面的 race 开始：`buildClaudeSessionEnv` 是在
+  // `query({...})` 的实参里求值的，它抛错时**根本走不到**后面的 finally，
+  // bridge token 就会留在 bridge-registry 里按调用次数单调增长。曾经的
+  // "requires a bridgeToken" 正是这样一个同步抛出。
   try {
+    const cliQuery = query({
+      prompt: (async function* () {
+        yield {
+          type: 'user' as const,
+          message: { role: 'user' as const, content: p.prompt },
+          parent_tool_use_id: null,
+          session_id: randomUUID(),
+        };
+      })(),
+      options: {
+        maxTurns: 1,
+        sessionId: randomUUID(),
+        cwd: appAiCwd(),
+        settingSources: ['project'],
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        pathToClaudeCodeExecutable: resolveClaudeCodeCli(),
+        env: buildClaudeSessionEnv(providerEnv, model, {
+          bridgeToken: bridge?.token,
+          providerId,
+        }),
+        systemPrompt: p.systemPrompt?.trim() || SYSTEM_PROMPT,
+        thinking: { type: 'disabled' },
+        effort: 'low',
+        includePartialMessages: false,
+        persistSession: false,
+        mcpServers: {},
+        tools: [],
+        abortController: controller,
+        ...(model
+          ? { model: applyProviderContextWindowSuffix(model, providerId) }
+          : {}),
+      },
+    });
+
     const outcome = await Promise.race([
       (async (): Promise<CompletionOutcome> => {
         for await (const message of cliQuery) {
@@ -323,7 +357,9 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
     if (controller.signal.aborted) return terminalFailure();
     return fail(APP_ERROR_CODES.HOST_ERROR, e instanceof Error ? e.message : String(e));
   } finally {
-    // 正常完成 / 超时 / 抛错都要摘除，否则注册表会随调用次数单调增长。
+    // 正常完成 / 超时 / 抛错都要摘除。bridge token 漏摘会留在 bridge-registry
+    // 里按调用次数单调增长，和 abort 注册表是同一类泄漏。
+    bridge?.release();
     // cancel 已经摘过一次，重复 release 是幂等的。
     releaseCall(p.appId, p.runId);
   }
