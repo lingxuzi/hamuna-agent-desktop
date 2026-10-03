@@ -275,12 +275,17 @@ sidecar 那份同时是纵深与直连工具链的落点（renderer 是 WebView�
 `src/server/__tests__/miniapp-ai-outcome.unit.test.ts`，fixture 是本机实跑
 Sidecar 打出来的原文裁剪，不是照文档编的。
 
-**顺带查明**：`app.ai` 固定 `providerEnv: undefined` + `providerId:
-SUBSCRIPTION_PROVIDER_ID`，而 `buildClaudeSessionEnv` 在订阅分支会**主动清掉**
+**顺带查明**（此处曾写错过，已订正）：`app.ai` 固定 `providerEnv: undefined` +
+`providerId: SUBSCRIPTION_PROVIDER_ID`。**只**设进程环境变量里的
+`ANTHROPIC_BASE_URL` 是无效的——`buildClaudeSessionEnv` 在订阅分支会**主动清掉**
 继承来的 `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`
-（日志：`[env] ANTHROPIC_BASE_URL cleared (using Anthropic default)`）。所以
-想用 loopback mock 替身验证补全链路是**行不通**的——宿主配置没被 push 进去时，
-它只走订阅通路。这一点决定了"真实模型回合"只能落在 credentialed 池。
+（日志：`[env] ANTHROPIC_BASE_URL cleared (using Anthropic default)`）。
+
+但**用 loopback mock 替身验证补全链路是行得通的**：先
+`POST /api/provider/set` 把宿主 provider 推进去（`baseUrl` 指向本地 mock），
+之后 `buildClaudeSessionEnv` 会打出 `[env] ANTHROPIC_BASE_URL set to: …`，
+SDK 子进程真的被 spawn、真的打 `POST /v1/messages?beta=true`、真的解析 SSE。
+所以下面的「真实模型回合」验证是**零成本**的，不必留在 credentialed 池。
 
 ### 验证状态（截至本轮）
 
@@ -310,16 +315,20 @@ SUBSCRIPTION_PROVIDER_ID`，而 `buildClaudeSessionEnv` 在订阅分支会**主�
   `ok:true` + "Not logged in…"，修复后返回 `HOST_ERROR` +
   `(authentication_failed)`。这条**零成本**：复现条件就是"没有凭据"。
   14 条单测钉住判定表，关掉错误判定有 3 条转红。
+- **`app.ai` 全链路**——`src/server/__tests__/miniapp-ai-wire.integration.test.ts`
+  把宿主 provider 指向一个 loopback mock（`POST /api/provider/set`），然后
+  `ai.complete` 真的 spawn SDK 子进程、真的打 `POST /v1/messages?beta=true`、
+  真的解析 SSE 回来，并断言**拿到的就是 mock 回的那段文本**且 mock 确实收到过
+  requests。`ai.chat` 的参考 messages 数组形态也实跑通了。**零成本**。
 
-**未验证（不是"没写"，是"跑了要花用户的钱"）**：
+**仍未验证（需要真实 Provider，属于 credentialed）**：
 
-- `app.ai.complete` / `app.agent.run` 的**真实模型回合**。这两条会调用
-  `~/.hamuna/config.json` 里的真实 Provider 凭据产生付费请求，属 `credentialed`
-  池。当前只验证到"参数校验 + 权限判定 + 分发路由 + 入参归一 + 错误判定"这一层，
-  **从 SDK 真正返回一段模型生成的 completion / turn 成功这一段没有实跑证据**。
-  注意这层**无法**用 loopback mock 替身绕过：`app.ai` 固定走订阅通路，
-  `buildClaudeSessionEnv` 会清掉继承来的 `ANTHROPIC_BASE_URL`（见上节）。要补就在 `credentialed` 池加一条
-  无凭据时 self-skip 的冒烟测试，不要塞进默认 CI。
+- **真实模型回合**（`app.ai.complete` / `app.agent.run` 打到真实 Anthropic 或
+  用户配置的第三方 Provider）。上面那条验证覆盖到 HTTP 边界为止：请求怎么组装、
+  SDK 怎么 spawn、SSE 怎么解析、信封怎么回全都验过了，**没有**覆盖的是
+  "真实上游是否接受这个请求形状、真实模型是否真的返回内容"——那是上游的契约，
+  不是我们的代码。`app.agent.run` 还要额外经过 Rust 起的**专用 sidecar**，
+  路径与 `app.ai` 不同，仍未实跑。
 
 本节其余条目（`contextFiles` 快照、流式回调、`displayText`、
 `max_tokens_per_request`）都是**有意不对齐**，理由见上；

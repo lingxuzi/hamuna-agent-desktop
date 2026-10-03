@@ -32,6 +32,10 @@ const CHILD_PROCESS_ALLOWLIST = new Set([
   // child runs against a temp HOME + temp workspace, needs no credentials, and
   // the only socket involved is the reserved 127.0.0.1 port.
   'src/server/__tests__/miniapp-app-wire.integration.test.ts',
+  // Same shape as above, plus an in-process loopback HTTP mock standing in for
+  // the model provider. It lets the real app.ai chain (SDK spawn, SSE parse,
+  // envelope) run in CI for free, so it never touches a real credential.
+  'src/server/__tests__/miniapp-ai-wire.integration.test.ts',
 ]);
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g');
 
