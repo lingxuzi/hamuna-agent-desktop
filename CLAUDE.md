@@ -277,7 +277,13 @@ npx vitest run --project dom -- src/renderer/components/chat-input/SimpleChatInp
 # 按名称过滤
 npx vitest run --project unit -- -t "should normalize"
 # Rust
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml          # Windows 上必须用下面的脚本代替
+# Windows：裸 cargo test 会编译通过但每个测试二进制启动即死（0xC0000139），一个测试都不会跑。
+# 根因是 tauri-build 的 manifest 只经 `cargo:rustc-link-arg-bins` 链给 bin，test harness 拿不到，
+# 于是 comctl32!TaskDialogIndirect 解析失败。脚本给已链接的 harness 旁挂一份 .exe.manifest 绕过，
+# 不动构建系统。根因与已排除的修法见 specs/tech_docs/miniapp_architecture.md §7。
+powershell -ExecutionPolicy Bypass -File .\scripts\test_rust_windows.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\test_rust_windows.ps1 -Filter miniapp  # 支持 -TestThreads / -SkipBuild
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check  # 格式检查（使用 rust-toolchain.toml pin 的 rustfmt）
 cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D clippy::disallowed_methods -D clippy::disallowed_macros
 # Windows 构建缓存/CSP 问题
@@ -300,7 +306,7 @@ Rust 工具链由仓库根目录 `rust-toolchain.toml` 固定，开发机和 CI 
 
 测试不是为了追覆盖率，而是把重要行为、历史事故和架构边界变成可执行契约；AI 开发时 MUST 把它当成开发回合内的护栏，主动跑、即时修。
 
-当前 Vitest 四池（`vitest.config.ts`，完整不变量见 `pit_of_success.md`「Test classification」）：`unit` 纯逻辑快池（含 server `*.unit.test.ts`）；`dom` = `*.test.tsx`（jsdom）；`integration` = CI-safe 后端集成池（`*.integration.test.ts`，串行）；`credentialed` = 真实 Provider / SDK / network smoke（显式本地跑，不进 `npm test` / CI）。`unit` / `integration` 禁止非 loopback 出站；Rust 走 `cargo test`，`npm test` 不覆盖。
+当前 Vitest 四池（`vitest.config.ts`，完整不变量见 `pit_of_success.md`「Test classification」）：`unit` 纯逻辑快池（含 server `*.unit.test.ts`）；`dom` = `*.test.tsx`（jsdom）；`integration` = CI-safe 后端集成池（`*.integration.test.ts`，串行）；`credentialed` = 真实 Provider / SDK / network smoke（显式本地跑，不进 `npm test` / CI）。`unit` / `integration` 禁止非 loopback 出站；Rust 走 `cargo test`（**Windows 上换成 `scripts/test_rust_windows.ps1`**，见开发命令节），`npm test` 不覆盖。
 
 - **操作速查**：组件测试的 `*.test.tsx` 只进 `dom`，不会被 `test:unit` 覆盖；旧 `stateful` 池已拆成 `integration`（stateful but deterministic，进 CI）和 `credentialed`（真实密钥/真实网络，显式本地跑）；`test:changed` 只适合本地快速回归，改测试分层、CI、runtime/session 边界时仍要跑 `test:classification` + 对应全池。
 - **何时补测试**：修 bug MUST 补能复现该 bug 的回归测试；新增红线 helper / 纯函数 MUST 配单测；改 pure policy / parser / queue / config 判断，优先进 `unit`；改 session / runtime / turn / transcript / IO / security 边界时，补 integration / boundary guard，能静态拦的用 lint / depcruise / clippy。
@@ -308,7 +314,7 @@ Rust 工具链由仓库根目录 `rust-toolchain.toml` 固定，开发机和 CI 
 - **怎么写**：把决策逻辑抽成纯函数（Functional Core / Imperative Shell），副作用留薄外壳；server 测试文件名必须显式分层：`*.unit.test.ts` / `*.integration.test.ts` / `*.credentialed.test.ts`，不允许裸 `src/server/**/*.test.ts`；涉及时间 MUST 注入时钟 / `vi.useFakeTimers`，涉及本地日期 MUST pin `process.env.TZ`。
 - **稳定性红线**：默认测试必须 deterministic，不依赖真实网络、真实密钥、真实 HOME；需要真实 Provider / SDK / upstream 的测试只能进 `credentialed`，无 secret 时 self-skip；测试失败不许靠弱化断言或 `skip` 糊过去，先判断是产品 bug 还是测试契约漂移，订正不变量必须有理由。
 - **命令纪律**：改纯逻辑后跑 `npm run test:unit`；改组件 / `.test.tsx` 后跑 `npm run test:dom`；改后端 session / runtime / persistence / IO / security 后跑 `npm run test:integration` 和 `npm run test:classification`；需要本地 deterministic 全量 Vitest 才跑 `npm test`；真实供应商链路才手动跑 `npm run test:credentialed`。
-- **CI gate**：PR + push 到 `dev/**` / `main` 跑 typecheck + lint + `test:classification` + `test:unit` + `test:dom` + `test:integration` + `build:server` / `build:bridge` / `build:cli` / `build:web` + `cargo test` + Clippy redline；credentialed 与完整 `tauri build` 不进普通 CI。
+- **CI gate**：PR + push 到 `dev/**` / `main` 跑 typecheck + lint + `test:classification` + `test:unit` + `test:dom` + `test:integration` + `build:server` / `build:bridge` / `build:cli` / `build:web` + `cargo test`（Windows runner 上必须走 `scripts/test_rust_windows.ps1`，否则 `cargo test` 会假绿：编译过、零测试执行）+ Clippy redline；credentialed 与完整 `tauri build` 不进普通 CI。
 
 ## Git 与工作流
 

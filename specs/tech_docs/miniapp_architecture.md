@@ -206,6 +206,31 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
     `workspace_scope` 是同一类口子：Agent 有工具、能写文件，放开就等于任意文件写。
     当前没有可信的授权记录来源，空开不如锁死。
 
+### 验证状态（截至本轮）
+
+**已实际执行验证**：
+
+- Rust 管理层（`create` / `install` / `list` / `source` / `uninstall`）——
+  21/21，见 §7。
+- 端到端 wire 契约——`src/server/__tests__/miniapp-app-wire.integration.test.ts`
+  起真实 Sidecar 子进程，用真实 loopback HTTP 驱动整个 `app.*` 面：请求信封、
+  状态码、错误载荷形状、跨进程 storage/fs 往返、权限 fail-closed、越界路径拒绝、
+  非 kebab appId 在路由层被拒，以及 `listAppMethods()` 里每个方法都有决定且不 500。
+  两次变异验证确认它不是空跑：把权限闸改成 `if (false)` 只有两条安全用例转红；
+  把路由的 400 改成 200 只有路由那条转红。
+
+**未验证（不是"没写"，是"跑了要花用户的钱"）**：
+
+- `app.ai.complete` / `app.agent.run` 的**真实模型回合**。这两条会调用
+  `~/.hamuna/config.json` 里的真实 Provider 凭据产生付费请求，属 `credentialed`
+  池。当前只验证到"参数校验 + 权限判定 + 分发路由"这一层，**从 SDK 真正返回
+  completion / turn 成功这一段没有实跑证据**。要补就在 `credentialed` 池加一条
+  无凭据时 self-skip 的冒烟测试，不要塞进默认 CI。
+
+本节其余条目（`contextFiles` 快照、流式回调、`displayText`、
+`appDataWorkspace`、`max_tokens_per_request`）都是**有意不对齐**，理由见上；
+不要在没有新证据的情况下把它们当 bug 修掉。
+
 ### 与 `miniapp-dev` 参考的已确认分歧（对齐审计，2025）
 
 逐条比对 `miniapp-dev/api-reference.md` 与本实现，**未对齐**的项如下。方法名
@@ -279,7 +304,7 @@ iframe CSP 是 `default-src 'none'`，作者**没有任何办法**加载第三�
 
 ---
 
-## 7. Windows 上 `cargo test` 跑不起来（根因已定位）
+## 7. Windows 上跑 Rust 测试（已解决，用 `scripts/test_rust_windows.ps1`）
 
 **症状**：`cargo test` 编译链接都过，但测试二进制一启动就死，退出码
 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`），没有任何测试输出。看起来像
@@ -292,32 +317,37 @@ iframe CSP 是 `default-src 'none'`，作者**没有任何办法**加载第三�
    `comctl32.dll!TaskDialogIndirect`。
 2. 逐个 import 校验 28 个 DLL 的导出表，只有这一个对不上。
 3. 本机 `C:\Windows\System32\comctl32.dll` 只有 119 个导出，是 **v5** 版本，
-   没有 `TaskDialog*`。
-4. v6 版本在 `WinSxS\amd64_microsoft.windows.common-controls_..._6.0.19041.6926_...`
+   没有 `TaskDialog*`；v6 在 `WinSxS\amd64_microsoft.windows.common-controls_...`
    下，**只有当可执行文件内嵌了声明 `Microsoft.Windows.Common-Controls` 6.0.0.0
-   依赖的 manifest 时**，装载器才会激活它。
-5. `hamuna.exe` 内嵌了这份 manifest（能跑），**测试二进制完全没有 manifest**
-   （连 `assemblyIdentity` 都没有）→ 装载器退回 System32 的 v5 → 入口点丢失。
+   依赖的 manifest 时**装载器才会激活它。
+4. `tauri_build::build()` 把这份 manifest 编进 `OUT_DIR/resource.lib`，并用
+   `cargo:rustc-link-arg-bins` 链接——**只给 bin target**。lib 的 test harness
+   不是 bin target，拿不到它。
 
 来源是 `tauri-plugin-dialog` → `rfd`：它用 `TaskDialogIndirect`，而 Tauri 只给
 **app 二进制**内嵌 manifest，不给测试二进制。
 
-**为什么没有直接修掉**：试过在 `build.rs` 里用
-`cargo:rustc-link-arg=/MANIFESTINPUT:<file>` 给所有目标补一份 manifest。
-`--lib` 目标确实修好了（777 个测试可以 `--list`），但 **bin 目标会
-`CVT1100` / `LNK1123`**——tauri 自己那份 manifest 与外加的那份在 CVTRES 阶段
-冲突，连 `cargo build` 都会被弄挂。已回滚，不要重犯同一个想法。
-（`cargo:rustc-link-arg-tests` 也不可用：Cargo 没有这个指令，只有
-`-bins` / `-benches` / `-examples` / `-cdylib` / `-bin=NAME`，
-无法只作用于测试目标。）
+**解法：给已链接好的测试二进制补一个旁挂 manifest，不动构建系统。**
 
-**要修的话**，正解是让 Tauri 侧或一个资源嵌入 crate（`winresource` 之类）把
-manifest 写进**测试目标**的 `.res`，而不是再给链接器加一份输入。
+`scripts/test_rust_windows.ps1` 跑 `cargo test --no-run`，找到最新的
+`app_lib-*.exe`，在它旁边写 `<binary>.exe.manifest`（Windows 官方的 external
+manifest 机制），再直接执行 harness。支持 `-Filter` / `-TestThreads` /
+`-SkipBuild`。
 
-**影响面**：MiniApp 的 Rust 管理层（`create` / `install` / `list` / `source` /
-`uninstall`）因此**未经执行验证**，只过了 `cargo check --offline --tests`。
-sidecar 侧的全部能力不受影响，已由 `miniapp-app-dispatch.integration.test.ts`
-与 `miniapp-dispatch-routing.integration.test.ts` 覆盖。
+**不要再试的修法**（都试过并回滚了）：
+
+- `cargo:rustc-link-arg-tests`：Cargo 没有这个指令；且本包没有 `[[test]]`
+  target，Cargo 直接拒绝（`does not have a test target`）。
+- `cargo:rustc-link-arg`（无后缀）：与 tauri-build 的 `-bins` 冲突，同一个
+  `.lib` 在链接行出现两次 → `CVT1100` + `LNK1123`，**连 `cargo build` 都挂**。
+- 往 `build.rs` 里塞 `/MANIFESTINPUT`：同样是与 tauri 那份在 CVTRES 阶段冲突。
+
+**影响面**：无。MiniApp 的 Rust 管理层（`create` / `install` / `list` /
+`source` / `uninstall`）现已**实际执行验证**，MiniApp Rust 测试 21/21 通过。
+全量 758 passed / 17 failed，剩下的 17 条都是既有问题且都在 MiniApp 之外
+（`process_cleanup` 的 Windows 盘符大小写、`workspace_files::path_safety` 的
+os error 87、`managed_codex` 的 pubkey 漂移、`space_cloud` / `system_skills` /
+`skill_sync`）。
 
 ---
 
@@ -333,3 +363,5 @@ sidecar 侧的全部能力不受影响，已由 `miniapp-app-dispatch.integratio
 | `src/server/miniapp-ai.ts` | `app.ai.*`（一次性 query） |
 | `src/server/miniapp-agent.ts` | `app.agent.*`（session-engine facade） |
 | `src-tauri/src/clipboard.rs` | OS 剪贴板（arboard） |
+| `src/server/__tests__/miniapp-app-wire.integration.test.ts` | 端到端 wire 契约（真 Sidecar 子进程 + 真 HTTP） |
+| `scripts/test_rust_windows.ps1` | Windows 上跑 Rust 测试（旁挂 manifest，见 §7） |
