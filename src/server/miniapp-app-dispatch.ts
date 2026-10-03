@@ -753,21 +753,37 @@ async function dispatchStorage(
     // 崩在作者自己的代码里，而宿主全程 ok —— 声明过却不生效比不声明更难查。
     // 注意用 hasOwnProperty 而不是 ??：作者显式 set(key, null) 存的就是 null，
     // 那是一次真实写入，不能被默认值悄悄顶掉。
+
+    // 下面两处对 `data` 一律用 hasOwnProperty 而不是 `in`。`in` 会走原型链，而
+    // key 由作者任意指定，于是 get('toString') 会返回函数、get('constructor') 会
+    // 返回 Object，remove('toString') 还会 delete 一个继承属性 —— delete 对继承
+    // 属性是 no-op，但它照样返回 true，作者收到"删除成功"而实际什么都没发生。
     if (name === 'get') {
-      if (key in data) return ok(data[key]);
+      if (Object.prototype.hasOwnProperty.call(data, key)) return ok(data[key]);
       if (Object.prototype.hasOwnProperty.call(ctx.storageDefaults, key)) {
         return ok(ctx.storageDefaults[key]);
       }
       return ok(undefined);
     }
     if (name === 'remove') {
-      if (!(key in data)) return ok(false);
+      if (!Object.prototype.hasOwnProperty.call(data, key)) return ok(false);
       delete data[key];
       await writeFile(store, JSON.stringify(data, null, 2), 'utf8');
       return ok(true);
     }
     if (name === 'set') {
-      data[key] = params.value ?? null;
+      // defineProperty 而不是 `data[key] = ...`。key 完全由作者控制，而赋值语义下
+      // `__proto__` 走的是 Object.prototype 上的 setter：不会产生自有属性，写完
+      // JSON.stringify 仍是 `{}`，值凭空消失。可同一进程内 get 又读得到（挂在原型
+      // 链上），于是作者看到"能读出来、换个 key 再写就没了"这种最没法自查的现象。
+      // defineProperty 产生自有可枚举属性；读回时 JSON.parse 按 CreateDataProperty
+      // 同样建成自有属性，往返闭合。
+      Object.defineProperty(data, key, {
+        value: params.value ?? null,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
       await writeFile(store, JSON.stringify(data, null, 2), 'utf8');
       return ok(null);
     }

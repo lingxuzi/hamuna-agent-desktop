@@ -393,6 +393,60 @@ describe('storage round trip', () => {
     expect(existsSync(join(appDir(), 'storage.json'))).toBe(false);
   });
 
+  it('stores __proto__ as a real key instead of mutating the object prototype', async () => {
+    // 赋值语义下 `data['__proto__'] = v` 走的是 Object.prototype 上的 setter，
+    // 不产生自有属性：写完 JSON.stringify 仍是 `{}`，值凭空消失。
+    writeMeta({});
+    const store = join(appDir(), 'storage.json');
+
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: '__proto__', value: { tag: 'x' } });
+
+    expect(Object.keys(JSON.parse(readFileSync(store, 'utf8')))).toEqual(['__proto__']);
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: '__proto__' })).result).toEqual({
+      tag: 'x',
+    });
+  });
+
+  it('a __proto__ key survives an unrelated later write', async () => {
+    // 这才是作者真正遇到的症状：刚写完 get 出来是好的，下一次 set 之后就没了。
+    // 只断言"存得进去"不够 —— 那恰好是它唯一一次看起来正常的时候。
+    writeMeta({});
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: '__proto__', value: { tag: 'x' } });
+
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: 'other', value: 1 });
+
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: '__proto__' })).result).toEqual({
+      tag: 'x',
+    });
+    expect((await dispatchMiniAppApp('storage.get', APP_ID, { key: 'other' })).result).toBe(1);
+  });
+
+  it('get on an inherited name returns undefined rather than a prototype member', async () => {
+    // `key in data` 会走原型链，而 key 由作者任意指定：get('toString') 返回函数、
+    // get('constructor') 返回 Object —— 一个从没被写过的键却"有值"，作者据此
+    // 写的 if (await app.storage.get('x')) 判断会静默走错分支。
+    writeMeta({});
+
+    for (const key of ['toString', 'constructor', 'hasOwnProperty', 'valueOf']) {
+      expect((await dispatchMiniAppApp('storage.get', APP_ID, { key })).result).toBeUndefined();
+    }
+  });
+
+  it('remove on an inherited name reports failure instead of a fake success', async () => {
+    // delete 一个继承属性是 no-op，但 delete 表达式本身求值为 true。修之前
+    // remove('toString') 报成功，作者据此以为清掉了，实际什么都没发生。
+    writeMeta({});
+    await dispatchMiniAppApp('storage.set', APP_ID, { key: 'real', value: 1 });
+
+    expect((await dispatchMiniAppApp('storage.remove', APP_ID, { key: 'toString' })).result).toBe(
+      false,
+    );
+    // 键本来就不存在，所以这次失败不该顺手把文件重写一遍
+    expect(
+      JSON.parse(readFileSync(join(appDir(), 'storage.json'), 'utf8')),
+    ).toEqual({ real: 1 });
+  });
+
   it('rejects a storage call with no key', async () => {
     writeMeta({});
     const res = await dispatchMiniAppApp('storage.get', APP_ID, {});
