@@ -2484,7 +2484,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // correct the stale "ai.cancel / agent streaming don't exist" notes. Both
 // used to steer authors away from capabilities that now work.
 
-const SYSTEM_SKILLS_VERSION: &str = "59";
+const SYSTEM_SKILLS_VERSION: &str = "60";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3162,11 +3162,13 @@ mod system_skills_tests {
     #[test]
     fn v37_updates_goal_cli_skill_and_preserves_v36_contracts() {
         // After Phase 1/2 added icon-design / miniapp-creator / ppt-master,
-        // SYSTEM_SKILLS_VERSION bumped to 58. The v37 contracts on
-        // CLI / memory-update / docs are still valid under v58 — only the
-        // version anchor was stale.
+        // SYSTEM_SKILLS_VERSION bumped to 58, and it has moved on since (60 as of
+        // the MiniApp sandbox same-origin fix — miniapp-creator's SKILL.md told
+        // authors the iframe carried `allow-same-origin`, which it no longer
+        // does). The v37 contracts on CLI / memory-update / docs are still valid;
+        // only the version anchor has to track the constant.
         assert_eq!(CLI_VERSION, "40");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "58");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "60");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));

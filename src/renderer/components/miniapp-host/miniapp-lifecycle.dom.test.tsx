@@ -383,7 +383,14 @@ describe('MiniApp launch: iframe is actually locked down', () => {
     // 'unsafe-inline', which permits only INLINE style/script. Every bundled
     // MiniApp ships `<link rel="stylesheet" href="style.css">` and
     // `<script src="ui.js">`, so the app rendered completely unstyled and
-    // inert. 'self' is mandatory in both directives.
+    // inert. The escape hatch used to be `'self'`; it is now that Rust's
+    // `inline_miniapp_siblings` inlines those siblings before the HTML ever
+    // reaches the renderer (see MiniAppRunner's IFRAME_CSP comment for why
+    // `'self'` is dead once the iframe is on an opaque origin).
+    //
+    // Note this test feeds the sibling tags in *raw* — the shape a MiniApp ships
+    // in, before inlining. It asserts the policy shape, not that the tags load:
+    // inlining happens in Rust, and no jsdom test can observe it.
     const RealMiniAppRunner = await importRealRunner();
     const html = [
       '<html><head>',
@@ -399,8 +406,8 @@ describe('MiniApp launch: iframe is actually locked down', () => {
       .replace(/&#39;/g, "'")
       .replace(/&quot;/g, '"')
       .replace(/&amp;/g, '&');
-    expect(csp).toContain("script-src 'unsafe-inline' 'self'");
-    expect(csp).toContain("style-src 'unsafe-inline' 'self'");
+    expect(csp).toContain("script-src 'unsafe-inline'");
+    expect(csp).toContain("style-src 'unsafe-inline'");
     // The anti-bypass directive must survive the relaxation.
     expect(csp).toContain("connect-src 'none'");
   });

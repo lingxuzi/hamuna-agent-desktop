@@ -29,7 +29,13 @@ MiniApp 运行在 iframe 沙箱里，能用的一切宿主能力都挂在 **`win
     └── style.css          # 必填 — 样式（必须用 CSS Token，见 §snippet）
 ```
 
-**为什么不直接写 1 个 `index.html`？** 因为 HamunaAgent 必须用 `meta.json` 知道这是个 MiniApp（id/版本/分类/权限声明）；`storage.json` 是 MiniApp 自己的 KV 状态；`source/` 是浏览器加载的沙箱（iframe `sandbox="allow-scripts allow-same-origin allow-forms"`）。
+**为什么不直接写 1 个 `index.html`？** 因为 HamunaAgent 必须用 `meta.json` 知道这是个 MiniApp（id/版本/分类/权限声明）；`storage.json` 是 MiniApp 自己的 KV 状态；`source/` 是浏览器加载的沙箱（iframe `sandbox="allow-scripts allow-forms"`）。
+
+> **沙箱没有同源，写代码时按这个假设来。** MiniApp 的文档走 iframe `srcdoc`，宿主**不给** `allow-same-origin`，所以你的页面运行在一个 opaque origin 上：`localStorage` / `sessionStorage` / `document.cookie` 一碰就抛 `SecurityError`，`window.parent.document` 也读不到。持久化一律走 `app.storage`（落到宿主侧的 `storage.json`），能力一律走 `app.*`，不要试图绕过桥直接摸宿主的对象。
+>
+> 同源一旦打开就等于沙箱不存在：宿主是 Tauri 应用，Tauri v2 总是往页面注入 `window.__TAURI_INTERNALS__`，同源页面可以直接 `window.parent.__TAURI_INTERNALS__.invoke('cmd_read_workspace_file', …)` 拿到任意 Tauri 命令，把 MiniApp 的整套权限声明一次性绕过。所以**不要**要求、也不要依赖同源。
+>
+> 同理，`source/index.html` 里引用的 `ui.js` / `style.css` **不需要**你能加载它们：宿主在加载前就把同目录的兄弟文件内联进 HTML 了。写相对路径引用即可，但如果某个引用在真实运行里加载不到，不要往 CSP 或 sandbox 上想解决办法 —— 那是宿主在 `inline_miniapp_siblings` 那里没内联成，`<script src>` 到宿主 origin 必然 404。
 
 ## `window.app` — 唯一的宿主接口
 

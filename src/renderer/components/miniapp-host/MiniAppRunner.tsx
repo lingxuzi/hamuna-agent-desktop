@@ -6,8 +6,18 @@
  * 无 Bubble Claim。
  *
  * 安全红线（PRD v0.3 §11.1）：
- * - sandbox = allow-scripts allow-same-origin allow-forms
- *   （**禁** allow-popups / allow-top-navigation / allow-pointer-lock / allow-modals）
+ * - sandbox = allow-scripts allow-forms
+ *   （**禁** allow-same-origin / allow-popups / allow-top-navigation /
+ *   allow-pointer-lock / allow-modals）
+ *   `allow-same-origin` 曾在这里，理由是"srcdoc 的 opaque origin 会让 nonce 校验
+ *   与 storage 分片失效"。实测那个前提两头都不成立，已移除：
+ *   - nonce 校验全在宿主侧（`event.source === iframe.contentWindow` + nonce +
+ *     appId），从不看 `event.origin`；opaque origin 下 origin 是 `"null"`，但没有
+ *     任何一处读它。
+ *   - MiniApp 持久化走 `app.storage`，落在宿主侧的 `storage.json`；没有一个内建
+ *     app 碰 `localStorage`（icon-generator 早期那份 `window.__miniappStorage`
+ *     模板从来就不存在，早就换成 `app.storage` 了）。
+ *   留着它的代价则是整个沙箱形同虚设，见 SANDBOX_FLAGS 处的说明。
  * - CSP `connect-src` 只放 MiniApp 自身 + Rust 代理层白名单端口；不放
  *   Cowork Sidecar port（Phase 2 防 iframe 直连旁路）
  * - postMessage `event.source === iframe.contentWindow` 严格相等
@@ -104,33 +114,59 @@ export interface MiniAppRuntimeEnv {
   appDataDir?: string;
 }
 
-const SANDBOX_FLAGS = 'allow-scripts allow-same-origin allow-forms';
+/**
+ * `allow-same-origin` 是**不能**加回来的那一个，它和 `allow-scripts` 同时出现时
+ * 等于把整个沙箱关掉。
+ *
+ * 原因不是理论上的：MiniApp 的文档是 `srcdoc`，默认继承宿主的 origin，于是
+ * `window.parent` 直接可达。Tauri v2 **总是**往页面注入
+ * `window.__TAURI_INTERNALS__`（`withGlobalTauri: false` 只关掉 `__TAURI__` 那个
+ * 便捷命名空间，关不掉它 —— `@tauri-apps/api/core` 的 invoke 就是走
+ * `window.__TAURI_INTERNALS__.invoke(cmd, args)`，本仓 renderer 自己也用
+ * `"__TAURI_INTERNALS__" in window` 做特性探测）。所以同源 MiniApp 一行
+ * `window.parent.__TAURI_INTERNALS__.invoke('cmd_read_workspace_file', …)` 就能
+ * 拿到任意 Tauri 命令，把 `app-permissions.ts` / `resolvePolicyForSidecar` /
+ * `checkAppPermission` / `path-safety` 以及本轮所有修过的那几道闸**全部绕过**。
+ * 顺带还能读宿主的 `localStorage`（设备身份、Tab 状态、配置）与整个 DOM。
+ *
+ * 去掉之后 MiniApp 拿到的是 opaque origin：`event.origin` 变成 `"null"`、
+ * `window.parent.document` / `localStorage` 抛 SecurityError、Tauri IPC 不可达。
+ * 代价是 `'self'` 不再匹配任何东西 —— 这正是下面 CSP 里把 `'self'` 一起去掉的
+ * 原因，两处必须一起改，否则 CSP 会假装还有一个同源关系。
+ */
+const SANDBOX_FLAGS = 'allow-scripts allow-forms';
 const IFRAME_NAME_PREFIX = 'miniapp-iframe';
 
 /**
  * PRD v0.3 §11.1 — the iframe must not be able to reach the sidecar directly
  * ("Phase 2 防 iframe 直连旁路").
  *
- * `'self'` is required in script-src/style-src, not optional: a MiniApp's
- * `source/index.html` references its siblings as `<link rel="stylesheet"
- * href="style.css">` and `<script src="ui.js">`. `default-src 'none'` +
- * `'unsafe-inline'` alone blocks those (it only permits *inline* style/script),
- * which strips the app bare. The source endpoint inlines both files before
- * handing the HTML over, so in practice the tags are already gone — `'self'`
- * is the safety net for a MiniApp whose sibling file failed to inline.
+ * 这里**没有** `'self'`，而且是刻意的：sandbox 不再给 `allow-same-origin`
+ * （理由见 SANDBOX_FLAGS），iframe 拿到的是 opaque origin，CSP 规范下 `'self'`
+ * 匹配不到任何来源 —— 留着它只会让人误以为 MiniApp 与宿主同源。
  *
- * `connect-src 'none'` is the directive that actually does the work: the
- * sidecar is a different origin, so no fetch/XHR/WebSocket from the iframe can
- * reach it. Every legitimate capability already goes through postMessage.
+ * MiniApp 的 `source/index.html` 会用 `<link rel="stylesheet" href="style.css">` /
+ * `<script src="ui.js">` 引同目录文件，**曾经**靠 `'self'` 兜底。现在不需要了：
+ * Rust 的 `inline_miniapp_siblings` 在把 HTML 交给渲染层之前就把这些兄弟文件
+ * 内联掉，而凡是它内联不了的引用，今天**本来就是坏的** ——
+ *   - 文件不存在 → 请求打到宿主 origin，那里不提供 MiniApp 资源，必然 404
+ *   - `../` / `./` 段 → `read_inline_target` 明确拒绝，理由是 `starts_with` 逐段
+ *     比较不规范化，`/a/b/../c` 仍以 `/a/b` 开头
+ *   - 远程 URL → 不在 `dependencies` 里就已经被 `script-src` 挡住；声明了的走
+ *     `injectDependencyTags` + `buildIframeCsp` 的显式 host 白名单，不依赖 `'self'`
+ * 所以删掉 `'self'` 不会让任何原本能跑的 MiniApp 变成不能跑。
  *
- * ponytail: `img-src https:` is a covert exfil channel (URL params, beacons).
- * Lock it to `data: blob:` when the marketplace starts shipping third-party
- * authors — the bundled apps don't need it, but a generated one might.
+ * `connect-src 'none'` 是真正干活的那条：sidecar 是另一个 origin，iframe 里的
+ * fetch/XHR/WebSocket 一个都够不着。所有合法能力都走 postMessage。
+ *
+ * ponytail: `img-src https:` 是一条隐蔽的外传通道（URL 参数、beacon）。等
+ * marketplace 开始上架第三方作者时收紧到 `data: blob:` —— 内建 app 用不到，
+ * 但生成的 app 可能会用。
  */
 const IFRAME_CSP = [
   "default-src 'none'",
-  "script-src 'unsafe-inline' 'self'",
-  "style-src 'unsafe-inline' 'self'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
   "img-src data: blob: https:",
   "font-src data:",
   "connect-src 'none'",
@@ -155,8 +191,8 @@ function buildIframeCsp(scriptHosts: readonly string[]): string {
   const hosts = [...new Set(scriptHosts)].join(' ');
   return [
     "default-src 'none'",
-    `script-src 'unsafe-inline' 'self' ${hosts}`,
-    `style-src 'unsafe-inline' 'self' ${hosts}`,
+    `script-src 'unsafe-inline' ${hosts}`,
+    `style-src 'unsafe-inline' ${hosts}`,
     "img-src data: blob: https:",
     "font-src data:",
     "connect-src 'none'",
@@ -595,7 +631,7 @@ export default function MiniAppRunner({
 /**
  * 在 srcDoc `<head>` 前注入 `window.app` runtime。
  *
- * CSP 是 `script-src 'unsafe-inline' 'self'`，所以内联 `<script>` 可执行。
+ * CSP 是 `script-src 'unsafe-inline'`，所以内联 `<script>` 可执行。
  * 注入点必须在用户 HTML 之前 —— `ui.js` 在解析期就可能调 `app.*`。
  */
 function injectAppRuntime(html: string, runtimeScript: string): string {

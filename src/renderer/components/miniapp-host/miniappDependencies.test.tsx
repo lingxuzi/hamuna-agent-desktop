@@ -46,7 +46,7 @@ describe('MiniAppRunner CDN dependencies', () => {
     const csp = cspOf(renderDoc({}));
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain("connect-src 'none'");
-    expect(csp).toContain("script-src 'unsafe-inline' 'self'");
+    expect(csp).toContain("script-src 'unsafe-inline'");
     // No bare origin token smuggled into script-src.
     expect(csp).not.toContain('jsdelivr');
   });
@@ -58,7 +58,7 @@ describe('MiniAppRunner CDN dependencies', () => {
     });
     expect(doc).toContain(`<script src="${CDN}" defer></script>`);
     expect(cspOf(doc)).toContain(
-      "script-src 'unsafe-inline' 'self' cdn.jsdelivr.net",
+      "script-src 'unsafe-inline' cdn.jsdelivr.net",
     );
   });
 
@@ -68,7 +68,7 @@ describe('MiniAppRunner CDN dependencies', () => {
       allow: ['cdn.jsdelivr.net'],
     });
     expect(doc).toContain(`<link rel="stylesheet" href="${CSS}">`);
-    expect(cspOf(doc)).toContain("style-src 'unsafe-inline' 'self' cdn.jsdelivr.net");
+    expect(cspOf(doc)).toContain("style-src 'unsafe-inline' cdn.jsdelivr.net");
   });
 
   it('places the tags inside <head>, before user markup', () => {

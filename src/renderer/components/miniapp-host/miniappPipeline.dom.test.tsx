@@ -164,11 +164,11 @@ describe('MiniApp assembly pipeline: Rust output → renderer → iframe', () =>
       { url: 'https://cdn.jsdelivr.net/npm/x@1/x.js', type: 'script' },
     ]);
     expect(withDeps).toContain('cdn.jsdelivr.net/npm/x@1/x.js');
-    expect(cspOf(withDeps)).toContain("script-src 'unsafe-inline' 'self' cdn.jsdelivr.net");
+    expect(cspOf(withDeps)).toContain("script-src 'unsafe-inline' cdn.jsdelivr.net");
 
     const withoutDeps = mount(compiledSource('<p>hi</p>'));
     expect(withoutDeps).not.toContain('jsdelivr');
-    expect(cspOf(withoutDeps)).toContain("script-src 'unsafe-inline' 'self'");
+    expect(cspOf(withoutDeps)).toContain("script-src 'unsafe-inline'");
     expect(cspOf(withoutDeps)).not.toContain('jsdelivr');
   });
 
@@ -193,11 +193,14 @@ describe('MiniApp assembly pipeline: Rust output → renderer → iframe', () =>
     );
     const sandbox = container.querySelector('iframe')?.getAttribute('sandbox') ?? '';
     const flags = sandbox.split(/\s+/).filter(Boolean);
-    // 少一个 allow-same-origin，srcdoc 的 opaque origin 会让 nonce 校验与
-    // storage 分片全部失效；多一个 allow-top-navigation，MiniApp 就能把整个
-    // 应用导航走。两者都只锁不放。
+    // 曾经断言 `toContain('allow-same-origin')`，理由写的是"少一个它，srcdoc 的
+    // opaque origin 会让 nonce 校验与 storage 分片全部失效"。那个前提两头都不成立
+    // （nonce 校验在宿主侧、从不看 event.origin；MiniApp 持久化走 app.storage 的
+    // 宿主侧 storage.json，内建 app 无人碰 localStorage），而留着它的代价是整个
+    // 沙箱作废 —— 同源 iframe 能直接调 `window.parent.__TAURI_INTERNALS__.invoke`，
+    // 绕过本仓所有 MiniApp 权限判定。详见 MiniAppRunner 里 SANDBOX_FLAGS。
     expect(flags).toContain('allow-scripts');
-    expect(flags).toContain('allow-same-origin');
+    expect(flags).not.toContain('allow-same-origin');
     expect(flags).not.toContain('allow-top-navigation');
     expect(flags).not.toContain('allow-popups');
   });

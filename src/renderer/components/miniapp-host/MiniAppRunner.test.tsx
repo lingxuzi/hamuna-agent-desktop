@@ -10,9 +10,7 @@ describe('MiniAppRunner', () => {
     );
     const iframe = container.querySelector('iframe');
     expect(iframe).not.toBeNull();
-    expect(iframe?.getAttribute('sandbox')).toBe(
-      'allow-scripts allow-same-origin allow-forms'
-    );
+    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts allow-forms');
     // Theme token CSS is prepended by the runner, then user srcdoc follows.
     const rendered = iframe?.getAttribute('srcdoc') ?? '';
     expect(rendered).toContain('<p>hi</p>');
@@ -30,15 +28,47 @@ describe('MiniAppRunner', () => {
     expect(rendered).toContain('content="hello-miniapp"');
   });
 
-  it('exposes sandbox attr with exactly three flags (PRD v0.3 §11.1)', () => {
+  it('exposes sandbox attr with exactly two flags (PRD v0.3 §11.1)', () => {
     render(<MiniAppRunner appId="a" srcDoc="<html></html>" height={50} />);
     const iframe = document.querySelector('iframe');
     const sandbox = iframe?.getAttribute('sandbox') ?? '';
     const flags = sandbox.split(/\s+/).filter(Boolean);
-    expect(flags).toEqual([
-      'allow-scripts',
-      'allow-same-origin',
-      'allow-forms',
-    ]);
+    expect(flags).toEqual(['allow-scripts', 'allow-forms']);
+  });
+
+  it('never grants allow-same-origin — it is a full sandbox escape, not a lock', () => {
+    // 单独一条，是因为这个 flag 一旦被"顺手加回来"，上面那条 toEqual 也未必有人
+    // 会先看到，而它加回来的后果是 MiniApp 直接拿到
+    // `window.parent.__TAURI_INTERNALS__.invoke` —— 本仓所有 MiniApp 权限判定
+    // （app-permissions / resolvePolicyForSidecar / checkAppPermission /
+    // path-safety）一次性作废。理由详见 MiniAppRunner 里 SANDBOX_FLAGS 的注释。
+    render(<MiniAppRunner appId="a" srcDoc="<html></html>" height={50} />);
+    const flags = (document.querySelector('iframe')?.getAttribute('sandbox') ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+    expect(flags).not.toContain('allow-same-origin');
+  });
+
+  it('does not put \'self\' in the iframe CSP — an opaque origin matches nothing', () => {
+    // 去掉 allow-same-origin 之后 iframe 是 opaque origin，CSP 里 `'self'` 匹配不到
+    // 任何来源。留着它不会放宽任何东西，但会让后来人以为 MiniApp 与宿主同源，
+    // 进而以为 `'self'` 还能兜住兄弟文件 —— 而兄弟文件早已由 Rust 的
+    // `inline_miniapp_siblings` 内联，兜底的从来不是 CSP。
+    const { container } = render(
+      <MiniAppRunner appId="a" srcDoc="<html></html>" height={50} />
+    );
+    // CSP 写在 HTML 属性里，`escapeHtml` 已把 `'` 变成 `&#39;`；不断码的话每条
+    // 断言都会读成"策略写错了"，而其实是对的。必须锚到 `default-src` —— 第一个
+    // `content="…"` 是 `x-miniapp-id` 那条 meta，不是 CSP。
+    const raw =
+      container
+        .querySelector('iframe')
+        ?.getAttribute('srcdoc')
+        ?.match(/content="([^"]*default-src[^"]*)"/)?.[1] ?? '';
+    const csp = raw.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).not.toMatch(/script-src[^;]*'self'/);
+    expect(csp).not.toMatch(/style-src[^;]*'self'/);
   });
 });
