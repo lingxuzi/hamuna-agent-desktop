@@ -75,7 +75,7 @@ const r = await app.shell.exec('git log --oneline -20', { cwd: '{workspace}' });
 const res = await app.net.fetch('https://api.example.com/data');
 // → { status, body }
 // 可选 opts.timeout_ms（毫秒）：默认 30s，同样被宿主夹到 1s~5min。
-// 写 `0` 不是"不限时"而是**根本不设定时器** —— 这条请求会一直挂着。
+// 与 `shell.exec` 共用同一条归一：`0` 和负数会被抬到 1s，不等于"不限时"。
 // 另外不接受 3xx：返回跳转请直接请求最终 URL。
 
 // 只读系统信息 —— 无需权限
