@@ -601,18 +601,21 @@ async function dispatchFs(name: string, params: Record<string, unknown>): Promis
 }
 
 /**
- * `shell.exec` 的 timeout 归一化。
+ * MiniApp 自报 timeout 的归一化（`shell.exec` 与 `net.fetch` 共用一条）。
  *
- * 这个值是 **MiniApp 自己传的**，而 Node 把 `timeout: 0` 解释成"永不超时"。
- * 原来直接 `opts.timeout ?? 30_000` 意味着一个 MiniApp 只要写 `{ timeout: 0 }`
- * 就能起一个 sidecar 永远不回收的子进程：abort 路径不杀它，dispatch 的 promise
- * 永远不 settle，重复调用就是资源泄漏。
+ * 这个值是 **MiniApp 自己传的**，两处的「默认值」都只是兜底，不是上限：
  *
- * `shell` 本身已经是作者显式声明的能力，这里不扩权也不缩权 —— 只是不让一个**声明
- * 过的**能力顺手变成"谁都收不掉的孤儿进程"。1s~5min：真的要跑长构建就分片，
- * MiniApp 是交互式的，占着一个进程十分钟对谁都没好处。
+ * - `shell.exec` 原来直接 `opts.timeout ?? 30_000`，而 Node 把 `timeout: 0`
+ *   解释成「永不超时」，于是 `{ timeout: 0 }` 就能起一个永远不回收的子进程。
+ * - `net.fetch` 的 `opts.timeout_ms` 同样直通 `setTimeout`。实测 Node：超过
+ *   2^31-1 会溢出成 1ms（快速失败，反而安全），但 2^31-1 以内照单全收，
+ *   `timeout_ms: 86400000` 就是一条挂满一整天的请求。
+ *
+ * 两处都是作者**显式声明过**的能力（`permissions.shell.allow` / `net.allow`），
+ * 所以这里不扩权也不缩权，只是不让一个声明过的能力变成收不掉的悬挂。
+ * 1s~5min：真要跑长任务就分片，MiniApp 是交互式的。
  */
-export function resolveShellTimeoutMs(raw: unknown): number {
+export function resolveMiniAppTimeoutMs(raw: unknown): number {
   const DEFAULT_MS = 30_000;
   const MIN_MS = 1_000;
   const MAX_MS = 300_000;
@@ -641,7 +644,7 @@ async function dispatchShell(
   try {
     const { stdout, stderr } = await run(command, {
       cwd,
-      timeout: resolveShellTimeoutMs(opts.timeout),
+      timeout: resolveMiniAppTimeoutMs(opts.timeout),
       // 不继承 shell 环境，避免读到宿主凭据
       env: { PATH: process.env.PATH ?? '' },
     });
@@ -677,7 +680,7 @@ async function dispatchNet(params: Record<string, unknown>): Promise<DispatchOut
   // （CLAUDE.md §Pit-of-Success "工具裸 fetch 无 AbortSignal"）。
   const { cancellableFetch } = await import('./utils/cancellation');
   const opts = asRecord(params.opts);
-  const timeoutMs = typeof opts.timeout_ms === 'number' ? opts.timeout_ms : 30_000;
+  const timeoutMs = resolveMiniAppTimeoutMs(opts.timeout_ms);
   const res = await cancellableFetch(
     url,
     {

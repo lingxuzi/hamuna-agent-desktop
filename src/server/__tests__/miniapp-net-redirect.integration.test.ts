@@ -164,3 +164,87 @@ describe('app.net.fetch refuses to follow a redirect past its own checks', () =>
     expect(res.result).toEqual({ status: 403, body: 'nope' });
   });
 });
+
+/**
+ * `net.fetch` 的 timeout 闸。同一个 MiniApp 边界上 `shell.exec` 已经有的那道夹取，
+ * 这里曾经漏了：`opts.timeout_ms` 直通 `cancellableFetch` 的 `setTimeout`。
+ *
+ * 为什么必须是**调用点**上的测试而不是只测纯函数：`cancellableFetch` 本体刻意
+ * 不设上限（tool-attachments / kb-ingest / provider-probe 要下大文件），夹取只
+ * 发生在 MiniApp 边界。所以纯函数测试全绿、而有人把 `resolveMiniAppTimeoutMs(opts.timeout_ms)`
+ * 改回 `opts.timeout_ms ?? 30_000` 时，unit 池不会有任何反应，闸就静默消失了。
+ * 这条测试直接观测真正落进 `setTimeout` 的那个数字，调用点一断它就红。
+ *
+ * 实测的 Node 行为（决定了危害区间）：超过 2^31-1 会溢出成 1ms 快速失败，反而
+ * 安全；而 **2^31-1 以内照单全收** —— `timeout_ms: 86400000` 真的会挂满一天。
+ * 而 `timeout_ms: 0` 更直接：`cancellableFetch` 的闸是 `timeoutMs > 0`，0 让它
+ * 干脆不设定时器，于是这条请求**没有任何超时**。
+ */
+describe('app.net.fetch cannot pin a request open', () => {
+  /**
+   * 跑一次 dispatch，并记录这次过程中真正传给 `setTimeout` 的 delay。
+   * 仍然调用真实实现（transport 立即 resolve，不会有真实等待），只旁路记录。
+   */
+  async function delaysSeenBy(
+    params: Record<string, unknown>,
+  ): Promise<{ res: Awaited<ReturnType<typeof dispatchMiniAppApp>>; delays: number[] }> {
+    const delays: number[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((handler: never, ms?: number, ...rest: never[]) => {
+        if (typeof ms === 'number') delays.push(ms);
+        return realSetTimeout(handler, ms, ...rest);
+      }) as never);
+    try {
+      const res = await dispatchMiniAppApp('net.fetch', APP_ID, params);
+      return { res, delays };
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  function stubOk(): void {
+    _setGeneralFetchTransportForTests(() => Promise.resolve(new Response('ok', { status: 200 })));
+  }
+
+  it('clamps a one-day request down to the 5min ceiling', async () => {
+    stubOk();
+    const { res, delays } = await delaysSeenBy({
+      url: `https://${PUBLIC_HOST}/thing`,
+      opts: { timeout_ms: 86_400_000 },
+    });
+
+    expect(res.ok, JSON.stringify(res.error)).toBe(true);
+    // 真正落进 setTimeout 的那个数字。
+    expect(delays).toContain(300_000);
+    // 作者要的那一天没有 sneak through 到任何别的 sink 上。
+    expect(delays).not.toContain(86_400_000);
+  });
+
+  it('turns timeout_ms: 0 into a real timeout instead of no timeout at all', async () => {
+    // cancellableFetch 只在 `timeoutMs > 0` 时设定时器，所以 0 的后果是
+    // 「一条永远不超时的请求」，比 shell.exec 的 0 还更彻底。
+    stubOk();
+    const { res, delays } = await delaysSeenBy({
+      url: `https://${PUBLIC_HOST}/thing`,
+      opts: { timeout_ms: 0 },
+    });
+
+    expect(res.ok, JSON.stringify(res.error)).toBe(true);
+    expect(delays).toContain(1_000);
+    expect(delays).not.toContain(0);
+  });
+
+  it('still honours an in-range timeout, and still defaults when none is given', async () => {
+    stubOk();
+    const inRange = await delaysSeenBy({
+      url: `https://${PUBLIC_HOST}/thing`,
+      opts: { timeout_ms: 5_000 },
+    });
+    expect(inRange.delays).toContain(5_000);
+
+    const defaulted = await delaysSeenBy({ url: `https://${PUBLIC_HOST}/thing` });
+    expect(defaulted.delays).toContain(30_000);
+  });
+});
