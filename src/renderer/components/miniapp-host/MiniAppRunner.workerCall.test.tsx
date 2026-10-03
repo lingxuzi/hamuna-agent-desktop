@@ -121,6 +121,52 @@ describe('MiniAppRunner / worker call wire-up', () => {
     });
   });
 
+  // spawn 失败分支此前**不可达**，所以一直没有覆盖：`pool.spawn()` 过去不等 entry
+  // 就返回成功，一个启动即死的 worker 会被报成 spawn 成功（见
+  // `worker-pool.ts::awaitReady`）。`spawn()` 改成等 entry 自己发 ready 之后，这条
+  // 分支才第一次真的会发生，而它恰好决定"要不要告诉 MiniApp worker 存在了"。
+  it('never tells the iframe a worker is ready when the spawn fails', async () => {
+    apiPostJson.mockResolvedValueOnce({
+      ok: false,
+      error:
+        "MiniApp worker failed to start: Cannot find module '.../worker-entry-git-graph.js'",
+    });
+
+    const { container, unmount } = render(
+      <MiniAppRunner
+        appId="git-graph"
+        srcDoc="<html><body>x</body></html>"
+        height={200}
+        kind="worker"
+        workerKind="git-graph"
+      />,
+    );
+
+    const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+    // Spy synchronously after render: the spawn continuation (and therefore any
+    // worker.ready) only runs once the awaited apiPostJson settles, which is
+    // strictly after this line.
+    const postSpy = vi.spyOn(iframe.contentWindow as Window, 'postMessage');
+
+    await waitFor(() => {
+      expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/worker/spawn', expect.anything());
+    });
+    await new Promise((r) => setTimeout(r, 20));
+
+    // The MiniApp gates every `app.worker.call` on this message, and the host
+    // nonce is delivered nowhere else — telling it a worker exists when none does
+    // is how the app ends up waiting forever on calls that can never be routed.
+    const kinds = postSpy.mock.calls.map((c) => (c[0] as { kind?: string } | undefined)?.kind);
+    expect(kinds).not.toContain('worker.ready');
+
+    // Nothing was registered either, so unmount must not try to terminate a
+    // worker that was never created.
+    apiPostJson.mockClear();
+    unmount();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(apiPostJson).not.toHaveBeenCalledWith('/api/miniapp/worker/terminate', expect.anything());
+  });
+
   it('ignores worker.call messages from a foreign window', async () => {
     apiPostJson.mockResolvedValueOnce({ ok: true, workerId: 'w-3', methods: ['git.log'] });
 
