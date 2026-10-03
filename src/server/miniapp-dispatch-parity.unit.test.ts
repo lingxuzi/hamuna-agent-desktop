@@ -85,4 +85,26 @@ describe('every declared app method reaches a real producer in the dispatcher', 
   it.each(GROUP_ROUTED)('%s: its whole-group handler exists', (group) => {
     expect(dispatchFunctionRegion(group), `dispatch${cap(group)} not found`).not.toBe('');
   });
+
+  it('no app method can create a symlink, which is the only thing making the missing realpath check survivable', () => {
+    // fs 路径判定是**纯词法**的：`normalizePath` 折叠 `..`、`isPathAllowed` 比分隔符
+    // 边界，执行层没有 realpath 复核（`resolveAgentWorkspace` 里的 `path.resolve` 同样
+    // 只做词法归一）。这本来是个洞，它成立的前提只有一个：MiniApp 无法自己在 appdata
+    // 里种一个指向沙箱外的链接。
+    //
+    // 所以这条不是风格约束，是那个前提的可执行形态。将来若加了 fs.symlink / fs.link，
+    // `appDataWorkspace` 就能被指到沙箱外，而 agent 的 cwd 就在那儿 —— 那时必须先补
+    // realpath 复核（解析最近的存在祖先，Windows 还要处理 `\\?\` 前缀）再合并。
+    const creating = Object.entries(APP_METHODS)
+      .flatMap(([group, methods]) => methods.map(m => `${group}.${m}`))
+      .filter(m => /symlink|hardlink|(^|\.)link$/.test(m));
+    expect(creating, 'a symlink-creating method appeared; add realpath re-verification first').toEqual(
+      [],
+    );
+
+    // 派发层也不能绕过协议表直接调 symlink。必须先剥注释：dispatchFs 里本就有一句
+    // "lstat 不跟随 symlink" 的说明性注释，按原文匹配会永远红。
+    const code = DISPATCH_SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code, 'the dispatcher calls a symlink API outside APP_METHODS').not.toMatch(/symlink/i);
+  });
 });

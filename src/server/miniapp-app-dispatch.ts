@@ -10,8 +10,10 @@
  *   1. renderer `appBridge.checkAppPermission` 按 `meta.json::permissions` 判一次
  *   2. 本层**重新读 meta.json** 判第二次 —— renderer 是 WebView，声明的权限
  *      不能作为唯一信任来源（XSS / 消息伪造都可能绕过 renderer 侧逻辑）
- *   3. fs 路径经 `path-safety` 二次校验 + 强制落在 appdata / workspace /
- *      user-selected 之内
+ *   3. fs 路径经 `expandTemplates` 展开模板、`isPathAllowed` 词法折叠 `..` 后
+ *      比对前缀，强制落在 appdata / workspace / user-selected 之内
+ *      （**纯词法**：没有 realpath / symlink 复核，见 `app-permissions.ts` 的
+ *      `normalizePath` 注释；本层的 `path-safety` 只服务 tool-attachments）
  *   4. shell 走 `child_process.exec` 且命令名必须命中白名单
  *   5. net 强制 https + 域名白名单 + 禁私网/环回（SSRF 红线）
  *
@@ -445,7 +447,12 @@ async function resolveAgentWorkspace(
   const { mkdir } = await import('node:fs/promises');
 
   const target = join(appdata, normalized.segment);
-  // appdata 自身可能是相对路径或带 symlink 的形态，两边都取 resolve 后再比。
+  // 纯词法复核：`path.resolve` 只做 `.` / `..` 归一，**不解析 symlink**。
+  // 它挡的是 segment 里混进分隔符或 `..`（`normalizeAppDataWorkspace` 已先筛过
+  // 一层，这里是纵深）。它挡不住 appdata 下预置一个指向沙箱外的符号链接 ——
+  // 那需要 realpath，而 realpath 在这里有两个真实障碍：目标可能尚不存在，且
+  // Windows 返回 `\\?\` 前缀路径。形态与取舍见 `app-permissions.ts` 的
+  // `normalizePath` 注释。
   if (dirname(resolve(target)) !== resolve(appdata)) {
     return {
       ok: false,

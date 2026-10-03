@@ -45,9 +45,19 @@ function asRecord(v: unknown): Record<string, unknown> {
  * 而 Node 的 fs 会照 `..` 真实解析到 `/etc/passwd`。前缀比较必须在**解析后**
  * 的路径上做，所以这里先做词法折叠。
  *
- * 词法折叠不等于 `realpath`：symlink 仍需执行侧解析（sidecar 侧对
- * `{appdata}` / `{workspace}` 根目录做 canonicalize 复核）。这一层挡住的是
- * 纯字符串构造的穿越，成本极低且覆盖绝大多数越权尝试。
+ * 词法折叠不等于 `realpath`。**当前没有 symlink 复核**：sidecar 的执行层
+ * （`miniapp-app-dispatch.ts`）对 appdata / workspace 根只做同样的词法比较，
+ * 没有 realpath 复核，MiniApp 路径上不存在这一层。
+ *
+ * 实际暴露面有限，因为 `app.fs.*` 没有创建符号链接的方法（只有 readFile /
+ * writeFile / appendFile / readdir / mkdir / rm / rmdir / stat / lstat /
+ * access / unlink / copyFile / rename），MiniApp 无法自己种一个链接指向沙箱外；
+ * 残留风险是用户或安装流程在 appdata 里预置了链接。
+ *
+ * 要补这一层不能在每次调用后直接 `realpath` 再比：目标文件常常还不存在
+ * （writeFile 新建），且 Windows 上 realpath 返回 `\\?\` 前缀路径，与本仓其它
+ * 地方的路径假设冲突。正确形态是"解析最近的存在祖先"再比，属于独立设计。
+ * 在那之前，这里挡住的只是纯字符串构造的穿越。
  */
 function normalizePath(p: string): string {
   const unified = p.replace(/\\/g, '/');
@@ -425,7 +435,7 @@ function checkNet(params: unknown, perms: MiniAppPermissions): PermissionDecisio
  * 压根到不了真正会正确展开的 sidecar。实测三个 bundled MiniApp 的
  * `fs.read/write` 声明全部落在这个洞里 —— 能力等于不存在。
  *
- * 因此 fs 的唯一权威是 sidecar（它独立复算、还额外做 canonicalize 复核）。
+ * 因此 fs 的唯一权威是 sidecar（它独立复算一遍展开后的判定）。
  * renderer 跳过预判**不削弱**纵深防御：预判本来就不是安全边界（WebView 可被
  * 伪造），真正的边界是 sidecar 那一遍。
  */
