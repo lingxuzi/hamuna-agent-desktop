@@ -13,8 +13,8 @@
 //   - 用户取消 open/save 被当成错误：作者被迫 try/catch 吞掉一个本属正常的状态。
 //   - `dialog.message` 的 confirm 走错原生 API：形状从 `{confirmed: boolean}` 变成
 //     `{confirmed: null}`，作者的条件分支永远走不到。
-//   - snake_case 的 `default_path` 没映射到 Tauri 的 `defaultPath`：对话框照常打开，
-//     只是初始目录不对 —— 没有任何错误，只有"为什么每次都要重新选目录"。
+//   - `defaultPath` 拼法没接上（文档教 camelCase，实现只读 snake_case）：对话框照常
+//     打开，只是初始目录不对 —— 没有任何错误，只有"为什么每次都要重新选目录"。
 //   - filter 里的非字符串 extensions 混进 IPC 载荷：Tauri 侧 schema 校验不严。
 //
 // 这些都在 renderer 里跑，且都要 Tauri，所以只能 mock 掉两个模块后单测；
@@ -135,6 +135,36 @@ describe('app.dialog.open / save pass a user cancel through as null, not as an e
 
     expect(dialogOpenMock).toHaveBeenCalledWith(
       expect.objectContaining({ defaultPath: 'C:/Users/alice' }),
+    );
+  });
+
+  it('honours the camelCase defaultPath that SKILL.md actually teaches', async () => {
+    // SKILL.md 的 dialog 示例写的是 `defaultPath`（与 Tauri 原生同名），而实现只读
+    // snake_case —— 照文档写的作者每次都被丢在随机目录：对话框照常打开，没有错误，
+    // 只有"为什么每次都要重选一遍"。open / save 两条调用路径都要认这个拼法。
+    dialogOpenMock.mockResolvedValueOnce(null);
+    dialogSaveMock.mockResolvedValueOnce(null);
+
+    await dispatch('dialog.open', { defaultPath: 'C:/Users/alice' });
+    await dispatch('dialog.save', { defaultPath: '~/out.txt' });
+
+    expect(dialogOpenMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: 'C:/Users/alice' }),
+    );
+    expect(dialogSaveMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: '~/out.txt' }),
+    );
+  });
+
+  it('prefers the snake_case spelling so the already-working path is unchanged', async () => {
+    // 两种拼法都在收，得钉死优先级：否则把 camelCase 加进来这个"修复"本身可能悄悄
+    // 改变既有 snake_case 调用者的结果。
+    dialogSaveMock.mockResolvedValueOnce(null);
+
+    await dispatch('dialog.save', { default_path: 'a.txt', defaultPath: 'b.txt' });
+
+    expect(dialogSaveMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: 'a.txt' }),
     );
   });
 

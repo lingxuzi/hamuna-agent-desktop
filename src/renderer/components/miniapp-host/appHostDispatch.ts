@@ -294,6 +294,19 @@ function pickFilters(spec: DialogSpec): DialogFilter[] {
   return out;
 }
 
+/**
+ * 起始路径：SKILL.md 教作者写 `defaultPath`（与 Tauri 原生同名），而本文件早期
+ * 实现读的是 snake_case 的 `default_path` —— 两种拼法都真实存在：一种被文档化、
+ * 一种被实现且被测试钉住。逐键丢一个不报错、只是静默失效（对话框照常打开，只是不
+ * 在作者指定的位置），所以这里两种都收，而不是逼作者记住该用哪套命名。
+ * snake_case 优先，保持既有行为不变。
+ */
+function pickDefaultPath(spec: DialogSpec): string | undefined {
+  if (typeof spec.default_path === 'string') return spec.default_path;
+  if (typeof spec.defaultPath === 'string') return spec.defaultPath;
+  return undefined;
+}
+
 async function dispatchDialog(name: string, p: DialogSpec): Promise<DispatchResult> {
   const dialog = await import('@tauri-apps/plugin-dialog');
   switch (name) {
@@ -304,7 +317,7 @@ async function dispatchDialog(name: string, p: DialogSpec): Promise<DispatchResu
         multiple: p.multiple === true,
         directory: p.directory === true,
         title: typeof p.title === 'string' ? p.title : undefined,
-        defaultPath: typeof p.default_path === 'string' ? p.default_path : undefined,
+        defaultPath: pickDefaultPath(p),
         filters: pickFilters(p),
       });
       return { ok: true, result: picked ?? null };
@@ -312,7 +325,7 @@ async function dispatchDialog(name: string, p: DialogSpec): Promise<DispatchResu
     case 'save': {
       const target = await dialog.save({
         title: typeof p.title === 'string' ? p.title : undefined,
-        defaultPath: typeof p.default_path === 'string' ? p.default_path : undefined,
+        defaultPath: pickDefaultPath(p),
         filters: pickFilters(p),
       });
       return { ok: true, result: target ?? null };
