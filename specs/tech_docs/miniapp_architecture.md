@@ -154,6 +154,26 @@ Sidecar），而 facade adapter 是进程级单例、绑定本进程宿主的那
 
 ---
 
+## 5.5 内置 MiniApp 的 worker 调用名「存在性」护栏
+
+undled-apps-permissions.test.ts 扫 pp.<head> 并**只用 listAppMethods()
+里的名字**去延长，所以一个**不存在**的方法名（拼错的 git.checkot）匹配不到
+任何东西，直接从它检查的集合里消失 —— 护栏对它结构性失明。症状与那个文件当初
+挖出来的完全一样：app 装得上、列表里出现、按钮点了没反应，且拼错与被拒在这里
+一样无声。
+
+于是字符串形态带来的是另一个问题，作者写在字符串里的方法名 worker 侧认不认。
+kinds/bundled-worker-calls.unit.test.ts 用**真注册表** listKinds() 判定，
+顺带钉住「只调自己 worker_kind 的方法」——pool 是先 getKindDef(app 的 kind)
+再在该 kind 的方法表里找，跨 kind 同样静默。名单必须从注册表来：手写名单会
+和实现一起漂移，而漂移后的名单永远绿，恰好废掉它存在的目的。
+
+变异验证（两个都真的变红并点名方法）：作者把 git.checkout 拼成 git.checkot；
+从 GIT_GRAPH_KIND 删掉 git.log。
+
+**为什么不用「调用总数」当不变式**：总数会把合法的**新增**调用打成红，报错指向
+一个不存在的问题（并发 session 正在改 bundled-miniapps 时尤其容易撞上）。只钉
+「每个 worker app 都扫到了东西」+ 写侧那条路径被点到。
 ## 6. 已知边界
 
 - **`app.agent.workspace_scope` 当前不放开**：`agent.run` 的 workspace 强制
