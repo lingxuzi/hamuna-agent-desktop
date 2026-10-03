@@ -589,8 +589,39 @@ describe('fs delete-family classification', () => {
   });
 });
 
-describe('app protocol surface', () => {
-  it('exposes only documented methods', () => {
+describe('app.clipboard must be opt-in', () => {
+  // 剪贴板里是宿主的用户状态，典型就是刚复制出来的密码。以前它和 `dialog` 一起
+  // 无条件 ALLOW，于是声明空 permissions 的 MiniApp 也读得到；再配一条
+  // net.allow 就是一条完整的凭据外泄链。
+  it('denies readText when clipboard is not declared at all', () => {
+    const d = checkAppPermission('clipboard.readText', {}, {});
+    expect(d.allowed).toBe(false);
+  });
+
+  it('denies readText when the app declared some other permission but not this one', () => {
+    // 这条是真正的回归点：`{ fs: {...} }` 不该顺带带出剪贴板。
+    const d = checkAppPermission('clipboard.readText', {}, { fs: { read: ['{appdata}/**'] } });
+    expect(d.allowed).toBe(false);
+  });
+
+  it('denies when clipboard is declared but explicitly disabled', () => {
+    const d = checkAppPermission('clipboard.readText', {}, { clipboard: { enabled: false } });
+    expect(d.allowed).toBe(false);
+  });
+
+  it('allows once the app opts in', () => {
+    const d = checkAppPermission('clipboard.readText', {}, { clipboard: { enabled: true } });
+    expect(d.allowed).toBe(true);
+  });
+
+  it('leaves dialog and storage alone — they were never the sensitive one', () => {
+    for (const method of ['dialog.alert', 'storage.get', 'os.info']) {
+      expect(checkAppPermission(method, {}, {}).allowed, method).toBe(true);
+    }
+  });
+});
+
+describe('app protocol surface', () => {  it('exposes only documented methods', () => {
     expect(isKnownAppMethod('fs.readFile')).toBe(true);
     expect(isKnownAppMethod('storage.set')).toBe(true);
     expect(isKnownAppMethod('workspace.readFile')).toBe(false);

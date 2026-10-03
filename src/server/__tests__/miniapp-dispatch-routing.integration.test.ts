@@ -102,6 +102,9 @@ function writeMeta(): void {
         node: { enabled: true },
         ai: { enabled: true },
         agent: { enabled: true },
+        // 剪贴板是 opt-in 的（见 app-permissions.ts::checkClipboard）。这里必须
+        // 显式授予，否则下面那条用例测到的是权限闸而不是路由，两回事。
+        clipboard: { enabled: true },
         storage: {},
       },
     }),

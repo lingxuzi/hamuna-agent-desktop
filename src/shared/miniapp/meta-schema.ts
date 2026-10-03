@@ -92,6 +92,15 @@ function parsePermissions(raw: unknown): MiniAppPermissions | string {
     }
   }
 
+  if (r.clipboard !== undefined) {
+    const cb = asRecord(r.clipboard);
+    if (!cb) return 'permissions.clipboard must be an object';
+    if (cb.enabled !== undefined && typeof cb.enabled !== 'boolean') {
+      return 'permissions.clipboard.enabled must be boolean';
+    }
+    out.clipboard = { enabled: cb.enabled === true };
+  }
+
   if (r.net !== undefined) {
     const nt = asRecord(r.net);
     if (!nt) return 'permissions.net must be an object';

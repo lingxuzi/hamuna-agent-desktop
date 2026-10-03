@@ -14,6 +14,15 @@ export interface MiniAppPermissions {
   shell?: {
     allow?: string[];
   };
+  /**
+   * 系统剪贴板。与 `dialog` 同属「宿主 UI 能力」那一档，但**不能**跟着
+   * `dialog` 一起无条件放行：剪贴板里通常就是用户刚从密码管理器复制的密码。
+   * 一个 `permissions: {}` 的 MiniApp 读得到剪贴板、又能 `net.fetch` 外发，
+   * 就是一条现成的凭据外泄路径，所以它必须像 `ai` / `agent` 一样显式 opt-in。
+   */
+  clipboard?: {
+    enabled?: boolean;
+  };
   net?: {
     allow?: string[];
   };

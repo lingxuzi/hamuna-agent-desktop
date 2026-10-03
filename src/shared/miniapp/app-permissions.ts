@@ -293,11 +293,27 @@ export function checkAppPermission(
     case 'storage':
     case 'os':
     case 'dialog':
-    case 'clipboard':
       return ALLOW;
+    case 'clipboard':
+      return checkClipboard(perms);
     default:
       return deny(`Unknown method '${method}'`, APP_ERROR_CODES.UNKNOWN_METHOD);
   }
+}
+
+/**
+ * 剪贴板要显式 opt-in。
+ *
+ * 它和 `dialog` / `os` / `storage` 不是一档：那三个要么没有敏感数据，要么本来就
+ * 是这个 MiniApp 自己存的东西。剪贴板里是**宿主的**用户状态，典型就是刚复制
+ * 的密码。以前这里和 `dialog` 一起 `return ALLOW`，于是声明空 `permissions`
+ * 的 MiniApp 照样能读——只要再配一条 `net.allow` 就是一条完整的凭据外泄链。
+ */
+function checkClipboard(perms: MiniAppPermissions): PermissionDecision {
+  if (perms.clipboard?.enabled !== true) {
+    return deny('app.clipboard requires meta.permissions.clipboard.enabled = true');
+  }
+  return ALLOW;
 }
 
 function checkFs(name: string, params: unknown, perms: MiniAppPermissions): PermissionDecision {
