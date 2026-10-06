@@ -161,28 +161,50 @@ describe('miniapp-permission-gate / loadMiniAppGrantsForApp', () => {
   });
 });
 
-describe('miniapp-permission-gate / known parser divergence (characterisation)', () => {
-  it('the gate loader honours a record that permissions-grants.ts rejects', async () => {
-    // CHARACTERISATION TEST — pins a known inconsistency, does not endorse it.
-    //
-    // `permissions-grants.readGrantsFile` validates `grantedAt` is a string and
-    // reads under `withFileLock`. The gate's local `readAllGrants` re-implements
-    // the same parse without either check, so the two disagree on a record that
-    // omits `grantedAt`. Its header calls itself a "thin wrapper around the
-    // public store"; it is a second parser that has already drifted.
-    //
-    // Not live today: `grantTool` is the only writer and always stamps
-    // `grantedAt`. It matters because the gate is the allow authority — a
-    // hand-edited or third-party-written grants file gets a laxer filter than
-    // the store. Closing the gap should flip this assertion; update it in the
-    // same commit.
+describe('miniapp-permission-gate / parser parity with the store', () => {
+  // The gate keeps its own parser so it never takes `withFileLock` on the
+  // PreToolUse hot path. That makes this pair of assertions the thing standing
+  // between "two parsers" and "two different answers": they pin the gate's
+  // filter to `permissions-grants.isValidGrant` in BOTH directions, so the two
+  // can never quietly drift apart again.
+  it('rejects exactly the records the store rejects', async () => {
+    // Regression: the gate's filter skipped `grantedAt`, so the allow authority
+    // honoured a record `isToolGranted` treated as absent. Only `grantTool`
+    // writes this file and it always stamps the field, so the record is only
+    // reachable by a hand-edited or third-party-written grants file - but the
+    // gate is what authorises every MiniApp tool call, and it must never be
+    // the laxer of the two.
     writeFileSync(
       grantsPath(),
       JSON.stringify({ grants: [{ appId: 'git-graph', toolName: 'Bash', scope: 'always' }] }),
       'utf8',
     );
     const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph');
-    expect(grants.get('Bash')).toBe('always');
+    expect(grants.get('Bash')).toBeUndefined();
     expect(await isToolGranted(appDirs, 'git-graph', 'Bash')).toBe(false);
+  });
+
+  it('still honours a fully-formed grant', async () => {
+    // The other direction, so parity cannot be "fixed" by making the gate
+    // ignore the file and silently deny every real grant - which would look
+    // exactly like correct fail-closed behaviour right up until a user could
+    // not run any MiniApp tool at all.
+    writeFileSync(
+      grantsPath(),
+      JSON.stringify({
+        grants: [
+          {
+            appId: 'git-graph',
+            toolName: 'Bash',
+            scope: 'always',
+            grantedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph');
+    expect(grants.get('Bash')).toBe('always');
+    expect(await isToolGranted(appDirs, 'git-graph', 'Bash')).toBe(true);
   });
 });

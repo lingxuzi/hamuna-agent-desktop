@@ -105,8 +105,20 @@ export async function loadMiniAppGrantsForApp(
   return out;
 }
 
-// Thin wrapper around the public store. Local to keep the gate decoupled
-// from utils/permissions-grants.ts re-exports.
+// A **second** parser, not a thin wrapper.
+//
+// Kept local so the gate never takes `withFileLock` on the PreToolUse hot path:
+// every MiniApp tool call runs this, so locking would add retry/poll latency and
+// contend with the prompt UI's own writes. The unlocked read is safe only because
+// the writer does tmp+rename (`permissions-grants.writeAtomic`) — a reader sees
+// the old file or the new one, never a torn one.
+//
+// The cost of staying local is a second validator, so it MUST stay field-for-field
+// identical to `permissions-grants.isValidGrant`. It had already drifted once: this
+// copy skipped `grantedAt`, so the gate — the allow authority that runs on every
+// PreToolUse — honoured records the store treated as absent.
+// `miniapp-permission-gate.unit.test.ts` pins the two in lockstep in both
+// directions; changing one filter without the other turns those tests red.
 async function readAllGrants(
   appDirs: { configDir: string },
 ): Promise<{ appId: string; toolName: string; scope: MiniAppToolScope }[]> {
@@ -125,6 +137,7 @@ async function readAllGrants(
           typeof g === 'object' &&
           typeof (g as { appId?: unknown }).appId === 'string' &&
           typeof (g as { toolName?: unknown }).toolName === 'string' &&
+          typeof (g as { grantedAt?: unknown }).grantedAt === 'string' &&
           ((g as { scope?: unknown }).scope === 'session' ||
             (g as { scope?: unknown }).scope === 'always'),
       )
