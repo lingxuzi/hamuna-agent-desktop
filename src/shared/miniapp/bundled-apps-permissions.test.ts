@@ -148,6 +148,19 @@ function extractCalls(rawSrc: string): string[] {
     }
     if (best) found.add(best);
   }
+  // 第二种形态：`workerCall('git.status', {...})` 与手写的
+  // `postMessage({kind:'worker.call', ...})`。**必须一起认**，否则走这条路的 app
+  // 扫出 0 处调用，于是下面每一条断言都以"没有调用可查"通过 —— 正是本文件要防的
+  // 静默失效。已提交版的 git-graph / file-explorer 走的正是这条路（各自手搓
+  // nonce + request/response），`app.call` 门面是后加的；只认 `app.*` 时这两个
+  // app 在本文件里彻底不可见，护栏对它们形同虚设。
+  //
+  // 统一记成 `call.call`：`checkAppPermission` 对它的判定只问
+  // `permissions.node.enabled`，与走哪条线无关，所以不必在这里复述"这条线还有
+  // 没有自己的闸"。真正的闸在 spawn 路由（`node.enabled !== true` 直接 403）
+  // 与 worker pool 的 kind 白名单，两条线共用。
+  if (/\bworkerCall\s*\(\s*['"`]([A-Za-z][\w.]*)['"`]/.test(source)) found.add('call.call');
+  if (/kind\s*:\s*['"`]worker\.call['"`]/.test(source)) found.add('call.call');
   return [...found].sort();
 }
 
@@ -289,6 +302,34 @@ describe('bundled MiniApps: every app.* call in source is covered by its own met
     const total = APPS.reduce((n, a) => n + a.calls.length, 0);
     expect(total).toBeGreaterThan(0);
     expect(APPS.some((a) => a.calls.includes('call.call'))).toBe(true);
+  });
+
+  it('sees the worker protocol, not just the app.call facade', () => {
+    // The extractor used to match `app.*` only. Every committed bundled app that
+    // reaches its worker does so through a hand-rolled `workerCall(...)` helper,
+    // so the scan found ZERO calls and this whole file passed on an empty input
+    // -- including the per-app assertions below, which had nothing to check.
+    // `scans real app.* call sites` was supposed to catch exactly that, but it
+    // only guards against a total zero, and in the app.call world the total was
+    // non-zero for the wrong reason: the facade call that no bundled app makes.
+    //
+    // So pin the extractor itself against both shapes. `call.call` is the right
+    // thing to record: `checkAppPermission` asks only whether
+    // `permissions.node.enabled` is true, and both transports land on the same
+    // spawn gate and the same worker-pool kind allow-list.
+    expect(extractCalls(`return app.call('git.status', {})`)).toContain('call.call');
+    expect(extractCalls(`return workerCall('git.status', {})`)).toContain('call.call');
+    expect(
+      extractCalls(`window.parent.postMessage({ kind: 'worker.call', nonce }, '*')`),
+    ).toContain('call.call');
+    // A real worker app in this repo uses exactly this shape, so if the pattern
+    // ever stops matching it, this fails before the per-app loop can go quiet.
+    expect(extractCalls(`await workerCall('git.checkout', { cwd, branch });`)).toEqual([
+      'call.call',
+    ]);
+    // ...and an app that calls nothing must stay empty, or the assertions above
+    // would be satisfied by matching everything.
+    expect(extractCalls(`const x = 1;`)).toEqual([]);
   });
 
   it('does not count capabilities that only appear in comments', () => {
