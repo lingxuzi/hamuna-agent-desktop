@@ -30,7 +30,7 @@ const RUNTIME_SETS_BASE_URL: &str = match option_env!("RUNTIME_SETS_BASE_URL") {
 };
 // Keep this in sync with `src-tauri/tauri.conf.json > plugins.updater.pubkey`.
 // Managed runtime manifests and artifacts use the same minisign trust root as app updates.
-const HAMUNA_MINISIGN_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY3RkQ5QjIzMTE4RTgyRTkKUldUcGdvNFJJNXY5OTB3T2pnUzVUbjFrV203Zk5ZTDg0NVJRdGI0UVRranJzTUsvM0hGcmFlc0IK";
+const HAMUNA_MINISIGN_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM3MUQ2M0E4MUU3NDJENEEKUlVSS0xYUWVxR01kTjVObEhudHI0SnFmRXorNy9wbGVZVUhSTCtpemFydFBRb2E4RU1LQ0tkb3cK";
 const MANIFEST_SCHEMA_VERSION: u32 = 1;
 // Build-time configurable; see comment on RUNTIME_SETS_BASE_URL above.
 const DOWNLOAD_HOST: &str = match option_env!("DOWNLOAD_HOST") {
