@@ -4,7 +4,7 @@
  * The generate/register half lives in
  * `src/server/__tests__/miniapp-lifecycle.unit.test.ts`.
  *
- * ## Historical note (read before touching the `it.fails` cases below)
+ * ## Historical note (the `it.fails` cases are all gone now)
  *
  * This file was written when a running MiniApp genuinely could not reach the
  * agent or an LLM: `permissions.ai` was declared in every meta.json but had no
@@ -12,11 +12,11 @@
  * gaps were pinned with `it.fails`, which passes while broken and flips to red
  * the moment someone fixes it.
  *
- * `app.ai.*` and `app.agent.*` have since landed, so some of those `.fails`
- * have already come off. **A remaining `.fails` is not a statement about the
- * product** — check what it asserts before assuming the capability is still
- * missing. The same goes in reverse: do not add a passing test that locks one
- * of these gaps in as intended behaviour.
+ * `app.ai.*` and `app.agent.*` have since landed, and the last `it.fails` was
+ * removed rather than flipped. See the note at the bottom of this file for why
+ * that one was deleted rather than converted. **Do not add a test asserting a
+ * MiniApp cannot reach a model** — the supported shape is two independent
+ * opt-ins plus Bubble Claim, all three described there.
  */
 import type { ReactElement } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -413,20 +413,19 @@ describe('MiniApp launch: iframe is actually locked down', () => {
   });
 });
 
-describe('MiniApp → LLM: not built, deliberately', () => {
-  it.fails('a MiniApp can reach an LLM / the agent', () => {
-    // `permissions.ai` is declared in all five bundled meta.json files and
-    // shape-checked by meta-schema.ts, but nothing reads it at runtime, and
-    // the iframe CSP now pins `connect-src 'none'`. A direct model call would
-    // need a host route, a metering policy, and a permission prompt — see the
-    // report; Bubble Claim is the designed channel instead.
-    const meta = JSON.parse('{"permissions":{"ai":{"enabled":true}}}') as {
-      permissions: { ai: { enabled: boolean } };
-    };
-    expect(
-      meta.permissions.ai.enabled && false,
-      'permissions.ai has no runtime consumer — declaring it in meta.json does ' +
-        'nothing. A MiniApp needs a real bridge (host route + prompt) to reach a model.',
-    ).toBe(true);
-  });
-});
+// The old `MiniApp → LLM: not built, deliberately` block is gone rather than
+// converted. Its `it.fails('a MiniApp can reach an LLM')` asserted
+// `meta.permissions.ai.enabled && false` — a tautology that throws whatever the
+// product does, so it could never have reported the capability arriving, only
+// that someone remembered to delete it. `app.ai.*` / `app.agent.*` shipped long
+// ago (see appHostDispatch's agent-turn routing and the CSP assertion above,
+// which is what keeps app code from bypassing the host's per-call permission
+// check). Its two surviving claims are covered elsewhere and were duplicated
+// here if reinstated: the `connect-src 'none'` anti-bypass directive, and the
+// Bubble Claim channel that needs no AI permission at all.
+//
+// Do not re-add a test asserting a MiniApp CANNOT reach a model. The supported
+// shape is: `app.ai.*` under `permissions.ai`, `app.agent.*` under
+// `permissions.agent` (independent opt-ins, both re-checked per call by the
+// dispatcher), and Bubble Claim as the zero-permission route into the user's
+// own conversation.
