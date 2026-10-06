@@ -31,23 +31,33 @@ interface GrantsFile {
   grants: MiniAppPermissionGrant[];
 }
 
-const EMPTY_FILE: GrantsFile = { grants: [] };
-
 function grantsPath(appDirs: { configDir: string }): string {
   return join(appDirs.configDir, 'permissions-grants.json');
 }
 
+// MUST be a factory, never a shared `const EMPTY_FILE = { grants: [] }`.
+// A shallow spread (`{ ...EMPTY_FILE }`) hands every caller the SAME array
+// instance, and `grantTool` pushes into it. The module-level array then
+// accumulates every grant made in the process lifetime, so any later read that
+// lands on the empty path (file deleted, corrupt, or `grants` not an array)
+// resurrects those grants instead of returning none — a fail-open in the
+// MiniApp permission gate. Verified: grant → delete file → isToolGranted still
+// answers true.
+function emptyGrantsFile(): GrantsFile {
+  return { grants: [] };
+}
+
 function readGrantsFile(path: string): GrantsFile {
-  if (!existsSync(path)) return { ...EMPTY_FILE };
+  if (!existsSync(path)) return emptyGrantsFile();
   try {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw) as Partial<GrantsFile>;
-    if (!parsed || !Array.isArray(parsed.grants)) return { ...EMPTY_FILE };
+    if (!parsed || !Array.isArray(parsed.grants)) return emptyGrantsFile();
     return { grants: parsed.grants.filter((g: unknown) => isValidGrant(g)) };
   } catch {
     // Corrupt file → start fresh. The lock-then-tmp+rename pattern on write
     // means a torn write would surface here, never silently dropping data.
-    return { ...EMPTY_FILE };
+    return emptyGrantsFile();
   }
 }
 

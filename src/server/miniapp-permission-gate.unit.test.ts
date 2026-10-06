@@ -1,10 +1,31 @@
-// Unit tests for the pure decision function in `miniapp-permission-gate.ts`.
-// The I/O helpers (`loadMiniAppGrantsForApp`, `isToolGranted`) are exercised
-// via the integration suite (Round 6 had integration for grants.json).
+// Unit tests for the MiniApp permission gate (`miniapp-permission-gate.ts`).
+//
+// `decideMiniAppTool` is the pure policy; `loadMiniAppGrantsForApp` is the I/O
+// half that feeds it the grant map. Both are covered here. An earlier version
+// of this header claimed the I/O half was "exercised via the integration
+// suite" — no test ever called it, so the grant → load → allow chain that
+// gates every MiniApp tool call ran entirely untested.
 
-import { describe, expect, it } from 'vitest';
-import { decideMiniAppTool } from './miniapp-permission-gate';
-import type { MiniAppToolScope } from './utils/permissions-grants';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { decideMiniAppTool, loadMiniAppGrantsForApp } from './miniapp-permission-gate';
+import { grantTool, isToolGranted, type MiniAppToolScope } from './utils/permissions-grants';
+
+let configDir: string;
+let appDirs: { configDir: string };
+
+beforeEach(() => {
+  configDir = mkdtempSync(join(tmpdir(), 'hamapp-gate-'));
+  appDirs = { configDir };
+});
+
+afterEach(() => {
+  rmSync(configDir, { recursive: true, force: true });
+});
+
+const grantsPath = () => join(configDir, 'permissions-grants.json');
 
 describe('miniapp-permission-gate / decideMiniAppTool', () => {
   it('passes through non-MiniApp sessions immediately', () => {
@@ -56,10 +77,12 @@ describe('miniapp-permission-gate / decideMiniAppTool', () => {
   });
 
   it('extracts the appId from "miniapp_<appId>_<runId>"', () => {
-    // First arg includes dashes and underscores in the appId; the runId may
-    // contain dashes. We deliberately do not exhaustively test every shape
-    // — the integration test in the grants.ts file round-trips the full
-    // set; here we just lock the parsing rule.
+    // Both halves are kebab-case ASCII — appId may contain dashes, runId may
+    // contain dashes, and neither may contain "_" (enforced upstream by
+    // `is_safe_app_id` / `is_safe_run_id`). So the first "_" after the
+    // `miniapp_` prefix is always the appId/runId boundary. We deliberately do
+    // not test illegal shapes here: they cannot reach the hook, and the loader
+    // tests below cover the live read path.
     const grants = new Map<string, MiniAppToolScope>([['Write', 'always']]);
     const decision = decideMiniAppTool(
       'miniapp_hello-world_run-with-dashes',
@@ -67,5 +90,99 @@ describe('miniapp-permission-gate / decideMiniAppTool', () => {
       grants,
     );
     expect(decision.allow).toBe(true);
+  });
+});
+
+// The gate's loader is the live read path: `agent-session.ts` calls
+// `loadMiniAppGrantsForApp` inside the PreToolUse hook for every
+// `miniapp_<appId>_<runId>` session.
+describe('miniapp-permission-gate / loadMiniAppGrantsForApp', () => {
+  it('returns only the requested app\'s grants', async () => {
+    await grantTool(appDirs, 'git-graph', 'Bash', 'session');
+    await grantTool(appDirs, 'git-graph', 'Write', 'always');
+    await grantTool(appDirs, 'file-explorer', 'Read', 'always');
+
+    const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph');
+    expect([...grants.keys()].sort()).toEqual(['Bash', 'Write']);
+    expect(grants.get('Bash')).toBe('session');
+    expect(grants.get('Write')).toBe('always');
+    // The other app's tool must not leak into this app's map — this map is
+    // the entire authorization surface for the hook.
+    expect(grants.has('Read')).toBe(false);
+  });
+
+  it('returns an empty map when the grants file does not exist', async () => {
+    const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph');
+    expect(grants.size).toBe(0);
+  });
+
+  it('returns an empty map for unparseable JSON (fail closed, never throws)', async () => {
+    writeFileSync(grantsPath(), 'not json at all', 'utf8');
+    const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph');
+    expect(grants.size).toBe(0);
+  });
+
+  it('returns an empty map when the record shape is wrong', async () => {
+    writeFileSync(grantsPath(), JSON.stringify({ grants: 'nope' }), 'utf8');
+    const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph');
+    expect(grants.size).toBe(0);
+  });
+
+  it('feeds decideMiniAppTool end to end: granted tool runs, ungranted is denied', async () => {
+    await grantTool(appDirs, 'git-graph', 'Bash', 'session');
+    const sessionId = 'miniapp_git-graph_run-abc';
+
+    const allowed = decideMiniAppTool(
+      sessionId,
+      'Bash',
+      await loadMiniAppGrantsForApp(appDirs, 'git-graph'),
+    );
+    expect(allowed.allow).toBe(true);
+    expect(allowed.scope).toBe('session');
+
+    const denied = decideMiniAppTool(
+      sessionId,
+      'Write',
+      await loadMiniAppGrantsForApp(appDirs, 'git-graph'),
+    );
+    expect(denied.allow).toBe(false);
+    expect(denied.reason).toMatch(/has not been granted/);
+  });
+
+  it('does not let one app answer for another through a shared session id shape', async () => {
+    // The hook derives appId by splitting "miniapp_<appId>_<runId>" on "_".
+    // That is only sound because both halves are kebab-case ASCII, enforced by
+    // `is_safe_app_id` / `is_safe_run_id` in `cmd_miniapp_ensure_session`
+    // before the session is created. This test pins the gate's half of that
+    // contract: given a well-formed id, it must resolve to exactly one app.
+    await grantTool(appDirs, 'git-graph', 'Bash', 'session');
+    const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph-run-abc');
+    expect(grants.size).toBe(0);
+  });
+});
+
+describe('miniapp-permission-gate / known parser divergence (characterisation)', () => {
+  it('the gate loader honours a record that permissions-grants.ts rejects', async () => {
+    // CHARACTERISATION TEST — pins a known inconsistency, does not endorse it.
+    //
+    // `permissions-grants.readGrantsFile` validates `grantedAt` is a string and
+    // reads under `withFileLock`. The gate's local `readAllGrants` re-implements
+    // the same parse without either check, so the two disagree on a record that
+    // omits `grantedAt`. Its header calls itself a "thin wrapper around the
+    // public store"; it is a second parser that has already drifted.
+    //
+    // Not live today: `grantTool` is the only writer and always stamps
+    // `grantedAt`. It matters because the gate is the allow authority — a
+    // hand-edited or third-party-written grants file gets a laxer filter than
+    // the store. Closing the gap should flip this assertion; update it in the
+    // same commit.
+    writeFileSync(
+      grantsPath(),
+      JSON.stringify({ grants: [{ appId: 'git-graph', toolName: 'Bash', scope: 'always' }] }),
+      'utf8',
+    );
+    const grants = await loadMiniAppGrantsForApp(appDirs, 'git-graph');
+    expect(grants.get('Bash')).toBe('always');
+    expect(await isToolGranted(appDirs, 'git-graph', 'Bash')).toBe(false);
   });
 });
