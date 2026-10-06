@@ -210,11 +210,14 @@ button:disabled {
 /* ── 双栏 ────────────────────────────────────────────────────────────────
  * 树驱动 viewer，两者共用一行；窄屏回落成单列（MiniApp 会被塞进侧栏）。
  * ------------------------------------------------------------------------ */
+/* align-items 默认就是 stretch，显式写出来是为了说明这是一个刻意的决定：
+ * 树和 viewer 共用一行，底边必须齐。之前写的 `align-items: start` 让两栏
+ * 各按内容收缩，一空一满，页面下沿参差，看起来像没排完。 */
 .panes {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   gap: var(--fe-gap);
-  align-items: start;
+  align-items: stretch;
 }
 
 .tree-pane,
@@ -222,6 +225,11 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* 跟着栏高拉伸，让虚线占位和真实列表在同一个盒子里换挡 —— 切换时底边不跳。 */
+#tree {
+  flex: 1;
 }
 
 /* ── 列表面板（树 / 命中）───────────────────────────────────────────── */
@@ -247,6 +255,18 @@ button:disabled {
 #tree li:last-child,
 #search-hits li:last-child {
   border-bottom: none;
+}
+
+/* 还没加载目录时列表是空的。没有这条，空 <ul> 会塌成一条 1px 的发丝线
+ * —— 比不做样式更糟，看起来像渲染坏了。这里给一个和 icon-generator
+ * 候选区同款的虚线占位：它说的是"还没有内容"，不需要文案（这个应用有 i18n，
+ * 而 CSS 里写死英文提示会绕过它）。ui.js 加载后写的空态是另一条规则，见下。 */
+#tree:empty,
+#search-hits:empty {
+  min-height: 96px;
+  border-style: dashed;
+  border-color: var(--fe-line-strong);
+  background: transparent;
 }
 
 /* 空状态：ui.js 写的是不带 button 的 <li>（emptyDir / noMatches）。

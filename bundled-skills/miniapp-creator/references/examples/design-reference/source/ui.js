@@ -286,7 +286,17 @@ el.reset.addEventListener('click', () => {
 
 syncAppearance(app.appearanceMode);
 syncLocale();
-await load();
+// 不要写成顶层 `await load()`：宿主会把 `<script src="ui.js">` 就地替换成
+// 裸的 script 元素（Rust `inline_miniapp_siblings`），**没有** `type="module"`，所以整份文件按 classic script 解析。顶层 await 是
+// SyntaxError，会让这里整个行为层一行都不执行 —— 而且只在 console 里留一条
+// red console error，界面停在空壳上，看起来像"没数据"。
+//
+// 同一份文件里任何 `await` 都必须待在一个 async 函数**内部**。
+load().catch((e) => {
+  // 首屏加载失败同样不能静默：用户看到的是空白，不是一句报错。
+  showToast(String((e && e.message) || e));
+  el.empty.hidden = false;
+});
 
 // 订阅而不是只读一次：外观和语言都会在会话中途变化。
 //

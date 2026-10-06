@@ -237,6 +237,23 @@ button:disabled {
   min-width: 0;
 }
 
+/* 还没加载仓库时 commit 列表是空的 `<ul>`。没有这条它会塌成一条 1px 发丝线，
+ * 看起来像渲染坏了；虚线占位说明"还没有内容"，不需要文案。 */
+#commit-log:empty {
+  min-height: 120px;
+  border-style: dashed;
+  border-color: var(--gg-line-strong);
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+
+/* 加载成功但一个 commit 都没有时，ui.js 写的是纯文本 "(no commits)" 到
+ * #commit-graph；那行字已经有内容，所以只是要让它读起来像提示而不是数据。 */
+#commit-graph:not(:empty) {
+  color: var(--gg-text-muted);
+}
+
 /* ── commit 日志 ────────────────────────────────────────────────────────
  * motif 在这里落地：左侧 2px 色条平时不可见，hover 才淡入，整行同时铺 5% 淡底。
  * 只给 row 升一档阴影，不改边框 —— 两处一起动会让整页在抖动。

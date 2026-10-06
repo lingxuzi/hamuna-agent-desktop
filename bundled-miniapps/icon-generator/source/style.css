@@ -285,7 +285,11 @@ button:disabled {
 }
 
 #icon-output {
-  width: clamp(160px, 40%, 256px);
+  /* 固定 256px，和 canvas 的固有尺寸一致。写成 clamp(160px, 40%, 256px) 也
+   * 能落到 256，但那个 40% 是按 flex 容器宽解析的，中间那段会被容器宽度带着
+   * 变；预览图是版面锚点，尺寸应该只由它自己决定。max-width 负责窄屏收敛。 */
+  width: 256px;
+  max-width: 100%;
   height: auto;
   aspect-ratio: 1;
   border: 1px solid var(--ig-line);

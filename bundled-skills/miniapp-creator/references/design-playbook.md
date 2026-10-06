@@ -212,6 +212,25 @@ hover 染色、想给选中态加 10% 底色、想让阴影带一点强调色 �
 | 用大量 stats / 装饰图标填空白 | 留白本身就是设计；空白说明结构该简化，不是被填满 |
 | 圆角 4/8/12/16 随心混用 | 钉 1-2 档（`--hamuna-radius-md` / `--hamuna-radius-sm`），全应用统一 |
 | 一上来就写 1500 行 ui.js | 早提交早预览；成型后再按功能分模块 |
+| `ui.js` 里写顶层 `await` | 任何 `await` 都待在一个 async 函数**内部**（宿主注入的是裸 `<script>`，不是 module，见下） |
+
+### 顶层 `await` 会让整份 ui.js 一行都不执行
+
+这条单独拎出来，因为它**没有任何可见症状**：宿主在把 HTML 交给 iframe 之前，会把
+`<script src="ui.js">` 就地替换成裸 `<script>…</script>`（Rust
+`inline_miniapp_siblings`）—— 没有 `type="module"`。于是文件按 **classic script**
+解析，里面任何顶层 `await` 都是 SyntaxError，**整个文件不执行**，控制台只留一条
+红色报错，界面停在空壳上。用户看到的是"没数据"，不是"报错了"。
+
+```js
+// ✗ 整个文件死掉
+await load();
+
+// ✓
+load().catch((e) => reportToUser(e));
+```
+
+模型很爱写顶层 `await`，因为它在别的地方（module、Node ESM）这么写是对的。
 
 ---
 
