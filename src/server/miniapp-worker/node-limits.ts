@@ -55,9 +55,13 @@ function readDeclaredNode(appRoot: string): MiniAppPermissions['node'] | null {
 
 /**
  * Resolve a MiniApp's worker resource envelope. Falls back to the pool
- * defaults for any field the app omits; `permissions.node.enabled === false`
- * is deliberately NOT honored here — the spawn route owns that decision, and
- * a disabled app should never reach the pool at all.
+ * defaults for any field the app omits.
+ *
+ * Whether a worker may exist at all is NOT decided here: the spawn route owns
+ * that, and it requires an explicit `enabled === true`. This function only
+ * answers "given a permitted app, what envelope does it get", so an app that
+ * declares `max_memory_mb` but forgets `enabled` still gets its declared
+ * number — the denial happens earlier and names the missing field.
  */
 export function resolveNodeLimits(appId: string): NodeLimits {
   const declared = readMiniAppNodePermission(appId);

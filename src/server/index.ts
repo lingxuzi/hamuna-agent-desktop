@@ -5786,15 +5786,29 @@ async function main() {
             body.init && typeof body.init === 'object' && !Array.isArray(body.init)
               ? (body.init as Record<string, unknown>)
               : undefined;
-          // `permissions.node.enabled === false` opt-out is declared in
-          // meta.json, so it has to be read before the worker exists. A
-          // missing or malformed meta.json resolves to "declared nothing",
-          // which the pool treats as permitted-with-defaults — the same
-          // fail-open-to-defaults the file has had since Phase 3.
+          // A worker thread is a privilege GRANT, so the only shape that may
+          // proceed is an explicit `permissions.node.enabled === true` —
+          // exactly what `checkAppPermission` already requires for
+          // `call.call` (shared/miniapp/app-permissions.ts). The two must
+          // agree: when they disagreed, an app that declared no `node`
+          // permission at all was denied by the dispatch gate while the
+          // spawn route happily handed it a live thread, because
+          // `enabled === undefined` fell through an `=== false` test.
+          //
+          // "Declared nothing" and "declared false" are the same answer here
+          // (deny), which is why this is stricter than Phase 3's
+          // fail-open-to-defaults: omitting a permission must never be worth
+          // more than explicitly refusing it, or every MiniApp author gets a
+          // Node worker by deleting one line from meta.json.
           const nodePerm = readMiniAppNodePermission(body.appId);
-          if (nodePerm?.enabled === false) {
+          if (nodePerm?.enabled !== true) {
             return jsonResponse(
-              { ok: false, error: `MiniApp '${body.appId}' declares permissions.node.enabled = false` },
+              {
+                ok: false,
+                error:
+                  `MiniApp '${body.appId}' must declare permissions.node.enabled = true ` +
+                  `to use a worker (currently: ${nodePerm?.enabled === false ? 'enabled = false' : 'not declared'})`,
+              },
               403,
             );
           }
