@@ -422,6 +422,27 @@ describe('MiniApp app.* over real HTTP against a real Sidecar process', () => {
     expect(res.error?.code).toBe('PERMISSION_DENIED');
   });
 
+  it('answers a denied dispatch with HTTP 200 so the renderer can read the envelope', async () => {
+    // 上面两条已经证明**信封里**的 code 是对的（PERMISSION_DENIED）。这条证明
+    // 它真的能穿过 HTTP 层到达消费端 —— 状态码曾经编码了"失败"（400），而
+    // renderer 的 `apiPostJson` 在 `!response.ok` 时是 throw（`apiFetch.ts:59`），
+    // 于是作者拿到的只剩 NETWORK_ERROR 加一个字面量 "[object Object]"：
+    // 真因和 code 一起消失。同一条路由的 agent 回合因为直读信封而一直是对的。
+    //
+    // 刻意不写 "expect(res.ok).toBe(true)" —— 那正是本文件此前只看信封、
+    // 因此漏掉这个 bug 的原因。
+    const res = await fetch(`${baseUrl}/api/miniapp/app/shell.exec`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appId: APP_ID, params: { command: 'echo', args: ['nope'] } }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Envelope;
+    expect(body.ok).toBe(false);
+    expect(body.error?.code).toBe('PERMISSION_DENIED');
+  });
+
   it('rejects an appId that is not kebab-case at the route, before any dispatch', async () => {
     const res = await fetch(`${baseUrl}/api/miniapp/app/storage.get`, {
       method: 'POST',
