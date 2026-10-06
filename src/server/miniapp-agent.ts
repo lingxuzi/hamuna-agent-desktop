@@ -24,19 +24,19 @@
  * 正是它自己的会话 —— 不需要、也不能在这里按 sessionId 再选一次。
  */
 
-import { APP_ERROR_CODES } from '../shared/miniapp/app-protocol';
+import { APP_ERROR_CODES, type AppErrorCode } from '../shared/miniapp/app-protocol';
 import { getSessionEngine } from './session-engine/selector';
 
 interface AgentOutcome {
   ok: boolean;
   result?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: AppErrorCode; message: string };
 }
 
 function ok(result: unknown): AgentOutcome {
   return { ok: true, result };
 }
-function fail(code: string, message: string): AgentOutcome {
+function fail(code: AppErrorCode, message: string): AgentOutcome {
   return { ok: false, error: { code, message } };
 }
 

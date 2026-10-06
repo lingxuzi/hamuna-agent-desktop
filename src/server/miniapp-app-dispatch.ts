@@ -23,7 +23,7 @@
  */
 
 import { getConfigDir } from './utils/admin-config';
-import { APP_ERROR_CODES } from '../shared/miniapp/app-protocol';
+import { APP_ERROR_CODES, type AppErrorCode } from '../shared/miniapp/app-protocol';
 import { checkAppPermission, isPathAllowed, isPrivateHostname } from '../shared/miniapp/app-permissions';
 import { normalizeAppDataWorkspace } from '../shared/miniapp/app-data-workspace';
 import type { MiniAppMetadata, MiniAppPermissions } from '../shared/miniapp/types';
@@ -32,13 +32,13 @@ import type { WorkerFsScope } from './miniapp-worker/worker-rpc';
 export interface DispatchOutcome {
   ok: boolean;
   result?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: AppErrorCode; message: string };
 }
 
 function ok(result: unknown): DispatchOutcome {
   return { ok: true, result };
 }
-function fail(code: string, message: string): DispatchOutcome {
+function fail(code: AppErrorCode, message: string): DispatchOutcome {
   return { ok: false, error: { code, message } };
 }
 /**

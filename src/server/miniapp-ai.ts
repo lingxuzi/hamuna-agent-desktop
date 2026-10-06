@@ -26,7 +26,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { APP_ERROR_CODES } from '../shared/miniapp/app-protocol';
+import { APP_ERROR_CODES, type AppErrorCode } from '../shared/miniapp/app-protocol';
 import {
   buildClaudeSessionEnv,
   getSessionProviderEnv,
@@ -70,13 +70,13 @@ export function resolveAiTimeoutMs(raw: unknown): number {
 interface AiOutcome {
   ok: boolean;
   result?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: AppErrorCode; message: string };
 }
 
 function ok(result: unknown): AiOutcome {
   return { ok: true, result };
 }
-function fail(code: string, message: string): AiOutcome {
+function fail(code: AppErrorCode, message: string): AiOutcome {
   return { ok: false, error: { code, message } };
 }
 
