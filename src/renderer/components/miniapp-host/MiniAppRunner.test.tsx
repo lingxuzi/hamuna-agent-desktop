@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import MiniAppRunner from './MiniAppRunner';
+import { THEME_TOKEN_STYLE_ID } from './theme-tokens';
 
 describe('MiniAppRunner', () => {
   it('renders iframe with sandbox flags and srcDoc containing user markup', () => {
@@ -81,7 +82,10 @@ describe('MiniAppRunner', () => {
     );
     const doc = container.querySelector('iframe')?.getAttribute('srcdoc') ?? '';
 
-    expect(doc).toMatch(/<style>\s*:root\s*\{/);
+    // 允许带属性：id 是承重的，不是装饰 —— appRuntimeScript 靠它找到首屏那个元素，
+    // 切亮暗时改写的就是它（见 MiniAppRunner.wire.dom.test.tsx 的推送用例）。
+    expect(doc).toMatch(/<style[^>]*>\s*:root\s*\{/);
+    expect(doc).toContain(`id="${THEME_TOKEN_STYLE_ID}"`);
     expect(doc).toContain('--hamuna-bg-primary');
   });
 

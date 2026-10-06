@@ -920,6 +920,141 @@ describe('MiniAppRunner pushes a locale change into a running MiniApp', () => {
   }, 15000);
 });
 
+// ── 主题 Token 实时刷新 ────────────────────────────────────────────────────
+// 回归护栏：`readThemeTokens()` 拷的是计算后**值快照**，烤在 srcDoc 里。宿主切亮暗时
+// iframe 还拿着挂载时的浅色值，`app.appearanceMode` 停在原处，
+// `app.onAppearanceChange` 永不响应 —— 而 skill 文档正教作者用它。整个失败模式
+// 没有异常、没有红，只表现为"UI 没跟着换主题"。
+//
+// 反方向也要守住：token CSS 一旦回到 srcDoc，改 `srcDoc` 属性就会重载 iframe，
+// 用户切一次主题 MiniApp 状态全丢。所以推、且 srcDoc 必须逐字节不变。
+
+describe('MiniAppRunner refreshes MiniApp theme tokens without reloading the iframe', () => {
+  /**
+   * IIFE 当探针：authorSrcDoc 会 `await (${call})`，表达式形式正好复用它的 harness。
+   *
+   * 返回哨兵 `'booted'` 是为了把两条报告分开 —— harness 自己在解析完就会报一条
+   * `{value: <IIFE 返回值>}`，而 appearance 回调再报一条。没有这个哨兵，按长度数的
+   * 断言会被启动那条满足掉，测试看着绿、其实什么都没验（第三版就这么空跑过）。
+   */
+  const THEME_PROBE = `(function () {
+    window.__parseCount = (window.__parseCount || 0) + 1;
+    app.onAppearanceChange(function (e) {
+      var el = document.getElementById('hamuna-theme-tokens');
+      window.parent.postMessage({
+        __wire: true,
+        payload: {
+          ok: true,
+          value: {
+            appearanceMode: app.appearanceMode,
+            scheme: e.appearanceMode,
+            hasStyle: !!el,
+            isDarkCss: !!el && el.textContent.indexOf('color-scheme: dark') >= 0,
+            parseCount: window.__parseCount
+          }
+        }
+      }, '*');
+    });
+    return 'booted';
+  })()`;
+
+  beforeEach(() => {
+    document.documentElement.dataset.colorScheme = 'light';
+  });
+
+  afterEach(() => {
+    delete document.documentElement.dataset.colorScheme;
+  });
+
+  /** 等 appearance 那条真的到（reports[1]），而不是启动那条。 */
+  const waitForAppearance = (reports: unknown[]) =>
+    waitFor(() => expect(reports).toHaveLength(2), { timeout: 3000 });
+
+  it('a light/dark switch reaches the author with the new tokens and the new mode', async () => {
+    const { reports } = await mountAndBoot(THEME_PROBE, {});
+
+    // 首帧只有 harness 的启动报告：host.ready 已经把 mode 送进去了，不该再有事件
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toEqual({ ok: true, value: 'booted' });
+
+    document.documentElement.dataset.colorScheme = 'dark';
+
+    await waitForAppearance(reports);
+    // 四个必须同时成立：mode 动了、CSS 里真的换成深色、首屏那个 <style> 被复用、
+    // 文档没有重新解析过（parseCount 仍是 1）
+    expect(reports[1]).toEqual({
+      ok: true,
+      value: {
+        appearanceMode: 'dark',
+        scheme: 'dark',
+        hasStyle: true,
+        isDarkCss: true,
+        parseCount: 1,
+      },
+    });
+  }, 15000);
+
+  it('leaves srcDoc byte-identical, so the switch cannot cost the author their state', async () => {
+    // 这是"不要用重载来刷新 token"那条约束本身。srcDoc 一变，React 就改 iframe 的
+    // 属性，iframe 重载 —— 切一次主题，MiniApp 里的输入、滚动位置、展开态全没。
+    const { iframe, reports } = await mountAndBoot(THEME_PROBE, {});
+    const before = iframe.getAttribute('srcdoc');
+
+    document.documentElement.dataset.colorScheme = 'dark';
+    await waitForAppearance(reports);
+
+    // 推已经发生（上面等到了 appearance），此时 srcDoc 必须一动不动
+    expect(iframe.getAttribute('srcdoc')).toBe(before);
+  }, 15000);
+
+  it('stores the pushed CSS as text, and never accumulates a second style element', async () => {
+    // token 值来自宿主的 getComputedStyle，也就是**装上来的第三方 Theme**。宿主自己
+    // 那条路有 cssSafeValue 转 '<'，但 runtime 不该依赖调用方永远记得转 —— 这是
+    // 第三方数据进 DOM 的最后一道闸。
+    //
+    // 这里直接手投带闭合标签的载荷，而不是靠宿主发正常 CSS：合法 CSS 两种写法结果
+    // 一致，那样这条什么都区分不了。
+    //
+    // ⚠️ 变异验证的一条教训，别把它读宽了：把 `textContent` 改成 `innerHTML`，
+    // **这条不会红**。`<style>` 按 HTML 规范走 fragment parsing 的 RAWTEXT 模式，
+    // 两种写法都不会把载荷解析成元素 —— 它们本来就等价。真正被钉住的是下面两件：
+    // 载荷逐字存成 CSS 文本（不被截断、不被执行），以及**style 元素数量不变** ——
+    // 后者才是活的：不复用首屏那个元素的话，用户切 20 次主题就多 20 个 style 标签。
+    const { iframe } = await mountAndBoot(THEME_PROBE, {});
+    const frameWindow = iframe.contentWindow as unknown as {
+      Function: (code: string) => () => unknown;
+    };
+    const dispatch = frameWindow.Function(
+      'return function (data) { window.dispatchEvent(new MessageEvent("message", { data: data, source: window.parent })); };',
+    )() as unknown as (data: unknown) => void;
+
+    const stylesBefore = frameWindow.Function(
+      'return document.getElementsByTagName("style").length;',
+    )() as unknown as number;
+
+    dispatch({
+      kind: 'app.event',
+      type: 'theme.change',
+      appearanceMode: 'dark',
+      tokenCss: ':root { --hamuna-bg-primary: "</style><style>window.__pwned=1</style>"; }',
+    });
+
+    const after = frameWindow.Function(`
+      var els = document.getElementsByTagName('style');
+      return {
+        count: els.length,
+        pwned: typeof window.__pwned,
+        keptText: els[0].textContent.indexOf('window.__pwned=1') >= 0,
+        ranScript: typeof window.__pwned !== 'undefined'
+      };
+    `)() as unknown as { count: number; pwned: string; keptText: boolean; ranScript: boolean };
+
+    expect(after.ranScript, 'a pushed theme token executed script in the MiniApp').toBe(false);
+    expect(after.count, 'the hostile payload was parsed into extra elements').toBe(stylesBefore);
+    expect(after.keptText, 'the payload must be kept verbatim as CSS text').toBe(true);
+  }, 15000);
+});
+
 // ── API 面覆盖补齐 ────────────────────────────────────────────────────────
 // 本文件此前只覆盖 34 个 method 中的 13 个。每个 method 都有三段"形状"要对：
 // runtime 拼出的 params、宿主 listener 认的字段、dispatch 读的字段。任一段写错，

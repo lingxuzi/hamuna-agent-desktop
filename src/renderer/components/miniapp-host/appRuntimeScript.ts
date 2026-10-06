@@ -14,6 +14,7 @@
  */
 
 import { APP_CALL_KIND, APP_RESULT_KIND } from '../../../shared/miniapp/app-protocol';
+import { THEME_TOKEN_STYLE_ID } from './theme-tokens';
 
 /**
  * 生成 runtime 脚本文本。
@@ -150,7 +151,11 @@ export function buildAppRuntimeScript(appId: string): string {
     // 只能让作者自己拼字符串绕开 app.t —— 那就等于白给了一个"语言变了"的通知。
     // applyEnv 内部跳过 undefined，畸形事件不会把 env 洗成 undefined。
     if (d.kind === 'app.event' && typeof d.type === 'string') {
-      if (d.type === 'theme.change') { applyEnv({ appearanceMode: d.appearanceMode }); emit('appearance', d); }
+      if (d.type === 'theme.change') {
+        applyEnv({ appearanceMode: d.appearanceMode });
+        applyThemeTokens(d.tokenCss);
+        emit('appearance', d);
+      }
       else if (d.type === 'locale.change') { applyEnv({ locale: d.locale }); emit('locale', d.locale); }
       // agent.* 走独立通道：Agent 的流式 delta 频率很高，混进通用 event
       // 会让只想监听主题变更的作者被迫过滤大量无关负载。
@@ -187,6 +192,30 @@ export function buildAppRuntimeScript(appId: string): string {
         env[k] = next[k];
       }
     }
+  }
+
+  // 宿主切主题 / 亮暗时下发的新 token CSS，改写首屏那个 <style> 的内容。
+  //
+  // 用 textContent 而不是 innerHTML：style 元素按 HTML 规范走 fragment parsing
+  // 的 RAWTEXT 模式，两者其实等价，但 textContent 的意图没有歧义。真正要紧的是
+  // **复用同一个元素**（首屏 srcDoc 里那个）—— 每次推送都新建一个的话，用户切二十
+  // 次主题就多二十个 style 标签。（变异验证：去掉复用，本条的 style 数量断言会红。）
+  //
+  // 元素本不该不存在 —— 首屏烤进了 srcDoc。仍兜一层 createElement：runtime 是所有
+  // MiniApp 共享的同一段脚本，宿主改版或作者删掉那个 style 后，主题变更不该静默失效。
+  function applyThemeTokens(css) {
+    if (typeof css !== 'string' || css === '') return;
+    // 无 DOM 环境直接跳过，和 readThemeTokens() 同一个惯例。这里抛出去会变成
+    // message listener 里的未捕获异常，把后面 emit('appearance') 一起吞掉 ——
+    // 作者的 onAppearanceChange 会静默失灵，比样式没刷新更难查。
+    if (typeof document === 'undefined') return;
+    var el = document.getElementById(${JSON.stringify(THEME_TOKEN_STYLE_ID)});
+    if (!el) {
+      el = document.createElement('style');
+      el.id = ${JSON.stringify(THEME_TOKEN_STYLE_ID)};
+      (document.head || document.documentElement).appendChild(el);
+    }
+    el.textContent = css;
   }
 
   // ── 能力门面 ────────────────────────────────────────────────────────────

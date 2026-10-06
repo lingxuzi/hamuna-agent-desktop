@@ -53,7 +53,7 @@ import {
   type WorkerCallMessage,
   type WorkerCallResult,
 } from './workerCallBridge';
-import { buildThemeTokenCss, readThemeTokens } from './theme-tokens';
+import { buildThemeTokenCss, readThemeTokens, THEME_TOKEN_STYLE_ID } from './theme-tokens';
 
 export type MiniAppKind = 'iframe' | 'worker';
 
@@ -237,7 +237,6 @@ export default function MiniAppRunner({
   isActive,
 }: MiniAppRunnerProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [themeCss, setThemeCss] = useState<string>('');
   // Per-iframe-session nonce. Re-minted on appId change so a stale claim from
   // the previous iframe can't survive a re-mount. See bubbleClaimBridge.ts
   // for the trust rules (source === iframe.contentWindow + nonce + kind).
@@ -282,27 +281,47 @@ export default function MiniAppRunner({
     };
   }, [appId, workerKind]);
 
-  // mount 时注入 Theme Token；后续 Theme 切换时刷新（PRD v0.3 §5.3 row 4）
+  // 首屏 Theme Token：**冻结**在 srcDoc 里，不再随主题变化改写。
   //
-  // 注意只监听 `data-theme-id`：注入的 CSS 烤在 srcDoc 里，改它意味着
-  // `fullSrcDoc` 变 → iframe 重载 → 应用状态全丢。把 `data-color-scheme`
-  // 也加进 attributeFilter 会让每次切亮暗都重载所有 MiniApp，那是回归不是修复。
+  // 冻结是刻意的。`fullSrcDoc` 一变，React 就改 iframe 的 `srcDoc` 属性，iframe
+  // 重载 —— 用户切一次主题/亮暗，MiniApp 里的状态就全丢。所以 token CSS 只在 mount
+  // 时烤一次（首屏无 FOUC），之后的变更走下面的推送。
   //
-  // 代价是**切亮暗不会重注入 token**（存量缺陷，见 buildThemeTokenCss 注释）。
-  // `colorScheme` 在 apply() 当场读 document 而不是走 React prop：ThemeRuntime
-  // 直接写 `document.documentElement.dataset.colorScheme`，没有 prop 可依赖，
-  // 多一条依赖就多一处可能漂移。
+  // `ponytail:` ceiling —— 若某个 MiniApp 在同一 mount 内依赖列表发生变化，
+  // `fullSrcDoc` 会重算并重载 iframe，而烤进去的仍是 mount 时的 token。
+  // 当前 `dependencies` / `permissions` 来自一次性加载的 meta.json，mount 内不变，
+  // 所以这条路径走不到。要放开依赖热更新时，得同时让推送路径补发一次。
+  const [themeCss] = useState(
+    () => buildThemeTokenCss(readThemeTokens(), document.documentElement.dataset.colorScheme),
+  );
+
+  // 主题 / 亮暗变更 → 重算 token CSS 并推给 iframe（不重载文档）。
+  //
+  // `appearanceMode` 取 `dataset.colorScheme` 而不是 `env.appearanceMode` prop：
+  // 它就是**产出这段 CSS 的那个值**，两者同源，`app.appearanceMode` 与作者看到的
+  // 颜色不可能互相矛盾。ThemeRuntime 直接写 DOM，没有可依赖的 prop。
   useEffect(() => {
-    const apply = () => {
-      const tokens = readThemeTokens();
-      setThemeCss(buildThemeTokenCss(tokens, document.documentElement.dataset.colorScheme));
+    // 只在真的变了才发。两个理由：换个 theme id 但 token 值一模一样时不值得惊动作者
+    // （onAppearanceChange 会被打一遍，而他们无从分辨"换了主题"和"主题算出来没变"）；
+    // 以及首帧那次 mutation 已由 srcDoc 承担，再推一遍是纯浪费。
+    let lastPushed = themeCss;
+    const push = () => {
+      const appearanceMode = document.documentElement.dataset.colorScheme;
+      const next = buildThemeTokenCss(readThemeTokens(), appearanceMode);
+      if (next === lastPushed) return;
+      lastPushed = next;
+      iframeRef.current?.contentWindow?.postMessage(
+        { kind: 'app.event', type: 'theme.change', appearanceMode, tokenCss: next },
+        '*',
+      );
     };
-    apply();
-    // Phase 0 简化：监听 Theme 切换靠 document `data-theme-id` attribute mutation
-    const obs = new MutationObserver(apply);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme-id'] });
+    const obs = new MutationObserver(push);
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme-id', 'data-color-scheme'],
+    });
     return () => obs.disconnect();
-  }, [appId]);
+  }, [themeCss]);
 
   // 拼 srcDoc：Theme `<style>` + CSP meta + `window.app` runtime + 用户 HTML
   //
@@ -318,7 +337,7 @@ export default function MiniAppRunner({
     () => (dependencies ?? []).filter((d) => hostAllowed(d.url, permissions?.net?.allow ?? [])),
     [dependencies, permissions],
   );
-  const fullSrcDoc = `<style>${themeCss}</style>\n${injectAppId(
+  const fullSrcDoc = `<style id="${THEME_TOKEN_STYLE_ID}">${themeCss}</style>\n${injectAppId(
     injectCsp(
       injectAppRuntime(injectDependencyTags(srcDoc, usableDeps), appRuntimeScript),
       [...new Set(usableDeps.map((d) => new URL(d.url).host))],

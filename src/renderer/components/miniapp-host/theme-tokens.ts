@@ -6,18 +6,36 @@
  * 内 `:root`，让 MiniApp UI 复用宿主视觉系统。MiniApp 内禁止硬编码颜色
  * （CLAUDE.md §Pit-of-Success "前端硬编码颜色破坏设计系统一致性"）。
  *
- * Theme 切换实时同步：MiniAppRunner mount 时读一次，之后监听
- * `data-theme-id` **和** `data-color-scheme` 重写 `:root` CSS 变量并给 iframe
- * 推 `app.event: theme.change`。
+ * Theme 切换实时同步：MiniAppRunner mount 时把首屏样式烤进 srcDoc，之后监听
+ * `data-theme-id` **和** `data-color-scheme`，重算 CSS 并经 `app.event:
+ * theme.change` 推给 iframe，由 appRuntimeScript 改写已注入的 `<style>`。
  *
- * ⚠️ 早前的两个坑，都留在这里免得重犯：
+ * ⚠️ 为什么是"推送"而不是"重烤 srcDoc"：iframe 的 sandbox 是
+ * `allow-scripts allow-forms`（没有 `allow-same-origin`），宿主拿不到
+ * `contentDocument`，postMessage 是唯一通道；反过来，只要重烤 srcDoc，React
+ * 改 `srcDoc` 属性就会重载 iframe —— 用户切一次亮暗，MiniApp 里的状态全丢。
+ *
+ * ⚠️ 早前的三个坑，都留在这里免得重犯：
  *   - 变量名猜错过一轮（`--bg-primary` / `--border-color` 宿主一个都没有），
  *     每个 `var()` 静默回落，整页掉回 fallback。`theme-tokens.host-contract.test.ts`
  *     把这张表钉在主题注册表的完整性清单上。
  *   - 只监听 `data-theme-id` 意味着**换亮暗不刷新**：`readThemeTokens` 拷的是
  *     计算后的值快照，宿主切到深色时 iframe 还拿着浅色值。`app.appearanceMode`
- *     同样停在挂载时的值，`app.onAppearanceChange` 永远不会响。
+ *     同样停在挂载时的值，`app.onAppearanceChange` 永远不会响。**observer 的
+ *     attributeFilter 里少写 `data-color-scheme` 就会原样退回这个 bug**，而它不会
+ *     报错——只是 UI 看起来"没跟着换主题"。
+ *   - 这段注释一度描述的是"已经在推送"的行为，而代码只监听 `data-theme-id`。
+ *     散文描述了代码没有的行为，是最难查的一类漂移。
  */
+
+/**
+ * 宿主注入的 token `<style>` 的 id。
+ *
+ * 宿主和 appRuntimeScript 必须认同一个字面量：首屏把 CSS 烤进 srcDoc，切亮暗时
+ * 改写同一个元素。改这里等于同时改两端 —— 所以它是个导出的常量，不是各自硬编码的
+ * 字符串。
+ */
+export const THEME_TOKEN_STYLE_ID = 'hamuna-theme-tokens';
 
 /**
  * 抽出当前 document `:root` 上 Theme 相关 CSS 变量。
