@@ -5623,7 +5623,18 @@ async function main() {
           const outcome = await dispatchMiniAppApp(method, body.appId, body.params ?? null, {
             workspaceDir: currentAgentDir,
           });
-          return jsonResponse(outcome, outcome.ok ? 200 : 400);
+          // 这条路由是 **RPC 信道**，不是 REST 资源：成败已经由信封里的 `ok` 说完了，
+          // 再用 HTTP 状态码重复一遍会把消费端带偏。`apiPostJson` 在
+          // `!response.ok` 时是 throw（`apiFetch.ts:59`），于是 400 会让
+          // `createAppDispatcher` 只走得到 catch：`PERMISSION_DENIED` 被降级成
+          // `NETWORK_ERROR`，而 `error:{code,message}` 被整个塞进 `new Error()`，
+          // 作者看到的是字面量 "[object Object]" —— 真因和 code 一起消失。
+          //
+          // 同一份信封在 agent 回合那条路上一直是对的（`appHostDispatch.ts:222`
+          // 用 `proxyFetch` 直读信封、不看状态码），两条路对同一个失败给出不同
+          // 答案才是真正的问题所在。200 = 「请求被听懂了」，答案在 body 里 ——
+          // 与本项目 Tauri `cmd_*` 的在带返回约定一致。
+          return jsonResponse(outcome);
         } catch (error) {
           console.error('[api/miniapp/app] Error:', error);
           return jsonResponse(
