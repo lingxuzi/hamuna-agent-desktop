@@ -1,0 +1,17 @@
+{
+  "id": "showcase",
+  "name": "Showcase Card",
+  "description": "展示型样例：什么时候可以放飞视觉，以及放飞时哪些工程纪律一条都不能少",
+  "icon": "sparkles",
+  "category": "design",
+  "version": 1,
+  "min_host_version": "0.3.233",
+  "tags": ["showcase", "design-reference"],
+  "permissions": {
+    "fs": { "read": [], "write": [] },
+    "shell": { "allow": [] },
+    "net": { "allow": [] }
+  },
+  "entry": "source/index.html",
+  "storage": { "defaults": { "shuffle": false } }
+}

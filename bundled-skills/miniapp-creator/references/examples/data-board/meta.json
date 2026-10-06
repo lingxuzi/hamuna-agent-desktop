@@ -1,0 +1,17 @@
+{
+  "id": "data-board",
+  "name": "Data Board",
+  "description": "数据密集型工具的排版样例：紧凑行高、等宽数字、冻结表头、语义色只点状态",
+  "icon": "bar-chart-2",
+  "category": "data",
+  "version": 1,
+  "min_host_version": "0.3.233",
+  "tags": ["data", "table", "design-reference"],
+  "permissions": {
+    "fs": { "read": [], "write": [] },
+    "shell": { "allow": [] },
+    "net": { "allow": [] }
+  },
+  "entry": "source/index.html",
+  "storage": { "defaults": { "density": "standard" } }
+}

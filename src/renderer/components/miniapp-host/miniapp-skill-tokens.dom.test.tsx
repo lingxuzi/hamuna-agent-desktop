@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -37,13 +37,38 @@ function skillFiles(): { path: string; text: string }[] {
     'source/miniapp-template/source/style.css',
     'source/miniapp-template/source/index.html',
     'references/design-playbook.md',
-    // The reference exemplar is what an AI copies the visual half of a MiniApp
+    // The reference exemplars are what an AI copies the visual half of a MiniApp
     // from, so a wrong token name there is at least as damaging as one in the
-    // prose — it gets pasted into generated apps verbatim.
-    'references/examples/design-reference/source/style.css',
-    'references/examples/design-reference/source/index.html',
-    'references/examples/design-reference/source/ui.js',
+    // prose — it gets pasted into generated apps verbatim. Keep this list in sync
+    // with references/examples/; the existence check below fails loudly when a
+    // directory is renamed, but a *new* exemplar has to be added deliberately.
+    ...exemplarFiles(),
   ].map((rel) => ({ path: rel, text: readFileSync(join(SKILL_ROOT, rel), 'utf8') }));
+}
+
+/**
+ * Every example's index.html + style.css, discovered from disk.
+ *
+ * Discovered rather than listed so that adding an exemplar cannot silently
+ * escape the token check — a new sample is exactly where a hallucinated
+ * `--bg-primary` would do the most damage, since it is the thing an AI pastes
+ * verbatim into generated apps.
+ */
+function exemplarFiles(): string[] {
+  const base = join(SKILL_ROOT, 'references', 'examples');
+  const out: string[] = [];
+  for (const dir of readdirSync(base, { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    for (const rel of [
+      'source/index.html',
+      'source/style.css',
+      'source/ui.js',
+    ]) {
+      const p = join(base, dir.name, rel);
+      if (existsSync(p)) out.push(`references/examples/${dir.name}/${rel}`);
+    }
+  }
+  return out;
 }
 
 /**
@@ -88,6 +113,25 @@ describe('miniapp-creator skill CSS tokens', () => {
     expect(
       files.some((f) => f.path.endsWith('design-reference/source/style.css')),
     ).toBe(true);
+  });
+
+  it('covers every exemplar on disk, not just the ones someone remembered to list', () => {
+    // Exemplars exist to be imitated, so one carrying a hallucinated token name
+    // is worse than one carrying none: it gets pasted into generated apps
+    // verbatim. Discovering the list from disk means a new exemplar is guarded
+    // from the moment it lands rather than from whenever someone remembers.
+    const onDisk = readdirSync(join(SKILL_ROOT, 'references', 'examples'), {
+      withFileTypes: true,
+    })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    expect(onDisk.length).toBeGreaterThan(1);
+    for (const dir of onDisk) {
+      expect(
+        files.some((f) => f.path.includes(`/examples/${dir}/`)),
+        `references/examples/${dir} is on disk but not covered by the token check`,
+      ).toBe(true);
+    }
   });
 
   it.each(files)('$path only references real host tokens', ({ text }) => {
@@ -154,5 +198,47 @@ describe('miniapp-creator skill CSS tokens', () => {
     expect(playbook, 'banning hard-coded rgba without offering color-mix leaves no legal way to add depth').toContain(
       'color-mix',
     );
+  });
+});
+
+/**
+ * The same failure mode, on the stylesheets we actually ship.
+ *
+ * The skill tells the AI which variables exist; these four stylesheets are
+ * hand-written and drift in the other direction — someone copies a token name
+ * from a neighbouring app, or from their own memory of the design system. A
+ * wrong `var()` name is not a build error and not a runtime error: it resolves
+ * to nothing, the `var(--x, fallback)` fallback answers, and the result is one
+ * panel that quietly stopped following the theme.
+ *
+ * Scanned per file rather than as one set: these stylesheets are independent,
+ * so a property declared in one must not excuse a reference in another.
+ */
+describe('bundled MiniApp stylesheets only reference real host tokens', () => {
+  const BUNDLED_ROOT = join(process.cwd(), 'bundled-miniapps');
+  const injected = injectedTokenNames();
+
+  const sheets = readdirSync(BUNDLED_ROOT, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith('_'))
+    .flatMap((e) => {
+      const rel = `bundled-miniapps/${e.name}/source/style.css`;
+      const p = join(BUNDLED_ROOT, e.name, 'source', 'style.css');
+      return existsSync(p) ? [{ path: rel, text: readFileSync(p, 'utf8') }] : [];
+    });
+
+  it('finds the shipped stylesheets (guards against a vacuous sweep)', () => {
+    expect(sheets.length).toBeGreaterThan(0);
+  });
+
+  it.each(sheets)('$path only references real host tokens', ({ text }) => {
+    const declared = declaredTokenNames([{ text }]);
+    for (const m of text.matchAll(/var\(\s*(--[\w-]+)/g)) {
+      const name = m[1];
+      expect(
+        injected.has(name) || declared.has(name),
+        `${name} is neither a host token nor declared in this stylesheet. ` +
+          `Host: ${[...injected].sort().join(', ')}`,
+      ).toBe(true);
+    }
   });
 });

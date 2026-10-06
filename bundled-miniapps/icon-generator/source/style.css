@@ -1,70 +1,181 @@
-/* Icon Generator demo — CSS Token driven (CLAUDE.md §Pit-of-Success theme bridge).
- * All visual values come from --hamuna-* tokens injected by the host via the
- * <style id="theme-vars"> block (see MiniAppRunner). No raw hex / Tailwind. */
+/* ============================================================================
+ * Icon Generator — 内置工具型样例
+ * ============================================================================
+ *
+ * --- Design System ---
+ * Theme: 工具感，但这一页的主角是"图形"，所以中性面占比更高、accent 更省。
+ * Palette:
+ *   dominant  : --ig-bg（页面底）
+ *   supporting: --ig-surface（候选格）/ --ig-inset（canvas 舞台）
+ *   accent    : --ig-accent —— 只给 Generate、Export 与选中态
+ *   semantic  : error 仅用于 .status.error
+ * Typography:
+ *   heading : 600 / 20px
+ *   body    : 400 / 14px
+ *   caption : 400 / 12px / muted
+ *   glyph   : 候选格里的 emoji 由 ui.js 写死为 textContent，这里只管字号与行高
+ * Radius: --ig-radius（面板与候选格）/ --ig-radius-sm（输入与按钮）
+ * Motif: 候选格 hover 时整体上浮 2px + 阴影升一档；选中是 accent 描边 + 淡底 +
+ *        角标环。三者只在这一个地方用，不外借。
+ * Elevation: 两档（面板 sm / 浮起与选中 md）。
+ * Motion: 三档时长 + 两条曲线，全部从宿主 --hamuna-duration-* 派生。
+ * ========================================================================= */
 
-:root {
-  color-scheme: light dark;
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  padding: 16px;
-  background: var(--hamuna-bg-surface, #fff);
-  color: var(--hamuna-text-primary, #111);
-  font-family: var(--hamuna-font-sans, system-ui);
+  padding: var(--ig-pad);
+  font-family: var(--ig-sans);
   font-size: 14px;
+  line-height: 1.5;
+  color: var(--ig-text);
+  background: var(--ig-bg);
+  background-image:
+    radial-gradient(880px 400px at 86% -14%, var(--ig-wash), transparent 62%),
+    radial-gradient(700px 340px at -6% 106%, var(--ig-wash), transparent 58%);
+  background-attachment: fixed;
+}
+
+/* ---------------------------------------------------------------------------
+ * Host tokens → 语义别名 + 派生层
+ * ------------------------------------------------------------------------ */
+:root {
+  --ig-bg: var(--hamuna-bg-primary, #ffffff);
+  --ig-surface: var(--hamuna-bg-elevated, #f5f5f5);
+  --ig-inset: var(--hamuna-bg-inset, #ececec);
+  --ig-input-bg: var(--hamuna-bg-input, #ffffff);
+
+  --ig-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
+  --ig-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
+  --ig-line-focus: var(--hamuna-border-primary, rgba(0, 0, 0, 0.2));
+
+  --ig-text: var(--hamuna-text-primary, #1c1612);
+  --ig-text-soft: var(--hamuna-text-secondary, #544b42);
+  --ig-text-muted: var(--hamuna-text-muted, #6f6156);
+
+  --ig-accent: var(--hamuna-accent, #7b8f6b);
+  --ig-accent-text: var(--hamuna-accent-text, #ffffff);
+  --ig-error: var(--hamuna-error, #b3261e);
+
+  /* 派生层：全文件只在 :root 声明一次 */
+  --ig-wash: color-mix(in srgb, var(--ig-accent) 6%, transparent);
+  --ig-accent-line: color-mix(in srgb, var(--ig-accent) 38%, transparent);
+  --ig-focus: 0 0 0 3px color-mix(in srgb, var(--ig-accent) 22%, transparent);
+  --ig-hover: color-mix(in srgb, var(--ig-text) 5%, transparent);
+  --ig-hairline: color-mix(in srgb, var(--ig-text) 9%, transparent);
+  --ig-error-wash: color-mix(in srgb, var(--ig-error) 7%, transparent);
+  --ig-error-line: color-mix(in srgb, var(--ig-error) 40%, transparent);
+  --ig-inset-shadow: inset 0 1px 2px color-mix(in srgb, var(--ig-text) 7%, transparent);
+
+  --ig-radius: var(--hamuna-radius-md, 10px);
+  --ig-radius-sm: var(--hamuna-radius-sm, 6px);
+
+  --ig-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --ig-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  --ig-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --ig-dur: var(--hamuna-duration-normal, 200ms);
+  --ig-dur-slow: var(--hamuna-duration-slow, 300ms);
+  --ig-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ig-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --ig-shadow: var(--hamuna-shadow-sm);
+  --ig-shadow-raised: var(--hamuna-shadow-md);
+
+  --ig-pad: 20px;
+  --ig-gap: 12px;
 }
 
 main {
   display: grid;
-  gap: 16px;
+  gap: var(--ig-gap);
   max-width: 720px;
   margin: 0 auto;
 }
 
+/* ── 头部 ───────────────────────────────────────────────────────────── */
 h1 {
   margin: 0;
-  font-size: var(--hamuna-text-lg, 18px);
+  font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .hint {
   margin: 4px 0 0;
-  color: var(--hamuna-text-secondary, #666);
-  font-size: var(--hamuna-text-sm, 13px);
+  font-size: 12px;
+  color: var(--ig-text-muted);
+  text-wrap: balance;
 }
 
+/* ── 输入行 ──────────────────────────────────────────────────────────────
+ * Generate 是本页唯一的"发起"动作，用实心 accent。
+ * ------------------------------------------------------------------------ */
 .prompt-row {
   display: flex;
   gap: 8px;
 }
 
-.prompt-row input {
+input[type='text'] {
   flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--hamuna-border-default, #d0d0d0);
-  border-radius: 6px;
-  background: var(--hamuna-bg-input, #fff);
-  color: var(--hamuna-text-primary, #111);
-  font: inherit;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--ig-line-strong);
+  border-radius: var(--ig-radius-sm);
+  background: var(--ig-input-bg);
+  color: var(--ig-text);
+  font-family: var(--ig-sans);
+  font-size: 13px;
+  transition: border-color var(--ig-dur) var(--ig-ease),
+    box-shadow var(--ig-dur) var(--ig-ease);
 }
 
+input[type='text']:hover {
+  border-color: var(--ig-accent-line);
+}
+
+input[type='text']:focus-visible,
+button:focus-visible {
+  outline: none;
+  border-color: var(--ig-accent);
+  box-shadow: var(--ig-focus);
+}
+
+/* ── 按钮 ─────────────────────────────────────────────────────────────
+ * 层级：#gen-btn / #export-btn 是两个"结果入口"，实心 accent；
+ * 其余（Edit / Continue in chat）是中性面。一屏之内 accent 只出现两处。
+ * -------------------------------------------------------------------- */
 button {
-  padding: 8px 14px;
-  border: 1px solid var(--hamuna-border-default, #d0d0d0);
-  border-radius: 6px;
-  background: var(--hamuna-bg-button, #f4f4f4);
-  color: var(--hamuna-text-primary, #111);
-  font: inherit;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--ig-line-strong);
+  border-radius: var(--ig-radius-sm);
+  background: var(--ig-surface);
+  color: var(--ig-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  transition: transform var(--ig-dur-fast) var(--ig-ease),
+    opacity var(--ig-dur-fast) var(--ig-ease),
+    background-color var(--ig-dur) var(--ig-ease),
+    border-color var(--ig-dur) var(--ig-ease);
 }
 
 button:hover:not(:disabled) {
-  background: var(--hamuna-bg-button-hover, #e8e8e8);
+  background: var(--ig-hover);
+  border-color: var(--ig-accent-line);
+}
+
+button:active:not(:disabled) {
+  /* 缩放起点 .96 而不是 0：0 会让元素瞬间塌掉并丢边框 */
+  transform: scale(0.96);
 }
 
 button:disabled {
@@ -72,95 +183,242 @@ button:disabled {
   cursor: not-allowed;
 }
 
-#gen-btn {
-  background: var(--hamuna-bg-primary, #2563eb);
-  color: var(--hamuna-text-on-primary, #fff);
+#gen-btn,
+#export-btn {
+  flex: none;
+  background: var(--ig-accent);
+  border-color: transparent;
+  color: var(--ig-accent-text);
+}
+
+#gen-btn:hover:not(:disabled),
+#export-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ig-accent) 88%, black);
   border-color: transparent;
 }
 
-#gen-btn:hover:not(:disabled) {
-  background: var(--hamuna-bg-primary-hover, #1d4ed8);
-}
-
+/* ── 候选格 ──────────────────────────────────────────────────────────────
+ * ui.js 把每个候选写成 div.candidate[role=button][tabindex=0]，textContent
+ * 是一个 emoji。所以这里是"图形预览"而不是文字列表：字号要大、留白要足、
+ * 悬停要浮起来。选中态用 accent 描边 + 淡底，不换背景色 —— 换色在深浅两套
+ * 外观下都要重新调一遍，描边只要调一次。
+ * ------------------------------------------------------------------------ */
 .candidates {
-  min-height: 80px;
+  min-width: 0;
 }
 
 #candidate-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+/* 还没生成时是空容器：给一个占位高度，生成后网格不会把下面的 canvas 顶下去。
+ * 这里不塞占位文案 —— 那是内容决策，不是样式的。 */
+#candidate-grid:empty {
+  min-height: 96px;
+  border: 1px dashed var(--ig-line-strong);
+  border-radius: var(--ig-radius);
 }
 
 .candidate {
-  width: 100%;
+  display: grid;
+  place-items: center;
   aspect-ratio: 1;
-  background: var(--hamuna-bg-elevated, #fafafa);
-  border: 2px solid transparent;
-  border-radius: 8px;
+  border: 1px solid var(--ig-line);
+  border-radius: var(--ig-radius);
+  background: var(--ig-surface);
+  box-shadow: var(--ig-shadow);
+  font-size: 40px;
+  line-height: 1;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  overflow: hidden;
+  user-select: none;
+  /* 悬停上浮 2px：这是全页唯一的"抬起"，所以别的地方不要再用 translateY */
+  transition: transform var(--ig-dur) var(--ig-ease),
+    box-shadow var(--ig-dur) var(--ig-ease),
+    background-color var(--ig-dur) var(--ig-ease),
+    border-color var(--ig-dur) var(--ig-ease);
+  animation: ig-cell-in var(--ig-dur-slow) var(--ig-ease-out) both;
+}
+
+.candidate:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ig-shadow-raised);
+  border-color: var(--ig-accent-line);
+}
+
+.candidate:focus-visible {
+  outline: none;
+  border-color: var(--ig-accent);
+  box-shadow: var(--ig-focus);
 }
 
 .candidate.selected {
-  border-color: var(--hamuna-border-primary, #2563eb);
+  border-color: var(--ig-accent);
+  background: var(--ig-wash);
+  box-shadow: var(--ig-focus);
 }
 
-.candidate img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+/* stagger：同样不用改 ui.js，靠 nth-child 给前 8 格递延，9 格起共用末档。 */
+.candidate:nth-child(1) { animation-delay: 0ms; }
+.candidate:nth-child(2) { animation-delay: 40ms; }
+.candidate:nth-child(3) { animation-delay: 80ms; }
+.candidate:nth-child(4) { animation-delay: 120ms; }
+.candidate:nth-child(5) { animation-delay: 160ms; }
+.candidate:nth-child(6) { animation-delay: 200ms; }
+.candidate:nth-child(n + 7) { animation-delay: 240ms; }
+
+@keyframes ig-cell-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: none; }
 }
 
+/* ── 预览 + 操作 ────────────────────────────────────────────────────────
+ * canvas 走 inset 舞台：内阴影 + 略暗底，让 256×256 的方图"陷"在页面里而不是
+ * 浮在文字旁边。宽度用 clamp 而不是固定值，MiniApp 被塞进侧栏时等比缩放。
+ * ------------------------------------------------------------------------ */
 .editor {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--hamuna-border-default, #d0d0d0);
-  border-radius: 8px;
-  background: var(--hamuna-bg-elevated, #fafafa);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ig-gap);
+  align-items: center;
 }
 
 #icon-output {
-  width: 256px;
-  height: 256px;
-  margin: 0 auto;
-  background: var(--hamuna-bg-input, #fff);
-  border: 1px solid var(--hamuna-border-subtle, #e5e5e5);
-  border-radius: 6px;
+  width: clamp(160px, 40%, 256px);
+  height: auto;
+  aspect-ratio: 1;
+  border: 1px solid var(--ig-line);
+  border-radius: var(--ig-radius);
+  background: var(--ig-inset);
+  box-shadow: var(--ig-inset-shadow);
 }
 
 .editor-controls {
   display: flex;
-  gap: 8px;
-  justify-content: center;
   flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 
+/* ── 参考图放置区 ────────────────────────────────────────────────────────
+ * 诚实一点：ui.js 目前只接了 <input type=file> 的 change，拖拽没接。所以用虚线
+ * 框表达"预留"，而不是做一个假的 dragover 高亮 —— 那会让人以为能用。
+ * 整个 label 就是点击热区（label[for]），原生的 file input 视觉上藏起来但保留
+ * 在无障碍树与 tab 序里。
+ * ------------------------------------------------------------------------ */
 .dropzone {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px;
-  border: 1px dashed var(--hamuna-border-default, #d0d0d0);
-  border-radius: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed var(--ig-line-strong);
+  border-radius: var(--ig-radius);
+  background: var(--ig-surface);
+  transition: border-color var(--ig-dur) var(--ig-ease),
+    background-color var(--ig-dur) var(--ig-ease),
+    box-shadow var(--ig-dur) var(--ig-ease);
+}
+
+.dropzone:hover {
+  border-color: var(--ig-accent-line);
 }
 
 .dropzone label {
-  font-size: var(--hamuna-text-sm, 13px);
-  color: var(--hamuna-text-secondary, #666);
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--ig-line-strong);
+  border-radius: var(--ig-radius-sm);
+  background: var(--ig-input-bg);
+  font-size: 12px;
+  color: var(--ig-text-soft);
+  cursor: pointer;
+  transition: background-color var(--ig-dur) var(--ig-ease),
+    border-color var(--ig-dur) var(--ig-ease),
+    color var(--ig-dur) var(--ig-ease);
 }
 
-#ref-input {
-  font: inherit;
+.dropzone label:hover {
+  background: var(--ig-hover);
+  border-color: var(--ig-accent-line);
+  color: var(--ig-text);
 }
 
+/* 视觉藏起来但仍可聚焦（不用 display:none，那会把它移出 tab 序） */
+.dropzone input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 焦点在隐藏的 input 上时，把焦点环画到外框上。:has() 不支持时只是少一个
+ * 焦点环，键盘用户仍能 Tab 到并用 Space 打开选择器。 */
+.dropzone:has(input[type='file']:focus-visible) {
+  border-color: var(--ig-accent);
+  box-shadow: var(--ig-focus);
+}
+
+/* ── 状态行 ──────────────────────────────────────────────────────────────
+ * .status 同时用于 #status 和 .dropzone 里的 #ref-status，两处都是 aria-live，
+ * 样式一致才不会一个像正文一个像脚注。
+ * ------------------------------------------------------------------------ */
 .status {
-  font-size: var(--hamuna-text-sm, 13px);
-  color: var(--hamuna-text-secondary, #666);
-  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--ig-text-muted);
+  transition: color var(--ig-dur) var(--ig-ease);
+}
+
+.status:not(:empty)::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+.status.error {
+  color: var(--ig-error);
+  padding: 6px 10px;
+  border-radius: var(--ig-radius-sm);
+  background: var(--ig-error-wash);
+  border: 1px solid var(--ig-error-line);
+}
+
+/* ── 窄屏 ──────────────────────────────────────────────────────────────── */
+@media (max-width: 520px) {
+  .prompt-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #candidate-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  }
+}
+
+/* ── 降级 ──────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

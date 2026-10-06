@@ -1,0 +1,319 @@
+/* === Design System ===
+ * Theme: 冷、密、工具感 —— CI 面板不是作品集，用户一整天都在看它。
+ * Palette:
+ *   - dominant: var(--hamuna-bg-primary) / var(--hamuna-text-primary)
+ *   - supporting: var(--hamuna-bg-elevated), var(--hamuna-border-subtle)
+ *   - accent: var(--hamuna-accent)   // 只给选中行和焦点环，绝不整片染色
+ * Typography:
+ *   - heading: 600, 18px
+ *   - body:    400, 13px          // 数据密集型比通用版紧一档，正文 14px 在表格里太散
+ *   - caption: 400, 11px, var(--hamuna-text-muted)
+ *   - numeric: var(--hamuna-font-mono) + tabular-nums   // 这一行是本样例的重点，见下
+ * Radius: var(--hamuna-radius-sm) (行) / var(--hamuna-radius-md) (卡片)
+ * Motif: 一条 2px 的左侧状态条 —— 每行都靠它区分状态，替代任何图标和文字标签。
+ * ===================== */
+
+/* 形态定位：数据密集型。跟 design-reference 的差别是「更紧、更少色、更依赖对齐」。
+ * 密度换行高不换字号 —— 换字号会连带换掉所有断行位置，用户记住的列宽就全错了。 */
+:root {
+  --db-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --db-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  --db-bg: var(--hamuna-bg-primary, #fbfaf8);
+  --db-text: var(--hamuna-text-primary, #1c1612);
+  --db-soft: var(--hamuna-text-secondary, #544b42);
+  --db-muted: var(--hamuna-text-muted, #6f6156);
+  --db-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
+  --db-accent: var(--hamuna-accent, #7b8f6b);
+
+  --db-ok: var(--hamuna-success, #146c2e);
+  --db-warn: var(--hamuna-warning, #8a5a00);
+  --db-bad: var(--hamuna-error, #b3261e);
+  --db-idle: var(--hamuna-text-muted, #6f6156);
+
+  /* 派生层：全部从上面这些 token 现场派生，不硬编码 rgba。
+   * 数据密集型尤其依赖这一层 —— 表格线、斑马纹、悬停底都是「很淡但要在」的颜色，
+   * 没有派生就只能写死 rgba，那正是 playbook §五 禁掉的。 */
+  --db-rule:      color-mix(in srgb, var(--db-text) 8%, transparent);
+  --db-rule-soft: color-mix(in srgb, var(--db-text) 4%, transparent);
+  --db-hover:     color-mix(in srgb, var(--db-text) 5%, transparent);
+  --db-sel:       color-mix(in srgb, var(--db-accent) 7%, transparent);
+  --db-sel-line:  color-mix(in srgb, var(--db-accent) 45%, transparent);
+  --db-head-bg:   color-mix(in srgb, var(--db-bg) 82%, transparent);
+  --db-ok-wash:   color-mix(in srgb, var(--db-ok) 10%, transparent);
+
+  --db-pad: 16px;
+  --db-card: var(--hamuna-radius-md, 10px);
+
+  /* 密度是唯一的尺寸 token 开关。行高和行内间距都从它派生， */
+  /* 所以切档位是改一个数，不是改一百条规则。 */
+  --db-row-h: 44px;
+  --db-row-px: 12px;
+  --db-dur: var(--hamuna-duration-normal, 200ms);
+  --db-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --db-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-density='compact'] {
+  --db-row-h: 32px;
+  --db-row-px: 8px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--db-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--db-text);
+  background: var(--db-bg);
+}
+
+/* 所有数字都用等宽 + tabular。proportional 数字下「1」和「8」宽度不同，
+ * 纵向扫一列时对不上 —— 这是数据表最廉价也最常见的问题。 */
+.db-num {
+  font-family: var(--db-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  text-align: right;
+}
+
+.db-board {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px var(--db-pad) 32px;
+}
+
+.db-head__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.db-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.db-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--db-muted);
+}
+
+/* 密度开关：形态是分段控件，不是两个漂浮按钮 —— 一组互斥选项必须看起来成组。 */
+.db-density {
+  display: inline-flex;
+  border: 1px solid var(--db-rule);
+  border-radius: var(--db-card);
+  overflow: hidden;
+}
+
+.db-density__btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--db-soft);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 10px;
+  /* 命中目标：横向可以窄，高度不能低于 32px */
+  height: 32px;
+  cursor: pointer;
+  transition: background-color var(--db-dur-fast) var(--db-ease);
+}
+
+.db-density__btn + .db-density__btn {
+  border-left: 1px solid var(--db-rule);
+}
+
+.db-density__btn:hover {
+  background: var(--db-hover);
+}
+
+.db-density__btn:focus-visible {
+  outline: 2px solid var(--db-accent);
+  outline-offset: -2px;
+}
+
+.db-density__btn[aria-pressed='true'] {
+  background: var(--db-sel);
+  color: var(--db-text);
+  font-weight: 600;
+}
+
+/* 滚动容器：表头 sticky 的前提是**滚动发生在这个元素里**，不是 window。
+ * 宿主给 iframe 灌了 6px 药丸滚动条，所以这里不需要自己写 scrollbar 样式。 */
+.db-scroll {
+  margin-top: 16px;
+  overflow: auto;
+  max-height: calc(100vh - 190px);
+  border: 1px solid var(--db-rule);
+  border-radius: var(--db-card);
+  background: var(--db-bg);
+}
+
+.db-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.db-th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--db-muted);
+  background: var(--db-head-bg);
+  /* 磨砂：行要从它底下滚过去。半透明底和 blur 必须成对，见 playbook §四。 */
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  padding: 8px var(--db-row-px);
+  border-bottom: 1px solid var(--db-rule);
+  white-space: nowrap;
+}
+
+.db-th--num {
+  text-align: right;
+}
+
+.db-td {
+  height: var(--db-row-h);
+  padding: 0 var(--db-row-px);
+  border-bottom: 1px solid var(--db-rule-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.db-tr {
+  position: relative;
+  transition: background-color var(--db-dur-fast) var(--db-ease);
+}
+
+.db-tr:hover {
+  background: var(--db-hover);
+}
+
+/* 选中态：淡底 + 左边框强调。整行重染色会让状态色和内容色打架。 */
+.db-tr[aria-selected='true'] {
+  background: var(--db-sel);
+}
+
+.db-tr[aria-selected='true'] .db-td:first-child {
+  box-shadow: inset 2px 0 0 var(--db-accent);
+}
+
+/* motif：左侧 2px 状态条。每行的状态都靠它，替代图标和文字标签。
+ * 条子用 ::before 而不是给 td 加边框 —— td 上的边框会被相邻行吃掉。 */
+.db-state {
+  position: relative;
+  padding-left: 14px;
+}
+
+.db-state::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 2px;
+  height: 14px;
+  border-radius: 1px;
+  transform: translateY(-50%);
+  background: var(--db-idle);
+}
+
+.db-state[data-state='ok']::before { background: var(--db-ok); }
+.db-state[data-state='warn']::before { background: var(--db-warn); }
+.db-state[data-state='bad']::before { background: var(--db-bad); }
+.db-state[data-state='run']::before {
+  background: var(--db-accent);
+  /* 唯一允许的循环动画，且降级块会把它停掉 */
+  animation: db-pulse 1.6s var(--db-ease) infinite alternate;
+}
+
+@keyframes db-pulse {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+/* 状态文字本身保持中性色 —— 颜色已经由左侧条承载了，文字再染一遍就是双重编码。 */
+.db-state__label {
+  font-size: 12px;
+  color: var(--db-soft);
+}
+
+/* 成功态的极淡底：唯一一处语义色入背景，且只给一行里最不重要的那格。 */
+.db-flag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--db-ok-wash);
+  color: var(--db-ok);
+}
+
+.db-empty {
+  padding: 48px 16px;
+  text-align: center;
+}
+
+.db-empty__mark {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--db-mono);
+  color: var(--db-muted);
+  border: 1px dashed var(--db-rule);
+}
+
+.db-empty__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.db-empty__hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--db-muted);
+}
+
+.db-foot {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--db-muted);
+  min-height: 1.4em;
+}
+
+.db-row-in {
+  animation: db-in var(--db-dur) var(--db-ease) both;
+  animation-delay: calc(var(--i, 0) * 24ms);
+}
+
+/* stagger 上限：数据表可能有几百行，超过 8 条还在等的用户已经划走了。 */
+.db-row-in:nth-child(n + 9) {
+  animation-delay: 0ms;
+}
+
+@keyframes db-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

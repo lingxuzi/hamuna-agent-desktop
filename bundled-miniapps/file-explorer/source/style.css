@@ -1,77 +1,191 @@
-/* File Explorer demo — CSS Token driven (CLAUDE.md §Pit-of-Success theme bridge).
-   Every value resolves through a token; the literals in the second argument of
-   each var() are only reached if a token is missing, never on a normal host. */
+/* ============================================================================
+ * File Explorer — 内置工具型样例
+ * ============================================================================
+ *
+ * --- Design System ---
+ * Theme: 克制的工具感。颜色全部来自宿主 token，本文件不定义颜色，只定义
+ *        "颜色怎么用"，层次用 color-mix 从 token 现场派生。
+ * Palette:
+ *   dominant  : --fe-bg（页面底）
+ *   supporting: --fe-surface（树 / 命中列表）/ --fe-inset（viewer 代码区）
+ *   accent    : --fe-accent —— 只给 Load / Search 两个 CTA 与焦点环
+ *   semantic  : error 仅用于 .status.error
+ * Typography:
+ *   heading : 600 / 20px（h1）/ 600 / 12px uppercase-ish（h2 区块标签）
+ *   body    : 400 / 14px
+ *   caption : 400 / 12px / muted（.hint、.status）
+ *   mono    : 12px，给路径、文件名、命中片段、viewer
+ * Radius: --fe-radius（面板）/ --fe-radius-sm（输入与按钮）
+ * Motif: 行是 ghost button —— 平时透明，hover 才铺 5% 淡底 + 左侧 2px accent
+ *        色条出现。整页只有这一种"选中/可点"表达，不给每行加边框。
+ * Elevation: 两档。面板用 sm，浮在内容上的东西用 md。
+ * Motion: 三档时长 + 两条曲线，全部从宿主 --hamuna-duration-* 派生。
+ * ========================================================================= */
 
-:root {
-  color-scheme: light dark;
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  padding: 16px;
-  background: var(--hamuna-bg-surface, #fff);
-  color: var(--hamuna-text-primary, #111);
-  font-family: var(--hamuna-font-sans, system-ui);
+  padding: var(--fe-pad);
+  font-family: var(--fe-sans);
   font-size: 14px;
+  line-height: 1.5;
+  color: var(--fe-text);
+  background: var(--fe-bg);
+  background-image:
+    radial-gradient(860px 400px at 88% -12%, var(--fe-wash), transparent 62%),
+    radial-gradient(720px 360px at -8% 104%, var(--fe-wash), transparent 58%);
+  background-attachment: fixed;
+}
+
+/* ---------------------------------------------------------------------------
+ * Host tokens → 语义别名 + 派生层
+ *
+ * 宿主的 token 全是平值：想要淡底、半透明描边、彩色辉光一个都没有。硬编码 rgba
+ * 能凑出来，但换主题不跟随。这里用 color-mix 现场派生，换主题自动跟随。
+ * ------------------------------------------------------------------------ */
+:root {
+  --fe-bg: var(--hamuna-bg-primary, #ffffff);
+  --fe-surface: var(--hamuna-bg-elevated, #f5f5f5);
+  --fe-inset: var(--hamuna-bg-inset, #ececec);
+  --fe-input-bg: var(--hamuna-bg-input, #ffffff);
+
+  --fe-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
+  --fe-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
+  --fe-line-focus: var(--hamuna-border-primary, rgba(0, 0, 0, 0.2));
+
+  --fe-text: var(--hamuna-text-primary, #1c1612);
+  --fe-text-soft: var(--hamuna-text-secondary, #544b42);
+  --fe-text-muted: var(--hamuna-text-muted, #6f6156);
+
+  --fe-accent: var(--hamuna-accent, #7b8f6b);
+  --fe-accent-text: var(--hamuna-accent-text, #ffffff);
+  --fe-error: var(--hamuna-error, #b3261e);
+
+  /* 派生层：全文件只在 :root 声明一次 */
+  --fe-wash: color-mix(in srgb, var(--fe-accent) 6%, transparent);
+  --fe-accent-line: color-mix(in srgb, var(--fe-accent) 38%, transparent);
+  --fe-focus: 0 0 0 3px color-mix(in srgb, var(--fe-accent) 22%, transparent);
+  --fe-hover: color-mix(in srgb, var(--fe-text) 5%, transparent);
+  --fe-hairline: color-mix(in srgb, var(--fe-text) 9%, transparent);
+  --fe-error-wash: color-mix(in srgb, var(--fe-error) 7%, transparent);
+  --fe-error-line: color-mix(in srgb, var(--fe-error) 40%, transparent);
+  --fe-inset-shadow: inset 0 1px 2px color-mix(in srgb, var(--fe-text) 7%, transparent);
+  /* 滚动条用宿主注入的 thumb 色：iframe 内外滑到底应该看起来一样，自己再派生
+   * 一个色相相近但不同的值，只会在两块面板接缝处露出差别。 */
+  --fe-scrollbar: var(--hamuna-scrollbar-thumb, var(--fe-hairline));
+
+  --fe-radius: var(--hamuna-radius-md, 10px);
+  --fe-radius-sm: var(--hamuna-radius-sm, 6px);
+
+  --fe-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --fe-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  --fe-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --fe-dur: var(--hamuna-duration-normal, 200ms);
+  --fe-dur-slow: var(--hamuna-duration-slow, 300ms);
+  --fe-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --fe-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --fe-shadow: var(--hamuna-shadow-sm);
+  --fe-shadow-raised: var(--hamuna-shadow-md);
+
+  --fe-pad: 20px;
+  --fe-gap: 12px;
 }
 
 main {
   display: grid;
-  gap: 16px;
-  max-width: 900px;
+  gap: var(--fe-gap);
+  max-width: 920px;
   margin: 0 auto;
 }
 
+/* ── 头部与区块标签 ─────────────────────────────────────────────────── */
 h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 h2 {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 0 6px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--hamuna-text-muted, #666);
+  color: var(--fe-text-muted);
+  letter-spacing: 0.02em;
 }
 
 .hint {
   margin: 4px 0 0;
-  color: var(--hamuna-text-secondary, #555);
-  font-size: 13px;
+  font-size: 12px;
+  color: var(--fe-text-muted);
+  text-wrap: balance;
 }
 
-.prompt-row {
-  display: flex;
-  gap: 8px;
-}
-
-input[type="text"] {
+/* ── 输入 ───────────────────────────────────────────────────────────── */
+input[type='text'] {
   flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--hamuna-border, #d4d4d4);
-  border-radius: var(--hamuna-radius-sm, 6px);
-  background: var(--hamuna-bg-input, #fff);
-  color: var(--hamuna-text-primary, #111);
-  font: inherit;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--fe-line-strong);
+  border-radius: var(--fe-radius-sm);
+  background: var(--fe-input-bg);
+  color: var(--fe-text);
+  font-family: var(--fe-mono);
+  font-size: 13px;
+  transition: border-color var(--fe-dur) var(--fe-ease),
+    box-shadow var(--fe-dur) var(--fe-ease);
 }
 
-input[type="text"]:focus-visible {
-  border-color: var(--hamuna-focus-border, var(--hamuna-accent, #4f46e5));
+input[type='text']:hover {
+  border-color: var(--fe-accent-line);
 }
 
+input[type='text']:focus-visible,
+button:focus-visible {
+  outline: none;
+  border-color: var(--fe-accent);
+  box-shadow: var(--fe-focus);
+}
+
+/* ── 按钮 ─────────────────────────────────────────────────────────────
+ * 这一页有三种按钮，层级必须分开，否则整页全是实心 accent 的色块：
+ *   1. 页面底部的 CTA（#load-btn / #search-btn）→ 实心 accent，全页只有这两处
+ *   2. 树与命中列表里的行 → ghost（下面的 #tree button / #search-hits button）
+ *   3. 默认兜底 → 中性面，给将来新增的按钮一个不会犯错的落点
+ * -------------------------------------------------------------------- */
 button {
-  padding: 8px 14px;
-  border: none;
-  border-radius: var(--hamuna-radius-sm, 6px);
-  background: var(--hamuna-accent, #4f46e5);
-  color: var(--hamuna-accent-text, #fff);
-  font: inherit;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--fe-line-strong);
+  border-radius: var(--fe-radius-sm);
+  background: var(--fe-surface);
+  color: var(--fe-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  transition: transform var(--fe-dur-fast) var(--fe-ease),
+    opacity var(--fe-dur-fast) var(--fe-ease),
+    background-color var(--fe-dur) var(--fe-ease),
+    border-color var(--fe-dur) var(--fe-ease);
+}
+
+button:hover:not(:disabled) {
+  background: var(--fe-hover);
+  border-color: var(--fe-accent-line);
+}
+
+button:active:not(:disabled) {
+  /* 缩放起点 .96 而不是 0：0 会让元素瞬间塌掉并丢边框 */
+  transform: scale(0.96);
 }
 
 button:disabled {
@@ -79,17 +193,28 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Two side-by-side panes; the tree drives the viewer, so they share a row. */
+#load-btn,
+#search-btn {
+  flex: none;
+  background: var(--fe-accent);
+  border-color: transparent;
+  color: var(--fe-accent-text);
+}
+
+#load-btn:hover:not(:disabled),
+#search-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fe-accent) 88%, black);
+  border-color: transparent;
+}
+
+/* ── 双栏 ────────────────────────────────────────────────────────────────
+ * 树驱动 viewer，两者共用一行；窄屏回落成单列（MiniApp 会被塞进侧栏）。
+ * ------------------------------------------------------------------------ */
 .panes {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: 12px;
-}
-
-@media (max-width: 640px) {
-  .panes {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  gap: var(--fe-gap);
+  align-items: start;
 }
 
 .tree-pane,
@@ -99,21 +224,24 @@ button:disabled {
   min-width: 0;
 }
 
+/* ── 列表面板（树 / 命中）───────────────────────────────────────────── */
 #tree,
 #search-hits {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--hamuna-border, #d4d4d4);
-  border-radius: var(--hamuna-radius-lg, 12px);
-  background: var(--hamuna-bg-elevated, #fff);
+  border: 1px solid var(--fe-line);
+  border-radius: var(--fe-radius);
+  background: var(--fe-surface);
+  box-shadow: var(--fe-shadow);
   max-height: 300px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 #tree li,
 #search-hits li {
-  border-bottom: 1px solid var(--hamuna-border-subtle, #e8e8e8);
+  border-bottom: 1px solid var(--fe-hairline);
 }
 
 #tree li:last-child,
@@ -121,45 +249,97 @@ button:disabled {
   border-bottom: none;
 }
 
+/* 空状态：ui.js 写的是不带 button 的 <li>（emptyDir / noMatches）。
+ * :has() 不支持时这条整条失效，退回普通行 —— 只是没那么好看，不会坏。
+ * 不写进 HTML 是因为 ui.js 有并行的未提交改动，这里不碰。 */
+#tree li:not(:has(button)),
+#search-hits li:not(:has(button)) {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--fe-text-muted);
+  text-align: center;
+}
+
+/* 行 = ghost button。左缘色条平时隐藏，hover 才淡入：这是全页唯一的
+ * "可点" 表达，给每行都加边框会让列表变成一片格子。 */
 #tree button,
 #search-hits button {
+  position: relative;
   display: block;
   width: 100%;
-  padding: 5px 12px;
+  height: auto;
+  min-height: 32px;
+  padding: 6px 12px 6px 14px;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--hamuna-text-primary, #111);
-  font-family: var(--hamuna-font-mono, monospace);
+  color: var(--fe-text);
+  font-family: var(--fe-mono);
   font-size: 12px;
   text-align: left;
-  cursor: pointer;
+  /* 长文件名/长命中行省略而不是换行：换行会让行高跳来跳去 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tree button::before,
+#search-hits button::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--fe-accent);
+  opacity: 0;
+  transition: opacity var(--fe-dur-fast) var(--fe-ease);
 }
 
 #tree button:hover,
 #search-hits button:hover {
-  background: var(--hamuna-bg-button-hover, #f0f0f0);
+  background: var(--fe-hover);
 }
 
+#tree button:hover::before,
+#search-hits button:hover::before {
+  opacity: 1;
+}
+
+/* 目录：与文件同色，只降一档 —— 靠行尾的 `/`（ui.js 写的）表达类型，
+ * 不用颜色表达类型，色盲用户和灰度截图下都还读得出来。 */
 #tree .dir {
-  color: var(--hamuna-text-muted, #888);
+  color: var(--fe-text-soft);
+  font-weight: 500;
 }
 
+/* ── viewer ────────────────────────────────────────────────────────────
+ * 代码区走 inset：内阴影 + 略暗的底，和上面的列表在深度上拉开一档。
+ * ------------------------------------------------------------------------ */
 #viewer {
   flex: 1;
   margin: 0;
-  padding: 12px;
-  border: 1px solid var(--hamuna-border, #d4d4d4);
-  border-radius: var(--hamuna-radius-lg, 12px);
-  background: var(--hamuna-bg-elevated, #fafafa);
-  font-family: var(--hamuna-font-mono, monospace);
+  padding: 12px 14px;
+  border: 1px solid var(--fe-line);
+  border-radius: var(--fe-radius);
+  background: var(--fe-inset);
+  box-shadow: var(--fe-inset-shadow);
+  color: var(--fe-text);
+  font-family: var(--fe-mono);
   font-size: 12px;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
   overflow: auto;
   max-height: 300px;
+  overscroll-behavior: contain;
 }
 
+/* ── 搜索行 + 大小写开关 ────────────────────────────────────────────────
+ * 开关做成可点的 chip：勾选状态由 accent 淡底 + accent 描边表达，不靠系统
+ * 原生 checkbox 的默认外观（跨平台不一致且不可主题化）。
+ * ------------------------------------------------------------------------ */
 .search {
   display: flex;
   gap: 8px;
@@ -169,18 +349,147 @@ button:disabled {
 .case-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--fe-line-strong);
+  border-radius: var(--fe-radius-sm);
+  background: var(--fe-surface);
   font-size: 12px;
-  color: var(--hamuna-text-secondary, #555);
+  color: var(--fe-text-soft);
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--fe-dur) var(--fe-ease),
+    border-color var(--fe-dur) var(--fe-ease),
+    color var(--fe-dur) var(--fe-ease);
 }
 
+.case-toggle:hover {
+  border-color: var(--fe-accent-line);
+  background: var(--fe-hover);
+}
+
+/* 原生 checkbox 隐藏但保留在无障碍树里（label 包着它，点整块都能切） */
+.case-toggle input[type='checkbox'] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--fe-line-focus);
+  border-radius: 4px;
+  background: var(--fe-input-bg);
+  display: grid;
+  place-content: center;
+  transition: background-color var(--fe-dur-fast) var(--fe-ease),
+    border-color var(--fe-dur-fast) var(--fe-ease);
+}
+
+.case-toggle input[type='checkbox']::after {
+  content: '';
+  width: 7px;
+  height: 4px;
+  border-left: 2px solid var(--fe-accent-text);
+  border-bottom: 2px solid var(--fe-accent-text);
+  transform: rotate(-45deg) scale(0.7);
+  opacity: 0;
+  transition: opacity var(--fe-dur-fast) var(--fe-ease);
+}
+
+.case-toggle input[type='checkbox']:checked {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+}
+
+.case-toggle input[type='checkbox']:checked::after {
+  opacity: 1;
+  transform: rotate(-45deg) scale(1);
+}
+
+.case-toggle:has(input:checked) {
+  color: var(--fe-text);
+  background: var(--fe-wash);
+  border-color: var(--fe-accent-line);
+}
+
+.case-toggle:focus-within {
+  border-color: var(--fe-accent);
+  box-shadow: var(--fe-focus);
+}
+
+/* ── 状态行 ──────────────────────────────────────────────────────────────
+ * min-height 常驻，避免"加载中 → 有结果"时整页跳一行；只有真有内容才画点。
+ * ------------------------------------------------------------------------ */
 .status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
   font-size: 12px;
-  color: var(--hamuna-text-muted, #666);
-  min-height: 16px;
+  color: var(--fe-text-muted);
+  transition: color var(--fe-dur) var(--fe-ease);
+}
+
+.status:not(:empty)::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
 }
 
 .status.error {
-  color: var(--hamuna-error, #c00);
+  color: var(--fe-error);
+  padding: 6px 10px;
+  border-radius: var(--fe-radius-sm);
+  background: var(--fe-error-wash);
+  border: 1px solid var(--fe-error-line);
+}
+
+/* ── 滚动条 ────────────────────────────────────────────────────────────── */
+#tree::-webkit-scrollbar,
+#search-hits::-webkit-scrollbar,
+#viewer::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+#tree::-webkit-scrollbar-thumb,
+#search-hits::-webkit-scrollbar-thumb,
+#viewer::-webkit-scrollbar-thumb {
+  background: var(--fe-scrollbar);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+#tree::-webkit-scrollbar-thumb:hover,
+#search-hits::-webkit-scrollbar-thumb:hover,
+#viewer::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-line-strong);
+  background-clip: content-box;
+}
+
+/* ── 窄屏 ──────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .search {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── 降级 ──────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -347,25 +347,48 @@ describe('miniapp-creator skill template', () => {
     expect(existsSync(join(templateRoot, 'storage.json')), 'storage.json is missing').toBe(true);
   });
 
-  it('ships a reference exemplar that also parses against the current schema', () => {
-    // The exemplar is what an AI copies meta.json shape from, so a schema
-    // violation there propagates into every generated MiniApp. It is a
-    // reference rather than a shipped app, so it has no storage.json and the
-    // 4-file check above does not apply.
-    const exemplarRoot = fileURLToPath(
-      new URL('../../../bundled-skills/miniapp-creator/references/examples/design-reference', import.meta.url),
-    );
-    const raw = JSON.parse(readFileSync(join(exemplarRoot, 'meta.json'), 'utf8'));
+  });
+
+/**
+ * Reference exemplars are what an AI copies `meta.json` shape from, so a schema
+ * violation or a wrong key here propagates into every generated MiniApp. They
+ * are references rather than shipped apps: nothing in the install path parses
+ * them, and they legitimately have no `storage.json`, so neither the bundled-app
+ * sweep nor the template's 4-file check covers them.
+ */
+describe('miniapp-creator reference exemplars', () => {
+  const exemplarBase = fileURLToPath(
+    new URL('../../../bundled-skills/miniapp-creator/references/examples', import.meta.url),
+  );
+
+  // Discovered from disk rather than listed. These are reference apps, not
+  // shipped ones, so nothing in the install path parses them — an exemplar that
+  // drifts out of schema just keeps being copied into generated MiniApps. A
+  // hardcoded list meant every exemplar added after this test was written was
+  // unguarded until someone remembered to extend it.
+  const exemplarDirs = readdirSync(exemplarBase, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+
+  it('finds reference exemplars', () => {
+    expect(exemplarDirs.length).toBeGreaterThan(0);
+  });
+
+  it.each(exemplarDirs)('%s parses and grants no ambient permission', (dirName) => {
+    const raw = JSON.parse(readFileSync(join(exemplarBase, dirName, 'meta.json'), 'utf8'));
     const r = parseMiniAppMetadata(raw);
     expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+    if (!r.ok) return;
+    expect(r.result.id).toBe(dirName);
 
-    // And it must not quietly teach permissions the playbook forbids asking
-    // for. The exemplar exists to be copied, so anything it declares is a
-    // recommendation.
-    const perms = (raw as { permissions?: Record<string, unknown> }).permissions ?? {};
-    expect(perms).toMatchObject({
+    // Assert on the *parsed* permissions, not the raw file. This is the whole
+    // point: the parser drops permission keys it does not recognise, so an
+    // exemplar can carry a plausible-looking `shell: { exec: [] }` that never
+    // survives parsing — and an AI copying it learns a key that silently grants
+    // nothing. Checking the raw JSON would have passed that forever.
+    expect(r.result.permissions).toMatchObject({
       fs: { read: [], write: [] },
-      shell: { exec: [] },
+      shell: { allow: [] },
       net: { allow: [] },
     });
   });

@@ -1,65 +1,207 @@
-/* Git Graph demo — CSS Token driven (CLAUDE.md §Pit-of-Success theme bridge). */
+/* ============================================================================
+ * Git Graph — 内置工具型样例
+ * ============================================================================
+ *
+ * --- Design System ---
+ * Theme: 克制的工具感。颜色全部来自宿主 token，本文件不定义颜色，只定义
+ *        "颜色怎么用"，并用 color-mix 从 token 现场派生层次。
+ * Palette:
+ *   dominant  : --gg-bg（页面底）
+ *   supporting: --gg-surface（输入/下拉）/ --gg-inset（graph、log 面板）
+ *   accent    : --gg-accent —— 只给主 CTA（Load）与焦点环
+ *   semantic  : error 仅用于 .status.error，绝不用于装饰
+ * Typography:
+ *   heading : 600 / 20px
+ *   body    : 400 / 14px
+ *   caption : 400 / 12px / muted（.hint、.status、.log）
+ *   mono    : 只给 hash 与 graph 文本
+ * Radius: --gg-radius（面板）/ --gg-radius-sm（输入与按钮）
+ * Motif: 左侧 2px 状态色条 + 34px 行高。hover 时色条出现、整行铺 4% 淡底。
+ * Elevation: 两档（面板 sm、hover/抬起的行用 raised）。一屏不超过两档。
+ * Motion: 三档时长 + 两条曲线，全部从宿主 --hamuna-duration-* 派生。
+ *        入场"淡入 + 上移 6px"，反馈"缩放脉冲"，反馈一律不做位移。
+ * ==========================
+ *
+ * 动效房规：
+ *   1. 禁 `transition: all`，永远显式列属性。
+ *   2. 禁 `scale(0)`，起点用 .96/.94。
+ *   3. keyframes 带本应用前缀（gg-），避免多 MiniApp 同页重名。
+ *   4. infinite 动画必须能被 prefers-reduced-motion 关掉。
+ * ========================================================================= */
 
-:root {
-  color-scheme: light dark;
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  padding: 16px;
-  background: var(--hamuna-bg-surface, #fff);
-  color: var(--hamuna-text-primary, #111);
-  font-family: var(--hamuna-font-sans, system-ui);
+  padding: var(--gg-pad);
+  font-family: var(--gg-sans);
   font-size: 14px;
+  line-height: 1.5;
+  color: var(--gg-text);
+  background: var(--gg-bg);
+  background-image:
+    radial-gradient(820px 380px at 86% -14%, var(--gg-wash), transparent 62%),
+    radial-gradient(700px 340px at -10% 106%, var(--gg-wash), transparent 58%);
+  background-attachment: fixed;
+}
+
+/* ---------------------------------------------------------------------------
+ * Host tokens → 语义别名 + 派生层
+ *
+ * 宿主给的 36 个 token 全是平值：淡底、半透明描边、彩色辉光一个都没有。硬编码
+ * rgba 能凑出来，但换主题不跟随，违反设计系统。这里用 color-mix 现场派生，
+ * 纯 CSS，换主题自动跟随。
+ *
+ * 比例是刻意的：淡底 ≤10%、描边 30-45%、辉光 15-25%、悬停 ≤8%。调大就是在往
+ * 界面上泼颜色，"廉价感"多数出在这里，不在色相本身。
+ * ------------------------------------------------------------------------ */
+:root {
+  --gg-bg: var(--hamuna-bg-primary, #ffffff);
+  --gg-surface: var(--hamuna-bg-elevated, #f5f5f5);
+  --gg-inset: var(--hamuna-bg-inset, #ececec);
+  --gg-input-bg: var(--hamuna-bg-input, #ffffff);
+
+  --gg-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
+  --gg-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
+  --gg-line-focus: var(--hamuna-border-primary, rgba(0, 0, 0, 0.2));
+
+  --gg-text: var(--hamuna-text-primary, #1c1612);
+  --gg-text-soft: var(--hamuna-text-secondary, #544b42);
+  --gg-text-muted: var(--hamuna-text-muted, #6f6156);
+
+  --gg-accent: var(--hamuna-accent, #7b8f6b);
+  --gg-accent-text: var(--hamuna-accent-text, #ffffff);
+  --gg-error: var(--hamuna-error, #b3261e);
+
+  /* 派生层：全文件只在 :root 声明一次，下面一律引用别名 */
+  --gg-wash: color-mix(in srgb, var(--gg-accent) 6%, transparent);
+  --gg-accent-line: color-mix(in srgb, var(--gg-accent) 38%, transparent);
+  --gg-focus: 0 0 0 3px color-mix(in srgb, var(--gg-accent) 22%, transparent);
+  --gg-hover: color-mix(in srgb, var(--gg-text) 5%, transparent);
+  --gg-hairline: color-mix(in srgb, var(--gg-text) 9%, transparent);
+  --gg-error-wash: color-mix(in srgb, var(--gg-error) 7%, transparent);
+  --gg-error-line: color-mix(in srgb, var(--gg-error) 40%, transparent);
+  /* 磨砂：半透明底 + blur 缺一不可。只有 blur 会让前景和后面内容叠在一起；
+   * 只有底色就是一块灰玻璃。saturate 让透过来的颜色不发闷。 */
+  --gg-frost: color-mix(in srgb, var(--gg-bg) 74%, transparent);
+  /* 凹陷面板：内阴影做"压进去"的层次，是工具型最主要的深度来源 */
+  --gg-inset-shadow: inset 0 1px 2px color-mix(in srgb, var(--gg-text) 7%, transparent);
+  /* 滚动条用宿主注入的 thumb 色：iframe 内外滑到底应该看起来一样，自己再派生
+   * 一个色相相近但不同的值，只会在两块面板接缝处露出差别。 */
+  --gg-scrollbar: var(--hamuna-scrollbar-thumb, var(--gg-hairline));
+
+  --gg-radius: var(--hamuna-radius-md, 10px);
+  --gg-radius-sm: var(--hamuna-radius-sm, 6px);
+
+  --gg-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --gg-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  --gg-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --gg-dur: var(--hamuna-duration-normal, 200ms);
+  --gg-dur-slow: var(--hamuna-duration-slow, 300ms);
+  --gg-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --gg-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --gg-shadow: var(--hamuna-shadow-sm);
+  --gg-shadow-raised: var(--hamuna-shadow-md);
+
+  --gg-pad: 20px;
+  --gg-gap: 12px;
+  --gg-row-h: 34px;
 }
 
 main {
   display: grid;
-  gap: 16px;
-  max-width: 720px;
+  gap: var(--gg-gap);
+  max-width: 760px;
   margin: 0 auto;
 }
 
+/* ── 头部 ─────────────────────────────────────────────────────────────── */
 h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .hint {
-  margin: 0;
-  color: var(--hamuna-text-muted, #666);
-  font-size: 13px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--gg-text-muted);
+  text-wrap: balance;
 }
 
+/* ── 输入行：路径输入 + 主 CTA ───────────────────────────────────────────
+ * 这是本页唯一的 accent 使用点。主 CTA 用实心 accent，其余控件保持中性 ——
+ * 一屏之内 accent 超过 3 处就说明层级失控了。
+ * ------------------------------------------------------------------------ */
 .prompt-row {
   display: flex;
   gap: 8px;
 }
 
-input[type="text"],
+input[type='text'],
 select {
   flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--hamuna-border, #d4d4d4);
-  border-radius: 6px;
-  background: var(--hamuna-bg-elevated, #fff);
-  color: var(--hamuna-text-primary, #111);
-  font: inherit;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--gg-line-strong);
+  border-radius: var(--gg-radius-sm);
+  background: var(--gg-input-bg);
+  color: var(--gg-text);
+  font-family: var(--gg-mono);
+  font-size: 13px;
+  transition: border-color var(--gg-dur) var(--gg-ease),
+    box-shadow var(--gg-dur) var(--gg-ease);
+}
+
+select {
+  font-family: var(--gg-sans);
+}
+
+input[type='text']:hover,
+select:hover {
+  border-color: var(--gg-accent-line);
+}
+
+input[type='text']:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: none;
+  border-color: var(--gg-accent);
+  box-shadow: var(--gg-focus);
 }
 
 button {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 6px;
-  background: var(--hamuna-accent, #4f46e5);
-  color: var(--hamuna-accent-text, #fff);
-  font: inherit;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--gg-radius-sm);
+  background: var(--gg-accent);
+  color: var(--gg-accent-text);
+  font-family: var(--gg-sans);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  /* 反馈用缩放脉冲，不做位移：位移容易被误读成导航 */
+  transition: transform var(--gg-dur-fast) var(--gg-ease),
+    opacity var(--gg-dur-fast) var(--gg-ease),
+    background-color var(--gg-dur) var(--gg-ease);
+}
+
+button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--gg-accent) 88%, black);
+}
+
+button:active:not(:disabled) {
+  /* 缩放起点 .96 而不是 0：0 会让元素瞬间塌掉并丢边框 */
+  transform: scale(0.96);
 }
 
 button:disabled {
@@ -67,59 +209,221 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* ── graph 面板 ─────────────────────────────────────────────────────────
+ * ui.js 往 #commit-graph 里写的是纯文本（`\n` 分隔的 `* abc1234 message`），
+ * 那是文本节点，没法逐个字符上色。所以这个面板的表达只能来自框架：凹陷底 +
+ * 左侧一条虚线"轨道"，暗示这是分支走线而不是普通代码块。
+ * 想让每条 commit 有自己的颜色条，得改 ui.js 生成结构 —— 那超出了样式表的范围。
+ * ------------------------------------------------------------------------ */
 .graph {
-  padding: 12px;
-  border: 1px solid var(--hamuna-border, #d4d4d4);
-  border-radius: 8px;
-  background: var(--hamuna-bg-elevated, #fafafa);
-  min-height: 80px;
-  font-family: var(--hamuna-font-mono, monospace);
-  font-size: 13px;
-  white-space: pre;
+  border: 1px solid var(--gg-line);
+  border-radius: var(--gg-radius);
+  background: var(--gg-inset);
+  box-shadow: var(--gg-inset-shadow);
+  padding: 10px 0 10px 10px;
+  min-height: 88px;
+  /* 横向滚动的容器要显式裁掉 padding，否则最后一个字符贴着边缘 */
   overflow-x: auto;
 }
 
+#commit-graph {
+  margin: 0;
+  padding-right: 12px;
+  font-family: var(--gg-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--gg-text-soft);
+  white-space: pre;
+  min-width: 0;
+}
+
+/* ── commit 日志 ────────────────────────────────────────────────────────
+ * motif 在这里落地：左侧 2px 色条平时不可见，hover 才淡入，整行同时铺 5% 淡底。
+ * 只给 row 升一档阴影，不改边框 —— 两处一起动会让整页在抖动。
+ * ------------------------------------------------------------------------ */
 .log {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--hamuna-border, #d4d4d4);
-  border-radius: 8px;
-  background: var(--hamuna-bg-elevated, #fff);
-  max-height: 240px;
+  border: 1px solid var(--gg-line);
+  border-radius: var(--gg-radius);
+  background: var(--gg-surface);
+  box-shadow: var(--gg-shadow);
+  max-height: 260px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .log li {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--hamuna-border, #d4d4d4);
+  position: relative;
   display: grid;
-  grid-template-columns: 80px 1fr;
-  gap: 8px;
+  /* minmax(0, 1fr) 而不是 1fr：没有它，grid 子项的 min-width:auto 会让长
+   * commit message 撑破容器，长行换行而不是省略号。 */
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: var(--gg-row-h);
+  padding: 6px 12px 6px 14px;
+  border-bottom: 1px solid var(--gg-hairline);
   font-size: 12px;
+  animation: gg-row-in var(--gg-dur-slow) var(--gg-ease-out) both;
+  transition: background-color var(--gg-dur-fast) var(--gg-ease);
 }
 
 .log li:last-child {
   border-bottom: none;
 }
 
-.log .hash {
-  color: var(--hamuna-text-muted, #888);
-  font-family: var(--hamuna-font-mono, monospace);
+.log li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--gg-accent);
+  opacity: 0;
+  transition: opacity var(--gg-dur-fast) var(--gg-ease);
 }
 
+.log li:hover {
+  background: var(--gg-hover);
+}
+
+.log li:hover::before {
+  opacity: 1;
+}
+
+.log .hash {
+  font-family: var(--gg-mono);
+  font-size: 12px;
+  color: var(--gg-text-muted);
+  /* tabular 让同一列的 hash 等宽对齐 */
+  font-variant-numeric: tabular-nums;
+}
+
+.log li > span:last-child {
+  color: var(--gg-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 入场 stagger。没有 --i 变量可用（ui.js 不设它，且不该为此改 ui.js），
+ * 所以用 :nth-child 覆盖前 10 行；第 11 行起共用第 1 行的延迟，看起来才是
+ * "已经加载完了"而不是"还在排队"。 */
+.log li:nth-child(1) { animation-delay: 0ms; }
+.log li:nth-child(2) { animation-delay: 24ms; }
+.log li:nth-child(3) { animation-delay: 48ms; }
+.log li:nth-child(4) { animation-delay: 72ms; }
+.log li:nth-child(5) { animation-delay: 96ms; }
+.log li:nth-child(6) { animation-delay: 120ms; }
+.log li:nth-child(7) { animation-delay: 144ms; }
+.log li:nth-child(8) { animation-delay: 168ms; }
+.log li:nth-child(9) { animation-delay: 192ms; }
+.log li:nth-child(n + 10) { animation-delay: 200ms; }
+
+@keyframes gg-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── 分支工具条 ─────────────────────────────────────────────────────── */
 .branch {
   display: flex;
   gap: 8px;
   align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--gg-line);
+  border-radius: var(--gg-radius);
+  /* 磨砂 + blur：这层浮在 log 之上，滚动时后面的行会透过来 */
+  background: var(--gg-frost);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
 }
 
+/* ── 状态行 ───────────────────────────────────────────────────────────
+ * 有内容才显示。默认 min-height 保留，避免加载中→有结果时整页往下跳一行。
+ * ------------------------------------------------------------------------ */
 .status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
   font-size: 12px;
-  color: var(--hamuna-text-muted, #666);
-  min-height: 16px;
+  color: var(--gg-text-muted);
+  transition: color var(--gg-dur) var(--gg-ease);
+}
+
+/* :empty 让空状态彻底不占视觉，只有真出错了才铺一层语义底 */
+.status:not(:empty)::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
 }
 
 .status.error {
-  color: var(--hamuna-error, #c00);
+  color: var(--gg-error);
+  padding: 6px 10px;
+  border-radius: var(--gg-radius-sm);
+  background: var(--gg-error-wash);
+  border: 1px solid var(--gg-error-line);
+}
+
+/* ── 滚动条 ──────────────────────────────────────────────────────────────
+ * 宿主会注入 appearance contract；这两个块只是让面板内的滚动条与宿主一致，
+ * 不写也不会坏（浏览器给默认样式）。
+ * ------------------------------------------------------------------------ */
+.graph::-webkit-scrollbar,
+.log::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.graph::-webkit-scrollbar-thumb,
+.log::-webkit-scrollbar-thumb {
+  background: var(--gg-scrollbar);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.graph::-webkit-scrollbar-thumb:hover,
+.log::-webkit-scrollbar-thumb:hover {
+  background: var(--gg-line-strong);
+  background-clip: content-box;
+}
+
+/* ── 降级 ────────────────────────────────────────────────────────────────
+ * 放在最后、选择器等权，靠源码顺序取胜。比 `@media` 包住整份文件更容易读，
+ * 也不会因为中间不小心多一层 @media 就失效。
+ * -------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 窄屏（MiniApp 可以被塞进侧栏）：路径行和分支条改为纵向，避免输入框被压到
+ * 放不下一个路径段的宽度。 */
+@media (max-width: 480px) {
+  .prompt-row,
+  .branch {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .log li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
 }

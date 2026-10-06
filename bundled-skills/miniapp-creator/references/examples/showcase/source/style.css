@@ -1,0 +1,234 @@
+/* === Design System ===
+ * Theme: 温润的手作感 —— 展示型。默认调性其实是工具型（见 playbook §三），
+ *        这个样例只在用户明确要"展示 / 作品集 / 对外"时才读。
+ * Palette: 自建（从 playbook §三 的十套里选" Berry & Cream "）
+ *   - dominant: 奶油纸面 + 深紫墨
+ *   - supporting: 浅色内凹面
+ *   - accent: 玫瑰金，只给「Keep」和选中态
+ * Motif: 一枚 3px 的玫瑰金压边 + 纸面颗粒，贯穿卡片、按钮、标签。
+ * ===================== */
+
+/*
+ * ⚠️ 自建色板 ≠ 放弃 token 契约。这里仍然从宿主派生**底色与文字**
+ *（否则深浅两套各写一遍），只把强调色换成自选的。这跟"硬编码整套颜色"是两件事：
+ * 换外观时只有强调色需要人工判断，底和字仍然自动跟随。
+ */
+:root {
+  --sc-rose: #6d2e46;
+  --sc-rose-soft: #a26769;
+  --sc-cream: #ece2d0;
+
+  --sc-bg: var(--hamuna-bg-primary, #faf6ef);
+  --sc-text: var(--hamuna-text-primary, #241a1c);
+  --sc-soft: var(--hamuna-text-secondary, #5c4a4e);
+  --sc-muted: var(--hamuna-text-muted, #8a757a);
+  --sc-accent: var(--sc-rose);
+  --sc-accent-text: var(--sc-cream);
+
+  --sc-line: color-mix(in srgb, var(--sc-accent) 22%, transparent);
+  --sc-wash: color-mix(in srgb, var(--sc-accent) 8%, transparent);
+  --sc-glow: 0 18px 48px -22px color-mix(in srgb, var(--sc-accent) 55%, transparent);
+
+  --sc-r-lg: 18px;
+  --sc-r-md: 12px;
+  --sc-dur: var(--hamuna-duration-normal, 200ms);
+  --sc-dur-slow: var(--hamuna-duration-slow, 300ms);
+  --sc-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  font-family: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--sc-text);
+  background: var(--sc-bg);
+  /* 展示型才允许的一层氛围：极淡径向光晕，透明度 8%，不引入竞争色相 */
+  background-image: radial-gradient(720px 420px at 50% -10%, var(--sc-wash), transparent 62%);
+}
+
+.sc-stage {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* 纸面质感：一张纸 + 一圈压边。放飞的是这层，不是字号。 */
+.sc-card {
+  width: 100%;
+  background: var(--sc-bg);
+  border: 1px solid var(--sc-line);
+  border-top: 3px solid var(--sc-accent); /* motif：所有区块共用这一条压边 */
+  border-radius: var(--sc-r-lg);
+  box-shadow: var(--sc-glow);
+  padding: 28px 26px 20px;
+}
+
+.sc-tag {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sc-accent);
+  background: var(--sc-wash);
+  border: 1px solid var(--sc-line);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.sc-card__title {
+  margin: 14px 0 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.sc-card__note {
+  margin: 6px 0 0;
+  color: var(--sc-soft);
+  font-size: 13px;
+}
+
+/* 装饰性图形：唯一一处 ::before 参与视觉的地方，仍然是纯 CSS，没往 DOM 塞节点 */
+.sc-marks {
+  display: flex;
+  gap: 6px;
+  margin: 20px 0 4px;
+}
+
+.sc-mark {
+  width: 26px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--sc-line);
+  transition: background-color var(--sc-dur) var(--sc-ease);
+}
+
+.sc-mark[data-on='true'] {
+  background: var(--sc-accent);
+}
+
+.sc-card__foot {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sc-line);
+}
+
+/* 命中目标 36px：展示型也遵守，它不是"无所谓"的场景 */
+.sc-btn {
+  appearance: none;
+  font: inherit;
+  font-size: 13px;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: var(--sc-r-md);
+  border: 1px solid var(--sc-line);
+  background: transparent;
+  color: var(--sc-text);
+  cursor: pointer;
+  transition: background-color var(--sc-dur) var(--sc-ease),
+    color var(--sc-dur) var(--sc-ease);
+}
+
+.sc-btn:hover {
+  background: var(--sc-wash);
+}
+
+.sc-btn:focus-visible {
+  outline: 2px solid var(--sc-accent);
+  outline-offset: 2px;
+}
+
+.sc-btn--primary {
+  background: var(--sc-accent);
+  border-color: var(--sc-accent);
+  color: var(--sc-accent-text);
+}
+
+.sc-btn--primary:hover {
+  background: color-mix(in srgb, var(--sc-accent) 88%, black);
+}
+
+.sc-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sc-status {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 12px;
+  color: var(--sc-muted);
+}
+
+/* 换卡：先退场再入场。完整生命周期是"进入 → 停留 → 退场 → 摘节点"，
+ * 只做进入是最常见的半成品动效。 */
+.sc-card[data-swap='out'] {
+  animation: sc-out 220ms var(--sc-ease) both;
+}
+
+.sc-card[data-swap='in'] {
+  animation: sc-in var(--sc-dur-slow) var(--sc-ease-out) both;
+}
+
+@keyframes sc-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-8px); }
+}
+
+@keyframes sc-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.sc-mark--in {
+  animation: sc-mark var(--sc-dur) var(--sc-ease) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+@keyframes sc-mark {
+  from { opacity: 0; transform: scaleX(0.4); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── 浅色外观重蒙皮 ────────────────────────────────────────────────
+ * 展示型自定义了色相，就必须同时为两种外观各调一遍 —— 深色值直接搬到浅色下
+ * 几乎总是"糊"：纸面变灰、玫瑰金不够深、对比掉一档。这里只覆写该覆写的，
+ * 底和字仍来自宿主 token。
+ * ------------------------------------------------------------------ */
+[data-appearance='light'] {
+  --sc-accent: #8a3d58;
+  --sc-rose: #8a3d58;
+  --sc-line: color-mix(in srgb, var(--sc-accent) 26%, transparent);
+  --sc-wash: color-mix(in srgb, var(--sc-accent) 10%, transparent);
+  --sc-glow: 0 18px 44px -24px color-mix(in srgb, var(--sc-accent) 40%, transparent);
+}
+
+[data-appearance='dark'] {
+  --sc-bg: var(--hamuna-bg-primary, #16110f);
+  --sc-text: var(--hamuna-text-primary, #f6efe6);
+  --sc-accent: #d9a0b4;
+  --sc-accent-text: #2a1620;
+  --sc-line: color-mix(in srgb, var(--sc-accent) 30%, transparent);
+  --sc-wash: color-mix(in srgb, var(--sc-accent) 12%, transparent);
+  --sc-glow: 0 18px 48px -20px color-mix(in srgb, var(--sc-accent) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

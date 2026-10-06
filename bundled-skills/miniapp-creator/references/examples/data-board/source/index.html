@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      骨架刻意极小：数据密集型工具的每一行像素都要给数据，让给装饰就没有密度可言。
+      这里只有语义标签，没有一个装饰性容器 —— 层级全部交给 CSS 的排版和分隔线。
+    -->
+    <div class="db-board">
+      <header class="db-head">
+        <div class="db-head__row">
+          <h1 class="db-title">Pipeline</h1>
+          <div class="db-density" role="group" aria-label="Row density">
+            <button class="db-density__btn" type="button" data-density="compact">Compact</button>
+            <button class="db-density__btn" type="button" data-density="standard">Standard</button>
+          </div>
+        </div>
+        <p class="db-sub" id="db-sub">—</p>
+      </header>
+
+      <!-- 冻结表头：滚动时列名留在视野里。表头用磨砂，否则行从它底下穿过会糊在一起。 -->
+      <div class="db-scroll" id="db-scroll">
+        <table class="db-table">
+          <thead>
+            <tr>
+              <th class="db-th db-th--name">Job</th>
+              <th class="db-th db-th--num">Elapsed</th>
+              <th class="db-th db-th--num">Rate</th>
+              <th class="db-th db-th--state">State</th>
+            </tr>
+          </thead>
+          <tbody id="db-rows"></tbody>
+        </table>
+
+        <!-- 空状态：数据密集型工具最常被截图的状态的就是它，别留一片空白。 -->
+        <div class="db-empty" id="db-empty" hidden>
+          <div class="db-empty__mark" aria-hidden="true">0</div>
+          <p class="db-empty__title">No jobs yet</p>
+          <p class="db-empty__hint">Run something, then refresh.</p>
+        </div>
+      </div>
+
+      <p class="db-foot" id="db-foot" role="status"></p>
+    </div>
+    <script src="ui.js"></script>
+  </body>
+</html>

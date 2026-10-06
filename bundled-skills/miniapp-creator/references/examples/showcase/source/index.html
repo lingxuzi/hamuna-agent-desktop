@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      展示型的骨架反而更小：视觉靠 CSS 的层、光和动效，不靠往 DOM 里塞装饰节点。
+      一张卡 + 两个按钮 + 一行说明，就是这个样例的全部。
+    -->
+    <main class="sc-stage">
+      <article class="sc-card" id="sc-card">
+        <header class="sc-card__top">
+          <span class="sc-tag" id="sc-tag">—</span>
+          <h1 class="sc-card__title" id="sc-title">—</h1>
+          <p class="sc-card__note" id="sc-note">—</p>
+        </header>
+        <div class="sc-marks" id="sc-marks" aria-hidden="true"></div>
+        <footer class="sc-card__foot">
+          <button class="sc-btn sc-btn--primary" type="button" id="sc-next">Next</button>
+          <button class="sc-btn" type="button" id="sc-save">Keep</button>
+        </footer>
+      </article>
+      <p class="sc-status" id="sc-status" role="status"></p>
+    </main>
+    <script src="ui.js"></script>
+  </body>
+</html>

@@ -13,7 +13,7 @@
       "write": []
     },
     "shell": {
-      "exec": []
+      "allow": []
     },
     "net": {
       "allow": []
