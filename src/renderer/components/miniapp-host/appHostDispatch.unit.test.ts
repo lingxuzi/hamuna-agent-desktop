@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentBridge } from './agentEventBridge';
 import { createAppDispatcher } from './appHostDispatch';
+import { APP_ERROR_CODES } from '../../../shared/miniapp/app-protocol';
 
 const { apiPostJsonMock, proxyFetchMock } = vi.hoisted(() => ({
   apiPostJsonMock: vi.fn(),
@@ -252,5 +253,97 @@ describe('appHostDispatch: session lifecycle stays renderer-side', () => {
     expect(apiPostJsonMock.mock.calls[0][0]).toBe('/api/miniapp/app/fs.stat');
     // 反向护栏：只有 agent.* 被改道，其它能力族不许被顺手带偏。
     expect(proxyFetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('appHostDispatch: the generic sidecar channel answers every failure in-band', () => {
+  // 本文件已有的错误路径测试（L105/L131/L143）打的是 agent.* 专用通道
+  // （dispatchAgentTurn / dispatchAgentHost）。createAppDispatcher 里
+  // `apiPostJson` 之后那几支 —— 通用能力族（fs / shell / net / storage / os）
+  // 的 "ok:false" 与 "请求抛异常" —— 此前是零覆盖的，而那正是 MiniApp 作者最常撞到的
+  // 失败形态：sidecar 已经不在了。
+  //
+  // 契约：dispatch 永不 reject，永远回 `{ok:false,error}`。调用方是第三方作者写的
+  // iframe 代码，一个 unhandled rejection 在那里表现为"静默卡住"，作者拿不到任何原因。
+
+  it('a sidecar refusal keeps the sidecar error code instead of flattening it', async () => {
+    apiPostJsonMock.mockResolvedValue({
+      ok: false,
+      error: { code: APP_ERROR_CODES.PERMISSION_DENIED, message: 'fs.read is not granted' },
+    });
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    const res = await dispatch('fs.read', { path: 'a.txt' });
+
+    expect(res).toEqual({
+      ok: false,
+      error: { code: APP_ERROR_CODES.PERMISSION_DENIED, message: 'fs.read is not granted' },
+    });
+  });
+
+  it('a refusal carrying no error field still answers with a readable envelope', async () => {
+    // 兜底不能塌成 undefined —— 作者要在 UI 上拿得到一个能显示的 code + message。
+    apiPostJsonMock.mockResolvedValue({ ok: false });
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    const res = await dispatch('fs.read', { path: 'a.txt' });
+
+    expect(res).toEqual({
+      ok: false,
+      error: { code: APP_ERROR_CODES.HOST_ERROR, message: 'dispatch failed' },
+    });
+  });
+
+  it('an unreachable sidecar becomes NETWORK_ERROR carrying the original message', async () => {
+    apiPostJsonMock.mockRejectedValue(new Error('Failed to fetch'));
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    const res = await dispatch('fs.read', { path: 'a.txt' });
+
+    expect(res).toEqual({
+      ok: false,
+      error: { code: APP_ERROR_CODES.NETWORK_ERROR, message: 'Failed to fetch' },
+    });
+  });
+
+  it('a non-Error rejection is stringified rather than surfacing as undefined', async () => {
+    // 代理层在部分失败形态下 reject 的不是 Error 实例。`e instanceof Error` 为假时若
+    // 少了 String(e) 兜底，作者在界面上看到的就是字面量 "undefined"。
+    apiPostJsonMock.mockRejectedValue('socket hang up');
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    const res = await dispatch('fs.read', { path: 'a.txt' });
+
+    expect(res).toEqual({
+      ok: false,
+      error: { code: APP_ERROR_CODES.NETWORK_ERROR, message: 'socket hang up' },
+    });
+  });
+
+  it('the failure never reroutes onto the agent sidecar channel', async () => {
+    apiPostJsonMock.mockRejectedValue(new Error('down'));
+    const dispatch = createAppDispatcher('demo', { agentBridge: makeBridge() });
+
+    await dispatch('fs.read', { path: 'a.txt' });
+
+    // 反向护栏：catch 里若顺手改走 proxyFetch，"fs 请求失败"会变成"打到了 agent 专用
+    // sidecar 上"，症状与本文件头描述的三种分家故障一模一样。
+    expect(proxyFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('agent.ensureSession with no bridge fails loudly instead of falling through', async () => {
+    const dispatch = createAppDispatcher('demo'); // 刻意不传 agentBridge
+
+    const res = await dispatch('agent.ensureSession', {});
+
+    expect(res).toEqual({
+      ok: false,
+      error: {
+        code: APP_ERROR_CODES.HOST_ERROR,
+        message: expect.stringContaining('agent bridge'),
+      },
+    });
+    // 不允许退化成"发去全局 sidecar"：那正是把 MiniApp 回合写进用户全局会话的起点。
+    expect(apiPostJsonMock).not.toHaveBeenCalled();
   });
 });
