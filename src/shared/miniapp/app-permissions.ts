@@ -446,7 +446,7 @@ export function rendererCanDecide(method: AppMethod): boolean {
 /** `runAppCall` 的返回信封，直接喂给 `buildAppResult`。 */
 export type AppCallOutcome =
   | { ok: true; result: unknown }
-  | { ok: false; error: { code: string; message: string } };
+  | { ok: false; error: { code: AppErrorCode; message: string } };
 
 /**
  * 「权限 → 执行 → 统一错误信封」的骨架。

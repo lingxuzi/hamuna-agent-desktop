@@ -95,13 +95,18 @@ export interface AppResultMessage {
   id: string;
   ok: boolean;
   result?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: AppErrorCode; message: string };
 }
 
 /**
- * 错误码。`E_*` 是宿主拒绝（权限不足 / 方法未知 / 路径越界），
- * `NETWORK_ERROR` 是宿主自身调用失败 —— 作者据此区分"我权限不够"和
- * "宿主故障"，不要笼统重试。
+ * 错误码 —— 作者在 `catch` 里拿到的**就是**这五个。
+ *
+ * `PERMISSION_DENIED` / `UNKNOWN_METHOD` / `INVALID_PARAMS` 是"宿主拒绝了你这次
+ * 调用"（改代码或改声明才有用）；`HOST_ERROR` / `NETWORK_ERROR` 是"宿主自己失败"
+ * （同样输入可能成功）。作者据此区分"我权限不够"和"宿主故障"，不要笼统重试。
+ *
+ * 线路协议上**不存在** `E_*` 前缀的码。`src/shared/miniapp/errors.ts` 里那张
+ * `E_*` 表只服务 meta.json 校验，不是这里的契约 —— 别照着它写 `catch` 分支。
  */
 export const APP_ERROR_CODES = {
   PERMISSION_DENIED: 'PERMISSION_DENIED',
@@ -166,7 +171,7 @@ export function verifyAppCall(
 export function buildAppResult(
   expectedNonce: string,
   id: string,
-  result: { ok: true; result: unknown } | { ok: false; error: { code: string; message: string } },
+  result: { ok: true; result: unknown } | { ok: false; error: { code: AppErrorCode; message: string } },
 ): AppResultMessage {
   return {
     kind: APP_RESULT_KIND,
@@ -203,7 +208,7 @@ export function postAppResult(
   target: AppResultTarget,
   nonce: string,
   id: string,
-  result: { ok: true; result: unknown } | { ok: false; error: { code: string; message: string } },
+  result: { ok: true; result: unknown } | { ok: false; error: { code: AppErrorCode; message: string } },
   methodForMessage = 'call',
 ): void {
   const tryPost = (payload: AppResultMessage): boolean => {

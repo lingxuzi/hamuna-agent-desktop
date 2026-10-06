@@ -13,6 +13,7 @@ import {
   isPathAllowed,
   isPrivateHostname,
   runAppCall,
+  type AppCallOutcome,
 } from './app-permissions';
 import {
   buildAppResult,
@@ -327,8 +328,8 @@ describe('runAppCall', () => {
  */
 describe('host failures must reject, not resolve with an error envelope', () => {
   /** 与 `createAppDispatcher` 的真实返回同形。 */
-  const deniedDispatcher = async () => ({
-    ok: false as const,
+  const deniedDispatcher = async (): Promise<AppCallOutcome> => ({
+    ok: false,
     error: { code: 'PERMISSION_DENIED', message: 'path not covered by permissions.fs.read' },
   });
 

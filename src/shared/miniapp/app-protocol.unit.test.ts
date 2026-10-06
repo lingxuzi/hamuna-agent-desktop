@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  APP_ERROR_CODES,
   buildAppResult,
   postAppResult,
   verifyAppCall,
@@ -212,7 +213,10 @@ describe('buildAppResult envelope shape', () => {
     expect(ok).toHaveProperty('ok', true);
     expect(ok).not.toHaveProperty('error');
 
-    const bad = buildAppResult(NONCE, 'x', { ok: false, error: { code: 'E', message: 'm' } });
+    const bad = buildAppResult(NONCE, 'x', {
+      ok: false,
+      error: { code: APP_ERROR_CODES.PERMISSION_DENIED, message: 'm' },
+    });
     expect(bad).toHaveProperty('ok', false);
     expect(bad).not.toHaveProperty('result');
   });

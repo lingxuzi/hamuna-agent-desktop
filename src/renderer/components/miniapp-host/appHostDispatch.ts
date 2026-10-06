@@ -23,23 +23,23 @@ import type { DialogFilter } from '@tauri-apps/plugin-dialog';
 import { apiPostJson } from '@/api/apiFetch';
 import { proxyFetch } from '@/api/tauriClient';
 
-import { APP_ERROR_CODES, type AppMethod } from '../../../shared/miniapp/app-protocol';
+import { APP_ERROR_CODES, type AppErrorCode, type AppMethod } from '../../../shared/miniapp/app-protocol';
 import { normalizeAppDataWorkspace } from '../../../shared/miniapp/app-data-workspace';
 import type { AgentBridge, AgentSessionTarget } from './agentEventBridge';
 
 interface DispatchResponse {
   ok: boolean;
   result?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: AppErrorCode; message: string };
 }
 
 type DispatchResult =
   | { ok: true; result: unknown }
-  | { ok: false; error: { code: string; message: string } };
+  | { ok: false; error: { code: AppErrorCode; message: string } };
 
 export type AppDispatcher = (method: AppMethod, params: unknown) => Promise<DispatchResult>;
 
-function err(code: string, message: string): DispatchResult {
+function err(code: AppErrorCode, message: string): DispatchResult {
   return { ok: false, error: { code, message } };
 }
 
