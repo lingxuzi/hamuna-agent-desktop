@@ -113,6 +113,11 @@ MiniApp 的 prompt 完全由第三方作者控制，若模型带着工具，一�
 文本再送进一次性补全，宿主不维护任何会话（多轮是 `app.agent` 的事）。想"记住上一轮"
 就自己把历史攒进数组一起传，别指望 `chat` 替你记。
 
+`app.ai` **没有流式**：两个方法都只在结束时 resolve，整段文本一次性到手。逐字出效果
+只有一条路 —— `app.agent.onEvent(fn)`（见下节），代价是要多声明 `agent.enabled` 且模型
+带工具。宿主只把 `agent.*` 事件投递进 iframe，`ai.*` 的中间过程一律不发，所以别等
+一个永远不会来的 delta。
+
 一次补全可能跑满 60s，所以作者要能自己停：
 
 ```javascript
@@ -161,7 +166,8 @@ await app.agent.cancel({ run_id: 'r1' });
 §Bubble Claim 交给对话里的 agent。
 
 需要流式输出时用 `app.agent.onEvent(fn)` 订阅（`agent.*` 事件走独立通道）。
-当前 `run` / `turnText` 返回终态文本。
+`run` / `turnText` 本身**只 resolve 终态文本**，与 `app.ai` 一样不流式 —— 增量只从
+订阅回调来，不是从这两个 Promise 上来。
 
 要在自己的 appdata 下挑一个子目录当 Agent workspace，把**目录名**（不是路径）作为
 `appDataWorkspace` 传给 `ensureSession` 或 `run` / `turnText`：
@@ -253,7 +259,7 @@ app.onDeactivate(() => clearInterval(timer));
 - `agent.workspace_scope` —— 声明保留但当前不放开，`agent.run` 强制落在 appdata 下。
 - `worker_kind` —— 白名单制，没有通用 npm 依赖加载。
 
-**想让 AI 帮忙？** 二选一：
+**想让 AI 帮忙？** 按需要什么能力选：
 - 纯文本处理（翻译 / 分类 / 摘要）→ `app.ai.complete`，需 `ai.enabled`
 - 需要**读**自己 appdata 里的文件来分析 → `app.agent.run`，需 `agent.enabled`
 - 需要**写**文件 → `app.fs.writeFile`（需 `fs.write` 权限），不是 `app.agent`
@@ -309,7 +315,7 @@ app.onDeactivate(() => clearInterval(timer));
 > **`permissions` 是嵌套对象**（`fs: {read, write}` / `shell: {allow}` / `net: {allow}`），不是扁平数组。写成 `"fs": []` 会被 schema 校验拒绝。
 >
 > **路径模板**：`{appdata}` = 本 app 数据目录（始终可读写）、`{workspace}` = 当前工作区。**不要写绝对路径**，schema 会拒。`app.fs.*` 收到的路径必须落在已声明前缀内，否则宿主返回 `PERMISSION_DENIED`。
-> **`{user-selected}` 现在还不能用**：宿主还没接入「用户授权某个目录」这条链路。`meta.json` 里写 `{user-selected}/**` 能过 schema 校验，但宿主展开不了这个前缀，于是凡是落在它下面的 `app.fs.*` 调用每一次都会被 `PERMISSION_DENIED` 拒掉 —— 声明了、装得上、却一条都用不了，比直接拒掉更难查。当前可用的根只有 `{appdata}` 与 `{workspace}` 两个。
+> **`{user-selected}` 不支持，且 schema 会直接拒**：可用的根只有 `{appdata}` 与 `{workspace}` 两个，写第三个会在 `meta.json` 校验阶段报错。宿主确实还没有「用户授权某个目录」这条链路（展开器 `expandAuthorPath` 不认识这个前缀），所以以前的做法是让 schema 放行、运行时再拒 —— 结果是作者能装上、却发现每一条 `app.fs.*` 都被 `PERMISSION_DENIED`，错误信息还指向路径而不是指向「这个 token 根本不支持」，比直接拒更难查。现在这个矛盾去掉了：能用 == 在 `KNOWN_TEMPLATES` 里。
 >
 > **持久化落点固定**：KV 恒定写在 `<appdata>/storage.json`，**不由 meta.json 指定**。`storage.file` 曾被标成"必填"，但宿主从来不读它 —— 声明什么名字都还是 `storage.json`。落哪个文件是安全边界：`app.storage` 是免权限 API，不该由作者决定它写哪。`app.fs.*` 才是要自己管文件的那条路。
 >

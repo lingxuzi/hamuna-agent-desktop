@@ -51,6 +51,13 @@ const CHILD_PROCESS_ALLOWLIST = new Set([
   // the "validated payloads are actually forwarded under the right field names"
   // assertion meaningful -- mocking managementApi would only prove the mock.
   'src/server/__tests__/miniapp-authoring-wire.integration.test.ts',
+  // Same shape again, for the /api/miniapp/worker/spawn privilege gate. The bug
+  // being pinned is an authorization decision made by the real route from a real
+  // meta.json on disk, in a child whose HOME is the sandbox -- mocking the
+  // child would mock the gate itself, and an in-process call would read the
+  // developer's real ~/.hamuna instead of the fixtures. No credentials, no
+  // off-loopback socket, child argv is fixed except for the mkdtemp HOME.
+  'src/server/__tests__/node-gate.integration.test.ts',
 ]);
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g');
 
