@@ -287,7 +287,7 @@ try {
 // → `pool.call`）。pool 与 entry 是同一份契约的**两份独立实现**，字段名漂了、
 // ready 握手对不上、方法白名单放行了别的 kind，上面的冒烟全都测不出来。
 console.log('through the real MiniAppWorkerPool (the path app.call actually takes)');
-const { pool } = await import('../src/server/miniapp-worker/worker-pool.ts');
+const { pool, PER_APP_WORKER_CAP } = await import('../src/server/miniapp-worker/worker-pool.ts');
 const { FILE_EXPLORER_KIND } = await import('../src/server/miniapp-worker/kinds/file-explorer.ts');
 const { GIT_GRAPH_KIND } = await import('../src/server/miniapp-worker/kinds/git-graph.ts');
 
@@ -368,6 +368,103 @@ try {
   } finally {
     if (gitWorkerId) await pool.terminate(gitWorkerId).catch(() => {});
     rmSync(poolRepo, { recursive: true, force: true });
+  }
+  // ── per-app cap:防"一个 MiniApp 起满 worker thread"的资源闸 ─────────────────
+  //
+  // cap 与 LRU 在本脚本之前**一个断言都没有**,unit 那边也只暴露了常量:唯一的
+  // 覆盖是一个 `it.skip`,还注明"等一个 echo fixture 落地"。也就是说
+  // `enforcePerAppCap` 整个函数体删掉,CI 依然全绿 —— 而它守的正是"一个坏掉的
+  // MiniApp 把宿主线程吃光"这条边界。
+  //
+  // 必须用**真 worker**:cap 逻辑跨 spawn/terminate 两个 await,幻影 worker 不占
+  // 线程,造不出"起第 cap+1 个时前 cap 个还活着"这个前提。
+  const capAppId = 'verify-pool-cap';
+  const capIds = [];
+  try {
+    for (let i = 0; i < PER_APP_WORKER_CAP; i += 1) {
+      capIds.push(
+        (await pool.spawn({
+          appId: capAppId,
+          kind: 'file-explorer',
+          fsScope: { read: [poolTree], write: [] },
+        })).workerId,
+      );
+    }
+    // 先把最早那个**用一次**,再让第 cap+1 个进来。这样被踢掉的必须是"最久没被
+    // 用过的",而不是"最早起的"。不刷新 lastUsedAt 的话,这 cap 个 worker 共享
+    // 同一个毫秒时间戳,稳定排序退化成按插入顺序踢,断言就悄悄变成在测 FIFO。
+    await new Promise((r) => setTimeout(r, 5));
+    await pool.call({ workerId: capIds[0], method: 'file.tree', params: { root: poolTree } });
+    capIds.push(
+      (await pool.spawn({
+        appId: capAppId,
+        kind: 'file-explorer',
+        fsScope: { read: [poolTree], write: [] },
+      })).workerId,
+    );
+
+    // 淘汰是 best-effort 的 `void this.terminate(...)`(worker-pool.ts:382),
+    // spawn 返回那一刻它可能还没落定,所以轮询等它稳定,不要 spawn 完就断言。
+    let settled = false;
+    for (let i = 0; i < 100 && !settled; i += 1) {
+      settled = (pool.snapshot().byApp[capAppId] ?? 0) <= PER_APP_WORKER_CAP;
+      if (!settled) await new Promise((r) => setTimeout(r, 50));
+    }
+    const live = pool.snapshot().byApp[capAppId] ?? 0;
+    if (settled && live === PER_APP_WORKER_CAP) {
+      ok(`pool held the per-app cap at ${live} after ${capIds.length} spawns (LRU evicted one)`);
+    } else {
+      fail(
+        `per-app cap not enforced: ${capIds.length} spawns left ${live} live workers ` +
+          `(cap ${PER_APP_WORKER_CAP}, settled=${settled})`,
+      );
+    }
+
+    const evicted = capIds[1];
+    const survivor = capIds[0];
+    const evictedRes = await pool.call({
+      workerId: evicted,
+      method: 'file.tree',
+      params: { root: poolTree },
+    });
+    if (!evictedRes.ok && evictedRes.error?.code === 'WORKER_NOT_FOUND') {
+      ok('the LRU victim is the least-recently-used worker, not the oldest-spawned one');
+    } else {
+      fail(
+        `expected the least-recently-used worker to be evicted, but it still answers: ` +
+          `${JSON.stringify(evictedRes).slice(0, 160)}`,
+      );
+    }
+    const survivorRes = await pool.call({
+      workerId: survivor,
+      method: 'file.tree',
+      params: { root: poolTree },
+    });
+    if (survivorRes.ok && survivorRes.result?.entries?.length === 3) {
+      ok('the recently-used worker survived eviction and still answers');
+    } else {
+      fail(`the recently-used worker was evicted too: ${JSON.stringify(survivorRes).slice(0, 160)}`);
+    }
+    // cap 必须是**每个 app 各自**的额度，不是全局的：某个 app 打满自己的额度时不该
+    // 踢掉别的 app 的 worker。少了 appId 过滤，上面两条断言照样绿 —— 因为被踢的
+    // 顺序恰好仍落在这批 cap worker 上，观测到的结果一模一样。
+    const neighbour = await pool.call({
+      workerId: poolWorkerId,
+      method: 'file.tree',
+      params: { root: poolTree },
+    });
+    if (neighbour.ok && neighbour.result?.entries?.length === 3) {
+      ok('one app reaching its cap left another app worker alone');
+    } else {
+      fail(
+        `this app's cap evicted a different app's worker: ` +
+          `${JSON.stringify(neighbour).slice(0, 160)}`,
+      );
+    }
+  } catch (e) {
+    fail(`the per-app cap path threw unexpectedly: ${String(e).slice(0, 300)}`);
+  } finally {
+    for (const id of capIds) await pool.terminate(id).catch(() => {});
   }
 
   // 起不来的 worker 必须**显式失败**。返回一个 id 就是幻影 spawn：MiniApp 拿到一个
