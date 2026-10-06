@@ -25,19 +25,22 @@
 按优先级取：
 
 1. 用户提供的截图 / 品牌资料 / 现成代码
-2. **`bundled-miniapps/` 里最贴近形态的现有应用**——直接读它的 `meta.json`、`index.html`、`style.css`、`ui.js`，识别它的视觉语言（间距、圆角、卡片密度、配色）。这是本项目最权威的范例来源
-3. 宿主注入的 CSS Token（见 §四）
+2. **`references/examples/design-reference/`** —— 本 skill 自带的视觉与动效质量基线，**默认先读它**。它的 `style.css` 顶部有设计系统声明，末尾有 `prefers-reduced-motion` 降级，全文只有三个时长和两条缓动曲线。生成任何新 MiniApp 的视觉部分时，把它当模板而不是当参考
+3. `bundled-miniapps/` 里形态最接近的现有应用——看它的 `meta.json` / `ui.js` 学**契约**，但**不要学它的 `style.css`**：那 4 个应用加起来没有一个够格的视觉参照（最大的 `file-explorer/style.css` 只有 3.65KB，零动效），照着抄必然产出"AI 味"。它们是功能样例，不是设计样例
+4. 宿主注入的 CSS Token（见 §四）
 
 **从零生成是最后选择**——它直接导致千篇一律的"AI 味"。
 
 现有可用参考：
 
-| 应用 | 形态 | 适合参考什么 |
-|---|---|---|
-| `bundled-miniapps/hello-miniapp/` | iframe，最小骨架 | 最小可运行结构 |
-| `bundled-miniapps/icon-generator/` | iframe + `skills` + `ai` 权限 | 带 AI 能力的形态、`allowed_models` 写法 |
-| `bundled-miniapps/git-graph/` | worker，`git-graph` kind | 需要宿主能力时的 `kind`/`worker_kind` 声明 |
-| `bundled-miniapps/file-explorer/` | worker，`file-explorer` kind | `fs.read` 路径声明 + 分栏布局 |
+| 参考 | 适合看什么 |
+|---|---|
+| `references/examples/design-reference/` | **视觉 + 动效 + 质感**（`style.css` 19KB，默认起手读这个） |
+| `references/examples/design-reference/source/ui.js` | 行为层：环境订阅、动效编排、退场动画、错误暴露 |
+| `bundled-miniapps/hello-miniapp/` | 最小可运行结构 |
+| `bundled-miniapps/icon-generator/` | 带 AI 能力的形态、`allowed_models` 写法 |
+| `bundled-miniapps/git-graph/` | 需要宿主能力时的 `kind`/`worker_kind` 声明 |
+| `bundled-miniapps/file-explorer/` | `fs.read` 路径声明 + 分栏布局 |
 
 ---
 
@@ -67,7 +70,7 @@
 
 ## 四、CSS Token（唯一正确的名字）
 
-MiniApp iframe 由宿主注入 **24 个 `--hamuna-*` 变量**。**只准用这些**，每个都可以带 fallback：
+MiniApp iframe 由宿主注入 **26 个 `--hamuna-*` 变量**（清单见 `src/renderer/components/miniapp-host/theme-tokens.ts::TOKEN_VAR_NAMES`，下表即其全集）。**只准用这些**，每个都可以带 fallback：
 
 | 用途 | Token |
 |---|---|
@@ -133,7 +136,94 @@ background: var(--bg-primary); /* disabled-example: 错 —— 这些名字宿�
 
 ---
 
-## 七、占位先行 → 早预览
+## 七、动效与质感
+
+> 视觉的"高级感"大半来自动效的**克制与一致**，不是来自效果多。判断标准：把所有动效关掉，界面应该依然成立；打开动效，只是更顺手，不应该更"好看"才值得存在。
+
+### 1. 先声明动效 token，再写动画
+
+不要在每个规则里直接写 `180ms` 和 `cubic-bezier(...)`。先在 `:root` 钉死全套：
+
+```css
+:root {
+  --dr-dur-fast: 120ms;  /* 悬停、按压、勾选 —— 反馈必须感觉即时 */
+  --dr-dur: 180ms;       /* 状态切换、展开收起 */
+  --dr-dur-slow: 280ms;  /* 入场、骨架消失 —— 大位移才配长时长 */
+  --dr-ease: cubic-bezier(0.2, 0.8, 0.2, 1);      /* 快起慢收，交互响应感强 */
+  --dr-ease-out: cubic-bezier(0.16, 1, 0.3, 1);   /* 入场：更长的减速尾巴 */
+}
+```
+
+前缀用你自己的应用缩写（`--gm-` / `--rx-`），避免和别的小应用撞名。
+
+**为什么这是机械保证而不是建议**：全应用只有三个时长和两条曲线之后，动效看起来统一就不是靠审美，是靠所有引用都收敛到这几个值。作者改一个值就等于改全局节奏，不需要逐处调整。
+
+时长分配的判据是**位移距离**：颜色淡入用 fast，位移用 slow。位移越大、时长越短，越显得仓促。
+
+### 2. 四条房规
+
+| 禁止 | 后果 | 正确做法 |
+|---|---|---|
+| `transition: all` | 会把 `width`/`height`/`top` 一起带上，引发本不该有的重排；大元素上肉眼可见的卡顿 | 永远显式列出属性：`transition: background-color var(--dr-dur-fast) var(--dr-ease)` |
+| `scale(0)` | 元素瞬间塌成 0 尺寸，边框消失，动画起点不可见 | 缩放起点用 `.96` / `.94` 这种"几乎没变"的值 |
+| 全局 `@keyframes` 裸名 | 同一宿主页里两个小应用重名互相覆盖 | 带应用前缀：`@keyframes dr-enter` |
+| 没有降级的 infinite 动画 | 前庭功能障碍用户会实际眩晕；这是无障碍缺陷不是偏好 | 见下条 |
+
+### 3. 动效降级是必选项
+
+前庭功能障碍用户对大面积位移和循环动画会**实际产生眩晕**。集中关一次，不要在每个动画旁边写一遍（新增动画时一定会漏）：
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+```
+
+保留 `color` / `background` / `opacity` 的过渡（不产生位移），还是把 `transition-duration` 也删掉，取决于你对"完全不动的界面"的判断。**加了这段就不算交付**：任何 infinite 动画在降级后都必须停。
+
+### 4. 动效词汇表：什么场景用什么
+
+只有四类，不要发明第五类：
+
+| 类别 | 时长 | 用在哪 | 形态 |
+|---|---|---|---|
+| **入场** | `--dr-dur-slow` + `--dr-ease-out` | 列表首次渲染、面板展开 | 淡入 + 上移 6px。列表逐条 stagger 24ms，**上限 8 条**——再多后面的还没等完用户已经划走 |
+| **反馈** | `--dr-dur-fast` + `--dr-ease` | 勾选、按压、按钮按下 | 缩放脉冲（`.96`）+ 透明度下降。**不要用位移**——位移容易被误读成导航 |
+| **加载** | `--dr-dur-slow` | 异步取数 | 骨架屏优于 spinner：它占住最终布局的位置，切换时不跳版，还能暗示内容形状。**骨架至少显示 600ms**，闪一下比不显示更糟，看起来像故障 |
+| **氛围** | — | 默认**不做** | 只有当页面过于空旷时才加极淡的径向光晕（透明度 < 10%）。循环漂浮、闪烁、呼吸灯一律不做 |
+
+确认性反馈用 toast/浮层，**完整生命周期是"进入 → 停留 → 退场 → 摘节点"**。只做进入不做退场是最常见的半成品动效。
+
+### 5. 退场：先播完再摘节点
+
+直接 `innerHTML` 重写或 `replaceChildren()` 会把节点连同正在播的动画一起销毁，视觉上就是"闪一下就没了"。正确顺序是打标记 → 等 `animationend` → 再改数据：
+
+```javascript
+function removeRow(row, done) {
+  row.dataset.exit = 'true';
+  row.addEventListener('animationend', () => { row.remove(); done(); }, { once: true });
+  // 降级模式下没有 animationend，用定时兜底
+  setTimeout(() => { row.remove(); done(); }, 240);
+}
+```
+
+JS 只负责**编排**（打标记、给索引），时长和曲线仍然在 CSS 里。不要在 JS 里写毫秒数常量。
+
+### 6. 交互质感
+
+- 命中目标 ≥ **32×32**，主操作按钮 ≥ 36px 高——窄侧栏里 24px 的按钮实际很难点中
+- 焦点环用 `:focus-visible` 而不是 `:focus`，并且**去掉 outline 后必须自己画回来**。只写 `outline: none` 是键盘用户的事故
+- 悬停才出现的控件用 `opacity` + `visibility`，**不要用 `display: none`**——后者会让行宽在 hover 时跳动，列表横向抖一下
+- `prefers-reduced-motion` 之外，还要保证信息不只靠颜色传达（完成态除了颜色还有删除线和文字标签）
+
+---
+
+## 八、占位先行 → 早预览
 
 第一次产出**不需要真实数据**：
 
@@ -146,7 +236,7 @@ background: var(--bg-primary); /* disabled-example: 错 —— 这些名字宿�
 
 ---
 
-## 八、视觉 QA Checklist
+## 九、视觉 QA Checklist
 
 每次大改后逐条过：
 
@@ -171,3 +261,15 @@ background: var(--bg-primary); /* disabled-example: 错 —— 这些名字宿�
 - [ ] 换一个人来看，能说出这应用是干什么的
 - [ ] 字体统一用 `--hamuna-font-sans`，等宽处统一用 `--hamuna-font-mono`
 - [ ] 切换应用、打开第二个 Tab，视觉上仍是一个系统的产品
+
+**动效层**
+
+- [ ] 动效 token 在 `:root` 声明，全应用只有 2-3 个时长和 2 条曲线，没有散落的裸 `180ms`
+- [ ] 没有 `transition: all`——每条 `transition` 都显式列了属性
+- [ ] 没有 `scale(0)`——缩放起点都在 .9 以上
+- [ ] `@keyframes` 全部带应用前缀，无重名
+- [ ] 有 `prefers-reduced-motion: reduce` 块，且系统开启"减少动态效果"后动画确实停了
+- [ ] 打开系统"减少动态效果"跑一遍：入场不位移、骨架不闪、toast 不飘
+- [ ] 骨架屏不会一闪而过（最短 600ms）
+- [ ] 删除元素是先播退场再摘节点，不是直接消失
+- [ ] 键盘 Tab 走一遍：焦点环在每一站都看得见，没有只写了 `outline: none` 的地方

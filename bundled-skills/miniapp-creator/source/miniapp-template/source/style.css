@@ -1,15 +1,183 @@
-/* style.css — MiniApp styles.
-   Use ONLY the host-injected --hamuna-* tokens (24 available, see
-   references/design-playbook.md §四). Every var() needs a fallback: the host
-   falls back to a light palette when a token is missing, and a wrong token
-   name fails silently rather than erroring. Never hardcode colors or sizes. */
+/* ============================================================================
+ * style.css — MiniApp 样式起手式
+ *
+ * Use ONLY the host-injected --hamuna-* tokens (full list:
+ * references/design-playbook.md §四, source of truth:
+ * src/renderer/components/miniapp-host/theme-tokens.ts::TOKEN_VAR_NAMES).
+ * Every var() needs a fallback: the host falls back to a light palette when a
+ * token is missing, and a wrong token name fails SILENTLY rather than erroring.
+ * Never hardcode colors.
+ *
+ * 这份骨架给的是**正确的骨头**，不是成品设计。动效与质感的完整示范在
+ * references/examples/design-reference/source/style.css —— 写正式界面前先读它。
+ * 这里刻意不放具体视觉方案：不同 MiniApp 的形态差别很大，把它们统一到同一
+ * 套卡片样式正是"每块一个风格"的来源。
+ * ========================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* --- 语义别名 -------------------------------------------------------------
+ * 宿主 token 只在这一段出现，下游一律用语义名。换配色只改这里。
+ * -------------------------------------------------------------------- */
 :root {
-  font-family: var(--hamuna-font-sans, -apple-system, 'Segoe UI', sans-serif);
-  color: var(--hamuna-text-primary, #1c1612);
-  background: var(--hamuna-bg-primary, #fff);
+  --surface: var(--hamuna-bg-elevated, #f5f5f5);
+  --inset: var(--hamuna-bg-inset, #ececec);
+  --line: var(--hamuna-border, rgba(0, 0, 0, 0.12));
+  --text: var(--hamuna-text-primary, #1c1612);
+  --text-soft: var(--hamuna-text-secondary, #544b42);
+  --text-muted: var(--hamuna-text-muted, #6f6156);
+  --accent: var(--hamuna-accent, #7b8f6b);
+  --accent-text: var(--hamuna-accent-text, #ffffff);
+  --focus: var(--hamuna-focus-border, #7b8f6b);
+  --danger: var(--hamuna-error, #b3261e);
+  --radius: var(--hamuna-radius-md, 10px);
+  --radius-sm: var(--hamuna-radius-sm, 6px);
+  --sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+
+  /* 动效 token：全应用只有这几个值。改这里等于改全局节奏。 */
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 280ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
-  margin: 0;
+  font-family: var(--sans);
+  font-size: 14px; /* 中文正文 14px 起步 */
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--hamuna-bg-primary, #fff);
+}
+
+button,
+input {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+main {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* --- 可复制的零件 ---------------------------------------------------------
+ * 下面三件是大多数 MiniApp 都要的。刻意保持极简；加装饰前先问"它让层级更
+ * 清楚了吗"，答不上就别加。
+ * -------------------------------------------------------------------- */
+
+/* 卡片 */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 16px;
+  /* 只过渡颜色，不过渡尺寸 —— 见 playbook §七 房规第 1 条 */
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+/* 按钮：命中目标 36px > 32px 门槛；按下用 scale(.96) 不用 scale(0) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--hamuna-bg-button, #f0ece6);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.btn:hover {
+  background: var(--hamuna-bg-button-hover, rgba(0, 0, 0, 0.06));
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+/* 焦点环：去掉 outline 就必须画回来，只写 outline:none 是键盘用户的事故 */
+.btn:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* 输入 */
+.input {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--hamuna-bg-input, #fff);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.input:focus {
+  border-color: var(--focus);
+}
+
+/* --- 骨架屏 ---------------------------------------------------------------
+ * 异步态用骨架而不是 spinner：占住最终布局位置，切换时不跳版。
+ * @keyframes 名带应用前缀，多个小应用同页时不重名。
+ * -------------------------------------------------------------------- */
+@keyframes tm-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+.skeleton {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--inset) 0%, var(--surface) 40%, var(--inset) 80%);
+  background-size: 240% 100%;
+  animation: tm-shimmer 1.4s linear infinite;
+}
+
+/* --- 动效降级 -------------------------------------------------------------
+ * 必选项，不是加分项。系统开启"减少动态效果"后所有动效必须停 ——
+ * 前庭功能障碍用户会实际产生眩晕。
+ * -------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

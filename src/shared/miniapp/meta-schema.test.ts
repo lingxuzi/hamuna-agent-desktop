@@ -346,4 +346,27 @@ describe('miniapp-creator skill template', () => {
     }
     expect(existsSync(join(templateRoot, 'storage.json')), 'storage.json is missing').toBe(true);
   });
+
+  it('ships a reference exemplar that also parses against the current schema', () => {
+    // The exemplar is what an AI copies meta.json shape from, so a schema
+    // violation there propagates into every generated MiniApp. It is a
+    // reference rather than a shipped app, so it has no storage.json and the
+    // 4-file check above does not apply.
+    const exemplarRoot = fileURLToPath(
+      new URL('../../../bundled-skills/miniapp-creator/references/examples/design-reference', import.meta.url),
+    );
+    const raw = JSON.parse(readFileSync(join(exemplarRoot, 'meta.json'), 'utf8'));
+    const r = parseMiniAppMetadata(raw);
+    expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+
+    // And it must not quietly teach permissions the playbook forbids asking
+    // for. The exemplar exists to be copied, so anything it declares is a
+    // recommendation.
+    const perms = (raw as { permissions?: Record<string, unknown> }).permissions ?? {};
+    expect(perms).toMatchObject({
+      fs: { read: [], write: [] },
+      shell: { exec: [] },
+      net: { allow: [] },
+    });
+  });
 });

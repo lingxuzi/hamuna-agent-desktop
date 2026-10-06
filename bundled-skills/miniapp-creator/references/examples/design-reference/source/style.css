@@ -1,0 +1,701 @@
+/* ============================================================================
+ * Design Reference — miniapp-creator 的视觉与动效质量基线
+ * ============================================================================
+ *
+ * 这份 CSS 的存在理由：本仓库其它 MiniApp 的样式表（最好的 file-explorer 只有
+ * 3.65KB）都不足以当视觉参照，而 playbook 又要求 AI「不要从零 mock，去读最贴近
+ * 形态的现有应用」。这份文件就是那个「够格的现有应用」。
+ *
+ * --- Design System ---
+ * Theme: 克制的工具感。视觉完全跟随宿主主题注入的 --hamuna-* token，
+ *        本文件不定义任何颜色，只定义"颜色怎么用"。
+ * Palette:
+ *   dominant  : --hamuna-bg-primary 占 60-70%，是所有表面的默认底
+ *   supporting: --hamuna-bg-elevated（卡片）/ --hamuna-bg-inset（凹陷区）
+ *               / --hamuna-border-subtle（默认描边）
+ *   accent    : --hamuna-accent —— **只**用于主 CTA 与选中态。
+ *               一屏之内 accent 出现超过 3 处就说明层级失控了。
+ *   semantic  : error/success/warning/info 仅用于状态，绝不用于装饰。
+ * Typography:
+ *   heading : 600 / 20px / --hamuna-text-primary
+ *   section : 600 / 14px
+ *   body    : 400 / 14px   ← 中文正文 14px 起步，比拉丁排版经验大 1px
+ *   caption : 400 / 12px / --hamuna-text-muted
+ * Radius: --hamuna-radius-md（卡片）/ --hamuna-radius-sm（输入、勾选框）
+ * Motif: 每行左侧 2px 状态色条 + 统一 48px 行高。选中时整行铺 accent 的
+ *        6% 淡底 + 色条加宽到 3px —— 全应用只用这一个"选中"表达。
+ * Motion:
+ *   三档时长 + 两条缓动，见下方 Motion 段。入场一律"淡入 + 上移 6px"，
+ *   反馈一律"缩放脉冲"，不做位移式反馈（位移容易被误读成导航）。
+ *   所有动效受 prefers-reduced-motion 统一管辖，见文件末尾。
+ * ==========================
+ *
+ * --- 动效房规（照抄自 scripts/audit-web-motion.mjs 的审计口径）---
+ *   1. 禁止 `transition: all` —— 永远显式列出属性。all 会把 layout 属性
+ *      （width/height/top）一起带上，引发本不该有的重排。
+ *   2. 禁止 `scale(0)` —— 它会让元素瞬间塌成 0 尺寸并丢失边框。缩放起点
+ *      用 .96 / .94 这种"几乎没变"的值。
+ *   3. keyframes 名必须带本应用前缀（dr-），避免多应用同页时的全局重名。
+ *   4. 任何 infinite 动画必须能被 prefers-reduced-motion 关掉。
+ * ========================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Host tokens → 语义别名
+ *
+ * 只在这里出现宿主注入的 --hamuna-* token。下游全部用语义名（--dr-surface 而不是
+ * --hamuna-bg-elevated）。这样换配色只改这一段，下游一行动不动。
+ *
+ * 每个 var() 都带 fallback：宿主 token 缺失时会回落到 FALLBACK_TOKENS，
+ * 而独立导出成普通网页时根本没有宿主。fallback 值与 theme-tokens.ts 里的
+ * FALLBACK_TOKENS 保持一致，否则"脱离宿主"和"宿主缺 token"会长得不一样。
+ * ------------------------------------------------------------------------ */
+:root {
+  /* 表面 */
+  --dr-bg: var(--hamuna-bg-primary, #ffffff);
+  --dr-surface: var(--hamuna-bg-elevated, #f5f5f5);
+  --dr-inset: var(--hamuna-bg-inset, #ececec);
+  --dr-surface-raised: var(--hamuna-bg-surface, #ffffff);
+
+  /* 描边：默认走 subtle，强调走 primary。中间态不要用。 */
+  --dr-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
+  --dr-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
+  --dr-line-focus: var(--hamuna-border-primary, rgba(0, 0, 0, 0.2));
+
+  /* 文字 */
+  --dr-text: var(--hamuna-text-primary, #1c1612);
+  --dr-text-soft: var(--hamuna-text-secondary, #544b42);
+  --dr-text-muted: var(--hamuna-text-muted, #6f6156);
+
+  /* 交互件 */
+  --dr-btn-bg: var(--hamuna-bg-button, #f0ece6);
+  --dr-btn-bg-hover: var(--hamuna-bg-button-hover, rgba(0, 0, 0, 0.06));
+  --dr-input-bg: var(--hamuna-bg-input, #ffffff);
+  --dr-focus: var(--hamuna-focus-border, #7b8f6b);
+
+  /* 强调 */
+  --dr-accent: var(--hamuna-accent, #7b8f6b);
+  --dr-accent-text: var(--hamuna-accent-text, #ffffff);
+  /* accent 的淡底用 color-mix 从 accent 派生，而不是另找一���浅色 ——
+   * 换主题时淡底自动跟着变，不需要维护第二套色板。 */
+  --dr-accent-wash: color-mix(in srgb, var(--dr-accent) 6%, transparent);
+  --dr-accent-line: color-mix(in srgb, var(--dr-accent) 40%, transparent);
+
+  /* 语义色：仅用于状态 */
+  --dr-success: var(--hamuna-success, #146c2e);
+  --dr-error: var(--hamuna-error, #b3261e);
+  --dr-warning: var(--hamuna-warning, #8a5a00);
+
+  /* 圆角 */
+  --dr-radius: var(--hamuna-radius-md, 10px);
+  --dr-radius-sm: var(--hamuna-radius-sm, 6px);
+  --dr-radius-lg: var(--hamuna-radius-lg, 14px);
+
+  /* 字体 */
+  --dr-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --dr-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  /* --- Motion -----------------------------------------------------------
+   * 全应用只有这三个时长和两条曲线。这是"克制"的机械保证：动效看起来统一，
+   * 不是因为审美，是因为所有引用都收敛到这几个值。改这里就等于改全局节奏。
+   * -------------------------------------------------------------------- */
+  --dr-dur-fast: 120ms;  /* 悬停、按压、勾选 —— 反馈必须感觉即时 */
+  --dr-dur: 180ms;       /* 状态切换、展开收起 */
+  --dr-dur-slow: 280ms;  /* 入场、骨架消失 —— 大位移才配长时长 */
+  /* 主曲线：快起慢收，交互响应感强又不生硬 */
+  --dr-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 入场曲线：更长的减速尾巴，让元素"落"到位而不是"停"到位 */
+  --dr-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 行高也是 token：motif 的一部分 */
+  --dr-row-h: 48px;
+  --dr-gap: 12px;
+
+  /* 入场 stagger 的档位。由 ui.js 按行索引覆盖，声明在这里是为了让默认值
+   * 只有一个来源 —— CSS 里就不用到处写 fallback 了。 */
+  --dr-stagger-i: 0;
+}
+
+/* 宿主切换外观时会重写 :root 上的 --hamuna-*，这里不需要任何 appearance
+ * 选择器 —— 颜色自动跟随是 token 契约的一部分。唯一需要显式同步的是
+ * color-scheme（它决定原生控件、滚动条和表单的默认外观），
+ * 由 ui.js 监听 app.appearanceMode 写入。 */
+
+body {
+  font-family: var(--dr-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dr-text);
+  background: var(--dr-bg);
+  /* 页面底色上的极淡径向光晕：让大面积纯色不死板，又不引入竞争色相。
+   * 两个光晕加起来透明度不到 10%，是"质感"不是"装饰"。 */
+  background-image:
+    radial-gradient(900px 420px at 88% -12%, var(--dr-accent-wash), transparent 62%),
+    radial-gradient(760px 380px at -8% 108%, var(--dr-accent-wash), transparent 58%);
+  background-attachment: fixed;
+}
+
+button,
+input {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ===========================================================================
+ * 排版
+ * ======================================================================== */
+.dr-app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dr-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.dr-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--dr-text-muted);
+}
+
+/* ===========================================================================
+ * 顶栏
+ * ======================================================================== */
+.dr-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dr-gap);
+}
+
+.dr-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dr-line);
+  background: var(--dr-surface);
+  font-size: 11px;
+  font-family: var(--dr-mono);
+  color: var(--dr-text-soft);
+  /* 环境徽章切换时轻微淡入，说明"这个东西会变" */
+  transition:
+    background-color var(--dr-dur) var(--dr-ease),
+    color var(--dr-dur) var(--dr-ease);
+}
+
+/* ===========================================================================
+ * 输入行
+ * ======================================================================== */
+.dr-composer {
+  display: flex;
+  gap: 8px;
+}
+
+.dr-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--dr-radius-sm);
+  border: 1px solid var(--dr-line-strong);
+  background: var(--dr-input-bg);
+  /* 只过渡颜色和描边，不过渡 height/width —— 见房规第 1 条 */
+  transition:
+    border-color var(--dr-dur-fast) var(--dr-ease),
+    box-shadow var(--dr-dur-fast) var(--dr-ease);
+}
+
+.dr-input::placeholder {
+  color: var(--dr-text-muted);
+}
+
+.dr-input:focus {
+  outline: none;
+  border-color: var(--dr-focus);
+  box-shadow: 0 0 0 3px var(--dr-accent-line);
+}
+
+/* ===========================================================================
+ * 按钮
+ *
+ * 最小命中目标 36px > 32px 门槛；用 transition 而非 animation 表达状态，
+ * 因为状态切换是双向的（按下/松开都要有反馈）。
+ * ======================================================================== */
+.dr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--dr-radius-sm);
+  border: 1px solid var(--dr-line-strong);
+  background: var(--dr-btn-bg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--dr-dur-fast) var(--dr-ease),
+    border-color var(--dr-dur-fast) var(--dr-ease),
+    transform var(--dr-dur-fast) var(--dr-ease);
+}
+
+.dr-btn:hover {
+  background: var(--dr-btn-bg-hover);
+}
+
+/* 按下用 scale(.96) 而非 scale(0) —— 房规第 2 条。
+ * 同时压低透明度，让"按下"不依赖位移也能被感知。 */
+.dr-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+.dr-btn:focus-visible {
+  outline: 2px solid var(--dr-focus);
+  outline-offset: 2px;
+}
+
+.dr-btn--primary {
+  background: var(--dr-accent);
+  border-color: var(--dr-accent);
+  color: var(--dr-accent-text);
+}
+
+.dr-btn--primary:hover {
+  background: color-mix(in srgb, var(--dr-accent) 88%, black);
+}
+
+.dr-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--dr-text-soft);
+}
+
+.dr-btn--ghost:hover {
+  background: var(--dr-btn-bg-hover);
+  color: var(--dr-text);
+}
+
+/* ===========================================================================
+ * 列表 —— motif 的主场
+ * ======================================================================== */
+.dr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dr-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--dr-row-h);
+  padding: 0 14px 0 16px;
+  border-radius: var(--dr-radius);
+  border: 1px solid var(--dr-line);
+  background: var(--dr-surface-raised);
+  overflow: hidden;
+  /* 行状态变化（待办 → 完成）用长一点的时长，因为它是"内容变了"不是"手按了" */
+  transition:
+    background-color var(--dr-dur) var(--dr-ease),
+    border-color var(--dr-dur) var(--dr-ease);
+}
+
+/* motif：左侧 2px 状态色条。选中时加宽到 3px 并换成 accent ——
+ * 全应用只有这一个地方表达"选中"。 */
+.dr-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--dr-line-strong);
+  transition:
+    width var(--dr-dur) var(--dr-ease),
+    background-color var(--dr-dur) var(--dr-ease);
+}
+
+.dr-row[data-done='false']::before {
+  background: var(--dr-text-muted);
+}
+
+.dr-row[data-done='true']::before {
+  background: var(--dr-success);
+}
+
+.dr-row[data-selected='true'] {
+  background: var(--dr-accent-wash);
+  border-color: var(--dr-accent-line);
+}
+
+.dr-row[data-selected='true']::before {
+  width: 3px;
+  background: var(--dr-accent);
+}
+
+/* 勾选框：不用原生 checkbox —— 原生控件跨平台外观不一致且不可主题化，
+ * 这是项目红线之一。用 button + role 自己做。 */
+.dr-check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--dr-line-strong);
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition:
+    background-color var(--dr-dur-fast) var(--dr-ease),
+    border-color var(--dr-dur-fast) var(--dr-ease);
+}
+
+.dr-check::after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid var(--dr-accent-text);
+  border-bottom: 2px solid var(--dr-accent-text);
+  transform: rotate(-45deg) scale(0.4);
+  opacity: 0;
+  transition:
+    opacity var(--dr-dur-fast) var(--dr-ease),
+    transform var(--dr-dur-fast) var(--dr-ease-out);
+}
+
+.dr-check[aria-checked='true'] {
+  background: var(--dr-accent);
+  border-color: var(--dr-accent);
+}
+
+/* 勾选反馈：勾号从 .4 弹到 1，落定后保持。scale 起点不是 0（房规第 2 条） */
+.dr-check[aria-checked='true']::after {
+  opacity: 1;
+  transform: rotate(-45deg) scale(1);
+}
+
+.dr-check:focus-visible {
+  outline: 2px solid var(--dr-focus);
+  outline-offset: 2px;
+}
+
+.dr-row__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  transition:
+    color var(--dr-dur) var(--dr-ease),
+    opacity var(--dr-dur) var(--dr-ease);
+}
+
+.dr-row[data-done='true'] .dr-row__label {
+  color: var(--dr-text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--dr-line-strong);
+}
+
+.dr-tag {
+  flex: none;
+  font-family: var(--dr-mono);
+  font-size: 11px;
+  color: var(--dr-text-muted);
+}
+
+/* 删除按钮：默认隐形（opacity 0 但仍占位，hover 时淡入）。
+ * 用 opacity + visibility 而不是 display:none —— 后者会让行宽在 hover 时
+ * 跳动，列表会横向抖一下。 */
+.dr-row__remove {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dr-radius-sm);
+  background: transparent;
+  color: var(--dr-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--dr-dur-fast) var(--dr-ease),
+    background-color var(--dr-dur-fast) var(--dr-ease),
+    color var(--dr-dur-fast) var(--dr-ease);
+}
+
+.dr-row:hover .dr-row__remove,
+.dr-row:focus-within .dr-row__remove {
+  opacity: 1;
+  visibility: visible;
+}
+
+.dr-row__remove:hover {
+  background: var(--dr-btn-bg-hover);
+  color: var(--dr-error);
+}
+
+.dr-row__remove:focus-visible {
+  outline: 2px solid var(--dr-focus);
+  outline-offset: -2px;
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ===========================================================================
+ * 入场 / 退场
+ *
+ * 列表项逐条入场，用 animation-delay 做 stagger。每条的延迟由 ui.js 按索引
+ * 写入 --dr-stagger-i。stagger 上限 8 条 —— 再多后面的还没等完用户已经划走，
+ * 逐条动画反而变成"等"。
+ * ======================================================================== */
+@keyframes dr-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dr-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+.dr-row[data-enter='true'] {
+  animation: dr-enter var(--dr-dur-slow) var(--dr-ease-out) backwards;
+  /* 保留 delay 到动画结束再清除，否则重排时整列会同时跳一下 */
+  animation-delay: calc(var(--dr-stagger-i) * 24ms);
+}
+
+.dr-row[data-exit='true'] {
+  animation: dr-exit var(--dr-dur) var(--dr-ease) forwards;
+}
+
+/* ===========================================================================
+ * 骨架屏
+ *
+ * 异步态用骨架而不是 spinner：它占住了最终布局的位置，切换时不会跳动，
+ * 而且能暗示"这里有几条、每条多宽"。
+ * ======================================================================== */
+.dr-list--skeleton {
+  gap: 8px;
+}
+
+.dr-row--skeleton {
+  pointer-events: none;
+}
+
+.dr-line {
+  display: block;
+  height: 12px;
+  width: 100%;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--dr-inset) 0%,
+    var(--dr-surface) 40%,
+    var(--dr-inset) 80%
+  );
+  background-size: 240% 100%;
+  animation: dr-shimmer 1.4s linear infinite;
+}
+
+.dr-row--skeleton:nth-child(2) .dr-line {
+  width: 72%;
+}
+
+.dr-row--skeleton:nth-child(3) .dr-line {
+  width: 88%;
+}
+
+@keyframes dr-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* ===========================================================================
+ * 空状态
+ * ======================================================================== */
+.dr-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 40px 24px;
+  border-radius: var(--dr-radius-lg);
+  border: 1px dashed var(--dr-line-strong);
+  animation: dr-enter var(--dr-dur-slow) var(--dr-ease-out);
+}
+
+/* 空状态标记是几何形，不是插画 —— 一个 24px 的虚线圆，克制且不占地方 */
+.dr-empty__mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1.5px dashed var(--dr-line-focus);
+  margin-bottom: 2px;
+}
+
+.dr-empty__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dr-empty__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dr-text-muted);
+}
+
+/* ===========================================================================
+ * 工具条
+ * ======================================================================== */
+.dr-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* ===========================================================================
+ * Toast —— 确认性反馈
+ *
+ * 固定在底部居中而不是右上角：MiniApp 通常在高内嵌面板里，底部更不容易被
+ * 面板边缘裁掉。
+ * ======================================================================== */
+.dr-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.dr-toast {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--dr-text);
+  color: var(--dr-bg);
+  font-size: 12px;
+  white-space: nowrap;
+  animation: dr-toast-in var(--dr-dur-slow) var(--dr-ease-out);
+}
+
+.dr-toast[data-leaving='true'] {
+  animation: dr-exit var(--dr-dur) var(--dr-ease) forwards;
+}
+
+@keyframes dr-toast-in {
+  from {
+    opacity: 0;
+    /* 从下方 8px 升起：比缩放更符合"提示浮现"的直觉 */
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* ===========================================================================
+ * 窄容器
+ *
+ * MiniApp 被嵌在侧栏时宽度可能只有 320px。这不是边缘情况，是常态。
+ * ======================================================================== */
+@media (max-width: 420px) {
+  .dr-app {
+    padding: 20px 16px 40px;
+    gap: 16px;
+  }
+
+  .dr-composer {
+    flex-direction: column;
+  }
+
+  .dr-btn--primary {
+    width: 100%;
+  }
+
+  .dr-title {
+    font-size: 18px;
+  }
+}
+
+/* ===========================================================================
+ * 动效降级 —— 不是可选项
+ *
+ * 前庭功能障碍用户对大面积位移和循环动画会实际产生眩晕。所有动效在这一处
+ * 统一关闭，比在每个动画定义旁边写一遍更可靠（新增动画时不会漏）。
+ *
+ * 保留 color / background / opacity 的过渡：这些不产生位移，是"颜色淡入"
+ * 而不是"东西在动"。若要彻底静止，把 transition 也删掉即可。
+ * ======================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

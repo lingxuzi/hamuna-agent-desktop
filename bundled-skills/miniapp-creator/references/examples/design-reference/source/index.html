@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Design Reference</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      结构与样式、逻辑三者分离：HTML 只放结构，所有视觉在 style.css，
+      所有行为在 ui.js。这个样例的价值在 style.css 的设计系统与动效词汇表。
+    -->
+    <div class="dr-app">
+      <header class="dr-topbar">
+        <div class="dr-topbar__text">
+          <h1 class="dr-title" data-i18n="app.title"></h1>
+          <p class="dr-subtitle" data-i18n="app.subtitle"></p>
+        </div>
+        <span class="dr-badge" id="mode-badge"></span>
+      </header>
+
+      <div class="dr-composer">
+        <input
+          class="dr-input"
+          id="new-task"
+          type="text"
+          autocomplete="off"
+          data-i18n-placeholder="list.placeholder"
+        />
+        <button class="dr-btn dr-btn--primary" id="add-task" type="button">
+          <span data-i18n="list.add"></span>
+        </button>
+      </div>
+
+      <!-- 骨架屏：异步态的第一帧。比 spinner 更有信息量，也不容易和真实内容打架。 -->
+      <ul class="dr-list dr-list--skeleton" id="skeleton" hidden aria-hidden="true">
+        <li class="dr-row dr-row--skeleton"><span class="dr-line"></span></li>
+        <li class="dr-row dr-row--skeleton"><span class="dr-line"></span></li>
+        <li class="dr-row dr-row--skeleton"><span class="dr-line"></span></li>
+      </ul>
+
+      <ul class="dr-list" id="list"></ul>
+
+      <!-- 空状态：说明下一步动作，不是装饰插画 -->
+      <div class="dr-empty" id="empty" hidden>
+        <div class="dr-empty__mark" aria-hidden="true"></div>
+        <p class="dr-empty__title" data-i18n="list.empty.title"></p>
+        <p class="dr-empty__hint" data-i18n="list.empty.hint"></p>
+      </div>
+
+      <footer class="dr-toolbar">
+        <button class="dr-btn" id="simulate" type="button">
+          <span data-i18n="action.simulate"></span>
+        </button>
+        <button class="dr-btn" id="toast" type="button">
+          <span data-i18n="action.toast"></span>
+        </button>
+        <button class="dr-btn dr-btn--ghost" id="reset" type="button">
+          <span data-i18n="action.reset"></span>
+        </button>
+      </footer>
+    </div>
+
+    <!-- 反馈浮层：确认性反馈的唯一形态。aria-live 让读屏器也能感知。 -->
+    <div class="dr-toast-host" id="toast-host" role="status" aria-live="polite"></div>
+
+    <script src="ui.js"></script>
+  </body>
+</html>

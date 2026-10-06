@@ -37,11 +37,40 @@ function skillFiles(): { path: string; text: string }[] {
     'source/miniapp-template/source/style.css',
     'source/miniapp-template/source/index.html',
     'references/design-playbook.md',
+    // The reference exemplar is what an AI copies the visual half of a MiniApp
+    // from, so a wrong token name there is at least as damaging as one in the
+    // prose — it gets pasted into generated apps verbatim.
+    'references/examples/design-reference/source/style.css',
+    'references/examples/design-reference/source/index.html',
+    'references/examples/design-reference/source/ui.js',
   ].map((rel) => ({ path: rel, text: readFileSync(join(SKILL_ROOT, rel), 'utf8') }));
+}
+
+/**
+ * Custom properties the skill's own files declare.
+ *
+ * Both the template and the exemplar alias host tokens once and then speak in
+ * semantic names (`--surface`, `--dr-ease`), because a real design system
+ * collapses to a few names. Those references are legitimate and must not be
+ * reported as unknown — but only when the file actually declares them, so a
+ * typo'd property is still caught.
+ */
+function declaredTokenNames(files: { text: string }[]): Set<string> {
+  const names = new Set<string>();
+  for (const { text } of files) {
+    // CSS declaration: `--foo: ...`. The `var(--foo` form has no colon after
+    // the name, so it is not matched here.
+    for (const m of text.matchAll(/(--[\w-]+)\s*:/g)) names.add(m[1]);
+    // Property set from script: `style.setProperty('--foo', ...)`
+    for (const m of text.matchAll(/setProperty\(\s*['"`](--[\w-]+)/g)) names.add(m[1]);
+  }
+  return names;
 }
 
 describe('miniapp-creator skill CSS tokens', () => {
   const injected = injectedTokenNames();
+  const files = skillFiles();
+  const declared = declaredTokenNames(files);
 
   it('reads a non-empty token list from the host builder', () => {
     // Guards the helper above: if buildThemeTokenCss changes shape, this fails
@@ -49,7 +78,17 @@ describe('miniapp-creator skill CSS tokens', () => {
     expect(injected.size).toBeGreaterThan(0);
   });
 
-  it.each(skillFiles())('$path only references real host tokens', ({ text }) => {
+  it('finds the reference exemplar the prose points at', () => {
+    // The playbook now tells the AI to read this file first. If someone moves
+    // or renames it, the instruction silently rots — same failure mode as a
+    // stale token name, one level up.
+    expect(declared.size).toBeGreaterThan(0);
+    expect(
+      files.some((f) => f.path.endsWith('design-reference/source/style.css')),
+    ).toBe(true);
+  });
+
+  it.each(files)('$path only references real host tokens', ({ text }) => {
     // Collect every `var(--x)` the skill tells the model to write. Lines marked
     // `disabled-example:` exist to show a failure mode, so they are exempt.
     const referenced = text
@@ -58,8 +97,9 @@ describe('miniapp-creator skill CSS tokens', () => {
       .flatMap((line) => [...line.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
     for (const name of referenced) {
       expect(
-        injected.has(name),
-        `${name} is not a host-injected token. Known: ${[...injected].sort().join(', ')}`,
+        injected.has(name) || declared.has(name),
+        `${name} is neither a host token nor declared by the skill. ` +
+          `Host: ${[...injected].sort().join(', ')}`,
       ).toBe(true);
     }
   });

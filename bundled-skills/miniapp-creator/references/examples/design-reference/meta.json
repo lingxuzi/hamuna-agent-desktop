@@ -1,0 +1,56 @@
+{
+  "id": "design-reference",
+  "name": "Design Reference",
+  "description": "miniapp-creator 的视觉与动效质量基线样例。生成新 MiniApp 时先读它的 style.css —— 本仓库其它 MiniApp 的 CSS 都比它薄，不要拿它们当视觉参照。",
+  "icon": "D",
+  "category": "other",
+  "version": 1,
+  "min_host_version": "0.3.233",
+  "tags": ["reference", "design"],
+  "permissions": {
+    "fs": {
+      "read": [],
+      "write": []
+    },
+    "shell": {
+      "exec": []
+    },
+    "net": {
+      "allow": []
+    }
+  },
+  "entry": "source/index.html",
+  "i18n": {
+    "default_locale": "zh-CN",
+    "locales": {
+      "zh-CN": {
+        "app.title": "设计参考",
+        "app.subtitle": "视觉与动效质量基线",
+        "list.placeholder": "添加一条任务…",
+        "list.add": "添加",
+        "list.empty.title": "还没有任务",
+        "list.empty.hint": "上面输入一条，先看静态状态",
+        "list.pending": "待办",
+        "list.done": "完成",
+        "action.simulate": "演示异步状态",
+        "action.toast": "演示反馈动效",
+        "action.reset": "重置演示数据",
+        "state.loading": "加载中…"
+      },
+      "en-US": {
+        "app.title": "Design Reference",
+        "app.subtitle": "Visual and motion quality baseline",
+        "list.placeholder": "Add a task…",
+        "list.add": "Add",
+        "list.empty.title": "No tasks yet",
+        "list.empty.hint": "Add one above to see the resting state",
+        "list.pending": "To do",
+        "list.done": "Done",
+        "action.simulate": "Simulate async",
+        "action.toast": "Show feedback",
+        "action.reset": "Reset demo data",
+        "state.loading": "Loading…"
+      }
+    }
+  }
+}
