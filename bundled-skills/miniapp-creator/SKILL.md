@@ -15,6 +15,13 @@ author: HamunaAgent
 
 MiniApp 运行在 iframe 沙箱里，能用的一切宿主能力都挂在 **`window.app`** 这一个全局对象上。`app.*` 走 postMessage 到宿主执行，权限由 `meta.json::permissions` 决定。
 
+**动手写第一行代码前，先读这两份（顺序不要反）：**
+
+1. [`references/design-playbook.md`](references/design-playbook.md) — 设计系统、反 AI 味清单、排版、Token 清单、视觉 QA 清单。**长什么样在这一份**。
+2. [`references/examples/design-reference/`](references/examples/design-reference/) — 一个**完整可运行**的参考实现（`style.css` 21.8KB）。写 `source/style.css` 前先读完它。
+
+**不要照着本文件里的代码片段想象 UI 长什么样。** 本文件讲的是契约和流程（怎么调 API、权限怎么声明、状态怎么存），**不是视觉参考**；本文件里出现的任何 HTML / CSS 片段都只是 API 用法示意，**没有排版、没有间距系统、没有状态、没有动效，不要当模板抄**。视觉的唯一权威是上面第 2 份。
+
 ## 你写什么 = 4 文件契约
 
 每个 MiniApp 落地为一个 `appId` 目录，里面恰好 4 个文件 + 1 个 `storage.json`：
@@ -359,7 +366,7 @@ iframe 的 CSP 是 `default-src 'none'`，**在 HTML 里直接写 `<script src="
 4. **写 meta.json**（用上面 schema）
 5. **写 source/index.html**（5-50 行 HTML，body 只放骨架 DOM，不内联 CSS/JS）
 6. **写 source/ui.js**（状态用 `app.storage`，文件/命令用 `app.fs` / `app.shell`，都要包 try/catch 显示错误）
-7. **写 source/style.css**（**必须用 `--hamuna-*` CSS Token**，见 §snippet 与 `references/design-playbook.md` §四）
+7. **写 source/style.css**（**必须用 `--hamuna-*` CSS Token**，见 `references/design-playbook.md` §四；结构与动效照抄 `references/examples/design-reference/source/style.css`）
 8. **写 storage.json**（`{}` 空即可）
 9. **提交写盘**（见 §端到端协议）
 10. **告诉用户结果**：appId + 4 文件路径 + SceneTab 怎么开
@@ -460,6 +467,8 @@ Chat 可拖 `~/.hamuna/miniapps/<appId>/source/` 目录到 Chat context 补仓�
 
 ## 端到端示例（用户说"做个待办清单 MiniApp"）
 
+> 只看**契约**：storage 的 get/set 都要 catch、失败要让用户看见、meta.json 怎么声明。**不要看它的样式** —— 它没有样式。视觉见 `references/examples/design-reference/`。
+
 ```html
 <!-- source/index.html -->
 <!doctype html>
@@ -501,6 +510,8 @@ async function load() {
 
 function render(items) {
   list.innerHTML = '';
+  // ⚠️ 这个清空写法会直接抹掉退场动画（正在飞的 li 瞬间消失）。
+  //    有动画时要逐个 await animationend 再移除，见 design-reference 的 render()。
   for (const text of items) {
     const li = document.createElement('li');
     li.textContent = text;
@@ -530,23 +541,12 @@ load();
 ```
 
 ```css
-/* source/style.css — 只用宿主注入的 --hamuna-* token，不写硬编码颜色/字号 */
-:root {
-  background: var(--hamuna-bg-primary, #fff);
-  color: var(--hamuna-text-primary, #1c1612);
-  font-family: var(--hamuna-font-sans, -apple-system, 'Segoe UI', sans-serif);
-}
-button {
-  background: var(--hamuna-accent, #7b8f6b);
-  color: var(--hamuna-text-on-primary, #fff);
-  border: 0;
-  padding: 8px 16px;
-  border-radius: var(--hamuna-radius-sm, 4px);
-  min-height: 32px;
-}
+/* source/style.css —— 完整写法见 references/examples/design-reference/source/style.css（21.8KB）。
+   这里只留一条必须记住的规则：只用宿主注入的 --hamuna-* token，不写硬编码颜色/字号。
+   本文件不提供样式模板。21.8KB 的参考实现才是权威 —— 抄它，不要抄这个片段。 */
 ```
 
-> **token 名字必须是 `--hamuna-*`**，例如 `--hamuna-bg-primary` / `--hamuna-text-primary` / `--hamuna-accent` / `--hamuna-radius-md` / `--hamuna-font-sans`。宿主注入的就是这 26 个（见 `src/renderer/components/miniapp-host/theme-tokens.ts`），写成 `--bg-primary` / `--ink` 这类名字会**静默失效**——不报错，只是看起来"没生效"。完整清单见 `references/design-playbook.md` §四。
+> **token 名字必须是 `--hamuna-*`**，例如 `--hamuna-bg-primary` / `--hamuna-text-primary` / `--hamuna-accent` / `--hamuna-radius-md` / `--hamuna-font-sans`。宿主注入的是 `--hamuna-` 前缀 token，共 36 个（权威值：`src/renderer/components/miniapp-host/theme-tokens.ts`），写成 `--bg-primary` / `--ink` 这类名字会**静默失效**——不报错，只是看起来"没生效"。完整清单见 `references/design-playbook.md` §四。
 
 ```json
 // meta.json

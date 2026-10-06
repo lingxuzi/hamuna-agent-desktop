@@ -72,6 +72,8 @@ describe('miniapp-creator skill CSS tokens', () => {
   const files = skillFiles();
   const declared = declaredTokenNames(files);
 
+  const skillText = () => files.find((f) => f.path === 'SKILL.md')!.text;
+
   it('reads a non-empty token list from the host builder', () => {
     // Guards the helper above: if buildThemeTokenCss changes shape, this fails
     // loudly instead of silently passing zero assertions.
@@ -101,6 +103,33 @@ describe('miniapp-creator skill CSS tokens', () => {
         `${name} is neither a host token nor declared by the skill. ` +
           `Host: ${[...injected].sort().join(', ')}`,
       ).toBe(true);
+    }
+  });
+
+  it('points at the design playbook in the preamble, not after the API dump', () => {
+    // The failure this guards is the reason generated MiniApps used to look
+    // flat. The model absorbed ~350 lines of API shape before anything told it
+    // the design rules existed, so the last concrete artifact it read before
+    // writing style.css was an API-usage snippet — which it copied wholesale,
+    // visual quality included. v2's miniapp-dev puts this pointer on line 14 for
+    // the same reason. Move the pointer back down and the symptom returns with
+    // no failing test, no lint hit, and no runtime error.
+    const preamble = skillText().split('\n').slice(0, 30).join('\n');
+    expect(preamble, 'SKILL.md preamble must name the playbook').toContain(
+      'design-playbook.md',
+    );
+    expect(preamble, 'SKILL.md preamble must name the visual exemplar').toContain(
+      'examples/design-reference',
+    );
+  });
+
+  it('keeps any token count quoted in SKILL.md equal to the real host count', () => {
+    // Prose drifts silently — nothing validates it and a wrong count only
+    // misleads the model's mental model, since theme-tokens.ts stays the actual
+    // source of truth. "26 个" survived a session in which theme-tokens.ts went
+    // 26 -> 36, so pin the quoted number to the real list instead of trusting it.
+    for (const m of skillText().matchAll(/共\s*(\d+)\s*个/g)) {
+      expect(Number(m[1]), `SKILL.md quotes "${m[0]}"`).toBe(injected.size);
     }
   });
 });
