@@ -830,3 +830,59 @@ describe('app.shell.exec really executes', () => {
     expect(res.error.code).toBe('PERMISSION_DENIED');
   });
 });
+
+describe('net.fetch refuses a private target even when the author declared it', () => {
+  // 声明私网主机是**允许**的：`net.allow` 是作者自己写的白名单，schema 不禁止
+  // `127.0.0.1`。所以"作者写了"从来不等于"能连" —— sidecar 这一层的
+  // `isPrivateHostname` 是唯一拦住"把宿主当成内网跳板"的地方。
+  //
+  // 断言的重点是**拒绝发生在开 socket 之前**：报出来的是 private address，
+  // 而不是任何一次真实请求的结果。integration 池禁止非 loopback 出站，所以
+  // 这里只测拒绝方向 —— 放行方向一旦真发请求，这个文件就得进 credentialed 池。
+  //
+  // 最后一条是反向护栏：没声明过的主机要在更早一道（白名单）就被拒掉，
+  // 免得"私网拒收"这条线反过来变成绕过白名单的借口。
+
+  const DECLARED_PRIVATE_HOSTS: readonly (readonly [string, string])[] = [
+    ['127.0.0.1', 'loopback'],
+    ['localhost', 'loopback by name'],
+    ['10.0.0.5', 'RFC1918 10/8'],
+    ['172.16.0.1', 'RFC1918 172.16 下界'],
+    ['192.168.1.1', 'RFC1918 192.168/16'],
+    ['169.254.169.254', '云 metadata'],
+    ['[::1]', 'IPv6 loopback'],
+  ];
+
+  for (const [host, why] of DECLARED_PRIVATE_HOSTS) {
+    it(`rejects ${host} (${why}) without opening a socket`, async () => {
+      writeMeta({ net: { allow: [host] } });
+
+      const res = await dispatchMiniAppApp('net.fetch', APP_ID, { url: `https://${host}/` }, {});
+
+      expect(res.ok).toBe(false);
+      if (res.ok) throw new Error('expected a denial');
+      expect(res.error?.code).toBe('PERMISSION_DENIED');
+      expect(res.error?.message).toContain('private address');
+    });
+  }
+
+  it('an undeclared host is refused by the allow-list, before the private check', async () => {
+    writeMeta({ net: { allow: ['api.example.com'] } });
+
+    const res = await dispatchMiniAppApp('net.fetch', APP_ID, { url: 'https://127.0.0.1/' }, {});
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('expected a denial');
+    expect(res.error?.message).toContain('not in permissions.net.allow');
+  });
+
+  it('http is refused for a public host, so a private one cannot slip in via scheme', async () => {
+    writeMeta({ net: { allow: ['api.example.com'] } });
+
+    const res = await dispatchMiniAppApp('net.fetch', APP_ID, { url: 'http://api.example.com/' }, {});
+
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('expected a denial');
+    expect(res.error?.message).toContain('only allows https');
+  });
+});
