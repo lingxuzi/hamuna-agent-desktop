@@ -23,7 +23,10 @@
  *   caption : 400 / 12px / --hamuna-text-muted
  * Radius: --hamuna-radius-md（卡片）/ --hamuna-radius-sm（输入、勾选框）
  * Motif: 每行左侧 2px 状态色条 + 统一 48px 行高。选中时整行铺 accent 的
- *        6% 淡底 + 色条加宽到 3px —— 全应用只用这一个"选中"表达。
+ *        6% 淡底 + 色条加宽到 3px + 阴影升一档 —— 全应用只用这一个"选中"表达。
+ * Elevation: 三档阴影（卡片 / 抬起 / 浮层），全部派生自宿主的
+ *        --hamuna-shadow-*。**不要硬编码 rgba 阴影** —— 换主题不跟随，
+ *        而且各猜各的就没有统一的空间感。一屏之内不要同时出现三档以上。
  * Motion:
  *   三档时长 + 两条缓动，见下方 Motion 段。入场一律"淡入 + 上移 6px"，
  *   反馈一律"缩放脉冲"，不做位移式反馈（位移容易被误读成导航）。
@@ -114,14 +117,31 @@ html {
   /* --- Motion -----------------------------------------------------------
    * 全应用只有这三个时长和两条曲线。这是"克制"的机械保证：动效看起来统一，
    * 不是因为审美，是因为所有引用都收敛到这几个值。改这里就等于改全局节奏。
+   *
+   * 时长**从宿主派生**而不是自己写死：宿主有 `--hamuna-duration-*`，
+   * 各自定义自己的 `180ms` 意味着小应用和宿主产品不是一个速度的东西。
+   * fallback 与 theme-tokens.ts 的 FALLBACK_TOKENS 一致。
    * -------------------------------------------------------------------- */
-  --dr-dur-fast: 120ms;  /* 悬停、按压、勾选 —— 反馈必须感觉即时 */
-  --dr-dur: 180ms;       /* 状态切换、展开收起 */
-  --dr-dur-slow: 280ms;  /* 入场、骨架消失 —— 大位移才配长时长 */
+  --dr-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --dr-dur: var(--hamuna-duration-normal, 200ms);
+  --dr-dur-slow: var(--hamuna-duration-slow, 300ms);
   /* 主曲线：快起慢收，交互响应感强又不生硬 */
   --dr-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   /* 入场曲线：更长的减速尾巴，让元素"落"到位而不是"停"到位 */
   --dr-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --- Elevation ---------------------------------------------------------
+   * 阴影同样从宿主派生。没有这套梯度时，加层次的唯一办法是硬编码 rgba，
+   * 换主题不跟随 —— 观感廉价且违反设计系统。档位含义：
+   *   sm     卡片（贴在面上）
+   *   md     抬起的卡片 / 选中态
+   *   lg     浮层、下拉
+   *   overlay 模态、toast
+   * 一屏之内不要同时出现三档以上阴影。
+   * -------------------------------------------------------------------- */
+  --dr-shadow-card: var(--hamuna-shadow-sm);
+  --dr-shadow-raised: var(--hamuna-shadow-md);
+  --dr-shadow-overlay: var(--hamuna-shadow-lg);
 
   /* 行高也是 token：motif 的一部分 */
   --dr-row-h: 48px;
@@ -327,11 +347,14 @@ input {
   border-radius: var(--dr-radius);
   border: 1px solid var(--dr-line);
   background: var(--dr-surface-raised);
+  /* 卡片档阴影。选中时换 raised 档 —— 阴影是"这层抬起来了"的最强信号，
+   * 比换背景色更能让层级一眼可读。 */
+  box-shadow: var(--dr-shadow-card);
   overflow: hidden;
-  /* 行状态变化（待办 → 完成）用长一点的时长，因为它是"内容变了"不是"手按了" */
   transition:
     background-color var(--dr-dur) var(--dr-ease),
-    border-color var(--dr-dur) var(--dr-ease);
+    border-color var(--dr-dur) var(--dr-ease),
+    box-shadow var(--dr-dur) var(--dr-ease);
 }
 
 /* motif：左侧 2px 状态色条。选中时加宽到 3px 并换成 accent ——
@@ -360,6 +383,7 @@ input {
 .dr-row[data-selected='true'] {
   background: var(--dr-accent-wash);
   border-color: var(--dr-accent-line);
+  box-shadow: var(--dr-shadow-raised);
 }
 
 .dr-row[data-selected='true']::before {
@@ -637,6 +661,8 @@ input {
   color: var(--dr-bg);
   font-size: 12px;
   white-space: nowrap;
+  /* 浮层档：toast 压在内容之上，必须比卡片明显"浮"，否则会像贴纸 */
+  box-shadow: var(--dr-shadow-overlay);
   animation: dr-toast-in var(--dr-dur-slow) var(--dr-ease-out);
 }
 

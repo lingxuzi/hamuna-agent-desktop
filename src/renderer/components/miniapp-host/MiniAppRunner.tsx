@@ -283,10 +283,19 @@ export default function MiniAppRunner({
   }, [appId, workerKind]);
 
   // mount 时注入 Theme Token；后续 Theme 切换时刷新（PRD v0.3 §5.3 row 4）
+  //
+  // 注意只监听 `data-theme-id`：注入的 CSS 烤在 srcDoc 里，改它意味着
+  // `fullSrcDoc` 变 → iframe 重载 → 应用状态全丢。把 `data-color-scheme`
+  // 也加进 attributeFilter 会让每次切亮暗都重载所有 MiniApp，那是回归不是修复。
+  //
+  // 代价是**切亮暗不会重注入 token**（存量缺陷，见 buildThemeTokenCss 注释）。
+  // `colorScheme` 在 apply() 当场读 document 而不是走 React prop：ThemeRuntime
+  // 直接写 `document.documentElement.dataset.colorScheme`，没有 prop 可依赖，
+  // 多一条依赖就多一处可能漂移。
   useEffect(() => {
     const apply = () => {
       const tokens = readThemeTokens();
-      setThemeCss(buildThemeTokenCss(tokens));
+      setThemeCss(buildThemeTokenCss(tokens, document.documentElement.dataset.colorScheme));
     };
     apply();
     // Phase 0 简化：监听 Theme 切换靠 document `data-theme-id` attribute mutation

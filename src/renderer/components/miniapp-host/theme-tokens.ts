@@ -2,15 +2,22 @@
  * MiniApp iframe CSS Token 注入（PRD v0.4 §B.1 #6 + PRD v0.3 §5.4）。
  *
  * 把当前 Theme 的视觉 token（`--ink` / `--accent-primary` / `--theme-radius-*` /
- * `--font-body` 等）注入到 MiniApp iframe 内 `:root`，让 MiniApp UI 复用宿主
- * 视觉系统。MiniApp 内禁止硬编码颜色（CLAUDE.md §Pit-of-Success "前端硬
- * 编码颜色破坏设计系统一致性"）。
+ * `--font-body` / `--theme-shadow-*` / `--duration-*` 等）注入到 MiniApp iframe
+ * 内 `:root`，让 MiniApp UI 复用宿主视觉系统。MiniApp 内禁止硬编码颜色
+ * （CLAUDE.md §Pit-of-Success "前端硬编码颜色破坏设计系统一致性"）。
  *
- * Theme 切换实时同步：MiniAppRunner mount 时读一次 + Theme change listener
- * 重写 `:root` CSS 变量 + 发 postMessage `app.event: theme.change`（v2）。
+ * Theme 切换实时同步：MiniAppRunner mount 时读一次，之后监听
+ * `data-theme-id` **和** `data-color-scheme` 重写 `:root` CSS 变量并给 iframe
+ * 推 `app.event: theme.change`。
+ *
+ * ⚠️ 早前的两个坑，都留在这里免得重犯：
+ *   - 变量名猜错过一轮（`--bg-primary` / `--border-color` 宿主一个都没有），
+ *     每个 `var()` 静默回落，整页掉回 fallback。`theme-tokens.host-contract.test.ts`
+ *     把这张表钉在主题注册表的完整性清单上。
+ *   - 只监听 `data-theme-id` 意味着**换亮暗不刷新**：`readThemeTokens` 拷的是
+ *     计算后的值快照，宿主切到深色时 iframe 还拿着浅色值。`app.appearanceMode`
+ *     同样停在挂载时的值，`app.onAppearanceChange` 永远不会响。
  */
-
-import type { CSSProperties } from 'react';
 
 /**
  * 抽出当前 document `:root` 上 Theme 相关 CSS 变量。
@@ -44,6 +51,28 @@ export interface MiniAppThemeTokens {
   radiusMd: string;
   fontSans: string;
   fontMono: string;
+
+  /**
+   * 阴影梯度（6 档）与滚动条、动效时长。
+   *
+   * 这三组是 UI 质感的地基，补它们的原因不是"功能缺失"而是**没有它们作者
+   * 只能硬编码**：`box-shadow` / 滚动条 / 时长没有 token 时，唯一写法就是
+   * 写死 rgba 和毫秒数 —— 那正是 playbook 反 AI 味清单要禁的、也是
+   * CLAUDE.md「前端硬编码颜色破坏设计系统一致性」要禁的。换主题时它们不会
+   * 跟着变，于是每个 MiniApp 的阴影都是从零猜的，观感必然廉价。
+   *
+   * 时长档位同理：作者各写各的 `200ms`/`300ms`，一个产品里就没有统一节奏。
+   */
+  shadowXs: string;
+  shadowSm: string;
+  shadowMd: string;
+  shadowLg: string;
+  shadowXl: string;
+  shadowOverlay: string;
+  scrollbarThumb: string;
+  durationFast: string;
+  durationNormal: string;
+  durationSlow: string;
 }
 
 const TOKEN_VAR_NAMES = {
@@ -73,6 +102,16 @@ const TOKEN_VAR_NAMES = {
   radiusMd: '--hamuna-radius-md',
   fontSans: '--hamuna-font-sans',
   fontMono: '--hamuna-font-mono',
+  shadowXs: '--hamuna-shadow-xs',
+  shadowSm: '--hamuna-shadow-sm',
+  shadowMd: '--hamuna-shadow-md',
+  shadowLg: '--hamuna-shadow-lg',
+  shadowXl: '--hamuna-shadow-xl',
+  shadowOverlay: '--hamuna-shadow-overlay',
+  scrollbarThumb: '--hamuna-scrollbar-thumb',
+  durationFast: '--hamuna-duration-fast',
+  durationNormal: '--hamuna-duration-normal',
+  durationSlow: '--hamuna-duration-slow',
 } as const;
 
 /**
@@ -116,6 +155,19 @@ export const HOST_TO_TOKEN: Record<keyof MiniAppThemeTokens, string> = {
   radiusMd: '--theme-radius-md',
   fontSans: '--font-body',
   fontMono: '--font-code',
+  // 阴影梯度直接取主题自己的 --theme-shadow-*：它已经是 6 档有序梯度，
+  // 另有 `--fb-shadow-*`（浮层专用）。不要自己编阴影值。
+  shadowXs: '--theme-shadow-xs',
+  shadowSm: '--theme-shadow-sm',
+  shadowMd: '--theme-shadow-md',
+  shadowLg: '--theme-shadow-lg',
+  shadowXl: '--theme-shadow-xl',
+  shadowOverlay: '--fb-shadow-strong',
+  scrollbarThumb: '--fb-scroll-thumb',
+  // 宿主已有节奏 token。author 各写各的毫秒数时，产品里就没有统一速度。
+  durationFast: '--duration-fast',
+  durationNormal: '--duration-normal',
+  durationSlow: '--duration-slow',
 };
 
 const FALLBACK_TOKENS: MiniAppThemeTokens = {
@@ -145,6 +197,20 @@ const FALLBACK_TOKENS: MiniAppThemeTokens = {
   radiusLg: '14px',
   fontSans: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   fontMono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  // 与 theme-tokens.host-contract.test.ts 对齐：这些值必须和 FALLBACK_TOKENS
+  // 之外的浅色主题观感一致，否则"宿主缺 token"和"无宿主"会长得不一样。
+  // 阴影用 rgba(逗号) 而非 rgb(空格/斜杠)：前者是导出成独立页面时
+  // 兼容性最广的写法。
+  shadowXs: '0 1px 2px rgba(28, 22, 18, 0.05)',
+  shadowSm: '0 2px 8px rgba(28, 22, 18, 0.08)',
+  shadowMd: '0 8px 24px rgba(28, 22, 18, 0.12)',
+  shadowLg: '0 16px 40px rgba(28, 22, 18, 0.16)',
+  shadowXl: '0 24px 48px rgba(28, 22, 18, 0.20)',
+  shadowOverlay: '0 32px 64px -12px rgba(28, 22, 18, 0.25)',
+  scrollbarThumb: 'rgba(166, 154, 144, 0.50)',
+  durationFast: '150ms',
+  durationNormal: '200ms',
+  durationSlow: '300ms',
 };
 
 /**
@@ -184,24 +250,58 @@ function cssSafeValue(value: string): string {
 /**
  * 生成一段 `<style>` 文本，注入到 iframe :root 上。
  */
-export function buildThemeTokenCss(tokens: MiniAppThemeTokens): string {
-  const lines = [':root {'];
+/**
+ * 生成注入到 MiniApp iframe `<style>` 的完整首屏样式。
+ *
+ * 除了变量本身，还带三样**作者写不出来也猜不到**的东西：
+ *
+ * 1. `color-scheme` —— 决定原生控件、滚动条、canvas 的默认外观。不设的话
+ *    深色主题里 MiniApp 会冒出一条亮色滚动条，这是"廉价感"最常见的来源。
+ *    传了 `appearanceMode` 就跟随宿主；没传退化成 `light dark` 交给 UA 判断，
+ *    仍然好过完全不管。
+ * 2. `background: transparent` —— 让 iframe 底色透明，透出宿主背景而不是
+ *    先白闪一下再被作者的 CSS 盖住。
+ * 3. 滚动条 —— 6px 透明轨道 + 药丸滑块 + hover，外加 `scrollbar-color` 与
+ *    `selector(::-webkit-scrollbar)` 两组 `@supports` 降级。默认滚动条又宽
+ *    又方，在一个精心排版的工具面板里极其扎眼。
+ *
+ * 变量值仍然逐个过 `cssSafeValue`；这三样都是字面量，不含 token 值。
+ */
+export function buildThemeTokenCss(
+  tokens: MiniAppThemeTokens,
+  appearanceMode?: string,
+): string {
+  const scheme = appearanceMode === 'light' || appearanceMode === 'dark'
+    ? appearanceMode
+    : 'light dark';
+  const lines = [
+    ':root {',
+    `  color-scheme: ${scheme};`,
+    '  background: transparent;',
+  ];
   (Object.keys(TOKEN_VAR_NAMES) as Array<keyof MiniAppThemeTokens>).forEach((key) => {
     const varName = TOKEN_VAR_NAMES[key];
     lines.push(`  ${varName}: ${cssSafeValue(tokens[key])};`);
   });
-  lines.push('}');
+  lines.push(
+    '}',
+    '/* Host scrollbar: 6px transparent track, pill thumb. */',
+    '*::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }',
+    '*::-webkit-scrollbar-track,',
+    '*::-webkit-scrollbar-track-piece,',
+    '*::-webkit-scrollbar-corner,',
+    '*::-webkit-scrollbar-button,',
+    '*::-webkit-scrollbar-resizer { background: transparent; }',
+    '*::-webkit-scrollbar-thumb {',
+    '  border-radius: 999px;',
+    '  background: var(--hamuna-scrollbar-thumb);',
+    '}',
+    '*::-webkit-scrollbar-thumb:hover {',
+    '  background: var(--hamuna-text-muted);',
+    '}',
+    '@supports (scrollbar-color: transparent transparent) {',
+    '  * { scrollbar-width: thin; scrollbar-color: var(--hamuna-scrollbar-thumb) transparent; }',
+    '}',
+  );
   return lines.join('\n');
-}
-
-/**
- * 直接返回 React `style={{ '--hamuna-bg': tokens.bg }}` 用的 inline style map
- * —— 给 MiniApp iframe srcDoc `<style>` 用。
- */
-export function themeTokenInlineStyle(tokens: MiniAppThemeTokens): CSSProperties {
-  const out: Record<string, string> = {};
-  (Object.keys(TOKEN_VAR_NAMES) as Array<keyof MiniAppThemeTokens>).forEach((key) => {
-    out[TOKEN_VAR_NAMES[key]] = tokens[key];
-  });
-  return out as CSSProperties;
 }

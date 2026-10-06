@@ -70,7 +70,7 @@
 
 ## 四、CSS Token（唯一正确的名字）
 
-MiniApp iframe 由宿主注入 **26 个 `--hamuna-*` 变量**（清单见 `src/renderer/components/miniapp-host/theme-tokens.ts::TOKEN_VAR_NAMES`，下表即其全集）。**只准用这些**，每个都可以带 fallback：
+MiniApp iframe 由宿主注入 **36 个 `--hamuna-*` 变量**（清单见 `src/renderer/components/miniapp-host/theme-tokens.ts::TOKEN_VAR_NAMES`，下表即其全集）。**只准用这些**，每个都可以带 fallback：
 
 | 用途 | Token |
 |---|---|
@@ -82,6 +82,17 @@ MiniApp iframe 由宿主注入 **26 个 `--hamuna-*` 变量**（清单见 `src/r
 | 交互 | `--hamuna-bg-button` / `--hamuna-bg-button-hover` / `--hamuna-bg-input` / `--hamuna-focus-border` |
 | 圆角 | `--hamuna-radius-sm` / `--hamuna-radius-md` / `--hamuna-radius-lg` |
 | 字体 | `--hamuna-font-sans` / `--hamuna-font-mono` |
+| **阴影** | `--hamuna-shadow-xs` / `-sm` / `-md` / `-lg` / `-xl` / `-overlay` |
+| **滚动条** | `--hamuna-scrollbar-thumb` |
+| **动效时长** | `--hamuna-duration-fast` / `-normal` / `-slow` |
+
+> **后三行是质感的地基，不是可选装饰。** 没有阴影 token 时，加层次的唯一
+> 写法就是硬编码 rgba —— 而那正是本文件 §五 要禁的。换主题时它不跟着变，
+> 于是每个 MiniApp 的阴影都是从零猜的，观感必然廉价。动效时长同理：各写各的
+> `200ms`/`300ms`，一个产品里就没有统一节奏。
+>
+> 宿主还会注入 `color-scheme`、`background: transparent` 和一整套滚动条样式，
+> **不需要你再写**，写了反而会和宿主的打架。
 
 ```css
 /* 对 */

@@ -99,4 +99,54 @@ function tokensWith(overrides: Partial<MiniAppThemeTokens> = {}): MiniAppThemeTo
     expect(css).toContain('--hamuna-bg-primary: #fff;');
     expect(css).toContain('--hamuna-font-sans: system-ui, sans-serif;');
   });
+
+  // --- 首屏投影 -----------------------------------------------------------
+  // 变量之外的这段才是"廉价感"的来源：深色主题里冒一条亮色滚动条、iframe
+  // 白闪一下、精心排版的面板配一条又宽又方的默认滚动条。都没有硬编码可抄，
+  // 作者只能自己猜，所以它必须由宿主给定并被钉住。
+  describe('first-paint projection', () => {
+    it('follows the host appearance mode', () => {
+      expect(buildThemeTokenCss(tokensWith(), 'dark')).toContain('color-scheme: dark;');
+      expect(buildThemeTokenCss(tokensWith(), 'light')).toContain('color-scheme: light;');
+    });
+
+    it('degrades to `light dark` rather than guessing when the mode is unknown', () => {
+      // `document.documentElement.dataset.colorScheme` 是唯一来源，它可能为空。
+      // 退化成两值形式让 UA 按 OS 判断，好过把一个字面值写死成错的。
+      for (const mode of [undefined, '', 'system', 'auto']) {
+        expect(buildThemeTokenCss(tokensWith(), mode)).toContain('color-scheme: light dark;');
+      }
+    });
+
+    it('makes the iframe background transparent so nothing white-flashes', () => {
+      expect(buildThemeTokenCss(tokensWith(), 'dark')).toContain('background: transparent;');
+    });
+
+    it('styles the scrollbar off the injected token, not a literal colour', () => {
+      const css = buildThemeTokenCss(tokensWith(), 'dark');
+      expect(css).toContain('--hamuna-scrollbar-thumb: #123456;');
+      expect(css).toMatch(/\*::-webkit-scrollbar\s*\{[^}]*width:\s*6px/);
+      expect(css).toContain('background: var(--hamuna-scrollbar-thumb);');
+      // Both @supports branches: one for standards `scrollbar-color`, one for
+      // engines that only match the webkit pseudo without also exposing it.
+      expect(css).toContain('@supports (scrollbar-color: transparent transparent)');
+    });
+
+    it('gives authors a shadow scale instead of making them invent one', () => {
+      // Shadows were the largest gap versus the reference spec: without tokens
+      // the only way to add elevation is a hardcoded rgba, which is exactly what
+      // the design playbook bans. All six rungs must come from the host.
+      const css = buildThemeTokenCss(tokensWith(), 'dark');
+      for (const rung of ['xs', 'sm', 'md', 'lg', 'xl', 'overlay']) {
+        expect(css, `--hamuna-shadow-${rung} is missing`).toContain(`--hamuna-shadow-${rung}:`);
+      }
+    });
+
+    it('gives authors the host motion timing instead of per-app milliseconds', () => {
+      const css = buildThemeTokenCss(tokensWith(), 'dark');
+      for (const tier of ['fast', 'normal', 'slow']) {
+        expect(css, `--hamuna-duration-${tier} is missing`).toContain(`--hamuna-duration-${tier}:`);
+      }
+    });
+  });
 });

@@ -49,12 +49,18 @@ html {
   --radius-sm: var(--hamuna-radius-sm, 6px);
   --sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
 
-  /* 动效 token：全应用只有这几个值。改这里等于改全局节奏。 */
-  --dur-fast: 120ms;
-  --dur: 180ms;
-  --dur-slow: 280ms;
+  /* 动效 token：全应用只有这几个值。改这里等于改全局节奏。
+   * 时长从宿主派生：小应用和宿主产品不该是两个速度的东西。 */
+  --dur-fast: var(--hamuna-duration-fast, 150ms);
+  --dur: var(--hamuna-duration-normal, 200ms);
+  --dur-slow: var(--hamuna-duration-slow, 300ms);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 阴影档位同样从宿主派生。硬编码 rgba 是本仓库明令禁止的：换主题不跟随，
+   * 而且每个 MiniApp 各猜各的，观感必然廉价。 */
+  --shadow-card: var(--hamuna-shadow-sm);
+  --shadow-overlay: var(--hamuna-shadow-lg);
 }
 
 body {
@@ -90,10 +96,12 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 16px;
-  /* 只过渡颜色，不过渡尺寸 —— 见 playbook §七 房规第 1 条 */
+  box-shadow: var(--shadow-card);
+  /* 只过渡颜色和阴影，不过渡尺寸 —— 见 playbook §七 房规第 1 条 */
   transition:
     background-color var(--dur) var(--ease),
-    border-color var(--dur) var(--ease);
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 
 /* 按钮：命中目标 36px > 32px 门槛；按下用 scale(.96) 不用 scale(0) */
