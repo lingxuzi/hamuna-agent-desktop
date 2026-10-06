@@ -104,6 +104,52 @@ background: var(--bg-primary); /* disabled-example: 错 —— 这些名字宿�
 
 宿主 token 缺失时会回落到 `FALLBACK_TOKENS`（浅色系）。所以 `var()` 一律带 fallback，导出成独立应用也还能看。
 
+### 从 token 派生层次（`color-mix`）
+
+36 个 token 全是**平值**：一个颜色，没有淡底、没有半透明描边、没有彩色阴影。想给
+hover 染色、想给选中态加 10% 底色、想让阴影带一点强调色 —— 宿主没提供，而**自己
+硬编码 `rgba()` 正是 §五 要禁的**。不给出路，这条规则等于把唯一可用的手段堵死，
+结果是每个 MiniApp 都只能做成同一张平卡片网格：合规，但平。
+
+出路是 `color-mix()`：从已有 token 现场派生。纯 CSS，宿主不需要加任何变量。
+
+```css
+/* 淡底：强调色的 6% 水洗 */
+--wash:     color-mix(in srgb, var(--dr-accent) 6%,  transparent);
+/* 描边：40% 强度，够看清又不抢 */
+--line:     color-mix(in srgb, var(--dr-accent) 40%, transparent);
+/* 彩色辉光：比纯黑阴影有生气 */
+--glow:     0 0 0 3px color-mix(in srgb, var(--dr-accent) 22%, transparent);
+/* 悬停底：从文字色派生极淡一层，比另找一个灰更贴合当前主题 */
+--hover:    color-mix(in srgb, var(--dr-text) 6%, transparent);
+/* 发丝分隔线：深色下自动可用，浅色下就浅到看不见 */
+--hairline: color-mix(in srgb, var(--dr-text) 10%, transparent);
+```
+
+**比例是刻意的**：淡底 ≤ 10%、描边 30–45%、辉光 15–25%、悬停 ≤ 8%。超过就是在往
+界面上泼颜色 —— "廉价感"多数出在这里，而不是出在颜色本身选得不好。
+
+派生变量同样只在 `:root` 声明一次、全应用引用别名，与 §七 的动效 token 同一个道理：
+**收敛到几个值之后，视觉统一是机械保证，不靠审美。**
+
+### 磨砂深度（`backdrop-filter`）
+
+"这层浮在内容之上"最便宜的信号：
+
+```css
+.header {
+  background: color-mix(in srgb, var(--dr-bg) 72%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border-bottom: 1px solid var(--dr-line);
+}
+```
+
+两个必须同时有：只有 `blur` 没有半透明底，前景文字会和后面的内容叠在一起；只有
+半透明底没有 `blur`，就是一块灰玻璃。`saturate()` 让透过来的颜色更饱和，磨砂感更实。
+
+> **降级**：`backdrop-filter` 在 WebView2 / Chromium 可用。不满足的运行环境里保留
+> 半透明底色即可读性正常 —— 不要因为它把整块背景写死成不透明。
+
 ---
 
 ## 五、反 AI 味清单（强约束）

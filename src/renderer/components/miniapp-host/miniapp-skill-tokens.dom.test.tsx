@@ -132,4 +132,27 @@ describe('miniapp-creator skill CSS tokens', () => {
       expect(Number(m[1]), `SKILL.md quotes "${m[0]}"`).toBe(injected.size);
     }
   });
+
+  it('offers color-mix whenever it bans hand-written rgba', () => {
+    // The playbook bans hard-coded rgba: "MiniApp 内禁止硬编码颜色" is a
+    // redline, and the anti-AI-flavor table repeats it. But every host token is a
+    // *flat* value — none of the 36 can produce a tint, a translucent border or a
+    // colored shadow. So without a sanctioned way to derive them, the ban leaves
+    // an author who wants depth with no legal move, and the only thing they can
+    // actually write is the banned one. The result is every MiniApp obeying the
+    // rule and looking like the same flat grey card grid.
+    //
+    // color-mix() is the exit: it derives from the tokens themselves, needs no new
+    // host variable, and follows the theme for free. v2's tool-type apps lean on it
+    // 17-25 times apiece against our 3. If someone tightens the ban again without
+    // keeping the alternative, this goes red — the symptom (flat output) has no
+    // other detectable signature.
+    const playbook = files.find((f) => f.path.endsWith('design-playbook.md'))!.text;
+    const bansHardCodedColor =
+      /禁止硬编码颜色|硬编码\s*`?rgba|不写硬编码颜色/.test(playbook);
+    expect(bansHardCodedColor, 'the playbook no longer bans hard-coded colors; re-check this test').toBe(true);
+    expect(playbook, 'banning hard-coded rgba without offering color-mix leaves no legal way to add depth').toContain(
+      'color-mix',
+    );
+  });
 });

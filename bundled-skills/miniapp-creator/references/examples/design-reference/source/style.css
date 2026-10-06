@@ -95,10 +95,29 @@ html {
   /* 强调 */
   --dr-accent: var(--hamuna-accent, #7b8f6b);
   --dr-accent-text: var(--hamuna-accent-text, #ffffff);
-  /* accent 的淡底用 color-mix 从 accent 派生，而不是另找一���浅色 ——
-   * 换主题时淡底自动跟着变，不需要维护第二套色板。 */
-  --dr-accent-wash: color-mix(in srgb, var(--dr-accent) 6%, transparent);
-  --dr-accent-line: color-mix(in srgb, var(--dr-accent) 40%, transparent);
+
+  /* --- 派生层 ---------------------------------------------------------------
+   * 宿主的 36 个 token 全是平值：想要淡底、半透明描边、彩色辉光，它一个都没有。
+   * 过去这里只能另找一条浅色、或硬编码 rgba —— 后者正是 playbook 反 AI 味清单
+   * 禁掉的。规则把唯一能用的手段堵死，结果就是一张平的卡片网格。
+   *
+   * color-mix 从已有 token 现场派生，纯 CSS，不需要宿主加任何变量，且换主题自动
+   * 跟随。**整份 CSS 只在 :root 声明这一次**，下面所有规则都引用别名 —— 与上面
+   * 的动效 token 同一个道理：收敛到几个值，视觉统一才是机械保证而不是靠审美。
+   *
+   * 比例是刻意的，不要随手调大：淡底 ≤10%、描边 30-45%、辉光 15-25%、悬停 ≤8%。
+   * 超过就是在往界面上泼颜色，"廉价感"多数出在这里，不是出在色相选得不好。
+   * -------------------------------------------------------------------- */
+  --dr-wash:      color-mix(in srgb, var(--dr-accent) 6%,  transparent);
+  --dr-wash-soft: color-mix(in srgb, var(--dr-accent) 3%,  transparent);
+  /* 注意别叫 --dr-line：上面那个已经被中性边框占了，撞名会静默串色 */
+  --dr-accent-line: color-mix(in srgb, var(--dr-accent) 38%, transparent);
+  --dr-glow:      0 0 0 3px color-mix(in srgb, var(--dr-accent) 22%, transparent);
+  --dr-hover:     color-mix(in srgb, var(--dr-text) 6%,  transparent);
+  --dr-hairline:  color-mix(in srgb, var(--dr-text) 10%, transparent);
+  /* 磨砂：半透明底 + blur 缺一不可。只有 blur 没底色，前景文字会和后面内容叠一起；
+   * 只有底色没 blur，就是一块灰玻璃。saturate 让透过来的颜色更饱和。 */
+  --dr-frost-bg:  color-mix(in srgb, var(--dr-bg) 72%, transparent);
 
   /* 语义色：仅用于状态 */
   --dr-success: var(--hamuna-success, #146c2e);
@@ -146,6 +165,10 @@ html {
   /* 行高也是 token：motif 的一部分 */
   --dr-row-h: 48px;
   --dr-gap: 12px;
+  /* 页面左右留白。顶栏要横向出血再补回来（frost 效果需要铺满到视口边缘，
+   * 补回来时必须和这里的数值一致，否则内容会左右跳动），所以它是 token 而不是
+   * 散落在两处的裸 24px。 */
+  --dr-pad: 24px;
 
   /* 入场 stagger 的档位。由 ui.js 按行索引覆盖，声明在这里是为了让默认值
    * 只有一个来源 —— CSS 里就不用到处写 fallback 了。 */
@@ -166,8 +189,8 @@ body {
   /* 页面底色上的极淡径向光晕：让大面积纯色不死板，又不引入竞争色相。
    * 两个光晕加起来透明度不到 10%，是"质感"不是"装饰"。 */
   background-image:
-    radial-gradient(900px 420px at 88% -12%, var(--dr-accent-wash), transparent 62%),
-    radial-gradient(760px 380px at -8% 108%, var(--dr-accent-wash), transparent 58%);
+    radial-gradient(900px 420px at 88% -12%, var(--dr-wash), transparent 62%),
+    radial-gradient(760px 380px at -8% 108%, var(--dr-wash), transparent 58%);
   background-attachment: fixed;
 }
 
@@ -184,7 +207,7 @@ input {
 .dr-app {
   max-width: 720px;
   margin: 0 auto;
-  padding: 32px 24px 48px;
+  padding: 32px var(--dr-pad) 48px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -206,11 +229,24 @@ input {
 /* ===========================================================================
  * 顶栏
  * ======================================================================== */
+/* 磨砂顶栏：半透明底 + blur 必须成对。sticky 让内容滚到它下面，磨砂才有意义 ——
+ * backdrop-filter 只有在**后面真的有过东西**时才看得见效果，静态顶栏加了等于没加。 */
 .dr-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--dr-gap);
+  background: var(--dr-frost-bg);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  /* 磨砂本身没有边界，不描边会和内容糊在一起 */
+  border-bottom: 1px solid var(--dr-hairline);
+  margin-inline: calc(var(--dr-pad) * -1);
+  padding-inline: var(--dr-pad);
+  padding-block: var(--dr-gap) 10px;
 }
 
 .dr-badge {
@@ -221,7 +257,11 @@ input {
   padding: 0 10px;
   border-radius: 999px;
   border: 1px solid var(--dr-line);
-  background: var(--dr-surface);
+  /* 染色 chip：强调色的极淡水洗 + 淡描边。这是让界面"有颜色"最省力的一招 ——
+   * 面积小、对比低，但整屏只要有两三个，它就不再是一张灰卡片网格。
+   * 面积越大越要压低比例：这里 3%，一行文字那么大的地方用 15% 就开始脏了。 */
+  background: var(--dr-wash-soft);
+  border-color: var(--dr-accent-line);
   font-size: 11px;
   font-family: var(--dr-mono);
   color: var(--dr-text-soft);
@@ -300,8 +340,11 @@ input {
 }
 
 .dr-btn:focus-visible {
-  outline: 2px solid var(--dr-focus);
+  /* 焦点环用强调色派生，而不是纯黑/纯蓝描边：键盘 Tab 过去时，一眼能看出
+   * "当前停在这个控件上" 是因为它被高亮了，而不是因为浏览器画了条蓝线。 */
+  outline: 2px solid var(--dr-accent);
   outline-offset: 2px;
+  box-shadow: var(--dr-glow);
 }
 
 .dr-btn--primary {
@@ -321,7 +364,8 @@ input {
 }
 
 .dr-btn--ghost:hover {
-  background: var(--dr-btn-bg-hover);
+  /* 从文字色派生极淡一层，而不是取一个固定灰 —— 换主题时它自动贴合 */
+  background: var(--dr-hover);
   color: var(--dr-text);
 }
 
@@ -381,7 +425,7 @@ input {
 }
 
 .dr-row[data-selected='true'] {
-  background: var(--dr-accent-wash);
+  background: var(--dr-wash);
   border-color: var(--dr-accent-line);
   box-shadow: var(--dr-shadow-raised);
 }
