@@ -163,3 +163,150 @@ describe('Marketplace page', () => {
     expect(card).toContain('经典棋盘');
   });
 });
+
+/**
+ * The half of the catalog journey the tests above never reached: removal,
+ * failure recovery, and the two empty states.
+ *
+ * Real v8 coverage put `Marketplace.tsx` at 78.2% lines with 101 uncovered
+ * statements, concentrated here — the uninstall ConfirmDialog, `LoadError`'s
+ * retry button, and `PlainEmpty` never rendered at all. Those are not cosmetic
+ * branches: uninstall is how a user gets an app off their machine, and the
+ * retry button is the only recovery path when the list request fails.
+ */
+describe('Marketplace page / removal, failure and empty states', () => {
+  // `description` is required by meta-schema.ts and Rust's `summary_for`
+  // coerces a missing one to `""` (commands.rs:643), so every fixture here
+  // carries one — a fixture without it is not a shape the renderer can see,
+  // and the search test below would fail on its own bad input.
+  const INSTALLED = {
+    id: 'icon-generator',
+    name: 'Icon Generator',
+    description: 'Make an icon',
+    version: 3,
+    path: '/b',
+    source: 'installed' as const,
+  };
+
+  afterEach(() => {
+    apiGetJson.mockReset();
+    apiPostJson.mockReset();
+    vi.restoreAllMocks();
+    window.location.hash = '';
+  });
+
+  /** Scope a click to the dialog's own button — the page button shares the label. */
+  function confirmInDialog(text: string) {
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).toBeTruthy();
+    const button = Array.from(dialog!.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes(text),
+    );
+    expect(button).toBeTruthy();
+    fireEvent.click(button!);
+  }
+
+  async function openInstalledDetail() {
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: [INSTALLED] });
+    const queries = render(<Marketplace isActive={true} />);
+    await waitFor(() => expect(queries.getByTestId('miniapp-card-icon-generator')).toBeTruthy());
+    fireEvent.click(queries.getByTestId('miniapp-card-icon-generator'));
+    await waitFor(() => expect(queries.getByTestId('marketplace-uninstall')).toBeTruthy());
+    return queries;
+  }
+
+  it('uninstalls through the confirm dialog and then reloads the catalog', async () => {
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: [INSTALLED] });
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: [INSTALLED] });
+    apiPostJson.mockResolvedValueOnce({ ok: true, appId: 'icon-generator' });
+
+    const { getByTestId } = render(<Marketplace isActive={true} />);
+    await waitFor(() => expect(getByTestId('miniapp-card-icon-generator')).toBeTruthy());
+    fireEvent.click(getByTestId('miniapp-card-icon-generator'));
+    await waitFor(() => expect(getByTestId('marketplace-uninstall')).toBeTruthy());
+
+    // Uninstall is destructive, so it must go through a confirm step first.
+    fireEvent.click(getByTestId('marketplace-uninstall'));
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
+    expect(apiPostJson).not.toHaveBeenCalled();
+
+    await waitFor(() => confirmInDialog('marketplace.uninstall'));
+
+    await waitFor(() => {
+      expect(apiPostJson).toHaveBeenCalledWith('/api/miniapp/uninstall', {
+        appId: 'icon-generator',
+      });
+    });
+  });
+
+  it('does NOT uninstall when the confirm dialog is dismissed', async () => {
+    const { getByTestId } = await openInstalledDetail();
+
+    fireEvent.click(getByTestId('marketplace-uninstall'));
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
+
+    // Cancel is the dialog's non-primary action.
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const cancel = Array.from(dialog.querySelectorAll('button')).find(
+      (b) => !b.textContent?.includes('marketplace.uninstall'),
+    );
+    expect(cancel).toBeTruthy();
+    fireEvent.click(cancel!);
+
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    expect(apiPostJson).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a load failure and recovers when the user hits retry', async () => {
+    apiGetJson.mockRejectedValueOnce(new Error('sidecar is not running'));
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: [INSTALLED] });
+
+    const { getByTestId, getByText, queryByText } = render(<Marketplace isActive={true} />);
+
+    await waitFor(() => expect(getByText('sidecar is not running')).toBeTruthy());
+    // A failed list must not masquerade as an empty catalog.
+    expect(queryByText('marketplace.empty')).toBeNull();
+
+    fireEvent.click(getByText('miniappCenter.retry'));
+
+    await waitFor(() => expect(getByTestId('miniapp-card-icon-generator')).toBeTruthy());
+    expect(apiGetJson).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders the empty state when the catalog itself is empty', async () => {
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: [] });
+
+    const { getByText, queryByText } = render(<Marketplace isActive={true} />);
+
+    await waitFor(() => expect(getByText('marketplace.empty')).toBeTruthy());
+    // "Nothing installed yet" and "your filter matched nothing" are different
+    // states; conflating them would tell the user to clear filters they never set.
+    expect(queryByText('marketplace.noResults')).toBeNull();
+  });
+
+  it('offers a way back when a search matches nothing, and clearing restores the list', async () => {
+    apiGetJson.mockResolvedValueOnce({
+      ok: true,
+      items: [
+        INSTALLED,
+        { ...INSTALLED, id: 'git-graph', name: 'Git Graph', description: 'Repo graph' },
+      ],
+    });
+
+    const { getByLabelText, getByText, getByTestId, queryByTestId } = render(
+      <Marketplace isActive={true} />,
+    );
+    await waitFor(() => expect(getByTestId('miniapp-card-icon-generator')).toBeTruthy());
+
+    fireEvent.change(getByLabelText('marketplace.searchPlaceholder'), {
+      target: { value: 'nothing-matches-this' },
+    });
+
+    await waitFor(() => expect(getByText('marketplace.noResults')).toBeTruthy());
+    expect(queryByTestId('miniapp-card-icon-generator')).toBeNull();
+
+    fireEvent.click(getByText('marketplace.clearFilters'));
+
+    await waitFor(() => expect(getByTestId('miniapp-card-icon-generator')).toBeTruthy());
+  });
+});

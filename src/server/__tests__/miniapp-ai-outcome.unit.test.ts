@@ -14,8 +14,13 @@
 
 import { readFileSync } from 'node:fs';
 
-import { describe, it, expect } from 'vitest';
-import { classifySdkMessage, resolveAiTimeoutMs } from '../miniapp-ai';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  classifySdkMessage,
+  resolveAiTimeoutMs,
+  resetMiniAppAiRateLimits,
+  runMiniAppAiComplete,
+} from '../miniapp-ai';
 
 /** 实跑捕获到的认证失败消息。 */
 const AUTH_FAILED_MESSAGE = {
@@ -214,5 +219,109 @@ describe('the ai timeout call site stays wired to the clamp', () => {
   it('never lets p.timeoutMs reach the race as a bare default fallback', () => {
     // 这一条才是真正的断言：第一条只证明 clamp 存在，这条证明它被用上了。
     expect(source).not.toMatch(/p\.timeoutMs\s*\?\?/);
+  });
+});
+
+/**
+ * `permissions.ai.rate_limit_per_minute` 的固定窗口限流。
+ *
+ * ## 为什么这一组能跑真实行为断言，而上面那组只能扫源码
+ *
+ * 上面说 `runMiniAppAiComplete` 配上假定时器会把整个文件挂死 5 分钟：它会走到
+ * `await import(SDK)` 和一串 agent-session 环境助手。那条路到这里为止都碰不到。
+ *
+ * 这里用一个**故意的越权 maxTokens** 当探针：`runMiniAppAiComplete` 的顺序是
+ * 空 prompt 检查 → 限流 → max_tokens 上界 → **才**是 SDK import。所以只要
+ * `maxTokens` 大于 `maxTokensPerRequest`，函数就在第 248 行返回，根本走不到
+ * 255 行的动态 import。既能真的驱动一次限流判定，又不碰 SDK、不需要 mock。
+ *
+ * 返回的两种错误信封因此就是这套断言的观测面：
+ *   - `max_tokens ... exceeds ...` → 限流**放行**了，请求死在下一道闸
+ *   - `rate limit exceeded ...`    → 限流**拦截**了
+ */
+describe('app.ai rate limiting', () => {
+  const MAX_TOKENS_ERROR = /max_tokens .* exceeds/;
+  const RATE_LIMIT_ERROR = /rate limit exceeded/;
+
+  /** 走一次限流判定，并故意死在 max_tokens 闸上（不碰 SDK）。 */
+  function probe(appId: string, rateLimitPerMinute: number) {
+    return runMiniAppAiComplete({
+      appId,
+      prompt: 'hi',
+      runId: 'run-1',
+      rateLimitPerMinute,
+      maxTokens: 999_999,
+      maxTokensPerRequest: 1,
+    });
+  }
+
+  beforeEach(() => {
+    resetMiniAppAiRateLimits();
+  });
+
+  it('allows exactly `limit` calls in the window, then denies the next', async () => {
+    const first = await probe('app-two-per-min', 2);
+    const second = await probe('app-two-per-min', 2);
+    const third = await probe('app-two-per-min', 2);
+
+    expect(first.ok).toBe(false);
+    expect(first.error?.message).toMatch(MAX_TOKENS_ERROR);
+    expect(second.error?.message).toMatch(MAX_TOKENS_ERROR);
+    // 第三次越界 —— 前两次都被放行，正说明配额是 2 而不是 1 或 3。
+    expect(third.error?.message).toMatch(RATE_LIMIT_ERROR);
+  });
+
+  it('treats a limit of 0 (or a missing one) as unlimited, not as a denial', async () => {
+    // 作者写 0 多半是想说"我有这个权限"，按拒绝处理会让 MiniApp 直接不可用。
+    for (let i = 0; i < 5; i += 1) {
+      const outcome = await probe('app-zero-limit', 0);
+      expect(outcome.error?.message).toMatch(MAX_TOKENS_ERROR);
+    }
+    const unlimited = await runMiniAppAiComplete({
+      appId: 'app-undefined-limit',
+      prompt: 'hi',
+      runId: 'run-1',
+      maxTokens: 999_999,
+      maxTokensPerRequest: 1,
+    });
+    expect(unlimited.error?.message).toMatch(MAX_TOKENS_ERROR);
+  });
+
+  it('gives each appId its own bucket', async () => {
+    await probe('app-noisy', 1);
+    await probe('app-noisy', 1); // 第二个被限流
+    // 隔壁 app 不该被连坐。
+    const other = await probe('app-quiet', 1);
+    expect(other.error?.message).toMatch(MAX_TOKENS_ERROR);
+  });
+
+  it('reopens the window once the fixed 60s has elapsed', async () => {
+    // 只假 Date，不假 setTimeout：本文件已经记过一次"假定时器挂死 5 分钟"，
+    // 而这里根本走不到 setTimeout，没必要冒那个险。
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      await probe('app-window', 1);
+      const blocked = await probe('app-window', 1);
+      expect(blocked.error?.message).toMatch(RATE_LIMIT_ERROR);
+
+      // 窗口边界：59s 仍然限流。
+      vi.setSystemTime(new Date('2026-01-01T00:00:59.999Z'));
+      const stillBlocked = await probe('app-window', 1);
+      expect(stillBlocked.error?.message).toMatch(RATE_LIMIT_ERROR);
+
+      vi.setSystemTime(new Date('2026-01-01T00:01:00.000Z'));
+      const reopened = await probe('app-window', 1);
+      expect(reopened.error?.message).toMatch(MAX_TOKENS_ERROR);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resetMiniAppAiRateLimits clears a spent window', async () => {
+    await probe('app-reset', 1);
+    expect((await probe('app-reset', 1)).error?.message).toMatch(RATE_LIMIT_ERROR);
+    resetMiniAppAiRateLimits();
+    expect((await probe('app-reset', 1)).error?.message).toMatch(MAX_TOKENS_ERROR);
   });
 });
