@@ -2662,8 +2662,15 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // but the gate in `checkAi` hangs entirely off `if (model && ...)`, so it only ever
 // applied to a model the author names explicitly. Left in place it teaches authors
 // that omitting `model` still confines them to their list, which is false.
+//
+// 62: miniapp-creator — make the syntax gate a mandatory step in 生成流程. A `ui.js`
+// that does not parse is discarded whole by the browser, so the app keeps its static
+// markup: header, stat tiles and form all render while no behaviour runs, with no
+// exception and no console error. A generated app reached exactly that state on a
+// single unterminated string literal, and it read as "plain" rather than "dead".
+// The flow now names `scripts/validate-miniapp.mts` and shows the failure it prevents.
 
-const SYSTEM_SKILLS_VERSION: &str = "62";
+const SYSTEM_SKILLS_VERSION: &str = "63";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

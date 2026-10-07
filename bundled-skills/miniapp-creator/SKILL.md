@@ -368,8 +368,30 @@ iframe 的 CSP 是 `default-src 'none'`，**在 HTML 里直接写 `<script src="
 6. **写 source/ui.js**（状态用 `app.storage`，文件/命令用 `app.fs` / `app.shell`，都要包 try/catch 显示错误）
 7. **写 source/style.css**（**必须用 `--hamuna-*` CSS Token**，见 `references/design-playbook.md` §四；结构与动效照抄 `references/examples/design-reference/source/style.css`）
 8. **写 storage.json**（`{}` 空即可）
-9. **提交写盘**（见 §端到端协议）
-10. **告诉用户结果**：appId + 4 文件路径 + SceneTab 怎么开
+9. **语法自检（不可跳过）**：跑一次 parse 闸，报错就改到干净为止
+
+   ```
+   node --import tsx/esm scripts/validate-miniapp.mts <app 目录>
+   ```
+
+   非 0 退出 = `ui.js` 根本不能解析。这一步不是形式：`ui.js` 解析失败时浏览器会
+   **整个丢弃**这个文件，页面只剩 `index.html` 里的静态骨架 —— 标题、统计块、
+   输入框全都正常显示，而所有行为一行都不跑。没有异常、没有 console 报错，
+   截图评审只会看成「有点朴素」而不是「根本没跑」。真实发生过：一次生成产出
+   6500 token，唯一的缺陷是
+
+   ```js
+   div.innerHTML = '
+     <label>…</label>
+   ';
+   ```
+
+   单引号字符串里跨了真实换行。头、三个数字块、输入框全在，一条待办没有。
+
+   报错信息带文件名、行号和出错那行原文，**照着改**，不要重写整个文件。
+
+10. **提交写盘**（见 §端到端协议）
+11. **告诉用户结果**：appId + 4 文件路径 + SceneTab 怎么开
 
 ## 端到端协议
 

@@ -39,7 +39,7 @@ import type { MiniAppDependency, MiniAppPermissions } from '../../../shared/mini
 import { runAppCall } from './appBridge';
 import { createAppDispatcher, clearWorkerId, registerWorkerId } from './appHostDispatch';
 import { createAgentBridge, type AgentEventPayload } from './agentEventBridge';
-import { buildAppRuntimeScript } from './appRuntimeScript';
+import { buildAppRuntimeScript, countAuthorLineOffset } from './appRuntimeScript';
 import {
   mintBubbleClaimNonce,
   verifyBubbleClaim,
@@ -323,11 +323,6 @@ export default function MiniAppRunner({
     return () => obs.disconnect();
   }, [themeCss]);
 
-  // 拼 srcDoc：Theme `<style>` + CSP meta + `window.app` runtime + 用户 HTML
-  //
-  // runtime 必须排在用户 HTML 之前：`ui.js` 在解析期就可能调用 `app.*`，
-  // 放后面会撞上 "Cannot read properties of undefined"。
-  const appRuntimeScript = useMemo(() => buildAppRuntimeScript(appId), [appId]);
   // CDN 依赖先注入（进 `<head>`），再算 CSP —— 顺序反了 CSP 会按旧的无依赖
   // 版本算好、放宽的源就永远用不上。两步都只在声明了依赖时改变输出。
   // 双重过滤：schema 已经要求 https + net.allow，但 meta 是磁盘上的文件，
@@ -337,13 +332,29 @@ export default function MiniAppRunner({
     () => (dependencies ?? []).filter((d) => hostAllowed(d.url, permissions?.net?.allow ?? [])),
     [dependencies, permissions],
   );
-  const fullSrcDoc = `<style id="${THEME_TOKEN_STYLE_ID}">${themeCss}</style>\n${injectAppId(
-    injectCsp(
-      injectAppRuntime(injectDependencyTags(srcDoc, usableDeps), appRuntimeScript),
-      [...new Set(usableDeps.map((d) => new URL(d.url).host))],
-    ),
-    appId,
-  )}`;
+
+  // 拼 srcDoc：Theme `<style>` + CSP meta + `window.app` runtime + 用户 HTML
+  //
+  // runtime 必须排在用户 HTML 之前：`ui.js` 在解析期就可能调用 `app.*`，
+  // 放后面会撞上 "Cannot read properties of undefined"。
+  //
+  // 两趟拼装：第一趟只为量出「runtime 结束 → 作者脚本开始」之间的行数，第二趟
+  // 把它烤进 runtime，好让脚本错误横幅报 ui.js 的真实行号而不是拼装后文档的
+  // 行号。偏移量写成单行整数，所以 `0` → `1090` 的替换不改变本段脚本行数，
+  // 第一趟量到的值在第二趟依然成立 —— 这个不变量由
+  // `buildAppRuntimeScript` 的参数注入方式保证。
+  const fullSrcDoc = useMemo(() => {
+    const assemble = (runtime: string): string =>
+      `<style id="${THEME_TOKEN_STYLE_ID}">${themeCss}</style>\n${injectAppId(
+        injectCsp(
+          injectAppRuntime(injectDependencyTags(srcDoc, usableDeps), runtime),
+          [...new Set(usableDeps.map((d) => new URL(d.url).host))],
+        ),
+        appId,
+      )}`;
+    const offset = countAuthorLineOffset(assemble(buildAppRuntimeScript(appId, 0)));
+    return assemble(buildAppRuntimeScript(appId, offset));
+  }, [appId, srcDoc, themeCss, usableDeps]);
 
   // `window.app.*` 派发器。绑定 appId（闭包），因此多个 MiniApp Tab 并存时
   // 互不串号。`useMemo` 而非 ref：dispatch 在 listener 里被调用，重建函数

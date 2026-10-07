@@ -17,6 +17,48 @@ import { APP_CALL_KIND, APP_RESULT_KIND } from '../../../shared/miniapp/app-prot
 import { THEME_TOKEN_STYLE_ID } from './theme-tokens';
 
 /**
+ * 标记本段 runtime 脚本的结尾。
+ *
+ * 宿主需要它来把「作者第一段脚本」在最终 srcDoc 里的起始行号算出来，再作为
+ * `authorLineOffset` 传回 `buildAppRuntimeScript`（原因见该函数参数注释）。
+ * 用注释而不是标识符：它必须对 JS 解析器完全不可见，又不能包含会提前闭合
+ * `<script>` 元素的序列。
+ */
+export const APP_RUNTIME_END_MARKER = '/*__hamuna_runtime_end__*/';
+
+/**
+ * 数出「本段 runtime 结束、作者第一段脚本内容开始」之前，文档共有多少行。
+ *
+ * 浏览器把内联脚本的语法错误报在**整份拼装文档**的坐标上，而宿主在作者代码
+ * 前面插了主题 CSS 与本段 runtime（作者自己的 style.css 也排在两者之间）。
+ * 不换算的话，作者会拿到自己 180 行文件里的「第 1168 行」——一个指不到处的
+ * 位置比没有位置更糟。
+ *
+ * 必须由拼装方在**字符串上**算，不能在 iframe 里遍历 DOM：解析错误触发时，
+ * 出错的那段脚本还没进 `document.scripts`（实测 offset 恒为 0）。
+ *
+ * 注意锚点取的是标签内的**内容**起点而非 `<script` 本身 ——
+ * `inline_miniapp_siblings` 产出的是 `<script>\n…content…`，标签自己那一行
+ * 不属于作者代码；差这一行，报出来就是「第 80 行」而不是真实的「第 79 行」。
+ *
+ * @param documentText 已注入 runtime 的完整 srcDoc
+ * @returns 行号偏移；找不到锚点时返回 0（此时横幅宁可不报行号也不报错的）
+ */
+export function countAuthorLineOffset(documentText: string): number {
+  const markerAt = documentText.indexOf(APP_RUNTIME_END_MARKER);
+  if (markerAt < 0) return 0;
+  const scriptAt = documentText.indexOf('<script', markerAt);
+  if (scriptAt < 0) return 0;
+  let contentStart = documentText.indexOf('>', scriptAt) + 1;
+  if (documentText.charCodeAt(contentStart) === 10) contentStart++;
+  let lines = 0;
+  for (let i = 0; i < contentStart; i++) {
+    if (documentText.charCodeAt(i) === 10) lines++;
+  }
+  return lines;
+}
+
+/**
  * 生成 runtime 脚本文本。
  *
  * 刻意写成不依赖任何 bundler runtime 的经典脚本：MiniApp iframe 的 CSP 是
@@ -24,12 +66,19 @@ import { THEME_TOKEN_STYLE_ID } from './theme-tokens';
  * 文件早在 Rust 侧就内联掉了。本段以字符串内联注入，用模板字面量而非 import/export。
  *
  * @param appId 绑定到本 iframe 的应用 id；每条请求都会带上，宿主据此防冒名。
+ * @param authorLineOffset 本段 runtime 结束、作者第一段脚本开始之前，文档里共有
+ *   多少行。由宿主（MiniAppRunner）按最终拼装结果算出 —— 见下方说明为什么不能
+ *   在 iframe 里自己数。
  */
-export function buildAppRuntimeScript(appId: string): string {
+export function buildAppRuntimeScript(appId: string, authorLineOffset = 0): string {
   const safeAppId = JSON.stringify(appId);
   return `(function () {
   'use strict';
   if (window.app) return; // 幂等：srcDoc 重建时不会重复注入
+
+  // 哨兵：让下面 authorLineOffset() 能认出「哪段内联脚本是本段 runtime」，
+  // 从而把作者代码的起始行号算出来。见该函数注释。
+  var __hamuna_app_runtime__ = true;
 
   var APP_ID = ${safeAppId};
   var nonce = null;
@@ -411,5 +460,89 @@ export function buildAppRuntimeScript(appId: string): string {
   };
 
   window.app = app;
+  ${APP_RUNTIME_END_MARKER}
+
+  // ── 脚本错误可见化 ──────────────────────────────────────────────────────
+  //
+  // 装在这里（app 脚本之前）而不是宿主侧，是因为**解析错误只有浏览器知道**。
+  // 一个不能解析的 ui.js 会被整个丢弃：不绑定任何 listener、不执行任何 render，
+  // 页面原样留下静态 HTML —— 没有异常、没有 console 错误、没有失败态。
+  // 实测一个真实生成产物就是这样：标题、三个统计块、输入框全都正常显示，
+  // 而 6 条待办一条都没渲染，截图评审看到的是"朴素但完整"而不是"根本没跑"。
+  //
+  // 之所以之前没人发现：宿主不注入全局 error handler，MiniApp 又跑在 sandbox
+  // iframe 里，错误既不冒泡到宿主文档也没有 unhandledrejection 兜底。
+  //
+  // 只用 addEventListener，不同时赋 window.onerror —— 两者会各报一次同一条错误
+  // （实测如此），横幅会重复。
+  //
+  // 刻意不吞掉错误：不 preventDefault、不 stopPropagation，console 里仍留原始
+  // 报错。这里只**额外**给人看一眼，不改变浏览器的错误语义。
+  var errorSurfaceInstalled = false;
+  // 浏览器报的 lineno 是**拼装后整份文档**的行号：宿主把作者的 style.css 与
+  // ui.js 内联进 srcdoc 之前，先注入了主题 CSS 和本段 runtime。作者看到的
+  // 1100 多行在自己 180 行的文件里根本不存在 —— 报一个指不到处的行号比不报
+  // 更糟，作者会照着找一个永远不存在的 bug。
+  //
+  // 偏移量由宿主按**最终拼装结果**算好后传进来，而不是在 iframe 里遍历 DOM 数：
+  // 解析错误触发时，出错的那段脚本还没进 document.scripts（实测 offset 恒为 0），
+  // 而且作者的 style.css 就排在本段 runtime 与 ui.js 之间，只数 runtime 之前的
+  // 部分会漏掉整整一份 CSS（实测漏 500 多行）。只有拼装方知道确切的行数。
+  var AUTHOR_LINE_OFFSET = ${Math.max(0, authorLineOffset)};
+
+  function showScriptError(message, line, col) {
+    if (errorSurfaceInstalled) return;   // 只报第一条：首个错误最有诊断价值
+    errorSurfaceInstalled = true;
+    // 换算不回正数就干脆不给行号，宁可少说也不要指错地方。
+    var authorLine = line == null ? null : line - AUTHOR_LINE_OFFSET;
+    if (authorLine == null || authorLine < 1) authorLine = null;
+    try {
+      var host = document.createElement('div');
+      host.id = 'hamuna-app-error';
+      // 用 iframe 里已经注入的主题 token，不写死颜色：换主题时横幅跟着换。
+      var title = document.createElement('strong');
+      title.textContent = 'MiniApp 脚本未能运行';
+      var detail = document.createElement('div');
+      detail.textContent = String(message || 'unknown error');
+      var where = document.createElement('div');
+      where.textContent = (authorLine ? 'ui.js 第 ' + authorLine + ' 行' : '')
+        + ' · 该文件被浏览器整体丢弃，页面只剩静态 HTML';
+      detail.style.marginTop = '6px';
+      detail.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+      detail.style.whiteSpace = 'pre-wrap';
+      detail.style.wordBreak = 'break-word';
+      where.style.marginTop = '6px';
+      where.style.opacity = '0.75';
+      where.style.fontSize = '12px';
+      host.appendChild(title);
+      host.appendChild(detail);
+      host.appendChild(where);
+      host.setAttribute('style', [
+        'position:fixed',
+        'inset:auto 12px 12px 12px',
+        'z-index:2147483647',
+        'padding:12px 14px',
+        'border-radius:8px',
+        'border:1px solid var(--hamuna-error, #b3261e)',
+        'background:var(--hamuna-bg-elevated, #fff)',
+        'color:var(--hamuna-text-primary, #1c1612)',
+        'box-shadow:0 8px 24px rgba(0,0,0,0.18)',
+        'font:13px/1.5 var(--hamuna-font-sans, system-ui, sans-serif)',
+      ].join(';'));
+      (document.body || document.documentElement).appendChild(host);
+    } catch (e) {
+      // 横幅画不出来也不能连累原始错误：它是附加信息，不是错误通道。
+    }
+  }
+  window.addEventListener('error', function (ev) {
+    // resource 错误（img/fetch 等）没有 message，交给作者自己处理，不算脚本挂掉。
+    if (!ev || typeof ev.message !== 'string' || !ev.message) return;
+    showScriptError(ev.message, ev.lineno, ev.colno);
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    var r = ev && ev.reason;
+    showScriptError('Unhandled promise rejection: ' +
+      ((r && (r.message || r.stack)) || String(r)), null, null);
+  });
 })();`;
 }
