@@ -142,6 +142,10 @@ echo ""
 echo -e "${BLUE}[2/3] 构建前端...${NC}"
 export VITE_DEBUG_MODE=true
 echo -e "${YELLOW}  VITE_DEBUG_MODE=${VITE_DEBUG_MODE}${NC}"
+# build:web 末尾会跑 verify:miniapp-error-surface，它要真的启动 Chromium。
+# 浏览器不在 npm 依赖里，缺了会以 "Executable doesn't exist" 挂掉整个构建。
+# --with-deps 补上 Playwright 链接所需的系统库；已经装过就是一次秒退的 no-op。
+npx playwright install --with-deps chromium || { echo -e "${RED}✗ Playwright chromium 安装失败${NC}"; exit 1; }
 npm run build:web
 echo -e "${GREEN}✓ 前端构建完成${NC}"
 echo ""

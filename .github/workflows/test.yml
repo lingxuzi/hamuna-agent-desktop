@@ -43,6 +43,13 @@ jobs:
       - run: npm run build:server
       - run: npm run build:bridge
       - run: npm run build:cli
+      # `build:web` ends in verify:miniapp-error-surface, which drives a real
+      # Chromium to prove a MiniApp's error banner points at the author's line.
+      # The browser is not part of the npm install, so without this the build
+      # dies with "Executable doesn't exist ... chrome-headless-shell.exe".
+      # `--with-deps` also installs the shared libraries Playwright links
+      # against; GitHub's runner image does not ship them.
+      - run: npx playwright install --with-deps chromium
       - run: npm run build:web
 
   # Rust gate: cargo test plus project redline Clippy rules. We only deny

@@ -332,6 +332,10 @@ echo -e "${GREEN}  ✓ sharp 预装完成 (darwin arm64 + x64)${NC}"
 
 # 构建前端
 echo -e "  ${CYAN}构建前端...${NC}"
+# build:web 末尾会跑 verify:miniapp-error-surface，它要真的启动 Chromium。
+# 浏览器不在 npm 依赖里，缺了会以 "Executable doesn't exist" 挂掉整个构建。
+# 已经装过就是一次秒退的 no-op。
+npx playwright install chromium || { echo -e "${RED}✗ Playwright chromium 安装失败${NC}"; exit 1; }
 npm run build:web
 echo -e "${GREEN}✓ 前端和服务端构建完成${NC}"
 echo ""

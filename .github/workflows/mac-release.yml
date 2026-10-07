@@ -312,6 +312,12 @@ jobs:
           fi
           echo ">>> sharp darwin-arm64 staged and validated"
 
+      - name: Install Playwright chromium
+        # Same reason as the other pipelines: `build:web` ends in
+        # verify:miniapp-error-surface, which drives a real Chromium, and the
+        # browser is not part of the npm install.
+        run: npx playwright install chromium
+
       - name: Build frontend
         run: npm run build:web
 

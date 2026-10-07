@@ -191,6 +191,14 @@ $env:NODE_OPTIONS = if ([string]::IsNullOrWhiteSpace($nodeOptionsWithoutHeap)) {
     "$nodeOptionsWithoutHeap --max-old-space-size=4096"
 }
 Write-ColorOutput "  NODE_OPTIONS=$env:NODE_OPTIONS" "Yellow"
+# build:web 末尾会跑 verify:miniapp-error-surface，它要真的启动 Chromium。
+# 浏览器不在 npm 依赖里，缺了会以 "Executable doesn't exist" 挂掉整个构建。
+# 已经装过就是一次秒退的 no-op。
+& npx playwright install chromium
+if ($LASTEXITCODE -ne 0) {
+    Write-ColorOutput "✗ Playwright chromium 安装失败（build:web 需要它做 MiniApp 错误横幅验证）" "Red"
+    exit 1
+}
 & npm run build:web
 if ($LASTEXITCODE -ne 0) {
     Write-ColorOutput "✗ 前端构建失败" "Red"

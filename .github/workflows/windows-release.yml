@@ -161,6 +161,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "sharp install failed" }
           Pop-Location
 
+      - name: Install Playwright chromium
+        # `build:web` ends in verify:miniapp-error-surface, which drives a real
+        # Chromium to prove a MiniApp's error banner points at the author's line.
+        # The browser is not part of the npm install, so without this the release
+        # dies with "Executable doesn't exist ... chrome-headless-shell.exe".
+        # A release build should fail here, naming the browser, rather than deep
+        # inside a bundling step where the cause is not obvious.
+        run: npx playwright install chromium
+
       - name: Build frontend
         run: npm run build:web
 

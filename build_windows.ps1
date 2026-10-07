@@ -688,6 +688,13 @@ try {
 
     # 构建前端 (增加内存限制避免 OOM)
     Write-Host "  构建前端..." -ForegroundColor Cyan
+    # build:web 末尾会跑 verify:miniapp-error-surface，它要真的启动 Chromium。
+    # 浏览器不在 npm 依赖里，缺了会以 "Executable doesn't exist" 挂掉整个构建。
+    # 已经装过就是一次秒退的 no-op。
+    & npx playwright install chromium
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright chromium 安装失败（build:web 需要它做 MiniApp 错误横幅验证）"
+    }
     $env:NODE_OPTIONS = "--max-old-space-size=4096"
     & npm run build:web
     if ($LASTEXITCODE -ne 0) {
