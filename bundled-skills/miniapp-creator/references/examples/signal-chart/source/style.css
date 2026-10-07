@@ -1,0 +1,786 @@
+/* ============================================================================
+ * Signal Chart — 数据可视化的样式基线
+ *
+ * 这个样例补的是仓库里的空缺：任务清单（design-reference）、数据表（data-board）
+ * 都有，唯独没有图表。而图表是"廉价感"最容易露馅的地方 —— 一张硬编码的蓝线、
+ * 比例数字的坐标轴、随手一个 rgba 悬停区，就足够让整屏看起来像 AI 生成的。
+ *
+ * 这里的规矩只有三条，其余都是从它们推出来的：
+ *   1. 颜色只来自 --hamuna-*；系列色用 accent + accent-secondary 这一对，
+ *      不自己造第三支色。
+ *   2. 颜色只走 CSS，JS 只写几何。js 侧写的是 path 的 d、圆的 cx、刻度的 y，
+ *      一律不带颜色 —— 于是换主题自动跟随，图表不需要知道主题的存在。
+ *   3. 所有数字走等宽 + tabular-nums。这是"廉价图表"最常被一眼认出的特征，
+ *      理由和 data-board 的表头一样，见下面 .sc-num 的注释。
+ * ========================================================================= */
+
+/* === Design System ===
+ * Theme: 冷、密、工具感 —— 仪表盘要在用户眼前停留一整天，动的是数据，颜色一动就吵。
+ * Palette:
+ *   - dominant: --hamuna-bg-primary（页面底）/ --hamuna-text-primary（正文）
+ *   - supporting: --hamuna-bg-elevated（卡片）、--hamuna-border-subtle（网格线）
+ *   - accent: --hamuna-accent（系列 A）+ --hamuna-accent-secondary（系列 B）
+ *     第二支是契约里的明文槽位，playbook §四 直接点名"图表 / 分类 / 双色编码用它"。
+ *     拿第一支硬凑两条曲线，一屏同色相，"系列"这个词就没有意义了。
+ *
+ *     强调色只落在四处：曲线、面积填充、2px 色条、选中描边。**绝不落到小号文字上** ——
+ *     浅色外观下 accent 对 elevated 底只有 3.4:1，12px 文字达不到 4.5:1。
+ *     所以图例里"这条线是谁"由色条回答，不由带色的名字回答。
+ *   - semantic: success / error 只出现在环比 chip 的**背景水洗**上，
+ *     方向由 ▲▼ 和正负号承担 —— 深色下 error 对 elevated 只有 4.3:1，
+ *     带色的 12px 文字会掉出 AA。信息不靠颜色单独传达，这一条在图表上同样成立。
+ * Typography:
+ *   - heading: 600, 18px
+ *   - section: 600, 13px（数据密集型比通用版紧一档）
+ *   - body:    400, 13px
+ *   - caption: 400, 11px, --hamuna-text-muted   // 坐标轴刻度、图例、脚注都是这一档
+ *   - numeric: var(--hamuna-font-mono) + font-variant-numeric: tabular-nums
+ * Radius: --hamuna-radius-md（卡片） / --hamuna-radius-sm（分段控件、tooltip）
+ * Motif: 一枚 2×10 的系列色条。凡是出现"系列名"的地方都带它 —— 图例、tooltip、
+ *        连空状态里"缺的是哪两条信号"也带。于是"这条线是谁"永远由同一根条子回答，
+ *        用户不需要在图例和曲线之间来回找。
+ * State: 选中 = accent 6% 水洗 + accent 42% 描边。全应用只这一处表达选中。
+ * ===================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * 宿主 token → 语义别名
+ *
+ * 全文件只有这一段出现 --hamuna-*。下游一律用语义名，于是"这套图为什么是这个
+ * 颜色"这个问题永远只有一个答案可查。每个 var() 都带 fallback：导出成独立网页
+ * 时没有宿主，没有 fallback 就会静默掉回浏览器默认值。
+ * ------------------------------------------------------------------------ */
+:root {
+  --sc-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --sc-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  /* 表面 */
+  --sc-bg:      var(--hamuna-bg-primary, #faf6ee);
+  --sc-surface: var(--hamuna-bg-elevated, #fffcf7);
+  --sc-inset:   var(--hamuna-bg-inset, #e8dccf);
+
+  /* 描边 */
+  --sc-line:        var(--hamuna-border-subtle, rgba(28, 22, 18, 0.06));
+  --sc-line-strong: var(--hamuna-border, rgba(28, 22, 18, 0.12));
+
+  /* 文字 */
+  --sc-text:  var(--hamuna-text-primary, #1c1612);
+  --sc-soft:  var(--hamuna-text-secondary, #2e2825);
+  --sc-muted: var(--hamuna-text-muted, #6f6156);
+
+  /* 系列色：只有两支，且都是契约槽位 */
+  --sc-series-a: var(--hamuna-accent, #7b8f6b);
+  --sc-series-b: var(--hamuna-accent-secondary, #c26d3a);
+
+  --sc-focus: var(--hamuna-focus-border, #7b8f6b);
+  --sc-up:    var(--hamuna-success, #146c2e);
+  --sc-down:  var(--hamuna-error, #b3261e);
+
+  /* --- 派生层：只在 :root 声明一次，全文件引用别名 ----------------------------
+   * 比例是刻意的，不要随手调大（playbook §四）：淡底 ≤10%、描边 30-45%、
+   * 辉光 15-25%、悬停 ≤8%。图表对这条尤其敏感 —— 网格线已经占满了底色，
+   * 再往上泼颜色，整张图就开始"发光"。
+   * -------------------------------------------------------------------- */
+  /* 网格线：比表格行线略深一档，因为它下面没有文字挡着 */
+  --sc-grid:      color-mix(in srgb, var(--sc-text) 9%,  transparent);
+  --sc-grid-soft: color-mix(in srgb, var(--sc-text) 5%,  transparent);
+  --sc-axis:      color-mix(in srgb, var(--sc-text) 22%, transparent);
+  --sc-hover:     color-mix(in srgb, var(--sc-text) 6%,  transparent);
+  /* 选中态 */
+  --sc-wash:       color-mix(in srgb, var(--sc-series-a) 6%,  transparent);
+  --sc-accent-line: color-mix(in srgb, var(--sc-series-a) 42%, transparent);
+  /* 面积填充：主系列一条，次系列不填。两条都填，图就被抹平了。
+     10% 就是 playbook 的淡底上限 —— 曲线已经有 2px 的实体，再往上加就浑了。 */
+  --sc-fill-a:   color-mix(in srgb, var(--sc-series-a) 10%, transparent);
+  --sc-fill-a-0: color-mix(in srgb, var(--sc-series-a) 0%,  transparent);
+  /* 环比 chip：语义色只进背景，文字保持中性（见 Design System 的 Palette 段） */
+  --sc-up-wash:   color-mix(in srgb, var(--sc-up) 10%, transparent);
+  --sc-down-wash: color-mix(in srgb, var(--sc-down) 10%, transparent);
+  --sc-glow: 0 0 0 3px color-mix(in srgb, var(--sc-focus) 22%, transparent);
+  /* 磨砂：半透明底 + blur 必须成对，缺一个就是一块灰玻璃或者一片糊字 */
+  --sc-frost: color-mix(in srgb, var(--sc-surface) 92%, transparent);
+
+  /* --- Motion ----------------------------------------------------------------
+   * 全应用只有这三个时长和两条曲线。图表的动效尤其要收敛：曲线自己已经在动，
+   * 界面再叠一层，用户的眼睛不知道该跟哪一个。
+   * 时长从宿主派生而不是自己写死 —— 各写各的 200ms/300ms 就没有统一节奏。
+   * -------------------------------------------------------------------- */
+  --sc-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --sc-dur:      var(--hamuna-duration-normal, 200ms);
+  --sc-dur-slow: var(--hamuna-duration-slow, 300ms);
+  --sc-ease:     cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --- Elevation -------------------------------------------------------------
+   * 只有两档：卡片（贴在面上）和浮层（tooltip 压在曲线之上）。一屏之内不要凑满三档。
+   * -------------------------------------------------------------------- */
+  --sc-shadow-card:  var(--hamuna-shadow-card);
+  --sc-shadow-float: var(--hamuna-shadow-lg);
+
+  --sc-radius:    var(--hamuna-radius-md, 10px);
+  --sc-radius-sm: var(--hamuna-radius-sm, 6px);
+  --sc-page: 880px;
+  --sc-pad: 16px;
+  --sc-btn-h: 32px;  /* 命中目标下限，见 playbook §七 */
+  --sc-tip-w: 176px; /* tooltip 固定宽 —— 这是热路径零布局读取的前提，见 ui.js */
+}
+
+body {
+  font-family: var(--sc-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--sc-text);
+  background: var(--sc-bg);
+}
+
+/* 所有数字走等宽 + tabular。
+ * 这不是审美偏好，是图表的第一可读性：proportional 数字下「1」和「8」宽度不同，
+ * 坐标轴刻度那一列会呈锯齿状，tooltip 里的读数每换一个值就左右跳一次。
+ * 这条和 data-board 的表头数字是同一个理由，只是图表上更致命 —— 曲线本身就是
+ * 在跟刻度对齐。 */
+.sc-num {
+  font-family: var(--sc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+/* ===========================================================================
+ * 页头
+ * ======================================================================== */
+.sc-page {
+  max-width: var(--sc-page);
+  margin: 0 auto;
+  padding: 24px var(--sc-pad) 32px;
+}
+
+.sc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.sc-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sc-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--sc-muted);
+}
+
+/* 范围切换：分段控件，互斥选项必须看起来成组，所以共用一圈边框而不是各自成按钮。 */
+.sc-range {
+  display: inline-flex;
+  border: 1px solid var(--sc-line);
+  border-radius: var(--sc-radius-sm);
+  overflow: hidden;
+  flex: none;
+}
+
+.sc-range__btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--sc-soft);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 12px;
+  /* 命中目标：横向可以窄，高度不低于 32px */
+  height: var(--sc-btn-h);
+  cursor: pointer;
+  transition:
+    background-color var(--sc-dur-fast) var(--sc-ease),
+    border-color var(--sc-dur-fast) var(--sc-ease),
+    color var(--sc-dur-fast) var(--sc-ease);
+}
+
+.sc-range__btn + .sc-range__btn {
+  border-left: 1px solid var(--sc-line);
+}
+
+.sc-range__btn:hover {
+  background: var(--sc-hover);
+}
+
+.sc-range__btn:focus-visible {
+  outline: 2px solid var(--sc-focus);
+  outline-offset: -2px;
+}
+
+/* 选中：淡底 + 描边 + 字重。不重染成实心 accent —— 那会让一段"时间范围"
+ * 变成整屏最重的东西，而它只是筛选器。 */
+.sc-range__btn[aria-pressed='true'] {
+  background: var(--sc-wash);
+  border-color: var(--sc-accent-line);
+  color: var(--sc-text);
+  font-weight: 600;
+}
+
+/* ===========================================================================
+ * 卡片
+ * ======================================================================== */
+.sc-card {
+  border: 1px solid var(--sc-line);
+  border-radius: var(--sc-radius);
+  background: var(--sc-surface);
+  box-shadow: var(--sc-shadow-card);
+  padding: var(--sc-pad);
+}
+
+.sc-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+}
+
+/* ===========================================================================
+ * 图例 = 读数（motif 的主场）
+ * ======================================================================== */
+.sc-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sc-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* motif：2×10 的系列色条。三处复用（图例 / tooltip / 空状态），全应用不再有第二种标识。 */
+.sc-key {
+  flex: none;
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--sc-series-a);
+}
+
+[data-series='b'] .sc-key {
+  background: var(--sc-series-b);
+}
+
+.sc-legend__name {
+  font-size: 12px;
+  color: var(--sc-soft);
+  white-space: nowrap;
+}
+
+/* 读数右对齐到同一个列：margin-left:auto 而不是固定宽度，
+ * 因为等宽 + tabular 之下同字数的值本来就对齐，不等宽的值也不该被挤歪。 */
+.sc-legend__value {
+  margin-left: auto;
+  color: var(--sc-text);
+}
+
+/* 环比 chip：文字中性，语义色只走背景。
+ * 方向由 ▲▼ 和正负号承担，所以关掉颜色信息不成立。 */
+.sc-delta {
+  flex: none;
+  min-width: 56px;
+  text-align: right;
+  font-family: var(--sc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--sc-soft);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--sc-hover);
+  transition: background-color var(--sc-dur) var(--sc-ease);
+}
+
+.sc-delta[data-dir='up'] {
+  background: var(--sc-up-wash);
+}
+
+.sc-delta[data-dir='down'] {
+  background: var(--sc-down-wash);
+}
+
+/* 空状态里的图例：虚掉，不用完整读数的对比度去喊"这里没有数据" */
+.sc-legend--empty .sc-legend__value,
+.sc-legend--empty .sc-legend__name {
+  color: var(--sc-muted);
+}
+
+/* ===========================================================================
+ * 绘图区：三个状态叠在同一网格单元
+ * ======================================================================== */
+/* grid-area 叠放而不是 display 切换：骨架、空、正常三态占据完全相同的高度，
+ * 切换时版面不跳。仪表盘反复切范围，每一次跳版都在提醒用户"界面坏了"。 */
+.sc-stage {
+  display: grid;
+  /* --sc-h 由 ui.js 按容器宽度算出来并写在这里：绘图区 / 骨架 / 空状态三态
+   * 共用同一个格子高度，所以切换时版面不跳。248px 只是 JS 尚未执行的兜底。 */
+  min-height: var(--sc-h, 248px);
+}
+
+.sc-stage > * {
+  grid-area: 1 / 1;
+}
+
+.sc-plot {
+  position: relative;
+  min-width: 0;
+  /* 键盘可达：方向键移动游标。没有它，一张只能靠鼠标读数的图对键盘用户等于不存在。 */
+  outline: none;
+  border-radius: var(--sc-radius-sm);
+}
+
+/* 空 / 加载时绘图区不画任何东西，但**保留占位**：visibility 既移出命中测试
+ * （hidden 元素收不到指针事件）和无障碍树，又不像 display:none 那样塌掉高度。
+ * 这就是三态不跳版的原因。 */
+.sc-plot[data-state='empty'],
+.sc-plot[data-state='loading'] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sc-plot:focus-visible {
+  outline: 2px solid var(--sc-focus);
+  outline-offset: 4px;
+  box-shadow: var(--sc-glow);
+}
+
+.sc-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 文字由 CSS 着色，不写在 fill 属性里：属性里的 var() 在部分渲染器里不解析，
+   * 一旦失效就是无声的黑字压在深色底上。 */
+  font-family: var(--sc-sans);
+  user-select: none;
+}
+
+/* ===========================================================================
+ * 曲线
+ * ======================================================================== */
+.sc-grid-line {
+  stroke: var(--sc-grid);
+  stroke-width: 1;
+  /* 1px 线画在整数像素上才不会糊；shape-rendering 让它干脆按像素对齐 */
+  shape-rendering: crispEdges;
+}
+
+.sc-grid-line--zero {
+  stroke: var(--sc-axis);
+}
+
+/* 刻度文字：11px caption 档。
+ * 同时写 color 和 fill —— fill 是它真正的着色，而 color 让探测工具量到的
+ * 对比度等于肉眼看到的那个。只写 fill 的话，量出来的是继承来的正文色，
+ * 一张看不清的图也能"通过"。 */
+.sc-tick {
+  fill: var(--sc-muted);
+  color: var(--sc-muted);
+  font-size: 11px;
+  font-family: var(--sc-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-axis-line {
+  stroke: var(--sc-line-strong);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.sc-area {
+  stroke: none;
+}
+
+/* 渐变的两端。stop-color 走 CSS 而不是 fill 属性上的 var()：
+ * 属性里的 var() 在部分渲染器里不解析，失效就是无声的黑块。 */
+.sc-area-stop--top {
+  stop-color: var(--sc-fill-a);
+}
+
+.sc-area-stop--bottom {
+  stop-color: var(--sc-fill-a-0);
+}
+
+.sc-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sc-line--a {
+  stroke: var(--sc-series-a);
+}
+
+.sc-line--b {
+  stroke: var(--sc-series-b);
+}
+
+/* 曲线入场：pathLength="1"（ui.js 里写）把路径长度归一化成 1，
+ * 于是 dasharray/dashoffset 可以用 0..1 表示长度，不必在 JS 里
+ * 调 getTotalLength() —— 那是一次真实的布局读取。 */
+.sc-chart[data-anim='true'] .sc-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: sc-draw var(--sc-dur-slow) var(--sc-ease-out) forwards;
+  /* 第二条线晚一点起笔，读起来是"两条信号依次到位"而不是一次闪完。
+   * 节奏值写在这里而不是 ui.js：JS 只给顺序，不给毫秒数。 */
+  animation-delay: calc(var(--sc-i, 0) * 90ms);
+}
+
+@keyframes sc-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ===========================================================================
+ * 悬停：准星 + 圆点
+ * ======================================================================== */
+/* 整个准星组靠一个 transform 平移。pointermove 里只有一次属性写入，
+ * 没有一次布局读取 —— 读取会强制重排，那就是 layout thrash 的定义。 */
+.sc-cursor {
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--sc-dur-fast) var(--sc-ease);
+}
+
+.sc-cursor[data-on='true'] {
+  opacity: 1;
+}
+
+.sc-cursor__rule {
+  stroke: var(--sc-axis);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.sc-cursor__dot {
+  stroke: var(--sc-surface);
+  stroke-width: 2;
+}
+
+.sc-cursor__dot--a {
+  fill: var(--sc-series-a);
+}
+
+.sc-cursor__dot--b {
+  fill: var(--sc-series-b);
+}
+
+/* 命中层：透明矩形铺满绘图区。放在 SVG 最上层，
+ * 于是 pointermove 只会在这个矩形上触发，不会去逐个判断点没点中曲线。 */
+.sc-hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+/* ===========================================================================
+ * Tooltip
+ * ======================================================================== */
+/* 固定宽 176px 是刻意的：翻转到右侧的判断必须是纯算术。
+ * 一旦宽度随内容变，热路径上就得读一次 offsetWidth 才能决定翻不翻，
+ * 而那正是要避免的读-改-读循环。 */
+.sc-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--sc-tip-w);
+  padding: 8px 10px;
+  border-radius: var(--sc-radius-sm);
+  border: 1px solid var(--sc-line-strong);
+  background: var(--sc-frost);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  box-shadow: var(--sc-shadow-float);
+  pointer-events: none;
+  z-index: 2;
+  /* 显隐走 opacity + visibility 而不是 display：display:none 会在出现时
+   * 触发一次重排，而这里每 16ms 就可能触发一次。 */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--sc-dur-fast) var(--sc-ease);
+}
+
+.sc-tip[data-show='true'] {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sc-tip__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--sc-grid-soft);
+}
+
+.sc-tip__time {
+  font-size: 12px;
+  color: var(--sc-text);
+}
+
+.sc-tip__unit {
+  font-size: 11px;
+  color: var(--sc-muted);
+}
+
+.sc-tip__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.sc-tip__name {
+  font-size: 12px;
+  color: var(--sc-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-tip__value {
+  margin-left: auto;
+  color: var(--sc-text);
+}
+
+/* ===========================================================================
+ * 骨架屏
+ * ======================================================================== */
+.sc-skeleton {
+  position: relative;
+  border-radius: var(--sc-radius-sm);
+  overflow: hidden;
+}
+
+/* 网格线用 repeating-linear-gradient 而不是一排 div：它跟着容器高度自适应，
+ * 而 div 版本在高度变化时会露白。颜色全部来自 token，没有 rgba。 */
+.sc-skeleton__grid {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--sc-grid-soft) 0 1px,
+    transparent 1px 48px
+  );
+}
+
+.sc-skeleton__spark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 28%;
+  height: 44%;
+  background: linear-gradient(
+    90deg,
+    var(--sc-inset) 0%,
+    var(--sc-line) 40%,
+    var(--sc-inset) 80%
+  );
+  background-size: 240% 100%;
+  animation: sc-shimmer 1.4s linear infinite;
+}
+
+@keyframes sc-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+.sc-loading {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--sc-muted);
+}
+
+/* ===========================================================================
+ * 空状态
+ * ======================================================================== */
+/* 不是一个字符串，是一整块被设计过的区域：标记 + 标题 + 下一步 + 缺了哪两条信号。
+ * 仪表盘里最常被截图的状态就是它，别留一片空白。 */
+.sc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px 16px;
+  border-radius: var(--sc-radius-sm);
+  border: 1px dashed var(--sc-line-strong);
+  text-align: center;
+  animation: sc-in var(--sc-dur) var(--sc-ease-out);
+}
+
+.sc-empty__mark {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--sc-mono);
+  font-size: 12px;
+  color: var(--sc-muted);
+  border: 1px dashed var(--sc-line-strong);
+}
+
+.sc-empty__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sc-empty__hint {
+  margin: 0;
+  max-width: 320px;
+  font-size: 12px;
+  color: var(--sc-muted);
+}
+
+.sc-legend--empty {
+  margin-top: 8px;
+  min-width: 200px;
+  text-align: left;
+}
+
+@keyframes sc-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* ===========================================================================
+ * 卡脚
+ * ======================================================================== */
+.sc-card__foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sc-grid-soft);
+}
+
+.sc-window,
+.sc-count {
+  font-size: 11px;
+  color: var(--sc-muted);
+}
+
+.sc-foot__right {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sc-hint {
+  font-size: 11px;
+  color: var(--sc-muted);
+  white-space: nowrap;
+}
+
+.sc-foot {
+  margin: 10px 0 0;
+  min-height: 1.4em;
+  font-size: 12px;
+  color: var(--sc-muted);
+}
+
+/* ===========================================================================
+ * 窄容器：MiniApp 嵌在侧栏时宽度可能只有 320px，这是常态不是边缘情况
+ * ======================================================================== */
+@media (max-width: 460px) {
+  .sc-page {
+    padding: 16px 12px 24px;
+  }
+
+  .sc-head {
+    margin-bottom: 12px;
+  }
+
+  /* 范围切换占满一行：三个按钮挤在 320px 里各自不足 24px 宽，
+   * 而命中目标的宽度下限是 24px。 */
+  .sc-range {
+    width: 100%;
+  }
+
+  .sc-range__btn {
+    flex: 1;
+  }
+
+  .sc-delta {
+    min-width: 48px;
+  }
+}
+
+/* ===========================================================================
+ * 动效降级 —— 不是可选项
+ *
+ * 集中关一次，不要在每个动画旁边写一遍（新增动画时一定会漏）。
+ * 曲线入场和骨架闪烁都是循环/长动画，前庭功能障碍用户会实际产生眩晕。
+ * ======================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* 曲线入场被关掉后 dashoffset 必须回到 0，否则曲线会永远停在"没画出来"的状态。
+   * 这就是降级块不能只写 animation-duration 的原因。 */
+  .sc-chart[data-anim='true'] .sc-line {
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}

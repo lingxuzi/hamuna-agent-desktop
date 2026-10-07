@@ -65,7 +65,7 @@ body {
 
   --fe-accent: var(--hamuna-accent, #7b8f6b);
   --fe-accent-hover: var(--hamuna-accent-hover, #6d8060);
-  --fe-accent-text: var(--hamuna-text-on-primary, #ffffff);
+  --fe-accent-text: var(--hamuna-text-on-primary, #050b14);
   --fe-error: var(--hamuna-error, #b3261e);
 
   /* 派生层：全文件只在 :root 声明一次 */

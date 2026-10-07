@@ -13,5 +13,24 @@
     "net": { "allow": [] }
   },
   "entry": "source/index.html",
-  "storage": { "defaults": { "shuffle": false } }
+  "storage": { "defaults": { "shuffle": false } },
+  "appearance": {
+    "mode": "bespoke",
+    "palette": {
+      "bg-primary": "#faf6ef",
+      "text-primary": "#241a1c",
+      "text-secondary": "#5c4a4e",
+      "text-muted": "#8a757a",
+      "accent": "#8a3d58",
+      "text-on-primary": "#ece2d0"
+    },
+    "palette_dark": {
+      "bg-primary": "#16110f",
+      "text-primary": "#f6efe6",
+      "text-secondary": "#c9b6b8",
+      "text-muted": "#a89094",
+      "accent": "#d9a0b4",
+      "text-on-primary": "#2a1620"
+    }
+  }
 }

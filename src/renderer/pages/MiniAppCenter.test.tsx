@@ -23,6 +23,12 @@ vi.mock('@/api/apiFetch', () => ({
   apiPostJson: (...args: unknown[]) => apiPostJson(...args),
 }));
 
+// The page now reports uninstall results through the toast. `useToast` throws
+// without a provider, so stub it the way Marketplace.test.tsx does.
+vi.mock('@/components/Toast', () => ({
+  useToast: () => ({ info: vi.fn(), error: vi.fn(), success: vi.fn(), warning: vi.fn() }),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'zh-CN' } }),
 }));
@@ -182,10 +188,14 @@ describe('MiniAppCenter page', () => {
     const listener = vi.fn();
     window.addEventListener(CUSTOM_EVENTS.OPEN_MARKETPLACE, listener);
 
-    const { getByTestId } = render(<MiniAppCenter isActive={true} />);
+    const { getByTestId, queryByTestId } = render(<MiniAppCenter isActive={true} />);
     await waitFor(() => {
       expect(getByTestId('miniapp-center-browse-marketplace')).toBeTruthy();
     });
+
+    // 空态只有一个市场入口：空态那块自带一个按钮，头部再放一个就是同一个
+    // 动作出现两次。比"缺少入口"更糟的重复，用户会以为是两个不同的功能。
+    expect(queryByTestId('miniapp-center-browse-marketplace-header')).toBeNull();
 
     fireEvent.click(getByTestId('miniapp-center-browse-marketplace'));
 
@@ -194,5 +204,192 @@ describe('MiniAppCenter page', () => {
     });
 
     window.removeEventListener(CUSTOM_EVENTS.OPEN_MARKETPLACE, listener);
+  });
+
+  it('the header keeps a Marketplace entry once apps are installed', async () => {
+    // 这条打的是「非空状态没有市场入口」这个缺口。此前唯一的入口在空态里，
+    // 装上第一个小程序后整个空态就不渲染了，于是列表页再也无法回到市场 ——
+    // 而市场是唯一能装第二个的地方。装得越多，越回不去。
+    apiGetJson.mockResolvedValueOnce({
+      ok: true,
+      items: [
+        {
+          id: 'icon-generator',
+          name: 'Icon Generator',
+          version: 1,
+          path: '/b',
+          source: 'installed',
+          icon: 'palette',
+          kind: 'iframe',
+        },
+      ],
+    });
+
+    const listener = vi.fn();
+    window.addEventListener(CUSTOM_EVENTS.OPEN_MARKETPLACE, listener);
+
+    const { getByTestId, queryByTestId } = render(<MiniAppCenter isActive={true} />);
+    await waitFor(() => {
+      expect(getByTestId('miniapp-center-card-icon-generator')).toBeTruthy();
+    });
+
+    // 空态按钮此刻必须已经消失 —— 正是它的消失让头部入口成为唯一路径。
+    expect(queryByTestId('miniapp-center-browse-marketplace')).toBeNull();
+    expect(getByTestId('miniapp-center-browse-marketplace-header')).toBeTruthy();
+
+    fireEvent.click(getByTestId('miniapp-center-browse-marketplace-header'));
+
+    await waitFor(() => {
+      expect(listener).toHaveBeenCalled();
+    });
+
+    window.removeEventListener(CUSTOM_EVENTS.OPEN_MARKETPLACE, listener);
+  });
+
+  it('hides the header Marketplace entry while loading and on a failed load', async () => {
+    // items 为 null（加载中）或 []（加载失败，`load()` 的 catch 就是 setItems([])）
+    // 时都不该冒出这个按钮：加载中它会闪现一下；失败时它指向的正是刚刚拉取
+    // 失败的那份目录。
+    //
+    // 这里断言的是错误文案本身，不是某个 testid 的消失 —— 后者在没有装任何
+    // 应用时恒为空，删掉整个按钮照样能过。
+    apiGetJson.mockResolvedValueOnce({ ok: false, error: 'sidecar is not running' });
+
+    const { findByText, queryByTestId } = render(<MiniAppCenter isActive={true} />);
+
+    // 加载中：items 仍是 null。
+    expect(queryByTestId('miniapp-center-browse-marketplace-header')).toBeNull();
+
+    // 加载失败：items 变成 []，错误横幅出现，入口依然不该在。
+    expect(await findByText('sidecar is not running')).toBeTruthy();
+    expect(queryByTestId('miniapp-center-browse-marketplace-header')).toBeNull();
+  });
+
+  // ── 卸载 ──────────────────────────────────────────────────────────────────
+  // 此前整个「卸载」链路只有 Marketplace 详情页一个入口。用户在自己的小程序
+  // 列表页（MiniAppCenter）想删掉一个装错的应用时，只能先知道它的名字、去市场、
+  // 搜到它、点进详情 —— 于是列表页看上去根本不支持删除。
+  //
+  // 下面四条锁住的是「危险操作必须先确认」这条不变量：单击删除按钮绝不能直接
+  // 发出请求（Rust 那边是 remove_dir_all，不可逆），必须过 ConfirmDialog。
+
+  const oneInstalled = [
+    {
+      id: 'icon-generator',
+      name: 'Icon Generator',
+      version: 3,
+      path: '/b',
+      source: 'installed',
+      icon: 'palette',
+      kind: 'iframe',
+    },
+  ];
+
+  it('does NOT uninstall on a single click — it asks for confirmation first', async () => {
+    // 反向护栏。这条如果哪天变红，说明有人把 ConfirmDialog 删了换成了直接调用：
+    // 那意味着误点一次就永久删掉了用户的小程序和它的 storage.json。
+    apiGetJson.mockResolvedValueOnce({ ok: true, items: oneInstalled });
+
+    const { getByTestId, getByText } = render(<MiniAppCenter isActive={true} />);
+    await waitFor(() => {
+      expect(getByTestId('miniapp-center-uninstall-icon-generator')).toBeTruthy();
+    });
+
+    fireEvent.click(getByTestId('miniapp-center-uninstall-icon-generator'));
+
+    // 确认框出现，且请求尚未发出。
+    expect(getByText('miniappCenter.uninstallConfirmMessage')).toBeTruthy();
+    expect(apiPostJson).not.toHaveBeenCalled();
+  });
+
+  it('confirming the dialog uninstalls the app and reloads the catalog', async () => {
+    // 第二次列表返回空 —— 真实的 /api/miniapp/list 在卸载后当然不再有这个 app。
+    // 用 mockResolvedValue 会让重拉拿到同一份列表，卡片当然还在，那种断言测不到
+    // 「卸载后列表会更新」这件事。
+    apiGetJson
+      .mockResolvedValueOnce({ ok: true, items: oneInstalled })
+      .mockResolvedValue({ ok: true, items: [] });
+    apiPostJson.mockResolvedValue({ ok: true });
+
+    const { getByTestId, getByText, queryByTestId } = render(<MiniAppCenter isActive={true} />);
+    await waitFor(() => {
+      expect(getByTestId('miniapp-center-uninstall-icon-generator')).toBeTruthy();
+    });
+
+    fireEvent.click(getByTestId('miniapp-center-uninstall-icon-generator'));
+    // ConfirmDialog 的确认键文案走 common 命名空间，本文件的 t mock 会把它
+    // 原样返回成 key，所以按 key 找。
+    fireEvent.click(getByText('miniappCenter.uninstall'));
+
+    await waitFor(() => {
+      expect(apiPostJson).toHaveBeenCalledWith(
+        '/api/miniapp/uninstall',
+        expect.objectContaining({ appId: 'icon-generator' }),
+      );
+    });
+    // 卸载后必须重拉列表，否则被删的应用会一直留在屏幕上。
+    await waitFor(() => {
+      expect(apiGetJson).toHaveBeenCalledTimes(2);
+    });
+    // 第二次列表返回空 → 卡片消失。
+    expect(queryByTestId('miniapp-center-card-icon-generator')).toBeNull();
+  });
+
+  it('cancelling the dialog leaves the app installed and makes no request', async () => {
+    apiGetJson.mockResolvedValue({ ok: true, items: oneInstalled });
+
+    const { getByTestId, getByText, queryByText } = render(<MiniAppCenter isActive={true} />);
+    await waitFor(() => {
+      expect(getByTestId('miniapp-center-uninstall-icon-generator')).toBeTruthy();
+    });
+
+    fireEvent.click(getByTestId('miniapp-center-uninstall-icon-generator'));
+    fireEvent.click(getByText('actions.cancel'));
+
+    await waitFor(() => {
+      expect(queryByText('miniappCenter.uninstallConfirmMessage')).toBeNull();
+    });
+    expect(apiPostJson).not.toHaveBeenCalled();
+    expect(getByTestId('miniapp-center-card-icon-generator')).toBeTruthy();
+  });
+
+  it('a failed uninstall keeps the card and does not reload the catalog', async () => {
+    // 后端拒绝（例如文件被占用）时页面必须留在原样：卡片还在，错误交给 toast。
+    // 少了这条，一次失败的删除会把用户正在看的小程序从列表里弄丢。
+    apiGetJson.mockResolvedValue({ ok: true, items: oneInstalled });
+    apiPostJson.mockResolvedValue({ ok: false, error: 'remove_dir_all failed: EPERM' });
+
+    const { getByTestId, getByText } = render(<MiniAppCenter isActive={true} />);
+    await waitFor(() => {
+      expect(getByTestId('miniapp-center-uninstall-icon-generator')).toBeTruthy();
+    });
+
+    fireEvent.click(getByTestId('miniapp-center-uninstall-icon-generator'));
+    fireEvent.click(getByText('miniappCenter.uninstall'));
+
+    await waitFor(() => {
+      expect(apiPostJson).toHaveBeenCalled();
+    });
+    expect(getByTestId('miniapp-center-card-icon-generator')).toBeTruthy();
+    expect(apiGetJson).toHaveBeenCalledTimes(1);
+  });
+
+  it('clicking delete does not launch the MiniApp', async () => {
+    // 删除按钮是启动按钮的兄弟节点而非子节点：早期把它放在 <button> 里，点击
+    // 会同时冒泡到启动处理器，删掉应用的同一个手势还会把它打开。
+    apiGetJson.mockResolvedValue({ ok: true, items: oneInstalled });
+
+    const listener = vi.fn();
+    window.addEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_SCENE, listener);
+
+    const { getByTestId } = render(<MiniAppCenter isActive={true} />);
+    await waitFor(() => {
+      expect(getByTestId('miniapp-center-uninstall-icon-generator')).toBeTruthy();
+    });
+
+    fireEvent.click(getByTestId('miniapp-center-uninstall-icon-generator'));
+
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_SCENE, listener);
   });
 });

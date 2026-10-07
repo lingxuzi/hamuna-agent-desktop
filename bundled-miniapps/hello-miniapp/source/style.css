@@ -1,1 +1,69 @@
-/* Phase 0: zero styles. Browser defaults only. */
+/* hello-miniapp —— 最小可运行样例，但"最小"不等于"零"。
+ *
+ * 之前这里是 `/* Phase 0: zero styles. Browser defaults only. *\/`，按钮落到
+ * 浏览器默认样式：46×21。这正是 render 探针报出来的那一类命中目标问题 ——
+ * 默认样式不是不能过审，是它连 32px 的可点高度都不到，而 playbook §七.6 把
+ * "命中目标 ≥ 32×32" 写成了硬要求。这个文件存在的意义是给作者看**结构**，
+ * 结构照��没变，只是补了一层最小可用的样式，免得样例本身违反它要示范的规矩。
+ */
+
+:root {
+  color-scheme: light dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--hamuna-bg-primary, #ffffff);
+  color: var(--hamuna-text-primary, #1c1612);
+  font-family: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+}
+
+#hello-btn {
+  /* 36px：playbook §七.6 的主操作按钮下限，比 32px 的通用命中目标再高一档 */
+  min-height: 36px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--hamuna-radius-sm, 6px);
+  background: var(--hamuna-accent, #7b8f6b);
+  color: var(--hamuna-text-on-primary, #050b14);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#hello-btn:hover {
+  background: var(--hamuna-accent-hover, #6d8060);
+}
+
+#hello-btn:focus-visible {
+  outline: 2px solid var(--hamuna-focus-border, #7b8f6b);
+  outline-offset: 2px;
+}
+
+#hello-dialog {
+  padding: 24px;
+  border: 1px solid var(--hamuna-border, rgba(0, 0, 0, 0.12));
+  border-radius: var(--hamuna-radius-md, 10px);
+  background: var(--hamuna-bg-elevated, #ffffff);
+  color: var(--hamuna-text-primary, #1c1612);
+}
+
+#hello-dialog::backdrop {
+  background: var(--hamuna-overlay-scrim, rgba(0, 0, 0, 0.56));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #hello-btn {
+    transition: none;
+  }
+}

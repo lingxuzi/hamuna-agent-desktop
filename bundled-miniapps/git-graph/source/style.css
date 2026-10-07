@@ -76,7 +76,7 @@ body {
 
   --gg-accent: var(--hamuna-accent, #7b8f6b);
   --gg-accent-hover: var(--hamuna-accent-hover, #6d8060);
-  --gg-accent-text: var(--hamuna-text-on-primary, #ffffff);
+  --gg-accent-text: var(--hamuna-text-on-primary, #050b14);
   --gg-error: var(--hamuna-error, #b3261e);
 
   /* 派生层：全文件只在 :root 声明一次，下面一律引用别名 */

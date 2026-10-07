@@ -5,6 +5,7 @@
 
 import { apiGetJson, apiPostJson } from '@/api/apiFetch';
 import type {
+  MiniAppAppearance,
   MiniAppDependency,
   MiniAppI18n,
   MiniAppPermissions,
@@ -44,6 +45,14 @@ export interface MiniAppMarketplaceItem {
    * the sole source of CSP widening. Absent = no CDN at all.
    */
   dependencies?: MiniAppDependency[];
+  /**
+   * `meta.json::appearance`. Only `mode: 'bespoke'` changes anything: the host
+   * injects the author's palette into the contract slots rather than its own
+   * theme, so an app whose palette *is* its content (a night-sky table, a brand
+   * dashboard) keeps that identity instead of being re-colored by the host.
+   * Absent = follow the host theme, which is the pre-existing behavior.
+   */
+  appearance?: MiniAppAppearance;
 }
 
 export interface MarketplaceListResponse {

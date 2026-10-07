@@ -125,6 +125,7 @@ export default function MiniAppSceneTab({ tab, isActive, onBubbleClaim }: MiniAp
       // 缺省即无授权，所有能力调用 fail-closed。
       permissions={payload.permissions}
       dependencies={payload.dependencies}
+      appearance={payload.appearance}
       env={runtimeEnv}
       isActive={isActive}
       srcDoc={srcDoc}

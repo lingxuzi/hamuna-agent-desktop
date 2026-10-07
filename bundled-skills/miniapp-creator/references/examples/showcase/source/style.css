@@ -9,24 +9,30 @@
  * ===================== */
 
 /*
- * ⚠️ 自建色板 ≠ 放弃 token 契约。这里仍然从宿主派生**底色与文字**
- *（否则深浅两套各写一遍），只把强调色换成自选的。这跟"硬编码整套颜色"是两件事：
- * 换外观时只有强调色需要人工判断，底和字仍然自动跟随。
+ * ⚠️ 自建色板 ≠ 放弃 token 契约。这里**变量名一个都没换** —— 仍然是那 43 个
+ * `--hamuna-*`，仍然是 `var()` + fallback。变的只是宿主往槽位里填什么：
+ *
+ *   meta.json 声明 `appearance.mode: "bespoke"` + 浅/深两套调色板，
+ *   宿主注入时就用作者声明的颜色填契约槽位，而不是自己的主题色。
+ *
+ * 这么做的理由：调色板就是这个应用的内容（莓果 + 奶油），但"用宿主 accent 画
+ * 玫瑰金"会让它在浅色主题下变成橄榄绿 —— 设计与契约直接对撞。以前只有两条
+ * 出路：要么交出辨识度，要么硬编码整套颜色（连审计都过不了，因为颜色不在
+ * 任何声明里）。现在有第三条：把颜色**声明**出来，让它进 review、进 diff。
+ *
+ * 下方的 `[data-appearance]` 两块只为**导出成独立网页**保留 —— 那种情况下没有
+ * 宿主替你填槽位，只能靠 fallback 自己分深浅。
  */
 :root {
-  --sc-rose: #6d2e46;
-  --sc-rose-soft: #a26769;
-  --sc-cream: #ece2d0;
-
   --sc-bg: var(--hamuna-bg-primary, #faf6ef);
   --sc-text: var(--hamuna-text-primary, #241a1c);
   --sc-soft: var(--hamuna-text-secondary, #5c4a4e);
   --sc-muted: var(--hamuna-text-muted, #8a757a);
-  --sc-accent: var(--sc-rose);
-  /* 自建色板就得自己管 hover。派生自 --sc-muted 而不是掺 black：掺字面量
-   * black 在深色主题下会把强调色压向纯黑，那不在调色板里。 */
-  --sc-accent-hover: color-mix(in srgb, var(--sc-rose) 86%, var(--sc-soft));
-  --sc-accent-text: var(--sc-cream);
+  --sc-accent: var(--hamuna-accent, #8a3d58);
+  --sc-accent-text: var(--hamuna-text-on-primary, #ece2d0);
+  /* 自建色板就得自己管 hover。派生自 --sc-soft 而不是掺 black：掺字面量
+   * black 在深色外观下会把强调色压向纯黑，那不在调色板里。 */
+  --sc-accent-hover: color-mix(in srgb, var(--sc-accent) 86%, var(--sc-soft));
 
   --sc-line: color-mix(in srgb, var(--sc-accent) 22%, transparent);
   --sc-wash: color-mix(in srgb, var(--sc-accent) 8%, transparent);
@@ -204,14 +210,21 @@ body {
   to { opacity: 1; transform: none; }
 }
 
-/* ── 浅色外观重蒙皮 ────────────────────────────────────────────────
- * 展示型自定义了色相，就必须同时为两种外观各调一遍 —— 深色值直接搬到浅色下
- * 几乎总是"糊"：纸面变灰、玫瑰金不够深、对比掉一档。这里只覆写该覆写的，
- * 底和字仍来自宿主 token。
+/* ── 无宿主时的深浅两套（导出成独立网页才走这里）────────────────────
+ * 宿主在的时候，上面 `:root` 里的 `--hamuna-*` 已经由 meta.json 的
+ * `appearance.palette` / `palette_dark` 填好了，这两块不参与。
+ *
+ * 深色下 secondary / muted 必须另给一套：沿用浅色的 #5c4a4e 配 #16110f 的
+ * 底，对比度不到 3:1，正文直接糊掉 —— 这正是"深色值直接搬到浅色下"反过来
+ * 也成立的那一半。
  * ------------------------------------------------------------------ */
 [data-appearance='light'] {
-  --sc-accent: #8a3d58;
-  --sc-rose: #8a3d58;
+  --sc-bg: var(--hamuna-bg-primary, #faf6ef);
+  --sc-text: var(--hamuna-text-primary, #241a1c);
+  --sc-soft: var(--hamuna-text-secondary, #5c4a4e);
+  --sc-muted: var(--hamuna-text-muted, #8a757a);
+  --sc-accent: var(--hamuna-accent, #8a3d58);
+  --sc-accent-text: var(--hamuna-text-on-primary, #ece2d0);
   --sc-line: color-mix(in srgb, var(--sc-accent) 26%, transparent);
   --sc-wash: color-mix(in srgb, var(--sc-accent) 10%, transparent);
   --sc-glow: 0 18px 44px -24px color-mix(in srgb, var(--sc-accent) 40%, transparent);
@@ -220,8 +233,10 @@ body {
 [data-appearance='dark'] {
   --sc-bg: var(--hamuna-bg-primary, #16110f);
   --sc-text: var(--hamuna-text-primary, #f6efe6);
-  --sc-accent: #d9a0b4;
-  --sc-accent-text: #2a1620;
+  --sc-soft: var(--hamuna-text-secondary, #c9b6b8);
+  --sc-muted: var(--hamuna-text-muted, #a89094);
+  --sc-accent: var(--hamuna-accent, #d9a0b4);
+  --sc-accent-text: var(--hamuna-text-on-primary, #2a1620);
   --sc-line: color-mix(in srgb, var(--sc-accent) 30%, transparent);
   --sc-wash: color-mix(in srgb, var(--sc-accent) 12%, transparent);
   --sc-glow: 0 18px 48px -20px color-mix(in srgb, var(--sc-accent) 45%, transparent);

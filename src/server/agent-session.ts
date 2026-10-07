@@ -28,8 +28,10 @@ import { resolveEffectiveResumeAt } from './utils/rewind-anchor';
 import { buildForkUuidRemap, remapStoredSdkUuids } from './utils/fork-remap';
 import {
   decideInFlightCancelSettlement,
+  shouldDropInFlightAfterLateInterruptReceipt,
   terminalEventMatchesInFlight,
   type InFlightAsyncCancelResult,
+  type InterruptReceipt,
 } from './utils/inflight-terminal';
 import { shouldBlockToolInPlanMode, planModeDenyMessage, isPlanModeInEffect, PLAN_MODE_READONLY_TOOLS, PLAN_MODE_HOST_INTERACTION_TOOLS, applyPermissionModeSelection, computePlanExitState, computeRestoredPlanState } from './utils/plan-mode-gate';
 import { decideMiniAppTool, loadMiniAppGrantsForApp } from './miniapp-permission-gate';
@@ -295,6 +297,7 @@ import {
   rescuePendingMidTurnToMessageFront,
   setAwaitingAssistantStartAckQueueId,
   setCommittingTurnAdmissionQueueId,
+  getForceSurfaceInFlightId,
   setForceSurfaceInFlightId,
   setForceTurnBoundaryQueueId,
   setInFlightQueueItem,
@@ -785,6 +788,9 @@ async function awaitSessionTermination(timeoutMs = 10_000, label = ''): Promise<
 
 let isInterruptingResponse = false;
 let isStreamingMessage = false;
+// UUIDs the SDK reported as still queued after the interrupt in flight
+// (`interrupt_receipt_v1`). null = no receipt yet, or a CLI too old to send one.
+let interruptStillQueued: ReadonlySet<string> | null = null;
 // Every `system` subtype defined in SDK 0.3.201 (sdk.d.ts) — handled here or
 // deliberately untouched. A subtype outside this set means a NEWER SDK started
 // emitting a message kind we have never seen; the loop logs it once per
@@ -931,6 +937,30 @@ async function cancelSdkAsyncMessage(queueId: string): Promise<InFlightAsyncCanc
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+}
+
+/**
+ * Settle an in-flight queue item the SDK has confirmed cancelled: clear the
+ * local slot, retire the pill, and let the next queued item run.
+ * Returns false when the SDK did not confirm, leaving the item untouched.
+ */
+async function settleInFlightQueueItemCancelled(
+  queueId: string,
+  cancelResult: InFlightAsyncCancelResult,
+): Promise<boolean> {
+  const settlement = decideInFlightCancelSettlement(cancelResult);
+  if (!settlement.cancelled) return false;
+  const sourceItem = getCurrentTurnSourceItem();
+  if (sourceItem?.id === queueId) await notifyQueuedTurnStopped(sourceItem);
+  if (settlement.removePendingRequest) removePendingOutputOwnerByQueueId(queueId);
+  if (settlement.clearSlot) {
+    clearInFlightSlot();
+    applyDeferredRestartIfNeeded();
+  }
+  if (settlement.broadcastCancelled) broadcast('queue:cancelled', { queueId });
+  console.log(`[agent] In-flight queue item ${queueId} cancelled by SDK (${cancelResult})`);
+  if (settlement.promoteNext) schedulePostTerminalQueueDrain('stopped');
+  return true;
 }
 
 // ===== Desktop → IM mirror state (PRD 0.2.14 Phase C) =====
@@ -6807,6 +6837,7 @@ const builtinTurnLifecycle = createBuiltinTurnLifecycle({
   terminalEventAppliesToCurrentInFlight,
   dropInFlightQueueItem,
   preserveInFlightAfterTerminalBoundary,
+  didInFlightSurviveInterrupt,
   surfaceInFlightQueueItem,
   schedulePostTerminalQueueDrain,
   endTurnAbort,
@@ -9490,22 +9521,65 @@ export async function interruptCurrentResponse(reason: CancelReason = 'user'): P
   isInterruptingResponse = true;
   postInterruptTurnEndOutcome = null;
   postInterruptTurnEndResolve = null;
+  const interruptTargetQueueId = getInFlightQueueId();
+  // Read the force-send intent NOW: surfacing the forced item clears this flag,
+  // so a later read would misread a force interrupt as a plain Stop and cancel
+  // a message the user explicitly asked to run.
+  const isForceForTarget = getForceSurfaceInFlightId() !== null
+    && getForceSurfaceInFlightId() === interruptTargetQueueId;
+  let receipt: InterruptReceipt | undefined;
+  interruptStillQueued = null;
   try {
     // Step 1: Try graceful interrupt (5 seconds).
     // interrupt() is cooperative — the SDK subprocess must be responsive to process it.
     // If a MCP tool is hung (e.g., Playwright screenshot on heavy page), the subprocess
     // may be blocked on I/O and unable to handle the interrupt signal.
     const interruptPromise = lifecycleState.query.interrupt();
-    const timeoutPromise = new Promise<void>((_, reject) => {
+    const timeoutPromise = new Promise<InterruptReceipt | undefined>((_, reject) => {
       setTimeout(() => reject(new Error('Interrupt timeout')), 5000);
     });
 
     let interrupted = false;
     try {
-      await Promise.race([interruptPromise, timeoutPromise]);
+      // The resolved value is the interrupt_receipt_v1 payload: the UUIDs the
+      // runtime kept queued. Discarding it is what let handleMessageComplete
+      // drop a mid-turn message the SDK was about to answer.
+      receipt = await Promise.race([interruptPromise, timeoutPromise]);
       interrupted = true;
+      if (receipt?.still_queued) {
+        interruptStillQueued = new Set(receipt.still_queued);
+        console.log(`[agent] Interrupt receipt: stillQueued=${interruptStillQueued.size}`);
+      } else {
+        console.log('[agent] Interrupt receipt unavailable (older CLI capability)');
+      }
     } catch (error) {
       console.error('[agent] Interrupt failed or timed out (5s):', error);
+    }
+
+    // Stop means stop: the queued message must not outlive it. `Query.interrupt()`
+    // hard-codes `{subtype:'interrupt'}` — cancel_queued is unreachable — so the
+    // SDK's documented per-uuid path is to follow up with cancel_async_message for
+    // whatever the receipt says survived. Force-send is excluded: that item must run.
+    if (interrupted && interruptTargetQueueId !== null && !isForceForTarget) {
+      const cancelResult = await cancelSdkAsyncMessage(interruptTargetQueueId);
+      if (await settleInFlightQueueItemCancelled(interruptTargetQueueId, cancelResult)) {
+        if (!hasQueuedOrInFlightWork() && !isTurnInFlight()) setSessionState('idle');
+      } else {
+        console.warn(`[agent] Stop could not cancel in-flight queue item ${interruptTargetQueueId} (${cancelResult}) — left queued`);
+      }
+    }
+
+    // The interrupted turn's `result` can land before the receipt does. In that
+    // order the result handler had to preserve the item; now that the receipt
+    // is here, drop it if the runtime says this UUID did not survive.
+    if (interrupted && receipt?.still_queued && shouldDropInFlightAfterLateInterruptReceipt({
+      postInterruptOutcome: postInterruptTurnEndOutcome,
+      interruptTargetQueueId: interruptTargetQueueId,
+      currentQueueId: getInFlightQueueId(),
+      stillQueued: new Set(receipt.still_queued),
+    })) {
+      dropInFlightQueueItem('interrupt receipt did not list this queued message', 'cancelled');
+      promoteNextFromPending();
     }
 
     // Step 2: If interrupt failed, force-close immediately.
@@ -9577,7 +9651,18 @@ export async function interruptCurrentResponse(reason: CancelReason = 'user'): P
     setInterruptingInFlightQueueId(null);
     postInterruptTurnEndResolve = null;
     postInterruptTurnEndOutcome = null;
+    interruptStillQueued = null;
   }
+}
+
+/**
+ * Whether the in-flight queued item survived the interrupt currently in flight.
+ * `null` means unknown — the receipt has not landed yet, or the CLI predates
+ * `interrupt_receipt_v1` — and callers must preserve rather than guess.
+ */
+function didInFlightSurviveInterrupt(queueId: string): boolean | null {
+  if (!interruptStillQueued) return null;
+  return interruptStillQueued.has(queueId);
 }
 
 /**
@@ -9634,18 +9719,8 @@ export async function cancelImRequest(
   if (getInFlightMetadata()?.requestId === requestId && getInFlightQueueId() !== null) {
     const queueId = getInFlightQueueId()!;
     const cancelResult = await cancelSdkAsyncMessage(queueId);
-    const settlement = decideInFlightCancelSettlement(cancelResult);
-    if (settlement.cancelled) {
-      const sourceItem = getCurrentTurnSourceItem();
-      if (sourceItem?.id === queueId) await notifyQueuedTurnStopped(sourceItem);
-      if (settlement.removePendingRequest) removePendingOutputOwnerByQueueId(queueId);
-      if (settlement.clearSlot) {
-        clearInFlightSlot();
-        applyDeferredRestartIfNeeded();
-      }
-      if (settlement.broadcastCancelled) broadcast('queue:cancelled', { queueId });
+    if (await settleInFlightQueueItemCancelled(queueId, cancelResult)) {
       console.log(`[agent] cancelImRequest requestId=${requestId} mode=in-flight-sdk-queue`);
-      if (settlement.promoteNext) schedulePostTerminalQueueDrain('stopped');
       if (!hasQueuedOrInFlightWork() && !isTurnInFlight()) {
         setSessionState('idle');
       }

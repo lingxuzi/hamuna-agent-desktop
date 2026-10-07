@@ -134,33 +134,12 @@
     return `req-${Date.now()}-${nextId++}`;
   }
 
+  // `window.app` is injected by the host before this script runs. It owns the
+  // nonce and request/response pairing, replacing the hand-rolled protocol that
+  // previously dropped calls issued before `worker.ready` arrived.
   function workerCall(method, params) {
-    const nonce = window.__workerNonce;
-    const id = mintId();
-    const msg = {
-      kind: 'worker.call',
-      nonce,
-      id,
-      payload: { method, params, appId },
-    };
-    return new Promise((resolve, reject) => {
-      const onMessage = (event) => {
-        const data = event.data;
-        if (!data || data.kind !== 'worker.result' || data.id !== id) return;
-        window.removeEventListener('message', onMessage);
-        if (data.ok) resolve(data.result);
-        else reject(new Error(data.error?.message || 'worker call failed'));
-      };
-      window.addEventListener('message', onMessage);
-      window.parent.postMessage(msg, '*');
-    });
+    return app.call(method, params);
   }
-
-  window.addEventListener('message', (event) => {
-    const data = event.data;
-    if (!data || data.kind !== 'worker.ready') return;
-    window.__workerNonce = data.nonce;
-  });
 
   // The worker returns `rel` paths relative to the root it resolved, so the UI
   // never has to reconstruct them from the (possibly symlinked) input string.

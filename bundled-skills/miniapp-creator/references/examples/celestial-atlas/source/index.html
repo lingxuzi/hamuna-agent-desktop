@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Celestial Atlas</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      骨架刻意只有三块：星表（密、安静）、星图（唯一的焦点）、数据面板（密、安静）。
+      视觉权重是刻意不等分的 —— 图占最大面积和最高对比度，两侧只是索引和读数。
+      换句话说：换一个人来看，能说出这个应用是干什么的。
+    -->
+    <main class="at-app">
+      <header class="at-head">
+        <div class="at-brand">
+          <p class="at-kicker" data-i18n="app.kicker"></p>
+          <h1 class="at-title" data-i18n="app.title"></h1>
+          <p class="at-sub" id="at-sub"></p>
+        </div>
+        <p class="at-lat" id="at-lat"></p>
+      </header>
+
+      <div class="at-grid">
+        <!-- ── 左：星表 ──────────────────────────────────────────────── -->
+        <section class="at-rail" aria-labelledby="at-rail-title">
+          <div class="at-rail__head">
+            <h2 class="at-h2" id="at-rail-title" data-i18n="catalog.title"></h2>
+            <span class="at-tally" id="at-tally"></span>
+          </div>
+
+          <!-- 类型筛选用分段控件而不是下拉：一组互斥选项必须看起来成组，
+               而下拉会把它们藏进一次点击。 -->
+          <div class="at-seg" role="group" id="at-seg" aria-label="filter">
+            <button class="at-seg__btn" type="button" data-kind="all" aria-pressed="true"></button>
+            <button class="at-seg__btn" type="button" data-kind="star" aria-pressed="false"></button>
+            <button class="at-seg__btn" type="button" data-kind="cluster" aria-pressed="false"></button>
+            <button class="at-seg__btn" type="button" data-kind="nebula" aria-pressed="false"></button>
+            <button class="at-seg__btn" type="button" data-kind="galaxy" aria-pressed="false"></button>
+          </div>
+
+          <ul class="at-list" id="at-list"></ul>
+
+          <p class="at-empty" id="at-empty" hidden>
+            <span class="at-empty__title" data-i18n="state.empty"></span>
+            <span class="at-empty__hint" data-i18n="state.empty.hint"></span>
+          </p>
+        </section>
+
+        <!-- ── 中：星图（图版）──────────────────────────────────────── -->
+        <section class="at-plate">
+          <div class="at-frame" id="at-frame" tabindex="0" role="group" aria-label="chart">
+            <svg class="at-svg" id="at-svg" role="img"></svg>
+            <!-- 准星读数用 HTML 定位：它要真的圆角和描边，在 SVG 里只能靠 filter 硬凑。
+                 位置只写 transform，left/top 一个都不碰（热路径不产生重排）。 -->
+            <div class="at-read" id="at-read" hidden aria-hidden="true">
+              <span class="at-read__ra" id="at-read-ra"></span>
+              <span class="at-read__dec" id="at-read-dec"></span>
+            </div>
+          </div>
+
+          <!-- 图版题注：图鉴这一行的名字就印在这儿，而不是塞进数据面板。
+               衬线大标题 + 等宽编号，是"印出来的星图"而不是"仪表盘"的读法。 -->
+          <figcaption class="at-caption">
+            <p class="at-caption__line">
+              <span class="at-plate-no" id="at-plate-no"></span>
+              <span class="at-caption__name" id="at-name"></span>
+            </p>
+            <p class="at-caption__meta" id="at-caption-meta"></p>
+            <p class="at-caption__hint" data-i18n="plate.hint"></p>
+          </figcaption>
+        </section>
+
+        <!-- ── 右：数据面板 ─────────────────────────────────────────── -->
+        <aside class="at-panel" aria-labelledby="at-data-title">
+          <div class="at-chips" id="at-chips"></div>
+
+          <h2 class="at-h2 at-panel__title" id="at-data-title" data-i18n="panel.data"></h2>
+          <dl class="at-data" id="at-data"></dl>
+
+          <h2 class="at-h2 at-panel__title" data-i18n="panel.observe"></h2>
+          <p class="at-note" id="at-note"></p>
+
+          <div class="at-log">
+            <div class="at-log__head">
+              <h2 class="at-h2" data-i18n="panel.log"></h2>
+              <span class="at-tally" id="at-log-tally"></span>
+            </div>
+            <button class="at-btn at-btn--primary" type="button" id="at-toggle"></button>
+            <p class="at-log__hint" data-i18n="log.hint"></p>
+            <ul class="at-log__list" id="at-log-list"></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <div class="at-toasts" id="at-toasts" role="status" aria-live="polite"></div>
+    <script src="ui.js"></script>
+  </body>
+</html>

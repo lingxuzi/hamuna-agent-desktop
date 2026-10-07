@@ -1,0 +1,540 @@
+/* === Design System ===
+ * Theme: 暗房里的光绘台。冷静、密集、工具感 —— 用户是在"调参数看结果"，
+ *        不是在欣赏作品。所以画布占主导（60%+ 面积），控件只占一条底栏。
+ *        深浅两套外观都成立：颜色全部来自 --hamuna-*，canvas 在运行时读同一批 token。
+ * Palette:
+ *   - dominant: var(--hamuna-bg-primary) / var(--hamuna-text-primary)
+ *   - supporting: var(--hamuna-bg-elevated), var(--hamuna-bg-inset),
+ *                 var(--hamuna-border-subtle)
+ *   - accent: var(--hamuna-accent)   // 只给主 CTA 与选中态。画布内部的强调色
+ *                                     // 是**图案内容**，不计入界面 accent 预算。
+ * Typography:
+ *   - heading: 600, 20px
+ *   - section: 600, 14px
+ *   - body:    400, 14px          // 中文正文 14px 起步，不照搬 13px 的拉丁经验
+ *   - caption: 400, 12px, var(--hamuna-text-muted)
+ *   - numeric: var(--hamuna-font-mono) + tabular-nums   // 参数值全是数字，必须等宽
+ * Radius: var(--hamuna-radius-md) (面板 / 画布) / var(--hamuna-radius-sm) (输入、按钮)
+ * Motif: 每个参数行右端一条 **读数 + 刻度**（等宽数字 + 一条随值伸缩的细条）。
+ *        同一个 motif 同时用在 seed 的进度条和两个 range 的读数上 ——
+ *        全应用只有这一个"参数长什么样"的表达，canvas 是它的放大版。
+ * Elevation: 两档阴影 —— 画布一档（浮在底上）、面板一档（贴在底上），
+ *        全部派生自 --hamuna-shadow-*，不硬编码 rgba。
+ * Motion: 三档时长 + 两条缓动，见 :root 的 Motion 段。
+ *        本应用**不用** CSS 动画做画布动效 —— 画布是位图，它的动画在
+ *        requestAnimationFrame 里（见 ui.js）。CSS 只负责控件的入场与悬停反馈。
+ * ===================== */
+
+/* --- 宿主 tokens → 语义别名 ------------------------------------------------
+ * --hamuna-* 只在这一个块里出现。往下全部用 --cl-*，
+ * 换配色只改这一段，下游一行动不动。
+ * 每个 var() 都带 fallback：本目录可以被独立导出成普通网页，那时没有宿主。
+ * -------------------------------------------------------------------- */
+:root {
+  /* 表面 */
+  --cl-bg: var(--hamuna-bg-primary, #ffffff);
+  --cl-surface: var(--hamuna-bg-elevated, #f5f5f5);
+  --cl-inset: var(--hamuna-bg-inset, #ececec);
+
+  /* 描边：默认 subtle，强调 primary，输入框走 field 专用 token */
+  --cl-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
+  --cl-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
+  --cl-field-line: var(--hamuna-field-border, rgba(0, 0, 0, 0.16));
+  --cl-field-line-focus: var(--hamuna-field-border-focus, #7b8f6b);
+
+  /* 文字 */
+  --cl-text: var(--hamuna-text-primary, #1c1612);
+  --cl-soft: var(--hamuna-text-secondary, #544b42);
+  --cl-muted: var(--hamuna-text-muted, #6f6156);
+
+  /* 交互件 */
+  --cl-btn-bg: var(--hamuna-bg-button, #f0ece6);
+  --cl-btn-bg-hover: var(--hamuna-bg-button-hover, rgba(0, 0, 0, 0.06));
+  --cl-input-bg: var(--hamuna-bg-input, #e8dccf);
+  --cl-focus: var(--hamuna-focus-border, #7b8f6b);
+
+  /* 强调。hover 有专属 token，不要用 filter:brightness —— 它会把子元素一起压暗 */
+  --cl-accent: var(--hamuna-accent, #7b8f6b);
+  --cl-accent-hover: var(--hamuna-accent-hover, #6d8060);
+  --cl-accent-text: var(--hamuna-text-on-primary, #050b14);
+  --cl-accent-2: var(--hamuna-accent-secondary, #c26d3a);
+
+  /* --- 派生层 ---------------------------------------------------------------
+   * 宿主给的是平值。color-mix 只用来造宿主不可能逐个提供的中间档位：
+   * 淡底、半透明描边、彩色辉光、悬停底。纯 CSS，换主题自动跟随。
+   * 比例是刻意的：淡底 ≤10%、描边 30-45%、辉光 15-25%、悬停 ≤8%。
+   * 超过就是在往界面上泼颜色，"廉价感"多数出在这里，不是出在色相选得不好。
+   * -------------------------------------------------------------------- */
+  --cl-wash: color-mix(in srgb, var(--cl-accent) 6%, transparent);
+  --cl-wash-soft: color-mix(in srgb, var(--cl-accent) 3%, transparent);
+  /* 描边 38%：够看清选中态又不抢。中间态不要用这一档。 */
+  --cl-accent-line: color-mix(in srgb, var(--cl-accent) 38%, transparent);
+  --cl-glow: 0 0 0 3px color-mix(in srgb, var(--cl-accent) 22%, transparent);
+  --cl-hover: color-mix(in srgb, var(--cl-text) 6%, transparent);
+  --cl-hairline: color-mix(in srgb, var(--cl-text) 10%, transparent);
+
+  /* --- Motion ---------------------------------------------------------------
+   * 全应用只有这三个时长和两条曲线。动效看起来统一不是靠审美，
+   * 是因为所有引用都收敛到这几个值。改这里就等于改全局节奏。
+   * 时长从宿主派生而不是写死：各自定义 180ms 意味着小应用和宿主不是一个速度的东西。
+   * -------------------------------------------------------------------- */
+  --cl-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --cl-dur: var(--hamuna-duration-normal, 200ms);
+  --cl-dur-slow: var(--hamuna-duration-slow, 300ms);
+  /* 主曲线：快起慢收，交互响应感强又不生硬 */
+  --cl-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 入场曲线：更长的减速尾巴，让元素"落"到位而不是"停"到位 */
+  --cl-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --- Elevation -----------------------------------------------------------
+   * 阴影从宿主派生。没有这套梯度时，加层次的唯一办法是硬编码 rgba，
+   * 换主题不跟随，各猜各的就没有统一的空间感。一屏之内不超过两档。
+   * -------------------------------------------------------------------- */
+  --cl-shadow-panel: var(--hamuna-shadow-card);
+  --cl-shadow-stage: var(--hamuna-shadow-lg);
+
+  /* 字体 */
+  --cl-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --cl-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  --cl-radius: var(--hamuna-radius-md, 10px);
+  --cl-radius-sm: var(--hamuna-radius-sm, 6px);
+
+  --cl-pad: 20px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  font-family: var(--cl-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--cl-text);
+  background: var(--cl-bg);
+  /* 页面底色上两处极淡的径向光晕，让大面积纯色不死板。
+   * 两个加起来透明度不到 10%，是"质感"不是"装饰"。 */
+  background-image:
+    radial-gradient(820px 380px at 86% -14%, var(--cl-wash), transparent 62%),
+    radial-gradient(700px 340px at -10% 106%, var(--cl-wash), transparent 58%);
+  background-attachment: fixed;
+}
+
+button,
+input {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ===========================================================================
+ * 布局
+ * ======================================================================== */
+.cl-app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px var(--cl-pad) 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cl-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cl-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.cl-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--cl-muted);
+}
+
+.cl-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--cl-accent-line);
+  /* 染色 chip：极淡水洗 + 淡描边。面积小、对比低，两三个就不再是一张灰网格。 */
+  background: var(--cl-wash-soft);
+  font-family: var(--cl-mono);
+  font-size: 11px;
+  color: var(--cl-soft);
+  transition:
+    background-color var(--cl-dur) var(--cl-ease),
+    color var(--cl-dur) var(--cl-ease);
+}
+
+/* ===========================================================================
+ * 画布 —— 界面的主角
+ *
+ * 这里只管 **CSS 盒子**：宽度撑满、锁定 1:1、给一个凹陷底色。
+ * canvas 的 width/height 属性是**背板**，由 ui.js 按 devicePixelRatio 算出来。
+ * 两件事混在一起（只写 CSS width、或者只写 canvas.width）都会让画面在
+ * 高 DPI 屏上糊掉 —— 详见 ui.js 的 resizeCanvas()。
+ * ======================================================================== */
+.cl-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--cl-radius);
+  border: 1px solid var(--cl-line);
+  /* 首帧之前画布是空的，给个底色，否则它是一块比页面更白的洞。
+   * 注意：JS 每帧都会用同一批 token 铺满，这里只兜住"还没画"的那一瞬。 */
+  background: var(--cl-inset);
+  box-shadow: var(--cl-shadow-stage);
+}
+
+/* ===========================================================================
+ * 参数面板
+ * ======================================================================== */
+.cl-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px var(--cl-pad);
+  border-radius: var(--cl-radius);
+  border: 1px solid var(--cl-line);
+  background: var(--cl-surface);
+  box-shadow: var(--cl-shadow-panel);
+}
+
+.cl-field {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.cl-label {
+  font-size: 12px;
+  color: var(--cl-muted);
+  white-space: nowrap;
+}
+
+.cl-field__control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* --- 读数：motif 的右半边 ------------------------------------------------
+ * 参数是数字，所以读数一律等宽 + tabular —— 否则拖动滑块时数字宽度在跳，
+ * 整行看起来在抽搐。单位用 12px caption，混排才对齐。
+ * -------------------------------------------------------------------- */
+.cl-readout {
+  flex: none;
+  min-width: 48px;
+  text-align: right;
+  font-family: var(--cl-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--cl-text);
+}
+
+/* seed 的刻度条：长度 = 种子在量程里的位置。motif 的左半边。 */
+.cl-meter {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cl-inset);
+  overflow: hidden;
+}
+
+.cl-meter > i {
+  display: block;
+  height: 100%;
+  width: var(--cl-fill, 0%);
+  border-radius: 999px;
+  background: var(--cl-accent);
+  /* 只过渡宽度这一条。过渡 all 会把 box-shadow 之类一起带上。 */
+  transition: width var(--cl-dur) var(--cl-ease);
+}
+
+/* --- 输入件 --------------------------------------------------------------- */
+.cl-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--cl-radius-sm);
+  border: 1px solid var(--cl-field-line);
+  background: var(--cl-input-bg);
+  font-family: var(--cl-mono);
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color var(--cl-dur-fast) var(--cl-ease),
+    box-shadow var(--cl-dur-fast) var(--cl-ease);
+}
+
+.cl-input:focus {
+  outline: none;
+  border-color: var(--cl-field-line-focus);
+  box-shadow: var(--cl-glow);
+}
+
+/* range：原生外观不可主题化，深浅两套外观下各是一副陌生面孔，
+ * 所以轨道和滑块都用 -webkit- 伪元素自己画。 */
+.cl-range {
+  flex: 1;
+  min-width: 0;
+  height: 32px; /* 命中目标 32px：命中的是整条 32px 高的轨道，不是滑块本身 */
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.cl-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cl-inset);
+}
+
+.cl-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--cl-bg);
+  background: var(--cl-accent);
+  transition: background-color var(--cl-dur-fast) var(--cl-ease);
+}
+
+.cl-range:hover::-webkit-slider-thumb {
+  background: var(--cl-accent-hover);
+}
+
+.cl-range:focus-visible {
+  outline: 2px solid var(--cl-focus);
+  outline-offset: 2px;
+  border-radius: var(--cl-radius-sm);
+}
+
+/* --- 分段控件 -------------------------------------------------------------
+ * 互斥选项必须看起来成组：一个共享外框 + 内部细分隔线，
+ * 而不是三个各自独立的按钮悬在面板里。
+ * -------------------------------------------------------------------- */
+.cl-segment {
+  display: inline-flex;
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--cl-line);
+  border-radius: var(--cl-radius-sm);
+  overflow: hidden;
+}
+
+.cl-seg {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--cl-soft);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    background-color var(--cl-dur-fast) var(--cl-ease),
+    color var(--cl-dur-fast) var(--cl-ease);
+}
+
+.cl-seg + .cl-seg {
+  border-left: 1px solid var(--cl-line);
+}
+
+.cl-seg:hover {
+  background: var(--cl-hover);
+}
+
+.cl-seg:focus-visible {
+  outline: 2px solid var(--cl-focus);
+  outline-offset: -2px;
+}
+
+.cl-seg[aria-pressed='true'] {
+  /* 选中：淡底 + 强调色文字。不整片刷强调色 —— 那会让"选中"失去分量。 */
+  background: var(--cl-wash);
+  color: var(--cl-text);
+  font-weight: 600;
+}
+
+/* --- 按钮 ----------------------------------------------------------------- */
+.cl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.cl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--cl-radius-sm);
+  border: 1px solid var(--cl-line-strong);
+  background: var(--cl-btn-bg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--cl-dur-fast) var(--cl-ease),
+    border-color var(--cl-dur-fast) var(--cl-ease),
+    transform var(--cl-dur-fast) var(--cl-ease);
+}
+
+.cl-btn:hover {
+  background: var(--cl-btn-bg-hover);
+}
+
+/* 按下用 scale(.96) 而不是 scale(0) —— 房规第 2 条：
+ * scale(0) 会让元素瞬间塌成 0 尺寸并丢掉边框，动画起点不可见。 */
+.cl-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+.cl-btn:focus-visible {
+  outline: 2px solid var(--cl-focus);
+  outline-offset: 2px;
+}
+
+.cl-btn--primary {
+  background: var(--cl-accent);
+  border-color: var(--cl-accent);
+  color: var(--cl-accent-text);
+}
+
+.cl-btn--primary:hover {
+  background: var(--cl-accent-hover);
+  border-color: var(--cl-accent-hover);
+}
+
+.cl-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--cl-soft);
+}
+
+.cl-btn--ghost:hover {
+  background: var(--cl-hover);
+  color: var(--cl-text);
+}
+
+/* 状态行：常驻一行，不跳版。min-height 预留一行文字的高度，
+ * 否则它从"有字"变成"没字"时下面的留白会跟着塌一下。 */
+.cl-status {
+  margin: 2px 0 0;
+  min-height: 1.4em;
+  font-size: 12px;
+  color: var(--cl-muted);
+}
+
+/* ===========================================================================
+ * 入场
+ *
+ * 画布和面板各淡入一次，24ms 的 stagger 由 ui.js 按 --cl-stagger-i 写入。
+ * 上限 2 —— 这个界面只有两个区块，stagger 再多就是装饰。
+ * ======================================================================== */
+@keyframes cl-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.cl-enter {
+  animation: cl-enter var(--cl-dur-slow) var(--cl-ease-out) backwards;
+  animation-delay: calc(var(--cl-stagger-i, 0) * 24ms);
+}
+
+/* ===========================================================================
+ * 窄容器
+ *
+ * MiniApp 嵌在侧栏里宽度可能只有 320px。这不是边缘情况，是常态。
+ * ======================================================================== */
+@media (max-width: 480px) {
+  .cl-app {
+    padding: 20px 16px 32px;
+    gap: 12px;
+  }
+
+  .cl-title {
+    font-size: 18px;
+  }
+
+  /* 参数行改成上下堆叠：96px 的标签列在 320px 宽里会把控件挤没。 */
+  .cl-field {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .cl-btn--primary {
+    width: 100%;
+  }
+}
+
+/* ===========================================================================
+ * 动效降级 —— 不是可选项
+ *
+ * 前庭功能障碍用户对大面积位移和循环动画会实际产生眩晕。所有 CSS 动效
+ * 在这一处统一关闭，比在每个动画定义旁边写一遍更可靠。
+ *
+ * 注意这只覆盖 **CSS**。画布的动画在 requestAnimationFrame 里，
+ * JS 必须自己读 matchMedia('(prefers-reduced-motion: reduce)') 并停掉循环 ——
+ * 见 ui.js 的 prefersStill()。
+ *
+ * 保留 color / background / opacity 的过渡：这些不产生位移。
+ * ======================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

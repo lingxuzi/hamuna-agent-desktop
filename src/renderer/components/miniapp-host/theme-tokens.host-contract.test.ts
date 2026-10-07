@@ -27,6 +27,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildThemeTokenCss,
+  bespokeOverrides,
   FALLBACK_BY_KEY,
   HOST_TO_TOKEN,
   TOKEN_VAR_NAMES,
@@ -255,5 +256,75 @@ function tokensWith(overrides: Partial<MiniAppThemeTokens> = {}): MiniAppThemeTo
         expect(css, `--hamuna-duration-${tier} is missing`).toContain(`--hamuna-duration-${tier}:`);
       }
     });
+  });
+});
+
+/**
+ * `meta.json::appearance` — the sanctioned way to ship a palette that is the
+ * product (a night-sky table, a brand dashboard).
+ *
+ * The failure this exists to prevent: an author who needs its own colours used
+ * to have exactly two options — give up its identity and render the host accent,
+ * or hardcode every colour and lose the token contract entirely. The first
+ * produced things like a "night" tarot app whose starfield was drawn with
+ * `--hamuna-text-muted` and vanished on a light theme. The second is now an
+ * audit failure, which is the point.
+ *
+ * So the contract has to hold on one non-obvious invariant: bespoke changes the
+ * values, never the names. If an override could rename or drop a variable, the
+ * author's `var()` fallbacks would stop matching reality and the standalone
+ * export would drift from the hosted render.
+ */
+describe('bespoke appearance overrides', () => {
+  /** Same idea as `tokensWith` above, which is scoped to its own describe. */
+  function fullTokens(): MiniAppThemeTokens {
+    const base: Record<string, string> = {};
+    for (const key of Object.keys(HOST_TO_TOKEN)) base[key] = '#123456';
+    return base as MiniAppThemeTokens;
+  }
+
+  it('returns nothing for host mode, so the default path is untouched', () => {
+    expect(bespokeOverrides(undefined, 'dark')).toBeUndefined();
+    expect(bespokeOverrides({ mode: 'host' }, 'dark')).toBeUndefined();
+  });
+
+  it('picks palette_dark in dark and palette in light', () => {
+    const appearance = {
+      mode: 'bespoke' as const,
+      palette: { accent: '#8a3d58' },
+      palette_dark: { accent: '#d9a0b4' },
+    };
+    expect(bespokeOverrides(appearance, 'light')).toEqual({ '--hamuna-accent': '#8a3d58' });
+    expect(bespokeOverrides(appearance, 'dark')).toEqual({ '--hamuna-accent': '#d9a0b4' });
+  });
+
+  it('falls back to the light palette in dark when only one is declared', () => {
+    // "I only declared one palette" beats "I forgot the second and it silently
+    // went light" — the author can see what they wrote and know what they'll get.
+    const appearance = { mode: 'bespoke' as const, palette: { accent: '#8a3d58' } };
+    expect(bespokeOverrides(appearance, 'dark')).toEqual({ '--hamuna-accent': '#8a3d58' });
+  });
+
+  it('overrides the value without touching the variable name', () => {
+    const css = buildThemeTokenCss(fullTokens(), 'light', { '--hamuna-accent': '#8a3d58' });
+    expect(css).toContain('--hamuna-accent: #8a3d58;');
+    // The rest of the contract still comes from the host, so the app keeps
+    // following the theme for everything it did not override.
+    expect(css).toContain('--hamuna-bg-primary:');
+    expect(css).toMatch(/--hamuna-bg-primary: [^;]+;/);
+    expect(css).not.toMatch(/--hamuna-bg-primary: ;/);
+  });
+
+  it('escapes a hostile override so it cannot break out of the style element', () => {
+    // meta.json is a file on disk and the iframe CSP allows unsafe-inline, so
+    // this is the same trust boundary as the host-token path — a palette value
+    // has to go through the same sanitizer, not a friendlier one.
+    const css = buildThemeTokenCss(fullTokens(), 'light', {
+      '--hamuna-accent': 'red;</style><script>alert(1)</script>',
+    });
+    expect(css).not.toContain('</style><script>');
+    // The `<` is CSS-escaped rather than dropped, so the author's value still
+    // parses as one declaration. `\\3c` is the CSS escape for `<`.
+    expect(css).toContain(String.raw`\3c `);
   });
 });

@@ -1,0 +1,1037 @@
+/* ============================================================================
+ * Desk Booking — 密集表单的视觉层
+ * ============================================================================
+ *
+ * 这个样例的存在理由：已有的样例覆盖了清单、数据表、展示卡、画布、图表，
+ * **没有一个覆盖密集多段表单**。要写设置页、向导、提交并校验的工具时，
+ * 可抄的东西为零 —— 于是每次都是重新发明，而重新发明的表单十个里有八个
+ * 栽在同一批问题上：错误只靠颜色传达、校验一出现整页跳版、禁用按钮不说
+ * 为什么禁用、提交按钮在窄侧栏里滚出屏幕。
+ *
+ * 下面这份 CSS 把每一条对策都写在它发生的地方。
+ *
+ * --- Design System ---
+ * Theme: 工具型。信息密度优先，一屏能读完两段半；所有颜色跟随宿主主题，
+ *        本文件不定义任何颜色，只定义"颜色怎么用"。
+ * Palette:
+ *   dominant  : --hamuna-bg-primary 占 60-70%，是所有表面的默认底
+ *   supporting: --hamuna-bg-elevated（分段卡片）/ --hamuna-bg-inset（输入内层、
+ *               序号方块）/ --hamuna-border-subtle（默认描边）
+ *   accent    : --hamuna-accent —— **只**用于主提交按钮与被选中的 chip。
+ *               一屏之内不超过 4 处。表单是全应用最容易滥用强调色形态：
+ *               每个聚焦的输入框、每条错误、每个标签都想抢，于是谁都不突出。
+ *   semantic  : error / success 只进**字形、描边和指示器**，不 12px 正文上 ——
+ *               见下面 Error 排版那一段，那里有一组跑过对比度的数字。
+ * Typography:
+ *   heading  : 600 / 20px
+ *   section  : 600 / 14px（fieldset 的 legend）
+ *   body     : 400 / 14px   ← 中文正文 14px 起步，比拉丁排版经验大 1px
+ *   caption  : 400 / 11-12px / --hamuna-text-secondary（**不是** muted，见下）
+ *   mono     : 400 / 12px   / --hamuna-font-mono（序号、字符计数）
+ * Radius: --hamuna-radius-md（分段卡片、输入）/ --hamuna-radius-sm（chip、按钮）
+ * Motif: **编号方块 + 一条左对齐的列**。每个 fieldset 的 legend 带一个 20×20 的
+ *        等宽序号方块（inset 底 + mono 数字），三段共用同一套序号；所有字段的
+ *        标签、输入框、说明文字共享**同一条左边缘**，于是表单读起来是三段
+ *        竖直对齐的列，而不是一列宽度不一的卡片。状态不靠颜色单独表达：
+ *        错误永远是「图标 + 一句话」，成功永远是「✓ + 标题」，必填永远是
+ *        「必填」两个字。颜色是第三重信息，不是第一重。
+ * Elevation: 两档（卡片 / 浮层），全部派生自 --hamuna-shadow-*。表单是平面
+ *        形态，多一档层次就变成"卡片里套卡片"。
+ * Motion:
+ *   三档时长 + 两条缓动，见 :root 的 Motion 段。入场一律"淡入 + 上移 6px"，
+ *   反馈一律"缩放脉冲"，加载 spinner 是唯一的循环动画（降级后停）。
+ * ==========================
+ *
+ * --- 房规（照抄自 design-reference，审计口径见 scripts/audit-miniapp-style.mjs）---
+ *   1. 禁止 `transition: all` —— 永远显式列出属性。
+ *   2. 禁止 `scale(0)` —— 缩放起点用 .96 / .94。
+ *   3. @keyframes 名必须带本应用前缀（fd-）。
+ *   4. 任何 infinite 动画都必须能被 prefers-reduced-motion 关掉。
+ * ========================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Host tokens → 语义别名
+ *
+ * `--hamuna-*` 全文件只出现在这一段。下面所有规则引用的是语义别名。
+ * 换配色只改这一段，下游一行动不动。
+ *
+ * 每个 var() 都带 fallback：宿主 token 缺失时会回落到内置值，而导出成独立
+ * 网页时根本没有宿主。fallback 与 theme-tokens.ts 的 FALLBACK_TOKENS 保持一致。
+ * ------------------------------------------------------------------------ */
+:root {
+  /* 表面 */
+  --fd-bg: var(--hamuna-bg-primary, #faf6ee);
+  --fd-surface: var(--hamuna-bg-elevated, #fffcf7);
+  --fd-inset: var(--hamuna-bg-input, #e8dccf);
+  --fd-inset-flat: var(--hamuna-bg-inset, #e8dccf);
+
+  /* 描边：输入框有专属 token（--hamuna-field-border），面板用 subtle。 */
+  --fd-line: var(--hamuna-border-subtle, rgba(28, 22, 18, 0.06));
+  --fd-line-strong: var(--hamuna-border-primary, rgba(28, 22, 18, 0.18));
+  --fd-field-line: var(--hamuna-field-border, rgba(28, 22, 18, 0.07));
+  --fd-field-line-focus: var(--hamuna-field-border-focus, #1c1612);
+
+  /* 文字 */
+  --fd-text: var(--hamuna-text-primary, #1c1612);
+  --fd-text-soft: var(--hamuna-text-secondary, #2e2825);
+  --fd-text-muted: var(--hamuna-text-muted, #6f6156);
+
+  /* 交互件 */
+  --fd-btn-bg: var(--hamuna-bg-button, #e8dccf);
+  --fd-btn-bg-hover: var(--hamuna-bg-button-hover, #ddd0c2);
+  --fd-focus: var(--hamuna-focus-border, #1c1612);
+
+  /* 强调。hover 有专属 token，不要用 filter:brightness —— 它把子元素一起压暗。 */
+  --fd-accent: var(--hamuna-accent, #7b8f6b);
+  --fd-accent-hover: var(--hamuna-accent-hover, #93a883);
+  --fd-accent-text: var(--hamuna-text-on-primary, #050b14);
+
+  /* 语义色：只进状态指示，不进正文（见上面的 Palette 段） */
+  --fd-error: var(--hamuna-error, #dc2626);
+  --fd-success: var(--hamuna-success, #2d8a5e);
+
+  /* --- 派生层 ---------------------------------------------------------------
+   * 宿主给的是平值，且交互态一律给全了。**有 token 的状态用 token，不要派生** ——
+   * 派生出来的 hover 不会跟随主题切换。color-mix 留给宿主不可能逐个提供的中间
+   * 档位：淡底、半透明描边、彩色辉光。纯 CSS，换主题自动跟随。
+   *
+   * 比例是刻意的：淡底 ≤10%、描边 30-45%、辉光 15-25%、悬停 ≤8%。
+   * 表单里这些派生值的用量比列表样例大得多，因为字段多；比例一放松，
+   * 八个字段就会把页面泼成一张彩色格子纸。
+   * -------------------------------------------------------------------- */
+  --fd-wash: color-mix(in srgb, var(--fd-accent) 6%, transparent);
+  --fd-accent-line: color-mix(in srgb, var(--fd-accent) 38%, transparent);
+  --fd-glow: 0 0 0 3px color-mix(in srgb, var(--fd-accent) 20%, transparent);
+  --fd-hover: color-mix(in srgb, var(--fd-text) 6%, transparent);
+  --fd-hairline: color-mix(in srgb, var(--fd-text) 10%, transparent);
+
+  /* 错误的两档派生：外圈辉光 18%（在 15-25% 区间内），行底水洗 7%。 */
+  --fd-error-glow: 0 0 0 3px color-mix(in srgb, var(--fd-error) 18%, transparent);
+  --fd-error-wash: color-mix(in srgb, var(--fd-error) 7%, transparent);
+  --fd-success-wash: color-mix(in srgb, var(--fd-success) 8%, transparent);
+
+  /* 磨砂：半透明底 + blur 缺一不可。只有 blur 没底色，前景文字会和后面内容叠
+   * 一起；只有底色没 blur，就是一块灰玻璃。 */
+  --fd-frost-bg: color-mix(in srgb, var(--fd-bg) 82%, transparent);
+
+  /* 圆角 */
+  --fd-radius: var(--hamuna-radius-md, 10px);
+  --fd-radius-sm: var(--hamuna-radius-sm, 6px);
+  --fd-radius-lg: var(--hamuna-radius-lg, 14px);
+
+  /* 字体 */
+  --fd-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --fd-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  /* --- Motion -------------------------------------------------------------
+   * 全应用只有这三个时长和两条曲线。时长**从宿主派生**而不是自己写死 ——
+   * 各自定义 180ms 意味着小应用和宿主产品不是一个速度的东西。
+   * -------------------------------------------------------------------- */
+  --fd-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --fd-dur: var(--hamuna-duration-normal, 200ms);
+  --fd-dur-slow: var(--hamuna-duration-slow, 300ms);
+  /* 主曲线：快起慢收，交互响应感强又不生硬 */
+  --fd-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 入场曲线：更长的减速尾巴，让元素"落"到位而不是"停"到位 */
+  --fd-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --- Elevation ----------------------------------------------------------
+   * 只有两档。表单是平面形态，第三档是噪声。
+   * -------------------------------------------------------------------- */
+  --fd-shadow-card: var(--hamuna-shadow-sm);
+  --fd-shadow-overlay: var(--hamuna-shadow-lg);
+
+  /* 尺寸。表单的每一处 padding / gap 都从这里出，不散落裸值。 */
+  --fd-pad: 24px;
+  --fd-gap: 16px;
+  --fd-control-h: 36px; /* 主操作与输入都 ≥ 36px：窄侧栏里 28px 很难点中 */
+  --fd-foot-h: 18px; /* 说明行的保留高度，见 index.html 里的第 2 条 */
+}
+
+/* 宿主切换外观时重写 :root 上的 --hamuna-*，这里不需要任何 appearance 选择器。
+ * 唯一必须显式同步的是 color-scheme（原生控件 / 滚动条 / 表单默认外观），
+ * 由 ui.js 监听 app.appearanceMode 写入。 */
+
+body {
+  font-family: var(--fd-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fd-text);
+  background: var(--fd-bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ===========================================================================
+ * 版心与顶栏
+ * ======================================================================== */
+.fd-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  /* 底部留出粘性底栏的高度，否则最后一行的说明文字会被底栏盖住。 */
+  padding: 24px var(--fd-pad) 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fd-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--fd-gap);
+}
+
+.fd-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.fd-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fd-text-muted);
+}
+
+.fd-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--fd-accent-line);
+  background: var(--fd-wash);
+  font-family: var(--fd-mono);
+  font-size: 11px;
+  color: var(--fd-text-soft);
+  white-space: nowrap;
+}
+
+/* ===========================================================================
+ * 表单与分段
+ * ======================================================================== */
+.fd-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fd-panel {
+  /* fieldset 的默认 min-inline-size: min-content 会让窄容器里被内容顶出横向
+   * 滚动条 —— 它是唯一一个默认样式会导致溢出的元素。 */
+  min-inline-size: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--fd-line);
+  border-radius: var(--fd-radius);
+  background: var(--fd-surface);
+  box-shadow: var(--fd-shadow-card);
+}
+
+/* legend 是 fieldset 的一部分，默认在边框上挖个口子。这里让它退回普通块级
+ * 标题：width:100% + 去掉默认 padding，标题行就和其他内容左对齐。
+ * fieldset 自身 padding-top 也要归零，否则标题和内容之间会多出一截。 */
+.fd-panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 14px;
+  /* 标题行的等宽序号是 motif 的锚：三段共用同一套形，扫一眼就知道
+   * "一共有三步，现在在第二步"。序号用 inset 底 + 次要文字色，
+   * **不**用强调色 —— 强调色留给"你现在能按的那个按钮"。 */
+}
+
+.fd-ordinal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--fd-radius-sm);
+  background: var(--fd-inset-flat);
+  font-family: var(--fd-mono);
+  font-size: 12px;
+  color: var(--fd-text-soft);
+}
+
+.fd-panel__titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fd-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fd-text);
+}
+
+.fd-panel__hint {
+  font-size: 12px;
+  color: var(--fd-text-muted);
+}
+
+/* ===========================================================================
+ * 字段
+ *
+ * 垂直节奏：标签行 → 控件 → 说明行。三段之间的距离固定，所以哪怕八条说明
+ * 全空着，控件之间的间距也是均匀的；错误出现时也不会把后面的字段顶下去。
+ * ======================================================================== */
+.fd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fd-field + .fd-field {
+  margin-top: 16px;
+}
+
+.fd-labelrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fd-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fd-text);
+}
+
+/* 必填 / 选填 用**文字**表达，不靠颜色、更不靠星号 —— 星号在读屏器里
+ * 大多被念成"星号"或者干脆跳过，而"必填"两个字会被念出来。
+ * 两个词都留着，形状之外的第二重冗余给扫视的人。 */
+.fd-flag {
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--fd-line-strong);
+  background: var(--fd-hover);
+  color: var(--fd-text-soft);
+  white-space: nowrap;
+}
+
+.fd-flag--optional {
+  border-style: dashed;
+  background: transparent;
+}
+
+/* 控件基座。input / select / textarea 共用一套尺寸与描边 —— 表单里最刺眼的
+ * 廉价感来源就是三个控件三个高度、三种圆角。 */
+.fd-input {
+  width: 100%;
+  min-height: var(--fd-control-h);
+  padding: 7px 12px;
+  border-radius: var(--fd-radius-sm);
+  border: 1px solid var(--fd-field-line);
+  background: var(--fd-inset);
+  transition:
+    border-color var(--fd-dur-fast) var(--fd-ease),
+    box-shadow var(--fd-dur-fast) var(--fd-ease);
+}
+
+.fd-input::placeholder {
+  color: var(--fd-text-muted);
+}
+
+.fd-input:focus {
+  outline: none;
+  border-color: var(--fd-field-line-focus);
+  box-shadow: var(--fd-glow);
+}
+
+.fd-input:focus-visible {
+  /* 输入控件用 :focus 而不是 :focus-visible：鼠标点击也要看得见焦点位置，
+   * 而对键盘用户两者等价。按钮反过来用 :focus-visible（见下）。 */
+  outline: none;
+}
+
+.fd-input--area {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.5;
+}
+
+/* 原生 select 的下拉箭头在深色外观下常常画成黑的一小块。用 appearance:none
+ * 去掉它，自己画一个 8px 的 chevron —— 描边跟随 currentColor，自动跟主题。 */
+.fd-select {
+  appearance: none;
+  height: var(--fd-control-h);
+  padding-right: 32px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) calc(50% + 1px),
+    calc(100% - 12px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+/* --- 说明行：表单最重要的一行 ---------------------------------------------
+ * 三件事同时发生在这 18px 上：
+ *   1. min-height 把它**预留**出来 —— 校验失败时错误文字填进这一行，
+ *      页面不重排。这是"校验一出现整页往下跳"这个经典问题的正解：
+ *      不是让动画更顺滑，是让这一格永远在。
+ *   2. 左侧 14px 的图标槽永远占位，图标进出不推动文字 —— 同一条错误
+ *      换语言时文本宽度会变，不预留就会左右抖。
+ *   3. 颜色之外必有图标：! 是错误，✓ 是通过，· 是可选提示。
+ *      把三层都去掉只剩红色描边的人，把可用性判给了色觉障碍用户。
+ * -------------------------------------------------------------------- */
+.fd-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--fd-foot-h);
+}
+
+.fd-msg {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  min-height: var(--fd-foot-h);
+  /* Error 排版的关键决定：**说明文字不用 --hamuna-error**。
+   * 跑过的数字（hamuna-default 主题，WCAG AA 正文需 4.5:1）：
+   *   浅色 #bd1e1e on #fffcf7 = 6.09 ✓ / on #faf6ee = 5.78 ✓ / on 输入底 = 4.62 ✓
+   *   深色 #f05050 on #242018 = 4.61 ✓ / on #1a1614 = 5.11 ✓
+   * 语义色**现在四种表面都过 AA 了**（它原本不过：浅色下 warning 在输入底上只有
+   * 2.36:1），但结论不变 —— **色相走图标和描边，文字走 --hamuna-text-secondary**，
+   * 读起来是 14.19:1 / 9.54:1。理由与对比度无关：错误要成行出现，涂成红色的一整段
+   * 12px 文字本身就是一个告警墙；颜色留给单个记号，句子留给正文色。
+   */
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fd-text-muted);
+}
+
+/* 说明文字前面的固定图标槽。没有具体状态时是一个中性点，表示"这一格在"。 */
+/* 状态标记全部用**形状**画，不写字。三个原因，第三个是硬约束：
+ *   1. 色觉障碍用户靠形状区分状态，而不是靠色相；
+ *   2. 字形"!"在小字号下各字体的字怀差异很大，12px 上几乎糊成一团；
+ *   3. 反白字（实心块 + 挖空字）要单独验：白墨压在 --success 填色上是 6.25:1，
+ *      深墨在深色外观下是 6.46:1 —— 都过了，但**这是跟着语义色一起改出来的结果**
+ *      （语义色压深到能承载小字时，配对的 --on-X 也换成了白墨）。所以规则仍然是
+ *      **语义色只进图形（3:1 门槛），不反白承载小字**：图形没有文字节点，
+ *      shoot-miniapp 的正文探针照不到它，
+ *      但真要调色时这是唯一能同时过两套外观的做法。
+ */
+.fd-msg::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--fd-text-muted);
+  transition: background-color var(--fd-dur-fast) var(--fd-ease);
+}
+
+.fd-msg[data-state='error'] {
+  color: var(--fd-text-soft);
+  font-weight: 500;
+}
+
+/* 错误 = 菱形。菱形和圆的差别在形状本身，不在颜色。 */
+.fd-msg[data-state='error']::before {
+  border-radius: 1px;
+  background: var(--fd-error);
+  transform: rotate(45deg) scale(0.94);
+}
+
+/* 通过 = 对勾，用两根边框转出来（不写字形）。 */
+.fd-msg[data-state='ok']::before {
+  width: 9px;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 0;
+  background: transparent;
+  border-left: 2px solid var(--fd-success);
+  border-bottom: 2px solid var(--fd-success);
+  transform: rotate(-45deg);
+}
+
+/* 错误态的控件描边。描边不是文字，4.5:1 的正文门槛不适用；这里用的是
+ * 18% 的辉光 + 纯色描边，浅色/深色下都看得见"这一格出事了"。 */
+.fd-input[aria-invalid='true'] {
+  border-color: var(--fd-error);
+  box-shadow: var(--fd-error-glow);
+}
+
+.fd-input[aria-invalid='true']:focus {
+  box-shadow: var(--fd-error-glow);
+}
+
+.fd-counter {
+  flex: none;
+  font-family: var(--fd-mono);
+  font-size: 11px;
+  line-height: var(--fd-foot-h);
+  color: var(--fd-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 计数器超限：数字 + 文字（"超出 12 字"），不是只把数字变红。
+   文字同样走 --hamuna-text-soft —— 这一条现在**不再是因为对比度不够**
+   （error 色在面板底上现在是 4.61:1 / 6.09:1），而是：11px 加粗也不算"大字"
+   （大字门槛是 18.66px 或 14px/700），而一整行红字本身就是告警墙。 */
+.fd-counter[data-over='true'] {
+  color: var(--fd-text-soft);
+  font-weight: 700;
+}
+
+/* --- 两列字段 --------------------------------------------------------------
+ * 窄容器（MiniApp 常被塞进 300px 侧栏）下折成一列。折行用 grid 而不是 flex，
+ * 因为 grid 的 minmax(0, 1fr) 会阻止子项的固有宽度顶破容器 —— flex 下
+ * 一个 min-content 很宽的 input 会把整行撑到溢出。
+ * -------------------------------------------------------------------- */
+.fd-field--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.fd-subfield {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* ===========================================================================
+ * 单选 chip 组
+ *
+ * 原生 <input type="radio"> 铺满整块 chip，视觉由 .fd-choice__box 画。
+ * 这样点标签的空白处也中，命中目标是整块 36px 高 —— 而不是那个 14px 的点。
+ * ======================================================================== */
+.fd-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fd-choice {
+  position: relative;
+  display: inline-flex;
+}
+
+.fd-choice__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.fd-choice__box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--fd-control-h);
+  padding: 0 14px;
+  border-radius: var(--fd-radius-sm);
+  border: 1px solid var(--fd-line-strong);
+  background: var(--fd-btn-bg);
+  font-size: 13px;
+  color: var(--fd-text-soft);
+  transition:
+    background-color var(--fd-dur-fast) var(--fd-ease),
+    border-color var(--fd-dur-fast) var(--fd-ease),
+    color var(--fd-dur-fast) var(--fd-ease),
+    transform var(--fd-dur-fast) var(--fd-ease);
+}
+
+.fd-choice:hover .fd-choice__box {
+  background: var(--fd-btn-bg-hover);
+}
+
+/* 选中态：强调色铺面 + 反色文字。这是全应用仅有的两处强调色之一（另一处是
+ * 主提交按钮），所以"选中"永远读得出来，即使色觉障碍也在 —— 边框同时加粗。 */
+.fd-choice__input:checked + .fd-choice__box {
+  background: var(--fd-accent);
+  border-color: var(--fd-accent);
+  color: var(--fd-accent-text);
+  font-weight: 600;
+}
+
+.fd-choice__input:focus-visible + .fd-choice__box {
+  outline: 2px solid var(--fd-focus);
+  outline-offset: 2px;
+}
+
+.fd-choice__input:active + .fd-choice__box {
+  transform: scale(0.96);
+}
+
+/* ===========================================================================
+ * 按钮
+ * ======================================================================== */
+.fd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--fd-control-h);
+  padding: 0 16px;
+  border-radius: var(--fd-radius-sm);
+  border: 1px solid var(--fd-line-strong);
+  background: var(--fd-btn-bg);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fd-text-soft);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--fd-dur-fast) var(--fd-ease),
+    border-color var(--fd-dur-fast) var(--fd-ease),
+    color var(--fd-dur-fast) var(--fd-ease),
+    opacity var(--fd-dur-fast) var(--fd-ease),
+    transform var(--fd-dur-fast) var(--fd-ease);
+}
+
+.fd-btn:hover {
+  background: var(--fd-btn-bg-hover);
+}
+
+.fd-btn:active {
+  /* scale(.96) 而不是 scale(0)：房规第 2 条。 */
+  transform: scale(0.96);
+}
+
+.fd-btn:focus-visible {
+  /* 去掉 outline 的地方必须自己画回来 —— 只写 outline:none 是键盘用户的事故。 */
+  outline: 2px solid var(--fd-focus);
+  outline-offset: 2px;
+}
+
+.fd-btn--primary {
+  background: var(--fd-accent);
+  border-color: var(--fd-accent);
+  color: var(--fd-accent-text);
+  font-weight: 600;
+  padding: 0 22px;
+}
+
+.fd-btn--primary:hover {
+  background: var(--fd-accent-hover);
+  border-color: var(--fd-accent-hover);
+}
+
+.fd-btn--ghost {
+  background: transparent;
+  border-color: var(--fd-line-strong);
+  color: var(--fd-text-soft);
+}
+
+.fd-btn--ghost:hover {
+  background: var(--fd-hover);
+}
+
+/* 禁用态。用 disabled 而不是 aria-disabled：主按钮禁用时**不允许**再触发提交，
+ * 视觉和语义要一致；而 aria-disabled 是给"仍可聚焦、仍要说为什么"的场景
+ * 准备的（见下面底栏的 reason）。文字用 --hamuna-text-secondary 而不是 muted：
+ * muted 在按钮底上只有 4.42:1 / 4.21:1，两套外观都不过 AA。 */
+.fd-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  background: var(--fd-btn-bg);
+  border-color: var(--fd-line-strong);
+  color: var(--fd-text-soft);
+  transform: none;
+}
+
+/* ===========================================================================
+ * 提交中的 spinner
+ *
+ * 全应用唯一的循环动画。降级后必须停（前庭功能障碍会对循环运动实际眩晕），
+ * 由文件末尾的 prefers-reduced-motion 块统一关闭。
+ * ======================================================================== */
+.fd-spinner {
+  display: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  /* 两段描边：底圈用 currentColor 的 25%，头圈用 currentColor。
+   * currentColor 让它跟着按钮文字色走 —— 禁用态变灰时 spinner 也变灰，
+   * 不需要第二套变量。 */
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  animation: fd-spin 720ms linear infinite;
+}
+
+.fd-btn[data-phase='sending'] .fd-spinner {
+  display: block;
+}
+
+/* ===========================================================================
+ * 提交失败横幅
+ * ======================================================================== */
+.fd-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--fd-radius);
+  border: 1px solid var(--fd-error);
+  background: var(--fd-error-wash);
+  animation: fd-enter var(--fd-dur) var(--fd-ease-out);
+}
+
+.fd-banner__mark {
+  flex: none;
+  width: 0;
+  height: 0;
+  margin: 4px 3px 0;
+  /* 警告三角：两条透明边 + 一条实底边，三角形本身由边框宽度决定。
+   * 写实心三角而不是"圆里一个!"，是因为反白小字过不了 AA（见 .fd-msg 段）。
+   * 三角这个形状本身就说"出事了"，颜色只是加强。 */
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid var(--fd-error);
+}
+
+.fd-banner__text {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  /* 同 --fd-msg 的结论：错误文案不涂 error 色，靠左边那个实心圆点 + 这句话。
+   * 浅色下 error 色在 7% 水洗底上的对比度更低，涂色必然不过。 */
+  color: var(--fd-text-soft);
+}
+
+/* ===========================================================================
+ * 演示开关
+ * ======================================================================== */
+.fd-demo {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.fd-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--fd-text-soft);
+  cursor: pointer;
+}
+
+.fd-switch__track {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--fd-inset-flat);
+  border: 1px solid var(--fd-line-strong);
+  transition: background-color var(--fd-dur-fast) var(--fd-ease);
+}
+
+.fd-switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--fd-btn-bg);
+  /* 滑块用 border + box-shadow 做出描边效果，而不是硬编码 rgba 阴影 ——
+   * 审计禁止 box-shadow 里的 rgba()，color-mix 才是合法出口。 */
+  box-shadow: 0 1px 0 0 var(--fd-hairline);
+  transition: transform var(--fd-dur-fast) var(--fd-ease);
+}
+
+.fd-switch[aria-checked='true'] .fd-switch__track {
+  background: var(--fd-wash);
+  border-color: var(--fd-accent-line);
+}
+
+/* 起点 .94：房规第 2 条，缩放塌到 0 会丢掉描边。 */
+.fd-switch[aria-checked='true'] .fd-switch__knob {
+  transform: translate3d(12px, 0, 0) scale(0.94);
+}
+
+.fd-switch:focus-visible {
+  outline: 2px solid var(--fd-focus);
+  outline-offset: 2px;
+  border-radius: var(--fd-radius-sm);
+}
+
+/* ===========================================================================
+ * 成功回执
+ * ======================================================================== */
+.fd-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 24px 16px;
+  border-radius: var(--fd-radius);
+  border: 1px solid var(--fd-line);
+  background: var(--fd-success-wash);
+  animation: fd-enter var(--fd-dur-slow) var(--fd-ease-out);
+}
+
+.fd-receipt__mark {
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--fd-success);
+}
+
+/* 圆里的对勾用边框转出来。图形挖空 6.09:1 / 5.83:1 两套外观都远过非文字的 3:1
+ * 门槛；用形状而不是字形，是因为反白的 "✓" 在 11px 上各字体字怀差异大得能看出
+ * 出处。 */
+.fd-receipt__mark::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  width: 7px;
+  height: 4px;
+  border-left: 2px solid var(--fd-surface);
+  border-bottom: 2px solid var(--fd-surface);
+  transform: rotate(-45deg);
+}
+
+.fd-receipt__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.fd-receipt__code {
+  margin: 0;
+  font-family: var(--fd-mono);
+  font-size: 12px;
+  color: var(--fd-text-soft);
+}
+
+.fd-receipt__list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 16px;
+  font-size: 13px;
+}
+
+.fd-receipt__list dt {
+  color: var(--fd-text-muted);
+}
+
+.fd-receipt__list dd {
+  margin: 0;
+  color: var(--fd-text-soft);
+  overflow-wrap: anywhere;
+}
+
+/* ===========================================================================
+ * 粘性底栏
+ *
+ * 主操作不应该需要滚动才能找到。sticky 而不是 fixed：fixed 会盖住内容，
+ * sticky 让内容从它后面滚过去 —— 而磨砂效果只有"后面真的有过东西"才看得见。
+ * ======================================================================== */
+.fd-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fd-gap);
+  margin-inline: calc(var(--fd-pad) * -1);
+  padding: 12px var(--fd-pad);
+  background: var(--fd-frost-bg);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  /* 磨砂本身没有边界，不描边会和内容糊在一起 */
+  border-top: 1px solid var(--fd-hairline);
+}
+
+.fd-reason {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--fd-text-muted);
+  transition: color var(--fd-dur) var(--fd-ease);
+}
+
+.fd-reason[data-tone='warn'] {
+  color: var(--fd-text-soft);
+  font-weight: 500;
+}
+
+/* ===========================================================================
+ * Toast —— 确认性反馈
+ * ======================================================================== */
+.fd-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.fd-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--fd-text);
+  color: var(--fd-bg);
+  font-size: 12px;
+  white-space: nowrap;
+  /* 浮层档：toast 压在内容之上，必须比卡片明显"浮"，否则像贴纸。 */
+  box-shadow: var(--fd-shadow-overlay);
+  animation: fd-toast-in var(--fd-dur-slow) var(--fd-ease-out);
+}
+
+.fd-toast[data-leaving='true'] {
+  animation: fd-exit var(--fd-dur) var(--fd-ease) forwards;
+}
+
+/* ===========================================================================
+ * 入场 / 退场 / 循环
+ *
+ * 入场：淡入 + 上移 6px。位移的减速尾巴更长，让元素"落"到位。
+ * 退场：反向 4px，比入场短 —— 退场只需要"它走了"这个事实。
+ * ======================================================================== */
+@keyframes fd-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fd-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+@keyframes fd-toast-in {
+  from {
+    opacity: 0;
+    /* 从下方 8px 升起：比缩放更符合"提示浮现"的直觉 */
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fd-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* ===========================================================================
+ * 窄容器
+ *
+ * MiniApp 被嵌在侧栏时宽度可能只有 320px。这不是边缘情况，是常态。
+ * ======================================================================== */
+@media (max-width: 480px) {
+  .fd-shell {
+    padding: 16px 16px 88px;
+    gap: 12px;
+  }
+
+  .fd-field--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 底栏在 320px 下改成两行：理由独占一行，按钮占满 —— 否则按钮被压到
+   * 30px 高，比它该有的命中目标还矮。 */
+  .fd-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .fd-btn--primary {
+    width: 100%;
+  }
+
+  .fd-title {
+    font-size: 18px;
+  }
+}
+
+/* ===========================================================================
+ * 动效降级 —— 不是可选项
+ *
+ * 前庭功能障碍用户对大面积位移和循环动画会实际产生眩晕。所有动效在这一处
+ * 统一关闭，比在每个动画定义旁边写一遍更可靠（新增动画时不会漏）。
+ * spinner 也在这里停 —— 它是唯一的 infinite 动画。
+ * ======================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

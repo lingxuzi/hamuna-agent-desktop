@@ -20,7 +20,7 @@ import type { McpServerDefinition } from '../../shared/config-types';
 import { CODEX_PERMISSION_MODES } from '../../shared/types/runtime';
 import { coerceFileChanges, formatFileChangeForResult } from '../../shared/fileChange';
 import type { AgentPlanTodo, AgentRuntime, RuntimeConfigCapabilities, RuntimeProcess, SessionStartOptions, UnifiedEvent, UnifiedEventCallback, ResolvedImagePayload, SubAgentScope } from './types';
-import { StaleRuntimeSessionError } from './types';
+import { RuntimeSteerUnavailableError, StaleRuntimeSessionError } from './types';
 import type { InteractionScenario } from '../system-prompt';
 import { shouldDisallowAskUserQuestion } from '../host-interaction';
 import { mapCodexTokenUsage, type CodexThreadTokenUsage } from './codex-token-usage';
@@ -1439,6 +1439,46 @@ export function codexModelCacheKey(runtimeSource: RuntimeSource, context: CodexC
 // ─── JSON-RPC 2.0 Client ───
 
 /**
+ * JSON-RPC error response, kept as its own type so the numeric `code` survives.
+ * A plain Error stringifies the code into the message and then the message is
+ * all a caller has — too lossy to tell "the runtime definitively refused"
+ * apart from "the transport broke".
+ */
+class JsonRpcResponseError extends Error {
+  constructor(
+    readonly code: number,
+    message: string,
+    readonly data?: unknown,
+  ) {
+    super(message);
+    this.name = 'JsonRpcResponseError';
+  }
+}
+
+type CodexNoActiveTurnSteerRejection = Error & { code: -32600 };
+
+/**
+ * Codex's definitive refusal to steer a turn that no longer exists. The message
+ * has been worded differently across CLI versions, so match loosely on the
+ * code plus the phrase. Only this specific refusal means "not consumed, safe to
+ * retry next turn" — every other RPC error leaves the delivery outcome unknown.
+ */
+export function isCodexNoActiveTurnSteerRejection(
+  error: unknown,
+): error is CodexNoActiveTurnSteerRejection {
+  const message = typeof error === 'object' && error !== null
+    ? (error as { message?: unknown }).message
+    : undefined;
+  return (
+    typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === -32600
+    && typeof message === 'string'
+    && /no active turn to steer/i.test(message)
+  );
+}
+
+/**
  * Lightweight JSON-RPC 2.0 client for Codex app-server.
  *
  * Handles three message types:
@@ -1573,7 +1613,11 @@ export class JsonRpcClient {
           // detection (and humans reading logs) see the actionable diagnostic,
           // not just the generic JSON-RPC "Internal error" wrapper.
           const details = typeof err.data?.details === 'string' ? `: ${err.data.details}` : '';
-          handler.reject(new Error(`RPC error ${err.code}: ${err.message}${details}`));
+          handler.reject(new JsonRpcResponseError(
+            err.code,
+            `RPC error ${err.code}: ${err.message}${details}`,
+            err.data,
+          ));
         } else {
           handler.resolve(msg.result);
         }
@@ -1620,7 +1664,10 @@ class CodexProcess implements RuntimeProcess {
   // Codex-specific state
   rpc: JsonRpcClient;
   threadId = '';
+  /** Most recent root turn id, kept for correlation after the turn retires. */
   currentTurnId = '';
+  /** Root turn that still accepts same-turn input. Cleared at native terminal. */
+  activeSteerTurnId = '';
   agentMessageTextById = new Map<string, string>();
   pendingRequests = new Map<string, PendingCodexRequest>();
 
@@ -2728,6 +2775,7 @@ export class CodexRuntime implements AgentRuntime {
           reasoningEffort: codexProc.reasoningEffort || null,
         }), 15_000) as { turn: { id: string } };
         codexProc.currentTurnId = turnResult.turn.id;
+        codexProc.activeSteerTurnId = turnResult.turn.id;
       }
 
       // 5. Fire-and-forget diagnostic fan-out (issue #194). Never block startup
@@ -2798,6 +2846,7 @@ export class CodexRuntime implements AgentRuntime {
       reasoningEffort: codexProc.reasoningEffort || null,
     }), 15_000) as { turn: { id: string } };
     codexProc.currentTurnId = turnResult.turn.id;
+    codexProc.activeSteerTurnId = turnResult.turn.id;
   }
 
   async steerMessage(
@@ -2808,20 +2857,44 @@ export class CodexRuntime implements AgentRuntime {
   ): Promise<void> {
     const codexProc = process as CodexProcess;
     if (codexProc.exited) throw new Error('Codex process has exited');
-    if (!codexProc.currentTurnId) {
-      throw new Error('Codex has no active turn to steer');
+    // Eligibility reads activeSteerTurnId, never currentTurnId: currentTurnId
+    // deliberately outlives the turn for correlation, so gating on it would
+    // offer a dead turn and turn every send into an RPC round-trip that fails.
+    const activeTurnId = codexProc.activeSteerTurnId;
+    if (!activeTurnId) {
+      throw new RuntimeSteerUnavailableError('Codex has no active turn to steer');
     }
 
     const input = buildCodexInput(message, images);
-    const result = await codexProc.rpc.call('turn/steer', buildCodexTurnSteerParams({
-      threadId: codexProc.threadId,
-      input,
-      expectedTurnId: codexProc.currentTurnId,
-      clientUserMessageId: options?.clientUserMessageId,
-    }), 15_000) as { turnId?: string };
-    if (result.turnId && result.turnId !== codexProc.currentTurnId) {
-      codexProc.currentTurnId = result.turnId;
+    let result: { turnId?: string };
+    try {
+      result = await codexProc.rpc.call('turn/steer', buildCodexTurnSteerParams({
+        threadId: codexProc.threadId,
+        input,
+        expectedTurnId: activeTurnId,
+        clientUserMessageId: options?.clientUserMessageId,
+      }), 15_000) as { turnId?: string };
+    } catch (error) {
+      if (isCodexNoActiveTurnSteerRejection(error)) {
+        // The turn retired between our check and the RPC landing. Nothing was
+        // consumed, so report it as steer-unavailable rather than a transport
+        // failure and let the session layer demote the message to the queue.
+        if (codexProc.activeSteerTurnId === activeTurnId) {
+          codexProc.activeSteerTurnId = '';
+        }
+        throw new RuntimeSteerUnavailableError(error.message);
+      }
+      throw error;
     }
+    if (result.turnId && result.turnId !== activeTurnId) {
+      codexProc.currentTurnId = result.turnId;
+      codexProc.activeSteerTurnId = result.turnId;
+    }
+  }
+
+  canSteerMessage(process: RuntimeProcess): boolean {
+    const codexProc = process as CodexProcess;
+    return !codexProc.exited && Boolean(codexProc.activeSteerTurnId);
   }
 
   /**
@@ -2868,10 +2941,10 @@ export class CodexRuntime implements AgentRuntime {
    */
   async interruptTurn(process: RuntimeProcess): Promise<void> {
     const codexProc = process as CodexProcess;
-    if (codexProc.exited || !codexProc.currentTurnId) return;
+    if (codexProc.exited || !codexProc.activeSteerTurnId) return;
     await codexProc.rpc.call('turn/interrupt', {
       threadId: codexProc.threadId,
-      turnId: codexProc.currentTurnId,
+      turnId: codexProc.activeSteerTurnId,
     }, 3_000).catch(() => { /* turn may already be ending; the turn/completed event drives idle */ });
   }
 
@@ -2907,11 +2980,11 @@ export class CodexRuntime implements AgentRuntime {
     if (codexProc.exited) return;
 
     try {
-      // 1. Interrupt current turn if any
-      if (codexProc.currentTurnId) {
+      // 1. Interrupt the live turn, if any
+      if (codexProc.activeSteerTurnId) {
         await codexProc.rpc.call('turn/interrupt', {
           threadId: codexProc.threadId,
-          turnId: codexProc.currentTurnId,
+          turnId: codexProc.activeSteerTurnId,
         }, 3_000).catch(() => {});
       }
       // 2. Close stdin — signals app-server to shut down (like CC's closeStdin)
@@ -3043,6 +3116,7 @@ export class CodexRuntime implements AgentRuntime {
           ?? stringValue(objectValue(p.turn).id);
         if (turnId) {
           codexProc.currentTurnId = turnId;
+          codexProc.activeSteerTurnId = turnId;
         }
         return [
           { kind: 'turn_started' },
@@ -3053,6 +3127,15 @@ export class CodexRuntime implements AgentRuntime {
 
       case 'turn/completed': {
         const turn = p.turn;
+        // The native turn is gone: retire the steer target so a send arriving
+        // now reports steer-unavailable and gets queued for the next turn
+        // instead of being offered to a dead turn and retracted. Guard on the id
+        // so a late completion can't clear a successor turn already admitted.
+        const completedTurnId = stringValue(p.turnId)
+          ?? stringValue(objectValue(turn).id);
+        if (completedTurnId && codexProc.activeSteerTurnId === completedTurnId) {
+          codexProc.activeSteerTurnId = '';
+        }
         // PRD 0.2.27 — sub-agent threads live within a turn; clear correlation
         // maps at turn end so a stale child threadId can't re-parent next turn's
         // tools and the maps don't grow unbounded across a long session.

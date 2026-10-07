@@ -18,6 +18,8 @@ import {
   configureCodexSkillExtraRoots,
   createCodexMcpStartupBarrier,
   initializeCodexRpc,
+  isCodexNoActiveTurnSteerRejection,
+  JsonRpcClient,
   KNOWN_CODEX_SERVER_REQUEST_METHODS,
   mapCodexTurnCompletedNotification,
   mapCodexTurnPlanUpdatedNotification,
@@ -25,6 +27,7 @@ import {
   serializeCodexPermissionResponse,
   type PendingCodexRequest,
 } from '../runtimes/codex';
+import { RuntimeSteerUnavailableError } from '../runtimes/types';
 
 describe('Codex app-server protocol helpers', () => {
   const tempRoots: string[] = [];
@@ -875,5 +878,105 @@ describe('Codex app-server protocol helpers', () => {
       type: 'error',
       code: -32000,
     });
+  });
+});
+
+/**
+ * Regression for the stale-steer race: a send that landed just after the
+ * runtime retired the turn used to be offered to a dead turn, come back as a
+ * generic RPC error, and get retracted — the user's message silently vanished.
+ * The session layer demotes to the turn queue only when the runtime reports a
+ * *definitive* refusal, so that discrimination is what this pins.
+ */
+describe('Codex realtime steer eligibility', () => {
+  type FakeProc = {
+    exited: boolean;
+    threadId: string;
+    currentTurnId: string;
+    activeSteerTurnId: string;
+    rpc: { call: ReturnType<typeof vi.fn> };
+  };
+
+  function fakeProc(call: ReturnType<typeof vi.fn>): FakeProc {
+    return {
+      exited: false,
+      threadId: 'thread-1',
+      currentTurnId: '',
+      activeSteerTurnId: '',
+      rpc: { call },
+    };
+  }
+
+  function asProcess(proc: FakeProc): import('../runtimes/types').RuntimeProcess {
+    return proc as unknown as import('../runtimes/types').RuntimeProcess;
+  }
+
+  it('does not offer a turn that only survives as a correlation id', async () => {
+    const runtime = new CodexRuntime();
+    const call = vi.fn();
+    // Exactly the post-turn/completed shape: currentTurnId is retained for
+    // correlation, the steer target is gone.
+    const proc = fakeProc(call);
+    proc.currentTurnId = 'turn-1';
+    proc.activeSteerTurnId = '';
+
+    expect(runtime.canSteerMessage(asProcess(proc))).toBe(false);
+    await expect(runtime.steerMessage(asProcess(proc), 'hi')).rejects.toBeInstanceOf(
+      RuntimeSteerUnavailableError,
+    );
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it('reports a no-active-turn refusal as steer-unavailable and retires the target', async () => {
+    const runtime = new CodexRuntime();
+    const call = vi.fn().mockRejectedValue(
+      Object.assign(new Error('RPC error -32600: no active turn to steer'), { code: -32600 }),
+    );
+    const proc = fakeProc(call);
+    proc.currentTurnId = 'turn-1';
+    proc.activeSteerTurnId = 'turn-1';
+
+    expect(runtime.canSteerMessage(asProcess(proc))).toBe(true);
+    await expect(runtime.steerMessage(asProcess(proc), 'hi')).rejects.toBeInstanceOf(
+      RuntimeSteerUnavailableError,
+    );
+    // Retiring the target keeps the *next* send local instead of repeating the
+    // same doomed round-trip.
+    expect(runtime.canSteerMessage(asProcess(proc))).toBe(false);
+  });
+
+  it('leaves an unknown RPC failure alone so it is never silently replayed', async () => {
+    const runtime = new CodexRuntime();
+    const failure = Object.assign(new Error('RPC error -32603: Internal error'), { code: -32603 });
+    const proc = fakeProc(vi.fn().mockRejectedValue(failure));
+    proc.currentTurnId = 'turn-1';
+    proc.activeSteerTurnId = 'turn-1';
+
+    await expect(runtime.steerMessage(asProcess(proc), 'hi')).rejects.toBe(failure);
+    expect(runtime.canSteerMessage(asProcess(proc))).toBe(true);
+  });
+
+  it('only reads the refusal off the RPC code, not any error mentioning a turn', () => {
+    expect(isCodexNoActiveTurnSteerRejection(
+      Object.assign(new Error('no active turn to steer'), { code: -32600 }),
+    )).toBe(true);
+    expect(isCodexNoActiveTurnSteerRejection(
+      Object.assign(new Error('no active turn to steer'), { code: -32603 }),
+    )).toBe(false);
+    expect(isCodexNoActiveTurnSteerRejection(new Error('connection reset'))).toBe(false);
+  });
+
+  it('keeps the numeric RPC code on the rejection the client produces', async () => {
+    const client = new JsonRpcClient({ stdin: { write: vi.fn().mockResolvedValue(undefined) } } as never);
+    const pending = client.call('turn/steer', {}, 5_000);
+    // Drive the client the way app-server stdout would, then assert the code
+    // survives — stringifying it into the message is what hid the refusal.
+    (client as unknown as { handleLine: (line: string) => void }).handleLine(JSON.stringify({
+      id: 1,
+      error: { code: -32600, message: 'no active turn to steer' },
+    }));
+
+    await expect(pending).rejects.toMatchObject({ code: -32600 });
+    await expect(pending).rejects.toSatisfy(isCodexNoActiveTurnSteerRejection);
   });
 });

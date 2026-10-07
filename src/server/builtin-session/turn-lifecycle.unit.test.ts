@@ -79,6 +79,7 @@ function makeDeps(overrides: Partial<BuiltinTurnLifecycleDeps> = {}) {
     terminalEventAppliesToCurrentInFlight: () => true,
     dropInFlightQueueItem: vi.fn(() => null),
     preserveInFlightAfterTerminalBoundary: vi.fn(),
+    didInFlightSurviveInterrupt: vi.fn(() => null),
     surfaceInFlightQueueItem: vi.fn(async () => undefined),
     schedulePostTerminalQueueDrain: vi.fn(),
     endTurnAbort: vi.fn(),

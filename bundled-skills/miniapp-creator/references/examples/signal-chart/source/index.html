@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal Chart</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      骨架刻意极小：仪表盘的每一行像素都该给数据。三个状态（正常 / 骨架 / 空）
+      叠在同一个网格单元里，所以切换时版面不跳 —— 这是"状态占位"而不是"状态切换"。
+    -->
+    <main class="sc-page">
+      <header class="sc-head">
+        <div class="sc-head__text">
+          <h1 class="sc-title" data-i18n="app.title"></h1>
+          <p class="sc-sub" data-i18n="app.subtitle"></p>
+        </div>
+
+        <!-- 范围切换是分段控件，不是两个漂浮按钮：一组互斥选项必须看起来成组。 -->
+        <div class="sc-range" role="group" data-i18n-aria="chart.range">
+          <button class="sc-range__btn" type="button" data-range="24h" aria-pressed="true">24h</button>
+          <button class="sc-range__btn" type="button" data-range="7d" aria-pressed="false">7d</button>
+          <button class="sc-range__btn" type="button" data-range="30d" aria-pressed="false">30d</button>
+        </div>
+      </header>
+
+      <section class="sc-card">
+        <!--
+          图例这一行同时是读数行：色条 + 系列名 + 最新值 + 环比。
+          把它们分成"图例"和"统计"两块会逼用户上下扫两次才把线对上名字。
+        -->
+        <div class="sc-card__top">
+          <ul class="sc-legend" id="sc-legend" data-i18n-aria="chart.legend">
+            <li class="sc-legend__row" data-series="a">
+              <span class="sc-key" aria-hidden="true"></span>
+              <span class="sc-legend__name" data-i18n="series.in"></span>
+              <span class="sc-num sc-legend__value" id="sc-last-a">—</span>
+              <span class="sc-delta" id="sc-delta-a" data-dir="flat">—</span>
+            </li>
+            <li class="sc-legend__row" data-series="b">
+              <span class="sc-key" aria-hidden="true"></span>
+              <span class="sc-legend__name" data-i18n="series.out"></span>
+              <span class="sc-num sc-legend__value" id="sc-last-b">—</span>
+              <span class="sc-delta" id="sc-delta-b" data-dir="flat">—</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sc-stage" id="sc-stage">
+          <!--
+            绘图区。SVG 按容器的**真实像素**绘制（viewBox 与像素 1:1），
+            所以 HTML tooltip 与 SVG 共用同一套坐标系，不需要任何缩放换算。
+          -->
+          <div class="sc-plot" id="sc-plot" tabindex="0" role="group" data-i18n-aria="chart.plot">
+            <svg class="sc-svg sc-chart" id="sc-svg" role="img" aria-label=""></svg>
+
+            <!--
+              tooltip 用 HTML 而不是 SVG <g>：它要真实的圆角、边框和浮层阴影，
+              这些在 SVG 里只能靠 filter 硬凑。位置只写 transform，
+              left/top 一个都不碰 —— 热路径上不产生重排（见 ui.js 的 moveCursor）。
+            -->
+            <div class="sc-tip" id="sc-tip" data-show="false" aria-hidden="true">
+              <div class="sc-tip__head">
+                <span class="sc-num sc-tip__time" id="sc-tip-time">—</span>
+                <span class="sc-tip__unit" data-i18n="chart.unit"></span>
+              </div>
+              <div class="sc-tip__row" data-series="a">
+                <span class="sc-key" aria-hidden="true"></span>
+                <span class="sc-tip__name" data-series-name="a"></span>
+                <span class="sc-num sc-tip__value" id="sc-tip-a">—</span>
+              </div>
+              <div class="sc-tip__row" data-series="b">
+                <span class="sc-key" aria-hidden="true"></span>
+                <span class="sc-tip__name" data-series-name="b"></span>
+                <span class="sc-num sc-tip__value" id="sc-tip-b">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 骨架屏：至少显示 600ms。闪一下的骨架比不显示更糟，看起来像故障。 -->
+          <div class="sc-skeleton" id="sc-skeleton" hidden>
+            <div class="sc-skeleton__grid" aria-hidden="true"></div>
+            <div class="sc-skeleton__spark" aria-hidden="true"></div>
+            <p class="sc-loading" data-i18n="state.loading"></p>
+          </div>
+
+          <!--
+            空状态。它复用图例那一行（含 motif 色条），所以"缺的是哪两条信号"
+            一眼可读 —— 一个只有一句文案的空状态没有回答任何问题。
+          -->
+          <div class="sc-empty" id="sc-empty" hidden>
+            <div class="sc-empty__mark" aria-hidden="true">0</div>
+            <p class="sc-empty__title" data-i18n="chart.empty.title"></p>
+            <p class="sc-empty__hint" data-i18n="chart.empty.hint"></p>
+            <ul class="sc-legend sc-legend--empty">
+              <li class="sc-legend__row" data-series="a">
+                <span class="sc-key" aria-hidden="true"></span>
+                <span class="sc-legend__name" data-i18n="series.in"></span>
+                <span class="sc-num sc-legend__value">—</span>
+              </li>
+              <li class="sc-legend__row" data-series="b">
+                <span class="sc-key" aria-hidden="true"></span>
+                <span class="sc-legend__name" data-i18n="series.out"></span>
+                <span class="sc-num sc-legend__value">—</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="sc-card__foot">
+          <span class="sc-num sc-window" id="sc-window">—</span>
+          <span class="sc-foot__right">
+            <span class="sc-num sc-count" id="sc-count">—</span>
+            <span class="sc-hint" data-i18n="chart.hint"></span>
+          </span>
+        </div>
+      </section>
+
+      <p class="sc-foot" id="sc-foot" role="status"></p>
+    </main>
+
+    <script src="ui.js"></script>
+  </body>
+</html>

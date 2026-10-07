@@ -1035,6 +1035,11 @@
     "kindWorker": "Worker",
     "kindIframe": "Iframe",
     "retry": "Retry",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "uninstall": "Uninstall",
+    "uninstallNamed": "Uninstall {{name}}",
+    "uninstallSuccess": "Uninstalled {{appId}}",
+    "uninstallConfirmTitle": "Uninstall MiniApp?",
+    "uninstallConfirmMessage": "Uninstall \"{{name}}\"? Its files and saved data are deleted and cannot be recovered."
   }
 }

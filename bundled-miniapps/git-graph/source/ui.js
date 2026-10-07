@@ -34,34 +34,13 @@
     return `req-${Date.now()}-${nextId++}`;
   }
 
+  // `window.app` is injected by the host before this script runs (see
+  // `appRuntimeScript.ts`). It owns the nonce and the request/response pairing,
+  // so this MiniApp no longer hand-rolls a postMessage protocol — which is how
+  // the previous version silently lost calls made before `worker.ready`.
   function workerCall(method, params) {
-    const nonce = window.__workerNonce;
-    const id = mintId();
-    const msg = {
-      kind: 'worker.call',
-      nonce,
-      id,
-      payload: { method, params, appId },
-    };
-    return new Promise((resolve, reject) => {
-      const onMessage = (event) => {
-        const data = event.data;
-        if (!data || data.kind !== 'worker.result' || data.id !== id) return;
-        window.removeEventListener('message', onMessage);
-        if (data.ok) resolve(data.result);
-        else reject(new Error(data.error?.message || 'worker call failed'));
-      };
-      window.addEventListener('message', onMessage);
-      window.parent.postMessage(msg, '*');
-    });
+    return app.call(method, params);
   }
-
-  // Wait for host to mint nonce (posted once after worker spawn).
-  window.addEventListener('message', (event) => {
-    const data = event.data;
-    if (!data || data.kind !== 'worker.ready') return;
-    window.__workerNonce = data.nonce;
-  });
 
   async function loadRepo() {
     const cwd = (cwdInput.value || '').trim();

@@ -23,6 +23,7 @@ import { WorkspaceSelectDialog } from '@/components/AgentSettings';
 import ProxyScopeDialog from '@/components/ProxyScopeDialog';
 import WorkspaceConfigPanel from '@/components/WorkspaceConfigPanel';
 import ModelManagementPanel from '@/components/ModelManagementPanel';
+import { MiniAppModelSetting } from './components/MiniAppModelSetting';
 import GrokSubscriptionProvider from '@/components/GrokSubscriptionProvider';
 import NxgdSubscriptionProvider from '@/components/NxgdSubscriptionProvider';
 import SubscriptionProviderCardContent from '@/components/SubscriptionProviderCardContent';
@@ -3987,6 +3988,18 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
       <p className="mb-6 text-sm text-[var(--ink-muted)]">
        {tSettings('providers.description')}
       </p>
+
+      {/* MiniApp 的 app.ai / app.agent 用哪个 provider。放在 provider 列表
+          正上方：这个功能配置的就是下面这些 provider 与 Key。 */}
+      <MiniAppModelSetting
+       providers={providers}
+       apiKeys={apiKeys}
+       verifyStatus={providerVerifyStatus}
+       config={config}
+       onChange={(providerId, model) => {
+        void updateConfig({ miniappProviderId: providerId, miniappModel: model });
+       }}
+      />
 
       {/* Provider list */}
       <div className="grid grid-cols-2 gap-4">

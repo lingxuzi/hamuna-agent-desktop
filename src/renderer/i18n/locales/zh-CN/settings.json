@@ -229,6 +229,12 @@
     "website": "去官网",
     "manage": "管理",
     "apiKeyPlaceholder": "输入 API Key",
+    "miniappModel": {
+      "title": "MiniApp 模型",
+      "description": "MiniApp 内置 AI 能力（app.ai / app.agent）使用哪个供应商和模型。默认跟随当前对话；只有想让 MiniApp 固定用某个供应商时才需要改。",
+      "followSession": "跟随对话",
+      "followingSession": "跟随对话中"
+    },
     "noEnabledTitle": "没有已启用的供应商",
     "noEnabledDescription": "打开“启用和排序”重新启用供应商。",
     "verifyPending": "待验证",

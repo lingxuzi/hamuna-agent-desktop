@@ -9,12 +9,14 @@
 import { err, ok, type MiniAppResponse } from './errors';
 import { validatePathTemplatePrefix } from './path-templates';
 import type {
+  MiniAppAppearance,
   MiniAppDependency,
   MiniAppI18n,
   MiniAppMetadata,
   MiniAppPermissions,
 } from './types';
 import { hostAllowed } from './app-permissions';
+import appearanceContract from '../miniapp-appearance/contract.json';
 
 const KNOWN_CATEGORIES = new Set<MiniAppMetadata['category']>([
   'developer',
@@ -276,6 +278,101 @@ function parseDependencies(raw: unknown, perms: MiniAppPermissions): MiniAppDepe
   return out;
 }
 
+/**
+ * 契约槽位名（`bg-primary`），由 `contract.json` 派生。
+ *
+ * 刻意从 JSON 读而不是手写一份 `Set`：手写的那份会和契约漂移，而漂移的后果是
+ * "作者声明了一个宿主不认识的槽位" —— 宿主照单全收、静默忽略，然后作者以为自己
+ * 换掉了底色，实际什么都没发生。
+ */
+const CONTRACT_SLOTS: ReadonlySet<string> = new Set(
+  appearanceContract.variables.map((v: { name: string }) => v.name.replace(/^--hamuna-/, '')),
+);
+
+/**
+ * 字面 CSS 颜色。
+ *
+ * 刻意**不接受** `var(...)`。`palette` 的意义是"这一版的底色由我定"，而
+ * `var(--hamuna-bg-primary)` 恰恰是把决定权交回宿主 —— 收了它，bespoke 就只是
+ * 多一层间接，谁也说不清最终颜色从哪来。
+ */
+const LITERAL_COLOR_RE = /^(#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla)\([^()]*\)|[a-z]+)$/;
+
+function parsePalette(
+  raw: unknown,
+  field: string,
+): { palette: Record<string, string> } | string {
+  const rec = asRecord(raw);
+  if (!rec) return `${field} must be an object`;
+
+  const palette: Record<string, string> = {};
+  for (const [slot, value] of Object.entries(rec)) {
+    if (!CONTRACT_SLOTS.has(slot)) {
+      return (
+        `${field}."${slot}" is not a MiniApp appearance token. ` +
+        'Keys are contract variable names without the --hamuna- prefix ' +
+        `(see src/shared/miniapp-appearance/contract.json): ${[...CONTRACT_SLOTS].join(', ')}`
+      );
+    }
+    const color = asString(value);
+    if (!color) return `${field}."${slot}" must be a string`;
+    if (!LITERAL_COLOR_RE.test(color.trim())) {
+      return (
+        `${field}."${slot}" must be a literal CSS color (hex / rgb() / hsl() / keyword), ` +
+        `got ${JSON.stringify(color)}. Referencing var(--hamuna-*) here would hand the ` +
+        'color decision back to the host, which is the opposite of what bespoke means'
+      );
+    }
+    palette[slot] = color.trim();
+  }
+  return { palette };
+}
+
+/**
+ * `meta.json::appearance`。缺省 = 跟随宿主，`mode: 'bespoke'` 时用作者声明的
+ * 调色板覆盖契约槽位。
+ */
+function parseAppearance(raw: unknown): MiniAppAppearance | string {
+  const rec = asRecord(raw);
+  if (!rec) return 'appearance must be an object';
+
+  const mode = asString(rec.mode);
+  if (mode !== 'host' && mode !== 'bespoke') {
+    return "appearance.mode must be 'host' | 'bespoke'";
+  }
+
+  let palette: Record<string, string> | undefined;
+  if (rec.palette !== undefined) {
+    const parsed = parsePalette(rec.palette, 'appearance.palette');
+    if (typeof parsed === 'string') return parsed;
+    palette = parsed.palette;
+  }
+
+  let paletteDark: Record<string, string> | undefined;
+  if (rec.palette_dark !== undefined) {
+    const parsed = parsePalette(rec.palette_dark, 'appearance.palette_dark');
+    if (typeof parsed === 'string') return parsed;
+    paletteDark = parsed.palette;
+  }
+
+  if (mode === 'bespoke' && !palette) {
+    return (
+      "appearance.mode 'bespoke' requires a palette. A bespoke theme with no palette " +
+      'is just an undeclared custom theme: the host would inject its own colors and the ' +
+      'author would have no way to tell that nothing happened'
+    );
+  }
+  if (mode === 'host' && (palette || paletteDark)) {
+    return "appearance.palette requires mode 'bespoke' (or omit both and inherit the host theme)";
+  }
+
+  return {
+    mode,
+    ...(palette ? { palette } : {}),
+    ...(paletteDark ? { palette_dark: paletteDark } : {}),
+  };
+}
+
 export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetadata> {
   const r = asRecord(raw);
   if (!r) return err('E_SCHEMA_INVALID', 'meta.json must be an object');
@@ -395,6 +492,13 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     i18n = parsedI18n;
   }
 
+  let appearance: MiniAppAppearance | undefined;
+  if (r.appearance !== undefined) {
+    const parsed = parseAppearance(r.appearance);
+    if (typeof parsed === 'string') return err('E_SCHEMA_INVALID', parsed);
+    appearance = parsed;
+  }
+
   const out: MiniAppMetadata = {
     id,
     name,
@@ -411,6 +515,7 @@ export function parseMiniAppMetadata(raw: unknown): MiniAppResponse<MiniAppMetad
     ...(dependencies && dependencies.length > 0 ? { dependencies } : {}),
     ...(i18n ? { i18n } : {}),
     ...(storage ? { storage } : {}),
+    ...(appearance ? { appearance } : {}),
   };
 
   const createdAt = asNumber(r.created_at);

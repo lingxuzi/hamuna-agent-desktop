@@ -99,6 +99,8 @@ export type BuiltinTurnLifecycleDeps = {
   terminalEventAppliesToCurrentInFlight: () => boolean;
   dropInFlightQueueItem: (reason: string, imTerminal?: 'cancelled' | 'failed') => string | null;
   preserveInFlightAfterTerminalBoundary: (reason: string) => void;
+  /** null when the SDK's interrupt receipt has not landed (or is unsupported). */
+  didInFlightSurviveInterrupt: (queueId: string) => boolean | null;
   surfaceInFlightQueueItem: (
     queueId: string,
     meta: InFlightMetadata | null,
@@ -236,6 +238,7 @@ export function createBuiltinTurnLifecycle(deps: BuiltinTurnLifecycleDeps): Buil
           isInterrupting: deps.getIsInterruptingResponse(),
           forced,
           hasMeta: !!meta,
+          survivedInterrupt: deps.didInFlightSurviveInterrupt(stale),
         });
         if (inFlightAction === 'drop') {
           deps.dropInFlightQueueItem('graceful interrupt result before SDK consumption confirmation', 'cancelled');

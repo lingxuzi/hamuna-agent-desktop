@@ -26,6 +26,9 @@
 
 import { APP_ERROR_CODES, type AppErrorCode } from '../shared/miniapp/app-protocol';
 import { getSessionEngine } from './session-engine/selector';
+import { createConcreteProviderRoute } from '../shared/providerRoute';
+import { loadConfig } from './utils/admin-config';
+import { describeMiniAppPinProblem, resolveMiniAppModelPin } from './miniapp-model-pin';
 
 interface AgentOutcome {
   ok: boolean;
@@ -145,13 +148,31 @@ export async function runMiniAppAgentTurn(p: MiniAppAgentRunParams): Promise<Age
     );
   }
 
+  // 与 `app.ai` 同一个 pin 解析器（见 miniapp-model-pin.ts）。差别只在于本函数
+  // 跑在 MiniApp **自己的** sidecar 里：那里的 `getSessionProviderEnv()` 属于
+  // 这个一次性会话，从没被设置过，所以没有 pin 时它只会解析出订阅 provider ——
+  // 也就是说这条路的"沿用会话"天然落空，配置 pin 是它唯一可用的选择。
+  //
+  // 只在配置真的钉了 provider 时才下发 route：没钉时保持原样，让
+  // `resolveSessionConfig` 走它自己那套（session → agent → config）优先级。
+  const config = loadConfig();
+  const pinProblem = describeMiniAppPinProblem(config);
+  if (pinProblem) {
+    return fail(APP_ERROR_CODES.HOST_ERROR, pinProblem);
+  }
+  const pin = resolveMiniAppModelPin(config);
+  const model = p.model?.trim() || pin.model;
+  const providerRoute =
+    pin.providerEnv && model ? createConcreteProviderRoute(pin.providerId, model) : undefined;
+
   const result = await engine.runInjectedTurn({
     prompt: p.prompt,
     sessionId,
     workspacePath: p.workspacePath,
     scenario: { type: 'desktop' },
     permissionMode: p.permissionMode ?? MINIAPP_AGENT_PERMISSION_MODE,
-    model: p.model,
+    model,
+    ...(providerRoute ? { providerRoute } : {}),
     timeoutMs: resolveMiniAppAgentTimeoutMs(p.timeoutMs),
     pollMs: 500,
     // turnOwner 让 stopOwnedTurn 能精确命中这一个 turn，而不是把整个 session

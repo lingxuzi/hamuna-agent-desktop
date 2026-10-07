@@ -9,8 +9,9 @@
  * acknowledgement. So whether the item should be SURFACED (shown as a user bubble),
  * DROPPED, or kept waiting depends on the terminal reason and user intent:
  *
- *  - Plain STOP: the user wants to stop; treat the in-flight item as "AI may not have
- *    seen it" and drop it from the UI (matches the long-standing stop behavior).
+ *  - Plain STOP: the interrupt receipt decides whether the queued item survived.
+ *    Preserve it until replay when the receipt lists it, or when an older CLI omits
+ *    the receipt; drop it only when the receipt explicitly omits its UUID.
  *  - FORCE ("立即发送"): the user explicitly asked for THIS item to run now. force
  *    interrupts the current turn precisely so the SDK drains + processes the queued
  *    command — so it MUST be surfaced as a user bubble (the AI's reply renders under it).
@@ -43,8 +44,15 @@ export function decideInFlightActionOnResult(opts: {
   forced: boolean;
   /** inFlightMetadata is available to build the user bubble. */
   hasMeta: boolean;
+  /** true/false from a public receipt; null/undefined when the CLI omitted it. */
+  survivedInterrupt?: boolean | null;
 }): InFlightTerminalAction {
-  // Plain stop (interrupt, not a force): drop — AI may not have seen the item.
+  // The SDK's interrupt receipt is authoritative: a listed survivor WILL run, so
+  // dropping it would delete a message the runtime is about to answer. Older CLIs
+  // omit the receipt — preserve then too, because Stop owns only the current turn
+  // and must never invent a cancellation the runtime did not report.
+  if (opts.isInterrupting && !opts.forced && opts.survivedInterrupt !== false) return 'await-replay';
+  // The receipt explicitly says this in-flight UUID did not survive the interrupt.
   if (opts.isInterrupting && !opts.forced) return 'drop';
   // Force-send: explicit user intent to interrupt and process this item now.
   if (opts.forced) return opts.hasMeta ? 'surface' : 'noop';
@@ -72,4 +80,28 @@ export function terminalEventMatchesInFlight(opts: {
   if (!opts.currentQueueId) return false;
   if (!opts.isInterrupting) return true;
   return opts.interruptTargetQueueId === opts.currentQueueId;
+}
+
+/** `interrupt_receipt_v1` payload — the UUIDs that survived this interrupt. */
+export type InterruptReceipt = { still_queued?: readonly string[] };
+
+/**
+ * Reconcile the narrow result-before-interrupt-receipt race.
+ *
+ * `decideInFlightActionOnResult` preserves the item while the receipt is still
+ * unknown. If the receipt then arrives and explicitly omits that exact UUID, the
+ * preserved pill must be cancelled at the queue owner — otherwise the
+ * conservative preserve above would strand it forever.
+ */
+export function shouldDropInFlightAfterLateInterruptReceipt(opts: {
+  /** Did this interrupt's `result` already claim the terminal before the receipt landed? */
+  postInterruptOutcome: 'result-claimed' | 'session-ended' | null;
+  interruptTargetQueueId: string | null;
+  currentQueueId: string | null;
+  stillQueued: ReadonlySet<string>;
+}): boolean {
+  return opts.postInterruptOutcome === 'result-claimed'
+    && opts.interruptTargetQueueId !== null
+    && opts.currentQueueId === opts.interruptTargetQueueId
+    && !opts.stillQueued.has(opts.interruptTargetQueueId);
 }

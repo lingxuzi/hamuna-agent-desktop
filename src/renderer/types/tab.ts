@@ -182,6 +182,11 @@ export interface Tab {
         /** `meta.json::dependencies` — CDN tags the host injects, and the
          *  only source of iframe CSP widening. Absent = strict CSP. */
         dependencies?: import('../../shared/miniapp/types').MiniAppDependency[];
+        /** `meta.json::appearance` — only `mode: 'bespoke'` changes anything:
+         *  the host injects the author's palette into the contract slots
+         *  instead of its own, so the app keeps its identity across themes.
+         *  Absent = follow the host theme (unchanged behavior). */
+        appearance?: import('../../shared/miniapp/types').MiniAppAppearance;
     };
 }
 

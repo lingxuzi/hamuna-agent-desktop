@@ -141,6 +141,10 @@ export interface AdminAppConfig {
   officialToolSettings?: OfficialToolSettings;
   // Provider
   defaultProviderId?: string;
+  /** Mirror of `AppConfig.miniappProviderId` — see the comment there for why
+   *  MiniApps need an explicit pin instead of inheriting the session provider. */
+  miniappProviderId?: string;
+  miniappModel?: string;
   providerApiKeys?: Record<string, string>;
   providerVerifyStatus?: Record<string, ProviderVerifyStatus>;
   providerOrder?: string[];

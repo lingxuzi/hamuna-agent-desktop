@@ -89,13 +89,13 @@ html {
   /* 交互件 */
   --dr-btn-bg: var(--hamuna-bg-button, #f0ece6);
   --dr-btn-bg-hover: var(--hamuna-bg-button-hover, rgba(0, 0, 0, 0.06));
-  --dr-input-bg: var(--hamuna-bg-input, #ffffff);
+  --dr-input-bg: var(--hamuna-bg-input, #e8dccf);
   --dr-focus: var(--hamuna-focus-border, #7b8f6b);
 
   /* 强调。hover 有专属 token，不要用 filter:brightness —— 它会把子元素一起压暗 */
   --dr-accent:        var(--hamuna-accent, #7b8f6b);
   --dr-accent-hover:  var(--hamuna-accent-hover, #6d8060);
-  --dr-accent-text:   var(--hamuna-text-on-primary, #ffffff);
+  --dr-accent-text:   var(--hamuna-text-on-primary, #050b14);
   --dr-link:          var(--hamuna-link, #7b8f6b);
 
   /* --- 派生层 ---------------------------------------------------------------

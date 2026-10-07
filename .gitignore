@@ -136,3 +136,7 @@ reference_videos/
 # is the single source of truth — do not hand-edit.
 src-tauri/src/system_skills.generated.rs
 src/shared/systemSkills.generated.ts
+.openbitfun/
+
+# Render harness output (npm run shoot:miniapp) — regenerated screenshots.
+.miniapp-shots/

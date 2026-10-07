@@ -61,7 +61,7 @@ body {
 
   --ig-accent: var(--hamuna-accent, #7b8f6b);
   --ig-accent-hover: var(--hamuna-accent-hover, #6d8060);
-  --ig-accent-text: var(--hamuna-text-on-primary, #ffffff);
+  --ig-accent-text: var(--hamuna-text-on-primary, #050b14);
   --ig-error: var(--hamuna-error, #b3261e);
 
   /* 派生层：全文件只在 :root 声明一次 */

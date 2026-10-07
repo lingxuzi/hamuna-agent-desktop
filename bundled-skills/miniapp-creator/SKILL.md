@@ -15,12 +15,14 @@ author: HamunaAgent
 
 MiniApp 运行在 iframe 沙箱里，能用的一切宿主能力都挂在 **`window.app`** 这一个全局对象上。`app.*` 走 postMessage 到宿主执行，权限由 `meta.json::permissions` 决定。
 
-**动手写第一行代码前，先读这两份（顺序不要反）：**
+**动手写第一行代码前，先看图、再读这两份（顺序不要反）：**
 
-1. [`references/design-playbook.md`](references/design-playbook.md) — 设计系统、反 AI 味清单、排版、Token 清单、视觉 QA 清单。**长什么样在这一份**。
-2. [`references/examples/design-reference/`](references/examples/design-reference/) — 一个**完整可运行**的参考实现（`style.css` 21.8KB）。写 `source/style.css` 前先读完它。
+0. [`references/design-reference-shots/`](references/design-reference-shots/) — **三张真实运行截图**。先看图，"好看"在这个产品里长什么样；代码能教结构，教不了品味。只有三张图，看完不到一分钟。
+1. [`references/design-direction.md`](references/design-direction.md) — **动笔前想清楚什么**：这是什么品类、标杆怎么做、调性五刻度、生成引擎、差异检验。**"正确但平庸"的界面全靠这一步挡住**，几秒钟的事。
+2. [`references/design-playbook.md`](references/design-playbook.md) — 设计系统、反 AI 味清单、排版、Token 清单、视觉 QA 清单。**长什么样在这一份**。
+3. [`references/examples/design-reference/`](references/examples/design-reference/) — 一个**完整可运行**的参考实现（`style.css` 21.8KB）。写 `source/style.css` 前先读完它。
 
-**不要照着本文件里的代码片段想象 UI 长什么样。** 本文件讲的是契约和流程（怎么调 API、权限怎么声明、状态怎么存），**不是视觉参考**；本文件里出现的任何 HTML / CSS 片段都只是 API 用法示意，**没有排版、没有间距系统、没有状态、没有动效，不要当模板抄**。视觉的唯一权威是上面第 2 份。
+**不要照着本文件里的代码片段想象 UI 长什么样。** 本文件讲的是契约和流程（怎么调 API、权限怎么声明、状态怎么存），**不是视觉参考**；本文件里出现的任何 HTML / CSS 片段都只是 API 用法示意，**没有排版、没有间距系统、没有状态、没有动效，不要当模板抄**。视觉的唯一权威是上面第 2、3 份。
 
 ## 你写什么 = 4 文件契约
 
@@ -254,11 +256,34 @@ app.onActivate(() => resume());
 app.onDeactivate(() => clearInterval(timer));
 ```
 
+> ⚠️ **`onAppearanceChange` / `onLocaleChange` 不为首屏状态触发。**
+>
+> 宿主在 `host.ready` 里下发初始的 `appearanceMode` / `locale`，runtime 把它
+> 存进 `app.appearanceMode` / `app.locale` 并 `applyEnv`，但**只发
+> `event: ready`，不发 appearance / locale 事件**。
+>
+> 只写上面两行的后果：界面用 runtime 的内置默认值（`dark` / `en-US`）起手。宿主在
+> 浅色或中文下打开时，整屏错色 / 整屏英文，而这两个回调**一次都不会响**——
+> 界面会一直错下去，直到用户手动切一次主题。这不是偶发，是每次都会发生。
+>
+> 首屏必须自己同步一次：
+>
+> ```javascript
+> const sync = () => repaint(app.appearanceMode, app.locale);
+> app.on((e) => { if (e.type === 'ready') sync(); });  // 首屏
+> app.onAppearanceChange(sync);                        // 之后才是变化事件
+> app.onLocaleChange(sync);
+> ```
+>
+> 这个坑本仓库三个样例各踩过一次，所以 `references/examples/README.md` 末尾也记了
+> 一遍。
+
 > `onActivate` / `onDeactivate` 只在**状态迁移**时触发，首次挂载不发。
 
 ### 明确不存在的能力（不要写）
 
 - `app.openbitfun.*` / `app.workspace.*` / `app.git.*` / `app.session.*` / `app.terminal.*` / `app.browser.*`
+- `app.off` —— 不存在（订阅返回的取消函数要自己保存）；`app.http` / `app.request` / `app.axios` —— 不存在，联网只有 `app.net.fetch`
 - `window.__miniappStorage` —— 不存在（早期文档写错过）。用 `app.storage`。
 - 第三方 CDN 脚本 —— **不能直接写 `<script src>`**，iframe CSP `default-src 'none'` 会拦掉。
   改用 `meta.json` 的 `dependencies` 声明（见下方「CDN 依赖」），由宿主注入标签并按需放宽 CSP。
@@ -271,6 +296,53 @@ app.onDeactivate(() => clearInterval(timer));
 - 需要**读**自己 appdata 里的文件来分析 → `app.agent.run`，需 `agent.enabled`
 - 需要**写**文件 → `app.fs.writeFile`（需 `fs.write` 权限），不是 `app.agent`
 - 只是想把一段草稿交给对话里的 agent → 用下面的 §Bubble Claim
+
+## 编码规范：调用 `app.*`（写 ui.js 前必读）
+
+`app` 是一个**运行期门面**——`app.fs.readFile` 就是挂着函数的普通属性。写错名字**不会在加载时报错**：页面照常渲染、静态骨架照常显示、截图评审看不出任何问题，直到用户点下去才抛 `TypeError: app.fs.readFileSync is not a function`。这是生成 MiniApp 最常见、也最难靠肉眼发现的缺陷，所以下面每条规则都对应一类真实错误。
+
+### 方法全表（照抄，不要凭记忆补全）
+
+宿主实现了的就这些，此外一律 `UNKNOWN_METHOD`：
+
+| 组 | 方法 |
+|---|---|
+| `app.fs` | `readFile` `writeFile` `appendFile` `readdir` `mkdir` `rm` `rmdir` `stat` `lstat` `access` `unlink` `copyFile` `rename` |
+| `app.shell` | `exec` |
+| `app.net` | `fetch` |
+| `app.os` | `info` |
+| `app.storage` | `get` `set` `remove` |
+| `app.ai` | `complete` `chat` `cancel` `getModels` |
+| `app.agent` | `ensureSession` `run` `turnText` `cancel` `onEvent` |
+| `app.dialog` | `open` `save` `message` |
+| `app.clipboard` | `readText` `writeText` |
+| `app.call` | `call(method, params)` |
+
+值 / getter（**只读，不要调用**）：`app.appId` `app.mode` `app.appearanceMode` `app.locale` `app.platform` `app.workspaceDir` `app.appDataDir`
+
+唯一的可调用非能力键：`app.t(table, fallback)`
+
+事件订阅（每个都**返回取消订阅函数**）：`app.on` `app.onAppearanceChange` `app.onLocaleChange` `app.onActivate` `app.onDeactivate`
+
+### 八条硬规则
+
+1. **唯一入口是 `window.app`。** 不要自己 `postMessage`、不要 `parent.xxx`、不要 `__miniappStorage`——这些都不存在。
+2. **能力全部返回 Promise。** 要么 `await`，要么显式 `.catch()`。写成 `app.storage.set(k, v);` 而既不 await 也不 catch，就是一个 unhandledrejection。
+3. **每个 await 都要 try/catch。** catch 里只认这五个码；前三个**改代码才有用**，后两个可以重试：
+
+   | 码 | 含义 | 该怎么办 |
+   |---|---|---|
+   | `PERMISSION_DENIED` | 宿主拒绝了这次调用 | 去 meta.json 补声明 |
+   | `UNKNOWN_METHOD` | 方法名不存在 | 查上面那张表 |
+   | `INVALID_PARAMS` | 参数形状不对 | 照签名改 |
+   | `HOST_ERROR` | 宿主自己失败 | 可以重试 |
+   | `NETWORK_ERROR` | 网络失败 | 可以重试 |
+
+4. **`app.fs.*` 的路径必须是完整字面量**，以 `{appdata}` 或 `{workspace}` 开头（尾部可加 `/**`）。中间段的 `*` **不生效**，`{user-selected}` 尚不能展开、写了必然 `PERMISSION_DENIED`。
+5. **`app.onAppearanceChange` 等订阅函数都返回取消订阅闭包，要存起来。** 反复进出会叠加监听器；没有 `app.off`，丢了这个返回值就等于永久泄漏。
+6. **`app.locale` / `app.appearanceMode` 是 getter**，会随宿主切换而变。不要在加载时缓存进变量，用到现取；要跟随切换就订阅对应的 `app.onAppearanceChange` / `app.onLocaleChange`。
+7. **不要用 `app.call` 绕开上表**去调自定义方法，除非你确实声明了 `node.enabled` 并写了对应的 worker。
+8. **worker 文件同样受此约束**，并额外受 require 限制：动态 `require(...)`、`process.binding` 之类一律被 `ast-policy` 拒绝。
 
 ## Schema
 
@@ -328,6 +400,52 @@ app.onDeactivate(() => clearInterval(timer));
 >
 > **`storage.defaults` 是真的会生效的**：`app.storage.get(key)` 在该 key 从未写入时返回这里的初值（照上面的例子写，`get('items')` 拿到 `[]` 而不是 `undefined`）。它只做回落：作者 `set(key, null)` 存下的 `null` 就是存下的值，不会被默认值顶掉；`remove` 之后回落重新生效。声明了但形状写错（不是对象）会被 schema 当场拒掉。
 
+### `appearance` — 调色板就是产品内容时
+
+**默认不写这个字段**，行为与从前完全一致。只有当你的调色板本身就是内容的一部分
+（夜景仪表盘、塔罗、品牌看板）才开这个口：
+
+```json
+"appearance": {
+  "mode": "bespoke",
+  "palette": { "bg-primary": "#faf6ef", "text-primary": "#241a1c", "accent": "#8a3d58", "text-on-primary": "#ece2d0" },
+  "palette_dark": { "bg-primary": "#16110f", "text-primary": "#f6efe6", "accent": "#d9a0b4", "text-on-primary": "#2a1620" }
+}
+```
+
+宿主会用你声明的颜色去填契约槽位，**变量名一个都不变** —— CSS 侧照旧写
+`var(--hamuna-bg-primary, #faf6ef)`，导出成独立网页还是你自己那个样子。
+
+- 键是契约变量名去掉 `--hamuna-` 前缀（完整清单见 playbook §四），值必须是
+  **字面颜色**。写 `var(--hamuna-accent)` 会被拒：那等于把颜色的决定权交回宿主。
+- 深浅两套都写。`palette_dark` 缺省时深浅共用 `palette`，但沿用浅色的
+  `text-secondary` 配深色底，对比度会掉到 3:1 以下。
+- 硬编码这些颜色到 `style.css` 里**会被 `verify:miniapp-style` 拦下** —— 除了
+  `var()` 的 fallback 位置，其它地方出现未声明的字面颜色就是构建错误。
+
+完整可运行的例子：`references/examples/showcase/`。
+
+### 外观微调（可选，但推荐）
+
+`references/tweaks/` 提供了可直接复制的运行时：几个外观档位持久化在
+`app.storage`，通过 `<html>` 上的 `data-tweak-*` 属性生效，右下角齿轮面板暴露。
+
+它解决的是"用户第二次打开才形成的偏好"—— 字太小、信息太密、动效晃眼。这些不会
+出现在第一次的需求描述里，而没有地方承接它们，模型就只能照抄用户的第一句话。
+
+```js
+import { mountTweaks } from './tweaks.js';
+mountTweaks({
+  items: [{ id: 'density', label: { 'zh-CN': '密度', 'en-US': 'Density' },
+            options: [['comfortable', '宽松'], ['compact', '紧凑']],
+            default: 'comfortable' }],
+});
+```
+
+你的 CSS 只需要写 `:root[data-density='compact'] { --row-h: 32px; }`，不必调 API。
+
+**只放"长什么样"**：默认视图、排序方式这类业务偏好属于主界面，不进这个面板。
+
 ### CDN 依赖
 
 iframe 的 CSP 是 `default-src 'none'`，**在 HTML 里直接写 `<script src="https://...">` 会被静默拦掉**。要加载第三方库必须走 `meta.json` 的 `dependencies`，宿主会注入标签并按声明的域名放宽 CSP。
@@ -361,37 +479,77 @@ iframe 的 CSP 是 `default-src 'none'`，**在 HTML 里直接写 `<script src="
 > 契约和流程在本文件；**长什么样**（设计系统、反 AI 味清单、排版、Token 清单、视觉 QA 清单）在 `references/design-playbook.md`，写样式前先读它。
 
 1. **澄清需求**（最重要）：用户说"做个 X"，X 是什么？输入输出？一次性的还是循环用？数据存哪？——**如果需求模糊，先反问 1-3 个澄清问题再开始写**
-2. **起 App ID**：用户给了就用，没给按上面规则派生
-3. **定权限**：这个 app 真的需要读文件 / 跑命令 / 联网吗？不需要就全留空——权限最小化是硬要求
-4. **写 meta.json**（用上面 schema）
-5. **写 source/index.html**（5-50 行 HTML，body 只放骨架 DOM，不内联 CSS/JS）
-6. **写 source/ui.js**（状态用 `app.storage`，文件/命令用 `app.fs` / `app.shell`，都要包 try/catch 显示错误）
-7. **写 source/style.css**（**必须用 `--hamuna-*` CSS Token**，见 `references/design-playbook.md` §四；结构与动效照抄 `references/examples/design-reference/source/style.css`）
-8. **写 storage.json**（`{}` 空即可）
-9. **语法自检（不可跳过）**：跑一次 parse 闸，报错就改到干净为止
+2. **定设计方向**（不可跳过，但只要几分钟）：读 `references/design-direction.md`，在动笔前答出四件事——**这是什么品类、这个品类里风格最鲜明的是谁、拆开它有哪 6–10 条可照做的要素、这个 app 沿用哪几条换掉哪几条**。再定五刻度调性（默认工具型）和一个生成引擎（具体场景 / 材质 / 角色原型 / 历史媒介），最后过一遍差异检验。
 
-   ```
-   node --import tsx/esm scripts/validate-miniapp.mts <app 目录>
-   ```
+   > **为什么这一步不能省。** 跳过它，你会稳定地产出"正确但平庸"的界面：一屏三块、
+   > 每块一个圆角卡片、标题下一条 1px 灰线。全部合规，全部及格，没有一处让人记住。
+   > playbook §五 的反 AI 味清单挡不住这种——它查的是"有没有犯忌"，不是"有没有主张"。
+   > 而方向想清楚再写，比写完返工便宜：返工要推翻的不是几行 CSS，是已经铺开的
+   > DOM 结构和一层层叠上去的样式。
+   >
+   > **轻量做法**：方向卡不用写满，在心里过一遍上面四问即可。只有当用户要的是
+   > 展示型 / 作品集 / 品牌向的 app（playbook §三 说的"用户明确要求"那一档），
+   > 才把卡写出来。
+3. **起 App ID**：用户给了就用，没给按上面规则派生
+4. **定权限**：这个 app 真的需要读文件 / 跑命令 / 联网吗？不需要就全留空——权限最小化是硬要求
+5. **写 meta.json**（用上面 schema）
+6. **写 source/index.html**（5-50 行 HTML，body 只放骨架 DOM，不内联 CSS/JS）
+7. **写 source/ui.js**（状态用 `app.storage`，文件/命令用 `app.fs` / `app.shell`，都要包 try/catch 显示错误）
+8. **写 source/style.css**（**必须用 `--hamuna-*` CSS Token**，见 `references/design-playbook.md` §四；结构与动效照抄 `references/examples/design-reference/source/style.css`）
+9. **写 storage.json**（`{}` 空即可）
+10. **语法 + 方法自检（不可跳过）**：跑一次闸，报错就改到干净为止
 
-   非 0 退出 = `ui.js` 根本不能解析。这一步不是形式：`ui.js` 解析失败时浏览器会
-   **整个丢弃**这个文件，页面只剩 `index.html` 里的静态骨架 —— 标题、统计块、
-   输入框全都正常显示，而所有行为一行都不跑。没有异常、没有 console 报错，
-   截图评审只会看成「有点朴素」而不是「根本没跑」。真实发生过：一次生成产出
-   6500 token，唯一的缺陷是
+    ```
+    node --import tsx/esm scripts/validate-miniapp.mts <app 目录>
+    ```
 
-   ```js
-   div.innerHTML = '
-     <label>…</label>
-   ';
-   ```
+    非 0 退出 = `ui.js` 要么**根本不能解析**，要么**调了宿主不存在的方法**。这两种都不是形式：
 
-   单引号字符串里跨了真实换行。头、三个数字块、输入框全在，一条待办没有。
+    - **解析失败**时浏览器会**整个丢弃**这个文件，页面只剩 `index.html` 里的静态骨架 —— 标题、统计块、输入框全都正常显示，而所有行为一行都不跑。没有异常、没有 console 报错，截图评审只会看成「有点朴素」而不是「根本没跑」。真实发生过：一次生成产出 6500 token，唯一的缺陷是
 
-   报错信息带文件名、行号和出错那行原文，**照着改**，不要重写整个文件。
+      ```js
+      div.innerHTML = '
+        <label>…</label>
+      ';
+      ```
 
-10. **提交写盘**（见 §端到端协议）
-11. **告诉用户结果**：appId + 4 文件路径 + SceneTab 怎么开
+      单引号字符串里跨了真实换行。头、三个数字块、输入框全在，一条待办没有。
+
+    - **方法写错**（`app.fs.readFileSync` / `app.http.get` / `app.locale(...)`）比解析失败更隐蔽：它能解析、能渲染、能过所有颜色与 token 探针，**只在用户点下去那一刻**才炸，静态截图看不出任何异常。
+
+    报错信息带文件名、行号、出错那行原文和**应该改成什么**，**照着改**，不要重写整个文件。
+
+11. **样式与渲染自检（不可跳过）**：写完 `style.css` 之后跑这两条
+
+    ```
+    node scripts/audit-miniapp-style.mjs
+    node --import tsx/esm scripts/shoot-miniapp.mjs <app 目录>
+    ```
+
+    第一条查颜色/token 契约与动效房规：契约里没有的变量名、自己重定义宿主变量、
+    硬编码颜色（`var()` 的 fallback 除外）、`transition: all`、`scale(0)`、
+    `filter: brightness()`、无前缀的 `@keyframes`、有动画却缺 `prefers-reduced-motion`
+    ——这些 CI 也会拦，所以在这里过一遍比等构建变红便宜。
+
+    第二条把应用按宿主的真实主题渲染成明暗两张图，并探对比度 / 横向溢出 /
+    命中目标 / 字号 / accent 支配度，**然后真的把每个按钮点一遍、每个输入框填一遍**，
+    报告运行期出现的异常（`page-error` / `console-error`）和宿主拒绝的调用
+    （`host-refused-call`）。
+
+    这一步抓的是第 10 条抓不到的那一类缺陷：**能解析、能渲染、过所有探针，
+    但点下去什么都不发生**。截图永远看不出 handler 是死是活的，只有真去点它。
+    报告写在 `.miniapp-shots/<id>/report.json`，其中 `driven.pressed` /
+    `driven.edited` 是 0 就说明这个 app 压根没有可交互控件——那本身就是个信号。
+
+    > 冒烟测试不是规格说明：它无法知道「添加」按钮**应该**添加一条。它只证明
+    > 「按下去没有抛异常、没有向宿主要一个会被拒绝的方法」。app 自身行为对不对，
+    > 还是得你自己点一遍。
+
+    **两条都过了不算完**：截图落在 `.miniapp-shots/<id>/`，**自己打开看一眼**。
+    探针只报可测量的东西，而"一眼很廉价"正是它测不出来、也正是用户会投诉的那部分。
+
+12. **提交写盘**（见 §端到端协议）
+13. **告诉用户结果**：appId + 4 文件路径 + SceneTab 怎么开
 
 ## 端到端协议
 

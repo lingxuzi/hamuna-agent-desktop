@@ -1,0 +1,61 @@
+{
+  "id": "canvas-lab",
+  "name": "Canvas Lab",
+  "description": "画布样例：devicePixelRatio、运行时读取主题色、rAF 生命周期与确定性 PRNG。生成 MiniApp 里凡是 immediate-mode 图形的那一类，先读它的 ui.js。",
+  "icon": "grid",
+  "category": "design",
+  "version": 1,
+  "min_host_version": "0.3.233",
+  "tags": ["canvas", "design-reference"],
+  "permissions": {
+    "fs": { "read": [], "write": [] },
+    "shell": { "allow": [] },
+    "net": { "allow": [] }
+  },
+  "entry": "source/index.html",
+  "i18n": {
+    "default_locale": "zh-CN",
+    "locales": {
+      "zh-CN": {
+        "app.title": "画布实验室",
+        "app.subtitle": "确定性图案 · 同一颗种子必然画出同一张图",
+        "control.seed": "种子",
+        "control.complexity": "复杂度",
+        "control.cell": "单元格",
+        "control.palette": "色板",
+        "palette.harmony": "谐色",
+        "palette.graphite": "石墨",
+        "palette.duotone": "双色",
+        "action.random": "随机种子",
+        "action.regenerate": "按种子重绘",
+        "action.export": "导出 PNG",
+        "canvas.alt": "按当前参数确定性生成的几何图案",
+        "status.ready": "改动任一参数即刻重画",
+        "status.regenerated": "同一颗种子 → 同一张图",
+        "status.randomized": "换了一颗种子：{0}",
+        "status.exported": "已导出 canvas-lab-{0}.png",
+        "status.exportFailed": "导出失败：浏览器没能把画布编码成 PNG"
+      },
+      "en-US": {
+        "app.title": "Canvas Lab",
+        "app.subtitle": "Deterministic patterns · one seed always paints one picture",
+        "control.seed": "Seed",
+        "control.complexity": "Complexity",
+        "control.cell": "Cell size",
+        "control.palette": "Palette",
+        "palette.harmony": "Harmony",
+        "palette.graphite": "Graphite",
+        "palette.duotone": "Duotone",
+        "action.random": "New seed",
+        "action.regenerate": "Redraw from seed",
+        "action.export": "Export PNG",
+        "canvas.alt": "Deterministic geometric pattern drawn from the current parameters",
+        "status.ready": "Change any parameter to redraw",
+        "status.regenerated": "Same seed → same picture",
+        "status.randomized": "New seed: {0}",
+        "status.exported": "Exported canvas-lab-{0}.png",
+        "status.exportFailed": "Export failed: the browser could not encode the canvas as PNG"
+      }
+    }
+  }
+}

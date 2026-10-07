@@ -75,20 +75,30 @@ html[data-theme-id='hamuna-default'][data-color-scheme='light'] {
   --heartbeat: #c75050;
   --heartbeat-bg: rgba(199, 80, 80, 0.10);
   --heartbeat-border: rgba(199, 80, 80, 0.20);
-  --success: #2d8a5e;
+  /* 语义色是**两用**的：既当小字正文用，又当实心填充用（`--on-X` 是填色上的墨）。
+   * 这两个用途对亮度的要求正好相反 —— 小字要压得够深才过 AA，填色要够浅才压得住墨。
+   * 原来的取值满足了后者、牺牲了前者：在 --paper-inset 上 `--warning` 只有 2.36:1、
+   * `--success` 3.17:1、`--info` 3.28:1、`--error` 3.58:1，**四个全部够不到 4.5:1**
+   * —— 也就是「用状态色写一行小字」在本主题的浅色表面上从来就读不清。
+   *
+   * 现在压深到四种表面都过 AA（最差的 --paper-inset 约 4.6:1），色相与饱和度不变。
+   * 代价是填色变深，于是配对的 `--on-X` 一起换成白墨（白墨在这四支色上都是 6.2:1）
+   * —— 这正是 themeArchitecture 那条「状态色必须配自己的 --on-*」约束要维护的东西。
+   */
+  --success: #236d4a;
   --success-bg: #e2f0e8;
-  --on-success: #000000;
-  --error: #dc2626;
+  --on-success: #ffffff;
+  --error: #bd1e1e;
   --error-bg: #fee2e2;
-  --error-hover: #b91c1c;
-  --error-subtle: rgba(220, 38, 38, 0.07);
+  --error-hover: #9c1919;
+  --error-subtle: rgba(189, 30, 30, 0.07);
   --on-error: #ffffff;
-  --warning: #d97706;
+  --warning: #944f00;
   --warning-bg: #fef3c7;
-  --on-warning: #1c1612;
-  --info: #4a7ab5;
+  --on-warning: #ffffff;
+  --info: #3c6292;
   --info-bg: #e4ecf4;
-  --on-info: #000000;
+  --on-info: #ffffff;
 
   --button-primary-bg: #b05e2d;
   --button-primary-bg-hover: #9c5027;
@@ -199,10 +209,15 @@ html[data-theme-id='hamuna-default'][data-color-scheme='dark'] {
   --success: #4aad7a;
   --success-bg: rgba(74, 173, 122, 0.15);
   --on-success: #1a1614;
-  --error: #ef4444;
-  --error-bg: rgba(239, 68, 68, 0.15);
-  --error-hover: #dc2626;
-  --error-subtle: rgba(239, 68, 68, 0.12);
+  /* 深色下只有 --error 一支没过 AA：在 --paper-elevated 上是 4.31:1。深色底的
+   * 修法与浅色相反 —— 要**提亮**而不是压深（#ef4444 → #f05050，5.11 / 4.61 / 5.40）。
+   * `--on-error` 保持深墨不变：填色变亮之后深墨对比度反而更好（5.11:1）。
+   * 同一个 token 在两种外观下往相反方向修，正是"两用"的直接后果。
+   */
+  --error: #f05050;
+  --error-bg: rgba(240, 80, 80, 0.15);
+  --error-hover: #f87171;
+  --error-subtle: rgba(240, 80, 80, 0.12);
   --on-error: #1a1614;
   --warning: #f59e0b;
   --warning-bg: rgba(245, 158, 11, 0.15);

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Canvas Lab</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      结构/样式/逻辑三者分离。HTML 里只有一个真正"内容"的元素 —— <canvas>，
+      其它全是它周围的仪器面板。这一份样例的价值在 ui.js 的四件事：
+      devicePixelRatio、运行时读主题色、rAF 生命周期、确定性 PRNG。
+    -->
+    <div class="cl-app">
+      <header class="cl-topbar">
+        <div class="cl-topbar__text">
+          <h1 class="cl-title" data-i18n="app.title"></h1>
+          <p class="cl-subtitle" data-i18n="app.subtitle"></p>
+        </div>
+        <span class="cl-badge" id="mode-badge"></span>
+      </header>
+
+      <!--
+        画布的 CSS 盒子是响应式的（宽度撑满、比例锁定 1:1），但它的**背板**
+        尺寸由 ui.js 按 devicePixelRatio 决定。两件事必须分开：CSS 管布局，
+        canvas.width/height 管像素密度。见 ui.js 的 resizeCanvas()。
+      -->
+      <canvas class="cl-canvas" id="stage" role="img" data-i18n-aria="canvas.alt"></canvas>
+
+      <section class="cl-panel">
+        <div class="cl-field">
+          <label class="cl-label" for="seed" data-i18n="control.seed"></label>
+          <div class="cl-field__control">
+            <!--
+              max 必须 >= ui.js 里 DEFAULTS.seed，否则默认种子一落进输入框就被
+              钳到 max 上：控件显示的是一个数，画出来的却是另一个数，而两边
+              都不报错。input[type=number] 的 rangeOverflow 也不会有任何提示。
+            -->
+            <input
+              class="cl-input cl-num"
+              id="seed"
+              type="number"
+              min="1"
+              max="99999999"
+              step="1"
+              inputmode="numeric"
+            />
+            <div class="cl-meter" aria-hidden="true"><i id="seed-meter"></i></div>
+          </div>
+        </div>
+
+        <div class="cl-field">
+          <label class="cl-label" for="complexity" data-i18n="control.complexity"></label>
+          <div class="cl-field__control">
+            <input class="cl-range" id="complexity" type="range" min="1" max="6" step="1" />
+            <output class="cl-readout" id="complexity-out">—</output>
+          </div>
+        </div>
+
+        <div class="cl-field">
+          <label class="cl-label" for="cell" data-i18n="control.cell"></label>
+          <div class="cl-field__control">
+            <input class="cl-range" id="cell" type="range" min="8" max="56" step="2" />
+            <output class="cl-readout" id="cell-out">—</output>
+          </div>
+        </div>
+
+        <div class="cl-field">
+          <span class="cl-label" id="palette-label" data-i18n="control.palette"></span>
+          <!-- 互斥选项要成组：三个按钮是分段控件，不是三个各自独立的按钮。 -->
+          <div class="cl-segment" role="group" aria-labelledby="palette-label">
+            <button class="cl-seg" type="button" data-palette="theme" data-i18n="palette.harmony"></button>
+            <button class="cl-seg" type="button" data-palette="ink" data-i18n="palette.graphite"></button>
+            <button class="cl-seg" type="button" data-palette="duo" data-i18n="palette.duotone"></button>
+          </div>
+        </div>
+
+        <div class="cl-actions">
+          <button class="cl-btn cl-btn--primary" id="random" type="button">
+            <span data-i18n="action.random"></span>
+          </button>
+          <button class="cl-btn" id="regen" type="button">
+            <span data-i18n="action.regenerate"></span>
+          </button>
+          <button class="cl-btn cl-btn--ghost" id="export" type="button">
+            <span data-i18n="action.export"></span>
+          </button>
+        </div>
+
+        <!--
+          状态行不可省：「按种子重绘」画出来的图和上一帧**逐像素相同**
+          （那正是这个应用要证明的事），不给一句确认，用户只会以为按钮坏了。
+          role=status 让读屏器也能感知。
+        -->
+        <p class="cl-status" id="status" role="status"></p>
+      </section>
+    </div>
+
+    <script src="ui.js"></script>
+  </body>
+</html>

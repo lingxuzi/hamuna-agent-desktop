@@ -1035,6 +1035,11 @@
     "kindWorker": "Worker",
     "kindIframe": "Iframe",
     "retry": "重试",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "uninstall": "卸载",
+    "uninstallNamed": "卸载 {{name}}",
+    "uninstallSuccess": "已卸载 {{appId}}",
+    "uninstallConfirmTitle": "卸载小程序？",
+    "uninstallConfirmMessage": "确认卸载「{{name}}」吗？小程序文件和它保存的数据都会被删除，无法恢复。"
   }
 }

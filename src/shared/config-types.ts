@@ -760,6 +760,17 @@ export function normalizeClaudeTranscriptCleanupPeriodDays(value: unknown): numb
 export interface AppConfig {
   // Default settings for new projects
   defaultProviderId?: string;
+  /** MiniApp `app.ai` / `app.agent` 的供应商/模型。缺省（或空串）= 沿用宿主
+   *  会话当前 provider，即改动前的行为。
+   *
+   *  为什么需要它：`app.ai` 跑在**全局 sidecar** 里，读的是
+   *  `getSessionProviderEnv()` 那个进程级全局 —— 只有 Rust IM router 会写它。
+   *  而用户在聊天框里选的 provider 是 renderer 的 per-tab state，只作为
+   *  `builtinSelection` 逐条消息下发，从不落到那个全局上。于是 MiniApp 用的
+   *  供应商与"对话中指定的"对不上，而用户没有任何手段纠正。 */
+  miniappProviderId?: string;
+  /** 与 `miniappProviderId` 配套的模型 id。留空则由 SDK 按该 provider 自选。 */
+  miniappModel?: string;
   defaultPermissionMode: PermissionMode;
   // Background-agent permission policy (issue #264). Controls what a
   // `run_in_background` sub-agent may do when it hits a tool the SDK can't

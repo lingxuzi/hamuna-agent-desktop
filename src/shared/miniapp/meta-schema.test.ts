@@ -393,3 +393,79 @@ describe('miniapp-creator reference exemplars', () => {
     });
   });
 });
+/**
+ * `meta.json::appearance` — a MiniApp declaring that its palette is the product
+ * rather than a deviation from the host theme.
+ *
+ * Every rule below exists because the alternative is silent. An unknown palette
+ * key would be ignored by the host and the author would believe they had
+ * overridden a colour that never changed. A `var(--hamuna-*)` inside a palette
+ * would make "bespoke" mean "a slightly more indirect way to depend on the host",
+ * which is the opposite of what the field promises.
+ */
+describe('appearance (bespoke palette)', () => {
+  const base = {
+    id: 'x',
+    name: 'X',
+    description: 'x',
+    icon: 'i',
+    category: 'other',
+    version: 1,
+    min_host_version: '0.3.0',
+    permissions: {},
+  };
+
+  const parse = (appearance: unknown) => parseMiniAppMetadata({ ...base, appearance });
+
+  it('is absent by default, so every existing meta.json behaves identically', () => {
+    const r = parseMiniAppMetadata(base);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.result.appearance).toBeUndefined();
+  });
+
+  it('accepts a palette keyed by contract slot names', () => {
+    const r = parse({
+      mode: 'bespoke',
+      palette: { 'bg-primary': '#101014', accent: '#d9a0b4' },
+      palette_dark: { 'bg-primary': '#faf6ef' },
+    });
+    expect(r.ok, r.ok ? '' : JSON.stringify(r.error)).toBe(true);
+    if (r.ok) {
+      expect(r.result.appearance).toEqual({
+        mode: 'bespoke',
+        palette: { 'bg-primary': '#101014', accent: '#d9a0b4' },
+        palette_dark: { 'bg-primary': '#faf6ef' },
+      });
+    }
+  });
+
+  it('rejects a slot the contract does not define', () => {
+    const r = parse({ mode: 'bespoke', palette: { 'bg-primry': '#101014' } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toContain('is not a MiniApp appearance token');
+  });
+
+  it('rejects a palette that defers to the host, which would make bespoke a no-op', () => {
+    const r = parse({ mode: 'bespoke', palette: { accent: 'var(--hamuna-accent)' } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toContain('literal CSS color');
+  });
+
+  it('requires a palette for bespoke rather than accepting a silent no-op', () => {
+    const r = parse({ mode: 'bespoke' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toContain('requires a palette');
+  });
+
+  it('rejects a palette declared without bespoke mode', () => {
+    const r = parse({ mode: 'host', palette: { accent: '#8a3d58' } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toContain("requires mode 'bespoke'");
+  });
+
+  it('rejects an unknown mode outright', () => {
+    const r = parse({ mode: 'custom' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toContain("must be 'host' | 'bespoke'");
+  });
+});

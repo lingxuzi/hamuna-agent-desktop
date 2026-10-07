@@ -50,6 +50,7 @@ export const THEME_TOKEN_STYLE_ID = 'hamuna-theme-tokens';
  * `theme-tokens.host-contract.test.ts` + `verify:miniapp-appearance` 守住。
  */
 import appearanceContract from '../../../shared/miniapp-appearance/contract.json';
+import type { MiniAppAppearance } from '../../../shared/miniapp/types';
 
 /**
  * The contract, read straight off the import.
@@ -143,7 +144,9 @@ export const FALLBACK_BY_KEY: Record<TokenKey, string> = {
   textPrimary: '#1c1612',
   textSecondary: '#544b42',
   textMuted: '#6f6156',
-  textOnPrimary: '#ffffff',
+  // 与 accent 配对的墨，不是主按钮的白字。绿底白字只有 3.51:1（深色 2.36:1），
+  // 主 CTA 在两种外观下都读不清 —— 见 contract.json 里 text-on-primary 的 note。
+  textOnPrimary: '#050b14',
 
   // 强调色。注意 fallback 的 accent 是 #7b8f6b（橄榄），白字对比度约 3.1:1，
   // 低于 WCAG AA 的 4.5:1。这不是选色失误而是缺 `--accent-primary-hover`
@@ -164,7 +167,8 @@ export const FALLBACK_BY_KEY: Record<TokenKey, string> = {
   borderPrimary: 'rgba(0, 0, 0, 0.20)',
   bgButton: '#f0ece6',
   bgButtonHover: 'rgba(0, 0, 0, 0.06)',
-  bgInput: '#ffffff',
+  // 与 --paper-inset 的浅色取值一致，不是 --code-bg 的暗色值。见 contract.json 的 note。
+  bgInput: '#e8dccf',
   fieldBorder: 'rgba(0, 0, 0, 0.12)',
   fieldBorderFocus: '#7b8f6b',
   focusBorder: '#7b8f6b',
@@ -235,6 +239,34 @@ function cssSafeValue(value: string): string {
  * 生成一段 `<style>` 文本，注入到 iframe :root 上。
  */
 /**
+ * `meta.json::appearance` → 契约槽位覆盖表。
+ *
+ * 返回的键是**完整契约变量名**（`--hamuna-bg-primary`），因为 `buildThemeTokenCss`
+ * 是按 `contract.json` 的顺序逐个发牌的，覆盖判断发生在那一步。`meta.json` 里
+ * 作者写的是去掉前缀的短名（`bg-primary`），转换只在这一处发生。
+ *
+ * 缺 `appearance` / `mode: 'host'` 一律返回 undefined —— 调用方不需要区分
+ * "没声明"和"声明了但什么都没覆盖"，那条路径本来就和注入宿主值完全一样。
+ */
+export function bespokeOverrides(
+  appearance: MiniAppAppearance | undefined,
+  appearanceMode?: string,
+): Record<string, string> | undefined {
+  if (!appearance || appearance.mode !== 'bespoke') return undefined;
+
+  // 深色用 `palette_dark`；缺省时深浅共用 `palette`。共用是有意可预测的：
+  // "我只声明了一套配色" 比 "另一套我忘了写，于是它悄悄用了浅色" 好。
+  const chosen = appearanceMode === 'dark' ? (appearance.palette_dark ?? appearance.palette) : appearance.palette;
+  if (!chosen) return undefined;
+
+  const out: Record<string, string> = {};
+  for (const [slot, color] of Object.entries(chosen)) {
+    out[`--hamuna-${slot}`] = color;
+  }
+  return out;
+}
+
+/**
  * 生成注入到 MiniApp iframe `<style>` 的完整首屏样式。
  *
  * 除了变量本身，还带三样**作者写不出来也猜不到**的东西：
@@ -250,10 +282,17 @@ function cssSafeValue(value: string): string {
  *    又方，在一个精心排版的工具面板里极其扎眼。
  *
  * 变量值仍然逐个过 `cssSafeValue`；这三样都是字面量，不含 token 值。
+ *
+ * `overrides` 是 `meta.json::appearance.mode === 'bespoke'` 的落点：作者声明的
+ * 颜色顶掉契约槽位，**变量名不变**。于是作者的 CSS 一个字都不用改、审计照常
+ * 认这些变量、`var()` 的 fallback 仍然等于作者自己的调色板（导出成独立网页
+ * 还是原来那个样子）。覆盖值同样过 `cssSafeValue` —— meta.json 是磁盘上的
+ * 文件，可能被手工改过，而 iframe 的 CSP 恰恰允许 `unsafe-inline`。
  */
 export function buildThemeTokenCss(
   tokens: MiniAppThemeTokens,
   appearanceMode?: string,
+  overrides?: Record<string, string>,
 ): string {
   const scheme = appearanceMode === 'light' || appearanceMode === 'dark'
     ? appearanceMode
@@ -264,6 +303,11 @@ export function buildThemeTokenCss(
     '  background: transparent;',
   ];
   for (const t of TOKENS) {
+    const override = overrides?.[t.name];
+    if (override !== undefined) {
+      lines.push(`  ${t.name}: ${cssSafeValue(override)};`);
+      continue;
+    }
     const source = HOST_TO_TOKEN[t.key];
     if (typeof source === 'string') {
       lines.push(`  ${t.name}: ${cssSafeValue(tokens[t.key] ?? '')};`);

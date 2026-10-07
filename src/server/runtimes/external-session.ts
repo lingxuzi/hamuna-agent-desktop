@@ -27,7 +27,7 @@ import type {
   ImagePayload,
   ResolvedImagePayload,
 } from './types';
-import { StaleRuntimeSessionError } from './types';
+import { isRuntimeSteerUnavailableError, StaleRuntimeSessionError } from './types';
 import { awaitInFlightSaves, rebuildAttachmentRegistryFromBlocks, trackInFlightSave } from './tool-attachments';
 import { messageAttachmentsFromImagePayloads, resolveImagePayloads } from './image-payload';
 import { maybeSpill } from '../utils/large-value-store';
@@ -700,6 +700,9 @@ function getExternalActiveSteerPair(): SteerCapableActivePair | null {
   if (!active || active.process.exited || !active.runtime.steerMessage) return null;
   if (getExternalLifecycleState() !== 'running') return null;
   if (isExternalTurnCompleted() || getExternalTurnStartTime() === 0) return null;
+  // Product turn activity outlives the runtime's own turn, so a "running"
+  // session is not proof a steer can land. Ask the runtime when it can answer.
+  if (active.runtime.canSteerMessage && !active.runtime.canSteerMessage(active.process)) return null;
   return active as SteerCapableActivePair;
 }
 
@@ -3381,12 +3384,60 @@ async function steerExternalMessageForDesktop(input: {
     );
     return { queued: true };
   } catch (err) {
+    if (isRuntimeSteerUnavailableError(err)) {
+      // The turn retired between our eligibility check and the steer landing.
+      // Codex consumed nothing, so the message is intact — demote it into the
+      // turn-boundary queue for the next turn. Retracting here is what makes a
+      // send at a turn boundary silently vanish.
+      console.log(`[external-session] realtime steer unavailable, deferring ${input.userMsg.id} to the turn queue`);
+      forgetPendingRealtimeSteeredUserMessage(input.userMsg.id);
+      return deferRealtimeSteerToQueue(input);
+    }
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[external-session] realtime steer failed, retracting user message ${input.userMsg.id}: ${message}`);
     forgetPendingRealtimeSteeredUserMessage(input.userMsg.id);
     broadcast('queue:cancelled', { queueId: input.queueId });
     return { queued: false, error: message };
   }
+}
+
+/**
+ * Re-enter an unsteerable realtime message into the turn-boundary FIFO under its
+ * original queueId. Reusing the id lets the renderer flip the pill it already
+ * drew from "in flight, realtime" to "waiting, turn" in place instead of
+ * removing and re-adding it.
+ */
+function deferRealtimeSteerToQueue(input: {
+  queueId: string;
+  text: string;
+  images?: ImagePayload[];
+  context: ExternalSendContext;
+}): { queued: boolean; error?: string } {
+  const runtimeConfig = captureExternalRuntimeConfigSnapshot(
+    input.context.model,
+    input.context.permissionMode,
+    input.context,
+  );
+  const queued = enqueueExternalMessageOperation({
+    text: input.text,
+    images: input.images,
+    context: applySnapshotToExternalSendContext(input.context, runtimeConfig),
+    runtimeConfig,
+    queueId: input.queueId,
+  });
+  if (!queued.queued) {
+    broadcast('queue:cancelled', { queueId: input.queueId });
+    return { queued: false, error: queued.error };
+  }
+  broadcast('queue:added', {
+    queueId: input.queueId,
+    messageText: input.text.slice(0, 100),
+    isInFlight: false,
+    deliveryMode: 'turn',
+    canCancel: true,
+    canForceExecute: true,
+  });
+  return { queued: true };
 }
 
 /**

@@ -1,17 +1,23 @@
 {
   "id": "icon-generator",
   "name": "Icon Generator",
-  "description": "Phase 1 e2e fixture: button cycles through 🎨 / 🖌️ / ✏️ / 🎭 / 🎪 / 🎬 — verifies AI generate → Rust write → MiniAppRunner reload chain.",
+  "description": "Phase 1 e2e fixture: button cycles through placeholder glyphs — verifies Chat create → Rust write → MiniAppRunner reload chain.",
   "icon": "palette",
-  "category": "creative",
+  "category": "design",
   "version": 1,
   "min_host_version": "0.3.0",
   "tags": ["demo", "phase-1", "fixture"],
   "permissions": {
-    "fs": [],
-    "shell": [],
-    "net": [],
-    "ai": []
+    "fs": {
+      "read": [],
+      "write": []
+    },
+    "shell": {
+      "allow": []
+    },
+    "net": {
+      "allow": []
+    }
   },
   "entry": "source/index.html",
   "storage": {

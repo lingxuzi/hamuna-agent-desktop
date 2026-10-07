@@ -42,12 +42,32 @@ html {
   --text-soft: var(--hamuna-text-secondary, #544b42);
   --text-muted: var(--hamuna-text-muted, #6f6156);
   --accent: var(--hamuna-accent, #7b8f6b);
-  --accent-text: var(--hamuna-text-on-primary, #ffffff);
+  --accent-text: var(--hamuna-text-on-primary, #050b14);
   --focus: var(--hamuna-focus-border, #7b8f6b);
   --danger: var(--hamuna-error, #b3261e);
   --radius: var(--hamuna-radius-md, 10px);
   --radius-sm: var(--hamuna-radius-sm, 6px);
+  --radius-lg: var(--hamuna-radius-lg, 14px);
   --sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+
+  /* 派生层 —— 加层次的唯一合法出口（playbook §四）。
+   *
+   * 契约给的是平值：想要 6% 淡底、22% 辉光、10% 发丝线这种"宿主不可能逐个
+   * 提供"的中间档位，收进契约就变成几十个半透明变量。**没有这一层，最容易
+   * 写的就变成硬编码 rgba** —— 而那正是"廉价感"的来源：换主题不跟随，各写
+   * 各的，界面永远对不齐。
+   *
+   * 比例是刻意的，不要随手调大：淡底 ≤10%、描边 30-45%、辉光 15-25%、悬停
+   * ≤8%。超过就是在往界面上泼颜色。
+   */
+  --wash:      color-mix(in srgb, var(--accent) 6%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 38%, transparent);
+  --glow:      0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent);
+  --hover:     color-mix(in srgb, var(--text) 6%, transparent);
+  --hairline:  color-mix(in srgb, var(--text) 10%, transparent);
+  /* 磨砂：半透明底 + blur 缺一不可。只有 blur 没底色，前景文字会和后面内容叠
+   * 一起；只有底色没 blur，就是一块灰玻璃。 */
+  --frost:     color-mix(in srgb, var(--hamuna-bg-primary, #fff) 72%, transparent);
 
   /* 动效 token：全应用只有这几个值。改这里等于改全局节奏。
    * 时长从宿主派生：小应用和宿主产品不该是两个速度的东西。 */
@@ -60,6 +80,7 @@ html {
   /* 阴影档位同样从宿主派生。硬编码 rgba 是本仓库明令禁止的：换主题不跟随，
    * 而且每个 MiniApp 各猜各的，观感必然廉价。 */
   --shadow-card: var(--hamuna-shadow-sm);
+  --shadow-raised: var(--hamuna-shadow-md);
   --shadow-overlay: var(--hamuna-shadow-lg);
 }
 
@@ -104,6 +125,37 @@ main {
     box-shadow var(--dur) var(--ease);
 }
 
+/* 选中态：淡底 + accent 描边，而不是把整块刷成实心 accent。
+ * 实心色块一屏超过 3 处就不再是强调，层级也就塌了。 */
+.card[aria-selected='true'],
+.card.is-selected {
+  border-color: var(--accent-line);
+  background: var(--wash);
+  box-shadow: var(--shadow-raised);
+}
+
+/* 发丝分隔线：从文字色派生，深浅两套都够用。 */
+.hairline {
+  height: 1px;
+  border: 0;
+  margin: 0;
+  background: var(--hairline);
+}
+
+/* 顶栏：浮在内容之上的那一层。磨砂两个成分必须都在。 */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 24px;
+  background: var(--frost);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border-bottom: 1px solid var(--hairline);
+}
+
 /* 按钮：命中目标 36px > 32px 门槛；按下用 scale(.96) 不用 scale(0) */
 .btn {
   display: inline-flex;
@@ -124,6 +176,11 @@ main {
   background: var(--hamuna-bg-button-hover, rgba(0, 0, 0, 0.06));
 }
 
+/* 次级按钮的悬停底从文字色派生，比另找一个灰更贴合当前主题 */
+.btn--quiet:hover {
+  background: var(--hover);
+}
+
 .btn:active {
   transform: scale(0.96);
 }
@@ -141,6 +198,13 @@ input:focus-visible {
   color: var(--accent-text);
 }
 
+/* 主按钮的悬停有专属 token。别用 filter:brightness —— 它会把子元素一起压暗，
+ * 而且不跟随主题。（playbook §四 状态 token 表） */
+.btn--primary:hover {
+  background: var(--hamuna-accent-hover, #6d8060);
+  border-color: var(--hamuna-accent-hover, #6d8060);
+}
+
 /* 输入 */
 .input {
   min-height: 36px;
@@ -153,6 +217,8 @@ input:focus-visible {
 
 .input:focus {
   border-color: var(--focus);
+  /* 彩色辉光：比纯黑描边更有生气，而且由 token 派生，换主题自动跟随 */
+  box-shadow: var(--glow);
 }
 
 /* --- 骨架屏 ---------------------------------------------------------------

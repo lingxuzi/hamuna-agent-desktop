@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Desk Booking</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      结构 / 样式 / 行为三者分离：这里只放结构，所有视觉在 style.css，所有行为在
+      ui.js。这个样例教的是**密集表单**，不是"好看的卡片"。
+
+      结构上的三个刻意的选择：
+
+      1. <fieldset> + <legend>，不是一堆 div。三个分组（谁 / 何时 / 订什么）各自
+         是一个 fieldset，读屏器会念出"谁，分组"，Tab 序列也在分组内自然连续。
+         没有它的话，"时长"和"备注"在无障碍树上就是八个平铺的输入框。
+
+      2. 每个字段自带一行**永远存在**的 .fd-foot（留空时 min-height 撑住）。校验
+         错误是插进这一行的，不是插进布局里的 —— 否则第一个错误出现时整页往下跳，
+         用户刚点下"提交"就发现按钮跑了，而正在看的输入框也移位了。
+
+      3. 每个字段的错误容器都带 aria-live="polite"。错误文字是从"空"变成"有"的，
+         读屏器会把这句念出来 —— 不这样做，键盘用户按完 Tab 就停在红色描边上，
+         读屏器一个字都不会说。aria-invalid + aria-describedby 一起给：
+         前者告诉 AT "这个控件当前无效"，后者把错误原文挂进它的可访问名称。
+    -->
+    <div class="fd-shell">
+      <header class="fd-topbar">
+        <div class="fd-topbar__text">
+          <h1 class="fd-title" data-i18n="app.title"></h1>
+          <p class="fd-sub" data-i18n="app.subtitle"></p>
+        </div>
+        <!-- 环境徽章：证明 ready 事件确实被订阅了（见 ui.js 的启动段）。
+             文字与 aria-label 各写一份：文字给扫视，aria-label 念完整句子。 -->
+        <span class="fd-badge" id="fd-badge"></span>
+      </header>
+
+      <form class="fd-form" id="fd-form" novalidate autocomplete="off">
+        <!-- novalidate：把"要不要拦下提交"的决定权从浏览器手里拿回来。
+             浏览器的原生校验气泡无法本地化、无法被读屏器读到、样式也管不住。
+             我们自己写校验，于是每一条错误都是应用内的一句人话。 -->
+
+        <!-- ── 1 / 谁 ────────────────────────────────────────────────────── -->
+        <fieldset class="fd-panel">
+          <legend class="fd-panel__head">
+            <span class="fd-ordinal" aria-hidden="true">1</span>
+            <span class="fd-panel__titles">
+              <span class="fd-panel__title" data-i18n="section.who"></span>
+              <span class="fd-panel__hint" data-i18n="section.who.hint"></span>
+            </span>
+          </legend>
+
+          <div class="fd-field" data-field="name">
+            <div class="fd-labelrow">
+              <label class="fd-label" for="fd-name" data-i18n="field.name"></label>
+              <span class="fd-flag" data-i18n="mark.required"></span>
+            </div>
+            <input
+              class="fd-input"
+              id="fd-name"
+              name="name"
+              type="text"
+              required
+              aria-describedby="fd-name-foot"
+              data-i18n-placeholder="field.name.ph"
+            />
+            <div class="fd-foot">
+              <p class="fd-msg" id="fd-name-foot" aria-live="polite" aria-atomic="true"></p>
+            </div>
+          </div>
+
+          <div class="fd-field" data-field="purpose">
+            <div class="fd-labelrow">
+              <label class="fd-label" for="fd-purpose" data-i18n="field.purpose"></label>
+              <span class="fd-flag" data-i18n="mark.required"></span>
+            </div>
+            <!-- 刻意不给 maxlength。第 5 段的字段（备注）会给，两者对比着看：
+                 这里是"软上限 80"，超了会**报出理由**并让提交失败；那里是原生
+                 maxlength，快到顶时浏览器直接不让再输入。原生那道在体验上更好，
+                 代价是粘贴超量时被静默截断，用户不知道少了一截；这个样例把两种
+                 做法都摆出来，读者自己判断该抄哪一个。 -->
+            <textarea
+              class="fd-input fd-input--area"
+              id="fd-purpose"
+              name="purpose"
+              rows="2"
+              required
+              aria-describedby="fd-purpose-foot fd-purpose-count"
+              data-i18n-placeholder="field.purpose.ph"
+            ></textarea>
+            <div class="fd-foot">
+              <p class="fd-msg" id="fd-purpose-foot" aria-live="polite" aria-atomic="true"></p>
+              <span class="fd-counter" id="fd-purpose-count"></span>
+            </div>
+          </div>
+
+          <div class="fd-field" data-field="email">
+            <div class="fd-labelrow">
+              <label class="fd-label" for="fd-email" data-i18n="field.email"></label>
+              <span class="fd-flag fd-flag--optional" data-i18n="mark.optional"></span>
+            </div>
+            <!-- type="email" 保留：它给移动端弹出正确的键盘，并且是 AT 的一个
+                 已知类型提示。但**不**加 required —— 选填字段加了必填语义，
+                 读屏器会一直报"此项必填"，而它并不必填。 -->
+            <input
+              class="fd-input"
+              id="fd-email"
+              name="email"
+              type="email"
+              inputmode="email"
+              aria-describedby="fd-email-foot"
+              data-i18n-placeholder="field.email.ph"
+            />
+            <div class="fd-foot">
+              <p class="fd-msg" id="fd-email-foot" aria-live="polite" aria-atomic="true"></p>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- ── 2 / 何时 ──────────────────────────────────────────────────── -->
+        <fieldset class="fd-panel">
+          <legend class="fd-panel__head">
+            <span class="fd-ordinal" aria-hidden="true">2</span>
+            <span class="fd-panel__titles">
+              <span class="fd-panel__title" data-i18n="section.when"></span>
+              <span class="fd-panel__hint" data-i18n="section.when.hint"></span>
+            </span>
+          </legend>
+
+          <div class="fd-field fd-field--split">
+            <div class="fd-subfield" data-field="date">
+              <div class="fd-labelrow">
+                <label class="fd-label" for="fd-date" data-i18n="field.date"></label>
+                <span class="fd-flag" data-i18n="mark.required"></span>
+              </div>
+              <!-- 刻意用 text + inputmode 而不是 type="date"。原生日期选择器在
+                   Chromium 里画的是深色也跟不对的弹出层，窄侧栏里还会顶出视口；
+                   这里换成可校验的文本 + placeholder，代价是要自己校验格式。 -->
+              <input
+                class="fd-input"
+                id="fd-date"
+                name="date"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                required
+                aria-describedby="fd-date-foot"
+                data-i18n-placeholder="field.date.ph"
+              />
+              <div class="fd-foot">
+                <p class="fd-msg" id="fd-date-foot" aria-live="polite" aria-atomic="true"></p>
+              </div>
+            </div>
+
+            <div class="fd-subfield" data-field="slot">
+              <div class="fd-labelrow">
+                <label class="fd-label" for="fd-slot" data-i18n="field.slot"></label>
+                <span class="fd-flag" data-i18n="mark.required"></span>
+              </div>
+              <!-- 首个选项是空值：让"没选"成为一个可表达的状态。
+                   默认选中第一项会把"用户还没做选择"伪装成"用户选了它"。 -->
+              <select class="fd-input fd-select" id="fd-slot" name="slot" required aria-describedby="fd-slot-foot">
+                <option value="" data-i18n="slot.none"></option>
+                <option value="morning" data-i18n="slot.morning"></option>
+                <option value="afternoon" data-i18n="slot.afternoon"></option>
+                <option value="evening" data-i18n="slot.evening"></option>
+              </select>
+              <div class="fd-foot">
+                <p class="fd-msg" id="fd-slot-foot" aria-live="polite" aria-atomic="true"></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="fd-field" data-field="hours" role="radiogroup" aria-labelledby="fd-hours-label">
+            <div class="fd-labelrow">
+              <span class="fd-label" id="fd-hours-label" data-i18n="field.hours"></span>
+              <span class="fd-flag" data-i18n="mark.required"></span>
+            </div>
+            <!-- 原生 radio 而不是 role="radio" 的 div：方向键在组内移动、
+                 Tab 在组间只停一次、读屏器念"1 / 3" —— 这三件事用 div 自己实现
+                 是本样例最容易被抄错的地方，所以直接用平台能力。
+                 每个 input 铺满整块 chip（见 ui.js / style.css），命中目标是
+                 整块而不是那个 14px 的圆点。 -->
+            <div class="fd-choices">
+              <label class="fd-choice">
+                <input class="fd-choice__input" type="radio" name="hours" value="one" aria-describedby="fd-hours-foot" />
+                <span class="fd-choice__box" data-i18n="hours.one"></span>
+              </label>
+              <label class="fd-choice">
+                <input class="fd-choice__input" type="radio" name="hours" value="two" aria-describedby="fd-hours-foot" />
+                <span class="fd-choice__box" data-i18n="hours.two"></span>
+              </label>
+              <label class="fd-choice">
+                <input class="fd-choice__input" type="radio" name="hours" value="allday" aria-describedby="fd-hours-foot" />
+                <span class="fd-choice__box" data-i18n="hours.allday"></span>
+              </label>
+            </div>
+            <div class="fd-foot">
+              <p class="fd-msg" id="fd-hours-foot" aria-live="polite" aria-atomic="true"></p>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- ── 3 / 订什么 ────────────────────────────────────────────────── -->
+        <fieldset class="fd-panel">
+          <legend class="fd-panel__head">
+            <span class="fd-ordinal" aria-hidden="true">3</span>
+            <span class="fd-panel__titles">
+              <span class="fd-panel__title" data-i18n="section.what"></span>
+              <span class="fd-panel__hint" data-i18n="section.what.hint"></span>
+            </span>
+          </legend>
+
+          <div class="fd-field" data-field="zone" role="radiogroup" aria-labelledby="fd-zone-label">
+            <div class="fd-labelrow">
+              <span class="fd-label" id="fd-zone-label" data-i18n="field.zone"></span>
+              <span class="fd-flag" data-i18n="mark.required"></span>
+            </div>
+            <div class="fd-choices">
+              <label class="fd-choice">
+                <input class="fd-choice__input" type="radio" name="zone" value="window" aria-describedby="fd-zone-foot" />
+                <span class="fd-choice__box" data-i18n="zone.window"></span>
+              </label>
+              <label class="fd-choice">
+                <input class="fd-choice__input" type="radio" name="zone" value="silent" aria-describedby="fd-zone-foot" />
+                <span class="fd-choice__box" data-i18n="zone.silent"></span>
+              </label>
+              <label class="fd-choice">
+                <input class="fd-choice__input" type="radio" name="zone" value="phone" aria-describedby="fd-zone-foot" />
+                <span class="fd-choice__box" data-i18n="zone.phone"></span>
+              </label>
+            </div>
+            <div class="fd-foot">
+              <p class="fd-msg" id="fd-zone-foot" aria-live="polite" aria-atomic="true"></p>
+            </div>
+          </div>
+
+          <div class="fd-field" data-field="notes">
+            <div class="fd-labelrow">
+              <label class="fd-label" for="fd-notes" data-i18n="field.notes"></label>
+              <span class="fd-flag fd-flag--optional" data-i18n="mark.optional"></span>
+            </div>
+            <textarea
+              class="fd-input fd-input--area"
+              id="fd-notes"
+              name="notes"
+              rows="2"
+              maxlength="60"
+              aria-describedby="fd-notes-foot fd-notes-count"
+              data-i18n-placeholder="field.notes.ph"
+            ></textarea>
+            <div class="fd-foot">
+              <p class="fd-msg" id="fd-notes-foot" aria-live="polite" aria-atomic="true"></p>
+              <span class="fd-counter" id="fd-notes-count"></span>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- 提交失败横幅。默认 hidden，成功提交后也一样 —— 它只属于错误路径。
+             role="alert" 让内容出现时被立刻打断播报；错误路径就该用 assertive，
+             而 toast 这类不打断的信息才用 polite。 -->
+        <div class="fd-banner" id="fd-banner" role="alert" hidden>
+          <span class="fd-banner__mark" aria-hidden="true"></span>
+          <p class="fd-banner__text" id="fd-banner-text"></p>
+          <button class="fd-btn fd-btn--ghost" id="fd-retry" type="button">
+            <span data-i18n="action.retry"></span>
+          </button>
+        </div>
+
+        <!-- 演示开关：这个样例需要一个**可复现**的错误路径，否则没人会看见它。
+             真接后端时把整个 .fd-demo 连同 failNext 一起删掉。 -->
+        <div class="fd-demo">
+          <button
+            class="fd-switch"
+            id="fd-failnext"
+            type="button"
+            role="switch"
+            aria-checked="false"
+          >
+            <span class="fd-switch__track" aria-hidden="true"><span class="fd-switch__knob"></span></span>
+            <span class="fd-switch__text" data-i18n="action.failNext"></span>
+          </button>
+        </div>
+      </form>
+
+      <!-- 成功回执。整块替换掉表单：提交是一次性的动作，成功之后还留着一堆
+           已填的输入框会让人怀疑"到底提交上没有"。 -->
+      <section class="fd-receipt" id="fd-receipt" hidden aria-labelledby="fd-receipt-title">
+        <span class="fd-receipt__mark" aria-hidden="true"></span>
+        <!-- tabindex="-1"：整块表单被替换掉时，焦点必须落在新内容上。
+             -1 让它可编程聚焦但不进 Tab 序列 —— 用户不需要 Tab 回标题，
+             读屏器念到标题就够了。少了它，上面的 focus() 是个空操作，
+             焦点会掉进 void（元素不可聚焦）。 -->
+        <h2 class="fd-receipt__title" id="fd-receipt-title" tabindex="-1" data-i18n="receipt.title"></h2>
+        <p class="fd-receipt__code" id="fd-receipt-code"></p>
+        <dl class="fd-receipt__list" id="fd-receipt-list"></dl>
+        <button class="fd-btn" id="fd-again" type="button">
+          <span data-i18n="action.again"></span>
+        </button>
+      </section>
+
+      <!-- 粘性底栏：主操作永远在拇指/光标够得到的地方，且滚到第三段时仍然可见。
+           它 position: sticky 而不是 fixed —— fixed 会盖住最后一行的说明文字，
+           而 sticky 让内容在它后面滚过去（见 style.css 的 frost 底色）。 -->
+      <div class="fd-footer" id="fd-footer">
+        <!-- 禁用原因：aria-disabled 的按钮仍然是可聚焦的（这是它的全部意义），
+             所以必须有一句话说明为什么不能按，并把它挂在按钮的 describedby 上。
+             只把按钮变灰而不说理由，等于把"为什么"推给用户猜。 -->
+        <p class="fd-reason" id="fd-reason"></p>
+        <button
+          class="fd-btn fd-btn--primary"
+          id="fd-submit"
+          type="submit"
+          form="fd-form"
+          aria-describedby="fd-reason"
+        >
+          <span class="fd-spinner" id="fd-spinner" aria-hidden="true"></span>
+          <span id="fd-submit-label" data-i18n="action.submit"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 确认性反馈浮层。role="status" + aria-live="polite"：成功这种不打断的
+         信息用 polite 播报，错误才用上面横幅的 alert。 -->
+    <div class="fd-toast-host" id="fd-toast-host" role="status" aria-live="polite"></div>
+
+    <script src="ui.js"></script>
+  </body>
+</html>

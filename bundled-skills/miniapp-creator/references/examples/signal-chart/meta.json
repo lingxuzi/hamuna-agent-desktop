@@ -1,0 +1,56 @@
+{
+  "id": "signal-chart",
+  "name": "Signal Chart",
+  "description": "数据可视化样例：响应式 SVG 折线图。比例尺与刻度生成、悬停准星与 tooltip、系列图例、24h/7d/30d 窗口切换、骨架屏与可设计的空状态",
+  "icon": "activity",
+  "category": "data",
+  "version": 1,
+  "min_host_version": "0.3.233",
+  "tags": ["data", "chart", "svg", "design-reference"],
+  "permissions": {
+    "fs": { "read": [], "write": [] },
+    "shell": { "allow": [] },
+    "net": { "allow": [] }
+  },
+  "entry": "source/index.html",
+  "storage": { "defaults": { "range": "24h" } },
+  "i18n": {
+    "default_locale": "zh-CN",
+    "locales": {
+      "zh-CN": {
+        "app.title": "信号监控",
+        "app.subtitle": "入站 / 出站请求量，近 24 小时",
+        "series.in": "入站请求",
+        "series.out": "出站请求",
+        "chart.range": "时间范围",
+        "chart.plot": "信号折线图，用左右方向键移动游标",
+        "chart.legend": "系列",
+        "chart.unit": "次",
+        "chart.hint": "← → 移动游标",
+        "chart.samples": "{n} 个采样点",
+        "chart.window": "窗口",
+        "chart.empty.title": "该窗口暂无数据",
+        "chart.empty.hint": "后端还没有聚合这个窗口，换一个范围或稍后再看。",
+        "chart.peak": "峰值 {v}",
+        "state.loading": "加载中…"
+      },
+      "en-US": {
+        "app.title": "Signal Monitor",
+        "app.subtitle": "Inbound / outbound requests, last 24 hours",
+        "series.in": "Inbound",
+        "series.out": "Outbound",
+        "chart.range": "Time range",
+        "chart.plot": "Signal line chart; use the left and right arrow keys to move the cursor",
+        "chart.legend": "Series",
+        "chart.unit": "req",
+        "chart.hint": "← → move cursor",
+        "chart.samples": "{n} samples",
+        "chart.window": "Window",
+        "chart.empty.title": "No data for this window",
+        "chart.empty.hint": "This window has not been aggregated yet. Pick another range or check back later.",
+        "chart.peak": "peak {v}",
+        "state.loading": "Loading…"
+      }
+    }
+  }
+}

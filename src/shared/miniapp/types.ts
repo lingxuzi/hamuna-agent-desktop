@@ -178,6 +178,36 @@ export interface MiniAppMetadata {
    */
   storage?: { defaults?: Record<string, unknown> };
   ai_context?: string | null;
+  /**
+   * 主题绑定方式。缺省 = `'host'`，行为与加这个字段之前完全一致。
+   *
+   * `'bespoke'` 是给"调色板本身就是产品内容"的应用开的口子：塔罗、夜景仪表盘、
+   * 品牌色看板这类应用如果被迫走宿主 token，就只能把"夜色"表达成 `text-muted`
+   * 画的星点、`accent` 画的铜金 —— 切到浅色主题时整屏浅底浅字、星点消失。
+   * 于是模型在"用 token"和"有辨识度"之间二选一，两边都输。
+   *
+   * 这里给的出口是**换掉注入的值，而不是换掉变量名**：CSS 侧仍然只写
+   * `var(--hamuna-bg-primary)`，宿主只是把契约里那几个槽位填成作者声明的颜色。
+   * 于是作者拿到的仍然是那 43 个变量（审计照常跑）、`var()` 的 fallback 仍然
+   * 等于自己声明的调色板（导出成独立网页还是原来那个样子）、换主题仍然自动
+   * 跟随 —— 区别只是"跟随谁"由作者说了算。
+   */
+  appearance?: MiniAppAppearance;
+}
+
+/**
+ * `meta.json::appearance`。
+ *
+ * `palette` 的键是契约变量名去掉 `--hamuna-` 前缀（`bg-primary`、`accent`…），
+ * 值必须是字面颜色 —— 不接受 `var(--hamuna-*)` 引用，因为 bespoke 的意义正是
+ * 不依赖宿主的值；接受引用会让"自持"退化成"换一种方式依赖宿主"。
+ */
+export interface MiniAppAppearance {
+  mode: 'host' | 'bespoke';
+  /** 浅色外观下覆盖契约槽位的颜色。`mode: 'bespoke'` 时必填。 */
+  palette?: Record<string, string>;
+  /** 深色外观下的覆盖；缺省时深浅共用 `palette`。 */
+  palette_dark?: Record<string, string>;
 }
 
 /** `storage.json` 形态（PRD v0.4 §5.12 + v0.3 §6.4）。 */

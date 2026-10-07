@@ -22,20 +22,25 @@ import {
   PanelsTopLeft,
   RefreshCw,
   Store,
+  Trash2,
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
 
 import { CUSTOM_EVENTS } from '../../shared/constants';
 import { localizeMiniApp } from '../../shared/miniapp/localize';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useToast } from '@/components/Toast';
 import {
   listMarketplace,
+  uninstallMarketplace,
   type MiniAppMarketplaceItem,
 } from '@/lib/marketplaceClient';
 import {
   PAPER_GRID_STYLE,
   SPACE_BACKGROUND_STYLE,
   SPACE_COLLECTION_FRAME_CLASS,
+  SPACE_PRIMARY_TOOL_BUTTON_CLASS,
   SPACE_REFRESH_TOOL_BUTTON_CLASS,
 } from '@/pages/space/spaceUi';
 import MiniAppIcon from './miniappIcon';
@@ -62,6 +67,7 @@ function dispatchOpenMiniAppScene(item: MiniAppMarketplaceItem): void {
         icon: item.icon,
         permissions: item.permissions,
         dependencies: item.dependencies,
+        appearance: item.appearance,
       },
     }),
   );
@@ -73,9 +79,12 @@ function dispatchOpenMarketplace(): void {
 
 export default function MiniAppCenter({ isActive }: MiniAppCenterProps) {
   const { t, i18n } = useTranslation('app');
+  const toast = useToast();
   const [items, setItems] = useState<MiniAppMarketplaceItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingUninstall, setPendingUninstall] = useState<MiniAppMarketplaceItem | null>(null);
+  const [uninstallingId, setUninstallingId] = useState<string | null>(null);
 
   // Reload whenever the tab becomes active (mirror Marketplace pattern). The
   // previous error is cleared up front so a banner from a failed load never
@@ -99,6 +108,26 @@ export default function MiniAppCenter({ isActive }: MiniAppCenterProps) {
     void load();
   }, [isActive, load]);
 
+  // Uninstall is destructive and irreversible (Rust `remove_dir_all`s the whole
+  // `~/.hamuna/miniapps/<id>/` tree, `storage.json` included), so it goes
+  // through a confirm dialog rather than firing on a single click.
+  const onUninstall = useCallback(
+    async (item: MiniAppMarketplaceItem) => {
+      setUninstallingId(item.id);
+      try {
+        await uninstallMarketplace(item.id);
+        toast.info(t('miniappCenter.uninstallSuccess', { appId: item.id }));
+        setPendingUninstall(null);
+        await load();
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      } finally {
+        setUninstallingId(null);
+      }
+    },
+    [load, t, toast],
+  );
+
   const installedCount = items?.length ?? 0;
   const tints = useMemo(() => miniAppTints((items ?? []).map((i) => i.id)), [items]);
 
@@ -114,7 +143,25 @@ export default function MiniAppCenter({ isActive }: MiniAppCenterProps) {
           <span className="rounded-md bg-[var(--paper-inset)] px-2 py-0.5 text-xs font-semibold text-[var(--ink-muted)]">
             {installedCount}
           </span>
-          <div className="ml-auto shrink-0">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {/* Only once something is installed. The empty state carries its own
+                "browse Marketplace" button, and showing both would put two
+                buttons for one job on screen at the same time — worse than the
+                gap this replaces. It also stays hidden while loading (`items`
+                is null) and in the error state, where the empty-state block
+                isn't rendered either and a stray entry point would point at a
+                catalog the page just failed to load. */}
+            {items !== null && items.length > 0 && (
+              <button
+                type="button"
+                onClick={dispatchOpenMarketplace}
+                data-testid="miniapp-center-browse-marketplace-header"
+                className={SPACE_PRIMARY_TOOL_BUTTON_CLASS}
+              >
+                <Store className="h-4 w-4" />
+                {t('miniappCenter.browseMarketplace')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void load()}
@@ -145,41 +192,64 @@ export default function MiniAppCenter({ isActive }: MiniAppCenterProps) {
                 {items.map((item) => {
                   const localized = localizeMiniApp(item, i18n.language);
                   const isWorker = item.kind === 'worker';
+                  const busy = uninstallingId === item.id;
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      type="button"
-                      onClick={() => dispatchOpenMiniAppScene(item)}
-                      data-testid={`miniapp-center-card-${item.id}`}
                       className="flex w-full flex-col gap-2 rounded-xl bg-[var(--paper-elevated)] px-3.5 py-3 text-left transition-shadow hover:shadow-sm"
                     >
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        <MiniAppIcon
-                          icon={item.icon}
-                          tint={tints.get(item.id) ?? NEUTRAL_TINT}
-                          className="h-5 w-5"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-[var(--ink)]">
-                            {localized.name || item.id}
-                          </span>
-                          <span className="block truncate font-mono text-xs text-[var(--ink-subtle)]">
-                            {item.id}
+                      <button
+                        type="button"
+                        onClick={() => dispatchOpenMiniAppScene(item)}
+                        data-testid={`miniapp-center-card-${item.id}`}
+                        className="flex flex-col gap-2 text-left"
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <MiniAppIcon
+                            icon={item.icon}
+                            tint={tints.get(item.id) ?? NEUTRAL_TINT}
+                            className="h-5 w-5"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-[var(--ink)]">
+                              {localized.name || item.id}
+                            </span>
+                            <span className="block truncate font-mono text-xs text-[var(--ink-subtle)]">
+                              {item.id}
+                            </span>
                           </span>
                         </span>
-                      </span>
-                      <span className="line-clamp-2 min-h-[2.5em] text-sm leading-6 text-[var(--ink-muted)]">
-                        {localized.description}
-                      </span>
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-[var(--ink-subtle)]">v{item.version}</span>
-                        <span
-                          className={`${KIND_PILL_CLASS} ${isWorker ? KIND_PILL_WORKER : KIND_PILL_IFRAME}`}
+                        <span className="line-clamp-2 min-h-[2.5em] text-sm leading-6 text-[var(--ink-muted)]">
+                          {localized.description}
+                        </span>
+                      </button>
+                      <span className="mt-auto flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs text-[var(--ink-subtle)]">v{item.version}</span>
+                          <span
+                            className={`${KIND_PILL_CLASS} ${isWorker ? KIND_PILL_WORKER : KIND_PILL_IFRAME}`}
+                          >
+                            {isWorker ? t('miniappCenter.kindWorker') : t('miniappCenter.kindIframe')}
+                          </span>
+                        </span>
+                        {/* Sibling of the launch button, never a child: a <button>
+                            inside a <button> is invalid HTML, and the click would
+                            also bubble to the launcher. */}
+                        <button
+                          type="button"
+                          onClick={() => setPendingUninstall(item)}
+                          disabled={uninstallingId !== null}
+                          data-testid={`miniapp-center-uninstall-${item.id}`}
+                          aria-label={t('miniappCenter.uninstallNamed', { name: localized.name || item.id })}
+                          title={t('miniappCenter.uninstall')}
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--ink-subtle)] transition-colors hover:bg-[var(--error-subtle)] hover:text-[var(--error)] disabled:cursor-wait disabled:opacity-50"
                         >
-                          {isWorker ? t('miniappCenter.kindWorker') : t('miniappCenter.kindIframe')}
-                        </span>
+                          {busy
+                            ? (<Loader2 className="h-3.5 w-3.5 animate-spin" />)
+                            : (<Trash2 className="h-3.5 w-3.5" />)}
+                        </button>
                       </span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -187,6 +257,20 @@ export default function MiniAppCenter({ isActive }: MiniAppCenterProps) {
           </div>
         </main>
       </div>
+
+      {pendingUninstall !== null && (
+        <ConfirmDialog
+          title={t('miniappCenter.uninstallConfirmTitle')}
+          message={t('miniappCenter.uninstallConfirmMessage', {
+            name: localizeMiniApp(pendingUninstall, i18n.language).name || pendingUninstall.id,
+          })}
+          confirmText={t('miniappCenter.uninstall')}
+          confirmVariant="danger"
+          loading={uninstallingId !== null}
+          onConfirm={() => { void onUninstall(pendingUninstall); }}
+          onCancel={() => { if (uninstallingId === null) setPendingUninstall(null); }}
+        />
+      )}
     </div>
   );
 }

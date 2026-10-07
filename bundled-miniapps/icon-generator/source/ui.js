@@ -1,13 +1,13 @@
-// icon-generator/source/ui.js — Phase 2 v0.4 demo.
+// icon-generator/source/ui.js
 // Runs inside the iframe MiniAppRunner sandbox (allow-scripts allow-same-origin
 // allow-forms; no popups / no top-nav). No third-party CDN, no fetch to
 // outside the host's CSP allow-list.
 //
-// Phase 2 v0.4 ships this UI but NOT the Rust invokes (`cmd_miniapp_ai_complete`
-// / `cmd_miniapp_context_files` were cut in the 13→2 invoke reduction). The
-// handlers below call `window.parent.postMessage` to bridge back to the host;
-// Phase 3 wires those messages to the Rust invokes. Until then the Generate
-// button uses a deterministic placeholder so the UI is testable end-to-end.
+// `window.app` is injected by the host before this file runs (see
+// `appRuntimeScript.ts`): use `app.storage` for persistence and
+// `app.shell.exec` / `app.fs.*` for the capabilities `meta.json` grants. There
+// is NO `app.ai` — the host has no AI bridge for MiniApps, so a "generate with
+// AI" button here must hand the work to Chat via Bubble Claim instead.
 //
 // Bubble Claim flow (`continue-chat-btn`) uses the BubbleClaimBridge we wired
 // in MiniAppRunner: this MiniApp posts `chat.claimComposer` with the bound
@@ -15,6 +15,15 @@
 
 const APP_ID =
   document.querySelector('meta[name="x-miniapp-id"]')?.getAttribute('content') || 'icon-generator';
+
+// Persisted state goes through `app.storage` (the host-injected `window.app`).
+// The template used to point at `window.__miniappStorage`, which never existed
+// in the host — every `get` threw a TypeError and the selection silently reset
+// on reload. `app.storage` is backed by the app's own `storage.json`.
+const storage = {
+  get: (key) => app.storage.get(key),
+  set: (key, value) => app.storage.set(key, value),
+};
 
 // ───── tiny in-iframe helpers ──────────────────────────────────────────
 // Phase 2 v0.4 has no Rust `cmd_miniapp_ai_complete`; the demo uses a
@@ -43,6 +52,8 @@ const els = {
 
 const ctx = els.canvas.getContext('2d');
 let selectedIdx = null;
+/** 当前这一轮的候选，主题切换后重绘要用 —— drawSelected 只吃一个 icon。 */
+let currentVariants = [];
 let nonce = null;
 /** Claims raised before the host's `host.ready` arrived. */
 const pendingClaims = [];
@@ -79,6 +90,7 @@ function generateCandidates(prompt) {
 }
 
 function renderCandidates(variants) {
+  currentVariants = variants;
   els.grid.innerHTML = '';
   variants.forEach((icon, i) => {
     const cell = document.createElement('div');
@@ -109,7 +121,13 @@ function selectVariant(idx, variants) {
 
 function drawSelected(icon) {
   ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
-  ctx.fillStyle = '#2563eb';
+  // 画布的 fillStyle 读不到 CSS 变量，只能在绘制那一刻把 token 取出来用。
+  // 之前这里写死 '#2563eb'：宿主换主题后图标预览仍是一块蓝，与整个应用脱色。
+  // 取不到 token 时保持上一次的 fillStyle —— 赋值空串是非法值，会被静默忽略。
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue('--hamuna-accent')
+    .trim();
+  if (accent) ctx.fillStyle = accent;
   ctx.fillRect(0, 0, els.canvas.width, els.canvas.height);
   ctx.font = '160px system-ui';
   ctx.textAlign = 'center';
@@ -148,7 +166,7 @@ function sendBubbleClaim({ draft, attachments }) {
 }
 
 // ───── wire UI ─────────────────────────────────────────────────────────
-els.genBtn.addEventListener('click', () => {
+els.genBtn.addEventListener('click', async () => {
   const prompt = els.prompt.value.trim();
   if (!prompt) {
     setStatus('Enter a prompt first.');
@@ -160,6 +178,12 @@ els.genBtn.addEventListener('click', () => {
   const variants = generateCandidates(prompt);
   renderCandidates(variants);
   selectedIdx = null;
+  // Persist the last prompt so a reload resumes where the user left off.
+  try {
+    await storage.set('lastPrompt', prompt);
+  } catch (e) {
+    setStatus('Could not save prompt: ' + (e && e.message ? e.message : 'unknown error'));
+  }
   setStatus('Pick a candidate to edit or export.');
   els.genBtn.disabled = false;
 });
@@ -213,3 +237,22 @@ els.refInput.addEventListener('change', (e) => {
   // host will save it via saveToolAttachment.
   els.refStatus.textContent = `Selected: ${file.name} (upload wired in Phase 3)`;
 });
+
+// 宿主换主题 / 换亮暗后，token 已经被改写，但画布是位图，不会自己更新。
+// 没有这一行，预览会一直停在上一个主题的颜色上，直到用户点了别的候选。
+app.onAppearanceChange(() => {
+  if (selectedIdx !== null && currentVariants[selectedIdx] !== undefined) {
+    drawSelected(currentVariants[selectedIdx]);
+  }
+});
+
+// Restore the last prompt on mount. A storage failure is non-fatal — the app is
+// fully usable without persistence, so degrade instead of blocking the UI.
+(async () => {
+  try {
+    const last = await storage.get('lastPrompt');
+    if (typeof last === 'string' && last) els.prompt.value = last;
+  } catch {
+    /* no persisted prompt */
+  }
+})();

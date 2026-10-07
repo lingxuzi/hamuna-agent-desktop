@@ -5,24 +5,19 @@
   "icon": "palette",
   "category": "design",
   "version": 2,
-  "min_host_version": "0.4.0",
+  "min_host_version": "0.3.233",
   "tags": ["demo", "phase-2", "design", "icon"],
   "skills": ["icon-design"],
   "permissions": {
     "fs": {
-      "write": ["{appdata}/source/**"]
+      "read": ["{appdata}/**"],
+      "write": ["{appdata}/**"]
     },
     "shell": {
       "allow": []
     },
     "net": {
       "allow": []
-    },
-    "ai": {
-      "enabled": true,
-      "allowed_models": ["gemini-2.5-flash-image", "imagen-3.0-generate"],
-      "max_tokens_per_request": 2000,
-      "rate_limit_per_minute": 5
     }
   },
   "entry": "source/index.html",

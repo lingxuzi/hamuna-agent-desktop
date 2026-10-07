@@ -1,0 +1,1274 @@
+/* ============================================================================
+ * 天体图鉴 / Celestial Atlas — style.css
+ * ============================================================================
+ *
+ * --- Design System ---
+ * Theme: 印出来的星图，不是仪表盘。深色优先（夜里看星表本来就该是暗的），
+ *        浅色是它的"铜版纸"对偶 —— 同一套版式，纸面替夜空。
+ *        这是**展示型**调性：playbook §三 说默认是工具型，放飞要用户明说。
+ *        放飞的是视觉表达，不是工程纪律 —— token / 动效房规 / 命中目标 /
+ *        prefers-reduced-motion / 一个 motif 贯穿，一条没少。
+ * Palette: 自建（meta.json::appearance，两套都算过对比度，见下表）
+ *   - dominant : --hamuna-bg-primary 占大面积，是纸 / 夜空本身
+ *   - supporting: --hamuna-bg-elevated（图版，唯一一个"抬起来"的表面）
+ *                 --hamuna-bg-inset（图版里的天区凹陷）
+ *   - accent   : --hamuna-accent 铜版红 / 夜色里的余烬铜。只给选中态与主 CTA。
+ *   - second   : --hamuna-accent-secondary 钢蓝。它同时是**光谱染色的冷端**。
+ * Typography:
+ *   - display  : 衬线（拉丁衬线 + CJK 衬线）。目标名与应用标题。星图是印刷品类，
+ *               全 sans 读起来是 dashboard —— 衬线才是"星图册"。
+ *   - body     : 400 / 14px（中文 14px 起步）
+ *   - caption  : 400 / 11-12px / --hamuna-text-muted
+ *   - 数据     : --hamuna-font-mono + tabular-nums，RA/Dec/星等靠它对齐
+ * Radius: --hamuna-radius-md（卡片）/ --hamuna-radius-sm（按钮、chip）
+ * Motif: **准星** —— 一个 11×11 的开口方框加十字丝。它出现在：星表选中行、
+ *        星图上被选中的目标、数据面板的类型 chip、toast 的前导点。
+ *        全应用只有这一个"我看准了它"的表达，不发明第二种。
+ * Focus: 三块视觉权重**刻意不等分**：图版是唯一抬起的表面，占最大面积与最高
+ *        对比；星表与数据面板都直接坐在纸面上，密、安静、只做索引与读数。
+ * Motion: 三档时长 + 两条曲线，见下方 Motion 段。
+ * ==========================
+ *
+ * ---------------------------------------------------------------------------
+ * 自建色板的对比度（WCAG 2.1，sRGB 相对亮度，node 算出来不是估的）
+ *
+ * 浅色 —— bg-primary #ece1d0 / bg-elevated #f7f0e3 / bg-inset #e1d2b9
+ *   success #1a6138   5.78 / 6.59 / 5.02
+ *   error   #9b2c1e   5.86 / 6.68 / 5.09
+ *   warning #7d5200   5.28 / 6.02 / 4.59
+ *   info    #215b86   5.59 / 6.38 / 4.86
+ *   text-on-primary #f8f1e5 压在自己的填充上：accent 6.02 / ok 6.65 /
+ *     bad 6.75 / warn 6.08 / info 6.44
+ *   text-primary #2a2117  12.23 / 13.95 / 10.63
+ *   text-secondary #574836 6.81 / 7.77 / 5.92
+ *   text-muted #65543c    5.63 / 6.42 / 4.89
+ *
+ * 深色 —— bg-primary #0e1226 / bg-elevated #171d36 / bg-inset #080b1a
+ *   success #63cc93   9.34 / 8.37 / 9.87
+ *   error   #f5907f   8.10 / 7.25 / 8.55
+ *   warning #e8bd63  10.49 / 9.40 / 11.08
+ *   info    #8fbde8   9.36 / 8.39 / 9.89
+ *   text-on-primary #1a0d08 压在自己的填充上：accent 7.23 / ok 9.58 /
+ *     bad 8.31 / warn 10.76 / info 9.60
+ *   text-primary #f1ebda  15.56 / 13.94 / 16.43
+ *   text-secondary #b9b3a1  8.85 / 7.92 / 9.34
+ *   text-muted #918b7c     5.46 / 4.89 / 5.77
+ *
+ * 每一格都是**四种语义色 × 三种表面 = 12 组**，两套共 24 组，全部 ≥ 4.5:1。
+ * 为什么这两页数字值得钉在文件里：它们是**算出来**的，不是挑出来的。深色
+ * 那一半是单独算的 —— 沿用浅色的 secondary/muted 配深底是另一个坑。
+ *
+ * 还有一个**算出来的选择**：星图的坐标刻度用 text-secondary 而不是
+ * text-muted。上表压的是裸表面，但刻度真正落在的是**染过色的图版底**上 ——
+ * 染色层最重的一档是 14.5%（暖端）或 8.5%（冷端），合成之后浅色是
+ * #e4d8cc、深色是 #222a42。secondary 压在上面是 6.28 / 6.78，muted 是
+ * 5.19 / 4.18 —— 后者在深色下已经掉到 AA 之下。两档都还看得见，选
+ * secondary 是因为 10px 的刻度要的是余量，不是及格线。
+ * ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+ * 宿主 token → 语义别名
+ *
+ * 只在这里出现宿主注入的 --hamuna-*。下游全用语义名（--at-plate 而不是
+ * --hamuna-bg-elevated），换配色只改这一段。每个 var() 都带 fallback ——
+ * fallback 值与 meta.json::appearance 声明的调色板逐字相同，所以导出成独立
+ * 网页时仍然是原来那个样子。
+ * ------------------------------------------------------------------------ */
+:root {
+  /* 表面 */
+  --at-bg: var(--hamuna-bg-primary, #ece1d0);
+  --at-plate: var(--hamuna-bg-elevated, #f7f0e3);
+  --at-well: var(--hamuna-bg-inset, #e1d2b9);
+
+  /* 描边 */
+  --at-line: var(--hamuna-border, rgba(28, 22, 18, 0.12));
+  --at-line-soft: var(--hamuna-border-subtle, rgba(28, 22, 18, 0.08));
+  --at-line-strong: var(--hamuna-border-primary, rgba(28, 22, 18, 0.2));
+
+  /* 文字 */
+  --at-ink: var(--hamuna-text-primary, #2a2117);
+  --at-ink-2: var(--hamuna-text-secondary, #574836);
+  --at-ink-3: var(--hamuna-text-muted, #65543c);
+
+  /* 强调 */
+  --at-accent: var(--hamuna-accent, #9e3b26);
+  --at-accent-hover: var(--hamuna-accent-hover, #8a3120);
+  --at-on-accent: var(--hamuna-text-on-primary, #f8f1e5);
+  /* 第二强调色同时是光谱染色的冷端 —— 一个槽位两处用，因为它们讲的是同一件事 */
+  --at-cool: var(--hamuna-accent-secondary, #2f6a94);
+
+  /* 光谱染色的两端。JS 只写插值位置，不写颜色 —— 冷端与暖端是版式的一部分，
+   * 和界面其余的强调色必须同源，否则换一次目标就像换了一个应用。 */
+  --at-dye-a: var(--at-cool);
+  --at-dye-b: var(--at-accent);
+
+  /* 语义 */
+  --at-ok: var(--hamuna-success, #1a6138);
+  --at-bad: var(--hamuna-error, #9b2c1e);
+  --at-warn: var(--hamuna-warning, #7d5200);
+  --at-info: var(--hamuna-info, #215b86);
+
+  --at-focus: var(--hamuna-focus-border, #9e3b26);
+
+  /* --- 派生层（color-mix）-----------------------------------------------
+   * 有 token 的交互态一律用 token（accent-hover / focus-border / shadow-*），
+   * 这里只造**宿主不可能逐个提供**的中间档位：淡底、半透明描边、彩色辉光。
+   * 全应用只在这一处声明，下面引用别名。比例是有天花板的，不要随手调大：
+   *   淡底 ≤10% · 描边 30-45% · 辉光 15-25% · 悬停 ≤8%
+   * "廉价感"多数出在把颜色泼到界面上，不是出在色相选得不好。
+   * -------------------------------------------------------------------- */
+  --at-wash: color-mix(in srgb, var(--at-accent) 8%, transparent);
+  --at-edge: color-mix(in srgb, var(--at-accent) 40%, transparent);
+  --at-glow: 0 0 0 3px color-mix(in srgb, var(--at-accent) 20%, transparent);
+  --at-hover: color-mix(in srgb, var(--at-ink) 5%, transparent);
+  --at-hairline: color-mix(in srgb, var(--at-ink) 14%, transparent);
+  /* 磨砂顶栏：半透明底 + blur 必须成对，缺一不可 */
+  --at-veil: color-mix(in srgb, var(--at-bg) 80%, transparent);
+
+  /* --- 场景染色 -----------------------------------------------------------
+   * ui.js 按目标的**光谱型**在 :root 上写两个自定义属性，其余全在这里：
+   *   --at-dye-mix  —— 插在冷端与暖端之间的位置（光谱色）
+   *   --at-dye-lift —— 同一色相下把水洗提亮还是压低（目标的"重量"）
+   * color-mix 是唯一一处把它们变成颜色的地方。JS 只写编排，派生留给 CSS。
+   *
+   * 为什么要**嵌套**一次 color-mix：直连冷端→暖端是不行的。暖端是饱和的
+   * 铜色，线性插值下 30% 就已经是肉眼可辨的暖调，于是 A 型（蓝白）星会
+   * 被染成玫瑰色。中间加一档"冷端与中性色的混血"当 0 位，一颗 A0V 才真的
+   * 停在冷端，而 K/M 才真的烧起来 —— 这也正是真实的星色序列。
+   *
+   * --at-tint 是一个**平色**而不是渐变色：平色能过渡，background-image 不能。
+   * 换目标时天区染色的整片柔和变化靠它，渐变一旦参与就变成"啪"地跳一下。
+   * -------------------------------------------------------------------- */
+  --at-dye-mix: 55%;
+  --at-dye-lift: 12%;
+  --at-dye-mid: color-mix(in srgb, var(--at-dye-a) 62%, var(--at-ink-2));
+  /* 注意百分比的归属：color-mix(A p%, B) 在 p=0 时**给出 B**，所以暖端必须
+   * 写在带百分比的那一侧。反过来写，整条光谱会静默地倒过来 —— O 型星被烧成
+   * 橙红、M 型星洗成蓝白，而且不报任何错。 */
+  --at-dye: color-mix(in srgb, var(--at-dye-b) var(--at-dye-mix), var(--at-dye-mid));
+  --at-tint: color-mix(in srgb, var(--at-dye) var(--at-dye-lift), transparent);
+
+  /* --- 字体 ---------------------------------------------------------------
+   * 衬线是硬编码的字体栈，不是 token：契约里只有 sans / mono，而"印出来的
+   * 星图"要的就是第三种声音。拉丁衬线在前、CJK 衬线在后 —— 顺序错了中文字
+   * 会先落到拉丁衬线的 fallback 上，那不是衬线。
+   * -------------------------------------------------------------------- */
+  --at-sans: var(--hamuna-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --at-mono: var(--hamuna-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --at-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman',
+    'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', STSong, SimSun, serif;
+
+  --at-radius: var(--hamuna-radius-md, 10px);
+  --at-radius-sm: var(--hamuna-radius-sm, 6px);
+  --at-radius-lg: var(--hamuna-radius-lg, 14px);
+
+  /* --- 阴影 ---------------------------------------------------------------
+   * 深浅都从宿主派生。深色下宿主的阴影本身接近纯黑、在夜空上看不见 —— 那时
+   * 撑起层次的是 --at-plate 比 --at-bg 亮，而不是投影。这是有意的取舍。
+   * -------------------------------------------------------------------- */
+  --at-shadow-card: var(--hamuna-shadow-sm, 0 2px 8px rgba(28, 22, 18, 0.08));
+  --at-shadow-plate: var(--hamuna-shadow-md, 0 8px 24px rgba(28, 22, 18, 0.12));
+  --at-shadow-pop: var(--hamuna-shadow-lg, 0 16px 40px rgba(28, 22, 18, 0.16));
+
+  /* --- Motion -------------------------------------------------------------
+   * 全应用只有这三个时长和两条曲线。改这里就等于改全局节奏。
+   * -------------------------------------------------------------------- */
+  --at-dur-fast: var(--hamuna-duration-fast, 150ms);
+  --at-dur: var(--hamuna-duration-normal, 200ms);
+  --at-dur-slow: var(--hamuna-duration-slow, 300ms);
+  --at-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --at-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 间距只用这四档。 */
+  --at-gap: 8px;
+  --at-gap-2: 16px;
+  --at-gap-3: 24px;
+  --at-pad: 24px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--at-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--at-ink);
+  background: var(--at-bg);
+  /* 页面底色上的一层光谱余晖。它**不参与过渡**（background-image 不可过渡），
+   * 但它是 12% 的耳语，跳变看不出来；真正看得见的那次过渡在 .at-frame 上。 */
+  background-image: radial-gradient(
+    820px 420px at 50% -14%,
+    var(--at-tint),
+    transparent 64%
+  );
+  background-attachment: fixed;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ===========================================================================
+ * 顶栏
+ * 磨砂：半透明底 + blur 成对。backdrop-filter 只有在**后面真的有过东西**时
+ * 才看得见 —— 顶部那圈光谱余晖就是它背后那件东西。
+ * ======================================================================== */
+.at-app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 var(--at-pad) 40px;
+  /* 撑满一屏，让左栏星表吃掉多余的高度。
+   *
+   * 之前这里是 auto、星表被 max-height: 截断，于是同时留下两处难看：列表底部永远
+   * 切在半行上（读起来像"内容没了"，而不是"下面还有，滚"），而整页下方还空着一
+   * 大片。两道门禁都发现不了 —— 溢出、对比度、色板占比全过。
+   */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.at-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--at-gap-2);
+  margin-inline: calc(var(--at-pad) * -1);
+  padding: 20px var(--at-pad) 14px;
+  background: var(--at-veil);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border-bottom: 1px solid var(--at-hairline);
+}
+
+/* 等宽 + 大字距的小标签：星图册扉页上那一行印出来的刊头 */
+.at-kicker {
+  margin: 0;
+  font-family: var(--at-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--at-ink-3);
+}
+
+.at-title {
+  margin: 2px 0 0;
+  font-family: var(--at-serif);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.at-sub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--at-ink-3);
+}
+
+.at-lat {
+  margin: 0;
+  flex: none;
+  font-family: var(--at-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--at-ink-3);
+  padding: 4px 10px;
+  border: 1px solid var(--at-line);
+  border-radius: 999px;
+}
+
+/* ===========================================================================
+ * 三栏网格
+ * 中间一栏 minmax(0, 1fr) 而不是 1fr：栅格默认 min-width:auto，长编号会把
+ * 整列顶宽，然后整页横向溢出 —— 而溢出的报错在几百行之外。
+ * ======================================================================== */
+.at-grid {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 304px;
+  gap: var(--at-gap-3);
+  /* stretch 而不是 start：左栏要吃满高度，右栏保持内容自然高度。
+   * 全部 stretch 会把数据面板拉成一根空柱子，比原来的死空间更难看。 */
+  align-items: stretch;
+  padding-top: var(--at-gap-3);
+  flex: 1;
+  min-height: 0;
+}
+
+/* 左栏作为一列 flex：头 + 分段控件固定，星表吃掉剩下的高度。 */
+.at-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ===========================================================================
+ * 区块标题 —— 全应用唯一的分隔横线，用在 section 之间
+ * 规则是横线放在**上**沿：放在标题下面那条 accent 横线是反 AI 味清单里
+ * 点名的写法，放在上沿它就只是分隔。
+ * ======================================================================== */
+.at-h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--at-ink-2);
+}
+
+.at-panel__title {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--at-hairline);
+}
+
+.at-tally {
+  font-family: var(--at-mono);
+  font-size: 11px;
+  color: var(--at-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+ * 左栏：星表
+ * 视觉上刻意"安静"：没有卡片、没有描边，只有行和行。密度靠 46px 行高 +
+ * 两行文本撑起来，而不是靠把它做成一张张圆角卡。
+ * ======================================================================== */
+.at-rail__head,
+.at-log__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--at-gap);
+  margin-bottom: 10px;
+}
+
+/* 分段控件：一组互斥选项必须看起来成组，所以是一个凹槽 + 一段选中底 */
+.at-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  margin-bottom: 10px;
+  border-radius: var(--at-radius-sm);
+  background: var(--at-well);
+}
+
+.at-seg__btn {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--at-ink-2);
+  cursor: pointer;
+  transition:
+    background-color var(--at-dur-fast) var(--at-ease),
+    color var(--at-dur-fast) var(--at-ease);
+}
+
+.at-seg__btn:hover {
+  background: var(--at-hover);
+  color: var(--at-ink);
+}
+
+.at-seg__btn[aria-pressed='true'] {
+  background: var(--at-plate);
+  color: var(--at-accent);
+  font-weight: 600;
+  box-shadow: var(--at-shadow-card);
+}
+
+.at-seg__btn:focus-visible {
+  outline: 2px solid var(--at-focus);
+  outline-offset: 1px;
+}
+
+.at-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* 内滚而不是把 52 行全铺开。高度不再是写死的 520px，而是吃掉左栏剩下的空间：
+   * 写死高度会在矮屏上留下死空间，在高屏上又切在半行上。 */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 底边渐隐。硬切一刀和"下面还有内容"在视觉上不是一回事：
+   * 截断的行永远横在那里，像是渲染坏了而不是可滚动的边界。 */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+}
+
+.at-row {
+  width: 100%;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 0;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--at-radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--at-dur-fast) var(--at-ease);
+}
+
+.at-row + .at-row {
+  /* 行线用发丝，不用框：49 条边框会把左栏变成一张网格表 */
+  box-shadow: 0 -1px 0 var(--at-hairline);
+}
+
+.at-row:hover {
+  background: var(--at-hover);
+}
+
+.at-row[aria-current='true'] {
+  background: var(--at-wash);
+}
+
+.at-row[aria-current='true'] + .at-row {
+  box-shadow: none;
+}
+
+.at-row:focus-visible {
+  outline: 2px solid var(--at-focus);
+  outline-offset: -2px;
+}
+
+/* 准星 —— 本应用的 motif。开口方框 + 十字丝，出现在行首、图上、chip、toast。 */
+.at-reticle {
+  grid-row: 1 / span 2;
+  position: relative;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--at-line-strong);
+  border-radius: 2px; /* 字形不是容器，不参与圆角档位 */
+  color: var(--at-line-strong);
+  transition:
+    border-color var(--at-dur-fast) var(--at-ease),
+    color var(--at-dur-fast) var(--at-ease);
+}
+
+.at-reticle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat;
+}
+
+.at-row[aria-current='true'] .at-reticle {
+  border-color: var(--at-accent);
+  color: var(--at-accent);
+}
+
+.at-row__name {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--at-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-row[aria-current='true'] .at-row__name {
+  color: var(--at-ink);
+  font-weight: 600;
+}
+
+.at-row__mag {
+  grid-column: 3;
+  grid-row: 1;
+  font-family: var(--at-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--at-ink-3);
+}
+
+.at-row[aria-current='true'] .at-row__mag {
+  color: var(--at-accent);
+}
+
+.at-row__desig {
+  grid-column: 2 / span 2;
+  grid-row: 2;
+  font-family: var(--at-mono);
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--at-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-empty {
+  margin: var(--at-gap-2) 0 0;
+  padding: 28px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  border: 1px dashed var(--at-line);
+  border-radius: var(--at-radius);
+}
+
+.at-empty__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--at-ink-2);
+}
+
+.at-empty__hint {
+  font-size: 12px;
+  color: var(--at-ink-3);
+}
+
+/* ===========================================================================
+ * 中栏：图版（唯一的焦点）
+ *
+ * 深度全靠**表面明度**而不是投影：浅色下 bg-elevated 比纸面亮，深色下比夜空
+ * 亮，两种外观都是"抬起来"。左右两栏刻意不抬 —— 等权重是这个界面最大的
+ * 失败模式，所以它是被设计掉的，不是被接受的。
+ * ======================================================================== */
+.at-plate {
+  min-width: 0;
+}
+
+.at-frame {
+  position: relative;
+  width: min(100%, 460px);
+  margin-inline: auto;
+  aspect-ratio: 1;
+  border-radius: var(--at-radius-lg);
+  border: 1px solid var(--at-line);
+  background: var(--at-plate);
+  box-shadow: var(--at-shadow-plate);
+  overflow: hidden;
+}
+
+/* 染色层。background-color 可以过渡，background-image 不能 —— 所以天区的
+ * 颜色变化全落在这个平色上，JS 换目标时它会平滑地染过去。
+ *
+ * 这里原本还有一层暗角（radial-gradient），删掉了：暗角要用"黑"而不是
+ * ink 色才能在深色外观下变暗，用 ink 色在浅色下是暗角、在深色下就成了
+ * 一圈发亮的边。而且它画在内容下面，等于一直隐形 —— 两重原因都指向删。 */
+.at-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: var(--at-tint);
+  transition: background-color var(--at-dur-slow) var(--at-ease);
+}
+
+.at-frame > * {
+  position: relative;
+  z-index: 2;
+}
+
+.at-frame:focus-visible {
+  outline: 2px solid var(--at-focus);
+  outline-offset: 3px;
+}
+
+.at-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-family: var(--at-sans);
+  touch-action: none;
+}
+
+/* --- SVG 内部 ------------------------------------------------------------
+ * 几何与颜色分离（和 signal-chart 同一条规矩）：JS 只写 d / cx / cy /
+ * transform，颜色一律交给下面的类。于是换主题自动跟随，绘图代码根本不需要
+ * 知道主题的存在。
+ * -------------------------------------------------------------------- */
+.at-g {
+  fill: none;
+  stroke: var(--at-line-strong);
+  stroke-width: 1;
+}
+
+.at-g--edge {
+  stroke: var(--at-ink-3);
+  stroke-width: 1.5;
+}
+
+.at-g--par {
+  stroke-dasharray: 2 5;
+  opacity: 0.55;
+}
+
+.at-spoke {
+  stroke: var(--at-line);
+  stroke-width: 1;
+}
+
+.at-label {
+  fill: var(--at-ink-2);
+  font-size: 10px;
+  font-family: var(--at-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* 星点。尺寸由 JS 按星等算好写进 r，CSS 只管颜色和入场。 */
+.at-star {
+  fill: var(--at-ink);
+}
+
+.at-star--field {
+  fill: var(--at-ink-3);
+  opacity: 0.55;
+}
+
+/* 星座连线：淡到几乎看不见，但拿掉它整张图就散成一片噪点。
+ * 掺 45% 的染色，所以整幅星座图也会随目标偏冷/偏暖 —— 这是"染色"在图上
+ * 最安静也最持久的一处：一百来条发丝线，占不到图版面积的 0.2%。 */
+.at-link {
+  stroke: color-mix(in srgb, var(--at-dye) 45%, var(--at-line-strong));
+  stroke-width: 1;
+  fill: none;
+  stroke-linecap: round;
+}
+
+/* 被选中的目标：准星本体 —— motif 在图上的那次显形。
+ * 颜色取的是**染色**，不是 accent：准星就是那个天体自己的颜色，这是整个
+ * 应用里"选中了什么"最直接的一次表达。 */
+.at-mark {
+  color: var(--at-dye);
+  transition: color var(--at-dur) var(--at-ease);
+}
+
+.at-mark__ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.at-mark__arm {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.at-mark__dot {
+  fill: currentColor;
+}
+
+.at-mark__name {
+  fill: currentColor;
+  font-size: 11px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--at-well);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.at-mark__name--en {
+  font-family: var(--at-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* 同星座的其它目标：小一号的空心点，弱到不抢，但一眼数得出来 */
+.at-peer {
+  fill: none;
+  stroke: var(--at-ink-3);
+  stroke-width: 1;
+}
+
+/* 准星（悬停） */
+.at-cross__rule {
+  stroke: var(--at-ink-2);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  opacity: 0;
+  transition: opacity var(--at-dur-fast) var(--at-ease);
+}
+
+.at-cross[data-on='true'] .at-cross__rule {
+  opacity: 0.75;
+}
+
+.at-hit {
+  fill: transparent;
+}
+
+/* 悬停读数用 HTML：圆角、描边、浮层投影在 SVG 里只能靠 filter 硬凑 */
+.at-read {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 8px;
+  border-radius: var(--at-radius-sm);
+  border: 1px solid var(--at-line);
+  background: var(--at-plate);
+  box-shadow: var(--at-shadow-pop);
+  font-family: var(--at-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  color: var(--at-ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* --- 图版题注 -----------------------------------------------------------
+ * 目标名印在图**下面**而不是塞进数据面板：星图册就是这么排的，而且它把
+ * 全应用唯一的衬线大标题放在焦点旁边，层级一眼可读。
+ * -------------------------------------------------------------------- */
+.at-caption {
+  width: min(100%, 460px);
+  margin: var(--at-gap-2) auto 0;
+  text-align: center;
+}
+
+.at-caption__line {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+}
+
+.at-plate-no {
+  font-family: var(--at-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--at-accent);
+  flex: none;
+}
+
+.at-caption__name {
+  font-family: var(--at-serif);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--at-ink);
+}
+
+.at-caption__meta {
+  margin: 4px 0 0;
+  font-family: var(--at-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--at-ink-3);
+}
+
+.at-caption__hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--at-ink-3);
+}
+
+/* ===========================================================================
+ * 右栏：数据面板
+ * 刻意做"表"而不是"卡片堆"：八项读数两列排开，等宽数字对齐，一行一行读下去。
+ * ======================================================================== */
+.at-panel {
+  min-width: 0;
+}
+
+.at-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* chip = 语义色的 10% 水洗 + 30% 描边 + 原色文字。
+ * 10% 是淡底的天花板：chip 只有一行字那么大的地方，用 15% 就开始脏了。 */
+.at-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.at-chip__mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  position: relative;
+  flex: none;
+}
+
+.at-chip__mark::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat;
+}
+
+.at-chip--info {
+  color: var(--at-info);
+  background: color-mix(in srgb, var(--at-info) 10%, transparent);
+  border-color: color-mix(in srgb, var(--at-info) 32%, transparent);
+}
+
+.at-chip--ok {
+  color: var(--at-ok);
+  background: color-mix(in srgb, var(--at-ok) 10%, transparent);
+  border-color: color-mix(in srgb, var(--at-ok) 32%, transparent);
+}
+
+.at-chip--warn {
+  color: var(--at-warn);
+  background: color-mix(in srgb, var(--at-warn) 10%, transparent);
+  border-color: color-mix(in srgb, var(--at-warn) 32%, transparent);
+}
+
+.at-chip--bad {
+  color: var(--at-bad);
+  background: color-mix(in srgb, var(--at-bad) 10%, transparent);
+  border-color: color-mix(in srgb, var(--at-bad) 32%, transparent);
+}
+
+.at-chip--plain {
+  color: var(--at-ink-3);
+  background: var(--at-hover);
+  border-color: var(--at-line);
+}
+
+.at-data {
+  margin: 14px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.at-data__k {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--at-ink-3);
+}
+
+.at-data__v {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--at-ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.at-data__v--num {
+  font-family: var(--at-mono);
+}
+
+.at-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--at-ink-2);
+}
+
+/* ===========================================================================
+ * 观测记录 + 按钮
+ * ======================================================================== */
+.at-log {
+  margin-top: 22px;
+}
+
+.at-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px; /* 主操作高于 32px 的地板 */
+  padding: 0 16px;
+  border: 1px solid var(--at-line);
+  border-radius: var(--at-radius-sm);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--at-dur-fast) var(--at-ease),
+    border-color var(--at-dur-fast) var(--at-ease),
+    transform var(--at-dur-fast) var(--at-ease);
+}
+
+.at-btn:hover {
+  background: var(--at-hover);
+}
+
+.at-btn:active {
+  transform: scale(0.97);
+}
+
+.at-btn:focus-visible {
+  outline: 2px solid var(--at-focus);
+  outline-offset: 2px;
+  box-shadow: var(--at-glow);
+}
+
+.at-btn--primary {
+  background: var(--at-accent);
+  border-color: var(--at-accent);
+  color: var(--at-on-accent);
+}
+
+.at-btn--primary:hover {
+  background: var(--at-accent-hover);
+  border-color: var(--at-accent-hover);
+}
+
+.at-log__hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--at-ink-3);
+}
+
+.at-log__list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 148px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.at-log__empty {
+  font-size: 12px;
+  color: var(--at-ink-3);
+}
+
+.at-log__row {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--at-radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--at-dur-fast) var(--at-ease);
+}
+
+.at-log__row + .at-log__row {
+  box-shadow: 0 -1px 0 var(--at-hairline);
+}
+
+.at-log__row:hover {
+  background: var(--at-hover);
+}
+
+.at-log__row:focus-visible {
+  outline: 2px solid var(--at-focus);
+  outline-offset: -2px;
+}
+
+.at-log__row .at-reticle {
+  width: 9px;
+  height: 9px;
+}
+
+.at-log__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--at-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-log__desig {
+  flex: none;
+  font-family: var(--at-mono);
+  font-size: 11px;
+  color: var(--at-ink-3);
+}
+
+.at-log__row[aria-current='true'] .at-log__name {
+  color: var(--at-ink);
+  font-weight: 600;
+}
+
+/* ===========================================================================
+ * Toast —— 确认性反馈，完整生命周期在 ui.js：进入 → 停留 → 退场 → 摘节点
+ * ======================================================================== */
+.at-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.at-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--at-ink);
+  color: var(--at-bg);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: var(--at-shadow-pop);
+  animation: at-toast-in var(--at-dur-slow) var(--at-ease-out);
+}
+
+.at-toast[data-tone='bad'] {
+  /* 唯一的 error 出场：本地存储写不进去。用户必须看见它，
+   * 静默失败会让人以为已经存上了，下次打开数据却没了。 */
+  background: var(--at-bad);
+  color: var(--at-on-accent);
+}
+
+.at-toast .at-reticle {
+  width: 9px;
+  height: 9px;
+  border-color: currentColor;
+  color: currentColor;
+}
+
+.at-toast[data-leaving='true'] {
+  animation: at-fade-out var(--at-dur) var(--at-ease) forwards;
+}
+
+/* ===========================================================================
+ * 入场 / 退场
+ * 只有三类：入场（淡入 + 极小位移）、反馈（缩放脉冲，不做位移）、
+ * 氛围（这里**没有** —— 大面积循环动画会让人眩晕，且这个应用不需要）。
+ * ======================================================================== */
+@keyframes at-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 连线是"画"出来的：pathLength="1" 把长度归一化成 1，CSS 就能用 0..1
+ * 表达画到哪儿了，不必在 JS 里调 getTotalLength()（那是一次真实的布局读取）。 */
+@keyframes at-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes at-toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes at-fade-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+@keyframes at-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.at-frame[data-enter='true'] .at-star,
+.at-frame[data-enter='true'] .at-peer {
+  animation: at-appear var(--at-dur-slow) var(--at-ease-out) backwards;
+  animation-delay: calc(var(--at-i, 0) * 22ms);
+}
+
+.at-frame[data-enter='true'] .at-link {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: at-draw var(--at-dur-slow) var(--at-ease-out) forwards;
+  animation-delay: calc(var(--at-j, 0) * 40ms);
+}
+
+.at-frame[data-enter='true'] .at-mark {
+  animation: at-mark-in var(--at-dur-slow) var(--at-ease-out) 120ms backwards;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.at-frame[data-enter='true'] .at-label,
+.at-frame[data-enter='true'] .at-g,
+.at-frame[data-enter='true'] .at-spoke {
+  animation: at-appear var(--at-dur) var(--at-ease-out) backwards;
+}
+
+/* ===========================================================================
+ * 窄容器 —— MiniApp 被嵌在侧栏时宽度可能只有 320px，这是常态不是边缘情况
+ * ======================================================================== */
+@media (max-width: 1080px) {
+  .at-grid {
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  .at-panel {
+    grid-column: 1 / -1;
+  }
+
+  .at-data {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --at-pad: 16px;
+  }
+
+  .at-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--at-gap-2);
+  }
+
+  .at-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .at-list {
+    max-height: 320px;
+  }
+
+  .at-data {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .at-caption__name {
+    font-size: 22px;
+  }
+}
+
+/* ===========================================================================
+ * 动效降级 —— 不是可选项。
+ * 前庭功能障碍用户对大面积位移与循环动画会实际眩晕，集中关一次比在每个
+ * 动画定义旁边写一遍更可靠（新增动画时不会漏）。
+ * ======================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 无宿主时的深浅两套（导出成独立网页才走这里）
+ *
+ * 宿主在的时候，上面 :root 里的 --hamuna-* 已经由 meta.json 的 appearance
+ * 填好了，这两块只是把同一个关系在 data-appearance 下再写一遍。保留它们是
+ * 为了"导出去也是一个能看的东西" —— showcase 用的是同一个手法。
+ * -------------------------------------------------------------------- */
+[data-appearance='light'] {
+  --at-bg: var(--hamuna-bg-primary, #ece1d0);
+  --at-plate: var(--hamuna-bg-elevated, #f7f0e3);
+  --at-well: var(--hamuna-bg-inset, #e1d2b9);
+  --at-ink: var(--hamuna-text-primary, #2a2117);
+  --at-ink-2: var(--hamuna-text-secondary, #574836);
+  --at-ink-3: var(--hamuna-text-muted, #65543c);
+  --at-accent: var(--hamuna-accent, #9e3b26);
+  --at-accent-hover: var(--hamuna-accent-hover, #8a3120);
+  --at-on-accent: var(--hamuna-text-on-primary, #f8f1e5);
+  --at-cool: var(--hamuna-accent-secondary, #2f6a94);
+  --at-ok: var(--hamuna-success, #1a6138);
+  --at-bad: var(--hamuna-error, #9b2c1e);
+  --at-warn: var(--hamuna-warning, #7d5200);
+  --at-info: var(--hamuna-info, #215b86);
+  --at-focus: var(--hamuna-focus-border, #9e3b26);
+}
+
+[data-appearance='dark'] {
+  --at-bg: var(--hamuna-bg-primary, #0e1226);
+  --at-plate: var(--hamuna-bg-elevated, #171d36);
+  --at-well: var(--hamuna-bg-inset, #080b1a);
+  --at-ink: var(--hamuna-text-primary, #f1ebda);
+  --at-ink-2: var(--hamuna-text-secondary, #b9b3a1);
+  --at-ink-3: var(--hamuna-text-muted, #918b7c);
+  --at-accent: var(--hamuna-accent, #e08a63);
+  --at-accent-hover: var(--hamuna-accent-hover, #eea488);
+  --at-on-accent: var(--hamuna-text-on-primary, #1a0d08);
+  --at-cool: var(--hamuna-accent-secondary, #8ab8dd);
+  --at-ok: var(--hamuna-success, #63cc93);
+  --at-bad: var(--hamuna-error, #f5907f);
+  --at-warn: var(--hamuna-warning, #e8bd63);
+  --at-info: var(--hamuna-info, #8fbde8);
+  --at-focus: var(--hamuna-focus-border, #e08a63);
+}

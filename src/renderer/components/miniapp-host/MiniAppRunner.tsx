@@ -34,7 +34,11 @@ import { apiPostJson } from '@/api/apiFetch';
 
 import { postAppResult, verifyAppCall } from '../../../shared/miniapp/app-protocol';
 import { hostAllowed } from '../../../shared/miniapp/app-permissions';
-import type { MiniAppDependency, MiniAppPermissions } from '../../../shared/miniapp/types';
+import type {
+  MiniAppAppearance,
+  MiniAppDependency,
+  MiniAppPermissions,
+} from '../../../shared/miniapp/types';
 
 import { runAppCall } from './appBridge';
 import { createAppDispatcher, clearWorkerId, registerWorkerId } from './appHostDispatch';
@@ -53,7 +57,7 @@ import {
   type WorkerCallMessage,
   type WorkerCallResult,
 } from './workerCallBridge';
-import { buildThemeTokenCss, readThemeTokens, THEME_TOKEN_STYLE_ID } from './theme-tokens';
+import { buildThemeTokenCss, bespokeOverrides, readThemeTokens, THEME_TOKEN_STYLE_ID } from './theme-tokens';
 
 export type MiniAppKind = 'iframe' | 'worker';
 
@@ -92,6 +96,14 @@ export interface MiniAppRunnerProps {
    * blocked, which is the fail-closed default.
    */
   dependencies?: readonly MiniAppDependency[];
+  /**
+   * `meta.json::appearance`. Only `mode: 'bespoke'` changes anything: the host
+   * then injects the author's declared palette into the contract slots instead
+   * of its own theme values, so the app keeps its identity (a night-sky tarot
+   * table stays dark) while still using the same 43 variables and the same
+   * `var()` fallbacks the audit knows about.
+   */
+  appearance?: MiniAppAppearance;
   /**
    * 宿主环境事实（平台 / 语言 / 工作区路径），随 `host.ready` 下发给
    * iframe 侧 runtime，填充 `app.platform` / `app.locale` / `app.workspaceDir`。
@@ -233,6 +245,7 @@ export default function MiniAppRunner({
   workerKind,
   permissions,
   dependencies,
+  appearance,
   env,
   isActive,
 }: MiniAppRunnerProps) {
@@ -292,7 +305,12 @@ export default function MiniAppRunner({
   // 当前 `dependencies` / `permissions` 来自一次性加载的 meta.json，mount 内不变，
   // 所以这条路径走不到。要放开依赖热更新时，得同时让推送路径补发一次。
   const [themeCss] = useState(
-    () => buildThemeTokenCss(readThemeTokens(), document.documentElement.dataset.colorScheme),
+    () =>
+      buildThemeTokenCss(
+        readThemeTokens(),
+        document.documentElement.dataset.colorScheme,
+        bespokeOverrides(appearance, document.documentElement.dataset.colorScheme),
+      ),
   );
 
   // 主题 / 亮暗变更 → 重算 token CSS 并推给 iframe（不重载文档）。
@@ -307,7 +325,14 @@ export default function MiniAppRunner({
     let lastPushed = themeCss;
     const push = () => {
       const appearanceMode = document.documentElement.dataset.colorScheme;
-      const next = buildThemeTokenCss(readThemeTokens(), appearanceMode);
+      const next = buildThemeTokenCss(
+        readThemeTokens(),
+        appearanceMode,
+        // Recomputed per push, not frozen at mount: a bespoke app's dark palette
+        // is only reachable once the host flips to dark, and this observer fires
+        // on `data-color-scheme` changes — which is exactly that moment.
+        bespokeOverrides(appearance, appearanceMode),
+      );
       if (next === lastPushed) return;
       lastPushed = next;
       iframeRef.current?.contentWindow?.postMessage(
@@ -321,7 +346,7 @@ export default function MiniAppRunner({
       attributeFilter: ['data-theme-id', 'data-color-scheme'],
     });
     return () => obs.disconnect();
-  }, [themeCss]);
+  }, [themeCss, appearance]);
 
   // CDN 依赖先注入（进 `<head>`），再算 CSP —— 顺序反了 CSP 会按旧的无依赖
   // 版本算好、放宽的源就永远用不上。两步都只在声明了依赖时改变输出。

@@ -1,0 +1,143 @@
+/**
+ * tweaks.css — 外观微调面板的样式。
+ *
+ * 与 tweaks.js 配套使用。刻意保持很小：面板本身不该成为界面的视觉主张，它是一枚
+ * 安静的控件，藏在右下角，用户想调才调。
+ *
+ * 作者自己的 CSS 不需要在这里写任何东西 —— 档位的效果由作者自己的规则解释：
+ *
+ * ```css
+ * :root[data-density='compact'] { --row-h: 32px; }
+ * ```
+ */
+
+/* 派生层：与 playbook §四 同一套比例。面板是浮层，需要一层"浮起来"的底。 */
+.tw-panel {
+  --tw-wash: color-mix(in srgb, var(--hamuna-accent, #7b8f6b) 6%, transparent);
+  --tw-line: color-mix(in srgb, var(--hamuna-text-primary, #1c1612) 10%, transparent);
+  --tw-hover: color-mix(in srgb, var(--hamuna-text-primary, #1c1612) 6%, transparent);
+  --tw-focus: var(--hamuna-focus-border, #7b8f6b);
+  --tw-dur: var(--hamuna-duration-fast, 150ms);
+  --tw-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  position: fixed;
+  right: 16px;
+  /* 浮在齿轮**上方**，而不是靠 aria-expanded 把齿轮藏掉。
+   * 藏掉它会带来一个具体的坏处：降级模式下没有过渡，"藏"就只能靠 display/opacity，
+   * 于是关闭按钮在需要时反而不见了。这里让两者共存，位置各占一处。 */
+  bottom: 56px;
+  z-index: 10;
+  display: grid;
+  gap: 10px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 12px;
+  /* 半透明底 + blur 缺一不可：只有 blur 没有底色，前景文字会和后面内容叠在一起；
+   * 只有底色没有 blur，就是一块灰玻璃。 */
+  background: color-mix(in srgb, var(--hamuna-bg-elevated, #f5f5f5) 88%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid var(--tw-line);
+  border-radius: var(--hamuna-radius-md, 10px);
+  box-shadow: var(--hamuna-shadow-lg);
+  /* 只过渡颜色，不过渡尺寸（playbook §七 房规第 1 条） */
+  transition:
+    background-color var(--tw-dur) var(--tw-ease),
+    border-color var(--tw-dur) var(--tw-ease);
+}
+
+.tw-panel[hidden] {
+  display: none;
+}
+
+.tw-field {
+  display: grid;
+  gap: 6px;
+}
+
+.tw-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--hamuna-text-muted, #6f6156);
+}
+
+.tw-options {
+  display: flex;
+  gap: 4px;
+}
+
+.tw-option {
+  /* 命中目标 32px 是 playbook §七.6 的硬下限 */
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--hamuna-radius-sm, 6px);
+  background: transparent;
+  color: var(--hamuna-text-secondary, #544b42);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color var(--tw-dur) var(--tw-ease),
+    color var(--tw-dur) var(--tw-ease),
+    border-color var(--tw-dur) var(--tw-ease);
+}
+
+.tw-option:hover {
+  background: var(--tw-hover);
+  color: var(--hamuna-text-primary, #1c1612);
+}
+
+/* 选中态用淡底 + 描边，不刷实心 accent —— 实心色块多了就不再是强调 */
+.tw-option[aria-checked='true'] {
+  background: var(--tw-wash);
+  border-color: color-mix(in srgb, var(--hamuna-accent, #7b8f6b) 38%, transparent);
+  color: var(--hamuna-text-primary, #1c1612);
+  font-weight: 600;
+}
+
+.tw-option:focus-visible,
+.tw-toggle:focus-visible {
+  outline: 2px solid var(--tw-focus);
+  outline-offset: 2px;
+}
+
+.tw-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 11;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--tw-line);
+  border-radius: var(--hamuna-radius-sm, 6px);
+  background: color-mix(in srgb, var(--hamuna-bg-elevated, #f5f5f5) 88%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  color: var(--hamuna-text-secondary, #544b42);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--hamuna-shadow-md);
+  transition:
+    background-color var(--tw-dur) var(--tw-ease),
+    color var(--tw-dur) var(--tw-ease);
+}
+
+.tw-toggle:hover {
+  color: var(--hamuna-text-primary, #1c1612);
+}
+
+/* 面板展开时收起齿轮：两个控件占同一个位置会叠在一起 */
+.tw-toggle[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--hamuna-accent, #7b8f6b) 8%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-panel,
+  .tw-option,
+  .tw-toggle {
+    transition-duration: 1ms !important;
+  }
+}

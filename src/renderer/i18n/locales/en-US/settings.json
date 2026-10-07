@@ -229,6 +229,12 @@
     "website": "Website",
     "manage": "Manage",
     "apiKeyPlaceholder": "Enter API Key",
+    "miniappModel": {
+      "title": "MiniApp model",
+      "description": "Which provider and model MiniApps use for their built-in AI features (app.ai / app.agent). Keep it following the conversation unless you want MiniApps pinned to a specific provider.",
+      "followSession": "Follow conversation",
+      "followingSession": "Following conversation"
+    },
     "noEnabledTitle": "No enabled providers",
     "noEnabledDescription": "Open Enable & Sort to re-enable providers.",
     "verifyPending": "Pending verification",

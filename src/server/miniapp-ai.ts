@@ -35,7 +35,8 @@ import {
 } from './agent-session';
 import { ensureDirSync } from './utils/fs-utils';
 import { applyProviderContextWindowSuffix } from './utils/model-capabilities';
-import { SUBSCRIPTION_PROVIDER_ID } from '../shared/config-types';
+import { loadConfig } from './utils/admin-config';
+import { describeMiniAppPinProblem, resolveMiniAppModelPin } from './miniapp-model-pin';
 import { registerCall, releaseCall } from './miniapp-ai-abort';
 
 const SYSTEM_PROMPT =
@@ -189,15 +190,14 @@ export {
 } from './miniapp-ai-abort';
 
 /**
- * 补全固定走宿主已配置的那条通路。
+ * 补全走「用户在设置里为 MiniApp 选的 provider」，没有配置时才沿用宿主会话。
  *
- * 刻意**不接受** MiniApp 传 providerEnv / apiKey：它没有 Key，也不该有能力把
- * 请求指向一个未在宿主配置里登记过的上游。`model` 缺省时留 undefined，由 SDK
- * 按宿主当前配置自选 —— 这比在 sidecar 侧重新解析一遍宿主 config 更可靠，
- * 因为 config 的权威在 Rust / 磁盘，sidecar 读到的可能已是陈旧快照。
+ * 仍然**不接受** MiniApp 传 providerEnv / apiKey：它没有 Key，也不该有能力把请求
+ * 指向一个未在宿主配置里登记过的上游。`model` 优先级不变 —— 作者显式传的 model
+ * 仍然压过配置里钉的那个。
  */
-function resolveHostModel(requested: string | undefined): string | undefined {
-  return requested?.trim() || undefined;
+function resolveHostModel(requested: string | undefined, pinned?: string): string | undefined {
+  return requested?.trim() || pinned;
 }
 
 export interface MiniAppAiParams {
@@ -253,23 +253,40 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
   }
 
   const { query } = await import('@anthropic-ai/claude-agent-sdk');
-  const model = resolveHostModel(p.model);
-  // 补全永远走宿主已配置的那条通路，MiniApp 不注入 providerEnv —— 它没有 Key，
-  // 也不该有能力把请求指向一个未在宿主配置里登记过的上游。传 `undefined` 在
-  // `buildClaudeSessionEnv` 里读作"沿用会话当前 provider"，正是这里要的安全性质。
-  const providerEnv = undefined;
 
-  // 上面那句"沿用当前 provider"是有代价的：调用方**必须自己**把这个 provider
-  // 配套的两样东西补齐。之前这里硬传 `providerId: SUBSCRIPTION_PROVIDER_ID`，
-  // 而真正决定走直连还是 bridge 的是 `effectiveProviderEnv`（即 configState 里
-  // 那个真实 provider）—— 两者一旦对不上，OpenAI 协议的上游会同时命中
-  // "按订阅处理"（providerId）和"需要 bridge token"（apiProtocol === 'openai'）
-  // 两条规则，而 token 从来没人注册，`buildClaudeSessionEnv` 当场抛。
+  // 配置在这里现读（`loadConfig`），不走任何进程级缓存 —— 用户刚在设置里改完就
+  // 立刻生效，不必重启 sidecar。
+  const config = loadConfig();
+  const pinProblem = describeMiniAppPinProblem(config);
+  if (pinProblem) {
+    return fail(APP_ERROR_CODES.HOST_ERROR, pinProblem);
+  }
+
+  const pin = resolveMiniAppModelPin(config, getSessionProviderEnv()?.providerId);
+  const model = resolveHostModel(p.model, pin.model);
+  // 有 pin 才用 pin 解析出来的 env；没 pin 时**原样沿用**改动前那条路：把
+  // `undefined` 传给 `buildClaudeSessionEnv`（读作"沿用会话当前 provider"），
+  // 并用同一个活的 `getSessionProviderEnv()` 对象决定 bridge。
+  //
+  // 这里刻意不从 config 重新物化"会话当前 provider"：活对象上带着
+  // `canonicalizeManagedProviderEnv` 之类只有 session 侧才做的加工（见
+  // agent-session.ts 的 managed-oauth 分支），重新物化会把那些加工抹掉。
+  // 没有 pin 的用户必须拿到与改动前逐字节相同的行为。
+  const pinned = !!(config.miniappProviderId && config.miniappProviderId.trim());
+  const activeProvider = pinned ? pin.providerEnv : getSessionProviderEnv();
+  const providerId = pin.providerId;
+
+  // 配了 pin 时，providerId 来自 pin 而 env 可能解析不出来 —— 那是上面
+  // `describeMiniAppPinProblem` 已经拦下的情况，走到这里 env 必然与 providerId 同源。
+  //
+  // 之前这里硬传 `providerId: SUBSCRIPTION_PROVIDER_ID`，而真正决定走直连还是
+  // bridge 的是 `effectiveProviderEnv`（即 configState 里那个真实 provider）——
+  // 两者一旦对不上，OpenAI 协议的上游会同时命中"按订阅处理"（providerId）和
+  // "需要 bridge token"（apiProtocol === 'openai'）两条规则，而 token 从来没人
+  // 注册，`buildClaudeSessionEnv` 当场抛。
   // 后果是 app.ai 对**任何**跑在 OpenAI 兼容 provider 上的用户都是坏的，
   // 而自定义 provider 里这类占多数（实测：宿主默认 provider 正是 apiProtocol
   // 'openai'，一次真实补全直接抛 "requires a bridgeToken"）。
-  const activeProvider = getSessionProviderEnv();
-  const providerId = activeProvider?.providerId ?? SUBSCRIPTION_PROVIDER_ID;
 
   // bridge 是 per-subprocess 的，不能复用活动会话那个 token —— 两个子进程共享
   // 一条路由时，上游切换与中止会互相干扰。与 title-generator 同款处理。
@@ -314,7 +331,7 @@ export async function runMiniAppAiComplete(p: MiniAppAiParams): Promise<AiOutcom
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         pathToClaudeCodeExecutable: resolveClaudeCodeCli(),
-        env: buildClaudeSessionEnv(providerEnv, model, {
+        env: buildClaudeSessionEnv(activeProvider, model, {
           bridgeToken: bridge?.token,
           providerId,
         }),

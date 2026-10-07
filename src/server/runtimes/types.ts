@@ -342,6 +342,16 @@ export interface AgentRuntime {
     options?: { clientUserMessageId?: string },
   ): Promise<void>;
 
+  /**
+   * Native steer eligibility, independent of whether the product layer still
+   * considers the turn "running". The two diverge at a turn boundary: the
+   * session is still streaming while the runtime has already retired the turn.
+   * Runtimes that implement this let the session layer skip a steer it knows
+   * cannot land; runtimes that omit it fall back to product-state gating and
+   * still recover via RuntimeSteerUnavailableError.
+   */
+  canSteerMessage?(process: RuntimeProcess): boolean;
+
   /** Respond to a permission request from the runtime */
   respondPermission(
     process: RuntimeProcess,
@@ -411,4 +421,32 @@ export class StaleRuntimeSessionError extends Error {
     super(message);
     this.name = 'StaleRuntimeSessionError';
   }
+}
+
+/**
+ * A same-turn input was definitively not accepted because the runtime no longer
+ * has an active steer target — the turn ended between our eligibility check and
+ * the steer RPC. The delivery outcome is *known* (nothing was consumed), so
+ * session orchestration may keep the same user message and demote it into the
+ * turn-boundary queue instead of retracting it.
+ *
+ * Transport failures must NOT use this error: for those the outcome is unknown
+ * and the message must not be silently replayed into another turn.
+ */
+export class RuntimeSteerUnavailableError extends Error {
+  readonly code = 'runtime_steer_unavailable';
+
+  constructor(message = 'Runtime has no active turn to steer') {
+    super(message);
+    this.name = 'RuntimeSteerUnavailableError';
+  }
+}
+
+export function isRuntimeSteerUnavailableError(error: unknown): error is RuntimeSteerUnavailableError {
+  return error instanceof RuntimeSteerUnavailableError
+    || (
+      typeof error === 'object'
+      && error !== null
+      && (error as { code?: unknown }).code === 'runtime_steer_unavailable'
+    );
 }
