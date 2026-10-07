@@ -23,6 +23,9 @@
   --sc-soft: var(--hamuna-text-secondary, #5c4a4e);
   --sc-muted: var(--hamuna-text-muted, #8a757a);
   --sc-accent: var(--sc-rose);
+  /* 自建色板就得自己管 hover。派生自 --sc-muted 而不是掺 black：掺字面量
+   * black 在深色主题下会把强调色压向纯黑，那不在调色板里。 */
+  --sc-accent-hover: color-mix(in srgb, var(--sc-rose) 86%, var(--sc-soft));
   --sc-accent-text: var(--sc-cream);
 
   --sc-line: color-mix(in srgb, var(--sc-accent) 22%, transparent);
@@ -156,7 +159,7 @@ body {
 }
 
 .sc-btn--primary:hover {
-  background: color-mix(in srgb, var(--sc-accent) 88%, black);
+  background: var(--sc-accent-hover);
 }
 
 .sc-btn:disabled {

@@ -345,7 +345,7 @@ input {
 .dr-btn:focus-visible {
   /* 焦点环用强调色派生，而不是纯黑/纯蓝描边：键盘 Tab 过去时，一眼能看出
    * "当前停在这个控件上" 是因为它被高亮了，而不是因为浏览器画了条蓝线。 */
-  outline: 2px solid var(--dr-accent);
+  outline: 2px solid var(--dr-focus);
   outline-offset: 2px;
   box-shadow: var(--dr-glow);
 }
@@ -357,7 +357,7 @@ input {
 }
 
 .dr-btn--primary:hover {
-  background: color-mix(in srgb, var(--dr-accent) 88%, black);
+  background: var(--dr-accent-hover);
 }
 
 .dr-btn--ghost {

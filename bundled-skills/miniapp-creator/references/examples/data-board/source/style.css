@@ -25,6 +25,9 @@
   --db-muted: var(--hamuna-text-muted, #6f6156);
   --db-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
   --db-accent: var(--hamuna-accent, #7b8f6b);
+  /* 焦点环有自己的 token。借用 accent 会让"当前焦点"和"页面主操作"同色 ——
+   * 在一个用户整盯着看的面板里，这两件事必须能在余光里分开。 */
+  --db-focus: var(--hamuna-focus-border, #7b8f6b);
 
   --db-ok: var(--hamuna-success, #146c2e);
   --db-warn: var(--hamuna-warning, #8a5a00);
@@ -134,7 +137,7 @@ body {
 }
 
 .db-density__btn:focus-visible {
-  outline: 2px solid var(--db-accent);
+  outline: 2px solid var(--db-focus);
   outline-offset: -2px;
 }
 
