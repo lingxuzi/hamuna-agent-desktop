@@ -51,37 +51,48 @@ export const THEME_TOKEN_STYLE_ID = 'hamuna-theme-tokens';
  */
 import appearanceContract from '../../../shared/miniapp-appearance/contract.json';
 
-type ContractVariable = {
-  name: string;
-  kind: 'theme' | 'system';
-  source?: string;
-  /** 派生值：宿主给的平值没有 alpha，用 color-mix 现场补上。 */
-  derived?: string;
-  mix?: number;
-};
-
-const CONTRACT_VARIABLES = appearanceContract.variables as ContractVariable[];
+/**
+ * The contract, read straight off the import.
+ *
+ * No local interface, on purpose. A hand-written one that widened `name` to
+ * `string` (and an array annotation to match) used to sit here and looked like
+ * documentation while quietly defeating the type-level check below it -- see the
+ * note on TokenKey.
+ */
+const CONTRACT_VARIABLES = appearanceContract.variables;
 
 /**
- * MiniApp 作者可见的 token 键。
+ * The shape of a `MiniAppThemeTokens` key.
  *
- * 键名由 contract 里的 MiniApp 变量名反推（`--hamuna-radius-md` ->
- * `radiusMd`），所以新增 token 只需要改 JSON。
+ * This is `string`, not a union, and that is a deliberate retreat. TypeScript
+ * does not preserve string literals through a JSON import -- the inferred type
+ * of `variables[i].name` is plain `string` -- so no conditional type can
+ * recover the real key set.
+ *
+ * An earlier attempt here used template-literal types to derive the union from
+ * the contract. It produced `never`, which makes every `Record` over it
+ * vacuously satisfied: a check that looks present while enforcing nothing, in
+ * the one file whose entire purpose is to make that class of mistake loud. A
+ * second trap worth recording, because it cost the most time: a conditional
+ * type over a union does not distribute the way it reads unless the checked
+ * type is a naked type parameter, so even the corrected shape needs the
+ * recursion inside a generic.
+ *
+ * So completeness is enforced where it can be observed. `theme-tokens
+ * .host-contract.test.ts` fails if a contract entry has no host mapping, no
+ * fallback, or names a host variable the theme registry does not validate.
  */
 type TokenKey = string;
 
-function camelize(name: string): string {
-  return name
+const camelize = (name: string): string =>
+  name
     .replace(/^--hamuna-/, '')
     .replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
-}
 
 const TOKENS = CONTRACT_VARIABLES.map((v) => ({
   ...v,
-  key: camelize(v.name) as TokenKey,
+  key: camelize(v.name),
 }));
-
-const BY_KEY = new Map(TOKENS.map((t) => [t.key, t]));
 
 /**
  * MiniApp 变量名 -> MiniAppThemeTokens 的键。由 contract 派生。
@@ -117,10 +128,15 @@ export const HOST_TO_TOKEN: Record<TokenKey, string | { derived: string; mix: nu
  */
 export type MiniAppThemeTokens = Record<TokenKey, string>;
 
-const FALLBACK_BY_KEY: Record<TokenKey, string> = {
+/**
+ * Exported so `theme-tokens.host-contract.test.ts` can assert every contract entry
+ * has a fallback. A test that re-declared the key list would only be checking
+ * itself; this way it reads the table the builder actually reads.
+ */
+export const FALLBACK_BY_KEY: Record<TokenKey, string> = {
   // 表面与文字。fallback 观感必须与 hamuna-default.css 的浅色一致，否则
   // "宿主缺 token"和"没有宿主"会长得不一样 —— 用户会以为主题坏了。
-  bg: '#ffffff',
+  bgPrimary: '#ffffff',
   bgSurface: '#ffffff',
   bgElevated: '#f5f5f5',
   bgInset: '#ececec',

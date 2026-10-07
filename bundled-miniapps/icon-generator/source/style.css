@@ -52,14 +52,16 @@ body {
 
   --ig-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
   --ig-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
-  --ig-line-focus: var(--hamuna-border-primary, rgba(0, 0, 0, 0.2));
+  --ig-line-focus: var(--hamuna-field-border, rgba(0, 0, 0, 0.12));
+  --ig-line-focus-active: var(--hamuna-field-border-focus, #7b8f6b);
 
   --ig-text: var(--hamuna-text-primary, #1c1612);
   --ig-text-soft: var(--hamuna-text-secondary, #544b42);
   --ig-text-muted: var(--hamuna-text-muted, #6f6156);
 
   --ig-accent: var(--hamuna-accent, #7b8f6b);
-  --ig-accent-text: var(--hamuna-accent-text, #ffffff);
+  --ig-accent-hover: var(--hamuna-accent-hover, #6d8060);
+  --ig-accent-text: var(--hamuna-text-on-primary, #ffffff);
   --ig-error: var(--hamuna-error, #b3261e);
 
   /* 派生层：全文件只在 :root 声明一次 */
@@ -84,7 +86,7 @@ body {
   --ig-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ig-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --ig-shadow: var(--hamuna-shadow-sm);
+  --ig-shadow: var(--hamuna-shadow-card);
   --ig-shadow-raised: var(--hamuna-shadow-md);
 
   --ig-pad: 20px;
@@ -143,7 +145,7 @@ input[type='text']:hover {
 input[type='text']:focus-visible,
 button:focus-visible {
   outline: none;
-  border-color: var(--ig-accent);
+  border-color: var(--ig-line-focus-active);
   box-shadow: var(--ig-focus);
 }
 
@@ -193,7 +195,7 @@ button:disabled {
 
 #gen-btn:hover:not(:disabled),
 #export-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ig-accent) 88%, black);
+  background: var(--ig-accent-hover);
   border-color: transparent;
 }
 
@@ -249,7 +251,7 @@ button:disabled {
 
 .candidate:focus-visible {
   outline: none;
-  border-color: var(--ig-accent);
+  border-color: var(--ig-line-focus-active);
   box-shadow: var(--ig-focus);
 }
 
@@ -367,7 +369,7 @@ button:disabled {
 /* 焦点在隐藏的 input 上时，把焦点环画到外框上。:has() 不支持时只是少一个
  * 焦点环，键盘用户仍能 Tab 到并用 Space 打开选择器。 */
 .dropzone:has(input[type='file']:focus-visible) {
-  border-color: var(--ig-accent);
+  border-color: var(--ig-line-focus-active);
   box-shadow: var(--ig-focus);
 }
 

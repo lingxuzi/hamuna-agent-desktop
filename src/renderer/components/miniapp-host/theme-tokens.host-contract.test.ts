@@ -22,9 +22,16 @@
  * the same boundary — the variables MiniApp authors are told to use. Between
  * them, nothing about this map can drift without a red test.
  */
+import appearanceContract from '../../../shared/miniapp-appearance/contract.json';
 import { describe, expect, it } from 'vitest';
 
-import { buildThemeTokenCss, HOST_TO_TOKEN, type MiniAppThemeTokens } from './theme-tokens';
+import {
+  buildThemeTokenCss,
+  FALLBACK_BY_KEY,
+  HOST_TO_TOKEN,
+  TOKEN_VAR_NAMES,
+  type MiniAppThemeTokens,
+} from './theme-tokens';
 import { REQUIRED_THEME_CSS_TOKENS } from '../../theme/registry-contract';
 
 const REQUIRED = new Set<string>(REQUIRED_THEME_CSS_TOKENS);
@@ -38,10 +45,23 @@ const REQUIRED = new Set<string>(REQUIRED_THEME_CSS_TOKENS);
  * variable just as much — so it gets pinned to the same list. Unwrapping here
  * keeps the assertions below written against a plain string.
  */
+/** Mirrors camelize() in theme-tokens.ts. Duplicated so this file reads the JSON itself. */
+const camelize = (name: string): string =>
+  name.replace(/^--hamuna-/, '').replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+
+/**
+ * The host variable a token actually reads, whichever form it takes.
+ *
+ * A `derived` entry resolves its base through `var()` in the emitted CSS rather
+ * than through getComputedStyle, but it depends on the host defining that
+ * variable just as much — so it gets pinned to the same list. Unwrapping here
+ * keeps the assertions below written against a plain string.
+ */
 const hostVarOf = (key: string): string => {
   const v = HOST_TO_TOKEN[key];
   return typeof v === 'string' ? v : v.derived;
 };
+
 describe('MiniApp theme tokens — host variable contract', () => {
   it('reads only variables the theme registry actually validates', () => {
     // A host var missing from REQUIRED_THEME_CSS_TOKENS is one a theme may
@@ -65,6 +85,51 @@ describe('MiniApp theme tokens — host variable contract', () => {
     const keys = Object.keys(HOST_TO_TOKEN);
     expect(new Set(keys).size).toBe(keys.length);
     expect(keys.length).toBeGreaterThan(0);
+  });
+  it('every contract variable has a host mapping and a fallback', () => {
+    // This is the check a type cannot do. TypeScript widens string literals
+    // through a JSON import, so TokenKey is `string` and any Record<TokenKey,
+    // ...> is satisfied by an empty object; deriving the key union with
+    // template-literal types instead yields `never`, which is equally vacuous.
+    // Two attempts at a compile-time guarantee both produced something that
+    // looked checked and checked nothing, so the guarantee lives here.
+    //
+    // It reads the JSON file itself rather than TOKEN_VAR_NAMES. That map is
+    // generated from the same contract, so a "reverse direction" assertion
+    // written against it is a tautology -- it passed even with a key mapped in
+    // the source but absent from the contract.
+    //
+    // The failure it prevents: a contract entry with no `source` reads
+    // undefined from getComputedStyle, emits an empty CSS value, and the
+    // MiniApp silently falls back -- no runtime error, no visible difference in
+    // the host app, just one token that stopped following the theme.
+    const contractKeys = appearanceContract.variables.map((v) => camelize(v.name));
+    expect(new Set(contractKeys).size, 'contract has a duplicate variable name').toBe(
+      contractKeys.length,
+    );
+    const known = new Set(contractKeys);
+
+    for (const [name, key] of Object.entries(TOKEN_VAR_NAMES)) {
+      const mapping = HOST_TO_TOKEN[key];
+      expect(mapping, `${name} has no entry in HOST_TO_TOKEN (key "${key}")`).toBeDefined();
+      expect(
+        typeof mapping === 'string' || mapping.derived,
+        `${name} needs either a host "source" or a "derived" variable`,
+      ).toBeTruthy();
+      expect(
+        FALLBACK_BY_KEY[key],
+        `${name} has no fallback, so a theme that omits it renders empty`,
+      ).toBeTruthy();
+    }
+
+    // Reverse: a key that no contract entry produces would be looked up by
+    // nothing. Dead weight that reads like coverage.
+    for (const key of Object.keys(HOST_TO_TOKEN)) {
+      expect(known.has(key), `${key} is mapped but absent from contract.json`).toBe(true);
+    }
+    for (const key of Object.keys(FALLBACK_BY_KEY)) {
+      expect(known.has(key), `${key} has a fallback but no contract entry`).toBe(true);
+    }
   });
 
   it('uses distinct host variables (no accidental aliasing)', () => {
@@ -177,9 +242,9 @@ function tokensWith(overrides: Partial<MiniAppThemeTokens> = {}): MiniAppThemeTo
     it('gives authors a shadow scale instead of making them invent one', () => {
       // Shadows were the largest gap versus the reference spec: without tokens
       // the only way to add elevation is a hardcoded rgba, which is exactly what
-      // the design playbook bans. All six rungs must come from the host.
+      // the design playbook bans. All seven rungs must come from the host.
       const css = buildThemeTokenCss(tokensWith(), 'dark');
-      for (const rung of ['xs', 'sm', 'md', 'lg', 'xl', 'overlay']) {
+      for (const rung of ['xs', 'sm', 'card', 'md', 'lg', 'xl', 'overlay']) {
         expect(css, `--hamuna-shadow-${rung} is missing`).toContain(`--hamuna-shadow-${rung}:`);
       }
     });

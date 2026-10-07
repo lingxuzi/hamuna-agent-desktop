@@ -56,14 +56,16 @@ body {
 
   --fe-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
   --fe-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
-  --fe-line-focus: var(--hamuna-border-primary, rgba(0, 0, 0, 0.2));
+  --fe-line-focus: var(--hamuna-field-border, rgba(0, 0, 0, 0.12));
+  --fe-line-focus-active: var(--hamuna-field-border-focus, #7b8f6b);
 
   --fe-text: var(--hamuna-text-primary, #1c1612);
   --fe-text-soft: var(--hamuna-text-secondary, #544b42);
   --fe-text-muted: var(--hamuna-text-muted, #6f6156);
 
   --fe-accent: var(--hamuna-accent, #7b8f6b);
-  --fe-accent-text: var(--hamuna-accent-text, #ffffff);
+  --fe-accent-hover: var(--hamuna-accent-hover, #6d8060);
+  --fe-accent-text: var(--hamuna-text-on-primary, #ffffff);
   --fe-error: var(--hamuna-error, #b3261e);
 
   /* 派生层：全文件只在 :root 声明一次 */
@@ -91,7 +93,7 @@ body {
   --fe-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fe-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --fe-shadow: var(--hamuna-shadow-sm);
+  --fe-shadow: var(--hamuna-shadow-card);
   --fe-shadow-raised: var(--hamuna-shadow-md);
 
   --fe-pad: 20px;
@@ -151,7 +153,7 @@ input[type='text']:hover {
 input[type='text']:focus-visible,
 button:focus-visible {
   outline: none;
-  border-color: var(--fe-accent);
+  border-color: var(--fe-line-focus-active);
   box-shadow: var(--fe-focus);
 }
 
@@ -203,7 +205,7 @@ button:disabled {
 
 #load-btn:hover:not(:disabled),
 #search-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--fe-accent) 88%, black);
+  background: var(--fe-accent-hover);
   border-color: transparent;
 }
 
@@ -433,7 +435,7 @@ button:disabled {
 }
 
 .case-toggle:focus-within {
-  border-color: var(--fe-accent);
+  border-color: var(--fe-line-focus-active);
   box-shadow: var(--fe-focus);
 }
 

@@ -67,14 +67,16 @@ body {
 
   --gg-line: var(--hamuna-border-subtle, rgba(0, 0, 0, 0.08));
   --gg-line-strong: var(--hamuna-border, rgba(0, 0, 0, 0.12));
-  --gg-line-focus: var(--hamuna-border-primary, rgba(0, 0, 0, 0.2));
+  --gg-line-focus: var(--hamuna-field-border, rgba(0, 0, 0, 0.12));
+  --gg-line-focus-active: var(--hamuna-field-border-focus, #7b8f6b);
 
   --gg-text: var(--hamuna-text-primary, #1c1612);
   --gg-text-soft: var(--hamuna-text-secondary, #544b42);
   --gg-text-muted: var(--hamuna-text-muted, #6f6156);
 
   --gg-accent: var(--hamuna-accent, #7b8f6b);
-  --gg-accent-text: var(--hamuna-accent-text, #ffffff);
+  --gg-accent-hover: var(--hamuna-accent-hover, #6d8060);
+  --gg-accent-text: var(--hamuna-text-on-primary, #ffffff);
   --gg-error: var(--hamuna-error, #b3261e);
 
   /* 派生层：全文件只在 :root 声明一次，下面一律引用别名 */
@@ -106,7 +108,7 @@ body {
   --gg-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --gg-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --gg-shadow: var(--hamuna-shadow-sm);
+  --gg-shadow: var(--hamuna-shadow-card);
   --gg-shadow-raised: var(--hamuna-shadow-md);
 
   --gg-pad: 20px;
@@ -174,7 +176,7 @@ input[type='text']:focus-visible,
 select:focus-visible,
 button:focus-visible {
   outline: none;
-  border-color: var(--gg-accent);
+  border-color: var(--gg-line-focus-active);
   box-shadow: var(--gg-focus);
 }
 
@@ -196,7 +198,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--gg-accent) 88%, black);
+  background: var(--gg-accent-hover);
 }
 
 button:active:not(:disabled) {
