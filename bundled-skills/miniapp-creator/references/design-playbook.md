@@ -112,25 +112,29 @@ MiniApp 的绝大多数是**工具型**（正则调试 / git 视图 / 计算器 
 
 ## 四、CSS Token（唯一正确的名字）
 
-MiniApp iframe 由宿主注入 **36 个 `--hamuna-*` 变量**（清单见 `src/renderer/components/miniapp-host/theme-tokens.ts::TOKEN_VAR_NAMES`，下表即其全集）。**只准用这些**，每个都可以带 fallback：
+MiniApp iframe 由宿主注入 **43 个 `--hamuna-*` 变量**（权威清单：`src/shared/miniapp-appearance/contract.json`；本表即其全集，按用途分组）。**只准用这些**，每个都可以带 fallback：
 
 | 用途 | Token |
 |---|---|
-| 背景 | `--hamuna-bg-primary` / `--hamuna-bg-elevated` / `--hamuna-bg-inset` / `--hamuna-bg-surface` |
+| 背景 | `--hamuna-bg-primary` / `--hamuna-bg-surface` / `--hamuna-bg-elevated` / `--hamuna-bg-inset` |
 | 文字 | `--hamuna-text-primary` / `--hamuna-text-secondary` / `--hamuna-text-muted` / `--hamuna-text-on-primary` |
-| 强调 | `--hamuna-accent` / `--hamuna-accent-text` |
+| 强调 | `--hamuna-accent` / `--hamuna-accent-hover` / `--hamuna-accent-secondary` |
+| 链接 | `--hamuna-link` |
 | 边框 | `--hamuna-border` / `--hamuna-border-subtle` / `--hamuna-border-primary` |
 | 状态 | `--hamuna-error` / `--hamuna-success` / `--hamuna-warning` / `--hamuna-info` |
-| 交互 | `--hamuna-bg-button` / `--hamuna-bg-button-hover` / `--hamuna-bg-input` / `--hamuna-focus-border` |
+| 按钮 | `--hamuna-bg-button` / `--hamuna-bg-button-hover` |
+| 输入框 | `--hamuna-bg-input` / `--hamuna-field-border` / `--hamuna-field-border-focus` |
+| 焦点 | `--hamuna-focus-border` |
 | 圆角 | `--hamuna-radius-sm` / `--hamuna-radius-md` / `--hamuna-radius-lg` |
 | 字体 | `--hamuna-font-sans` / `--hamuna-font-mono` |
-| **阴影** | `--hamuna-shadow-xs` / `-sm` / `-md` / `-lg` / `-xl` / `-overlay` |
-| **滚动条** | `--hamuna-scrollbar-thumb` |
-| **动效时长** | `--hamuna-duration-fast` / `-normal` / `-slow` |
+| **阴影** | `--hamuna-shadow-xs` / `--hamuna-shadow-sm` / `--hamuna-shadow-card` / `--hamuna-shadow-md` / `--hamuna-shadow-lg` / `--hamuna-shadow-xl` / `--hamuna-shadow-overlay` |
+| **浮层** | `--hamuna-overlay-scrim` |
+| **滚动条** | `--hamuna-scrollbar-thumb` / `--hamuna-scrollbar-thumb-hover` |
+| **动效时长** | `--hamuna-duration-fast` / `--hamuna-duration-normal` / `--hamuna-duration-slow` |
 
-> **后三行是质感的地基，不是可选装饰。** 没有阴影 token 时，加层次的唯一
-> 写法就是硬编码 rgba —— 而那正是本文件 §五 要禁的。换主题时它不跟着变，
-> 于是每个 MiniApp 的阴影都是从零猜的，观感必然廉价。动效时长同理：各写各的
+> **阴影、浮层、滚动条、动效这四行是质感的地基，不是可选装饰。** 没有它们时，
+> 加层次的唯一写法就是硬编码 rgba —— 而那正是本文件 §五 要禁的。换主题时它不跟着
+> 变，于是每个 MiniApp 的阴影都是从零猜的，观感必然廉价。动效时长同理：各写各的
 > `200ms`/`300ms`，一个产品里就没有统一节奏。
 >
 > 宿主还会注入 `color-scheme`、`background: transparent` 和一整套滚动条样式，
@@ -144,16 +148,58 @@ background: var(--bg-primary); /* disabled-example: 错 —— 这些名字宿�
 
 > **为什么这条这么重要**：`src/renderer/components/miniapp-host/theme-tokens.ts` 曾经猜错过一轮 token 名（用了 `--bg-primary` / `--bg-elevated` / `--border-color`），宿主里一个都不存在，于是每个 `var()` 都静默返回空串，整个 iframe 掉回 fallback 配色。**写错 token 不会有任何报错，只会看起来"没生效"。**
 
-宿主 token 缺失时会回落到 `FALLBACK_TOKENS`（浅色系）。所以 `var()` 一律带 fallback，导出成独立应用也还能看。
+宿主 token 缺失时会回落到内置浅色 fallback。所以 `var()` 一律带 fallback，导出成独立应用也还能看。
+
+### 交互态优先用 token，别用 `filter`
+
+强调色、输入框、链接、遮罩的**每一个交互态现在都有专属 token**。这不是装饰性补充，
+而是修正一类具体的坏做法：
+
+<!-- state-tokens:start -->
+| 界面状态 | 必须用 | 常见错误写法 |
+|---|---|---|
+| 强调色悬停 / 按下 | `--hamuna-accent-hover` | `filter: brightness(0.92)` —— 连子元素一起压暗，且不跟随主题 |
+| 第二强调色（图表 / 分类 / 双色编码） | `--hamuna-accent-secondary` | 拿 accent 硬凑，一屏全是同一个色相 |
+| 正文里的可点文本 | `--hamuna-link` | `color: var(--hamuna-accent)` —— 按钮和链接抢同一个注意力 |
+| 输入框描边 | `--hamuna-field-border` | 硬编码一个灰，切主题后对不上 |
+| 输入框聚焦描边 | `--hamuna-field-border-focus` | 硬编码 focus 蓝 |
+| 焦点环 | `--hamuna-focus-border` | 硬编码 focus 蓝 |
+| 模态遮罩（弹窗背后的那层） | `--hamuna-overlay-scrim` | `background: rgba(0,0,0,.5)` —— 深色主题下层次直接消失 |
+| 卡片投影 | `--hamuna-shadow-card` | 与浮层共用一档，卡片和弹窗糊在一起 |
+| 滚动条滑块悬停 | `--hamuna-scrollbar-thumb-hover` | 悬停无反馈，滚动条像块死的灰条 |
+<!-- state-tokens:end -->
+
+`--hamuna-link` 与 `--hamuna-accent` 分开是有意的：**按钮和可点文本是两种语义**。
+都叫强调色时，正文里每一条链接都会跳出来跟你抢主 CTA 的注意力。
+
+```css
+/* 对 */
+.btn:hover { background: var(--hamuna-accent-hover); }
+input        { border: 1px solid var(--hamuna-field-border); }
+input:focus  { border-color: var(--hamuna-field-border-focus);
+               box-shadow: 0 0 0 3px color-mix(in srgb, var(--hamuna-focus-border) 22%, transparent); }
+a            { color: var(--hamuna-link); }
+.card        { box-shadow: var(--hamuna-shadow-card); }
+```
+
+### 模态遮罩必须用 `--hamuna-overlay-scrim`
+
+弹窗"浮起来"的那一下不来自阴影，来自**背景被压下去**。没有遮罩色的 MiniApp 只能
+`background: rgba(0,0,0,.5)` —— 换深色主题就变成"黑底上盖了层半透明黑"，层次完全
+消失，`filter` 也救不了。宿主的 mask token 是不透明黑，宿主已经用 `color-mix`
+派生出带 alpha 的版本，直接用：
+
+```css
+dialog::backdrop, .modal-scrim {
+  background: var(--hamuna-overlay-scrim, rgba(0, 0, 0, 0.56));
+}
+```
 
 ### 从 token 派生层次（`color-mix`）
 
-36 个 token 全是**平值**：一个颜色，没有淡底、没有半透明描边、没有彩色阴影。想给
-hover 染色、想给选中态加 10% 底色、想让阴影带一点强调色 —— 宿主没提供，而**自己
-硬编码 `rgba()` 正是 §五 要禁的**。不给出路，这条规则等于把唯一可用的手段堵死，
-结果是每个 MiniApp 都只能做成同一张平卡片网格：合规，但平。
-
-出路是 `color-mix()`：从已有 token 现场派生。纯 CSS，宿主不需要加任何变量。
+`color-mix` 依然是**造中间层**的正确工具 —— 6% 淡底、22% 辉光、10% 发丝线这类
+"宿主不可能逐个提供"的中间档位，契约里有意不收（收进来就是几十个半透明变量）。
+但注意分工：**有 token 的状态用 token**（上一节），**没有的中间层才派生**。
 
 ```css
 /* 淡底：强调色的 6% 水洗 */

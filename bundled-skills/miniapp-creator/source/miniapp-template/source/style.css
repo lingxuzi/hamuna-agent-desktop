@@ -42,7 +42,7 @@ html {
   --text-soft: var(--hamuna-text-secondary, #544b42);
   --text-muted: var(--hamuna-text-muted, #6f6156);
   --accent: var(--hamuna-accent, #7b8f6b);
-  --accent-text: var(--hamuna-accent-text, #ffffff);
+  --accent-text: var(--hamuna-text-on-primary, #ffffff);
   --focus: var(--hamuna-focus-border, #7b8f6b);
   --danger: var(--hamuna-error, #b3261e);
   --radius: var(--hamuna-radius-md, 10px);

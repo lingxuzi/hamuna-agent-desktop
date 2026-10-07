@@ -92,18 +92,21 @@ html {
   --dr-input-bg: var(--hamuna-bg-input, #ffffff);
   --dr-focus: var(--hamuna-focus-border, #7b8f6b);
 
-  /* 强调 */
-  --dr-accent: var(--hamuna-accent, #7b8f6b);
-  --dr-accent-text: var(--hamuna-accent-text, #ffffff);
+  /* 强调。hover 有专属 token，不要用 filter:brightness —— 它会把子元素一起压暗 */
+  --dr-accent:        var(--hamuna-accent, #7b8f6b);
+  --dr-accent-hover:  var(--hamuna-accent-hover, #6d8060);
+  --dr-accent-text:   var(--hamuna-text-on-primary, #ffffff);
+  --dr-link:          var(--hamuna-link, #7b8f6b);
 
   /* --- 派生层 ---------------------------------------------------------------
-   * 宿主的 36 个 token 全是平值：想要淡底、半透明描边、彩色辉光，它一个都没有。
-   * 过去这里只能另找一条浅色、或硬编码 rgba —— 后者正是 playbook 反 AI 味清单
-   * 禁掉的。规则把唯一能用的手段堵死，结果就是一张平的卡片网格。
+   * 宿主给的是平值，且交互态一律给全了（accent-hover / field-border / link /
+   * overlay-scrim）。**有 token 的状态用 token，不要派生** —— 派生出来的 hover
+   * 不会跟随主题切换，只在首次加载时对。
    *
-   * color-mix 从已有 token 现场派生，纯 CSS，不需要宿主加任何变量，且换主题自动
-   * 跟随。**整份 CSS 只在 :root 声明这一次**，下面所有规则都引用别名 —— 与上面
-   * 的动效 token 同一个道理：收敛到几个值，视觉统一才是机械保证而不是靠审美。
+   * color-mix 留给宿主不可能逐个提供的中间档位：淡底、半透明描边、彩色辉光。纯
+   * CSS，不需要宿主加任何变量，且换主题自动跟随。**整份 CSS 只在 :root 声明
+   * 这一次**，下面所有规则都引用别名 —— 与上面的动效 token 同一个道理：收敛到
+   * 几个值，视觉统一才是机械保证而不是靠审美。
    *
    * 比例是刻意的，不要随手调大：淡底 ≤10%、描边 30-45%、辉光 15-25%、悬停 ≤8%。
    * 超过就是在往界面上泼颜色，"廉价感"多数出在这里，不是出在色相选得不好。

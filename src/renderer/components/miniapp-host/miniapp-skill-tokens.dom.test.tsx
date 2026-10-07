@@ -28,7 +28,14 @@ function injectedTokenNames(): Set<string> {
     new Proxy({} as MiniAppThemeTokens, { get: () => '' }),
   );
   // buildThemeTokenCss emits one `  --name: value;` line per token.
-  return new Set([...css.matchAll(/(--[\w-]+):/g)].map((m) => m[1]));
+  //
+  // A derived token also emits an internal alias (`--host-hamuna-<name>`) holding
+  // the unmixed host value. That alias is an implementation detail of the mix —
+  // it is not part of the author-facing contract, and letting it through would
+  // inflate the count and invite authors to depend on an unmasked black.
+  return new Set(
+    [...css.matchAll(/(--hamuna-[\w-]+):/g)].map((m) => m[1]),
+  );
 }
 
 function skillFiles(): { path: string; text: string }[] {
@@ -198,6 +205,67 @@ describe('miniapp-creator skill CSS tokens', () => {
     expect(playbook, 'banning hard-coded rgba without offering color-mix leaves no legal way to add depth').toContain(
       'color-mix',
     );
+  });
+
+  it('backs every interaction state the playbook teaches with a real token', () => {
+    // The reason v2's MiniApps looked better was not denser CSS technique — our
+    // color-mix and shadow usage already matched it. The gap was semantic: v2
+    // shipped tokens for *states* (accent hover, field border, scrim, link) and we
+    // shipped none, so the only way to express those states was a hard-coded
+    // rgba — which the playbook bans — or `filter: brightness()`, which darkens
+    // children and does not follow the theme. The result obeyed the rules and
+    // still looked flat.
+    //
+    // This reads the playbook's own state→token table rather than searching the
+    // prose, because a substring check is trivially satisfied: every token in
+    // the contract is *also* listed in the inventory table, so "does the playbook
+    // mention --hamuna-accent-hover" passes even after the state guidance is
+    // deleted. The table is the actual teaching surface, so the table is what gets
+    // checked — and deleting a row is a test failure rather than a silent loss.
+    const playbook = files.find((f) => f.path.endsWith('design-playbook.md'))!.text;
+    const table = playbook.match(
+      /<!-- state-tokens:start -->([\s\S]*?)<!-- state-tokens:end -->/,
+    )?.[1];
+    expect(
+      table,
+      'design-playbook.md has no <!-- state-tokens --> table, so the state guidance is uncheckable',
+    ).toBeDefined();
+
+    const rows = (table as string)
+      .split('\n')
+      .map((line) => line.match(/^\|\s*([^|]+?)\s*\|[^|]*?(--hamuna-[\w-]+)/))
+      .filter((m): m is RegExpMatchArray => m !== null);
+
+    // Guards the helper: a regex that silently matches nothing would pass the
+    // per-row assertions below.
+    expect(rows.length, 'the state-token table yielded no rows').toBeGreaterThanOrEqual(8);
+
+    for (const [, state, token] of rows) {
+      expect(
+        injected.has(token),
+        `the playbook teaches the "${state}" state but the host injects no ${token}`,
+      ).toBe(true);
+    }
+  });
+
+  it('does not teach filter:brightness as a hover affordance', () => {
+    // The playbook now bans it. brightness() is the specific wrong move that the
+    // missing accent-hover token used to force: it darkens the button *and every
+    // descendant* including the label, and it cannot respond to a theme switch
+    // because the correct value lives in a token the CSS never reads.
+    //
+    // Matches a CSS *declaration*, not the phrase — the prose has to be able to
+    // name the mistake in order to ban it, and a comment saying "don't use
+    // filter:brightness" would otherwise read as a violation.
+    const skillTextAll = files.map((f) => f.text).join('\n');
+    for (const m of skillTextAll.matchAll(/^[^\n]*[{;]\s*filter:\s*brightness[^\n]*$/gm)) {
+      const line = m[0];
+      // `disabled-example:` lines exist to show the failure mode.
+      expect(
+        line.includes('disabled-example:'),
+        `filter:brightness is declared as a hover affordance: ${line.trim()} — use var(--hamuna-accent-hover)`,
+      ).toBe(true);
+    }
   });
 });
 

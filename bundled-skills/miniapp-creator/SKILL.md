@@ -546,7 +546,7 @@ load();
    本文件不提供样式模板。21.8KB 的参考实现才是权威 —— 抄它，不要抄这个片段。 */
 ```
 
-> **token 名字必须是 `--hamuna-*`**，例如 `--hamuna-bg-primary` / `--hamuna-text-primary` / `--hamuna-accent` / `--hamuna-radius-md` / `--hamuna-font-sans`。宿主注入的是 `--hamuna-` 前缀 token，共 36 个（权威值：`src/renderer/components/miniapp-host/theme-tokens.ts`），写成 `--bg-primary` / `--ink` 这类名字会**静默失效**——不报错，只是看起来"没生效"。完整清单见 `references/design-playbook.md` §四。
+> **token 名字必须是 `--hamuna-*`**，例如 `--hamuna-bg-primary` / `--hamuna-text-primary` / `--hamuna-accent` / `--hamuna-radius-md` / `--hamuna-font-sans`。宿主注入的是 `--hamuna-` 前缀 token，共 43 个（权威值：`src/shared/miniapp-appearance/contract.json`），写成 `--bg-primary` / `--ink` 这类名字会**静默失效**——不报错，只是看起来"没生效"。完整清单见 `references/design-playbook.md` §四。
 
 ```json
 // meta.json

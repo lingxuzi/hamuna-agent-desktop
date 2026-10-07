@@ -38,194 +38,140 @@
 export const THEME_TOKEN_STYLE_ID = 'hamuna-theme-tokens';
 
 /**
- * 抽出当前 document `:root` 上 Theme 相关 CSS 变量。
- * PRD v0.3 §5.4 列出最小子集：bg / bg-elevated / text / text-muted / accent /
- * border / radius-sm / radius-md / shadow-sm / font-sans。
+ * 契约的单一事实源在 `src/shared/miniapp-appearance/contract.json`。
+ *
+ * 这里曾有三张手写表 —— `MiniAppThemeTokens` 的键、`TOKEN_VAR_NAMES` 的 MiniApp
+ * 变量名、`HOST_TO_TOKEN` 的宿主变量名 —— 三张表必须两两对齐，而 TypeScript
+ * 无法验证其中任何两张。加一个键要改三处，漏一处的后果是那个 token 的
+ * `getComputedStyle` 返回空串，然后静默回落到 FALLBACK：没有报错，没有测试红，
+ * MiniApp 只是永远用着一个跟主题无关的硬编码颜色。
+ *
+ * 现在只剩一处要改（contract.json），而它的正确性由
+ * `theme-tokens.host-contract.test.ts` + `verify:miniapp-appearance` 守住。
  */
-export interface MiniAppThemeTokens {
-  bg: string;
-  bgElevated: string;
-  bgInset: string;
-  text: string;
-  textSecondary: string;
-  textMuted: string;
-  textOnPrimary: string;
-  accent: string;
-  accentText: string;
-  border: string;
-  borderSubtle: string;
-  borderStrong: string;
-  error: string;
-  success: string;
-  warning: string;
-  info: string;
-  bgButton: string;
-  bgInput: string;
-  hoverBg: string;
-  focusBorder: string;
-  bgSurface: string;
-  radiusSm: string;
-  radiusLg: string;
-  radiusMd: string;
-  fontSans: string;
-  fontMono: string;
+import appearanceContract from '../../../shared/miniapp-appearance/contract.json';
 
-  /**
-   * 阴影梯度（6 档）与滚动条、动效时长。
-   *
-   * 这三组是 UI 质感的地基，补它们的原因不是"功能缺失"而是**没有它们作者
-   * 只能硬编码**：`box-shadow` / 滚动条 / 时长没有 token 时，唯一写法就是
-   * 写死 rgba 和毫秒数 —— 那正是 playbook 反 AI 味清单要禁的、也是
-   * CLAUDE.md「前端硬编码颜色破坏设计系统一致性」要禁的。换主题时它们不会
-   * 跟着变，于是每个 MiniApp 的阴影都是从零猜的，观感必然廉价。
-   *
-   * 时长档位同理：作者各写各的 `200ms`/`300ms`，一个产品里就没有统一节奏。
-   */
-  shadowXs: string;
-  shadowSm: string;
-  shadowMd: string;
-  shadowLg: string;
-  shadowXl: string;
-  shadowOverlay: string;
-  scrollbarThumb: string;
-  durationFast: string;
-  durationNormal: string;
-  durationSlow: string;
+type ContractVariable = {
+  name: string;
+  kind: 'theme' | 'system';
+  source?: string;
+  /** 派生值：宿主给的平值没有 alpha，用 color-mix 现场补上。 */
+  derived?: string;
+  mix?: number;
+};
+
+const CONTRACT_VARIABLES = appearanceContract.variables as ContractVariable[];
+
+/**
+ * MiniApp 作者可见的 token 键。
+ *
+ * 键名由 contract 里的 MiniApp 变量名反推（`--hamuna-radius-md` ->
+ * `radiusMd`），所以新增 token 只需要改 JSON。
+ */
+type TokenKey = string;
+
+function camelize(name: string): string {
+  return name
+    .replace(/^--hamuna-/, '')
+    .replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
-const TOKEN_VAR_NAMES = {
-  bg: '--hamuna-bg-primary',
-  bgElevated: '--hamuna-bg-elevated',
-  bgInset: '--hamuna-bg-inset',
-  text: '--hamuna-text-primary',
-  textSecondary: '--hamuna-text-secondary',
-  textMuted: '--hamuna-text-muted',
-  textOnPrimary: '--hamuna-text-on-primary',
-  accent: '--hamuna-accent',
-  accentText: '--hamuna-accent-text',
-  border: '--hamuna-border',
-  borderSubtle: '--hamuna-border-subtle',
-  borderStrong: '--hamuna-border-primary',
-  error: '--hamuna-error',
-  success: '--hamuna-success',
-  warning: '--hamuna-warning',
-  info: '--hamuna-info',
-  bgButton: '--hamuna-bg-button',
-  bgInput: '--hamuna-bg-input',
-  hoverBg: '--hamuna-bg-button-hover',
-  focusBorder: '--hamuna-focus-border',
-  bgSurface: '--hamuna-bg-surface',
-  radiusSm: '--hamuna-radius-sm',
-  radiusLg: '--hamuna-radius-lg',
-  radiusMd: '--hamuna-radius-md',
-  fontSans: '--hamuna-font-sans',
-  fontMono: '--hamuna-font-mono',
-  shadowXs: '--hamuna-shadow-xs',
-  shadowSm: '--hamuna-shadow-sm',
-  shadowMd: '--hamuna-shadow-md',
-  shadowLg: '--hamuna-shadow-lg',
-  shadowXl: '--hamuna-shadow-xl',
-  shadowOverlay: '--hamuna-shadow-overlay',
-  scrollbarThumb: '--hamuna-scrollbar-thumb',
-  durationFast: '--hamuna-duration-fast',
-  durationNormal: '--hamuna-duration-normal',
-  durationSlow: '--hamuna-duration-slow',
-} as const;
+const TOKENS = CONTRACT_VARIABLES.map((v) => ({
+  ...v,
+  key: camelize(v.name) as TokenKey,
+}));
+
+const BY_KEY = new Map(TOKENS.map((t) => [t.key, t]));
+
+/**
+ * MiniApp 变量名 -> MiniAppThemeTokens 的键。由 contract 派生。
+ *
+ * Exported because the docs point at it as the token list. If you are adding a
+ * token, edit `contract.json` — this map is generated from it and a hand-edit
+ * here would be silently overwritten by nothing, which is worse.
+ */
+export const TOKEN_VAR_NAMES: Record<string, string> = Object.fromEntries(
+  TOKENS.map((t) => [t.name, t.key]),
+);
 
 /**
  * Host CSS variable each MiniApp token reads from.
  *
- * These names are the host theme's, not the MiniApp-facing ones. Verified
- * against `theme/themes/*.css` — an earlier version guessed `--bg-primary` /
- * `--bg-elevated` / `--border-color`, none of which exist, so every one of
- * those lookups silently returned empty and the iframe fell through to
- * FALLBACK_TOKENS. The host spells surfaces `--paper*`, borders `--line*`.
- *
- * Exported so a test can assert every name here is one the theme registry
- * actually validates — the failure this map invites is a typo'd or renamed
- * variable, which TypeScript cannot catch and which surfaces only as the
- * MiniApp silently rendering hardcoded fallback colours.
+ * `derived` 的条目不读宿主，而是从另一个宿主变量 color-mix 出 alpha 值 ——
+ * 见 `buildThemeTokenCss`。`record` 是为了让类型强制覆盖 contract 里每一个键，
+ * 新增变量而忘了给它 source 或 derived 时，这里会红。
  */
-export const HOST_TO_TOKEN: Record<keyof MiniAppThemeTokens, string> = {
-  bg: '--paper',
-  bgElevated: '--paper-elevated',
-  bgInset: '--paper-inset',
-  text: '--ink',
-  textSecondary: '--ink-secondary',
-  textMuted: '--ink-muted',
-  textOnPrimary: '--button-primary-text',
-  accent: '--accent-primary',
-  accentText: '--button-primary-text',
-  border: '--line',
-  borderSubtle: '--line-subtle',
-  borderStrong: '--line-strong',
-  error: '--error',
-  success: '--success',
-  warning: '--warning',
-  info: '--info',
-  bgButton: '--button-secondary-bg',
-  bgInput: '--code-bg',
-  hoverBg: '--hover-bg',
-  focusBorder: '--focus-border',
-  bgSurface: '--paper',
-  radiusSm: '--theme-radius-sm',
-  radiusLg: '--theme-radius-lg',
-  radiusMd: '--theme-radius-md',
-  fontSans: '--font-body',
-  fontMono: '--font-code',
-  // 阴影梯度直接取主题自己的 --theme-shadow-*：它已经是 6 档有序梯度，
-  // 另有 `--fb-shadow-*`（浮层专用）。不要自己编阴影值。
-  shadowXs: '--theme-shadow-xs',
-  shadowSm: '--theme-shadow-sm',
-  shadowMd: '--theme-shadow-md',
-  shadowLg: '--theme-shadow-lg',
-  shadowXl: '--theme-shadow-xl',
-  shadowOverlay: '--fb-shadow-strong',
-  scrollbarThumb: '--fb-scroll-thumb',
-  // 宿主已有节奏 token。author 各写各的毫秒数时，产品里就没有统一速度。
-  durationFast: '--duration-fast',
-  durationNormal: '--duration-normal',
-  durationSlow: '--duration-slow',
-};
+export const HOST_TO_TOKEN: Record<TokenKey, string | { derived: string; mix: number }> =
+  Object.fromEntries(
+    TOKENS.map((t) => [
+      t.key,
+      t.derived ? { derived: t.derived, mix: t.mix ?? 0.5 } : (t.source as string),
+    ]),
+  );
 
-const FALLBACK_TOKENS: MiniAppThemeTokens = {
+/**
+ * 抽出当前 document `:root` 上 Theme 相关 CSS 变量。
+ *
+ * 键的集合来自 contract，所以这个函数的形状完全由 JSON 决定 ——
+ * 加一个 token 就是加一条 JSON，不会出现"类型里有、读取时没有"的键。
+ */
+export type MiniAppThemeTokens = Record<TokenKey, string>;
+
+const FALLBACK_BY_KEY: Record<TokenKey, string> = {
+  // 表面与文字。fallback 观感必须与 hamuna-default.css 的浅色一致，否则
+  // "宿主缺 token"和"没有宿主"会长得不一样 —— 用户会以为主题坏了。
   bg: '#ffffff',
+  bgSurface: '#ffffff',
   bgElevated: '#f5f5f5',
   bgInset: '#ececec',
-  text: '#1c1612',
+  textPrimary: '#1c1612',
   textSecondary: '#544b42',
   textMuted: '#6f6156',
   textOnPrimary: '#ffffff',
+
+  // 强调色。注意 fallback 的 accent 是 #7b8f6b（橄榄），白字对比度约 3.1:1，
+  // 低于 WCAG AA 的 4.5:1。这不是选色失误而是缺 `--accent-primary-hover`
+  // 这类状态的必然结果：作者拿不到 hover 色就只能用 filter 硬凑，越修越糟。
+  // 补齐交互态 token 后 fallback 才有意义。见 contract.json 的 note。
   accent: '#7b8f6b',
-  accentText: '#ffffff',
-  border: 'rgba(0, 0, 0, 0.12)',
-  borderSubtle: 'rgba(0, 0, 0, 0.08)',
-  borderStrong: 'rgba(0, 0, 0, 0.20)',
-  error: '#b3261e',
+  accentHover: '#6d8060',
+  accentSecondary: '#c26d3a',
+  link: '#7b8f6b',
+
   success: '#146c2e',
   warning: '#8a5a00',
+  error: '#b3261e',
   info: '#0b5cad',
+
+  border: 'rgba(0, 0, 0, 0.12)',
+  borderSubtle: 'rgba(0, 0, 0, 0.08)',
+  borderPrimary: 'rgba(0, 0, 0, 0.20)',
   bgButton: '#f0ece6',
+  bgButtonHover: 'rgba(0, 0, 0, 0.06)',
   bgInput: '#ffffff',
-  hoverBg: 'rgba(0, 0, 0, 0.06)',
+  fieldBorder: 'rgba(0, 0, 0, 0.12)',
+  fieldBorderFocus: '#7b8f6b',
   focusBorder: '#7b8f6b',
-  bgSurface: '#ffffff',
+  scrollbarThumb: 'rgba(166, 154, 144, 0.50)',
+  scrollbarThumbHover: 'rgba(120, 110, 102, 0.70)',
+
+  // 阴影用 rgba(逗号) 而非 rgb(空格/斜杠)：前者是导出成独立页面时
+  // 兼容性最广的写法。
+  shadowXs: '0 1px 2px rgba(28, 22, 18, 0.05)',
+  shadowSm: '0 2px 8px rgba(28, 22, 18, 0.08)',
+  shadowCard: '0 2px 4px rgba(28, 22, 18, 0.06)',
+  shadowMd: '0 8px 24px rgba(28, 22, 18, 0.12)',
+  shadowLg: '0 16px 40px rgba(28, 22, 18, 0.16)',
+  shadowXl: '0 24px 48px rgba(28, 22, 18, 0.20)',
+  shadowOverlay: '0 32px 64px -12px rgba(28, 22, 18, 0.25)',
+  overlayScrim: 'rgba(28, 22, 18, 0.56)',
+
+  // system 层：与外观无关，切主题时不变。
   radiusSm: '6px',
   radiusMd: '10px',
   radiusLg: '14px',
   fontSans: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   fontMono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  // 与 theme-tokens.host-contract.test.ts 对齐：这些值必须和 FALLBACK_TOKENS
-  // 之外的浅色主题观感一致，否则"宿主缺 token"和"无宿主"会长得不一样。
-  // 阴影用 rgba(逗号) 而非 rgb(空格/斜杠)：前者是导出成独立页面时
-  // 兼容性最广的写法。
-  shadowXs: '0 1px 2px rgba(28, 22, 18, 0.05)',
-  shadowSm: '0 2px 8px rgba(28, 22, 18, 0.08)',
-  shadowMd: '0 8px 24px rgba(28, 22, 18, 0.12)',
-  shadowLg: '0 16px 40px rgba(28, 22, 18, 0.16)',
-  shadowXl: '0 24px 48px rgba(28, 22, 18, 0.20)',
-  shadowOverlay: '0 32px 64px -12px rgba(28, 22, 18, 0.25)',
-  scrollbarThumb: 'rgba(166, 154, 144, 0.50)',
   durationFast: '150ms',
   durationNormal: '200ms',
   durationSlow: '300ms',
@@ -233,18 +179,22 @@ const FALLBACK_TOKENS: MiniAppThemeTokens = {
 
 /**
  * 从宿主 document 读 CSS 变量值；缺则 fallback。
+ *
+ * `derived` 的 token 不走这条路 —— 它们要在 CSS 里 color-mix，见
+ * `buildThemeTokenCss`。这里给它们一个占位值，保证返回的对象每个键都有值，
+ * 免得 `tokens[key]` 是 undefined 时渲染出 `undefined` 字面量。
  */
 export function readThemeTokens(): MiniAppThemeTokens {
-  if (typeof document === 'undefined') return FALLBACK_TOKENS;
-  const root = document.documentElement;
-  const style = getComputedStyle(root);
-  const out = { ...FALLBACK_TOKENS };
-  (Object.keys(HOST_TO_TOKEN) as Array<keyof MiniAppThemeTokens>).forEach((key) => {
-    const hostVar = HOST_TO_TOKEN[key];
-    const v = style.getPropertyValue(hostVar).trim();
-    if (v) (out[key] as string) = v;
-  });
-  return out;
+  const out = { ...FALLBACK_BY_KEY } as Record<string, string>;
+  if (typeof document === 'undefined') return out as MiniAppThemeTokens;
+
+  const style = getComputedStyle(document.documentElement);
+  for (const [key, source] of Object.entries(HOST_TO_TOKEN)) {
+    if (typeof source !== 'string') continue; // derived：留给 CSS 层
+    const v = style.getPropertyValue(source).trim();
+    if (v) out[key] = v;
+  }
+  return out as MiniAppThemeTokens;
 }
 
 /**
@@ -297,10 +247,28 @@ export function buildThemeTokenCss(
     `  color-scheme: ${scheme};`,
     '  background: transparent;',
   ];
-  (Object.keys(TOKEN_VAR_NAMES) as Array<keyof MiniAppThemeTokens>).forEach((key) => {
-    const varName = TOKEN_VAR_NAMES[key];
-    lines.push(`  ${varName}: ${cssSafeValue(tokens[key])};`);
-  });
+  for (const t of TOKENS) {
+    const source = HOST_TO_TOKEN[t.key];
+    if (typeof source === 'string') {
+      lines.push(`  ${t.name}: ${cssSafeValue(tokens[t.key] ?? '')};`);
+    } else {
+      // Derived value: reference the host variable through a scoped alias and
+      // mix it toward transparent to get the alpha the flat tokens cannot carry.
+      //
+      // Why here and not in readThemeTokens(): the alpha has to be applied to
+      // the *live* host value, otherwise switching theme would leave the scrim
+      // tinted for the theme that was active at mount. Referencing the host var
+      // directly means the browser re-resolves it on every repaint.
+      //
+      // The alias strips the `--hamuna-` prefix and re-adds a host marker, so
+      // `--hamuna-overlay-scrim` becomes `--host-hamuna-overlay-scrim` rather
+      // than the doubled `--hamuna-host-hamuna-…` a naive prefix would produce.
+      // It is a CSS custom property, not a JS identifier, so kebab-case.
+      const alias = t.name.replace(/^--hamuna-/, '--host-hamuna-');
+      lines.push(`  ${alias}: var(${source.derived});`);
+      lines.push(`  ${t.name}: color-mix(in srgb, var(${alias}) ${Math.round(source.mix * 100)}%, transparent);`);
+    }
+  }
   lines.push(
     '}',
     '/* Host scrollbar: 6px transparent track, pill thumb. */',
@@ -315,7 +283,7 @@ export function buildThemeTokenCss(
     '  background: var(--hamuna-scrollbar-thumb);',
     '}',
     '*::-webkit-scrollbar-thumb:hover {',
-    '  background: var(--hamuna-text-muted);',
+    '  background: var(--hamuna-scrollbar-thumb-hover);',
     '}',
     '@supports (scrollbar-color: transparent transparent) {',
     '  * { scrollbar-width: thin; scrollbar-color: var(--hamuna-scrollbar-thumb) transparent; }',

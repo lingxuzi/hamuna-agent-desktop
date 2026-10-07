@@ -29,36 +29,52 @@ import { REQUIRED_THEME_CSS_TOKENS } from '../../theme/registry-contract';
 
 const REQUIRED = new Set<string>(REQUIRED_THEME_CSS_TOKENS);
 
+
+/**
+ * The host variable a token actually reads, whichever form it takes.
+ *
+ * A `derived` entry resolves its base through `var()` in the emitted CSS rather
+ * than through getComputedStyle, but it depends on the host defining that
+ * variable just as much — so it gets pinned to the same list. Unwrapping here
+ * keeps the assertions below written against a plain string.
+ */
+const hostVarOf = (key: string): string => {
+  const v = HOST_TO_TOKEN[key];
+  return typeof v === 'string' ? v : v.derived;
+};
 describe('MiniApp theme tokens — host variable contract', () => {
   it('reads only variables the theme registry actually validates', () => {
     // A host var missing from REQUIRED_THEME_CSS_TOKENS is one a theme may
     // legitimately drop. Reading it would then fall through to FALLBACK_TOKENS
     // and paint the MiniApp with hardcoded colours — silently.
-    const unvalidated = Object.values(HOST_TO_TOKEN).filter(v => !REQUIRED.has(v));
+    const unvalidated = Object.keys(HOST_TO_TOKEN)
+      .map(hostVarOf)
+      .filter((v) => !REQUIRED.has(v));
 
     expect(
       unvalidated,
       `HOST_TO_TOKEN reads variable(s) the theme registry does not require: ${unvalidated.join(', ')}. ` +
-      'Add them to REQUIRED_THEME_CSS_TOKENS (if every theme must define them) ' +
-      'or stop reading them (if the fallback is intended).',
+        'Add them to REQUIRED_THEME_CSS_TOKENS (if every theme must define them) ' +
+        'or stop reading them (if the fallback is intended).',
     ).toEqual([]);
   });
 
   it('covers every MiniApp token key', () => {
-    // Guards the opposite drift: a key added to MiniAppThemeTokens but not
-    // mapped here would be undefined at read time.
+    // Guards the opposite drift: a key added to the contract but not mapped here
+    // would be undefined at read time.
     const keys = Object.keys(HOST_TO_TOKEN);
     expect(new Set(keys).size).toBe(keys.length);
     expect(keys.length).toBeGreaterThan(0);
   });
 
   it('uses distinct host variables (no accidental aliasing)', () => {
-    // Two MiniApp tokens sharing a host var is legal (`accentText` and
-    // `textOnPrimary` both map to --button-primary-text), so this only
-    // reports the mapping for review rather than failing on it.
+    // Two MiniApp tokens sharing a host var is legal (`focusBorder` and
+    // `fieldBorderFocus` both resolve to --focus-border), so this only reports
+    // the mapping for review rather than failing on it.
     const counts = new Map<string, string[]>();
-    for (const [key, hostVar] of Object.entries(HOST_TO_TOKEN)) {
-      counts.set(hostVar, [...(counts.get(hostVar) ?? []), key]);
+    for (const key of Object.keys(HOST_TO_TOKEN)) {
+      const v = hostVarOf(key);
+      counts.set(v, [...(counts.get(v) ?? []), key]);
     }
     const shared = [...counts.entries()].filter(([, keys]) => keys.length > 1);
     for (const [hostVar, keys] of shared) {
@@ -83,7 +99,7 @@ function tokensWith(overrides: Partial<MiniAppThemeTokens> = {}): MiniAppThemeTo
     // Theme 只要把某个 token 写成 `</style><script>…</script><style>`，就会在
     // 每一个 MiniApp 里执行：没有错误、没有告警，作者的 UI 直接被换掉。
     const css = buildThemeTokenCss(
-      tokensWith({ bg: '</style><script>window.__pwned=1</script><style>' }),
+      tokensWith({ bgPrimary: '</style><script>window.__pwned=1</script><style>' }),
     );
 
     expect(css).not.toContain('</style>');
@@ -95,9 +111,35 @@ function tokensWith(overrides: Partial<MiniAppThemeTokens> = {}): MiniAppThemeTo
 
   it('leaves ordinary colour values byte-identical', () => {
     // 转义只针对 `<`。日常的色值 / 字体栈一个字符都不能变，否则主题会被改坏。
-    const css = buildThemeTokenCss(tokensWith({ bg: '#fff', fontSans: 'system-ui, sans-serif' }));
+    const css = buildThemeTokenCss(tokensWith({ bgPrimary: '#fff', fontSans: 'system-ui, sans-serif' }));
     expect(css).toContain('--hamuna-bg-primary: #fff;');
     expect(css).toContain('--hamuna-font-sans: system-ui, sans-serif;');
+  });
+
+  it('derives translucent values from a host variable instead of baking a literal', () => {
+    // The host's token set is all flat values, so nothing it provides can carry
+    // an alpha. A scrim built from a literal would be tinted for whichever theme
+    // happened to be active when this ran; referencing the host variable means
+    // the browser re-resolves it, so a dark theme gets a scrim tuned for dark.
+    //
+    // The literal here is the thing being asserted against: if someone "fixes"
+    // this by replacing the color-mix with `rgba(0,0,0,.56)`, the test goes red
+    // and says why.
+    const css = buildThemeTokenCss(tokensWith({ overlayScrim: 'rgba(0, 0, 0, 0.56)' }), 'dark');
+
+    expect(css).toContain('--hamuna-overlay-scrim: color-mix(');
+    expect(css).toMatch(/--host-hamuna-overlay-scrim: var\(--fb-mask-opaque\);/);
+    expect(css).not.toContain('--hamuna-overlay-scrim: rgba(0, 0, 0, 0.56)');
+    // And the mix must actually produce a scrim — a 100% mix is opaque black.
+    // The pattern is non-greedy up to the first `%` rather than the first `)`,
+    // because the value contains `var(...)` and its closing paren would
+    // otherwise cut the match short.
+    const pct = Number(
+      css.match(/--hamuna-overlay-scrim:\s*color-mix\((?:[^%]*?)(\d+)%/)?.[1],
+    );
+    expect(Number.isNaN(pct), 'overlay-scrim no longer emitted as a color-mix').toBe(false);
+    expect(pct).toBeGreaterThan(0);
+    expect(pct).toBeLessThan(100);
   });
 
   // --- 首屏投影 -----------------------------------------------------------
