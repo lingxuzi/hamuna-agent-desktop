@@ -187,4 +187,62 @@ describe('production Theme contrast', () => {
     expect(contrast(foreground, tokens.get('--button-primary-bg')!)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(foreground, tokens.get('--button-primary-bg-hover')!)).toBeGreaterThanOrEqual(4.5);
   });
+
+  // The palette sweep above deliberately skips `hamuna-default` and
+  // `default-black`, because both carry bespoke contracts instead: Default
+  // Black asserts its own black CTA pair just above, and the warm default
+  // palette is pinned by themeArchitecture. Those bespoke checks only ever
+  // looked at --button-primary-*, so the accent pair --on-accent over --accent
+  // and --accent-warm-hover had no coverage at all anywhere -- and on the
+  // burnt-orange ramp that pair is genuinely broken (white on #e18a58 is
+  // 2.63:1). `KNOWN_ACCENT_RAMP_FAILURES` below records that as an explicit,
+  // per-scheme debt list rather than leaving it to chance: any *new* theme, or
+  // any theme that develops the defect later, still fails here, and removing a
+  // theme from this list can only happen together with fixing its numbers.
+  const KNOWN_ACCENT_RAMP_FAILURES: Record<string, true> = {
+    'hamuna-default.light': true,
+    'hamuna-default.dark': true,
+    'default-black.light': true,
+    'default-black.dark': true,
+  };
+
+  it('reports the burnt-orange accent ramp as unfixed instead of untested', () => {
+    const offenders: string[] = [];
+
+    for (const definition of themeRegistry.getAcceptedDefinitions()) {
+      for (const scheme of ['light', 'dark'] as const) {
+        const tokens = tokensFor(definition.stylesheetText, definition.id, scheme);
+        const foreground = resolvedColorToken(tokens, '--on-accent');
+        const key = `${definition.id}.${scheme}`;
+
+        for (const backgroundToken of ['--accent', '--accent-warm-hover'] as const) {
+          if (contrast(foreground, tokens.get(backgroundToken)!) < 4.5) {
+            offenders.push(`${key} ${foreground} on ${tokens.get(backgroundToken)}`);
+          }
+        }
+
+        // Any theme absent from the debt list must be clean; this is the check
+        // that turns "nobody looked" into "nobody can regress it quietly".
+        if (!(key in KNOWN_ACCENT_RAMP_FAILURES)) {
+          expect(
+            contrast(foreground, tokens.get('--accent')!),
+            `${key} --on-accent over --accent`,
+          ).toBeGreaterThanOrEqual(4.5);
+          expect(
+            contrast(foreground, tokens.get('--accent-warm-hover')!),
+            `${key} --on-accent over --accent-warm-hover`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+
+    // Each broken theme/scheme reports one offender per failing surface, so
+    // compare the sets of theme.scheme keys rather than the raw strings.
+    expect(
+      [...new Set(offenders.map(entry => entry.split(' ')[0]))].sort(),
+      'Accent-ramp contrast debt changed. If these are fixed, delete them from '
+      + 'KNOWN_ACCENT_RAMP_FAILURES; if a theme was renamed, update the key. '
+      + 'A new offender means a new theme shipped a failing solid accent.',
+    ).toEqual(Object.keys(KNOWN_ACCENT_RAMP_FAILURES).sort());
+  });
 });
