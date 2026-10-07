@@ -11,6 +11,7 @@
 // it lands in the main console / logs. These assertions lock that contract in.
 import { describe, expect, it } from 'vitest';
 
+import { i18n } from '@/i18n';
 import { buildSandboxHtml } from './widgetSandboxHtml';
 
 const html = buildSandboxHtml(':root{--widget-text:#222}');
@@ -25,8 +26,30 @@ describe('widget sandbox failure handling', () => {
   });
 
   it('renders a visible inline notice (not a silent blank)', () => {
-    expect(html).toContain('data-widget-error');
-    expect(html).toContain("This component's script could not run");
+    // The notice prefix is baked from the ACTIVE locale, so asserting a
+    // hardcoded English literal made this test a measurement of the machine's
+    // OS locale rather than of the sandbox: it passed on an en-US box and
+    // failed on this zh-CN host, where the sandbox correctly baked
+    // "这个组件的脚本没能运行…". Pin the language so the assertion tests the
+    // default (no-options) wiring and nothing else. Wording parity across
+    // locales is resourceParity.test.ts's job, not this file's.
+    const previous = i18n.language;
+    void i18n.changeLanguage('en-US');
+    try {
+      const localised = buildSandboxHtml(':root{--widget-text:#222}');
+
+      expect(localised).toContain('data-widget-error');
+      expect(localised).toContain("This component's script could not run");
+      // ...and the notice actually renders that prefix. Merely asserting the
+      // English text appears somewhere in the srcdoc is satisfied by the
+      // `var widgetScriptErrorPrefix = ...` declaration even when the notice
+      // body was changed to show the bare error, so pin the concatenation:
+      // dropping widgetScriptErrorPrefix from the textContent expression made
+      // this assertion pass while removing the thing it is meant to protect.
+      expect(localised).toMatch(/note\.textContent\s*=[^;]*widgetScriptErrorPrefix[^;]*text\s*;/);
+    } finally {
+      void i18n.changeLanguage(previous);
+    }
   });
 
   it('accepts a localized inline notice prefix', () => {
