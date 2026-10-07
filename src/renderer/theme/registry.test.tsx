@@ -75,7 +75,9 @@ describe('ThemeRegistry', () => {
       expect(swatches.light, `${themeId}.light`).toMatch(/^#/);
       expect(swatches.dark, `${themeId}.dark`).toMatch(/^#/);
     }
-    expect(themeRegistry.getPreviewSwatches('hamuna-default').light).toBe('#c26d3a');
+    // Tracks --button-primary-bg, not --accent: the warm default light CTA was
+    // darkened off #c26d3a because that pair admitted no readable foreground.
+    expect(themeRegistry.getPreviewSwatches('hamuna-default').light).toBe('#b05e2d');
     expect(themeRegistry.getPreviewSwatches('default-black').light).toBe('#111111');
   });
 

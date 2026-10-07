@@ -84,7 +84,7 @@ const lightWidgetVariables = {
   '--widget-warning-bg': '#fef3c7',
   '--widget-info': '#4a7ab5',
   '--widget-info-bg': '#e4ecf4',
-  '--widget-primary-text': '#ffffff',
+  '--widget-primary-text': '#050b14',
   ...widgetStructure,
 } as const;
 
@@ -108,7 +108,7 @@ const darkWidgetVariables = {
   '--widget-warning-bg': 'rgba(245, 158, 11, 0.15)',
   '--widget-info': '#6b9fd4',
   '--widget-info-bg': 'rgba(107, 159, 212, 0.15)',
-  '--widget-primary-text': '#ffffff',
+  '--widget-primary-text': '#050b14',
   ...widgetStructure,
 } as const;
 

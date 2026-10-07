@@ -53,7 +53,7 @@ html[data-theme-id='default-black'][data-color-scheme='light'] {
   --accent-primary-hover: #93a883;
   --accent-cool: #2e6f5e;
   --accent-cool-hover: #3d8a75;
-  --on-accent: #ffffff;
+  --on-accent: #050b14;
   --accent-sky: #7ba3b8;
   --accent-sky-hover: #8bb3c8;
 
@@ -77,7 +77,7 @@ html[data-theme-id='default-black'][data-color-scheme='light'] {
 
   --button-primary-bg: #111111;
   --button-primary-bg-hover: #2b2b2b;
-  --button-primary-text: var(--on-accent);
+  --button-primary-text: #ffffff;
   --button-dark-bg: #1c1612;
   --button-dark-bg-hover: #3a3532;
   --button-dark-text: #ffffff;
@@ -173,7 +173,7 @@ html[data-theme-id='default-black'][data-color-scheme='dark'] {
   --accent-primary-hover: #b3c6a3;
   --accent-cool: #4aad8a;
   --accent-cool-hover: #5ec49e;
-  --on-accent: #ffffff;
+  --on-accent: #050b14;
   --accent-sky: #8bb3c8;
   --accent-sky-hover: #9cc3d6;
 
@@ -197,7 +197,7 @@ html[data-theme-id='default-black'][data-color-scheme='dark'] {
 
   --button-primary-bg: #b05e2d;
   --button-primary-bg-hover: #9c5027;
-  --button-primary-text: var(--on-accent);
+  --button-primary-text: #ffffff;
   --button-dark-bg: #443e36;
   --button-dark-bg-hover: #564e44;
   --button-dark-text: #e4dcd4;

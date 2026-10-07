@@ -181,18 +181,18 @@ describe('Theme architecture guardrails', () => {
         '--accent: #c26d3a', '--accent-warm: #c26d3a', '--accent-warm-hover: #e18a58',
         '--accent-warm-subtle: rgba(194, 109, 58, 0.08)',
         '--accent-warm-muted: rgba(194, 109, 58, 0.15)',
-        '--accent-warm-subtle-a0: rgba(194, 109, 58, 0)', '--on-accent: #ffffff',
-        '--button-primary-bg: #c26d3a', '--button-primary-bg-hover: #b05e2d',
-        '--button-primary-text: var(--on-accent)', '--focus-border: #1c1612', '--toggle-thumb: #ffffff',
+        '--accent-warm-subtle-a0: rgba(194, 109, 58, 0)', '--on-accent: #050b14',
+        '--button-primary-bg: #b05e2d', '--button-primary-bg-hover: #9c5027',
+        '--button-primary-text: #ffffff', '--focus-border: #1c1612', '--toggle-thumb: #ffffff',
       ],
       dark: [
         '--hover-bg: rgba(194, 109, 58, 0.12)',
         '--accent: #d4803f', '--accent-warm: #d4803f', '--accent-warm-hover: #e89860',
         '--accent-warm-subtle: rgba(212, 128, 63, 0.12)',
         '--accent-warm-muted: rgba(212, 128, 63, 0.20)',
-        '--accent-warm-subtle-a0: rgba(212, 128, 63, 0)', '--on-accent: #ffffff',
+        '--accent-warm-subtle-a0: rgba(212, 128, 63, 0)', '--on-accent: #050b14',
         '--button-primary-bg: #b05e2d', '--button-primary-bg-hover: #9c5027',
-        '--button-primary-text: var(--on-accent)', '--focus-border: var(--accent)', '--toggle-thumb: #ffffff',
+        '--button-primary-text: #ffffff', '--focus-border: var(--accent)', '--toggle-thumb: #ffffff',
       ],
     } as const;
     for (const declaration of expectedThemeByScheme.light) {
@@ -210,11 +210,11 @@ describe('Theme architecture guardrails', () => {
     const darkAdapter = sourceSection(adapters, 'const dark: ThemeSchemeDefinition', 'const noHeroBackground');
     for (const declaration of [
       "'--widget-accent': '#c26d3a'", "'--widget-accent-hover': '#e18a58'",
-      "'--widget-accent-subtle': 'rgba(194, 109, 58, 0.08)'", "'--widget-primary-text': '#ffffff'",
+      "'--widget-accent-subtle': 'rgba(194, 109, 58, 0.08)'", "'--widget-primary-text': '#050b14'",
     ]) expect(lightWidget).toContain(declaration);
     for (const declaration of [
       "'--widget-accent': '#d4803f'", "'--widget-accent-hover': '#e89860'",
-      "'--widget-accent-subtle': 'rgba(212, 128, 63, 0.12)'", "'--widget-primary-text': '#ffffff'",
+      "'--widget-accent-subtle': 'rgba(212, 128, 63, 0.12)'", "'--widget-primary-text': '#050b14'",
     ]) expect(darkWidget).toContain(declaration);
     for (const declaration of [
       "cursor: '#c26d3a'", "selectionBackground: 'rgba(194, 109, 58, 0.18)'",

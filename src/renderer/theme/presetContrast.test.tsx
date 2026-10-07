@@ -83,18 +83,6 @@ describe('production Theme contrast', () => {
     }
   });
 
-  it('keeps every optional light Theme solid Accent foreground on the light control surface', () => {
-    const lightSurfaceFloor = luminance('#f0f0f0');
-
-    for (const definition of themeRegistry.getAcceptedDefinitions().slice(1)) {
-      const tokens = tokensFor(definition.stylesheetText, definition.id, 'light');
-      expect(
-        luminance(tokens.get('--on-accent')!),
-        `${definition.id}.light solid Accent foreground`,
-      ).toBeGreaterThanOrEqual(lightSurfaceFloor);
-    }
-  });
-
   it('keeps every dark Theme primary action readable with the intended foreground polarity', () => {
     const lightSurfaceFloor = luminance('#f0f0f0');
 
@@ -177,72 +165,57 @@ describe('production Theme contrast', () => {
     }
   });
 
-  it('keeps the Default Black light primary action readable', () => {
-    const definition = themeRegistry.getAcceptedDefinitions().find(
-      candidate => candidate.id === 'default-black',
-    )!;
-    const tokens = tokensFor(definition.stylesheetText, definition.id, 'light');
-    const foreground = resolvedColorToken(tokens, '--button-primary-text');
-
-    expect(contrast(foreground, tokens.get('--button-primary-bg')!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(foreground, tokens.get('--button-primary-bg-hover')!)).toBeGreaterThanOrEqual(4.5);
-  });
-
-  // The palette sweep above deliberately skips `hamuna-default` and
-  // `default-black`, because both carry bespoke contracts instead: Default
-  // Black asserts its own black CTA pair just above, and the warm default
-  // palette is pinned by themeArchitecture. Those bespoke checks only ever
-  // looked at --button-primary-*, so the accent pair --on-accent over --accent
-  // and --accent-warm-hover had no coverage at all anywhere -- and on the
-  // burnt-orange ramp that pair is genuinely broken (white on #e18a58 is
-  // 2.63:1). `KNOWN_ACCENT_RAMP_FAILURES` below records that as an explicit,
-  // per-scheme debt list rather than leaving it to chance: any *new* theme, or
-  // any theme that develops the defect later, still fails here, and removing a
-  // theme from this list can only happen together with fixing its numbers.
-  const KNOWN_ACCENT_RAMP_FAILURES: Record<string, true> = {
-    'hamuna-default.light': true,
-    'hamuna-default.dark': true,
-    'default-black.light': true,
-    'default-black.dark': true,
-  };
-
-  it('reports the burnt-orange accent ramp as unfixed instead of untested', () => {
-    const offenders: string[] = [];
-
+  it('keeps every solid accent and primary action readable', () => {
     for (const definition of themeRegistry.getAcceptedDefinitions()) {
       for (const scheme of ['light', 'dark'] as const) {
         const tokens = tokensFor(definition.stylesheetText, definition.id, scheme);
-        const foreground = resolvedColorToken(tokens, '--on-accent');
         const key = `${definition.id}.${scheme}`;
 
         for (const backgroundToken of ['--accent', '--accent-warm-hover'] as const) {
-          if (contrast(foreground, tokens.get(backgroundToken)!) < 4.5) {
-            offenders.push(`${key} ${foreground} on ${tokens.get(backgroundToken)}`);
-          }
+          expect(
+            contrast(resolvedColorToken(tokens, '--on-accent'), tokens.get(backgroundToken)!),
+            `${key} --on-accent over ${backgroundToken}`,
+          ).toBeGreaterThanOrEqual(4.5);
         }
 
-        // Any theme absent from the debt list must be clean; this is the check
-        // that turns "nobody looked" into "nobody can regress it quietly".
-        if (!(key in KNOWN_ACCENT_RAMP_FAILURES)) {
+        // `resolvedColorToken` follows the `var(--x)` indirection on purpose:
+        // `--button-primary-text` must NOT be `var(--on-accent)`. One token
+        // cannot serve both surfaces once the CTA background is a different
+        // colour family from the accent -- Default Black's light CTA is
+        // #111111 and needs white, while its #c26d3a accent needs dark ink.
+        // That alias is precisely what let the two surfaces disagree, so
+        // resolving it here is load-bearing, not incidental.
+        for (const backgroundToken of ['--button-primary-bg', '--button-primary-bg-hover'] as const) {
           expect(
-            contrast(foreground, tokens.get('--accent')!),
-            `${key} --on-accent over --accent`,
-          ).toBeGreaterThanOrEqual(4.5);
-          expect(
-            contrast(foreground, tokens.get('--accent-warm-hover')!),
-            `${key} --on-accent over --accent-warm-hover`,
+            contrast(
+              resolvedColorToken(tokens, '--button-primary-text'),
+              tokens.get(backgroundToken)!,
+            ),
+            `${key} --button-primary-text over ${backgroundToken}`,
           ).toBeGreaterThanOrEqual(4.5);
         }
       }
     }
-
-    // Each broken theme/scheme reports one offender per failing surface, so
-    // compare the sets of theme.scheme keys rather than the raw strings.
-    expect(
-      [...new Set(offenders.map(entry => entry.split(' ')[0]))].sort(),
-      'Accent-ramp contrast debt changed. If these are fixed, delete them from '
-      + 'KNOWN_ACCENT_RAMP_FAILURES; if a theme was renamed, update the key. '
-      + 'A new offender means a new theme shipped a failing solid accent.',
-    ).toEqual(Object.keys(KNOWN_ACCENT_RAMP_FAILURES).sort());
+  });
+  it('keeps every Widget solid accent readable', () => {
+    for (const definition of themeRegistry.getAcceptedDefinitions()) {
+      for (const scheme of ['light', 'dark'] as const) {
+        const widget = themeRegistry.resolve(definition.id, scheme, false).adapters.widget.variables;
+        const foreground = widget['--widget-primary-text'];
+        const key = `${definition.id}.${scheme}`;
+        // Widget variables are raw hex by construction (preset-theme.ts reads
+        // them through requiredHex), so they can be contrasted directly. This
+        // surface is its own owner rather than an alias of --on-accent, which
+        // is why the burnt-orange themes needed fixing in two places.
+        expect(
+          contrast(foreground!, widget['--widget-accent']!),
+          `${key} --widget-primary-text over --widget-accent`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(foreground!, widget['--widget-accent-hover']!),
+          `${key} --widget-primary-text over --widget-accent-hover`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 });
