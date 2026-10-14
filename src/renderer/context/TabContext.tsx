@@ -26,6 +26,7 @@ import type { ExitPlanModeRequest, EnterPlanModeRequest } from '../../shared/typ
 import type { TerminalReason } from '../../shared/terminalReason';
 import type { SessionMetadata } from '@/api/sessionClient';
 import type { ContextUsage } from '../../shared/types/context-usage';
+import type { SessionKnowledgeGraph } from '../../shared/sessionKnowledge';
 import type { SlashCommand } from '../../shared/slashCommands';
 import type { ProviderRoute } from '../../shared/providerRoute';
 
@@ -115,6 +116,20 @@ export interface TabState {
      * 自取数，不穿 SimpleChatInput props 以免 textarea 重渲)。
      */
     contextUsage: ContextUsage | null;
+    /**
+     * Session knowledge dashboard graph (对话知识看板). Set on
+     * `chat:knowledge-updated` SSE (post-turn LLM extraction), prefetched via
+     * `GET /api/session/knowledge` on session load, cleared on reset/switch.
+     * Null until first data arrives — panel renders its empty state.
+     */
+    knowledgeGraph: SessionKnowledgeGraph | null;
+    /**
+     * True while the sidecar is running LLM knowledge extraction for this
+     * session. Distinct from `knowledgeGraph` — extraction takes seconds and
+     * the graph is unchanged the whole time, so this is the only progress
+     * signal the dashboard can show.
+     */
+    knowledgeExtracting: boolean;
     /**
      * PRD TODO #143 — Chat 顶部 MCP 健康指示器用的快照。
      * Set on `chat:mcp-status-update` SSE 广播（任何 tab 触发 `/api/mcp/recheck`
@@ -219,6 +234,15 @@ export interface TabContextValue extends TabState {
      * session. No backend call is made.
      */
     adoptMigratedSession: (newSessionId: string, options?: AdoptMigratedSessionOptions) => Promise<boolean>;
+    /**
+     * Lightweight id-only adopt — for paths where the backend already minted a
+     * new session id (e.g. rewindSession branch C) and the caller has kept UI
+     * state (messages / tools / permissions) in sync optimistically. Touches
+     * ONLY `currentSessionIdRef` + `setCurrentSessionId` + parent propagation;
+     * no UI clearing. Same id is a no-op. Compare with adoptMigratedSession
+     * (heavy = id + full UI clear) — this is the "light" sibling.
+     */
+    adoptSessionId: (nextSessionId: string) => boolean;
 
     // Tab-scoped API functions (use this Tab's Sidecar)
     // `opts.signal` cancels the call from the renderer side (e.g., useEffect
@@ -275,6 +299,8 @@ const defaultContextValue: TabContextValue = {
     systemStatus: null,
     systemNotice: null,
     contextUsage: null,
+    knowledgeGraph: null,
+    knowledgeExtracting: false,
     agentPlanTodos: null,
     lastTerminalReason: null,
     pendingPermission: null,
@@ -301,6 +327,7 @@ const defaultContextValue: TabContextValue = {
     loadOlderMessages: async () => { },
     resetSession: async () => false,
     adoptMigratedSession: async () => false,
+    adoptSessionId: () => false,
     apiGet: async () => { throw new Error('Not in TabProvider'); },
     apiPost: async () => { throw new Error('Not in TabProvider'); },
     apiPut: async () => { throw new Error('Not in TabProvider'); },

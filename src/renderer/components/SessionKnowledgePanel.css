@@ -1,0 +1,401 @@
+/* SessionKnowledgePanel — horizontal knowledge strip.
+ *
+ * Self-contained dark "observation deck": the reference neural-creator-dashboard
+ * look is a fixed single dark palette, so these values are deliberately literal
+ * rather than pulled from global theme tokens. The strip must read as one object
+ * regardless of which app theme surrounds it.
+ */
+
+.skp-root {
+  --skp-bg: #0d0e0e;
+  --skp-line: rgba(228, 228, 222, 0.11);
+  --skp-line-2: rgba(232, 232, 226, 0.2);
+  --skp-text: #ecece9;
+  --skp-text-2: #a5a6a1;
+  --skp-muted: #75766f;
+  --skp-gold: #e6cf98;
+  --skp-rose: #e3b3c4;
+  --skp-mint: #ace0cf;
+
+  /* KbGraphView paints its canvas by reading these off the document root
+   * (cssVar --ink / --line / --accent / --paper-inset). Re-point them at the
+   * strip's dark palette here so the graph stays legible under a light app
+   * theme, without teaching the shared engine about this panel. */
+  --ink: #ecece9;
+  --ink-muted: #a5a6a1;
+  --line: rgba(228, 228, 222, 0.16);
+  --accent: #e6cf98;
+  --paper-inset: #1a1b1b;
+  --button-primary-bg: #e6cf98;
+
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 100;
+  height: 216px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--skp-text);
+  background:
+    radial-gradient(ellipse 70% 120% at 22% 60%, rgba(88, 90, 88, 0.22), transparent 70%),
+    radial-gradient(ellipse 140% 100% at 50% 100%, #141515 0%, #090a0a 75%);
+  border-top: 1px solid var(--skp-line);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.skp-root * {
+  box-sizing: border-box;
+}
+
+.skp-root :focus-visible {
+  outline: 2px solid var(--skp-gold);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ── Ambient scene: orb + jellyfish ─────────────────────────────────── */
+
+.skp-scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* Keep `screen` on the jellyfish from blending with the chat behind the strip. */
+  isolation: isolate;
+}
+
+.skp-orb {
+  position: absolute;
+  left: 1.5%;
+  bottom: -34px;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+}
+
+.skp-orb-halo {
+  position: absolute;
+  inset: -48%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    rgba(196, 197, 193, 0.38) 0%,
+    rgba(166, 167, 163, 0.22) 44%,
+    rgba(116, 117, 114, 0.1) 63%,
+    transparent 88%
+  );
+  filter: blur(14px);
+  animation: skp-breathe 5.5s ease-in-out infinite;
+}
+
+@keyframes skp-breathe {
+  50% {
+    transform: scale(1.08);
+    opacity: 0.75;
+  }
+}
+
+/* The <video> never renders — it exists only to drive decoding. Frames are
+ * drawn into the sibling canvas (see paintVideo) because some embedded WebViews
+ * decode a video without ever compositing it. */
+.skp-vsrc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skp-vid {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.skp-orb-vid {
+  filter: brightness(0.86) contrast(1.1);
+  /* Circular falloff blends the video's rectangular frame into the dark ground;
+   * without this the orb reads as a hard-edged grey box. */
+  -webkit-mask-image: radial-gradient(circle closest-side at 50% 50%, #000 52%, rgba(0, 0, 0, 0.82) 68%, rgba(0, 0, 0, 0.4) 84%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side at 50% 50%, #000 52%, rgba(0, 0, 0, 0.82) 68%, rgba(0, 0, 0, 0.4) 84%, transparent 100%);
+}
+
+.skp-jelly {
+  position: absolute;
+  left: 21%;
+  bottom: 6px;
+  width: 168px;
+  height: 126px;
+  /* `screen` lifts the near-black jellyfish frame out of the dark ground; on a
+   * lighter app theme underneath it is a no-op but the mask still rounds it. */
+  mix-blend-mode: screen;
+  animation: skp-jelly-float 9s ease-in-out infinite;
+}
+
+.skp-jelly-vid {
+  -webkit-mask-image: radial-gradient(ellipse 62% 64% at 50% 46%, #000 52%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 64% at 50% 46%, #000 52%, transparent 100%);
+}
+
+@keyframes skp-jelly-float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-7px) translateX(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skp-orb-halo,
+  .skp-jelly {
+    animation: none;
+  }
+}
+
+/* ── Header bar ─────────────────────────────────────────────────────── */
+
+.skp-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--skp-line);
+  background: linear-gradient(to bottom, rgba(20, 21, 21, 0.72), rgba(14, 15, 15, 0.35));
+  flex-shrink: 0;
+}
+
+.skp-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--skp-gold);
+}
+
+.skp-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--skp-text);
+  white-space: nowrap;
+}
+
+.skp-extracting {
+  font-size: 12px;
+  color: var(--skp-gold);
+  white-space: nowrap;
+}
+
+.skp-stats {
+  font-size: 12px;
+  color: var(--skp-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.skp-spacer {
+  flex: 1;
+}
+
+.skp-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 1px solid var(--skp-line);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--skp-text-2);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.skp-close:hover {
+  color: var(--skp-text);
+  border-color: var(--skp-line-2);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.skp-close-x {
+  width: 13px;
+  height: 13px;
+}
+
+.skp-pulse {
+  animation: skp-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes skp-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skp-pulse {
+    animation: none;
+  }
+}
+
+/* ── Graph stage ────────────────────────────────────────────────────── */
+
+.skp-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.skp-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.skp-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-inline: 24px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.skp-empty-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--skp-muted);
+  opacity: 0.45;
+}
+
+.skp-empty-p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--skp-text-2);
+}
+
+.skp-empty-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--skp-muted);
+  opacity: 0.75;
+}
+
+/* ── Detail footer (docked right, overlays the graph) ──────────────── */
+
+.skp-detail {
+  position: absolute;
+  top: 45px;
+  right: 12px;
+  bottom: 12px;
+  width: 300px;
+  max-width: 62%;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--skp-line);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(50, 51, 50, 0.62), rgba(15, 16, 16, 0.78));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+.skp-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skp-detail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--skp-text);
+}
+
+.skp-detail-type {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  color: var(--skp-text-2);
+}
+
+.skp-rels {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.skp-rel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--skp-text-2);
+}
+
+.skp-rel-other {
+  color: var(--skp-text);
+}
+
+.skp-rel-sep {
+  margin-inline: 5px;
+  opacity: 0.55;
+}
+
+.skp-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.skp-sources-label {
+  font-size: 12px;
+  color: var(--skp-muted);
+}
+
+.skp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--skp-line);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--skp-text-2);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.skp-chip:hover {
+  color: var(--skp-gold);
+  border-color: rgba(230, 207, 152, 0.45);
+  background: rgba(230, 207, 152, 0.08);
+}
+
+.skp-chip-x {
+  width: 11px;
+  height: 11px;
+}

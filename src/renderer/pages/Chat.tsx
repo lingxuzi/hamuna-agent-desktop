@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Bot, Globe, History, Loader2, Plus, PanelRightOpen, RotateCcw, TerminalSquare, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bot, Globe, History, Loader2, Plus, PanelRightOpen, RotateCcw, TerminalSquare, Waypoints, X } from 'lucide-react';
 import { forwardRef, lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +24,7 @@ import ContextUsageIndicator from '@/components/ContextUsageIndicator';
 import ChatBootOverlay from '@/components/ChatBootOverlay';
 import QueryNavigator from '@/components/chat/QueryNavigator';
 import ChatSearchPanel from '@/components/ChatSearchPanel';
+import SessionKnowledgePanel from '@/components/SessionKnowledgePanel';
 import { useChatSearch, isHighlightApiSupported } from '@/hooks/useChatSearch';
 import SelectionCommentMenu from '@/components/SelectionCommentMenu';
 import TerminalReasonBanner from '@/components/TerminalReasonBanner';
@@ -498,6 +499,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     loadSession,
     resetSession,
     adoptMigratedSession,
+    adoptSessionId,
     clearUnifiedLogs,
     respondPermission,
     respondAskUserQuestion,
@@ -508,6 +510,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     cancelQueuedMessage,
     forceExecuteQueuedMessage,
     isConnected,
+    knowledgeExtracting,
   } = useTabState();
   const isActive = useTabActive();
   const toast = useToast();
@@ -3273,6 +3276,18 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     if (!isActive && chatSearchOpen) closeChatSearch();
   }, [isActive, chatSearchOpen, closeChatSearch]);
 
+  // ── Session knowledge dashboard (对话知识看板) ──
+  const [knowledgePanelOpen, setKnowledgePanelOpen] = useState(false);
+  const closeKnowledgePanel = useCallback(() => setKnowledgePanelOpen(false), []);
+  useCloseLayer(() => {
+    if (!knowledgePanelOpen) return false;
+    closeKnowledgePanel();
+    return true;
+  }, 100);
+  useEffect(() => {
+    if (!isActive && knowledgePanelOpen) closeKnowledgePanel();
+  }, [isActive, knowledgePanelOpen, closeKnowledgePanel]);
+
   // Auto-focus input when Tab becomes active
   useEffect(() => {
     if (isActive && inputRef.current) {
@@ -4703,11 +4718,18 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     setRewindStatus('rewinding');
     apiPost(retryEndpoint, { userMessageId })
       .then(res => {
-        const r = res as { success?: boolean; error?: string } | undefined;
+        const r = res as { success?: boolean; sessionId?: string; error?: string } | undefined;
         if (r && !r.success) {
           setMessages(snapshot);
           toastRef.current.error(t('shell.toasts.retryFailedWithError', { error: r.error || t('shell.toasts.unknownError') }));
           return;
+        }
+        // If backend minted a new session id (rewindSession branch C — no SDK
+        // anchor / session not yet registered), re-sync local ref before the
+        // resend so /chat/send writes to the same row SessionStore will read.
+        // A/B paths omit sessionId → adoptSessionId is a no-op.
+        if (r?.sessionId) {
+          adoptSessionId(r.sessionId);
         }
         // Rewind succeeded → auto-resend the original message
         track('message_retry', {});
@@ -4738,7 +4760,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
           setIsLoading(false);
         }
       });
-  }, [apiPost, setMessages, setIsLoading, pauseAutoScroll, isExternalRuntime, t]); // all stable — refs handle the rest
+  }, [apiPost, setMessages, setIsLoading, pauseAutoScroll, isExternalRuntime, adoptSessionId, t]); // all stable — refs handle the rest
 
   // Uses refs for messagesRef/toastRef/handleSendMessageRef — deps are all stable → reference stable
   const handleRetry = useCallback((assistantMessageId: string) => {
@@ -5083,6 +5105,21 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                 <PanelRightOpen className="h-4 w-4" />
               </button>
             )}
+            {/* Session knowledge dashboard toggle (对话知识看板) */}
+            <button
+              type="button"
+              onClick={() => setKnowledgePanelOpen(v => !v)}
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1.5 text-sm font-medium transition-colors ${
+                knowledgePanelOpen
+                  ? 'bg-[var(--paper-inset)] text-[var(--ink)]'
+                  : 'text-[var(--ink-muted)] hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]'
+              }`}
+              title={t('shell.header.knowledgeDashboard')}
+              aria-pressed={knowledgePanelOpen}
+            >
+              <Waypoints className={`h-3.5 w-3.5 flex-shrink-0 ${knowledgeExtracting && !knowledgePanelOpen ? 'animate-pulse' : ''}`} />
+              {!splitFile && <span>{t('shell.header.knowledgeDashboardShort')}</span>}
+            </button>
           </div>
         </div>
 
@@ -5095,6 +5132,10 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
           {/* In-page text finder — Cmd/Ctrl+F */}
           {chatSearchOpen && (
             <ChatSearchPanel controller={chatSearch} onClose={closeChatSearch} />
+          )}
+          {/* Session knowledge dashboard — per-conversation concept graph */}
+          {knowledgePanelOpen && (
+            <SessionKnowledgePanel onClose={closeKnowledgePanel} onLocateMessage={handleNavigateToQuery} />
           )}
           {/* Drop zone overlay for file drag */}
           <DropZoneOverlay

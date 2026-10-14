@@ -10192,6 +10192,12 @@ description: >
       // BEFORE any turn can complete (initializeAgent / pre-warm run below).
       installAutoTitleHook();
 
+      // Session knowledge dashboard — same slot pattern, lazily imported so
+      // its config/sse chain stays off the critical boot path.
+      void import('./session-knowledge-service').then(({ installSessionKnowledgeHook }) => {
+        installSessionKnowledgeHook();
+      });
+
       // Knowledge base (资料库) — periodic LLM relation typing for ingested
       // material. Best-effort: no-op until a session model is available.
       // The poller must run exactly ONCE: only in the global sidecar (or a

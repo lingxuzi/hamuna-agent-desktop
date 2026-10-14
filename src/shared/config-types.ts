@@ -811,6 +811,8 @@ export interface AppConfig {
   chatQueueResponseMode?: ChatQueueResponseMode;
   showDevTools: boolean; // 显示开发者工具 (Logs/System Info)
   multiAgentRuntime?: boolean; // 多 Agent Runtime 模式（开发者，默认关闭）
+  /** 对话知识看板：每 turn 用 LLM 提取概念/关系。默认开；置 false 关闭提取。 */
+  knowledgeDashboardEnabled?: boolean;
   experimentalSplitView?: boolean; // 实验性：文件预览在右侧分屏而非弹窗
   /** 实验室：用户注册 CLI 工具注册表（PRD 0.2.36）。默认关。
    *  只控制工具箱里的 CLI 工具注册/管理/AI 自动发现；不影响 hamuna CLI

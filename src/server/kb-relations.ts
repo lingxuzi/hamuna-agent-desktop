@@ -43,7 +43,7 @@ const MAX_OUTPUT_TOKENS = 16_384;
  * Any of these can drive a headless SDK query, so KB relations get typed even
  * with only the global sidecar running.
  */
-function resolveRelationModel(): { model: string; providerEnv?: ProviderEnv } | null {
+export function resolveRelationModel(): { model: string; providerEnv?: ProviderEnv } | null {
   const config = loadConfig();
 
   const sessionModel = getSessionModel();
@@ -212,7 +212,7 @@ export function extractBalancedJson(text: string): string | null {
 }
 
 /** Parse the LLM's JSON object {entities, relations}. */
-function parseExtraction(text: string): ExtractionResult {
+export function parseExtraction(text: string): ExtractionResult {
   const jsonText = extractBalancedJson(stripMarkdownFence(text));
   if (!jsonText) return { entities: [], relations: [] };
   try {
@@ -354,7 +354,7 @@ export function apiRoot(baseUrl: string): string {
  * A single-turn, tool-less request needs no bridge translation — both formats
  * carry the same system+user prompt.
  */
-async function providerMessagesText(
+export async function providerMessagesText(
   providerEnv: ProviderEnv,
   model: string,
   system: string,

@@ -828,7 +828,23 @@
       "newChat": "New chat",
       "newChatShort": "New chat",
       "history": "History",
-      "expandWorkspace": "Expand workspace"
+      "expandWorkspace": "Expand workspace",
+      "knowledgeDashboard": "Knowledge dashboard",
+      "knowledgeDashboardShort": "Knowledge"
+    },
+    "knowledge": {
+      "title": "Knowledge",
+      "extracting": "Absorbing…",
+      "stats": "{{entities}} concepts · {{relations}} relations",
+      "empty": "No knowledge nodes yet",
+      "emptyHint": "After each AI reply, the dashboard extracts concepts and links from this conversation",
+      "close": "Close dashboard",
+      "closeDetail": "Collapse details",
+      "nodeType": "Type",
+      "sources": "Sources",
+      "relations": "Relations",
+      "locate": "Locate source message",
+      "messageChip": "message"
     },
     "currentChatFallback": "This chat",
     "dropZone": {

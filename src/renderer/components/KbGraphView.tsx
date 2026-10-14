@@ -58,9 +58,20 @@ interface GraphView {
   ui: { type: string; sources: string; relations: string };
 }
 
-/** Read a CSS variable value (fallback for missing/unset). */
-function cssVar(name: string, fallback: string): string {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+export type { GraphNode, GraphView };
+export {
+  stopAnimation,
+  updateGraph,
+  renderGraph,
+  resizeGraph,
+};
+
+/** Read a CSS variable value (fallback for missing/unset).
+ *  `root` lets a host element that repaints the canvas with its own palette
+ *  shadow the document-level tokens — the dashboard strip does this to stay
+ *  legible under a light app theme without teaching this engine about it. */
+function cssVar(name: string, fallback: string, root?: HTMLElement): string {
+  const v = getComputedStyle(root ?? document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
 }
 
@@ -81,12 +92,12 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
   const isLarge = nodes.length > LARGE_THRESHOLD;
 
   const colors = {
-    link: cssVar('--line', '#d0d0d0'),
-    linkTyped: cssVar('--accent', '#4f8cff'),
-    node: cssVar('--accent', '#4f8cff'),
-    nodeText: cssVar('--ink', '#222'),
-    labelText: cssVar('--ink-muted', '#888'),
-    hover: cssVar('--button-primary-bg', '#4f8cff'),
+    link: cssVar('--line', '#d0d0d0', canvas),
+    linkTyped: cssVar('--accent', '#4f8cff', canvas),
+    node: cssVar('--accent', '#4f8cff', canvas),
+    nodeText: cssVar('--ink', '#222', canvas),
+    labelText: cssVar('--ink-muted', '#888', canvas),
+    hover: cssVar('--button-primary-bg', '#4f8cff', canvas),
   };
 
   ctx.save();
@@ -227,7 +238,7 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
     px = Math.max(4, Math.min(px, width - panelW - 4));
     const py = Math.max(4, Math.min(sy - panelH / 2, height - panelH - 4));
 
-    ctx.fillStyle = cssVar('--paper-inset', '#1e1e1e');
+    ctx.fillStyle = cssVar('--paper-inset', '#1e1e1e', canvas);
     ctx.globalAlpha = 0.96;
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
@@ -243,7 +254,7 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
     ctx.fillRect(px, py, 3, panelH);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = cssVar('--ink', '#222');
+    ctx.fillStyle = cssVar('--ink', '#222', canvas);
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.fillText(h.label, px + 12, py + lineH / 2 + 2);
 
@@ -254,9 +265,9 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
       if (lines[i] === relHeader) {
         ctx.fillStyle = colors.linkTyped;
       } else if (lines[i].startsWith('  ')) {
-        ctx.fillStyle = cssVar('--ink-muted', '#888');
+        ctx.fillStyle = cssVar('--ink-muted', '#888', canvas);
       } else {
-        ctx.fillStyle = cssVar('--ink', '#222');
+        ctx.fillStyle = cssVar('--ink', '#222', canvas);
       }
       ctx.fillText(lines[i], px + 12, y);
     }
@@ -327,8 +338,15 @@ function updateGraph(view: GraphView, host: HTMLCanvasElement, graph: KbGraph): 
   return true;
 }
 
-/** Build the graph inside a canvas host. Returns the view (caller stops it). */
-function renderGraph(host: HTMLCanvasElement, graph: KbGraph, ui: { type: string; sources: string; relations: string }): GraphView {
+/** Build the graph inside a canvas host. Returns the view (caller stops it).
+ *  `onNodeClick` is optional — KbGraphView itself doesn't use it (clicks
+ *  toggle neighborhood expansion); the session knowledge panel selects nodes. */
+function renderGraph(
+  host: HTMLCanvasElement,
+  graph: KbGraph,
+  ui: { type: string; sources: string; relations: string },
+  onNodeClick?: (node: GraphNode) => void,
+): GraphView {
   const width = host.clientWidth || 600;
   const height = host.clientHeight || 420;
   if (width <= 0 || height <= 0) throw new Error('graph host has no size');
@@ -512,6 +530,7 @@ function renderGraph(host: HTMLCanvasElement, graph: KbGraph, ui: { type: string
         } else {
           view.expanded.add(id);
         }
+        onNodeClick?.(view.dragging);
         // Wake the layout so expanded edges pull neighbors closer.
         simulation.alpha(0.4).restart();
       }

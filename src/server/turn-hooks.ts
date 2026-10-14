@@ -57,3 +57,36 @@ export function firePostTurnTitleHook(
     /* best-effort: swallow so the turn is never affected */
   }
 }
+
+// ── Knowledge dashboard slot ──────────────────────────────────────────────
+// Second sibling slot (see the file comment above): fires after a successful
+// turn so the session knowledge dashboard can extract concepts. Same shape as
+// the title slot — fire-and-forget, never affects the turn.
+
+export interface PostTurnKnowledgePayload {
+  sessionId: string;
+  runtime: RuntimeType;
+  /** Assistant text of the completed turn (may be empty). */
+  text: string;
+  /** Message id of the completed assistant message (renderer locates it). */
+  messageId: string;
+  model: string | undefined;
+  providerEnv?: ProviderEnv;
+}
+
+export type PostTurnKnowledgeHook = (payload: PostTurnKnowledgePayload) => void;
+
+let knowledgeHook: PostTurnKnowledgeHook | null = null;
+
+export function setPostTurnKnowledgeHook(hook: PostTurnKnowledgeHook): void {
+  knowledgeHook = hook;
+}
+
+export function firePostTurnKnowledgeHook(payload: PostTurnKnowledgePayload): void {
+  if (!knowledgeHook) return;
+  try {
+    knowledgeHook(payload);
+  } catch {
+    /* best-effort: swallow so the turn is never affected */
+  }
+}

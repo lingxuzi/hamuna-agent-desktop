@@ -828,7 +828,23 @@
       "newChat": "新建对话",
       "newChatShort": "新对话",
       "history": "历史",
-      "expandWorkspace": "展开工作区"
+      "expandWorkspace": "展开工作区",
+      "knowledgeDashboard": "对话知识看板",
+      "knowledgeDashboardShort": "知识看板"
+    },
+    "knowledge": {
+      "title": "知识看板",
+      "extracting": "吸收中…",
+      "stats": "{{entities}} 概念 · {{relations}} 关系",
+      "empty": "还没有知识节点",
+      "emptyHint": "AI 回复完成后，看板会自动提取本次对话中的概念与关联",
+      "close": "关闭看板",
+      "closeDetail": "收起详情",
+      "nodeType": "类型",
+      "sources": "来源",
+      "relations": "关联",
+      "locate": "定位到来源消息",
+      "messageChip": "消息"
     },
     "currentChatFallback": "此对话",
     "dropZone": {

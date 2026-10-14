@@ -54,6 +54,7 @@ import type { AgentStatusTodoSnapshot, Message, MessageAttachment, ContentBlock,
 import type { ToolUse } from '@/types/stream';
 import type { SystemInitInfo } from '../../shared/types/system';
 import type { ContextUsage } from '../../shared/types/context-usage';
+import type { SessionKnowledgeGraph } from '../../shared/sessionKnowledge';
 import type { TerminalReason } from '../../shared/terminalReason';
 import type { SlashCommand } from '../../shared/slashCommands';
 import type { LogEntry } from '@/types/log';
@@ -696,6 +697,10 @@ export default function TabProvider({
     // cleared on session switch / reset. 见 ContextUsageIndicator。
     const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
     const liveContextUsageSessionIdRef = useRef<string | null>(null);
+    // 对话知识看板 — per-session graph. Set on chat:knowledge-updated, prefetched
+    // on session load, cleared on reset/switch.
+    const [knowledgeGraph, setKnowledgeGraph] = useState<SessionKnowledgeGraph | null>(null);
+    const [knowledgeExtracting, setKnowledgeExtracting] = useState(false);
     const [agentPlanTodos, setAgentPlanTodos] = useState<AgentStatusTodoSnapshot[] | null>(null);
     const clearRuntimePlanTodos = useCallback(() => {
         setAgentPlanTodos(prev => prev === null ? prev : []);
@@ -740,6 +745,8 @@ export default function TabProvider({
         // lastContextUsage; new-session paths (reset/adopt) also clear explicitly for immediacy.
         liveContextUsageSessionIdRef.current = null;
         setContextUsage(null);
+        setKnowledgeGraph(null);
+        setKnowledgeExtracting(false);
         if (!shouldPreservePendingBirthSnapshots) {
             setAgentPlanTodos(null);
         }
@@ -1067,6 +1074,25 @@ export default function TabProvider({
         setCurrentSessionId(newSessionId);
         return true;
     }, [tabId, setStreamingMessage, clearInteractiveState, clearSessionActive, resetPaginationState]);
+
+    // Lightweight id-only adopt — used when the backend rewind path mints a new
+    // session id (branch C of rewindSession) but the UI state (messages, tools,
+    // permission state) is already kept in sync optimistically by the caller.
+    // Compare with adoptMigratedSession (heavy = id + full UI clear) — this
+    // variant touches ONLY currentSessionIdRef/setCurrentSessionId and the
+    // parent onSessionIdChangeRef propagation. Returns true on success, false
+    // if the parent refused the id change.
+    const adoptSessionId = useCallback((nextSessionId: string): boolean => {
+        if (currentSessionIdRef.current === nextSessionId) return true;
+        const changed = onSessionIdChangeRef.current?.(nextSessionId);
+        if (changed === false) {
+            console.error(`[TabProvider ${tabId}] adoptSessionId aborted: parent refused id change to ${nextSessionId}`);
+            return false;
+        }
+        currentSessionIdRef.current = nextSessionId;
+        setCurrentSessionId(nextSessionId);
+        return true;
+    }, [tabId]);
 
     const trackSessionNewForBirth = useCallback((
         newSessionId: string,
@@ -2525,6 +2551,20 @@ export default function TabProvider({
                 // Refresh the session-list surfaces (history dropdown / task center),
                 // which re-read titles from disk where the backend already persisted.
                 window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.SESSION_TITLE_CHANGED));
+                break;
+            }
+
+            case 'chat:knowledge-updated': {
+                // Session knowledge dashboard — post-turn extraction result.
+                // Session-scoped: the SSE connection is Tab-scoped, payload sessionId
+                // must match the current session.
+                const knowledgePayload = data as { sessionId?: string; graph?: SessionKnowledgeGraph; extracting?: boolean } | null;
+                const payloadSessionId = knowledgePayload?.sessionId ?? null;
+                const currentId = currentSessionIdRef.current;
+                if (knowledgePayload?.graph && payloadSessionId && payloadSessionId === currentId) {
+                    setKnowledgeGraph(knowledgePayload.graph);
+                    setKnowledgeExtracting(knowledgePayload.extracting === true);
+                }
                 break;
             }
 
@@ -4349,6 +4389,20 @@ export default function TabProvider({
                 setContextUsage(null);
             }
             setSdkSlashCommands([]);
+            // Prefetch the knowledge dashboard graph (对话知识看板) for this session.
+            // Best-effort: 404/empty leaves the panel on its empty state.
+            void (async () => {
+                try {
+                    const res = await apiGetJson<{ ok?: boolean; graph?: SessionKnowledgeGraph }>(
+                        `/api/session/knowledge?sessionId=${encodeURIComponent(targetSessionId)}`,
+                    );
+                    if (res.ok && res.graph && currentSessionIdRef.current === targetSessionId) {
+                        setKnowledgeGraph(res.graph);
+                    }
+                } catch {
+                    /* no graph yet / route unavailable — panel shows empty state */
+                }
+            })();
             // Only reset loading state if not explicitly skipped
             // (caller may be managing loading state for an in-progress operation like cron task)
             if (!options?.skipLoadingReset) {
@@ -4953,6 +5007,8 @@ export default function TabProvider({
         systemStatus,
         systemNotice,
         contextUsage,
+        knowledgeGraph,
+        knowledgeExtracting,
         agentPlanTodos,
         lastTerminalReason,
         pendingPermission,
@@ -4979,6 +5035,7 @@ export default function TabProvider({
         loadOlderMessages,
         resetSession,
         adoptMigratedSession,
+        adoptSessionId,
         // Tab-scoped API functions
         apiGet: apiGetJson,
         apiPost: postJson,
@@ -4991,8 +5048,8 @@ export default function TabProvider({
         forceExecuteQueuedMessage,
     }), [
         tabId, agentDir, currentSessionId, messages, historyMessages, streamingMessage, firstItemIndex, hasMoreBefore, isLoading, isSessionLoading, sessionState, sessionRuntime, sessionRuntimeSource, sessionMeta,
-        logs, unifiedLogs, systemInitInfo, sdkSlashCommands, runtimeDiagnostics, agentError, systemStatus, systemNotice, contextUsage, agentPlanTodos, lastTerminalReason, pendingPermission, pendingAskUserQuestion, pendingExitPlanMode, pendingEnterPlanMode, toolCompleteCount, queuedMessages, isConnected,
-        setMessages, appendLog, appendUnifiedLog, clearUnifiedLogs, sendMessage, stopResponse, loadSession, loadOlderMessages, resetSession, adoptMigratedSession,
+        logs, unifiedLogs, systemInitInfo, sdkSlashCommands, runtimeDiagnostics, agentError, systemStatus, systemNotice, contextUsage, agentPlanTodos, lastTerminalReason, pendingPermission, pendingAskUserQuestion, pendingExitPlanMode, pendingEnterPlanMode, toolCompleteCount, queuedMessages, isConnected, knowledgeGraph, knowledgeExtracting,
+        setMessages, appendLog, appendUnifiedLog, clearUnifiedLogs, sendMessage, stopResponse, loadSession, loadOlderMessages, resetSession, adoptMigratedSession, adoptSessionId,
         apiGetJson, postJson, apiPutJson, apiDeleteJson, respondPermission, respondAskUserQuestion, respondExitPlanMode, cancelQueuedMessage, forceExecuteQueuedMessage
     ]);
 

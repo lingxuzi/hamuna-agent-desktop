@@ -78,6 +78,13 @@ export const SSE_EVENT_PRIORITIES: Readonly<Record<string, SseEventPriority>> = 
   // [sse] missing-from-priorities warning per process).
   'chat:context-usage': 'coalescible',
   'chat:agent-plan-update': 'coalescible',
+  // PRD 0.2.34 session knowledge dashboard — post-turn extraction result, also
+  // the `extracting` in-progress flag. Latest-wins snapshot (renderer does
+  // setKnowledgeGraph / setKnowledgeExtracting on each event), so under
+  // backpressure an older graph must collapse to the newest instead of queueing.
+  // Cost of coalescing here is that the transient "extracting" pulse can be
+  // skipped when the false-flag overtakes it — the final state still lands.
+  'chat:knowledge-updated': 'coalescible',
   // (Phase E PRD 0.2.7: `workspace:files-changed` SSE event removed; the
   // renderer subscribes to the Rust workspace_files watcher via Tauri
   // events instead, so this whitelist no longer needs the entry.)

@@ -111,7 +111,7 @@ import type { SystemInitInfo } from '../shared/types/system';
 import type { SlashCommand as UiSlashCommand } from '../shared/slashCommands';
 import type { OfficialToolId } from '../shared/official-tools';
 import { commitPreparedSessionForFirstUserTurn, deleteSession, saveSessionMetadata, updateSessionTitleFromMessage, updateSessionMetadata, getSessionMetadata, getSessionData } from './SessionStore';
-import { firePostTurnTitleHook } from './turn-hooks';
+import { firePostTurnTitleHook, firePostTurnKnowledgeHook } from './turn-hooks';
 import { createSessionMetadata, type SessionMetadata, type SessionMessage, type MessageAttachment, type SessionSource, type TurnAnalyticsSource } from './types/session';
 import { originFromMaterializationScenario, originFromTurnAttribution } from '../shared/session-origin';
 import type { SessionOrigin } from '../shared/session-origin';
@@ -6873,6 +6873,7 @@ const builtinTurnLifecycle = createBuiltinTurnLifecycle({
   clearApiRetryStatus,
   trackServer,
   firePostTurnTitleHook,
+  firePostTurnKnowledgeHook,
   appendTextChunk,
   localizeImError,
   setLastAgentError: (error) => { lastAgentError = error; },
@@ -10010,6 +10011,11 @@ export async function rewindSession(userMessageId: string): Promise<{
     if (targetIndex < 0) return { success: false as const, error: 'Message not found' };
     const targetMessage = transcriptState.messages[targetIndex];
 
+    // Track the new session id minted by branch C so the frontend can re-sync
+    // currentSessionIdRef before the next resend (otherwise /chat/send writes
+    // the new id to SessionStore while the UI keeps showing the orphan old id).
+    let rewindNewSessionId: string | undefined;
+
     // 2. 两个 UUID 分离：
     //    - lastAssistantUuid → 用于 resumeSessionAt（截断 SDK 会话历史到目标前的 assistant）
     //    - targetMessage.sdkUuid → 用于 rewindFiles（文件检查点按 user message 打点）
@@ -10109,6 +10115,7 @@ export async function rewindSession(userMessageId: string): Promise<{
       pendingResumeSessionAt = undefined;
       sessionRegistered = false;
       setCurrentSessionId(randomUUID());
+      rewindNewSessionId = sessionId;
       hasInitialPrompt = false; // Reset so next message creates metadata for the new session
       resetSessionMaterializationState({ allowLazySessionMaterialization: true });
     }
@@ -10116,7 +10123,12 @@ export async function rewindSession(userMessageId: string): Promise<{
     // 8. 预热下次 session
     schedulePreWarm();
 
-    return { success: true as const, content: removedContent, attachments: removedAttachments };
+    return {
+      success: true as const,
+      ...(rewindNewSessionId ? { sessionId: rewindNewSessionId } : {}),
+      content: removedContent,
+      attachments: removedAttachments,
+    };
   };
 
   const promise = doRewind();

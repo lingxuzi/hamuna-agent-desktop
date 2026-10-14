@@ -195,6 +195,15 @@ export async function handleSessionReadRoute(
     return jsonResponse(getSessionEngine().getLatestAssistantResult());
   }
 
+  if (pathname === '/api/session/knowledge' && request.method === 'GET') {
+    const sessionId = url.searchParams.get('sessionId') ?? '';
+    if (!sessionId) {
+      return jsonResponse({ ok: false, error: 'sessionId required' }, 400);
+    }
+    const { getKnowledgeGraphForSession } = await import('../session-knowledge-service');
+    return jsonResponse({ ok: true, graph: getKnowledgeGraphForSession(sessionId) });
+  }
+
   if (pathname === '/api/session-watch/register' && request.method === 'POST') {
     return handleSessionWatchRegister(request);
   }

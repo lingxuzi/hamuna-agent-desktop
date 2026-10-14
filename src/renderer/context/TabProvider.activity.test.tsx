@@ -284,6 +284,9 @@ describe('TabProvider session activity ownership', () => {
       if (url.endsWith('/sessions/switch') && init?.method === 'POST') {
         return new Response(JSON.stringify({ success: true }), { status: 200 });
       }
+      if (url.includes('/api/session/knowledge')) {
+        return new Response(JSON.stringify({ ok: true, graph: null }), { status: 200 });
+      }
       throw new Error(`Unexpected proxyFetch call: ${init?.method ?? 'GET'} ${url}`);
     });
 
@@ -307,7 +310,8 @@ describe('TabProvider session activity ownership', () => {
       });
     });
 
-    expect(tauriHarness.proxyFetch).toHaveBeenCalledTimes(2);
+    // 2 = session REST + sessions/switch; +1 knowledge prefetch (对话知识看板)
+    expect(tauriHarness.proxyFetch).toHaveBeenCalledTimes(3);
   });
 
   it.each([

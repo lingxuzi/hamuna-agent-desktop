@@ -1,0 +1,112 @@
+{
+  "brand": { "name": "HamunaAgent", "href": "#top", "mark": "assets/brand/mark.webp" },
+  "cta": { "label": "火热内测中", "href": "#cross" },
+  "hint": "向下滚动,飞入世界",
+  "diveScroll": 1.3,
+  "connScroll": 0.9,
+  "sections": [
+    {
+      "id": "quant",
+      "label": "量化策略",
+      "still": "assets/quant.webp",
+      "clip": "assets/vid/dive_01_quant.mp4",
+      "accent": "#1F4F44",
+      "scroll": 1.5,
+      "eyebrow": "QUANT STRATEGY",
+      "title": "数据驱动决策，从研究到执行。",
+      "body": "策略、回测、风控——一桌完成。",
+      "tags": ["回测", "风控", "执行"]
+    },
+    {
+      "id": "ads",
+      "label": "广告片制作",
+      "still": "assets/ads.webp",
+      "clip": "assets/vid/dive_02_ads.mp4",
+      "accent": "#9BD3A8",
+      "eyebrow": "AD FILMS",
+      "title": "从脚本到成片，镜头替你跑。",
+      "body": "创意、拍摄、剪辑，Agent 全程协作。",
+      "tags": ["概念", "拍摄", "后期"]
+    },
+    {
+      "id": "drama",
+      "label": "短剧制作",
+      "still": "assets/drama.webp",
+      "clip": "assets/vid/dive_03_drama.mp4",
+      "accent": "#D08B5B",
+      "eyebrow": "SHORT DRAMA",
+      "title": "短剧流水线，分镜即剧本。",
+      "body": "选角、机位、剪辑，多 Agent 分头推进。",
+      "tags": ["选角", "分镜", "合成"]
+    },
+    {
+      "id": "team",
+      "label": "多智能体团队",
+      "still": "assets/team.webp",
+      "clip": "assets/vid/dive_04_team.mp4",
+      "accent": "#1F4F44",
+      "eyebrow": "MULTI-AGENT TEAM",
+      "title": "一张桌子，五个专家。",
+      "body": "规划、研究、执行、复盘，同步推进。",
+      "tags": ["规划", "研究", "执行"]
+    },
+    {
+      "id": "miniapp",
+      "label": "自定义 MiniApp",
+      "still": "assets/miniapp.webp",
+      "clip": "assets/vid/dive_05_miniapp.mp4",
+      "accent": "#9BD3A8",
+      "eyebrow": "CUSTOM MINI APP",
+      "title": "把流程，变成你的应用。",
+      "body": "描述需求，Agent 把常用操作变成工具。",
+      "tags": ["配置", "建图", "发布"]
+    },
+    {
+      "id": "long",
+      "label": "长任务",
+      "still": "assets/long.webp",
+      "clip": "assets/vid/dive_06_long.mp4",
+      "accent": "#2D3138",
+      "eyebrow": "LONG-RUNNING TASKS",
+      "title": "夜晚开工，早晨交卷。",
+      "body": "计划好的任务可以在服务器持续推进。",
+      "tags": ["持久", "中断恢复", "审计"]
+    },
+    {
+      "id": "evolve",
+      "label": "自进化",
+      "still": "assets/evolve.webp",
+      "clip": "assets/vid/dive_07_evolve.mp4",
+      "accent": "#1F4F44",
+      "eyebrow": "SELF-EVOLUTION",
+      "title": "Agent 越用越懂你。",
+      "body": "技能库随工作流沉淀，版本化迭代。",
+      "tags": ["技能", "版本", "记忆"]
+    },
+    {
+      "id": "cross",
+      "label": "跨设备",
+      "still": "assets/cross.webp",
+      "clip": "assets/vid/dive_08_cross.mp4",
+      "accent": "#9BD3A8",
+      "scroll": 1.7,
+      "linger": 0.45,
+      "eyebrow": "ACROSS DEVICES",
+      "title": "桌面、手机、手表，同一份对话。",
+      "body": "任务随你切换设备持续推进。",
+      "tags": ["桌面", "移动", "穿戴"],
+      "cta": {
+        "primary": { "label": "免费下载 HamunaAgent 0.3.226", "href": "https://download.agent.hamuna.club/releases/v0.3.226/HamunaAgent_0.3.226_x64-setup.exe", "disabled": false }
+      }
+    }
+  ],
+  "connectors": [
+    "assets/vid/conn_01.mp4",
+    "assets/vid/conn_02.mp4",
+    "assets/vid/conn_03.mp4",
+    "assets/vid/conn_04.mp4",
+    "assets/vid/conn_05.mp4",
+    "assets/vid/conn_06.mp4",
+    "assets/vid/conn_07.mp4"
+  ]
+}

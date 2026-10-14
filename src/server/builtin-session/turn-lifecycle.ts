@@ -150,6 +150,14 @@ export type BuiltinTurnLifecycleDeps = {
     model: string | undefined,
     providerEnv: ProviderEnv | undefined,
   ) => Promise<void> | void;
+  firePostTurnKnowledgeHook: (payload: {
+    sessionId: string;
+    runtime: 'builtin';
+    text: string;
+    messageId: string;
+    model: string | undefined;
+    providerEnv: ProviderEnv | undefined;
+  }) => Promise<void> | void;
   appendTextChunk: (chunk: string) => boolean;
   localizeImError: (rawError: string) => string;
   setLastAgentError: (error: string) => void;
@@ -707,6 +715,11 @@ export function createBuiltinTurnLifecycle(deps: BuiltinTurnLifecycleDeps): Buil
         isAbortResult ? 'cancelled' : 'complete',
       );
 
+      // Captured before the async hooks below and before clearCurrentTurnTextBlocks()
+      // further down: reading it inside a .then() callback yields '' because the
+      // turn buffer is cleared synchronously once this handler returns.
+      const sessionEventText = getCurrentTurnText();
+
       if (!isAbortResult && shouldTitleCompletedTurn(resultMessage.is_error === true, resultMessage.terminal_reason)) {
         const titleSid = deps.getSessionId();
         const titleModel = deps.getCurrentModel();
@@ -715,9 +728,20 @@ export function createBuiltinTurnLifecycle(deps: BuiltinTurnLifecycleDeps): Buil
           () => deps.firePostTurnTitleHook(titleSid, 'builtin', titleModel, titleProviderEnv),
           () => undefined,
         );
+        void lastTurnEndPersist.then(
+          () =>
+            deps.firePostTurnKnowledgeHook({
+              sessionId: titleSid,
+              runtime: 'builtin',
+              text: sessionEventText,
+              messageId: lastAssistant?.id ?? '',
+              model: titleModel,
+              providerEnv: titleProviderEnv,
+            }),
+          () => undefined,
+        );
       }
 
-      const sessionEventText = getCurrentTurnText();
       const sessionEventError = resultMessage.is_error
         ? {
             code: 'turn_failed',

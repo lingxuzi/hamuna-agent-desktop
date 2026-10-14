@@ -61,6 +61,7 @@
 | KB TypeGraph store | `src/server/kb/kb-store.ts` | 稳定 | 单例 + jieba 预分词 + FTS5 命中 |
 | KB HTTP service | `src/server/kb/kb-service.ts` | 稳定 | `/api/admin/kb/*` 16 路由 + `{ok,...}` 契约；lazy |
 | KB 关系抽取 | `src/server/{kb-relations,kb-ingest}.ts` | 稳定 | `scripts/kb-verify-stats.mjs` A/B ROI |
+| Session Knowledge 看板 | `src/server/{session-knowledge-service,session-knowledge-store}.ts` | 稳定 | turn 成功 → LLM 提取 → `<id>.knowledge.json` → SSE；TODO #201 |
 
 ### 1.3 前端 (`src/renderer/`)
 
@@ -74,7 +75,8 @@
 | Chat Input | `src/renderer/components/chat-input/` | 稳定 | 图片分支改 `copyPaths(hamuna_files)` + `convertFileSrc`；`attachmentSessionId` 已删 |
 | CompanionWindow | `src/renderer/floating-ball/CompanionWindow.tsx` | 稳定 | 图片拖拽同上（`2338a83`） |
 | Widget Libraries (UMD) | `src/renderer/components/tools/widgetLibraries.ts` | 稳定 | `widgetUmdSourceResolver` plugin 修 Vite 7 `?raw` "optimized info should be defined" |
-| KB 图可视化 | `src/renderer/components/KbGraphView.tsx` | 稳定 | d3 force-directed |
+| KB 图可视化 | `src/renderer/components/KbGraphView.tsx` | 稳定 | d3 force-directed；renderGraph/updateGraph 已导出供 SessionKnowledgePanel 复用 |
+| Session Knowledge 面板 | `src/renderer/components/SessionKnowledgePanel.tsx` | 稳定 | Chat 顶栏 Waypoints 按钮；TabState.knowledgeGraph；TODO #201 |
 | KB 管理面板 | `src/renderer/components/GlobalKbPanel.tsx` | 稳定 | CRUD + 材料入库 + workspace↔KB mount |
 | KB Client | `src/renderer/api/kbClient.ts` | 稳定 | 11 个 `invoke('cmd_kb_*')` → `/api/admin/kb/*` |
 | Vite Config | `vite.config.ts` | 稳定 | `widgetUmdSourceResolver` plugin（`enforce: 'pre'`） |
@@ -203,7 +205,6 @@ TODO #126 pin 0.11.33 后整条 rationale chain (`197837b / 4812fbe / 37a7f21 / 
 清华源 `https://pypi.tuna.tsinghua.edu.cn/simple` 2026-09-10 fresh install 时 timeout（`9732280` rationale chain 之一撞新墙）；单一 mirror = 单点依赖（`197837b` 已栽过）→ **必须**带 fallback。**改动 2 文件**（+15 -2）：`installer.nsi:781` `pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple` → 主源 `https://mirrors.aliyun.com/pypi/simple/` + `${If} $1 != 0` ExecWait fallback `https://pypi.org/simple` + 13 行注释 + 显式 "DO NOT fall back to Tsinghua" 提醒；`mcp.json:41` description 改写 mirror 段（清华源引用 → 阿里主 + PyPI fallback + cross-link #128）。**已 #127 烟测兜底**：TODO #127 smoke step 5 不依赖走哪个 mirror，uvx 装上即 pass；新 mirror chain 由 workflow 自动验证。**未引入新设计**：mirror chain 是单点 fallback 标准模式，无新抽象/依赖。**未验证**：阿里源 0.11.33 同步延迟 / 阿里源从 US IP 拉时延 / PyPI 官方源大陆可达性。**版本流转**：0.3.147。
 
 #### TODO #121 — Windows install pip-only 落地（uvx 退 bundled）✅ DONE
-#### TODO #121 — Windows install pip-only 落地（uvx 退 bundled）✅ DONE
 **折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log（含 `69a8c63` feat + 各 follow-up commit）。原方案 A = auto-merge bundled uvx；user 拍板改 pip-only；48 MB bundle 减重；HKCU\Environment\Path 由 `uvx-path-setup.ps1` 持久化。
 #### TODO #108 — creative-video-suite 视频时长边界单源化 ✅ DONE
 详见 §5.7 narrative + 10 文件改动：`agnes-ai-api.md §视频时长边界（单一权威 · 2026-09-09 加）` + 9 个 ref 全部 cross-link；dual constraint 4 下限 / 12 上限 / 9 合法值字符串集合；drama 90→72 残留修复；gate 11→12；T13 footnote 显式豁免。
@@ -226,18 +227,13 @@ TODO #126 pin 0.11.33 后整条 rationale chain (`197837b / 4812fbe / 37a7f21 / 
 #### TODO #120 — creative-ad-director: 抖音/创意广告 5 阶段 SKILL ✅ DONE
 
 #### TODO #131 — agnes-video-25 v0.1.7 `_coerce_image_paths_input` helper ✅ DONE
-#### TODO #131 — agnes-video-25 v0.1.7 `_coerce_image_paths_input` helper ✅ DONE
 **折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log `c008edc` + `hosted_mcps/agnes-video-25/CHANGELOG.md [0.1.7]/[0.2.2]` 段。**v0.2.2 缓解**：递归 unwrap + `id()` 环检测 + 深度 8 上限；架构正确做法（BeforeValidator）未偿还。
-#### TODO #132 — agnes-video-25 v0.1.8 schema 层放宽 `image_paths: list[str] | dict | None` ✅ DONE
 #### TODO #132 — agnes-video-25 v0.1.8 schema 层放宽 `image_paths: list[str] | dict | None` ✅ DONE
 **折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log `f65a609` + `hosted_mcps/agnes-video-25/CHANGELOG.md [0.1.8]` 段。
 #### TODO #133 — 工具箱 stdio MCP 启动握手校验 (`/api/mcp/enable`) ✅ DONE
-#### TODO #133 — 工具箱 stdio MCP 启动握手校验 (`/api/mcp/enable`) ✅ DONE
 **折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log + `/home/hmcz/.claude/plans/mossy-dreaming-dewdrop.md`。9 unit + 3 integration 全绿；分支 `feature/mcp-stdio-startup-validation`（master 不直接 commit）。
 #### TODO #135 — Windows install-time prefetch `agnes-video-25-mcp` wheel ✅ DONE
-#### TODO #135 — Windows install-time prefetch `agnes-video-25-mcp` wheel ✅ DONE
 **折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log `69a8c63` + TODO #127 smoke test 兜底。版本流转 0.3.157 → 0.3.158。
-#### TODO #134 — agnes-video-25 v0.2.0：agnes-video-v2.0 模型白名单 + 参数转义 🔄
 #### TODO #134 — agnes-video-25 v0.2.0：agnes-video-v2.0 模型白名单 + 参数转义 🔄
 **折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log。model ID = `agnes-video-v2.0`（带 v，非 `2.0` 也非 `v20` URL slug）；白名单仅 MCP server 改，skill 红线保持。0.2.0 PyPI sha256 verified @ 2026-09-11T15:35:04Z。
 **P3 多 key fallback 历史折叠**（2026-09-29 · snapshot 增补）：详见 §4 git log `d2403e6` + `hosted_mcps/agnes-video-25/CHANGELOG.md [0.1.6]/[0.2.3]`。in-memory KeyState 状态机 + 30s 窗口 reason split + round-robin 叠加 fallback（user 拍板方案 B）。
@@ -356,12 +352,9 @@ TODO #126 pin 0.11.33 后整条 rationale chain (`197837b / 4812fbe / 37a7f21 / 
 **核心结论**：涨到 3.24 GB 的不是产品代码泄漏，是 WebKitGTK DevTools Inspector WebProcess 在 `#[cfg(debug_assertions)]` 下长 cache 主 webview DOM/source map；release build 无此进程 = 用户线上不受影响。详细采样表 / 误判订正 / `pgrep -f` 抓 bash wrapper 踩坑 → 见 git log。**scope-out**：(a) 不 gate `open_devtools()`；(b) 不写 memory regression 测试；(c) 不 commit（诊断而非 fix）。
 
 ### 5.9 OpenAI Bridge Responses API tool 形状回归到嵌套结构（2026-09-20 · #186 落地）
-### 5.9 OpenAI Bridge Responses API tool 形状回归到嵌套结构（2026-09-20 · #186 落地）
 **折叠（2026-09-29 · snapshot 增补）**：详见 §4 git log + `src/server/openai-bridge/types/openai-responses.ts` + `src/server/openai-bridge/translate/request-responses.ts` + 3 处 unit test。根因 = `request-responses.ts:113-124` 补 `strict: false` 但保留平铺 `{type, name, description, parameters, strict}`；Rust serde untagged enum 严格匹配嵌套 `{type:'function', function:{...}}`，agnes strict provider 拒收平铺。修法 = 改嵌套输出。40/40 unit test + nested invariant 锁死。
 ### 5.10 OpenBitFun 调研锚点（2026-09-21 · 借鉴素材）
-### 5.10 OpenBitFun 调研锚点（2026-09-21 · 借鉴素材）
 **折叠（2026-09-29 · snapshot 增补）**：对照 `/home/hmcz/Projects/openbitfun`（v1.0.0 MIT）。已展开=`specs/prd/miniapp.md` v0.1 + `specs/prd/miniapp-v0.4.md` v0.4（4-Phase 切片）。不借鉴=6 层 Rust workspace / App Server wire 矩阵 / ACP / OpenCode / Codex adapter / Sandbox / Computer Use。详见 PRD。
-### 5.11 MyAgents `mcp-command.ts` 横向对比（2026-09-23 → 2026-09-28 · #192 → #194 落地后调研）
 ### 5.11 MyAgents `mcp-command.ts` 横向对比（2026-09-23 → 2026-09-28 · #192 → #194 落地后调研）
 **折叠（2026-09-29 · snapshot 增补）**：本仓 #185+#192+#194 落地后已完全对齐 MyAgents resolver + PATH-prepend 模式（Win/POSIX + nodeDir 前置 + 大小写归一化 + 去重）。仅缺 `buildMcpStdioLaunchConfig` 单一入口封装（**非 resolver 层面**；MCP spawn 三处各自拼 PATH 是已知冗余，下次需要再统一）。
 ### 5.12 MiniApp 系统 —— 创意插件需求拍板（2026-09-29 · 用户 6 维 grill 落地）
@@ -465,3 +458,42 @@ PRD §14 12 项 scope-out（v0.4 +1 项不引 SQLite）。验收清单详见 PRD
 **文件清单**：NEW `node-limits.ts`(~75 行)+ NEW `node-limits.unit.test.ts`(6 tests：默认回落 / installed / bundled / installed 优先 / 越界回落 / enabled 探针)；改 `worker-pool.ts`(`SpawnWorkerRequest.limits` + `WorkerHandle.limits`，pool 不读盘)、`index.ts`(barrel 导出)、`server/index.ts`(spawn 路由解析 + 403)、`shared/miniapp/{types,meta-schema}.ts`、`meta-schema.test.ts`(+10 category + 6 node cases = 38)、`miniapp-host/theme-tokens.ts`、`file-explorer/{index.html,ui.js,style.css}`。
 **Verification**：`npx tsc --noEmit` 0；`npx eslint`(9 文件) 0；`npx vitest run --project unit src/shared/miniapp/ src/server/miniapp-worker/node-limits.unit.test.ts` **54/54 pass**。
 **scope-out**：宿主 locale 通道（`app.locale` getter + `onLocaleChange`）——本轮 `data-i18n` 只做单语言检测，宿主切语言不会重刷已开 MiniApp；第三个 worker kind / SceneTab 持久化见 5.12.15。
+
+#### TODO #201 — 对话知识看板（Session Knowledge Dashboard）✅ DONE（2026-10-11 · 6 新文件 + 14 改动 · snapshot 486/500 行）
+**触发**：用户参考 neural-creator-dashboard（PolyForm 非商业，素材/代码不可搬）要求「对话页面加知识看板，每次对话（AI turn 完成）更新一次」。拍板：(a) 有界提取（回复 ≥200 字符且 turn 成功才跑 LLM 提取）；(b) 自绘发光点线（复用 KbGraphView d3-force + canvas 引擎）。
+**数据流**：turn 成功 → `turn-hooks.ts` knowledge sibling slot → `session-knowledge-service.ts`（config gate `knowledgeDashboardEnabled` → <200 字符跳过 → per-session inFlight + 单槽 pending 最新者胜 → 动态 import `kb-relations` 三件套 `resolveRelationModel`/`providerMessagesText`/`parseExtraction` → ≤12 实体 + ≤12 关系，输入截 6k）→ `mergeTurnIntoGraph`（cap 120 节点/250 边，weight 淘汰保护新节点）→ `<id>.knowledge.json` → `chat:knowledge-updated` SSE → TabProvider set `knowledgeGraph` → `SessionKnowledgePanel` 浮板（Chat 顶栏 Waypoints 按钮 toggle，useCloseLayer(100) 三段模式）→ 点节点分析栏 → onLocateMessage → scrollToMessage。
+**关键架构决策**：(a) hook 走 turn-hooks 第二 sibling slot（依赖倒置防 import 环，照抄 title slot）；(b) builtin fire 点在 `turn-lifecycle.ts`（title hook 旁，条件复用 `!isAbortResult && shouldTitleCompletedTurn`，messageId 取 `lastAssistant?.id`）；external fire 点在 `external-session.ts`（`capturedReplyText || getExternalAssistantText()`，providerEnv undefined 时 resolveRelationModel 退配置模型天然可用）；(c) 渲染端 loadSession 预取 `/api/session/knowledge`（TabProvider.tsx:4370），SSE 事件进白名单 + sessionId 校验；(d) 面板图更新走 `updateGraph` 增量合并（新节点中心生成/旧节点保位/温和 re-heat），不整图重建。
+**Verification**：typecheck 0 错误；sessionKnowledge 9/9 + store 5/5 + panel dom 3/3 + turn-lifecycle 26/26 + TabProvider.activity 6/6（修复 1 真回归：knowledge 预取 +1 请求，测试契约 2→3 更新）；eslint 0。**预先存在失败（clean tree 复现，与本轮无关）**：unit 6 文件 13 例（index.unit seedBundledSkills / eventRegistry / themeArchitecture 2 / playwright-bash-redirect / widgetSandboxHtml）/ dom 12 文件 96 例（CustomTitleBar / ForceUpdateModal / LauncherRightRail / SessionHistoryDropdown / appConfigService / agentConfigService / useTabSwipeGesture / IssueAssigneePicker / IssuesWorkspace / FloatingThemeRuntime / indexThemeBootstrap / ThemeRuntime）/ integration 1（node-gate miniapp worker spawn 500）。
+
+#### TODO #202 — rewind 误创建多会话 bug 修复（2026-10-11 · 4 文件 +30 -5 · snapshot 498/500 行）
+**触发**：用户报告「对话中回撤（rewind）误创建多个会话」。**根因**：`rewindSession`（`agent-session.ts:10002-10130`）分支 C 在 L10112 用 `setCurrentSessionId(randomUUID())` 切了后端模块级 sessionId，但返回体（`10120`）不含 `sessionId` → `/chat/rewind` 路由（`session-operations.ts:49-50`）透传空字段 → 前端 `performRetryFromUserMessage` resend 用旧 `currentSessionIdRef.current` → `/chat/send`（`index.ts:2898`）用后端 `runtimeSessionId` 写 SessionStore → 历史侧栏永久多孤儿。**对照已验证模式**：`/chat/reset`（`TabProvider.tsx:953-989`）响应明确回写。**拍板**：选项 A（最小 diff，照搬 reset 同步模式）。
+**改动**（4 文件 +30 -5）：
+- `agent-session.ts::rewindSession`：分支 C 内 `setCurrentSessionId(randomUUID())` 后加 `rewindNewSessionId = sessionId;`；返回体 `return { ...(rewindNewSessionId ? { sessionId: rewindNewSessionId } : {}), ... }`（A/B 分支不传）
+- `TabContext.tsx`：TabContextValue 加 `adoptSessionId(nextId): boolean`（light id-only adopt，与已有 heavy `adoptMigratedSession` 配对：light = 只切 ref + 通知 parent / heavy = 切 ref + 清 UI state）；defaultContextValue stub `() => false`
+- `TabProvider.tsx`：实现 `adoptSessionId(nextSessionId)` —— 同 id 短路 / parent 拒绝 false / `currentSessionIdRef.current = nextId; setCurrentSessionId(nextId); return true`；加入 contextValue deps
+- `Chat.tsx::performRetryFromUserMessage`：类型断言扩 `sessionId?`；resend 前 `if (r?.sessionId) adoptSessionId(r.sessionId);`；useCallback deps 加 `adoptSessionId`
+**Verification**：typecheck 0；eslint 0；`rewind` 单测 13/13 + turn-lifecycle 26/26 + SessionKnowledgePanel/TabProvider.activity 9/9 全绿；预先存在失败同 #201。
+**scope-out**：external-retry 路径（独立接口，本 bug 限定 builtin）/ SessionHistoryDropdown orphan 清理（独立 PR）/ launcher 移植（用户拍板推迟到本轮后）。**follow-up**：adoptSessionId 与 adoptMigratedSession 形成 light/heavy 配对，future forkSession / resetForNewDesktopSession 等场景可复用。
+
+#### TODO #200 — landing page 视频资源压缩（90.3% 减重）✅ DONE
+**触发**：用户原话 "landing page assets 资源太重，首页加载太长时间"。
+**根因**：8 dive mp4 + 7 connector mp4 共 41 MB，全部 1280×704 / H.264 中等码率；`preloadAll(4)` boot 时并发 4 全片 fetch + IndexedDB 首次为空 → 首访用户首屏要等全部 ~41 MB 字节 + ≥1 seeked/loadeddata 触发才褪 veil。
+**改动**（+0 -0，纯内容替换；文件路径/名零变更）：
+- `assets/vid/{conn_01..07,dive_01..08}.mp4` 全部 `ffmpeg -vf scale=720:-2:flags=lanczos -c:v libx264 -crf 30 -preset medium -profile:v high -pix_fmt yuv420p -an -movflags +faststart` 重编码。
+- `assets/_orig/*.mp4` 备份留盘（不在 index.html/sections.json 引用；如需回退 `cp _orig/* vid/`）。
+- `index.html` / `sections.json` 文件名引用一字未改（webp still 不动）。
+**字节对比**（15 文件 / 现状 100% 同名 | `_baseline/probe.jsonl` 留 git log 维护）：
+| 段 | 原 | 现 | 减 |
+|---|---|---|---|
+| 7 connector | 16.5 MB | 1.83 MB | -88.9% |
+| 8 dive | 24.5 MB | 2.15 MB | -91.2% |
+| **总计** | **41.05 MB** | **3.98 MB** | **-90.3%** |
+**视觉抽帧**：CRF 30 抽 mid-frame 视觉无伤（粘土/卡通风格对 CRF 30 友好；如未来切实拍，加 round 2 上 CRF 26）。
+**boot 预估**：首次访问 41MB @ 4 并发 + ~10Mbps → 8s+；改后 3.98MB → ~3s（带宽决定，但往返数从 41/0.3=137 RTT 量级降到 3.98/0.3=13 RTT）。IndexedDB 命中后立即 ready（同文件不变所以 cache key 不变）。
+**grlling 拍板**：用户拍板 "720p / CRF 30 / 全量 + 保留全 preload"（不做按需 boot，保留 IndexedDB 缓存命中即即时的体验）。
+**scope-out**：
+- (a) **不动** `engine.js::preloadAll` / `cfg.preloadConcurrency=4` / boot veil —— 保留全 preload + IndexedDB 缓存路径；
+- (b) **不动** webp still（每个 43-68KB 已经够轻）；
+- (c) **不动** `engine.js:285-286` seeked/loadeddata 重复 ready（无副作用，可忽略）。
+- (d) **不动** `engine.js:289` 失败 catch 不通知 ready 的真 bug（与本任务无关，独立 PR）；
+- (e) **不**改 CTA URL / sections.json schema / engine.js。**版本流转**：本轮纯 assets，未改 JS 版本号也无 bump 必要；如未来发货随 release 推 CDN，需要 `Cache-Control: immutable` + 文件指纹 hash（不在本 scope）。**follow-up**：connector 可继续缩到 360p 砍 ~80% 字节；dive_* 仍可压 540p 砍 ~30%（若用户报"还是慢"再起）。

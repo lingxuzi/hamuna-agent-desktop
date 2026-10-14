@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appendMessage, resetTranscriptForTest, transcriptState } from './transcript';
 import {
   accumulateCurrentTurnUsage,
+  appendCurrentTurnTextBlock,
   markCurrentTurnHasOutput,
   peekPendingOutputOwner,
   popPendingOutputOwner,
@@ -108,6 +109,7 @@ function makeDeps(overrides: Partial<BuiltinTurnLifecycleDeps> = {}) {
     clearApiRetryStatus: vi.fn(),
     trackServer: vi.fn(),
     firePostTurnTitleHook: vi.fn(),
+    firePostTurnKnowledgeHook: vi.fn(),
     appendTextChunk: vi.fn(() => true),
     localizeImError: (error) => `localized:${error}`,
     setLastAgentError: vi.fn(),
@@ -211,6 +213,41 @@ describe('turn-lifecycle owner', () => {
       'builtin',
       'claude-test',
       undefined,
+    );
+  });
+
+  it('passes the live turn text to the knowledge hook, not the buffer cleared after the handler returns', async () => {
+    const turnText = 'x'.repeat(250);
+    const { deps } = makeDeps();
+    const lifecycle = createBuiltinTurnLifecycle(deps);
+    appendMessage({
+      id: '1',
+      role: 'assistant',
+      content: turnText,
+      timestamp: '2026-06-21T00:00:00.000Z',
+    });
+    markCurrentTurnHasOutput();
+    setCurrentTurnStartTime(90);
+    setCurrentTurnSourceItem({
+      id: 'turn-1',
+      message: { role: 'user', content: 'run' },
+      messageText: 'run',
+      wasQueued: false,
+      resolve: vi.fn(),
+      turnOwner: { kind: 'agent', id: 'turn-1' },
+      onTerminal: vi.fn(),
+      activityFacts: {
+        origin: { kind: 'desktop', surface: 'launcher_input' },
+        inputText: 'run',
+      },
+    });
+    appendCurrentTurnTextBlock(turnText);
+
+    lifecycle.handleSdkResult(makeResult({ result: turnText }));
+
+    await lifecycle.getLastTurnEndPersist();
+    expect(deps.firePostTurnKnowledgeHook).toHaveBeenCalledWith(
+      expect.objectContaining({ text: turnText }),
     );
   });
 

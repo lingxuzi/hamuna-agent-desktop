@@ -65,7 +65,7 @@ import {
   getSessionMetadata,
   getSessionData,
 } from '../SessionStore';
-import { firePostTurnTitleHook } from '../turn-hooks';
+import { firePostTurnTitleHook, firePostTurnKnowledgeHook } from '../turn-hooks';
 import {
   createMaterializedSessionMetadata,
   type SessionMaterializationScenario,
@@ -4599,6 +4599,14 @@ async function persistTurnResult(terminalGeneration: number): Promise<void> {
     // auth, so no providerEnv is passed.
     if (turnSucceededAtTerminal && !persistFailed && lifecycleSessionId) {
       firePostTurnTitleHook(lifecycleSessionId, runtimeType, getExternalRuntimeDesiredModel() || undefined, undefined);
+      firePostTurnKnowledgeHook({
+        sessionId: lifecycleSessionId,
+        runtime: runtimeType,
+        text: capturedReplyText || getExternalAssistantText().trim(),
+        messageId: '',
+        model: getExternalRuntimeDesiredModel() || undefined,
+        providerEnv: undefined,
+      });
     }
   } catch (error) {
     persistFailed = true;

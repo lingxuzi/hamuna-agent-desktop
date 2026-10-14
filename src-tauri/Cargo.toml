@@ -1,6 +1,6 @@
 [package]
 name = "hamuna"
-version = "0.3.233"
+version = "0.3.234"
 description = "HamunaAgent - Desktop Claude Code for everyone"
 authors = ["HamunaAgent Team <hamuna.io@gmail.com>"]
 license = "Apache-2.0"
@@ -65,6 +65,13 @@ chrono-tz = "0.10"
 futures = "0.3"
 base64 = "0.22"
 minisign-verify = "0.2.5"
+# Local offline speech recognition (speech_asr). Apache-2.0 engine, MIT Whisper
+# weights. `shared` (not the default `static`) links only sherpa-onnx-c-api +
+# onnxruntime as dylibs instead of 13 static archives — the release profile is
+# `lto = true` + `codegen-units = 1` + `opt-level = 1` and link.exe already peaked
+# at 3.7 GB without them. Its build.rs has no `cc`/`cmake` dep: it downloads the
+# prebuilt .tar.bz2 and emits rustc-link-search.
+sherpa-onnx = { version = "1.13.8", default-features = false, features = ["shared"] }
 dirs = "6.0"
 sys-locale = "0.3.2"
 uuid = { version = "1.11", features = ["v4"] }
