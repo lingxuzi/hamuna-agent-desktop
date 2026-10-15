@@ -60,6 +60,21 @@ describe('mergeTurnIntoGraph', () => {
     expect(g.relations).toHaveLength(0);
   });
 
+  it('resolves relation endpoints that differ from the entity id only by case or padding', () => {
+    // LLM extraction is not byte-exact: the relation names come back cased and
+    // padded differently from the entity ids. Matching raw strings silently
+    // dropped every such edge, so the dashboard rendered isolated nodes.
+    const g = mergeTurnIntoGraph(
+      emptyKnowledgeGraph(),
+      extraction([['React'], ['Vite']], [['react ', ' VITE', 'integrates_with']]),
+      'm1',
+    );
+    expect(g.relations).toHaveLength(1);
+    // Stored as the canonical entity ids, not the raw extraction strings.
+    expect(g.relations[0].subject).toBe('React');
+    expect(g.relations[0].object).toBe('Vite');
+  });
+
   it('is a no-op for empty extractions except turnCount', () => {
     let g = mergeTurnIntoGraph(emptyKnowledgeGraph(), extraction([['A']], []), 'm1');
     const before = g;
