@@ -255,6 +255,7 @@ import { assertOfficialSystemSkillExposed } from './utils/system-skill-readiness
 import { APP_ID_ERROR, isKebabAppId } from './miniapp-app-id';
 import { managementApi } from './utils/management-api-client';
 import { buildGoalContinuationReminder } from '../shared/systemReminder';
+import { WIDGET_ACTION_PREFIX, parseWidgetAction } from '../shared/widget-action';
 import { setImCronContext } from './tools/im-cron-tool';
 // admin-api module (~2900 lines, depends on zod + full config/session/cron surface)
 // is lazy-loaded on first /api/admin/* hit to shave ~150ms off sidecar cold
@@ -2847,6 +2848,15 @@ async function main() {
           return jsonResponse({ success: false, error: 'Invalid JSON payload.' }, 400);
         }
         const text = payload?.text?.trim() ?? '';
+        // Widget interactions reach the model as a prefixed user message. The
+        // renderer validates before sending, but the sidecar does not trust the
+        // client: an unparseable envelope must never enter the transcript.
+        // (ponytail: no widgetId→transcript cross-check — a forged id only
+        // names a widget, it grants no capability. Add when actions can mutate
+        // session state directly.)
+        if (text.startsWith(WIDGET_ACTION_PREFIX) && !parseWidgetAction(text)) {
+          return jsonResponse({ success: false, error: 'Malformed widget action.' }, 400);
+        }
         let images = payload?.images ?? [];
         const clientSessionId = typeof payload?.sessionId === 'string' ? payload.sessionId : undefined;
         const runtimeSessionId = getRuntimeSessionIdForRequest();

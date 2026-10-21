@@ -14,6 +14,48 @@
 
 import { i18n } from '@/i18n';
 
+// Widget → agent action channel, inlined into the sandbox before any widget
+// script runs.
+//
+// Models must NOT hand-write parent.postMessage: field names would drift and
+// the sandbox would gain the ability to forge any message shape. Instead this
+// one API is pre-injected and forwards only {action, payload} — the widgetId is
+// attached by the host, so a widget cannot claim to be another widget's click.
+// Values are clamped here so a runaway widget can't build a huge message before
+// the host ever sees it; the host revalidates regardless.
+//
+// Exported so the test can evaluate it against a stub window instead of
+// asserting on the string form (which would pass even if the logic broke).
+export const WIDGET_ACTION_API_SRC = `
+  var MAX_ACTION_FIELDS = 12, MAX_ACTION_VALUE_LEN = 500;
+  var actionCount = 0;
+  var actionWindowStart = 0;
+  function emit(action, payload) {
+    if (action !== 'select' && action !== 'submit') return false;
+    // Rate limit: a looping widget script would otherwise flood the model's
+    // context. 10 actions per rolling minute per widget.
+    var now = Date.now();
+    if (now - actionWindowStart > 60000) { actionWindowStart = now; actionCount = 0; }
+    if (++actionCount > 10) return false;
+    var clean = {}, fields = 0;
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      for (var k in payload) {
+        if (!Object.prototype.hasOwnProperty.call(payload, k)) continue;
+        if (++fields > MAX_ACTION_FIELDS) break;
+        var v = payload[k];
+        if (typeof v === 'string') clean[k] = v.slice(0, MAX_ACTION_VALUE_LEN);
+        else if (typeof v === 'number' && isFinite(v)) clean[k] = v;
+        else if (typeof v === 'boolean') clean[k] = v;
+      }
+    }
+    try { window.parent.postMessage({ type: 'widget:action', action: action, payload: clean }, '*'); }
+    catch (e) { return false; }
+    return true;
+  }
+  window.hamuna = { emit: emit };
+`;
+
+
 export function buildSandboxHtml(
   cssVarsBlock: string,
   options: { scriptErrorPrefix?: string } = {},
@@ -139,6 +181,8 @@ p { margin: 0 0 8px; }
   }
   // Also report on load and after script execution
   window.addEventListener('load', reportHeight);
+
+${WIDGET_ACTION_API_SRC}
 
   // Link interception — open in parent's system browser
   document.addEventListener('click', function(e) {

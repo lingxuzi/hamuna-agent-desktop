@@ -60,6 +60,7 @@ import type { SlashCommand } from '../../shared/slashCommands';
 import type { LogEntry } from '@/types/log';
 import type { ProviderRoute } from '../../shared/providerRoute';
 import { stripLeadingSystemReminder } from '../../shared/systemReminder';
+import { describeWidgetAction, parseWidgetAction } from '../../shared/widget-action';
 import {
     COLD_HISTORY_REPLAY_KIND,
     LIVE_USER_ECHO_REPLAY_KIND,
@@ -130,6 +131,10 @@ function appText(key: string, options?: Record<string, unknown>): string {
 }
 
 function queueDisplayText(raw: string): string {
+    // A widget gesture is queued like any user turn, but the pill must say what
+    // the person did — not replay the `[Widget action] {...}` wire envelope.
+    const widgetAction = parseWidgetAction(raw);
+    if (widgetAction) return describeWidgetAction(widgetAction);
     const visible = stripLeadingSystemReminder(raw).trim();
     return visible || appText('tabProvider.hiddenSystemMessage');
 }

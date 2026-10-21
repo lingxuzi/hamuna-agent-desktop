@@ -65,3 +65,23 @@ describe('Message widget rendering', () => {
     expect(screen.getByTestId('widget')).toHaveAttribute('data-streaming', 'true');
   });
 });
+
+describe('Message widget action echo', () => {
+  it('renders a widget gesture as readable text, not the wire envelope', () => {
+    // The `[Widget action] {...}` body is a user message on the wire. Showing it
+    // verbatim would put protocol JSON in the user's own bubble.
+    render(
+      <Message
+        message={{
+          id: 'u-1',
+          role: 'user',
+          content: '[Widget action] {"widgetId":"m:0","action":"select","payload":{"optionId":"b"}}',
+          timestamp: new Date(),
+        } as MessageType}
+      />,
+    );
+
+    expect(screen.getByText('select · optionId: b')).toBeInTheDocument();
+    expect(screen.queryByText(/Widget action\] \{/)).not.toBeInTheDocument();
+  });
+});

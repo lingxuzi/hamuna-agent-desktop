@@ -3738,7 +3738,16 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // PERFORMANCE: text is now passed from SimpleChatInput (which manages its own state)
   // This avoids re-rendering Chat on every keystroke.
   // Returns false to signal SimpleChatInput NOT to clear the input (e.g., on rejection).
-  const handleSendMessage = useCallback(async (text: string, images?: ImageAttachment[]): Promise<boolean | void> => {
+  //
+  // `automate` distinguishes a typed turn from a generative-UI widget click. Both
+  // must run the same provider/runtime/queue guards and reach `sendMessage` the
+  // same way, but only a typed turn may arm a cron/goal draft: clicking an option
+  // inside a widget is a choice, not "start a scheduled task from this prompt".
+  const dispatchSend = useCallback(async (
+    text: string,
+    images?: ImageAttachment[],
+    automate = true,
+  ): Promise<boolean | void> => {
     // Must have content and not be in stopping state
     if ((!text && (!images || images.length === 0)) || sessionState === 'stopping') {
       return false;
@@ -3790,10 +3799,11 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     // This also re-enables auto-scroll if user had scrolled up
     scrollToBottom();
 
-    const pendingGoalStart = goalDraftConfigRef.current !== null
-      || (cronStateRef.current.isEnabled
-        && !cronStateRef.current.task
-        && cronStateRef.current.config?.taskKind === 'goal');
+    const pendingGoalStart = automate
+      && (goalDraftConfigRef.current !== null
+        || (cronStateRef.current.isEnabled
+          && !cronStateRef.current.task
+          && cronStateRef.current.config?.taskKind === 'goal'));
 
     // Goal creation is a fast state mutation, not an AI turn. Keep the global
     // loading surface idle until the original query is sent through /chat/send.
@@ -3812,11 +3822,11 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
 
       // If cron mode is enabled and task hasn't started yet, start the task
       const cron = cronStateRef.current;
-      if (goalDraftConfigRef.current) {
+      if (automate && goalDraftConfigRef.current) {
         const startedKind = await startScheduledTask(text);
         if (startedKind !== 'goal') return;
         if (!isAiBusy) setIsLoading(true);
-      } else if (cron.isEnabled && !cron.task && cron.config) {
+      } else if (automate && cron.isEnabled && !cron.task && cron.config) {
         setStoppedCronRecovery(null);
         if (cron.config.taskKind === 'cron' && cron.config.executionTarget === 'new_task') {
           // ── New standalone task: create independently, show card in chat ──
@@ -3894,9 +3904,21 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // eslint-disable-next-line react-hooks/exhaustive-deps -- toastRef/currentProviderRef/apiKeysRef/cronStateRef are refs (stable); scrollToBottom/setMessages/setIsLoading/setSessionState are stable
   }, [sessionState, isLoading, queuedMessages.length, startScheduledTask, sendMessage, effectivePermissionMode, effectiveModel, reasoningEffort, isExternalRuntime, isCrossRuntimeSession, scrollToBottom, pinnedProviderUnavailable, builtinSnapshotProviderSelectionIncomplete, showPinnedProviderUnavailableToast, showSnapshotProviderIncompleteToast, t]);
 
+  const handleSendMessage = useCallback(
+    (text: string, images?: ImageAttachment[]) => dispatchSend(text, images),
+    [dispatchSend],
+  );
+
   // Ref-stabilize handleSendMessage for handleRetry (avoids frequent re-creation)
   const handleSendMessageRef = useRef(handleSendMessage);
   handleSendMessageRef.current = handleSendMessage;
+
+  // A validated `[Widget action] {...}` envelope from a generative-UI widget.
+  // Sends immediately (no draft to confirm): the click already carries the
+  // choice. `automate: false` keeps it out of cron/goal task creation.
+  const handleWidgetAction = useCallback((encoded: string) => {
+    void dispatchSend(encoded, undefined, false);
+  }, [dispatchSend]);
 
   // Triggered from the SystemPromptsPanel empty state ("智能生成" card). Closes the
   // workspace settings overlay and dispatches `/init` to the current Tab so the user
@@ -5313,6 +5335,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
               onRewind={isExternalRuntime ? undefined : handleRewind}
               onRetry={handleRetry}
               onFork={isExternalRuntime ? undefined : handleFork}
+              onWidgetAction={handleWidgetAction}
               bottomSpacerPx={inputOverlayHeight}
             />
 

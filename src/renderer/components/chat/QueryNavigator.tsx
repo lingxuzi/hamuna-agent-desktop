@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Message } from '../../types/chat';
 import { parseLeadingSystemReminder } from '../../../shared/systemReminder';
+import { describeWidgetAction, parseWidgetAction } from '../../../shared/widget-action';
 
 /** Minimum user queries to show the navigator */
 const MIN_QUERIES = 3;
@@ -29,9 +30,13 @@ function getQueryText(msg: Message): string {
   return '';
 }
 
-/** Extract the real user query from a mixed system-reminder + user message. */
+/** Extract the real user query from a mixed system-reminder + user message.
+ *  Widget actions are UI gestures, not queries — they show up under their
+ *  readable form so the navigator doesn't display raw protocol JSON. */
 function getVisibleQueryText(text: string): string {
   const trimmed = text.trim();
+  const widgetAction = parseWidgetAction(trimmed);
+  if (widgetAction) return describeWidgetAction(widgetAction);
   const reminder = parseLeadingSystemReminder(trimmed);
   if (reminder.hasReminder) return reminder.visibleText;
   return text;

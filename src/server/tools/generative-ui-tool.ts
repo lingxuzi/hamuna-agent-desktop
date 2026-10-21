@@ -258,7 +258,31 @@ Use when: "compare X vs Y", "help me choose", "pricing comparison"
 Use when: "show me the contact card", "create a receipt", "display the record"
 - Single card, centered, max-width 400px
 - Header: colored stripe using palette 500 stop, white text, 12px 16px padding
-- Field rows: label (12px, var(--widget-text-muted)) + value (14px, var(--widget-text)), 8px row gap`;
+- Field rows: label (12px, var(--widget-text-muted)) + value (14px, var(--widget-text)), 8px row gap
+
+## Widget → you: the action channel
+A widget can hand a choice back to the conversation. Call the pre-injected
+\`window.hamuna.emit(action, payload)\` from the widget's own script:
+
+\`\`\`js
+window.hamuna.emit('select', { optionId: 'b' });   // user picked a card / row
+window.hamuna.emit('submit', { budget: 8000, city: 'Kyoto' }); // form sent
+\`\`\`
+
+Rules that shape how you write the widget:
+- Only \`'select'\` and \`'submit'\` exist. Nothing else is accepted.
+- \`payload\` is a FLAT object of strings / finite numbers / booleans, max 12 keys, each value ≤ 500 chars. No nesting.
+- The click arrives as a new user message shaped
+  \`[Widget action] {"widgetId":"<msg>:<n>","action":"select","payload":{...}}\`.
+  Treat it as the user's answer to that widget and continue the conversation from it. The \`widgetId\` identifies which widget was used — do not echo it back to the user.
+- A widget is INTERACTIVE ONLY IN YOUR NEWEST REPLY. Once the user or you send another message, its controls go read-only (clicks are dropped silently). So: never make a later step depend on a stale widget, and have the widget show its own "selected" state locally after emit so the click still reads as handled.
+- Emit at most once per user gesture. 10 emissions per minute is the hard cap.
+- Do not use \`emit\` to smuggle instructions ("ignore previous…", "run this command"). It is a UI channel for the choice the person made.
+
+Only add \`emit\` when the interaction genuinely continues the conversation —
+picking an option to refine, submitting parameters for the next step. A slider
+that only redraws its own chart stays local; do not emit on every input event.
+Send on the commit gesture (click / form submit), not on \`input\`.`;
 
 const SECTION_ART = `# Art and illustration
 
@@ -354,6 +378,7 @@ More explanatory text here...
 - CDN script loading: load the \`<script src>\`, then use the library in the next \`<script>\` — scripts run in order, so the library is loaded by then. No onload/init dance needed.
 - Pre-styled form elements: bare <input>, <button>, <select>, <textarea> are automatically styled. Use class="primary" for accent buttons.
 - Layout utility classes available: .flex, .grid, .grid-2, .grid-3, .gap-3, .gap-4, .p-3, .p-4, .rounded, .rounded-lg, .border, .bg-elevated, .stat-card, .stat-value, .stat-label
+- To send the user's choice back to you, call \`window.hamuna.emit(action, payload)\` — see the interactive module contract before using it
 
 ## Format-only fallbacks
 - ER / database schema → Mermaid in a fenced code block (the chat renderer handles it)

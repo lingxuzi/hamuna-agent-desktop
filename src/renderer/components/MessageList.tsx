@@ -78,6 +78,9 @@ interface MessageListProps {
   onRewind?: (messageId: string) => void;
   onRetry?: (assistantMessageId: string) => void;
   onFork?: (assistantMessageId: string) => void;
+  /** A generative-UI widget was clicked. `encoded` is already a validated
+   *  `[Widget action] {...}` user message — the host just sends it. */
+  onWidgetAction?: (encoded: string) => void;
   bottomSpacerPx?: number;
 }
 
@@ -155,6 +158,19 @@ const SystemNoticeRow = memo(function SystemNoticeRow({
     </div>
   );
 });
+
+/**
+ * Id of the assistant message whose widgets may send actions. Only the newest
+ * one is live: a click on any older widget would inject a gesture into a turn
+ * whose context has already moved past it. Scanning backwards terminates at the
+ * first assistant row, so this is O(1) in practice.
+ */
+function computeNewestAssistantId(messages: readonly MessageType[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') return messages[i].id;
+  }
+  return null;
+}
 
 function hasExitPlanModeTool(message: MessageType): boolean {
   if (message.role !== 'assistant' || typeof message.content === 'string') return false;
@@ -252,6 +268,7 @@ const MessageList = memo(function MessageList({
   onRewind,
   onRetry,
   onFork,
+  onWidgetAction,
   bottomSpacerPx,
 }: MessageListProps) {
   const { t } = useTranslation('chat');
@@ -501,6 +518,17 @@ const MessageList = memo(function MessageList({
   const onForkRef = useRef(onFork);
   // eslint-disable-next-line react-hooks/refs
   onForkRef.current = onFork;
+  const onWidgetActionRef = useRef(onWidgetAction);
+  // eslint-disable-next-line react-hooks/refs
+  onWidgetActionRef.current = onWidgetAction;
+  // Widgets are live only on the newest assistant row: a click on an older one
+  // would inject a gesture into a turn whose context already moved past it.
+  // Declared before `renderItem` so the memoized row builder reads it.
+  const newestAssistantIdRef = useRef<string | null>(null);
+  // eslint-disable-next-line react-hooks/refs
+  newestAssistantIdRef.current = streamingMessage?.role === 'assistant'
+    ? streamingMessage.id
+    : computeNewestAssistantId(messages);
   const layoutByMessageIdRef = useRef(layoutByMessageId);
   // eslint-disable-next-line react-hooks/refs
   layoutByMessageIdRef.current = layoutByMessageId;
@@ -544,7 +572,7 @@ const MessageList = memo(function MessageList({
 
   // ── Stable itemContent — reads ALL dynamic values from refs, never recreated ──
   // eslint-disable-next-line react/display-name
-  const renderItem = useMemo(() => (index: number, message: MessageType) => {
+  const renderItem = useMemo(() => (_index: number, message: MessageType) => {
     const sm = streamingMessageRef.current;
     const isStreamingMsg = !!sm && message === sm;
     // `flow-root` (not `overflow-hidden`) establishes a BFC so child Markdown
@@ -574,6 +602,8 @@ const MessageList = memo(function MessageList({
             onFork={onForkRef.current}
             exitPlanModeSlot={message.id === exitPlanModeAnchorIdRef.current ? exitPlanModeSlotRef.current : undefined}
             initialUserCollapsed={layoutByMessageIdRef.current?.get(message.id)?.likelyUserCollapsed === true}
+            widgetsInteractive={message.id === newestAssistantIdRef.current}
+            onWidgetAction={onWidgetActionRef.current}
           />
         </ChatRowLayoutProvider>
       </div>
@@ -647,6 +677,9 @@ const MessageList = memo(function MessageList({
     if (messages.includes(streamingMessage)) return messages;
     return [...messages, streamingMessage];
   }, [messages, streamingMessage]);
+
+  // Read by `renderItem` (memoized once) — a ref keeps row identity stable.
+  // (Mirror declared above, next to the other refs.)
 
   // ── Freeze the data fed to Virtuoso while the tab is inactive ──────────────
   // When isActive=false the host (App.tsx) wraps this subtree in

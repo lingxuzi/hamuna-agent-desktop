@@ -9,6 +9,7 @@ import Markdown from '@/components/Markdown';
 import { useToastOptional } from '@/components/Toast';
 import WidgetRenderer from '@/components/tools/WidgetRenderer';
 import { parseWidgetTags, hasWidgetTags } from '@/components/tools/widgetTagParser';
+import { describeWidgetAction, parseWidgetAction, widgetIdFor } from '../../shared/widget-action';
 import Tip from '@/components/Tip';
 import ToolAttachmentGallery from '@/components/tools/ToolAttachmentGallery';
 import { useNotifyRowLayoutChanged } from '@/context/ChatRowLayoutContext';
@@ -38,6 +39,10 @@ interface MessageProps {
   /** Slot rendered after the BlockGroup containing ExitPlanMode tool */
   exitPlanModeSlot?: ReactNode;
   initialUserCollapsed?: boolean;
+  /** Whether widgets in this message accept input (only the newest assistant message). */
+  widgetsInteractive?: boolean;
+  /** Fires when a widget emits an action; `encoded` is the ready-to-send user message body. */
+  onWidgetAction?: (encoded: string) => void;
 }
 
 /**
@@ -263,7 +268,18 @@ function systemTagLabel(kind: string, t: (key: string) => string): string | null
   return null;
 }
 
-function renderWidgetSegments(text: string, isLoading: boolean): ReactNode {
+interface RenderWidgetSegmentsOptions {
+  messageId: string;
+  /** Only the newest assistant message's widgets accept input — see WidgetRenderer.interactive. */
+  interactive: boolean;
+  onWidgetAction?: (encoded: string) => void;
+}
+
+function renderWidgetSegments(
+  text: string,
+  isLoading: boolean,
+  { messageId, interactive, onWidgetAction }: RenderWidgetSegmentsOptions,
+): ReactNode {
   const segments = parseWidgetTags(text);
   return segments.map((seg, si) => {
     if (seg.type === 'text') {
@@ -283,6 +299,9 @@ function renderWidgetSegments(text: string, isLoading: boolean): ReactNode {
           // Parser incompleteness means "more bytes may arrive" only while the turn is live.
           isStreaming={isLoading && !seg.isComplete}
           title={seg.title || 'widget'}
+          widgetId={widgetIdFor(messageId, si)}
+          interactive={interactive}
+          onWidgetAction={onWidgetAction}
         />
       </div>
     );
@@ -293,7 +312,7 @@ function renderWidgetSegments(text: string, isLoading: boolean): ReactNode {
  * Message component with memo optimization.
  * History messages won't re-render when streaming message updates.
  */
-const Message = memo(function Message({ message, isLoading = false, onRewind, onRetry, onFork, exitPlanModeSlot, initialUserCollapsed = false }: MessageProps) {
+const Message = memo(function Message({ message, isLoading = false, onRewind, onRetry, onFork, exitPlanModeSlot, initialUserCollapsed = false, widgetsInteractive = false, onWidgetAction }: MessageProps) {
   const { t } = useTranslation('app');
   const { openPreview } = useImagePreview();
   const notifyRowLayoutChanged = useNotifyRowLayoutChanged();
@@ -364,9 +383,15 @@ const Message = memo(function Message({ message, isLoading = false, onRewind, on
 
     // Strip system injection tags that wrap delivered content. These HTML-like tags trigger
     // Markdown's HTML block mode, breaking \n rendering and Markdown syntax.
-    const displaySource = reminder.hasReminder
-      ? (reminder.visibleText || sessionSendRequest?.payload || '')
-      : rawUserContent;
+    // A widget gesture is real user intent, so it gets a bubble — but the wire
+    // envelope is protocol JSON, never something to show verbatim.
+    const widgetAction = parseWidgetAction(rawUserContent);
+    if (widgetAction) systemTag = t('message.systemTags.widgetAction');
+    const displaySource = widgetAction
+      ? describeWidgetAction(widgetAction)
+      : reminder.hasReminder
+        ? (reminder.visibleText || sessionSendRequest?.payload || '')
+        : rawUserContent;
     const userContent = displaySource
       .replace(/<\/?system-reminder>/g, '')
       .replace(/<\/?HEARTBEAT>/g, '')
@@ -522,7 +547,11 @@ const Message = memo(function Message({ message, isLoading = false, onRewind, on
         <div className="w-full max-w-none">
           {hasWidgets ? (
             <div className="w-full space-y-3">
-              {renderWidgetSegments(message.content, isLoading)}
+              {renderWidgetSegments(message.content, isLoading, {
+                messageId: message.id,
+                interactive: widgetsInteractive,
+                onWidgetAction,
+              })}
             </div>
           ) : (
             /* ai-message-content：聊天 AI 正文的 prose 上下文（16px/1.7/0.01em）。
@@ -590,7 +619,11 @@ const Message = memo(function Message({ message, isLoading = false, onRewind, on
                   if (hasWidgetTags(item.text)) {
                     return (
                       <div key={index} className="w-full space-y-3">
-                        {renderWidgetSegments(item.text, isLoading)}
+                        {renderWidgetSegments(item.text, isLoading, {
+                          messageId: message.id,
+                          interactive: widgetsInteractive,
+                          onWidgetAction,
+                        })}
                       </div>
                     );
                   }

@@ -247,6 +247,7 @@
       "floatingContext": "悬浮上下文",
       "spaceIssue": "Space issue",
       "goalMode": "目标模式",
+      "widgetAction": "Widget 交互",
       "sessionRequest": "跨会话请求"
     },
     "systemInfo": "系统信息",

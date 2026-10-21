@@ -19,6 +19,7 @@ import { detectWidgetLibraries, loadLibrarySources, inlineWidgetLibraries } from
 import { useResolvedTheme } from '@/theme';
 import { useWorkspaceFileService } from '@/hooks/useWorkspaceFileService';
 import { resolveLocalMediaSrcs } from './widgetLocalImg';
+import { encodeWidgetAction, validateWidgetActionEnvelope } from '../../../shared/widget-action';
 
 // ===== Module-level height cache (survives component lifecycle) =====
 // Key: first 300 chars of widget_code (past the common <style> prefix).
@@ -68,12 +69,28 @@ interface WidgetRendererProps {
   widgetCode: string;
   isStreaming: boolean;
   title: string;
+  /** Stable address for this widget across the session (`messageId:segmentIndex`). */
+  widgetId: string;
+  /** Only the newest assistant message's widgets may send actions back — older
+   *  ones are read-only, so a click can never smuggle stale state into a turn
+   *  whose context has already moved on. */
+  interactive: boolean;
+  /** `encoded` is `WIDGET_ACTION_PREFIX + JSON(envelope)` (widgetId included),
+   *  ready to send verbatim as a user message. */
+  onWidgetAction?: (encoded: string) => void;
 }
 
 const DEBOUNCE_MS = 120;
 const MIN_HEIGHT = 60;
 
-export default function WidgetRenderer({ widgetCode, isStreaming, title }: WidgetRendererProps) {
+export default function WidgetRenderer({
+  widgetCode,
+  isStreaming,
+  title,
+  widgetId,
+  interactive,
+  onWidgetAction,
+}: WidgetRendererProps) {
   const { t } = useTranslation('chat');
   const resolvedTheme = useResolvedTheme();
   const themeCss = useMemo(() => buildWidgetCssVars(resolvedTheme), [resolvedTheme]);
@@ -89,6 +106,7 @@ export default function WidgetRenderer({ widgetCode, isStreaming, title }: Widge
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasFinalized = useRef(false);
   const widgetErrorReports = useRef(0);
+  const actionRejectReports = useRef(0);
   const notifyRowLayoutChanged = useNotifyRowLayoutChanged();
   const lastNotifiedHeight = useRef<number | null>(null);
 
@@ -201,6 +219,27 @@ export default function WidgetRenderer({ widgetCode, isStreaming, title }: Widge
           break;
         }
 
+        case 'widget:action': {
+          // Read-only widgets silently ignore input rather than erroring: the
+          // widget script has no way to know it went stale, and a visible error
+          // would be noise on every scrollback click.
+          if (!interactive || !onWidgetAction) return;
+          const envelope = validateWidgetActionEnvelope({
+            widgetId,
+            action: e.data.action,
+            payload: e.data.payload,
+          });
+          if (!envelope) {
+            if (actionRejectReports.current < 3) {
+              actionRejectReports.current += 1;
+              console.warn(`[widget] rejected malformed action (widgetId=${widgetId})`);
+            }
+            return;
+          }
+          onWidgetAction(encodeWidgetAction(envelope));
+          break;
+        }
+
         case 'widget:link':
           if (e.data.href && /^https?:|^mailto:/i.test(String(e.data.href))) {
             openExternal(String(e.data.href));
@@ -228,7 +267,7 @@ export default function WidgetRenderer({ widgetCode, isStreaming, title }: Widge
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [widgetCode, isStreaming, sendToIframe, sendFinalize, cacheKey, title, scriptErrorPrefix, notifyRowLayoutChanged, themeCss]);
+  }, [widgetCode, isStreaming, sendToIframe, sendFinalize, cacheKey, title, scriptErrorPrefix, notifyRowLayoutChanged, themeCss, interactive, onWidgetAction, widgetId]);
 
   useEffect(() => {
     if (!iframeReady.current) return;

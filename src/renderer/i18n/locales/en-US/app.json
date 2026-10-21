@@ -247,6 +247,7 @@
       "floatingContext": "Floating context",
       "spaceIssue": "Space issue",
       "goalMode": "Goal Mode",
+      "widgetAction": "Widget action",
       "sessionRequest": "Session request"
     },
     "systemInfo": "System info",
