@@ -68,6 +68,9 @@ import {
  isProjectVisibleToUser,
  type Project,
 } from '@/config/types';
+import GlobalSidebar from '@/components/global-sidebar/GlobalSidebar';
+import { resolveDefaultWorkspace, WorkspaceSelectionProvider } from '@/context/WorkspaceSelectionContext';
+import { readGlobalSidebarPreference, writeGlobalSidebarPreference } from '@/utils/globalSidebarPreference';
 import type { BubbleClaimMessage } from '@/components/miniapp-host/bubbleClaimBridge';
 import { type Tab, type InitialMessage, type LaunchSessionBirthHint, type SidecarConfigDisposition, type FilePreviewIntent, type MiniAppClaimIntent, createNewTab, getFolderName, buildChatFlipPatch, MAX_TABS } from '@/types/tab';
 import { buildRestoredTabs, saveOpenTabs, hydratePersistedState, pickDurableOverride, shouldOfferRestore, planRestoreTabs } from '@/utils/tabPersistence';
@@ -318,7 +321,6 @@ export const MemoizedTabContent = memo(function TabContent({
      startError={error}
      isActive={isActive}
      attachmentSessionId={createPendingSessionId(tab.id)}
-     sessionNotificationBadgeCounts={sessionNotificationBadgeCounts}
     />
    ) : kind === 'settings' ? (
     <Suspense fallback={PAGE_FALLBACK}>
@@ -548,6 +550,40 @@ export default function App() {
  const [tabs, setTabs] = useState<Tab[]>(() => [createNewTab()]);
  const [activeTabId, setActiveTabIdState] = useState<string | null>(() => tabs[0]?.id ?? null);
  const [externalNotificationBadges, setExternalNotificationBadges] = useState<NotificationBadgeItem[]>([]);
+
+ // Global sidebar geometry — one preference shared by the shell, the resize
+ // handle and every Launcher tab (selected workspace + collapsed state).
+ const [sidebarPreference, setSidebarPreference] = useState(readGlobalSidebarPreference);
+ const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+ const handleToggleSidebar = useCallback(() => {
+  setSidebarPreference((prev) => {
+   const next = { ...prev, mode: prev.mode === 'expanded' ? 'rail' as const : 'expanded' as const };
+   writeGlobalSidebarPreference(next);
+   return next;
+  });
+ }, []);
+ const handleCommitSidebarWidth = useCallback((width: number) => {
+  setSidebarPreference((prev) => {
+   const next = { ...prev, width };
+   writeGlobalSidebarPreference(next);
+   return next;
+  });
+ }, []);
+
+ // One workspace selection shared by the sidebar tree and every Launcher tab's
+ // composer. `visibleProjects` keeps archived workspaces selectable only through
+ // the sidebar's own active list, so the Launcher composer never seeds from one.
+ const userVisibleProjects = useMemo(
+  () => configProjects.filter(isProjectVisibleToUser),
+  [configProjects],
+ );
+ const workspaceSelection = useMemo(() => {
+  const selected = userVisibleProjects.find((p) => p.id === selectedWorkspaceId) ?? null;
+  return {
+   workspace: selected ?? resolveDefaultWorkspace(userVisibleProjects, config.defaultWorkspacePath),
+   selectWorkspace: (project: Project) => setSelectedWorkspaceId(project.id),
+  };
+ }, [userVisibleProjects, selectedWorkspaceId, config.defaultWorkspacePath]);
 
  // "恢复对话" pill (Issue #309). `restorePillCount > 0` shows it; the resolved
  // candidate is held in a ref (NOT localStorage — the persist effect clears
@@ -3234,6 +3270,7 @@ export default function App() {
 
  // Open TaskCenter as a singleton tab (mirrors handleOpenSettings)
  const handleOpenTaskCenter = useCallback(() => {
+  track('task_center_open', {});
   const currentTabs = tabsRef.current;
   const existing = currentTabs.find((t) => t.view === 'taskcenter');
   if (existing) {
@@ -4045,10 +4082,26 @@ export default function App() {
 
  return (
   <LinkContextMenuProvider>
-   <div className="flex h-screen flex-col bg-[var(--paper)]">
+   <WorkspaceSelectionProvider value={workspaceSelection}>
+   <div className="flex h-screen bg-[var(--paper)]" data-app-shell>
+    <GlobalSidebar
+     expanded={sidebarPreference.mode === 'expanded'}
+     width={sidebarPreference.width}
+     onToggleExpanded={handleToggleSidebar}
+     onCommitWidth={handleCommitSidebarWidth}
+     projects={userVisibleProjects}
+     isProjectsLoading={configLoading}
+     selectedWorkspaceId={workspaceSelection.workspace?.id ?? null}
+     onSelectWorkspace={workspaceSelection.selectWorkspace}
+     onNewChat={handleNewTab}
+     activeView={activeTabView}
+     notificationCount={notificationBadgeCount}
+     sessionNotificationBadgeCounts={sessionNotificationBadgeCounts}
+    />
+    <div className="flex min-w-0 flex-1 flex-col" data-tab-workspace>
     {/* Chrome-style titlebar with tabs */}
     <CustomTitleBar
-     onSettingsClick={handleOpenSettings}
+     sidebarExpanded={sidebarPreference.mode === 'expanded'}
      updateReady={updateReady}
      updateVersion={updateVersion}
      updateInstalling={updateInstalling}
@@ -4220,7 +4273,9 @@ export default function App() {
       onPinModel={pinNxgdModel}
      />
     )}
+    </div>
    </div>
+   </WorkspaceSelectionProvider>
   </LinkContextMenuProvider>
  );
 }

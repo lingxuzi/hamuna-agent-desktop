@@ -196,6 +196,74 @@
   --space-12: 48px;
 }
 
+/* Global sidebar — width lives on the shell so the resize handle can update it
+   without a full App re-render (see SidebarResizeHandle). */
+[data-app-shell] {
+  --global-sidebar-width: 256px;
+  --global-sidebar-motion: var(--duration-normal);
+}
+
+/* Disclosure motion. The shell flex slot, the sidebar border and the titlebar
+   inset all animate the same width so nothing teleports: the Tab row keeps the
+   same distance to the sidebar edge for the whole transition. Labels clip
+   against that moving edge instead of being unmounted, so icon rows never jump
+   when the rail lands. */
+.global-sidebar,
+.global-sidebar-titlebar-inset {
+  transition: width var(--global-sidebar-motion) ease-in-out;
+}
+
+.global-sidebar-label {
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+  transition:
+    opacity var(--duration-fast) ease,
+    clip-path var(--global-sidebar-motion) ease-in-out;
+}
+
+.global-sidebar[data-global-sidebar-mode='rail'] .global-sidebar-label {
+  opacity: 0;
+  clip-path: inset(0 100% 0 0);
+}
+
+[data-app-shell][data-sidebar-resizing] .global-sidebar,
+[data-app-shell][data-sidebar-resizing] .global-sidebar-titlebar-inset,
+[data-app-shell][data-sidebar-resizing] .global-sidebar-resize-handle {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-sidebar,
+  .global-sidebar-label,
+  .global-sidebar-titlebar-inset { transition: none; }
+}
+
+.global-sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 1;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.global-sidebar-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--line);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.global-sidebar-resize-handle:hover::after,
+.global-sidebar-resize-handle:focus-visible::after,
+[data-sidebar-resizing] .global-sidebar-resize-handle::after {
+  opacity: 1;
+}
+
 /* Viewport-locked app: prevent document-level scrolling entirely.
    All scrolling is handled by inner containers (MessageList, panels, etc.). */
 html,
@@ -541,37 +609,15 @@ pre code {
    ============================================ */
 
 
-/* Launcher two-column layout */
+/* Launcher single column — workspaces and history live in the global sidebar. */
 .launcher-layout {
-  display: grid;
-  /* Left 55%, Right 45% — Marquee Hero gives the brand more breathing room
-     while the workspaces rail gets slightly more visual weight. */
-  grid-template-columns: 55fr minmax(var(--sidebar-min-width), 45fr);
-  grid-template-areas: 'brand workspaces';
+  display: flex;
+  flex-direction: column;
 }
 
 .launcher-brand {
-  grid-area: brand;
+  flex: 1 1 auto;
   min-width: 0; /* Allow shrinking */
-}
-
-.launcher-workspaces {
-  grid-area: workspaces;
-  position: relative;
-}
-
-.workspace-card-channel-tags-fade {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
-}
-
-.workspace-card-action-overlay {
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    color-mix(in srgb, var(--paper-elevated) 78%, transparent) 40%,
-    var(--paper-elevated) 78%
-  );
 }
 
 .launcher-history-row-title-fade {
@@ -592,19 +638,10 @@ pre code {
 /* Floating divider between brand and workspaces — removed in Hallmark redesign
    (Marquee Hero layout, the card grid provides its own visual separation). */
 
-/* Responsive: stack vertically below 640px (use --breakpoint-mobile) */
+/* Responsive: keep the composer usable on narrow windows */
 @media (max-width: 639px) {
-  .launcher-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      'brand'
-      'workspaces';
-  }
-
   .launcher-brand {
     min-height: 200px;
-    border-bottom: 1px solid var(--line);
   }
 }
 

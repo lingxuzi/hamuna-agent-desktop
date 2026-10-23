@@ -22,7 +22,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 }));
 
 import { i18n } from '@/i18n';
-import { CUSTOM_EVENTS } from '../../shared/constants';
+import { GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET } from '@/utils/globalSidebarPreference';
 import CustomTitleBar from './CustomTitleBar';
 
 function renderBar(over: Partial<React.ComponentProps<typeof CustomTitleBar>> = {}) {
@@ -80,53 +80,45 @@ describe('CustomTitleBar — 恢复对话 pill (Issue #309)', () => {
         const tauriDragRegions = Array.from(container.querySelectorAll('[data-tauri-drag-region]'));
         const tabbarHost = screen.getByTestId('tabbar').parentElement;
 
-        expect(tauriDragRegions.length).toBeGreaterThanOrEqual(4);
+        expect(tauriDragRegions.length).toBeGreaterThanOrEqual(3);
         expect(tauriDragRegions.some((node) => (node as HTMLElement).style.width === '30px')).toBe(true);
         expect(tauriDragRegions.some((node) => (node as HTMLElement).className.includes('w-1'))).toBe(true);
         expect(container.querySelector('[data-hamuna-titlebar-drag-region]')).toBeNull();
         expect(tabbarHost?.className).toContain('flex-1');
     });
 
-    it('renders titlebar action labels in English', async () => {
+    it('keeps only the Team entry in the titlebar (other shortcuts moved to the sidebar)', async () => {
         mocks.isTauri.mockReturnValue(true);
         await i18n.changeLanguage('en-US');
 
-        renderBar({ teamSpaceEnabled: true, onSettingsClick: vi.fn() });
+        renderBar({ teamSpaceEnabled: true });
 
-        expect(screen.getByRole('button', { name: 'AI Helper' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Team' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Tasks' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
-        expect(screen.queryByText('小助理')).not.toBeInTheDocument();
-        expect(screen.queryByText('任务')).not.toBeInTheDocument();
-        expect(screen.queryByText('设置')).not.toBeInTheDocument();
-    });
-});
-
-// The MiniApp Center entry used to live in the Launcher hero and moved here,
-// so these two guards moved with it. The "no Tauri" case matters: the button
-// only dispatches a window event, so gating it on `isTauri()` — the way its
-// Tasks neighbour is gated — would strand the entry in browser dev mode.
-describe('CustomTitleBar — 小程序 entry', () => {
-    beforeEach(async () => {
-        mocks.isTauri.mockReturnValue(false);
-        await i18n.changeLanguage('zh-CN');
+        expect(screen.queryByRole('button', { name: 'Tasks' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /MiniApp/ })).not.toBeInTheDocument();
     });
 
-    it('offers the MiniApp Center entry even without the Tauri task center', () => {
-        renderBar();
+    it('reserves the rail toggle slot only when the sidebar is collapsed', async () => {
+        const { container, rerender } = renderBar({ restoreCount: 0 });
+        const spacerWidth = () => Array.from(container.querySelectorAll('[data-tauri-drag-region]'))
+            .map((node) => (node as HTMLElement).style.width)
+            .filter((w) => w !== '') ;
 
-        expect(screen.getByRole('button', { name: /小程序/ })).toBeInTheDocument();
-    });
+        rerender(
+            <CustomTitleBar onRestoreSession={() => {}} onDismissRestore={() => {}} restoreCount={0}>
+                <div data-testid="tabbar" />
+            </CustomTitleBar>,
+        );
+        // Rail mode: the toggle overhangs the 64px rail onto this bar, so its
+        // slot is reserved. Expanded mode: the sidebar covers the slot itself.
+        expect(spacerWidth()).toContain(`${GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET}px`);
 
-    it('dispatches OPEN_MINIAPP_CENTER from the MiniApp Center entry', () => {
-        const onEvent = vi.fn();
-        window.addEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, onEvent);
-
-        renderBar();
-        fireEvent.click(screen.getByRole('button', { name: /小程序/ }));
-
-        expect(onEvent).toHaveBeenCalledTimes(1);
-        window.removeEventListener(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER, onEvent);
+        rerender(
+            <CustomTitleBar onRestoreSession={() => {}} onDismissRestore={() => {}} restoreCount={0} sidebarExpanded>
+                <div data-testid="tabbar" />
+            </CustomTitleBar>,
+        );
+        expect(spacerWidth()).not.toContain(`${GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET}px`);
     });
 });

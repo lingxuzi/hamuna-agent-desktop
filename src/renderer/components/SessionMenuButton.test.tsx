@@ -73,10 +73,14 @@ describe('SessionMenuButton', () => {
   it('hides the trigger tooltip while the session menu is open', () => {
     renderMenu();
 
-    expect(screen.getByText('对话操作')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
+    // The tooltip mounts on hover (it portals out of the trigger), so assert
+    // through the real interaction rather than the old always-mounted node.
+    const trigger = screen.getByRole('button', { name: '对话操作' });
+    fireEvent.mouseOver(trigger);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('对话操作');
 
-    expect(screen.queryByText('对话操作')).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     expect(screen.getByText('SessionID:')).toBeInTheDocument();
   });
 

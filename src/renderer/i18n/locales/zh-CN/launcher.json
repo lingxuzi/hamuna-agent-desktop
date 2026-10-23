@@ -34,33 +34,15 @@
   },
   "rightRail": {
     "workspaceTitle": "Agent 工作区",
-    "logsTitle": "查看 Rust 日志",
     "loading": "加载中...",
     "emptyWorkspaceTitle": "还没有工作区",
-    "emptyWorkspaceDescription": "添加本地项目文件夹，或从模板快速创建",
     "addFolder": "添加文件夹",
-    "createFromTemplate": "从模板创建",
-    "collapse": "收起",
-    "expandMore": "展开更多 {{count}} 个",
-    "historyTitle": "历史对话",
-    "searchHistory": "搜索历史对话",
-    "retry": "重试",
-    "emptyFavorites": "暂无收藏对话",
     "emptyHistory": "暂无历史对话",
-    "emptyWorkspaceHistory": "该工作区暂无历史对话",
-    "loadMore": "加载更多...",
     "deleteDialogTitle": "删除对话",
     "deleteDialogMessage": "确定要删除「{{title}}」吗？此操作不可撤销。",
     "deleted": "已删除",
     "deleteFailedRetry": "删除失败，请重试",
-    "deleteFailed": "删除失败",
     "favoriteFailedRetry": "收藏失败，请重试",
-    "filterAll": "全部",
-    "filterFavorites": "我的收藏",
-    "filterTitle": "筛选历史对话",
-    "filterAria": "筛选历史对话：{{label}}",
-    "automationHistoryVisible": "定时任务对话已显示",
-    "automationHistoryHidden": "定时任务对话已隐藏",
     "unreadNotifications": "{{count}} 条未读通知",
     "more": "更多",
     "favorite": "收藏对话",
@@ -69,6 +51,20 @@
     "delete": "删除",
     "stopCronBeforeDelete": "请先停止或取消当前目标/定时任务后再删除"
   },
+  "globalSidebar": {
+    "newChat": "新建对话",
+    "taskCenter": "任务中心",
+    "marketplace": "市场",
+    "miniappCenter": "MiniApp 中心",
+    "settings": "设置",
+    "notifications": "通知",
+    "resize": "调整侧栏宽度",
+    "resizeHint": "拖动调整宽度，双击复位",
+    "collapse": "收起侧栏",
+    "expand": "展开侧栏",
+    "showAllHistory": "显示全部 {{count}} 条",
+    "collapseHistory": "收起历史"
+  },
   "workspaceCard": {
     "more": "更多",
     "pin": "置顶",
@@ -76,9 +72,6 @@
     "archive": "归档",
     "unarchive": "取消归档",
     "showArchived": "展示归档 Agent 工作区",
-    "hideArchived": "收起归档 Agent 工作区",
-    "archivedCount": "{{count}} 个已归档",
-    "archivedBadge": "已归档",
     "agentSettings": "Agent 设置",
     "openFolder": "打开所在文件夹",
     "remove": "移除"
@@ -128,13 +121,6 @@
     "deleteDialogMessage": "确定要从模板库中删除「{{name}}」吗？模板文件将被永久删除。"
   },
   "workspaceEdit": {
-    "title": "编辑工作区",
-    "icon": "图标",
-    "defaultIcon": "默认图标",
-    "name": "名称",
-    "namePlaceholder": "工作区名称",
-    "saving": "保存中...",
-    "save": "保存",
     "cancel": "取消"
   }
 }

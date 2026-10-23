@@ -11,12 +11,16 @@ import { Popover } from '@/components/ui/Popover';
 
 interface AddWorkspaceMenuProps {
     onAddFolder: () => void;
-    onCreateFromTemplate: () => void;
+    /** Omit to hide the "create from template" row (e.g. surfaces without a template library). */
+    onCreateFromTemplate?: () => void;
+    /** Icon-only 24px trigger, for dense headers such as the global sidebar. */
+    compact?: boolean;
 }
 
 export default memo(function AddWorkspaceMenu({
     onAddFolder,
     onCreateFromTemplate,
+    compact = false,
 }: AddWorkspaceMenuProps) {
     const { t } = useTranslation('launcher');
     const [open, setOpen] = useState(false);
@@ -29,10 +33,14 @@ export default memo(function AddWorkspaceMenu({
             <button
                 ref={buttonRef}
                 onClick={toggle}
-                className="flex items-center gap-1.5 rounded-lg bg-[var(--button-primary-bg)] px-2.5 py-1 text-sm font-medium text-[var(--button-primary-text)] transition-colors hover:bg-[var(--button-primary-bg-hover)]"
+                title={t('addWorkspaceMenu.add')}
+                aria-label={t('addWorkspaceMenu.add')}
+                className={compact
+                    ? 'flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]'
+                    : 'flex items-center gap-1.5 rounded-lg bg-[var(--button-primary-bg)] px-2.5 py-1 text-sm font-medium text-[var(--button-primary-text)] transition-colors hover:bg-[var(--button-primary-bg-hover)]'}
             >
                 <Plus className="h-3.5 w-3.5" />
-                {t('addWorkspaceMenu.add')}
+                {!compact && t('addWorkspaceMenu.add')}
             </button>
             <Popover
                 open={open}
@@ -50,15 +58,17 @@ export default memo(function AddWorkspaceMenu({
                     <FolderPlus className="h-3.5 w-3.5 text-[var(--ink-muted)]" />
                     {t('addWorkspaceMenu.addLocalFolder')}
                 </button>
-                <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setOpen(false); onCreateFromTemplate(); }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-[var(--ink)] transition-colors hover:bg-[var(--hover-bg)]"
-                >
-                    <LayoutTemplate className="h-3.5 w-3.5 text-[var(--ink-muted)]" />
-                    {t('addWorkspaceMenu.createFromTemplateAgent')}
-                </button>
+                {onCreateFromTemplate && (
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setOpen(false); onCreateFromTemplate(); }}
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-[var(--ink)] transition-colors hover:bg-[var(--hover-bg)]"
+                    >
+                        <LayoutTemplate className="h-3.5 w-3.5 text-[var(--ink-muted)]" />
+                        {t('addWorkspaceMenu.createFromTemplateAgent')}
+                    </button>
+                )}
             </Popover>
         </>
     );

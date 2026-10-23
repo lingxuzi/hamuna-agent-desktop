@@ -34,33 +34,15 @@
   },
   "rightRail": {
     "workspaceTitle": "Agent Workspaces",
-    "logsTitle": "View Rust logs",
     "loading": "Loading...",
     "emptyWorkspaceTitle": "No workspaces yet",
-    "emptyWorkspaceDescription": "Add a local project folder or create one from a template",
     "addFolder": "Add folder",
-    "createFromTemplate": "Create from template",
-    "collapse": "Collapse",
-    "expandMore": "Show {{count}} more",
-    "historyTitle": "Chat History",
-    "searchHistory": "Search chat history",
-    "retry": "Retry",
-    "emptyFavorites": "No favorite chats",
     "emptyHistory": "No chat history",
-    "emptyWorkspaceHistory": "No chat history in this workspace",
-    "loadMore": "Loading more...",
     "deleteDialogTitle": "Delete Chat",
     "deleteDialogMessage": "Delete \"{{title}}\"? This cannot be undone.",
     "deleted": "Deleted",
     "deleteFailedRetry": "Delete failed. Please try again.",
-    "deleteFailed": "Delete failed.",
     "favoriteFailedRetry": "Failed to update favorite. Please try again.",
-    "filterAll": "All",
-    "filterFavorites": "Favorites",
-    "filterTitle": "Filter chat history",
-    "filterAria": "Filter chat history: {{label}}",
-    "automationHistoryVisible": "Scheduled task chats visible",
-    "automationHistoryHidden": "Scheduled task chats hidden",
     "unreadNotifications": "{{count}} unread notification(s)",
     "more": "More",
     "favorite": "Favorite chat",
@@ -69,6 +51,20 @@
     "delete": "Delete",
     "stopCronBeforeDelete": "Stop or cancel the active Goal or scheduled task before deleting this chat"
   },
+  "globalSidebar": {
+    "newChat": "New chat",
+    "taskCenter": "Task center",
+    "marketplace": "Marketplace",
+    "miniappCenter": "MiniApp center",
+    "settings": "Settings",
+    "notifications": "Notifications",
+    "resize": "Resize sidebar",
+    "resizeHint": "Drag to resize, double-click to reset",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "showAllHistory": "Show all {{count}}",
+    "collapseHistory": "Collapse history"
+  },
   "workspaceCard": {
     "more": "More",
     "pin": "Pin",
@@ -76,9 +72,6 @@
     "archive": "Archive",
     "unarchive": "Unarchive",
     "showArchived": "Show archived Agent workspaces",
-    "hideArchived": "Hide archived Agent workspaces",
-    "archivedCount": "{{count}} archived",
-    "archivedBadge": "Archived",
     "agentSettings": "Agent settings",
     "openFolder": "Open containing folder",
     "remove": "Remove"
@@ -128,13 +121,6 @@
     "deleteDialogMessage": "Delete \"{{name}}\" from the template library? Template files will be permanently deleted."
   },
   "workspaceEdit": {
-    "title": "Edit Workspace",
-    "icon": "Icon",
-    "defaultIcon": "Default icon",
-    "name": "Name",
-    "namePlaceholder": "Workspace name",
-    "saving": "Saving...",
-    "save": "Save",
     "cancel": "Cancel"
   }
 }

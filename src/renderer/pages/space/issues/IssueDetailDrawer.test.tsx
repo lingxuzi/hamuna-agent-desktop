@@ -324,9 +324,16 @@ describe('IssueDetailDrawer', () => {
 
     const uploadButton = screen.getByRole('button', { name: '上传附件' });
     const sendButton = screen.getByRole('button', { name: '发送评论' });
-    expect(uploadButton.parentElement).toHaveTextContent('上传附件');
-    expect(sendButton.parentElement).toHaveTextContent('发送评论');
-    expect(sendButton.parentElement).toHaveTextContent('⌘ + Enter');
+    // Tips portal out of the button on hover, so drive the real interaction
+    // instead of reading a hidden always-mounted node.
+    fireEvent.mouseOver(uploadButton);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('上传附件');
+    fireEvent.mouseOut(uploadButton);
+
+    fireEvent.mouseOver(sendButton);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('发送评论');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('⌘ + Enter');
+    fireEvent.mouseOut(sendButton);
     expect(sendButton).not.toHaveAttribute('title');
 
     const composer = screen.getByPlaceholderText('说说你的想法');

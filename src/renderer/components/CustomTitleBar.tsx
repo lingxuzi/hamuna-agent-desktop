@@ -9,16 +9,18 @@
  * we use decorations: false on Windows for custom title bar styling.
  */
 
-import { Cloud, Minus, Square, X, RefreshCw, RotateCcw, Settings, Copy, CheckSquare, Sparkles } from 'lucide-react';
+import { Cloud, Minus, Square, X, RefreshCw, RotateCcw, Copy } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isTauri } from '@/api/tauriClient';
 import { CUSTOM_EVENTS } from '@/../shared/constants';
+import { GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET } from '@/utils/globalSidebarPreference';
 
 
 interface CustomTitleBarProps {
  children: ReactNode;  // TabBar component
- onSettingsClick?: () => void;
+ /** Global sidebar is expanded, so it already reserves the traffic-light zone. */
+ sidebarExpanded?: boolean;
  /** Whether an update is ready to install */
  updateReady?: boolean;
  /** Version of the update ready to install */
@@ -45,8 +47,6 @@ interface CustomTitleBarProps {
  onDismissRestore?: () => void;
 }
 
-// macOS traffic lights (close/minimize/maximize) width + padding
-const MACOS_TRAFFIC_LIGHTS_WIDTH = 78;
 const EDGE_DRAG_REGION_WIDTH = 30;
 
 // Detect platform
@@ -65,7 +65,7 @@ function TitlebarDragSpacer({ className = '', style }: { className?: string; sty
 
 export default function CustomTitleBar({
  children,
- onSettingsClick,
+ sidebarExpanded = false,
  updateReady,
  updateVersion,
  updateInstalling,
@@ -79,8 +79,6 @@ export default function CustomTitleBar({
  const { t } = useTranslation('app');
  const [isFullscreen, setIsFullscreen] = useState(false);
  const [isMaximized, setIsMaximized] = useState(false);
- const taskShortcut = navigator.platform.toLowerCase().includes('mac') ? '⌘Y' : 'Ctrl+Y';
- const settingsShortcut = navigator.platform.toLowerCase().includes('mac') ? '⌘U' : 'Ctrl+U';
 
  // Listen for fullscreen changes
  useEffect(() => {
@@ -169,11 +167,15 @@ export default function CustomTitleBar({
   <div
    className="custom-titlebar flex h-11 flex-shrink-0 items-center border-b border-[var(--line)] bg-gradient-to-b from-[var(--paper)] to-[var(--paper-inset)]/30"
   >
-   {/* macOS traffic lights spacer - DRAGGABLE (hidden on Windows) */}
+   {/* macOS: the sidebar toggle keeps one window-x (84) in both modes, so in
+       rail mode it overhangs onto this bar. Reserve its slot with a width that
+       animates alongside the sidebar — mounting the spacer at its full width
+       would shove the Tab row 56px right on the first collapse frame — and let
+       it collapse to 0 when the wider sidebar covers the slot itself. */}
    {!isWindows && !isFullscreen && (
     <div
-     className="h-full flex-shrink-0"
-     style={{ width: MACOS_TRAFFIC_LIGHTS_WIDTH }}
+     className="global-sidebar-titlebar-inset h-full flex-shrink-0"
+     style={{ width: sidebarExpanded ? 0 : GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET }}
      data-tauri-drag-region
     />
    )}
@@ -262,61 +264,23 @@ export default function CustomTitleBar({
       <TitlebarDragSpacer className="w-1" />
      </>
     )}
-    {isTauri() && (
+    {/* Task Center / Settings / MiniApp Center live in the global sidebar.
+        Space has no sidebar entry (by design), so it stays here as the only
+        entry point. */}
+    {isTauri() && teamSpaceEnabled && (
      <>
-      {teamSpaceEnabled && (
-       <>
-        <button
-         onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_SPACE))}
-         className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
-         title={t('titlebar.team')}
-         data-no-drag
-        >
-         <Cloud className="h-4 w-4" />
-         <span className="text-sm font-medium">{t('titlebar.team')}</span>
-        </button>
-        <TitlebarDragSpacer className="w-1" />
-       </>
-      )}
       <button
-       onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_TASK_CENTER))}
+       onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_SPACE))}
        className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
-       title={t('titlebar.taskCenterTitle', { shortcut: taskShortcut })}
+       title={t('titlebar.team')}
        data-no-drag
       >
-       <CheckSquare className="h-4 w-4" />
-       <span className="text-sm font-medium">{t('titlebar.task')}</span>
+       <Cloud className="h-4 w-4" />
+       <span className="text-sm font-medium">{t('titlebar.team')}</span>
       </button>
       <TitlebarDragSpacer className="w-1" />
      </>
     )}
-
-    <button
-     onClick={onSettingsClick || (() => console.log('Settings clicked - TODO'))}
-     className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
-     title={t('titlebar.settingsTitle', { shortcut: settingsShortcut })}
-     data-no-drag
-    >
-     <Settings className="h-4 w-4" />
-     <span className="text-sm font-medium">{t('titlebar.settings')}</span>
-    </button>
-    <TitlebarDragSpacer className="w-1" />
-    {/* MiniApp Center. Lives beside Tasks / Settings rather than in the
-                    Launcher hero: it is a peer navigation target, and the
-                    hero slot is reserved for the brand group. NOT gated on
-                    `isTauri()` — it only dispatches a window event, so
-                    gating it would strand the entry in browser dev mode
-                    (same reasoning as its previous Launcher placement). */}
-    <button
-     onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER))}
-     className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
-     title={t('titlebar.miniAppsTitle')}
-     data-no-drag
-    >
-     <Sparkles className="h-4 w-4" />
-     <span className="text-sm font-medium">{t('titlebar.miniApps')}</span>
-    </button>
-    <TitlebarDragSpacer className="w-1" />
    </div>
 
    {/* Windows window controls */}

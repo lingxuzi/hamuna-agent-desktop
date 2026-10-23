@@ -1,10 +1,28 @@
-/** Lightweight CSS-only tooltip — appears instantly on hover, no JS timers.
- *  `position="top"` (default) shows above; `position="bottom"` shows below.
- *  `align="center"` (default) centers; `"end"` aligns to the right edge.
- *  `disabled` suppresses the tooltip while the trigger owns an open Popover.
- *  `shortcut` adds a muted second line (e.g. "⌘ + Enter") rendered below
- *  the main label. Use for actions with a keyboard accelerator worth
- *  teaching — keep it to a short inline string, no raw JSX. */
+/** Lightweight tooltip — appears instantly on hover/focus, no timers.
+ *  `position="top"` (default) shows above; `"bottom"` below; `"right"` beside
+ *  (use for rail icons). `align="center"` (default) centers; `"end"` aligns to
+ *  the right edge. `disabled` suppresses the tooltip while the trigger owns an
+ *  open Popover.
+ *  `shortcut` adds a muted second line (e.g. "⌘ + Enter") rendered below the
+ *  main label. Use for actions with a keyboard accelerator worth teaching —
+ *  keep it to a short inline string, no raw JSX.
+ *
+ *  The bubble is portaled through Popover, so scroll containers cannot clip it
+ *  and floating-ui flips it at viewport edges — an absolutely positioned child
+ *  would be cut off by the sidebar's `overflow: auto` column. */
+import { useRef, useState } from 'react';
+
+import { Popover, type PopoverPlacement } from './ui/Popover';
+
+function tipPlacement(
+  position: 'top' | 'bottom' | 'right',
+  align: 'center' | 'end',
+): PopoverPlacement {
+  if (position === 'right') return 'right';
+  if (align === 'end') return `${position}-end`;
+  return position;
+}
+
 export default function Tip({
   label,
   shortcut,
@@ -12,34 +30,67 @@ export default function Tip({
   position = 'top',
   align = 'center',
   disabled = false,
+  className = '',
 }: {
   label: string;
   shortcut?: string;
   children: React.ReactNode;
-  position?: 'top' | 'bottom';
+  position?: 'top' | 'bottom' | 'right';
   align?: 'center' | 'end';
   disabled?: boolean;
+  /** Wrapper classes — pass `w-full` so a full-width trigger keeps its width. */
+  className?: string;
 }) {
-  const posClass = position === 'bottom'
-    ? 'top-full mt-1.5'
-    : 'bottom-full mb-1.5';
-  const alignClass = align === 'end'
-    ? 'right-0'
-    : 'left-1/2 -translate-x-1/2';
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [hovered, setHovered] = useState(false);
+  const [focusedWithin, setFocusedWithin] = useState(false);
+  const visible = (hovered || focusedWithin) && !disabled;
+  const dismiss = () => {
+    setHovered(false);
+    setFocusedWithin(false);
+  };
+
   return (
-    <span className="group/tip relative inline-flex">
+    <span
+      ref={anchorRef}
+      className={`relative inline-flex ${className}`.trim()}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={dismiss}
+      // Activation consumes the hint even if the child stops bubbling.
+      onClickCapture={dismiss}
+      onContextMenuCapture={dismiss}
+      onFocusCapture={() => setFocusedWithin(true)}
+      onBlurCapture={(event) => {
+        const next = event.relatedTarget;
+        if (!(next instanceof Node) || !event.currentTarget.contains(next)) setFocusedWithin(false);
+      }}
+    >
       {children}
-      {!disabled && (
-        <span
-          className={`pointer-events-none absolute z-50 whitespace-nowrap rounded-md bg-[var(--button-dark-bg)]/90 px-2.5 py-1.5 text-xs leading-tight text-[var(--button-dark-text)] opacity-0 transition-opacity group-hover/tip:opacity-100 ${posClass} ${alignClass}`}
+      {visible && (
+        <Popover
+          open
+          onClose={dismiss}
+          anchorRef={anchorRef}
+          placement={tipPlacement(position, align)}
+          offset={position === 'right' ? 12 : 6}
+          closeOnOutsideClick={false}
+          closeOnEscape={false}
+          zIndex={280}
+          unstyled
+          className="pointer-events-none"
         >
-          {label}
-          {shortcut && (
-            <span className="mt-0.5 block text-xs text-[var(--button-dark-text)]/70">
-              {shortcut}
-            </span>
-          )}
-        </span>
+          <span
+            role="tooltip"
+            className="block whitespace-nowrap rounded-md bg-[var(--button-dark-bg)]/90 px-2.5 py-1.5 text-xs leading-tight text-[var(--button-dark-text)]"
+          >
+            {label}
+            {shortcut && (
+              <span className="mt-0.5 block text-xs text-[var(--button-dark-text)]/70">
+                {shortcut}
+              </span>
+            )}
+          </span>
+        </Popover>
       )}
     </span>
   );
