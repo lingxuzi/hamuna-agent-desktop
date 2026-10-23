@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { SessionMetadata } from '@/api/sessionClient';
 import type { Project } from '@/config/types';
-import { groupSessionsByProject } from './sidebarWorkspaceTree';
+import { groupSessionsByProject } from './sidebarWorkspaceGrouping';
 
 function project(id: string, path: string): Project {
   return { id, name: id, path } as Project;

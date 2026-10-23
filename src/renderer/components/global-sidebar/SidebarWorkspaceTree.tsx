@@ -25,7 +25,7 @@ import { useWorkspaceFileService } from '@/hooks/useWorkspaceFileService';
 import { getSessionDisplayText } from '@/utils/taskCenterUtils';
 import { CUSTOM_EVENTS } from '../../../shared/constants';
 import { SidebarWorkspaceRow } from './SidebarWorkspaceRow';
-import { groupSessionsByProject, SIDEBAR_HISTORY_LIMIT } from './sidebarWorkspaceTree';
+import { groupSessionsByProject, SIDEBAR_HISTORY_LIMIT } from './sidebarWorkspaceGrouping';
 
 const WorkspaceConfigPanel = lazy(() => import('@/components/WorkspaceConfigPanel'));
 

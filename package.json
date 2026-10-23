@@ -2,7 +2,7 @@
   "name": "hamuna",
   "description": "HamunaAgent - Desktop Claude Code for everyone. AI-powered productivity, not just for developers.",
   "type": "module",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "license": "Apache-2.0",
   "packageManager": "npm@11.13.0",
   "engines": {
@@ -40,7 +40,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "typecheck": "tsc --noEmit",
-    "lint": "node scripts/verify-system-skills-sync.mjs && npm run verify:miniapp-style && eslint . --cache --cache-location .eslintcache --max-warnings=0 && npm run lint:deps",
+    "lint": "node scripts/verify-system-skills-sync.mjs && node scripts/check-import-case-ambiguity.mjs && npm run verify:miniapp-style && eslint . --cache --cache-location .eslintcache --max-warnings=0 && npm run lint:deps",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs src",
     "test": "npm run test:classification && npm run test:unit && npm run test:dom && npm run test:integration",
     "test:classification": "node scripts/check-test-classification.mjs",

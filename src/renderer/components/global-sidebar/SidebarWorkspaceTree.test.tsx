@@ -50,7 +50,7 @@ vi.mock('@/hooks/useWorkspaceFileService', () => ({
 import { i18n } from '@/i18n';
 import type { Project } from '@/config/types';
 import { SidebarWorkspaceTree } from './SidebarWorkspaceTree';
-import { SIDEBAR_HISTORY_LIMIT } from './sidebarWorkspaceTree';
+import { SIDEBAR_HISTORY_LIMIT } from './sidebarWorkspaceGrouping';
 
 const PROJECT: Project = {
   id: 'p1',
