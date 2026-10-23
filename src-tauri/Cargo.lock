@@ -2534,7 +2534,7 @@ dependencies = [
 
 [[package]]
 name = "hamuna"
-version = "1.0.7"
+version = "1.0.9"
 dependencies = [
  "active-win-pos-rs 0.11.0",
  "arboard",
