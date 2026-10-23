@@ -6,17 +6,24 @@ export const GLOBAL_SIDEBAR_MIN_WIDTH = 224;
 export const GLOBAL_SIDEBAR_MAX_WIDTH = 480;
 export const GLOBAL_SIDEBAR_RAIL_WIDTH = 64;
 
-/** Window-x of the sidebar toggle in both modes. On macOS it must clear the
- *  traffic lights, which live over the sidebar; in rail mode the control
- *  therefore overhangs the 64px rail and sits on the titlebar surface. Keeping
- *  one coordinate in both modes is what stops the button from jumping when the
- *  sidebar collapses. */
-export const GLOBAL_SIDEBAR_TOGGLE_INSET = 84;
+/** Sidebar toggle button box (MyAgents parity: 32px hit target, not 28px). */
+export const GLOBAL_SIDEBAR_TOGGLE_SIZE = 32;
+/** Horizontal inset of the toggle inside the sidebar. Sized so the button's
+ *  16px glyph lands on the nav icon axis (12px nav gutter + 12px row padding
+ *  = 24px, minus the 8px half-button offset), so the control reads as the
+ *  first row of the sidebar rather than a stray chip floating in the header. */
+export const GLOBAL_SIDEBAR_TOGGLE_INSET = 16;
+/** On macOS the native traffic lights float over the webview, so the toggle
+ *  must clear them; that pushes the control out of the 64px rail and onto the
+ *  titlebar surface in rail mode. Every other platform keeps its window chrome
+ *  outside the webview, so the toggle stays inside the rail. */
+export const GLOBAL_SIDEBAR_MACOS_TOGGLE_INSET = 84;
 /** Leading slot the titlebar must reserve in rail mode so the first Tab never
- *  renders under the overhanging toggle: toggle inset + its 28px box + 8px gap,
- *  minus the rail that already sits left of the titlebar. */
+ *  renders under the overhanging toggle: toggle inset + its button box + 8px
+ *  gap, minus the rail that already sits left of the titlebar. macOS only —
+ *  elsewhere the toggle never leaves the rail, so the titlebar needs no slot. */
 export const GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET =
-  GLOBAL_SIDEBAR_TOGGLE_INSET + 28 + 8 - GLOBAL_SIDEBAR_RAIL_WIDTH;
+  GLOBAL_SIDEBAR_MACOS_TOGGLE_INSET + GLOBAL_SIDEBAR_TOGGLE_SIZE + 8 - GLOBAL_SIDEBAR_RAIL_WIDTH;
 
 export type GlobalSidebarMode = 'expanded' | 'rail';
 

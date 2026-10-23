@@ -14,6 +14,7 @@ import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isTauri } from '@/api/tauriClient';
 import { CUSTOM_EVENTS } from '@/../shared/constants';
+import { isMacPlatform } from '@/utils/hamunaProtocol';
 import { GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET } from '@/utils/globalSidebarPreference';
 
 
@@ -167,12 +168,14 @@ export default function CustomTitleBar({
   <div
    className="custom-titlebar flex h-11 flex-shrink-0 items-center border-b border-[var(--line)] bg-gradient-to-b from-[var(--paper)] to-[var(--paper-inset)]/30"
   >
-   {/* macOS: the sidebar toggle keeps one window-x (84) in both modes, so in
-       rail mode it overhangs onto this bar. Reserve its slot with a width that
-       animates alongside the sidebar — mounting the spacer at its full width
-       would shove the Tab row 56px right on the first collapse frame — and let
-       it collapse to 0 when the wider sidebar covers the slot itself. */}
-   {!isWindows && !isFullscreen && (
+   {/* macOS: the native traffic lights float over the webview, so the sidebar
+       toggle has to clear them and ends up overhanging onto this bar in rail
+       mode. Reserve its slot with a width that animates alongside the sidebar
+       — mounting the spacer at its full width would shove the Tab row right on
+       the first collapse frame — and let it collapse to 0 when the wider
+       sidebar covers the slot itself. Every other platform keeps the toggle
+       inside the rail, so no slot is needed. */}
+   {isMacPlatform() && !isFullscreen && (
     <div
      className="global-sidebar-titlebar-inset h-full flex-shrink-0"
      style={{ width: sidebarExpanded ? 0 : GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET }}

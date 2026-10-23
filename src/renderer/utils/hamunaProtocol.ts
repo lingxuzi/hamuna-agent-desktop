@@ -15,6 +15,13 @@ export function isWindowsPlatform(): boolean {
   return /Win/i.test(navigator.platform || '') || /Windows/i.test(navigator.userAgent || '');
 }
 
+/** macOS draws native traffic lights over the webview; every other platform
+ *  (Windows, Linux) keeps the window chrome outside the webview surface. */
+export function isMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Macintosh|Mac OS X/i.test(navigator.userAgent || '');
+}
+
 export function resolveHamunaAgentProtocolUrl(pathname: string): string {
   const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
   if (isWindowsPlatform()) {

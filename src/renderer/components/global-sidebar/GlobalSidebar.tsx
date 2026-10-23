@@ -3,8 +3,7 @@ import {
   Bell,
   CheckSquare,
   MessageSquarePlus,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelLeft,
   Settings,
   Sparkles,
   Store,
@@ -18,8 +17,12 @@ import type { Project } from '@/config/types';
 import { isProjectActiveForUser } from '@/config/types';
 import { CUSTOM_EVENTS } from '../../../shared/constants';
 import { getFolderName } from '@/types/tab';
-import { isWindowsPlatform } from '@/utils/hamunaProtocol';
-import { GLOBAL_SIDEBAR_RAIL_WIDTH, GLOBAL_SIDEBAR_TOGGLE_INSET } from '@/utils/globalSidebarPreference';
+import { isMacPlatform } from '@/utils/hamunaProtocol';
+import {
+  GLOBAL_SIDEBAR_MACOS_TOGGLE_INSET,
+  GLOBAL_SIDEBAR_RAIL_WIDTH,
+  GLOBAL_SIDEBAR_TOGGLE_INSET,
+} from '@/utils/globalSidebarPreference';
 import { SidebarResizeHandle } from './SidebarResizeHandle';
 import { SidebarWorkspaceTree } from './SidebarWorkspaceTree';
 
@@ -53,7 +56,7 @@ export default memo(function GlobalSidebar({
   sessionNotificationBadgeCounts,
 }: GlobalSidebarProps) {
   const { t } = useTranslation('launcher');
-  const toggleInset = isWindowsPlatform() ? 12 : GLOBAL_SIDEBAR_TOGGLE_INSET;
+  const toggleInset = isMacPlatform() ? GLOBAL_SIDEBAR_MACOS_TOGGLE_INSET : GLOBAL_SIDEBAR_TOGGLE_INSET;
   const activeProjects = useMemo(
     () => sortLauncherProjects(projects.filter(isProjectActiveForUser)),
     [projects],
@@ -73,22 +76,25 @@ export default memo(function GlobalSidebar({
       className="global-sidebar relative z-[60] flex h-screen shrink-0 flex-col border-r border-[var(--line)] bg-[var(--paper)]"
       style={{ width: expanded ? 'var(--global-sidebar-width)' : GLOBAL_SIDEBAR_RAIL_WIDTH }}
     >
-      {/* One toggle at one window-x in both modes. The macOS inset clears the
-          traffic lights, so in rail mode the 28px button overhangs the 64px
-          rail onto the titlebar — CustomTitleBar reserves the matching inset
-          to keep the first Tab clear. Keeping the control still is what stops
-          collapse from reading as a layout jump. */}
+      {/* One toggle at one window-x in both modes, so collapse never reads as a
+          layout jump. Only macOS clears the native traffic lights (which float
+          over the webview); that pushes the control out of the 64px rail and
+          onto the titlebar surface, and CustomTitleBar reserves the matching
+          inset to keep the first Tab clear. Elsewhere the toggle stays on the
+          nav icon axis inside the rail. */}
       <div className="relative h-11 shrink-0" data-tauri-drag-region>
-        <div className="absolute top-2" style={{ left: toggleInset }}>
+        <div className="absolute top-1.5" style={{ left: toggleInset }}>
           <Tip label={expanded ? t('globalSidebar.collapse') : t('globalSidebar.expand')} position="bottom">
             <button
               type="button"
               onClick={onToggleExpanded}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--ink-muted)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--ink-muted)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]"
               aria-label={expanded ? t('globalSidebar.collapse') : t('globalSidebar.expand')}
               data-no-drag
             >
-              {expanded ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+              {/* One glyph for both states: swapping icons made the control
+                  change shape on every collapse. */}
+              <PanelLeft className="h-4 w-4" />
             </button>
           </Tip>
         </div>

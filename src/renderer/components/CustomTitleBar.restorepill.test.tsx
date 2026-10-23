@@ -3,7 +3,7 @@
 // mock the Tauri-heavy deps (effects bail when isTauri() is false) and assert
 // the pill's visibility gate + click wiring.
 import { render, screen, fireEvent } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
     isTauri: vi.fn(() => false),
@@ -41,9 +41,23 @@ function renderBar(over: Partial<React.ComponentProps<typeof CustomTitleBar>> = 
 }
 
 describe('CustomTitleBar — 恢复对话 pill (Issue #309)', () => {
+    let userAgentSpy: ReturnType<typeof vi.spyOn>;
+
+    /** Pretend to run on macOS, where the native traffic lights float over the
+     *  webview and the sidebar toggle has to clear them. */
+    const setMacUserAgent = () => userAgentSpy.mockReturnValue(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+    );
+
     beforeEach(async () => {
         mocks.isTauri.mockReturnValue(false);
         await i18n.changeLanguage('zh-CN');
+        userAgentSpy = vi.spyOn(navigator, 'userAgent', 'get');
+        setMacUserAgent();
+    });
+
+    afterEach(() => {
+        userAgentSpy.mockRestore();
     });
 
     it('is hidden when restoreCount is 0 (clean quit → no nag)', () => {
@@ -120,5 +134,15 @@ describe('CustomTitleBar — 恢复对话 pill (Issue #309)', () => {
             </CustomTitleBar>,
         );
         expect(spacerWidth()).not.toContain(`${GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET}px`);
+    });
+
+    it('reserves no rail slot off macOS, where the toggle never leaves the rail', () => {
+        userAgentSpy.mockReturnValue('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15');
+        const { container } = renderBar({ restoreCount: 0 });
+        const spacerWidth = Array.from(container.querySelectorAll('[data-tauri-drag-region]'))
+            .map((node) => (node as HTMLElement).style.width)
+            .filter((w) => w !== '');
+
+        expect(spacerWidth).not.toContain(`${GLOBAL_SIDEBAR_RAIL_TITLEBAR_INSET}px`);
     });
 });
