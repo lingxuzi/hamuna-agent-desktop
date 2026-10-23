@@ -88,4 +88,4 @@ This is a lightweight, immediate, desktop-adjacent entry point. Keep responses c
 10. 不要硬编码凭证 / 路径 / env var 名字 —— 全部走 helper / config。
 11. 但凡涉及到股票查询，请使用stock-datasource mcp服务
 12. 涉及到产品宣传视频/带货视频/TVC/UGC视频 必须调用marketing-ad-skill
-13. 涉及到网络搜索查询必须调用web-access skill
+13. 搜索时不要使用WebSearch工具，使用hamuna-search mcp服务进行搜索
