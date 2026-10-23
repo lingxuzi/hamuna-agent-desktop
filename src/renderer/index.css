@@ -226,6 +226,30 @@
   clip-path: inset(0 100% 0 0);
 }
 
+/* Footer actions in rail mode. The 64px rail cannot hold two 32px buttons
+   side by side on the icon axis, so they stack and each centers on it — the
+   32px button lands its 16px glyph at x=24, matching the nav rows. */
+.global-sidebar[data-global-sidebar-mode='rail'] .global-sidebar-footer-action {
+  justify-content: center;
+}
+
+.global-sidebar[data-global-sidebar-mode='rail'] .global-sidebar-footer-action button {
+  width: 32px;
+  padding-inline: 0;
+  justify-content: center;
+}
+
+/* The nav rows keep their label mounted so the glyph never shifts; the footer
+   row has no such need — it is one button, and a hidden-but-laid-out label
+   would push the icon off the rail's icon axis. */
+.global-sidebar[data-global-sidebar-mode='rail'] .global-sidebar-footer-action .global-sidebar-label {
+  display: none;
+}
+
+.global-sidebar[data-global-sidebar-mode='rail'] .global-sidebar-footer-bell {
+  justify-content: center;
+}
+
 [data-app-shell][data-sidebar-resizing] .global-sidebar,
 [data-app-shell][data-sidebar-resizing] .global-sidebar-titlebar-inset,
 [data-app-shell][data-sidebar-resizing] .global-sidebar-resize-handle {

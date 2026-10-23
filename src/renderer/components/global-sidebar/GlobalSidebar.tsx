@@ -67,7 +67,6 @@ export default memo(function GlobalSidebar({
     { key: 'taskCenter', icon: CheckSquare, label: t('globalSidebar.taskCenter'), onClick: () => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_TASK_CENTER)), active: activeView === 'taskcenter' },
     { key: 'marketplace', icon: Store, label: t('globalSidebar.marketplace'), onClick: () => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_MARKETPLACE)), active: activeView === 'marketplace' },
     { key: 'miniapps', icon: Sparkles, label: t('globalSidebar.miniappCenter'), onClick: () => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_MINIAPP_CENTER)), active: activeView === 'miniapp-center' },
-    { key: 'settings', icon: Settings, label: t('globalSidebar.settings'), onClick: () => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_SETTINGS)), active: activeView === 'settings' },
   ];
 
   return (
@@ -168,22 +167,40 @@ export default memo(function GlobalSidebar({
         </div>
       </div>
 
-      {/* Right-anchored in both modes so the bell rides the moving border
-          instead of teleporting between center and end. */}
-      <div className="flex shrink-0 items-center justify-end border-t border-[var(--line)] px-3 py-2">
-        <Tip label={t('globalSidebar.notifications')}>
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_TASK_CENTER))}
-            className="relative flex h-8 w-8 items-center justify-center rounded-md text-[var(--ink-muted)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]"
-            aria-label={t('globalSidebar.notifications')}
-          >
-            <Bell className="h-4 w-4" />
-            {notificationCount > 0 && (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-            )}
-          </button>
-        </Tip>
+      {/* Settings leads the footer from the left, the bell stays right-anchored
+          so it rides the moving border instead of teleporting between center
+          and end. The 64px rail cannot hold both 32px buttons side by side on
+          the icon axis, so rail mode stacks them and centers each on that
+          axis — the same treatment the nav rows get. */}
+      <div className="flex shrink-0 flex-col gap-1 border-t border-[var(--line)] px-2 py-2">
+        <div className="global-sidebar-footer-action flex w-full items-center">
+          <Tip label={t('globalSidebar.settings')} position="bottom" disabled={expanded}>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_SETTINGS))}
+              className="flex h-8 items-center gap-2 overflow-hidden rounded-md px-2 text-sm text-[var(--ink-secondary)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]"
+              aria-label={t('globalSidebar.settings')}
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              <span className="global-sidebar-label min-w-0 truncate">{t('globalSidebar.settings')}</span>
+            </button>
+          </Tip>
+        </div>
+        <div className="global-sidebar-footer-bell flex w-full items-center justify-end">
+          <Tip label={t('globalSidebar.notifications')}>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_TASK_CENTER))}
+              className="relative flex h-8 w-8 items-center justify-center rounded-md text-[var(--ink-muted)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]"
+              aria-label={t('globalSidebar.notifications')}
+            >
+              <Bell className="h-4 w-4" />
+              {notificationCount > 0 && (
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              )}
+            </button>
+          </Tip>
+        </div>
       </div>
 
       <SidebarResizeHandle expanded={expanded} width={width} onCommit={onCommitWidth} />

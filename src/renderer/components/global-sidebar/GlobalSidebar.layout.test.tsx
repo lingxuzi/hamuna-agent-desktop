@@ -96,3 +96,25 @@ describe('GlobalSidebar — 收起/展开按钮位置', () => {
     expect(screen.getByRole('button', { name: '收起侧栏' })).toBeTruthy();
   });
 });
+
+describe('GlobalSidebar — 设置入口在 footer', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('zh-CN');
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (X11; Linux x86_64)');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('设置按钮在 footer 里，且不在 nav 列表中', () => {
+    const { container } = renderSidebar();
+    const settings = screen.getByRole('button', { name: '设置' });
+
+    const nav = container.querySelector('nav');
+    expect(nav?.contains(settings)).toBe(false);
+
+    const footer = container.querySelector('.global-sidebar-footer-action');
+    expect(footer?.contains(settings)).toBe(true);
+  });
+});
