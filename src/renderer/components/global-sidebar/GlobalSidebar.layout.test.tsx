@@ -117,4 +117,21 @@ describe('GlobalSidebar — 设置入口在 footer', () => {
     const footer = container.querySelector('.global-sidebar-footer-action');
     expect(footer?.contains(settings)).toBe(true);
   });
+
+  it('设置与铃铛同属一个 footer 行，设置在前（flex row 下即左侧）', () => {
+    const { container } = renderSidebar();
+    const footer = container.querySelector('.global-sidebar-footer');
+    const settings = screen.getByRole('button', { name: '设置' });
+    const bell = screen.getByRole('button', { name: '通知' });
+
+    expect(footer).toBeTruthy();
+    expect(footer?.contains(settings)).toBe(true);
+    expect(footer?.contains(bell)).toBe(true);
+    // Same row: the footer is a flex row pinned to both edges, so DOM order
+    // is left-to-right order.
+    expect(footer?.className).toContain('justify-between');
+    expect(
+      settings.compareDocumentPosition(bell) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
