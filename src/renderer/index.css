@@ -229,6 +229,12 @@
 /* Footer actions in rail mode. The 64px rail cannot hold two 32px buttons
    side by side on the icon axis, so they stack and each centers on it — the
    32px button lands its 16px glyph at x=24, matching the nav rows. */
+.global-sidebar[data-global-sidebar-mode='rail'] .global-sidebar-footer {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
 .global-sidebar[data-global-sidebar-mode='rail'] .global-sidebar-footer-action {
   justify-content: center;
 }

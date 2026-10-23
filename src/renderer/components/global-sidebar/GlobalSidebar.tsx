@@ -167,18 +167,17 @@ export default memo(function GlobalSidebar({
         </div>
       </div>
 
-      {/* Settings leads the footer from the left, the bell stays right-anchored
-          so it rides the moving border instead of teleporting between center
-          and end. The 64px rail cannot hold both 32px buttons side by side on
-          the icon axis, so rail mode stacks them and centers each on that
-          axis — the same treatment the nav rows get. */}
-      <div className="flex shrink-0 flex-col gap-1 border-t border-[var(--line)] px-2 py-2">
-        <div className="global-sidebar-footer-action flex w-full items-center">
+      {/* Settings leads the footer from the left, the bell rides the right
+          edge. Both sit on one row so their centres share a line; the 64px
+          rail cannot hold two 32px buttons side by side, so rail mode stacks
+          them and centers each on the nav icon axis instead. */}
+      <div className="global-sidebar-footer flex shrink-0 items-center justify-between gap-2 border-t border-[var(--line)] px-2 py-2">
+        <div className="global-sidebar-footer-action flex min-w-0 items-center">
           <Tip label={t('globalSidebar.settings')} position="bottom" disabled={expanded}>
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.OPEN_SETTINGS))}
-              className="flex h-8 items-center gap-2 overflow-hidden rounded-md px-2 text-sm text-[var(--ink-secondary)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]"
+              className="flex h-8 min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 text-sm text-[var(--ink-secondary)] transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--ink)]"
               aria-label={t('globalSidebar.settings')}
             >
               <Settings className="h-4 w-4 shrink-0" />
@@ -186,7 +185,7 @@ export default memo(function GlobalSidebar({
             </button>
           </Tip>
         </div>
-        <div className="global-sidebar-footer-bell flex w-full items-center justify-end">
+        <div className="global-sidebar-footer-bell flex shrink-0 items-center">
           <Tip label={t('globalSidebar.notifications')}>
             <button
               type="button"
