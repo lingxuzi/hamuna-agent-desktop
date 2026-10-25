@@ -40,6 +40,7 @@ import { LOGS_DIR, ensureLogsDir } from './logUtils';
 import { localDate } from '../shared/logTime';
 import { runLogRetentionSweep } from './log-retention';
 import { getActiveSessionLogPath } from './AgentLogger';
+import { isLevelEnabled } from './logLevel';
 
 // ── Tunables (Pattern 6 §6.3.5) ────────────────────────────────────────
 const FLUSH_INTERVAL_MS = 100;
@@ -263,7 +264,12 @@ function installExitHooks(): void {
  */
 export function appendUnifiedLog(entry: LogEntry): void {
   const line = formatLogEntry(entry) + '\n';
+  // Remember *before* the floor check: the in-memory ring only costs 200
+  // lines of RAM and feeds the crash dumper, whose whole job is showing what
+  // led up to the error. Filtering it too would leave a crash bundle with the
+  // exception and none of the context.
   rememberRecent(line);
+  if (!isLevelEnabled(entry.level)) return;
   if (queue.length >= QUEUE_MAX_ENTRIES) {
     dropped++;
     return;
@@ -280,6 +286,7 @@ export function appendUnifiedLogBatch(entries: LogEntry[]): void {
   for (const entry of entries) {
     const line = formatLogEntry(entry) + '\n';
     rememberRecent(line);
+    if (!isLevelEnabled(entry.level)) continue;
     if (queue.length >= QUEUE_MAX_ENTRIES) {
       dropped++;
       continue;

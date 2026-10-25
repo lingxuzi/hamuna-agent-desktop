@@ -232,6 +232,11 @@ pub fn start_tab_sidecar<R: Runtime>(
         cmd.env("HAMUNA_MANAGEMENT_PORT", mgmt_port.to_string());
     }
 
+    // The Sidecar writes to the same unified log file. Node can't read
+    // `debug_assertions`, so the release floor has to be handed over
+    // explicitly or the GUI stops logging while Node keeps filling the file.
+    crate::logger::apply_log_level_env(&mut cmd);
+
     // Inject runtime type for Agent Runtime selection (v0.1.59)
     // This path is used by start_sidecar (generic, IM/Agent channels).
     // Session sidecars created via ensure_session_sidecar use resolve_session_runtime()

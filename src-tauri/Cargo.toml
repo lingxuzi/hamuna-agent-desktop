@@ -1,6 +1,6 @@
 [package]
 name = "hamuna"
-version = "1.0.8"
+version = "1.0.9"
 description = "HamunaAgent - Desktop Claude Code for everyone"
 authors = ["HamunaAgent Team <hamuna.io@gmail.com>"]
 license = "Apache-2.0"
@@ -101,6 +101,14 @@ zip = { version = "2.4.2", default-features = false, features = ["deflate-zlib"]
 # nothing else.
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", default-features = false, features = ["signal"] }
+
+# Linux-only: GTK3 widget tree access for positioning the embedded browser
+# webview. Tauri's `Window::add_child` builds the child webview straight into
+# the window's `GtkBox`, which drops the requested x/y (see browser.rs
+# `linux_layout`). Same crate version (0.18) as tauri-runtime-wry already
+# pulls in — no new lock entry, no new system library.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "0.18", features = ["v3_24"] }
 
 # macOS-only: runtime workaround for AppKit function-key private-use text
 # leaking from WKWebView arrow-key handling into focused text controls.

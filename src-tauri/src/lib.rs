@@ -719,11 +719,9 @@ pub fn run() {
             // because those paths need a logger backend for log::warn!/info! calls.
             use tauri_plugin_log::{Target, TargetKind};
 
-            let log_level = if cfg!(debug_assertions) {
-                log::LevelFilter::Debug
-            } else {
-                log::LevelFilter::Info
-            };
+            // Same floor as the unified log (file + frontend emit), so stdout,
+            // LogDir and the unified file never disagree about what counts.
+            let log_level = logger::plugin_level_filter();
 
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()

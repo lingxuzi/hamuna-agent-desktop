@@ -42,7 +42,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Runtime};
 
 /// Log level enum
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Info,
@@ -60,6 +60,91 @@ impl LogLevel {
             LogLevel::Debug => "DEBUG",
         }
     }
+
+    fn severity(self) -> u8 {
+        match self {
+            LogLevel::Debug => 0,
+            LogLevel::Info => 1,
+            LogLevel::Warn => 2,
+            LogLevel::Error => 3,
+        }
+    }
+
+    fn as_env_value(self) -> &'static str {
+        match self {
+            LogLevel::Debug => "debug",
+            LogLevel::Info => "info",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error",
+        }
+    }
+}
+
+/// The lowest level the unified log keeps.
+///
+/// Release builds keep **only `Error`**. A representative week of real usage
+/// wrote ~40k lines / 8MB per day, of which >90% were DEBUG/INFO perf and HTTP
+/// traces — the handful of lines anyone greps for were buried in them.
+/// Debug builds (and `tauri dev`) keep everything, unchanged.
+///
+/// `HAMUNA_LOG_LEVEL=debug|info|warn|error` overrides the floor for a single
+/// launch. That escape hatch is not a preference: without it a release user's
+/// log file contains nothing to diagnose, and support has no way to ask for a
+/// verbose run. It is the same env var handed to the Node sidecar below, so
+/// one flag turns the whole app verbose.
+fn min_level() -> LogLevel {
+    static MIN: OnceLock<LogLevel> = OnceLock::new();
+    *MIN.get_or_init(|| {
+        let requested = std::env::var("HAMUNA_LOG_LEVEL")
+            .ok()
+            .and_then(|raw| parse_level(&raw));
+        requested.unwrap_or(if cfg!(debug_assertions) {
+            LogLevel::Debug
+        } else {
+            LogLevel::Error
+        })
+    })
+}
+
+fn parse_level(raw: &str) -> Option<LogLevel> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "debug" => Some(LogLevel::Debug),
+        "info" => Some(LogLevel::Info),
+        "warn" | "warning" => Some(LogLevel::Warn),
+        "error" => Some(LogLevel::Error),
+        _ => None,
+    }
+}
+
+fn level_enabled_at(level: LogLevel, floor: LogLevel) -> bool {
+    level.severity() >= floor.severity()
+}
+
+/// Whether `level` survives the unified-log ceiling (file + frontend emit).
+pub fn level_enabled(level: LogLevel) -> bool {
+    level_enabled_at(level, min_level())
+}
+
+/// The same floor expressed for `tauri_plugin_log`, so stdout / LogDir cannot
+/// drift from the unified log. Two independent thresholds is exactly how the
+/// file stayed at 8MB/day while the plugin was "already limited".
+pub fn plugin_level_filter() -> log::LevelFilter {
+    match min_level() {
+        LogLevel::Debug => log::LevelFilter::Debug,
+        LogLevel::Info => log::LevelFilter::Info,
+        LogLevel::Warn => log::LevelFilter::Warn,
+        LogLevel::Error => log::LevelFilter::Error,
+    }
+}
+
+/// Propagate this process's log floor to a child Node process.
+///
+/// Node has no `debug_assertions` equivalent, so the build mode has to travel
+/// as an env var; otherwise the Sidecar keeps writing DEBUG/INFO into the very
+/// file the GUI just stopped writing to, and the ceiling only halves the
+/// volume.
+pub fn apply_log_level_env(cmd: &mut std::process::Command) {
+    cmd.env("HAMUNA_LOG_LEVEL", min_level().as_env_value());
 }
 
 /// Log entry sent to frontend.
@@ -424,6 +509,9 @@ pub fn create_log_entry_with_correlation(
 
 /// Send a log entry to the frontend and persist to file
 pub fn emit_log<R: Runtime>(app: &AppHandle<R>, level: LogLevel, message: String) {
+    if !level_enabled(level) {
+        return;
+    }
     let entry = create_log_entry(level, message.clone());
 
     // 1. Log to Rust's log system (stdout)
@@ -496,6 +584,13 @@ pub fn unified_log(level: LogLevel, message: String) {
 /// the kv-pair form of `ulog_*!` macros so explicit correlation values on
 /// the call site take precedence over `LogContext::current()`).
 pub fn unified_log_entry(entry: LogEntry) {
+    // Below the floor: drop before *any* of the three sinks. Filtering here
+    // rather than in each sink is what makes `min_level()` authoritative —
+    // the old shape wrote the full file regardless of what the stdout plugin
+    // was configured to print.
+    if !level_enabled(entry.level) {
+        return;
+    }
     // 1. log crate (stdout)
     match entry.level {
         LogLevel::Info => log::info!("{}", entry.message),
@@ -651,4 +746,56 @@ macro_rules! __ulog_assign {
     (runtime, $val:expr, $sid:ident, $tid:ident, $oid:ident, $rid:ident, $turn:ident, $rt:ident) => {
         $rt = Some(::std::string::ToString::to_string(&$val));
     };
+}
+
+#[cfg(test)]
+mod log_level_tests {
+    use super::*;
+
+    #[test]
+    fn severity_orders_debug_info_warn_error() {
+        assert!(LogLevel::Debug.severity() < LogLevel::Info.severity());
+        assert!(LogLevel::Info.severity() < LogLevel::Warn.severity());
+        assert!(LogLevel::Warn.severity() < LogLevel::Error.severity());
+    }
+
+    #[test]
+    fn a_floor_admits_itself_and_everything_above() {
+        assert!(level_enabled_at(LogLevel::Error, LogLevel::Error));
+        assert!(!level_enabled_at(LogLevel::Warn, LogLevel::Error));
+        assert!(!level_enabled_at(LogLevel::Info, LogLevel::Error));
+        assert!(!level_enabled_at(LogLevel::Debug, LogLevel::Error));
+    }
+
+    #[test]
+    fn a_debug_floor_admits_everything() {
+        let all = [
+            LogLevel::Debug,
+            LogLevel::Info,
+            LogLevel::Warn,
+            LogLevel::Error,
+        ];
+        for level in all {
+            assert!(level_enabled_at(level, LogLevel::Debug));
+        }
+    }
+
+    #[test]
+    fn level_names_round_trip_through_the_env_var() {
+        let all = [
+            LogLevel::Debug,
+            LogLevel::Info,
+            LogLevel::Warn,
+            LogLevel::Error,
+        ];
+        for level in all {
+            assert_eq!(parse_level(level.as_env_value()), Some(level));
+        }
+        // `HAMUNA_LOG_LEVEL=WARN ` (copy-pasted from a log line) must work.
+        assert_eq!(parse_level("  WARN "), Some(LogLevel::Warn));
+        // Anything unrecognised is not silently treated as "verbose" or
+        // "silent" — it falls back to the build default.
+        assert_eq!(parse_level("verbose"), None);
+        assert_eq!(parse_level(""), None);
+    }
 }

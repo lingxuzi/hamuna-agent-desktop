@@ -748,6 +748,10 @@ fn create_new_session_sidecar<R: Runtime>(
         cmd.env("HAMUNA_MANAGEMENT_PORT", mgmt_port.to_string());
     }
 
+    // Same release floor as the GUI process — this Sidecar writes the same
+    // unified log file. See `logger::min_level`.
+    crate::logger::apply_log_level_env(&mut cmd);
+
     // Reuse validation and process spawn consume the same identity snapshot for
     // this ensure attempt. In particular, missing Session metadata is not an
     // implicit builtin identity for a metadata creator.

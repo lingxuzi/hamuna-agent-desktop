@@ -334,6 +334,10 @@ Rust 工具链由仓库根目录 `rust-toolchain.toml` 固定，开发机和 CI 
 
 日志来自三层（React / Node.js Sidecar / Rust），汇入统一日志 `~/.hamuna/logs/unified-{YYYY-MM-DD}.log`。**用户报告问题时 MUST 主动读日志，不等用户粘贴。**
 
+**等级闸门（0.2.x）：** release 构建**只保留 ERROR**，dev / debug 构建保留全部。唯一权威是 `src-tauri/src/logger.rs::min_level()`，Rust 的三条通道（stdout plugin / 统一文件 / 前端 emit）和 Node 的 `appendUnifiedLog` 都读它；Node 那份经 spawn 时的 `HAMUNA_LOG_LEVEL` env 传过来（`src/server/logLevel.ts`）。
+- **要一份可诊断的日志**：设 `HAMUNA_LOG_LEVEL=info`（或 `warn` / `debug`）重启 App。这一个变量同时作用于 GUI 与 Sidecar，不需要改代码。
+- 因此 release 下 grep 不到 `[browser]` / `[perf]` / `[agent][sdk]` 这类 INFO 行是**预期行为**，不是日志坏了。先确认用户是不是 release 安装、以及是否带了 `HAMUNA_LOG_LEVEL`。
+
 - **IM Bot 问题**：搜 `[feishu]` `[im]` `[telegram]` `[dingtalk]` `[bridge]` `[openclaw]`
 - **AI / Agent 异常**：搜 `[agent]` `pre-warm` `timeout`
 - **定时任务**：搜 `[CronTask]`
