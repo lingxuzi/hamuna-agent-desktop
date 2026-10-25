@@ -34,6 +34,8 @@ import {
   type InterruptReceipt,
 } from './utils/inflight-terminal';
 import { shouldBlockToolInPlanMode, planModeDenyMessage, isPlanModeInEffect, PLAN_MODE_READONLY_TOOLS, PLAN_MODE_HOST_INTERACTION_TOOLS, applyPermissionModeSelection, computePlanExitState, computeRestoredPlanState } from './utils/plan-mode-gate';
+import { isBrowserCommandAutoAllowed, isBrowserSubmitCommand } from './utils/browser-command-approval';
+import { shouldDenyForBrowserSearch, browserSearchDenyReason } from './utils/browser-search-gate';
 import { decideMiniAppTool, loadMiniAppGrantsForApp } from './miniapp-permission-gate';
 import { planRetraction } from './utils/message-retraction';
 import type { TransientProviderTextRetryDecision } from './session-core/turn-result-policy';
@@ -4447,6 +4449,17 @@ async function checkToolPermission(
   }
 
   // 3. Check if user already granted "always allow" in this session
+  //
+  //    EXCEPT for `hamuna browser submit`: that grant is keyed by TOOL NAME
+  //    ("Bash"), so a session-wide Bash grant would silently swallow the
+  //    submit gate — the one browser action with an externally-visible side
+  //    effect. The submit check runs BEFORE the session grant so a submit
+  //    always reaches the approval prompt.
+  if (toolName === 'Bash' && isBrowserSubmitCommand(bashCommandOf(input))) {
+    console.log(`[permission] Bash: browser submit needs explicit approval (bypasses session grant)`);
+    return promptUser(toolName, input, mode, signal);
+  }
+
   if (sessionAlwaysAllowed.has(toolName)) {
     console.debug(`[permission] ${toolName}: allowed by session grant`);
     return 'allow';
@@ -4459,6 +4472,32 @@ async function checkToolPermission(
   }
 
   // 5. Request user confirmation via frontend
+  return promptUser(toolName, input, mode, signal);
+}
+
+/**
+ * Extract the shell command from a Bash tool input.
+ *
+ * Returns '' when the input isn't a well-formed Bash call — callers treat
+ * that as "not a recognized command" and fall back to the normal prompt.
+ */
+function bashCommandOf(input: unknown): string {
+  const command = (input as Record<string, unknown> | undefined)?.command;
+  return typeof command === 'string' ? command.trim() : '';
+}
+
+/**
+ * Broadcast a permission request and wait for the user's answer.
+ *
+ * Split out of `checkToolPermission` so the browser-submit gate can reach the
+ * prompt without duplicating the request/abort plumbing.
+ */
+async function promptUser(
+  toolName: string,
+  input: unknown,
+  mode: PermissionMode,
+  signal?: AbortSignal
+): Promise<'allow' | 'deny'> {
   console.log(`[permission] ${toolName}: requesting user confirmation (mode=${mode})`);  // Keep as info - user action needed
 
   const requestId = `perm_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -11095,6 +11134,29 @@ async function startStreamingSession(preWarm = false): Promise<void> {
               updatedInput: input as Record<string, unknown>
             };
           }
+
+          // 7. Embedded browser: `hamuna browser status|open|read|click|fill …`
+          //
+          //    These drive the user's own browser panel (the window in front of
+          //    them) for reading and local interaction — no externally-visible
+          //    effect, so prompting on each one would make every "查一下这个网页"
+          //    turn cost a modal.
+          //
+          //    `hamuna browser submit` is deliberately NOT auto-allowed: it fires
+          //    a form's requestSubmit(), which can place an order, publish a
+          //    post, or message a third party. It falls through to
+          //    checkToolPermission, where the user sees the exact command and
+          //    approves it. The policy lives in
+          //    `utils/browser-command-approval.ts` (pure core + unit tests);
+          //    the submit-specific gate that a session-wide Bash grant cannot
+          //    bypass lives in checkToolPermission (see isBrowserSubmitCommand).
+          if (isBrowserCommandAutoAllowed(cmd)) {
+            console.log(`[permission] hamuna browser auto-allowed: ${cmd}`);
+            return {
+              behavior: 'allow' as const,
+              updatedInput: input as Record<string, unknown>
+            };
+          }
         }
 
         // Headless IM fast-path: IM bridges (Telegram/Dingtalk builtin + all OpenClaw plugins
@@ -11287,6 +11349,26 @@ async function startStreamingSession(preWarm = false): Promise<void> {
                     hookEventName: 'PreToolUse' as const,
                     permissionDecision: 'deny' as const,
                     permissionDecisionReason: reason,
+                  },
+                };
+              }
+              // Browser-search gate: in a Chat, WebSearch / WebFetch would
+              // look things up from the Sidecar's network path — no user
+              // cookies, no JS-rendered pages, and every region-gated or
+              // bot-challenged engine returns a degraded page. The embedded
+              // browser the user is already looking at can do better, so the
+              // Agent is pointed at `hamuna browser search` instead. Other
+              // scenarios (cron / IM / registered agent) have no browser
+              // window to drive and keep the native tools.
+              if (shouldDenyForBrowserSearch(pre.tool_name, currentScenario)) {
+                console.warn(
+                  `[permission] browser-search hard gate denied: ${pre.tool_name} scenario=${currentScenario.type}`,
+                );
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    permissionDecision: 'deny' as const,
+                    permissionDecisionReason: browserSearchDenyReason(pre.tool_name),
                   },
                 };
               }

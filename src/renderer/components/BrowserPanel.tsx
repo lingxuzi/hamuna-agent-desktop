@@ -29,6 +29,13 @@ import Tip from '@/components/Tip';
 interface BrowserPanelProps {
   tabId: string;
   url: string | null;
+  /**
+   * Chat session that owns this browser. The agent CLI addresses the browser
+   * by session id (it only knows `HAMUNA_SESSION_ID`), so Rust stores this
+   * id and the renderer re-binds it whenever the id upgrades from
+   * `pending-<tabId>` to the real UUID.
+   */
+  sessionId?: string | null;
   /** Whether this panel should be visible (includes isActive + splitActiveView + splitPanelVisible) */
   isVisible: boolean;
   isDraggingSplit: boolean;
@@ -60,6 +67,7 @@ interface BrowserPanelProps {
 export default function BrowserPanel({
   tabId,
   url,
+  sessionId,
   isVisible,
   isDraggingSplit,
   isSplitTransitioning = false,
@@ -152,6 +160,7 @@ export default function BrowserPanel({
         tabId, url,
         x: bounds.x, y: bounds.y,
         width: bounds.width, height: bounds.height,
+        sessionId: sessionId ?? null,
       })
         .then(() => {
           // Cross-instance race: this resolution may belong to an unmounted
@@ -208,7 +217,23 @@ export default function BrowserPanel({
       cancelled = true;
       if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [url, browserAlive, isVisible, isSplitTransitioning, tabId, onBrowserCreated, onCreateFailed, readUsableBounds, t]);
+  }, [url, browserAlive, isVisible, isSplitTransitioning, tabId, sessionId, onBrowserCreated, onCreateFailed, readUsableBounds, t]);
+
+  // ── Re-bind the browser to the Chat session id ──
+  //
+  // A Chat's session id is not stable: a fresh tab starts as
+  // `pending-<tabId>` and is upgraded to the real UUID once the SDK reports
+  // `system_init`. The agent CLI only ever knows the final id (it reads
+  // `HAMUNA_SESSION_ID` from its own environment), so the browser has to be
+  // re-pointed at the new id — otherwise every agent command would look up a
+  // browser that does not exist under that id.
+  useEffect(() => {
+    if (!browserAlive) return;
+    invoke('cmd_browser_set_session', {
+      tabId,
+      sessionId: sessionId ?? null,
+    }).catch(() => {});
+  }, [browserAlive, tabId, sessionId]);
 
   // ── Listen for URL/loading events from Rust ──
   useEffect(() => {

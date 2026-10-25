@@ -182,6 +182,35 @@ pub async fn start_management_api() -> Result<u16, String> {
         .route("/api/miniapp/source", post(miniapp_source_handler))
         .route("/api/thought/list", get(thought_list_handler))
         .route("/api/thought/create", post(thought_create_handler))
+        // Agent-driven embedded browser (`hamuna browser …`).
+        .route(
+            "/api/browser/state",
+            get(crate::browser_api::browser_state_handler),
+        )
+        .route(
+            "/api/browser/navigate",
+            post(crate::browser_api::browser_navigate_handler),
+        )
+        .route(
+            "/api/browser/read",
+            post(crate::browser_api::browser_read_handler),
+        )
+        .route(
+            "/api/browser/click",
+            post(crate::browser_api::browser_click_handler),
+        )
+        .route(
+            "/api/browser/fill",
+            post(crate::browser_api::browser_fill_handler),
+        )
+        .route(
+            "/api/browser/submit",
+            post(crate::browser_api::browser_submit_handler),
+        )
+        .route(
+            "/api/browser/search",
+            post(crate::browser_api::browser_search_handler),
+        )
         .route("/api/space/list", post(space_list_handler))
         .route("/api/space/whoami", post(space_whoami_handler))
         .route(

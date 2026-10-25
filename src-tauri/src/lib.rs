@@ -4,6 +4,9 @@
 pub mod app_dirs;
 pub mod attachment_protocol;
 pub mod browser;
+pub mod browser_agent;
+pub mod browser_api;
+pub mod browser_throttle;
 pub mod cli;
 pub mod clipboard;
 mod commands;
@@ -282,6 +285,10 @@ pub fn run() {
     // access to Tauri `State`. They point at the same inner store.
     thought::set_thought_store(thought_state.clone());
     task::set_task_store(task_state.clone());
+    // Same pattern for the browser manager: the Rust Management API needs to
+    // drive the embedded browser for the `hamuna browser` CLI commands, and
+    // Management API handlers have no Tauri `State` injection.
+    browser::set_browser_manager(browser_state.clone());
 
     // Create SSE proxy state
     let sse_proxy_state = Arc::new(sse_proxy::SseProxyState::default());
@@ -578,6 +585,7 @@ pub fn run() {
             terminal::cmd_terminal_close,
             // Browser commands (embedded webview)
             browser::cmd_browser_create,
+            browser::cmd_browser_set_session,
             browser::cmd_browser_navigate,
             browser::cmd_browser_go_back,
             browser::cmd_browser_go_forward,

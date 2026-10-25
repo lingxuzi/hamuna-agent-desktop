@@ -437,6 +437,44 @@ hamuna im readme                                      # 拉 IM 工具完整文�
 - `--file` 必须是绝对路径，且路径白名单：必须落在 workspace / `/tmp` / HamunaAgent scratch 目录之一——这是为了防 prompt injection 把 `~/.ssh/id_rsa` 之类发给聊天对方
 - 不在 IM session 内调用会返回 "No IM context"，正常——这命令本来就是 session-scoped
 
+### 内置浏览器（browser）
+
+驱动用户当前 Chat 里那个嵌入式浏览器窗口——就是你眼前那个，不是另开一个无头浏览器。
+
+```bash
+hamuna browser search "tauri webview child"        # 搜索，返回标题/链接/摘要
+hamuna browser search "tauri webview" --engine bing  # 换引擎（默认 360）
+hamuna browser open https://example.com          # 打开（面板不存在时自动创建并显示）
+hamuna browser status                            # 当前页 title / url / readyState
+hamuna browser read                              # 当前页正文，输出 Markdown
+hamuna browser click --selector "#submit"        # 点 CSS 选择器命中的元素
+hamuna browser click --text "Sign in"            # 点可见文字匹配的元素
+hamuna browser fill --selector "#q" --value "hamuna"
+hamuna browser submit --selector "#form"         # 提交表单（会弹审批）
+```
+
+**何时用：**
+- **要搜资料 / 查网页 → 用 `browser search`**，不要用 WebSearch / WebFetch 工具
+- 用户让你"去网页上查一下 / 打开某个页面看看" → `browser search` 拿结果 → `browser open` 细读
+- 需要先填表再提交 → `browser fill` → `browser submit`
+- 需要在页面上翻找链接再进二级页 → `read` 拿到 Markdown 后再 `open` 下一个 URL
+
+**搜索：**
+- `search` 在**用户自己那个浏览器窗口**里跑：结果页由真实浏览器渲染（JS 执行、过人机校验），用户的 cookie 也生效——需要登录才看得到的内容，`search` 能搜到而普通 HTTP 请求搜不到
+- 输出按「标题 / 链接 / 摘要」三段一组逐条罗列
+- 默认引擎 360；`--engine bing` / `--engine baidu` 可换
+- 搜索会**占用浏览器面板**（结果页显示在用户眼前）。要细读某篇，再 `browser open <url>` 跳过去
+
+**定位目标：**
+- `--selector` 传 CSS 选择器，优先命中
+- `--text` 传元素可见文字：先精确匹配，再包含匹配
+- 两个都匹配不到会报错并列出候选可见元素，照着改 selector 或 text 重来
+
+**安全边界：**
+- `submit` 是唯一有外部副作用的动作（下单、发帖、发消息），**会走正常审批弹窗**，别绕过
+- `click` / `fill` / `open` / `read` / `search` / `status` 不会触发审批
+- 浏览器是 session-scoped：只能操作自己这个 session 的面板
+
 ### Session 间通信（session, PRD 0.2.37）
 
 ```bash

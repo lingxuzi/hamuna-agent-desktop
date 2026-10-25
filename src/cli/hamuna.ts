@@ -307,6 +307,7 @@ Usage: hamuna <command> [options]
 
 Commands:
   mcp       Manage MCP tool servers
+  browser   Drive the app's embedded browser (search/open/read/click/fill/submit)
   vision    Official image-understanding CLI tool
   tool      Manage registered CLI tools (Lab-gated; enable in Settings first)
   model     Manage model providers
@@ -345,6 +346,11 @@ Examples:
   hamuna mcp oauth start notion-mcp
   hamuna vision readme
   hamuna vision analyze --image hamuna_files/screenshot.png --prompt "Summarize the UI state"
+  hamuna browser search "tauri webview"         # search through the embedded browser
+  hamuna browser open https://example.com        # drive the app's embedded browser
+  hamuna browser read                           # current page as markdown
+  hamuna browser click --text "Sign in"
+  hamuna browser fill --selector "#q" --value "hamuna"
   hamuna model list
   hamuna model set-key deepseek sk-xxx
   hamuna skill list
@@ -749,6 +755,10 @@ export function printResult(
     } else {
       console.log('\u2713 vision analyze completed');
     }
+    return;
+  }
+  if (group === 'browser') {
+    printBrowserResult(action, result);
     return;
   }
   if (group === 'diagnose') {
@@ -2051,6 +2061,81 @@ function printThoughtList(thoughts: Array<Record<string, unknown>>): void {
   }
 }
 
+/**
+ * Render a `hamuna browser …` result.
+ *
+ * `read` prints the markdown page body raw — that IS the payload the agent
+ * wants, and wrapping it in a label would only add noise for an LLM reader.
+ */
+function printBrowserResult(action: string, result: Record<string, unknown>): void {
+  const data = (result.data as Record<string, unknown>) ?? {};
+
+  if (action === 'read') {
+    const markdown = typeof data.markdown === 'string' ? data.markdown : '';
+    console.log(markdown.trim() || '(page had no readable content)');
+    return;
+  }
+
+  if (action === 'status' || action === 'state' || action === 'list') {
+    const title = typeof data.title === 'string' ? data.title : '';
+    const url = typeof data.url === 'string' ? data.url : '';
+    console.log(`title: ${title || '(untitled)'}`);
+    console.log(`url:   ${url || '(unknown)'}`);
+    const readyState = typeof data.readyState === 'string' ? data.readyState : '';
+    if (readyState) console.log(`state: ${readyState}`);
+    return;
+  }
+
+  if (action === 'open' || action === 'navigate') {
+    const url = typeof data.url === 'string' ? data.url : '';
+    console.log(`✓ opened ${url}`);
+    if (data.opened === true) {
+      console.log('  (the browser panel was opened for this session)');
+    }
+    return;
+  }
+
+  if (action === 'click') {
+    const label = typeof data.label === 'string' && data.label ? data.label : '(unlabeled)';
+    console.log(`✓ clicked ${label}`);
+    return;
+  }
+
+  if (action === 'fill') {
+    const label = typeof data.label === 'string' && data.label ? data.label : '(unlabeled)';
+    console.log(`✓ filled ${label}`);
+    return;
+  }
+
+  if (action === 'submit') {
+    const label = typeof data.label === 'string' && data.label ? data.label : '(form)';
+    console.log(`✓ submitted ${label}`);
+    return;
+  }
+
+  if (action === 'search') {
+    const results = Array.isArray(data.results) ? data.results : [];
+    if (!results.length) {
+      console.log('(no results)');
+      return;
+    }
+    for (const item of results) {
+      if (!item || typeof item !== 'object') continue;
+      const row = item as Record<string, unknown>;
+      const title = typeof row.title === 'string' ? row.title : '';
+      const url = typeof row.url === 'string' ? row.url : '';
+      const snippet = typeof row.snippet === 'string' ? row.snippet : '';
+      console.log(`${title}`);
+      console.log(url);
+      if (snippet) console.log(snippet);
+      console.log('');
+    }
+    return;
+  }
+
+  console.log(formatObject(data));
+}
+
 function printMcpOAuth(data: Record<string, unknown>): void {
   if (!data) return;
   const id = data.id ?? '';
@@ -2422,6 +2507,12 @@ export function buildRoute(group: string, action: string, rest: string[]): strin
     if (attachmentAction === 'download') return 'space/attachment-download';
     if (attachmentAction === 'add') return 'space/attachment-add';
     if (attachmentAction === 'inspect') return 'space/attachment-inspect';
+  }
+  // `hamuna browser` with no sub-command → report the current page state.
+  // (`action` defaults to 'list' upstream, so a bare `browser list` lands
+  // here too — harmless, it just shows status.)
+  if (group === 'browser' && action === 'list') {
+    return 'browser/status';
   }
   return `${group}/${action}`;
 }
@@ -3235,6 +3326,62 @@ export function buildRequestBody(
   rest: string[],
   flags: Record<string, unknown>,
 ): Record<string, unknown> {
+  // Embedded browser (agent-driven). The URL may come as a positional arg
+  // (`hamuna browser open https://…`) or as `--url`; both are accepted.
+  if (group === 'browser') {
+    assertStringFlag(flags.selector, 'selector');
+    assertStringFlag(flags.text, 'text');
+    assertStringFlag(flags.value, 'value');
+    assertStringFlag(flags.session, 'session');
+    assertStringFlag(flags.query, 'query');
+    assertStringFlag(flags.engine, 'engine');
+    const sessionId = typeof flags.session === 'string' ? flags.session : undefined;
+    const base: Record<string, unknown> = sessionId ? { sessionId } : {};
+    if (action === 'open' || action === 'navigate') {
+      const url = (typeof flags.url === 'string' ? flags.url : rest[0] ?? '').trim();
+      if (!url) {
+        console.error('Error: browser open requires a URL.');
+        console.error('  Usage: hamuna browser open https://example.com');
+        process.exit(2);
+      }
+      return { ...base, url };
+    }
+    if (action === 'status' || action === 'state' || action === 'list') {
+      return base;
+    }
+    if (action === 'read') {
+      return base;
+    }
+    if (action === 'search') {
+      // The query may come as a positional arg or as --query; a bare
+      // `browser search` with no query is a usage error, not an empty search.
+      const query = (typeof flags.query === 'string' ? flags.query : rest.join(' ')).trim();
+      if (!query) {
+        console.error('Error: browser search requires a query.');
+        console.error('  Usage: hamuna browser search "tauri webview"');
+        process.exit(2);
+      }
+      const engine = typeof flags.engine === 'string' ? flags.engine.trim() : '';
+      return { ...base, query, ...(engine ? { engine } : {}) };
+    }
+    if (action === 'click' || action === 'fill' || action === 'submit') {
+      const selector = typeof flags.selector === 'string' ? flags.selector : undefined;
+      const text = typeof flags.text === 'string' ? flags.text : undefined;
+      if (!selector && !text) {
+        console.error(`Error: browser ${action} requires --selector <css> or --text <visible label>.`);
+        console.error(`  Usage: hamuna browser ${action} --text "Sign in"`);
+        process.exit(2);
+      }
+      return {
+        ...base,
+        ...(selector ? { selector } : {}),
+        ...(text ? { text } : {}),
+        ...(action === 'fill' ? { value: typeof flags.value === 'string' ? flags.value : '' } : {}),
+      };
+    }
+    return base;
+  }
+
   // Official image understanding tool. Unlike the user-defined CLI tool
   // registry, this is a built-in product capability backed by AppConfig model
   // settings, so it routes directly to the official vision admin handlers.

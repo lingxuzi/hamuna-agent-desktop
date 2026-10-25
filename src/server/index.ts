@@ -902,9 +902,14 @@ type SendMessagePayload = {
 function desktopScenarioForAnalyticsSource(
   source: TurnAnalyticsSource | undefined,
 ): Extract<InteractionScenario, { type: 'desktop' }> {
+  // `surface: 'chat'` is the discriminator the browser-search gate keys on:
+  // the Chat owns the browser panel, the floating ball does not. Analytics
+  // are unaffected — `originFromTurnAttribution` maps every desktop surface
+  // except 'floating-ball' to `surface: 'unknown'`, so naming the Chat
+  // explicitly changes no bucket.
   return source === 'floating_ball'
     ? { type: 'desktop', surface: 'floating-ball' }
-    : { type: 'desktop' };
+    : { type: 'desktop', surface: 'chat' };
 }
 
 function goalContinuationScenarioForSession(
@@ -2203,6 +2208,14 @@ async function routeAdminApi(pathname: string, payload: Record<string, unknown>)
   if (route === 'reload') return api.handleReload(payload.workspacePath as string | undefined);
   if (route === 'version') return api.handleVersion();
   if (route === 'help') return api.handleHelp(payload as Parameters<typeof api.handleHelp>[0]);
+
+  // Embedded browser (agent-driven). The handlers live in a separate module
+  // because they pull in the HTML→markdown converter, which must not be part
+  // of the admin-api cold-start path.
+  if (route.startsWith('browser/')) {
+    const { handleBrowserAction } = await import('./browser/browser-api');
+    return handleBrowserAction(route.slice('browser/'.length), payload);
+  }
 
   return { success: false, error: `Unknown admin route: ${pathname}` };
 }

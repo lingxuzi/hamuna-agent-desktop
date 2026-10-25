@@ -1820,6 +1820,41 @@ using 'hamuna tool ...'. The stable built-in hamuna CLI commands
 (cron, thought, im, widget, task, runtime, etc.) remain available.`;
 
 const HELP_TEXTS: Record<string, string> = {
+  browser: `hamuna browser — Drive the app's embedded browser
+
+Commands:
+  search <query>             Search the web through the embedded browser
+  status                     Show the current page (title / url / readyState)
+  open <url>                 Navigate to a URL (opens the browser panel if needed)
+  read                       Read the current page as markdown
+  click                      Click an element (--selector or --text)
+  fill                       Set an input's value (--selector or --text + --value)
+  submit                     Submit a form (--selector or --text)
+
+Targeting:
+  --selector <css>           CSS selector for the target element
+  --text <label>             Visible text of the target element (exact match
+                             first, then contains; a failed match lists the
+                             visible candidates so you can retry)
+
+Options:
+  --value <text>             Value to type (for 'fill')
+  --url <url>                URL (for 'open'; may also be positional)
+  --query <text>             Search query (for 'search'; may also be positional)
+  --engine <name>            Search engine: 360 (default) | bing | baidu
+  --session <id>             Target a specific Chat session's browser
+  --json                     Machine-readable output
+
+Notes:
+  The browser panel is shared with the user — the Agent drives the very
+  window the user is looking at. Navigation, clicking and filling are
+  automatic; 'submit' asks the user for approval first, because it is an
+  externally-visible action (an order, a post, a message).
+
+  'search' runs in that same window: the engine's result page is rendered by
+  a real browser (JS runs, bot challenges resolve) and the user's cookies
+  apply, so a search sees what the user would see. It prints title / url /
+  snippet per result. Prefer it over the WebSearch / WebFetch tools.`,
   mcp: `hamuna mcp — Manage MCP tool servers
 
 Commands:

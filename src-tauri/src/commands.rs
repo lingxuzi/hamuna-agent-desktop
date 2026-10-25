@@ -2471,7 +2471,7 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 
 // ============= CLI Sync =============
 
-const CLI_VERSION: &str = "40";
+const CLI_VERSION: &str = "42";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2669,8 +2669,20 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // exception and no console error. A generated app reached exactly that state on a
 // single unterminated string literal, and it read as "plain" rather than "dead".
 // The flow now names `scripts/validate-miniapp.mts` and shows the failure it prevents.
+//
+// 64: hamuna-cli — document the `browser` command family, which drives the
+// app's own embedded browser panel from inside a Chat session. The skill is
+// the only place an agent learns that `browser read` returns Markdown and that
+// `browser submit` is the one side-effecting action; without it the agent
+// either never finds the command or submits forms without the user seeing it.
+//
+// 65: hamuna-cli — document `browser search`, which runs a web search inside
+// that same embedded browser window. The search has to happen in the user's
+// real browser (JS-rendered results, user's cookies), so it is not
+// interchangeable with a plain fetch; the skill is where an agent learns to
+// prefer it over the WebSearch / WebFetch tools.
 
-const SYSTEM_SKILLS_VERSION: &str = "63";
+const SYSTEM_SKILLS_VERSION: &str = "65";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3353,11 +3365,12 @@ mod system_skills_tests {
         // the iframe carried `allow-same-origin`, which it no longer does), 61 when
         // `allowed_models` stopped being documented as a hard ceiling, and 62 when
         // the `app.agent` section stopped promising a writable, command-capable
-        // agent — it is read-only; writes and shell are hard-denied. The v37
+        // agent — it is read-only; writes and shell are hard-denied. 63 documented
+        // the browser command family, 64 kept that wording stable. The v37
         // contracts on CLI / memory-update / docs are still valid; only the version
         // anchor has to track the constant.
-        assert_eq!(CLI_VERSION, "40");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "62");
+        assert_eq!(CLI_VERSION, "42");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "65");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));

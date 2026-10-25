@@ -965,3 +965,50 @@ describe('hamuna CLI cron time handling', () => {
       .toBe('2026-07-09 09:00 Asia/Shanghai (UTC+08:00)');
   });
 });
+
+describe('hamuna CLI browser search', () => {
+  it('routes browser search to the browser/search admin route', () => {
+    expect(buildRoute('browser', 'search', ['tauri webview'])).toBe('browser/search');
+  });
+
+  it('takes the query positionally or from --query', () => {
+    expect(buildRequestBody('browser', 'search', ['tauri webview'], {})).toMatchObject({
+      query: 'tauri webview',
+    });
+    expect(buildRequestBody('browser', 'search', [], { query: 'tauri webview' })).toMatchObject({
+      query: 'tauri webview',
+    });
+  });
+
+  it('forwards the engine only when one was given', () => {
+    expect(buildRequestBody('browser', 'search', ['q'], { engine: 'bing' })).toMatchObject({
+      query: 'q',
+      engine: 'bing',
+    });
+    expect(buildRequestBody('browser', 'search', ['q'], {}).engine).toBeUndefined();
+  });
+
+  it('keeps the session id when one is passed', () => {
+    expect(buildRequestBody('browser', 'search', ['q'], { session: 'sess-1' })).toMatchObject({
+      sessionId: 'sess-1',
+    });
+  });
+
+  it('rejects a search with no query', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'search', [], {})).toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('browser search requires a query'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('advertises the search command in the top help', () => {
+    expect(TOP_HELP).toContain('hamuna browser search "tauri webview"');
+  });
+});

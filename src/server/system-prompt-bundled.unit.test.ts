@@ -15,6 +15,7 @@ import { buildSystemPromptAppend, type InteractionScenario, type SystemPromptOpt
 import { getBundledTopLevelResourcePath } from './utils/runtime';
 
 const desktopScenario: InteractionScenario = { type: 'desktop' };
+const chatScenario: InteractionScenario = { type: 'desktop', surface: 'chat' };
 const floatingBallScenario: InteractionScenario = { type: 'desktop', surface: 'floating-ball' };
 const imScenario: InteractionScenario = { type: 'im', platform: 'feishu', sourceType: 'private' };
 const registeredAgentScenario: InteractionScenario = {
@@ -91,6 +92,46 @@ describe('buildSystemPromptAppend with bundled global.md', () => {
     const ballPrompt = await buildSystemPromptAppend(floatingBallScenario, baseOptions);
     expect(ballPrompt).toContain('<hamuna-floating-ball-instructions>');
     expect(ballPrompt).toContain('HamunaAgent desktop floating window');
+  });
+
+  // ===== browserSearchHint =====
+  //
+  // The "search with the embedded browser" rule is Chat-only. It must render
+  // for exactly the scenarios the PreToolUse hard gate denies WebSearch /
+  // WebFetch for (server/utils/browser-search-gate.ts) — a prompt that tells
+  // a cron job to use a browser it cannot drive, or a gate that denies a
+  // scenario the prompt never prepared, are both silent breakage.
+
+  it('renders the browser-search rule only for the Chat surface', async () => {
+    mockBundledFile('{{#if browserSearchHint}}use hamuna browser search{{/if}}');
+
+    const chatPrompt = await buildSystemPromptAppend(chatScenario, baseOptions);
+    expect(chatPrompt).toContain('use hamuna browser search');
+
+    // The floating ball is a desktop surface but the browser panel belongs to
+    // the Chat tab; a bare desktop scenario is a MiniApp / memory-update /
+    // Goal turn. Neither can drive the embedded browser.
+    for (const scenario of [desktopScenario, floatingBallScenario, imScenario, registeredAgentScenario]) {
+      const prompt = await buildSystemPromptAppend(scenario, baseOptions);
+      expect(prompt).not.toContain('use hamuna browser search');
+    }
+  });
+
+  it('keeps the original search instruction for the non-Chat scenarios', async () => {
+    // The else branch must carry the pre-existing rule (hamuna-search MCP) —
+    // the Chat-only switch must not silently strip the search instruction
+    // from cron / IM / registered-agent / floating-ball prompts.
+    mockBundledFile('{{#if browserSearchHint}}use hamuna browser search{{else}}use hamuna-search mcp{{/if}}');
+
+    const chatPrompt = await buildSystemPromptAppend(chatScenario, baseOptions);
+    expect(chatPrompt).toContain('use hamuna browser search');
+    expect(chatPrompt).not.toContain('use hamuna-search mcp');
+
+    for (const scenario of [desktopScenario, floatingBallScenario, imScenario, registeredAgentScenario]) {
+      const prompt = await buildSystemPromptAppend(scenario, baseOptions);
+      expect(prompt).toContain('use hamuna-search mcp');
+      expect(prompt).not.toContain('use hamuna browser search');
+    }
   });
 
   it('reads bundled file fresh on every call (no cache)', async () => {

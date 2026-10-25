@@ -66,6 +66,7 @@ import CronTaskCard from '@/components/scheduled-tasks/CronTaskCard';
 import CronTaskDetailPanel from '@/components/CronTaskDetailPanel';
 import { projectTaskExecutionOverrides } from '@/utils/taskProviderProjection';
 import { isTauriEnvironment } from '@/utils/browserMock';
+import { listenWithCleanup } from '@/utils/tauriListen';
 import { isDebugMode } from '@/utils/debug';
 import { getChannelTypeLabel } from '@/utils/taskCenterUtils';
 import { appendCronPromptToDraft } from '@/utils/cronComposerRecovery';
@@ -520,6 +521,33 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   const tRef = useRef(t);
   tRef.current = t;
 
+  /**
+   * Tell the Sidecar this Tab is a Chat turn.
+   *
+   * The system prompt is BAKED at SDK spawn (buildSystemPromptAppend runs
+   * inside startStreamingSession), not per turn — so the scenario has to be
+   * known before the pre-warm spawns the SDK, or the Chat-only rules never
+   * reach the prompt. The MCP push is what arms that pre-warm, so this call
+   * has to precede it; the floating ball orders it the same way in
+   * syncFloatingSidecarConfig.
+   *
+   * `surface: 'chat'` is also what the browser-search hard gate keys on
+   * (server/utils/browser-search-gate.ts) — the same discriminator, so the
+   * prompt and the gate can never disagree about which turns must use the
+   * embedded browser.
+   */
+  const pushChatInteractionScenario = useCallback(async () => {
+    try {
+      await apiPost('/api/interaction-scenario/set', {
+        scenario: { type: 'desktop', surface: 'chat' },
+      });
+    } catch (err) {
+      // Non-fatal: the per-turn gate still applies (it reads the scenario the
+      // /chat/send path sets), so at worst the prompt hint is missing.
+      console.warn('[Chat] Failed to set interaction scenario:', err);
+    }
+  }, [apiPost]);
+
   // Workspace file service — Phase D coherence fix: SimpleChatInput already
   // sources its slash menu from `cmd_list_slash_commands`; the chat sidebar
   // (loadSkillsAndCommands below) used to hit the sidecar `/api/commands`
@@ -931,6 +959,49 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
     else if (splitFile) setSplitActiveView('file');
   }, [terminalPinned, terminalAlive, splitFile]);
+
+  // ── Agent-driven browser open ──
+  //
+  // Rust asks the renderer to open the embedded browser when the `hamuna
+  // browser open` CLI command runs against a Chat that has no browser yet.
+  // Rust can't place the OS-level webview itself — only the renderer knows
+  // where the split panel is.
+  //
+  // The event carries the owning Chat's session id, so exactly one tab claims
+  // it. A pending session id never matches: the agent only ever knows the
+  // real (post-system_init) id, so a tab that has not been upgraded yet
+  // cannot be addressed by the agent anyway.
+  useEffect(() => {
+    if (!isTauriEnvironment()) return;
+    const ac = new AbortController();
+
+    void listenWithCleanup<{ sessionId?: string }>(
+      'browser:agent-open-request',
+      (event) => {
+        const requested = event.payload?.sessionId;
+        if (!requested) return;
+        // The renderer and the Sidecar can be a beat apart on the session id
+        // upgrade (pending-<tabId> → real UUID). Only a real id can match, and
+        // only the tab that owns it may open the panel.
+        if (isPendingSessionId(requested)) return;
+        if (sessionIdRef.current !== requested) return;
+        // The webview is an OS-level overlay that only exists while the panel
+        // is visible, so the owning tab has to be in front — otherwise the
+        // agent would drive a browser the user can't see.
+        if (!isActive) {
+          window.dispatchEvent(new CustomEvent(CUSTOM_EVENTS.JUMP_TO_TAB, {
+            detail: { targetTabId: tabId, sessionId: requested },
+          }));
+        }
+        startBrowserSplitTransitionIfNeeded();
+        setBrowserUrl((prev) => prev ?? BROWSER_BLANK_URL);
+        setSplitActiveView('browser');
+      },
+      ac.signal,
+    );
+
+    return () => ac.abort();
+  }, [isActive, tabId, startBrowserSplitTransitionIfNeeded]);
 
   // Switch from browser preview to editor for a local HTML file.
   // Re-reads from disk to ensure editor shows the latest saved content
@@ -1670,6 +1741,10 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
           const effective = allServers.filter(s =>
             globalEnabled.includes(s.id) && launchMessage.mcpEnabledServers!.includes(s.id)
           );
+          // Scenario BEFORE the MCP push: the MCP push arms the pre-warm that
+          // bakes the system prompt, and the prompt needs to know this is a
+          // Chat turn. See pushChatInteractionScenario.
+          await pushChatInteractionScenario();
           await apiPost('/api/mcp/set', { servers: effective });
         }
         // Hand later config-change MCP pushes back to the mount effect now that
@@ -2339,6 +2414,21 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
         const effectiveServers = servers.filter(s =>
           enabledIds.includes(s.id) && workspaceEnabled.includes(s.id)
         );
+
+        // Declare the Chat's surface BEFORE the MCP push.
+        //
+        // The system prompt is BAKED at SDK spawn (buildSystemPromptAppend runs
+        // inside startStreamingSession), not per turn — so a scenario that is
+        // only known after the SDK is up never reaches the prompt. The MCP push
+        // below is what arms the pre-warm that spawns the SDK, so this push
+        // must land first; the floating ball orders it the same way in
+        // syncFloatingSidecarConfig.
+        //
+        // `surface: 'chat'` is also what the browser-search hard gate keys on
+        // (server/utils/browser-search-gate.ts) — the same discriminator, so the
+        // prompt and the gate can never disagree about which turns must use
+        // the embedded browser.
+        await pushChatInteractionScenario();
 
         // Always call /api/mcp/set, even with empty array
         // Empty array means "user explicitly disabled all MCP"
@@ -5759,6 +5849,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                   <LazyBrowserPanel
                     tabId={tabId}
                     url={browserUrl}
+                    sessionId={sessionId}
                     isVisible={isActive && splitPanelVisible && splitActiveView === 'browser'}
                     isDraggingSplit={isDraggingSplit}
                     isSplitTransitioning={isSplitWidthTransitioning}

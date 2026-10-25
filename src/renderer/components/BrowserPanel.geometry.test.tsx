@@ -84,10 +84,11 @@ function createCalls(): Array<{ x: number; y: number; width: number; height: num
     .map(([, args]) => args as { x: number; y: number; width: number; height: number });
 }
 
-function panelProps(overrides: { isVisible?: boolean; isSplitTransitioning?: boolean; browserAlive?: boolean } = {}) {
+function panelProps(overrides: { isVisible?: boolean; isSplitTransitioning?: boolean; browserAlive?: boolean; sessionId?: string | null } = {}) {
   return {
     tabId: 'tab-1',
     url: 'https://example.com',
+    sessionId: overrides.sessionId ?? null,
     isVisible: overrides.isVisible ?? true,
     isDraggingSplit: false,
     isSplitTransitioning: overrides.isSplitTransitioning ?? false,
@@ -245,5 +246,46 @@ describe('BrowserPanel geometry reconciler (#339)', () => {
     containerRect = { x: 440, y: 95, width: 820, height: 610 };
     await flushFrame();
     expect(resizeCalls()).toHaveLength(1);
+  });
+});
+
+/**
+ * The agent CLI addresses the browser by Chat session id. A Chat's id rotates
+ * (`pending-<tabId>` → real UUID once the SDK reports system_init), so the
+ * browser must be re-bound whenever the id changes — otherwise every agent
+ * command would look up a browser under an id the browser no longer carries.
+ */
+describe('BrowserPanel session binding', () => {
+  function setSessionCalls(): Array<{ tabId: string; sessionId: string | null }> {
+    return invokeMock.mock.calls
+      .filter(([cmd]) => cmd === 'cmd_browser_set_session')
+      .map(([, args]) => args as { tabId: string; sessionId: string | null });
+  }
+
+  it('creates the webview with the current session id', async () => {
+    render(<BrowserPanel {...panelProps({ browserAlive: false, sessionId: 'session-abc' })} />);
+    await flushFrame();
+
+    const creates = invokeMock.mock.calls.filter(([cmd]) => cmd === 'cmd_browser_create');
+    expect(creates).toHaveLength(1);
+    expect(creates[0][1]).toMatchObject({ sessionId: 'session-abc' });
+  });
+
+  it('re-binds when the session id is upgraded', async () => {
+    const view = render(<BrowserPanel {...panelProps({ browserAlive: true, sessionId: 'pending-tab-1' })} />);
+    await flushFrame();
+
+    view.rerender(<BrowserPanel {...panelProps({ browserAlive: true, sessionId: 'session-real' })} />);
+    await flushFrame();
+
+    const binds = setSessionCalls();
+    expect(binds.length).toBeGreaterThan(0);
+    expect(binds[binds.length - 1]).toMatchObject({ tabId: 'tab-1', sessionId: 'session-real' });
+  });
+
+  it('does not bind before the webview exists', async () => {
+    render(<BrowserPanel {...panelProps({ browserAlive: false, sessionId: 'session-abc' })} />);
+    await flushFrame();
+    expect(setSessionCalls()).toHaveLength(0);
   });
 });

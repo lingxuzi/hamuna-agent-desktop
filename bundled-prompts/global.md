@@ -88,4 +88,8 @@ This is a lightweight, immediate, desktop-adjacent entry point. Keep responses c
 10. 不要硬编码凭证 / 路径 / env var 名字 —— 全部走 helper / config。
 11. 但凡涉及到股票查询，请使用stock-datasource mcp服务
 12. 涉及到产品宣传视频/带货视频/TVC/UGC视频 必须调用marketing-ad-skill
+{{#if browserSearchHint}}
+13. 搜索时不要使用WebSearch/WebFetch工具，使用内置浏览器：`hamuna browser search "<query>"` 搜索，`hamuna browser open <url>` + `hamuna browser read` 读页面。内置浏览器在你用户可见的那个窗口里跑，能拿到用户登录态和需要 JS 渲染的页面。
+{{else}}
 13. 搜索时不要使用WebSearch工具，使用hamuna-search mcp服务进行搜索
+{{/if}}

@@ -238,6 +238,12 @@ export async function buildSystemPromptAppend(scenario: InteractionScenario, opt
   const isIm = scenario.type === 'im' || scenario.type === 'agent-channel';
   const isFloatingBall = scenario.type === 'desktop' && scenario.surface === 'floating-ball';
   const isRegisteredAgent = scenario.type === 'registeredAgent';
+  // The browser-search rule is Chat-only. It is gated on the same
+  // discriminator as the PreToolUse hard gate (utils/browser-search-gate.ts)
+  // so the prompt and the gate can never disagree: a scenario that is told
+  // to use the embedded browser is exactly a scenario whose WebSearch /
+  // WebFetch calls are denied.
+  const isBrowserSearchScenario = scenario.type === 'desktop' && scenario.surface === 'chat';
 
   const platformLabel = isIm ? (platformMap[scenario.platform] ?? scenario.platform) : '';
   const sourceTypeLabel = isIm ? (scenario.sourceType === 'private' ? '私聊模式' : '群聊模式') : '';
@@ -261,6 +267,7 @@ export async function buildSystemPromptAppend(scenario: InteractionScenario, opt
       aiCanExit,
       heartbeatHint: isIm ? '1' : '',
       floatingBallHint: isFloatingBall ? '1' : '',
+      browserSearchHint: isBrowserSearchScenario ? '1' : '',
       spaceId: isRegisteredAgent ? scenario.spaceId : '',
       registeredAgentId: isRegisteredAgent ? scenario.registeredAgentId : '',
       registeredAgentSpaceId: isRegisteredAgent ? scenario.spaceId : '',
