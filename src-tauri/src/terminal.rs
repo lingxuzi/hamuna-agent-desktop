@@ -20,9 +20,10 @@ use std::sync::Arc;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
+use crate::app_dirs;
 use crate::{ulog_error, ulog_info};
 
 /// A single terminal session with its PTY pair and reader task.
@@ -393,7 +394,7 @@ fn inject_terminal_env(cmd: &mut CommandBuilder, app: &AppHandle, sidecar_port: 
     let mut extra_paths: Vec<String> = Vec::new();
 
     // External binaries directory (cuse sidecar etc.; tauri.conf.json::externalBin)
-    if let Ok(resource_dir) = app.path().resource_dir() {
+    if let Ok(resource_dir) = app_dirs::resource_dir(&app) {
         // #229 (same bug class): on Windows resource_dir() may carry the `\\?\`
         // extended-length prefix. cmd.exe / PowerShell don't honor `\\?\` entries
         // in PATH lookups, so a prefixed nodejs/binaries dir would be invisible to

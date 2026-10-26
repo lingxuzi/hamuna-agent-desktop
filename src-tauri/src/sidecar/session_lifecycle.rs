@@ -733,7 +733,7 @@ fn create_new_session_sidecar<R: Runtime>(
         } else {
             "x64"
         };
-        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        if let Ok(resource_dir) = crate::app_dirs::resource_dir(&app_handle) {
             let py_dir = resource_dir.join(format!("python-{bundled_arch}"));
             if py_dir.is_dir() {
                 cmd.env("UV_PYTHON", &py_dir);

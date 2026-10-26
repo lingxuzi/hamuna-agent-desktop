@@ -126,7 +126,7 @@ pub(crate) fn normalize_external_path(path: PathBuf) -> PathBuf {
 pub(super) fn diagnose_node_not_found<R: Runtime>(app_handle: &AppHandle<R>) -> String {
     let mut details = Vec::new();
 
-    match app_handle.path().resource_dir() {
+    match crate::app_dirs::resource_dir(&app_handle) {
         Ok(resource_dir) => {
             details.push(format!("resource_dir: {:?}", resource_dir));
             let expected = node_path_in_resources(&resource_dir);
@@ -332,7 +332,7 @@ pub(super) fn find_node_executable_inner<R: Runtime>(app_handle: &AppHandle<R>) 
     // via scripts/download_nodejs.sh). Unlike the prior Bun externalBin
     // flow, Node.js is a binary + lib directory combo that can't ride
     // Tauri's externalBin — it's a plain resource copy.
-    match app_handle.path().resource_dir() {
+    match crate::app_dirs::resource_dir(&app_handle) {
         Ok(resource_dir) => {
             ulog_info!("[sidecar] resource_dir resolved to: {:?}", resource_dir);
 
@@ -437,7 +437,7 @@ pub(super) fn find_server_script_inner<R: Runtime>(_app_handle: &AppHandle<R>) -
 
     #[cfg(not(debug_assertions))]
     {
-        match _app_handle.path().resource_dir() {
+        match crate::app_dirs::resource_dir(_app_handle) {
             Ok(resource_dir) => {
                 let bundled_script = resource_dir.join("server-dist.js");
                 if bundled_script.exists() {

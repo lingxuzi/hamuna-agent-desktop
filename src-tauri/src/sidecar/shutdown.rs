@@ -354,7 +354,7 @@ fn cleanup_child_processes(seed_pids: &[u32]) {
 
 fn update_protected_roots<R: Runtime>(app_handle: &AppHandle<R>) -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+    if let Ok(resource_dir) = crate::app_dirs::resource_dir(&app_handle) {
         roots.push(normalize_external_path(resource_dir));
     }
     if let Ok(exe) = std::env::current_exe() {
@@ -433,7 +433,7 @@ fn wait_for_update_file_locks<R: Runtime>(_app_handle: &AppHandle<R>) -> Result<
 
 #[cfg(target_os = "windows")]
 fn update_lock_probe_paths<R: Runtime>(app_handle: &AppHandle<R>) -> Result<Vec<PathBuf>, String> {
-    let resource_dir = app_handle.path().resource_dir().map_err(|err| {
+    let resource_dir = crate::app_dirs::resource_dir(&app_handle).map_err(|err| {
         format!(
             "UPDATE_LOCK_PROBE_UNAVAILABLE: failed to resolve resource_dir: {}",
             err

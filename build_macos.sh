@@ -162,12 +162,15 @@ check_dependency "codesign" "需要 Xcode Command Line Tools"
 check_dependency "lipo" "需要 Xcode Command Line Tools"
 check_dependency "otool" "需要 Xcode Command Line Tools"
 
-# 检查 mino 默认工作区
-if [ ! -d "${PROJECT_DIR}/mino" ] || [ ! -f "${PROJECT_DIR}/mino/CLAUDE.md" ]; then
-    echo -e "${RED}错误: mino/ 目录不存在或不完整! 请先运行 ./setup.sh${NC}"
-    exit 1
-fi
-echo -e "${GREEN}  ✓ mino 默认工作区已就绪${NC}"
+# 检查内置 Agent 模板（mino 默认工作区 + easel）
+for tpl in mino easel; do
+    if [ ! -d "${PROJECT_DIR}/agent-templates/${tpl}" ] \
+        || [ ! -f "${PROJECT_DIR}/agent-templates/${tpl}/CLAUDE.md" ]; then
+        echo -e "${RED}错误: agent-templates/${tpl}/ 目录不存在或不完整!${NC}"
+        exit 1
+    fi
+done
+echo -e "${GREEN}  ✓ 内置 Agent 模板已就绪 (agent-templates/)${NC}"
 
 # Rust toolchain/components/target 必须与 rust-toolchain.toml 和 CI 对齐。
 "${PROJECT_DIR}/scripts/ensure_rust_toolchain.sh" "${BUILD_TARGETS[@]}"

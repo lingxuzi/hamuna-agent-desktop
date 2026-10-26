@@ -4,8 +4,6 @@
 // The Bridge is an independent Bun process that loads the plugin and communicates
 // with Rust via HTTP endpoints.
 
-use tauri::Manager;
-
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -15,6 +13,7 @@ use reqwest::Client;
 use serde_json::json;
 use tokio::sync::{mpsc, Mutex};
 
+use crate::app_dirs;
 use crate::im::adapter::{AdapterResult, ImAdapter, ImStreamAdapter};
 use crate::im::types::ImMessage;
 use crate::{ulog_debug, ulog_error, ulog_info, ulog_warn};
@@ -1154,7 +1153,7 @@ fn find_bridge_script<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) -> Op
     #[cfg(not(debug_assertions))]
     {
         use crate::sidecar::normalize_external_path;
-        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        if let Ok(resource_dir) = app_dirs::resource_dir(&app_handle) {
             let bundled: PathBuf = resource_dir.join("plugin-bridge-dist.mjs");
             if bundled.exists() {
                 let bundled = normalize_external_path(bundled);
@@ -1808,7 +1807,7 @@ fn bundled_nodejs_candidate_dirs<R: tauri::Runtime>(
     let mut dirs: Vec<PathBuf> = Vec::new();
 
     // Production: resource_dir/nodejs/  (standard layout)
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+    if let Ok(resource_dir) = app_dirs::resource_dir(&app_handle) {
         dirs.push(resource_dir.join("nodejs"));
 
         // Windows extra: resource_dir.parent/nodejs/ (NSIS-style layouts
@@ -2475,7 +2474,7 @@ fn find_tsx_runtime_loader<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) 
     // Production: bundled in resources/tsx-runtime/
     #[cfg(not(debug_assertions))]
     {
-        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        if let Ok(resource_dir) = app_dirs::resource_dir(&app_handle) {
             let p = resource_dir
                 .join("tsx-runtime")
                 .join("node_modules")
@@ -2537,7 +2536,7 @@ fn find_sdk_shim_dir<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) -> Opt
     // Production: bundled in resources
     #[cfg(not(debug_assertions))]
     {
-        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        if let Ok(resource_dir) = app_dirs::resource_dir(&app_handle) {
             let bundled: PathBuf = resource_dir.join("plugin-bridge-sdk-shim");
             if bundled.exists() {
                 return Some(bundled);

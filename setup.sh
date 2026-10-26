@@ -111,7 +111,7 @@ echo ""
 # 首次运行仍需联网一次（克隆到 ~/.hamuna/setup-cache/mino），之后只做本地拷贝。
 # 强制刷新缓存：MINO_REFRESH=1 ./setup.sh
 # 强制走 HTTPS（绕过 SSH 探测）：MINO_REPO_URL=https://.../openmino.git ./setup.sh
-MINO_DIR="${PROJECT_DIR}/mino"
+MINO_DIR="${PROJECT_DIR}/agent-templates/mino"
 MINO_CACHE_DIR="${MINO_CACHE_DIR:-${HAMUNA_HOME:-$HOME/.hamuna}/setup-cache/mino}"
 MINO_REPO_URL_SSH="${MINO_REPO_URL_SSH:-git@github.com:hAcKlyc/openmino.git}"
 MINO_REPO_URL_HTTPS="${MINO_REPO_URL_HTTPS:-https://github.com/hAcKlyc/openmino.git}"

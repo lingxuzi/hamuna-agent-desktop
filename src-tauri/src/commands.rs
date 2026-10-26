@@ -7,11 +7,12 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 
 #[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
 
+use crate::app_dirs;
 use crate::logger;
 use crate::perf_trace::{elapsed_ms, emit_perf_trace, trace_start, PerfTrace, PerfTraceName};
 #[cfg(not(target_os = "windows"))]
@@ -382,10 +383,7 @@ fn initialize_bundled_workspace_blocking<R: Runtime>(
         });
     }
 
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource dir: {}", e))?;
+    let resource_dir = app_dirs::resource_dir(&app_handle)?;
     let mino_src = resource_dir.join("mino");
     if !mino_src.exists() || !mino_src.join("CLAUDE.md").exists() {
         return Err(format!(
@@ -530,13 +528,12 @@ pub async fn cmd_miniapp_list_marketplace<R: Runtime>(
 }
 
 fn list_marketplace_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<Vec<MiniAppSummary>, String> {
-    use tauri::Manager;
     let mut out: Vec<MiniAppSummary> = Vec::new();
 
     // Bundled (read-only seed under resource_dir/bundled-miniapps/). Fail
     // soft: in dev the resource_dir may not contain bundled-miniapps/, but
     // Phase 1 Phase 2 already wrapped that — we just collect whatever exists.
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+    if let Ok(resource_dir) = app_dirs::resource_dir(&app_handle) {
         let bundled = resource_dir.join("bundled-miniapps");
         if bundled.exists() {
             if let Ok(rd) = fs::read_dir(&bundled) {
@@ -939,7 +936,7 @@ fn candidate_source_dirs<R: Runtime>(
     if let Ok(root) = miniapp_root_dir() {
         out.push(root.join(app_id));
     }
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+    if let Ok(resource_dir) = app_dirs::resource_dir(&app_handle) {
         out.push(resource_dir.join("bundled-miniapps").join(app_id));
     }
     Ok(out)
@@ -975,11 +972,7 @@ pub async fn cmd_miniapp_get_bundled_root<R: Runtime>(
 }
 
 fn bundled_root_blocking<R: Runtime>(app_handle: &AppHandle<R>) -> Result<String, String> {
-    use tauri::Manager;
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("resource_dir: {}", e))?;
+    let resource_dir = app_dirs::resource_dir(&app_handle)?;
     let bundled = resource_dir.join("bundled-miniapps");
     if !bundled.exists() {
         return Err("bundled-miniapps/ not found in resource dir".to_string());
@@ -1200,11 +1193,7 @@ fn install_from_marketplace_blocking<R: Runtime>(
     app_id: String,
 ) -> Result<CreateMiniAppResult, String> {
     // Read bundled source from `bundled-miniapps/<id>/`
-    use tauri::Manager;
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("resource_dir: {}", e))?;
+    let resource_dir = app_dirs::resource_dir(&app_handle)?;
     let bundled_root = resource_dir.join("bundled-miniapps").join(&app_id);
     if !bundled_root.exists() {
         return Err(format!("bundled MiniApp '{}' not found", app_id));
@@ -1781,10 +1770,7 @@ fn create_bot_workspace_blocking<R: Runtime>(
     let dest = find_available_workspace_path(&projects_dir, &sanitized);
 
     // Primary: copy from bundled resources
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource dir: {}", e))?;
+    let resource_dir = app_dirs::resource_dir(&app_handle)?;
     let mino_src = resource_dir.join("mino");
 
     if mino_src.exists() && mino_src.join("CLAUDE.md").exists() {
@@ -2080,10 +2066,7 @@ fn create_workspace_from_bundled_template_blocking<R: Runtime>(
     }
 
     // Primary: copy from bundled resources
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource dir: {}", e))?;
+    let resource_dir = app_dirs::resource_dir(&app_handle)?;
     let template_src = resource_dir.join(template_id);
 
     if template_src.exists() && template_src.join("CLAUDE.md").exists() {
@@ -2154,10 +2137,7 @@ fn resolve_template_source<R: Runtime>(
 ) -> Result<PathBuf, String> {
     if let Some(id) = template_id.as_deref() {
         validate_template_id(id)?;
-        let resource_dir = app_handle
-            .path()
-            .resource_dir()
-            .map_err(|e| format!("Failed to get resource dir: {}", e))?;
+        let resource_dir = app_dirs::resource_dir(&app_handle)?;
         let bundled = resource_dir.join(id);
         if bundled.exists() && bundled.join("CLAUDE.md").exists() {
             // Canonicalize so subsequent reads can't be redirected via symlink swap.
@@ -2415,10 +2395,7 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
     }
 
     // Source: app resources
-    let res = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Resource dir: {}", e))?;
+    let res = app_dirs::resource_dir(&app_handle)?;
     let src = res.join("bundled-agents").join("hamuna_helper");
     if !src.exists() {
         return Err(format!("Admin agent not found: {:?}", src));
@@ -2498,10 +2475,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
     }
 
     // Source: app resources/cli/ (esbuild output from `npm run build:cli`)
-    let res = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Resource dir: {}", e))?;
+    let res = app_dirs::resource_dir(&app_handle)?;
     let cli_src = res.join("cli");
     if !cli_src.exists() {
         return Err(format!("CLI source not found: {:?}", cli_src));
@@ -2554,9 +2528,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
     // launcher, so terminal invocations don't depend on the system install.
     #[cfg(target_os = "windows")]
     {
-        let bundled_node = app_handle
-            .path()
-            .resource_dir()
+        let bundled_node = app_dirs::resource_dir(&app_handle)
             .ok()
             .map(|r| r.join("nodejs").join("node.exe"))
             .filter(|p| p.exists())
@@ -2811,10 +2783,7 @@ fn sync_system_skills_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<b
     }
 
     // Source: app bundle resources/bundled-skills/
-    let res = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Resource dir: {}", e))?;
+    let res = app_dirs::resource_dir(&app_handle)?;
     let bundled_skills_dir = res.join("bundled-skills");
     if !bundled_skills_dir.exists() {
         return Err(format!(

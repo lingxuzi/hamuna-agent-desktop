@@ -587,7 +587,7 @@ try {
     # 首次运行仍需联网一次（克隆到 %USERPROFILE%\.hamuna\setup-cache\mino），之后只做本地拷贝。
     # 强制刷新缓存：$env:MINO_REFRESH=1; .\setup_windows.ps1
     # 强制指定仓库：$env:MINO_REPO_URL='git@github.com:you/openmino.git'; .\setup_windows.ps1
-    $MinoDir = Join-Path $ProjectDir "mino"
+    $MinoDir = Join-Path $ProjectDir "agent-templates\mino"
     $MinoCacheDir = if ($env:MINO_CACHE_DIR) { $env:MINO_CACHE_DIR } else { Join-Path $env:USERPROFILE ".hamuna\setup-cache\mino" }
     $MinoRepoUrl = if ($env:MINO_REPO_URL) { $env:MINO_REPO_URL } else { "https://github.com/hAcKlyc/openmino.git" }
     $MinoRefresh = $env:MINO_REFRESH

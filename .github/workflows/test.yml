@@ -103,7 +103,18 @@ jobs:
           mkdir -p src-tauri/binaries
           printf '#!/usr/bin/env sh\nexit 0\n' > src-tauri/binaries/cuse-x86_64-unknown-linux-gnu
           chmod +x src-tauri/binaries/cuse-x86_64-unknown-linux-gnu
-          mkdir -p mino
-          printf '# CI placeholder for Tauri resource validation\n' > mino/CLAUDE.md
+          # Bundled agent templates are real trees in git, so a normal checkout
+          # already has them and nothing below runs. The loop only fills in a
+          # tree that is genuinely absent (fork that stripped it, sparse
+          # checkout) so tauri-build's resource validation does not hard-fail —
+          # it errors out on any missing bundle.resources path. Never write
+          # unconditionally: `> CLAUDE.md` would truncate the real file.
+          # Kept in sync with the `../agent-templates/*` entries in
+          # tauri.conf.json::bundle.resources.
+          for tpl in mino easel; do
+            mkdir -p "agent-templates/$tpl"
+            [ -f "agent-templates/$tpl/CLAUDE.md" ] \
+              || printf '# CI placeholder for Tauri resource validation\n' > "agent-templates/$tpl/CLAUDE.md"
+          done
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D clippy::disallowed_methods -D clippy::disallowed_macros

@@ -1,8 +1,12 @@
-//! Centralized application data directory and PID lock file management.
+//! Centralized application directory and PID lock file management.
 //!
 //! All code that needs `~/.hamuna/` SHOULD use [`hamuna_data_dir()`] instead of
 //! hardcoding the path. This enables future dev/prod isolation (separate data dirs
 //! for debug vs release builds) with a single change to this module.
+//!
+//! All code that needs the bundled **resource** directory SHOULD use
+//! [`resource_dir()`] instead of `app.path().resource_dir()` — see its doc for
+//! why Tauri's raw answer is wrong under a custom `build.target-dir`.
 //!
 //! ## PID Lock File
 //!
@@ -111,6 +115,53 @@ impl LockAcquireResult {
 /// For now, both profiles share the same directory.
 pub fn hamuna_data_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".hamuna"))
+}
+
+/// Resolve the directory holding bundled resources (templates, skills, agents,
+/// CLI, Node.js, miniapps, mino, …).
+///
+/// **Use this instead of `app.path().resource_dir()`.** Tauri's version detects
+/// "running from a cargo output dir" by requiring the exe's path to contain a
+/// directory literally named `target` (`tauri-utils::platform::resource_dir_from`).
+/// A custom `build.target-dir` — this dev machine uses `~/.cargo/shared-target`
+/// to share artifacts across checkouts — fails that name check and silently
+/// falls through to the Linux *installed* layout `/usr/lib/<name>`, which does
+/// not exist in dev. Every bundled lookup then fails while the resources sit
+/// untouched next to the exe: `bundled-skills not found:
+/// "/usr/lib/HamunaAgent/bundled-skills"`, admin-agent sync errors, easel
+/// templates "not found in bundled resources", Node.js unresolvable, embedded
+/// terminal PATH missing the bundled binaries. The failure is quiet because most
+/// call sites treat a missing resource as "feature off".
+///
+/// The `.cargo-lock` file is the part of Tauri's check that carries the actual
+/// meaning (tauri-build writes it into the cargo output dir); the `target` name
+/// is a heuristic on top. We keep the meaningful half and drop the heuristic.
+pub fn resource_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+    use tauri::Manager;
+
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(PathBuf::from));
+
+    if let Some(dir) = exe_dir.as_deref().and_then(cargo_output_dir) {
+        return Ok(dir);
+    }
+
+    app.path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to resolve resource dir: {e}"))
+}
+
+/// Testable core of [`resource_dir`]: is `exe_dir` a cargo output directory?
+///
+/// The probe is `.cargo-lock`, which tauri-build places there — deliberately
+/// *not* a check on the directory's name (that is exactly the heuristic that
+/// breaks under `build.target-dir`).
+fn cargo_output_dir(exe_dir: &std::path::Path) -> Option<PathBuf> {
+    exe_dir
+        .join(".cargo-lock")
+        .exists()
+        .then(|| exe_dir.to_path_buf())
 }
 
 /// Path to the PID lock file.
@@ -279,5 +330,42 @@ mod clean_exit_tests {
         let wrote = write_clean_exit_marker(dir.path(), true).expect("clear");
         assert!(!wrote);
         assert!(!dir.path().join(LAST_EXIT_FILE).exists());
+    }
+}
+
+#[cfg(test)]
+mod resource_dir_tests {
+    use super::cargo_output_dir;
+
+    // Regression (dev-only, silent in prod): a cargo output dir is recognised
+    // by `.cargo-lock`, NOT by being called `target`. This machine shares
+    // artifacts via `build.target-dir = ~/.cargo/shared-target`; Tauri's own
+    // resource_dir() requires the literal name `target`, so it fell through to
+    // `/usr/lib/HamunaAgent` and every bundled resource lookup failed while the
+    // files sat next to the exe (bundled-skills, templates, agents, Node.js).
+    #[test]
+    fn cargo_output_dir_is_recognised_without_being_named_target() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let shared = dir.path().join("shared-target").join("debug");
+        std::fs::create_dir_all(&shared).expect("mkdir");
+        std::fs::write(shared.join(".cargo-lock"), "").expect("lock");
+
+        assert_eq!(cargo_output_dir(&shared), Some(shared.clone()));
+    }
+
+    // A directory that merely LOOKS like a build output (named `target`, even
+    // `target/debug`) must not be trusted — only the lock file proves tauri-build
+    // actually copied resources here.
+    #[test]
+    fn bare_target_name_alone_is_not_enough() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let looks_right = dir.path().join("target").join("debug");
+        std::fs::create_dir_all(&looks_right).expect("mkdir");
+
+        assert_eq!(cargo_output_dir(&looks_right), None);
+
+        // On an installed layout there is no cargo lock either — callers must
+        // fall through to Tauri's own resolution.
+        assert_eq!(cargo_output_dir(dir.path()), None);
     }
 }
