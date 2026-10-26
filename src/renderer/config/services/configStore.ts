@@ -36,12 +36,12 @@ const withConfigProcessLock = createAsyncLock();
 
 const CONFIG_LOCK_TIMEOUT_MS = 5000;
 const CONFIG_LOCK_POLL_MS = 50;
-const CONFIG_LOCK_STALE_MS = 30000;
+export const CONFIG_LOCK_STALE_MS = 30000;
 
 export class ConfigBusyError extends Error {
     readonly code = 'CONFIG_BUSY';
 
-    constructor(message = 'Config busy: could not acquire config.json.lock within 5000ms; retry') {
+    constructor(message = `Config busy: could not acquire a config lock within ${CONFIG_LOCK_TIMEOUT_MS}ms; retry`) {
         super(message);
         this.name = 'ConfigBusyError';
     }
@@ -256,16 +256,21 @@ async function acquireFileLock(lockDir: string): Promise<string> {
  * sidecar crashes are rare, and (b) on next sidecar restart the Node-side
  * helper observes its own dead pid and breaks the lock immediately.
  */
-function shouldBreakStaleLock(ageMs: number, owner: string, staleMs: number): boolean {
+export function shouldBreakStaleLock(ageMs: number, owner: string, staleMs: number): boolean {
     if (owner.startsWith('renderer:')) {
         return ageMs > staleMs; // we trust mtime for our own runtime.
     }
-    if (owner.startsWith('node:') || owner.startsWith('rust:')) {
-        // Node/Rust owners: pid-liveness probe not available from the renderer.
-        // Use a 4× threshold to be conservative.
-        return ageMs > staleMs * 4;
-    }
-    return false; // unknown owner format — never break, surface as timeout.
+    // Everything else — node:/rust: owners, an empty owner file left by a
+    // crashed writer, or an unrecognized format — gets the same 4×,
+    // wait-longer treatment. The renderer cannot probe another process's pid
+    // from the WebView, so it cannot tell "still running" from "died before
+    // writing an owner".
+    //
+    // Never returning false for the empty-owner case matters: a lock dir that
+    // carries no owner file is then unrecoverable at any age, so every acquire
+    // times out forever. Node and Rust both break these by age; matching them
+    // is what keeps the three runtimes from deadlocking each other.
+    return ageMs > staleMs * 4;
 }
 
 async function tryBreakStaleLock(lockDir: string): Promise<boolean> {
