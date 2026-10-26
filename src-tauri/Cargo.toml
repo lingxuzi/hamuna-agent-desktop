@@ -1,6 +1,6 @@
 [package]
 name = "hamuna"
-version = "1.0.11"
+version = "1.0.12"
 description = "HamunaAgent - Desktop Claude Code for everyone"
 authors = ["HamunaAgent Team <hamuna.io@gmail.com>"]
 license = "Apache-2.0"
