@@ -307,7 +307,7 @@ Usage: hamuna <command> [options]
 
 Commands:
   mcp       Manage MCP tool servers
-  browser   Drive the app's embedded browser (search/open/read/click/fill/submit)
+  browser   Drive the app's embedded browser (search/open/read/click/fill/upload/submit)
   vision    Official image-understanding CLI tool
   tool      Manage registered CLI tools (Lab-gated; enable in Settings first)
   model     Manage model providers
@@ -351,6 +351,7 @@ Examples:
   hamuna browser read                           # current page as markdown
   hamuna browser click --text "Sign in"
   hamuna browser fill --selector "#q" --value "hamuna"
+  hamuna browser upload --selector "input[type=file]" --file ./cover.png
   hamuna model list
   hamuna model set-key deepseek sk-xxx
   hamuna skill list
@@ -2107,6 +2108,18 @@ function printBrowserResult(action: string, result: Record<string, unknown>): vo
     return;
   }
 
+  if (action === 'upload') {
+    const name = typeof data.name === 'string' ? data.name : '(unnamed)';
+    const size = typeof data.size === 'number' ? data.size : 0;
+    console.log(`✓ uploaded ${name} (${size} bytes)`);
+    // More than one file input means the page has several slots (cover vs
+    // gallery); say so, because the agent may need to target the next one.
+    if (typeof data.inputCount === 'number' && data.inputCount > 1) {
+      console.log(`  (page has ${data.inputCount} file inputs — this one only)`);
+    }
+    return;
+  }
+
   if (action === 'submit') {
     const label = typeof data.label === 'string' && data.label ? data.label : '(form)';
     console.log(`✓ submitted ${label}`);
@@ -3335,6 +3348,7 @@ export function buildRequestBody(
     assertStringFlag(flags.session, 'session');
     assertStringFlag(flags.query, 'query');
     assertStringFlag(flags.engine, 'engine');
+    assertStringFlag(flags.file, 'file');
     const sessionId = typeof flags.session === 'string' ? flags.session : undefined;
     const base: Record<string, unknown> = sessionId ? { sessionId } : {};
     if (action === 'open' || action === 'navigate') {
@@ -3363,6 +3377,27 @@ export function buildRequestBody(
       }
       const engine = typeof flags.engine === 'string' ? flags.engine.trim() : '';
       return { ...base, query, ...(engine ? { engine } : {}) };
+    }
+    if (action === 'upload') {
+      const selector = typeof flags.selector === 'string' ? flags.selector : undefined;
+      const text = typeof flags.text === 'string' ? flags.text : undefined;
+      const file = (typeof flags.file === 'string' ? flags.file : rest[0] ?? '').trim();
+      if (!selector && !text) {
+        console.error('Error: browser upload requires --selector <css> or --text <visible label>.');
+        console.error('  Usage: hamuna browser upload --selector "input[type=file]" --file ./cover.png');
+        process.exit(2);
+      }
+      if (!file) {
+        console.error('Error: browser upload requires --file <path>.');
+        console.error('  Usage: hamuna browser upload --selector "input[type=file]" --file ./cover.png');
+        process.exit(2);
+      }
+      return {
+        ...base,
+        ...(selector ? { selector } : {}),
+        ...(text ? { text } : {}),
+        file,
+      };
     }
     if (action === 'click' || action === 'fill' || action === 'submit') {
       const selector = typeof flags.selector === 'string' ? flags.selector : undefined;

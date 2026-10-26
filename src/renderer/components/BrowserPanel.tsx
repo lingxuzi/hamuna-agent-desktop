@@ -85,7 +85,17 @@ export default function BrowserPanel({
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentUrl, setCurrentUrl] = useState(url ?? '');
   const [isLoading, setIsLoading] = useState(false);
-  const creatingRef = useRef(false);
+  // Which tabId this instance has already issued a create for. NOT an in-flight
+  // flag: `cmd_browser_create` rejects a tab that already owns a webview
+  // ("Browser already exists"), while this effect legitimately re-runs during
+  // the in-flight window — a parent handing down a fresh callback identity, or
+  // `isVisible` toggling with the tab. Releasing the flag when the promise
+  // settled left that window open: the rejected second create raised a toast
+  // AND `onCreateFailed` tore down the webview that had just succeeded.
+  // Keyed by tabId so a same-instance tab switch still creates. Clearing on
+  // failure is deliberately omitted — a retry needs a remount with a new
+  // tabId, otherwise "already exists" would loop.
+  const createdForTabRef = useRef<string | null>(null);
 
   // Toast accessed via ref so the create effect doesn't list it as a dep
   // (project convention — see CLAUDE.md react_stability_rules). Ref is
@@ -152,7 +162,7 @@ export default function BrowserPanel({
     let rafId = 0;
 
     const createWithBounds = (bounds: BrowserBounds) => {
-      creatingRef.current = true;
+      createdForTabRef.current = tabId;
       lastRequestedUrlRef.current = url;
       lastSyncedBoundsRef.current = bounds;
 
@@ -187,11 +197,10 @@ export default function BrowserPanel({
             onCreateFailed();
           }
         })
-        .finally(() => { creatingRef.current = false; });
     };
 
     const waitForUsableBounds = () => {
-      if (cancelled || creatingRef.current) return;
+      if (cancelled || createdForTabRef.current === tabId) return;
       const bounds = readUsableBounds();
       if (bounds) {
         createWithBounds(bounds);
@@ -200,7 +209,7 @@ export default function BrowserPanel({
       rafId = requestAnimationFrame(waitForUsableBounds);
     };
 
-    if (!browserAlive && !creatingRef.current && isVisible) {
+    if (!browserAlive && createdForTabRef.current !== tabId && isVisible) {
       // Create at the first usable rect after any known split-transition
       // suspension (#290 degenerate-bounds floor). The previous "wait for the
       // rect to hold still across N frames" dance (a8cd4f47) is still gone: a

@@ -968,6 +968,63 @@ pub async fn cmd_browser_navigate(
         .map_err(|e| format!("Navigation failed: {e}"))
 }
 
+/// Report whether a CSS selector currently matches a VISIBLE element.
+///
+/// Exists for login-completion detection. Some creator consoles (Douyin being
+/// the canonical one) are pure SPAs: the URL is byte-identical before and
+/// after the user scans the QR code, so the renderer's `browser:url-changed`
+/// signal never fires and a URL whitelist can never conclude "logged in".
+/// The only reliable tell is a post-login element becoming visible — Easel
+/// reads the same signal (`douyin_publish.py::_logged_in`) in Playwright.
+///
+/// Deliberately NOT a general eval bridge: the caller supplies a selector, not
+/// a script, and this returns one boolean. `querySelectorAll` + `getClientRects`
+/// covers the `is_visible()` semantics Easel relies on — existence alone is not
+/// enough (Kuaishou's SPA keeps the creator-console shell in the DOM, hidden,
+/// after logout, which is the classic false positive).
+#[tauri::command]
+pub async fn cmd_browser_query_visible(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+    tab_id: String,
+    selector: String,
+) -> Result<bool, String> {
+    let sessions = state.sessions.lock().await;
+    let session = sessions
+        .get(&tab_id)
+        .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
+    let label = session.webview_label.clone();
+    drop(sessions);
+
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "Webview not found".to_string())?;
+
+    // JSON-encode the selector so quotes / backslashes in a CSS attribute
+    // selector cannot break out of the JS string literal.
+    let selector_json = serde_json::to_string(&selector)
+        .map_err(|e| format!("Invalid selector: {e}"))?;
+
+    // `getClientRects().length > 0` is the check that actually matters: a
+    // display:none / detached element has none, while `offsetParent` alone
+    // misses `position: fixed` elements that ARE visible.
+    let script = format!(
+        r#"(() => {{
+  const els = document.querySelectorAll({selector_json});
+  for (const el of els) {{
+    if (!el.getClientRects().length) continue;
+    const st = window.getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.visibility === 'collapse') continue;
+    return true;
+  }}
+  return false;
+}})()"#
+    );
+
+    eval_in_webview(&webview, &script, std::time::Duration::from_secs(5)).await
+        .map(|v| v.as_bool().unwrap_or(false))
+}
+
 /// Go back in browser history.
 #[tauri::command]
 pub async fn cmd_browser_go_back(

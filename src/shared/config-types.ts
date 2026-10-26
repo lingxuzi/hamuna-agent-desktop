@@ -4,6 +4,7 @@ import type { HeartbeatConfig, MemoryAutoUpdateConfig, MemoryEvolutionConfig } f
 import type { RuntimeModelInfo, RuntimeSource, RuntimeType } from './types/runtime';
 import type { UiLanguage } from './i18n';
 import type { OfficialToolId, OfficialToolSettings } from './official-tools';
+import type { SocialAccount } from './socialPlatforms';
 import type { SubscriptionVerifyFailureKind } from './subscription';
 import { PLAYWRIGHT_MCP_PACKAGE_SPEC } from './mcpPackages';
 import managedCodexRuntimeLock from './managed-codex-runtime.json';
@@ -608,6 +609,52 @@ export const PRESET_TEMPLATES: WorkspaceTemplate[] = [
       },
     },
   },
+  {
+    // 社媒内容创作模板。与 Mino 的关键差异在定位：Mino 是通用伙伴模板，
+    // Easel 有明确的五层流水线（发现/策划/制作/发布/归因）与发布门禁。
+    //
+    // heartbeat 开着，但语义和 Mino 不同：Mino 靠它"主动找人聊天"，Easel 靠它
+    // **巡栏** —— 读工作区的 HEARTBEAT.md 清单，检查已发内容的数据、热点变化、
+    // 到期排期。没有需要处理的事就回 HEARTBEAT_OK，不打扰。
+    //
+    // 注意：agentDefaults 只是初始值，heartbeat runner 的真实启动门槛是
+    // `heartbeat_handle.is_none() && !channels.is_empty()`（src-tauri/src/im/
+    // config_store.rs:2738），且每轮还要 resolve 出 IM 私聊 target。没有配
+    // IM channel 的用户拿到这条配置也什么都不会跑 —— 这是设计如此，不是 bug。
+    //
+    // 间隔 120 分钟而非 Mino 的 240：内容数据的近期波动窗口短，热点更是按小时
+    // 变化。两小时一次是"不错过当天"和"不烧 token"的折中。activeHours 取
+    // 08:00–23:00，覆盖早晚两个流量高峰，避开深夜无人值守时段的无效巡检。
+    id: 'easel',
+    name: 'Easel',
+    description: '社媒内容创作 Agent。发现、策划、制作、发布、归因，五层陪你做账号。',
+    icon: 'palette',
+    isBuiltin: true,
+    agentDefaults: {
+      enabled: true,
+      heartbeat: {
+        enabled: true,
+        intervalMinutes: 120,
+        ackMaxChars: 300,
+        activeHours: {
+          start: '08:00',
+          end: '23:00',
+          timezone: 'Asia/Shanghai',
+        },
+      },
+      memoryAutoUpdate: {
+        enabled: true,
+        intervalHours: 24,
+        queryThreshold: 3,
+        updateWindowStart: '23:00',
+        updateWindowEnd: '08:00',
+        updateWindowTimezone: undefined,
+      },
+      memoryEvolution: {
+        enabled: true,
+      },
+    },
+  },
 ];
 
 /**
@@ -760,6 +807,10 @@ export function normalizeClaudeTranscriptCleanupPeriodDays(value: unknown): numb
 export interface AppConfig {
   // Default settings for new projects
   defaultProviderId?: string;
+  // ===== 社媒账号（Agent Template: Easel）=====
+  /** 按平台 id 索引的单账号记忆。缺省 = 全部未配置。
+   *  合并写 MUST 走 `atomicModifyConfig`（浅合并的 `updateConfig` 会丢其他平台的键）。 */
+  socialAccounts?: Record<string, SocialAccount>;
   /** MiniApp `app.ai` / `app.agent` 的供应商/模型。缺省（或空串）= 沿用宿主
    *  会话当前 provider，即改动前的行为。
    *

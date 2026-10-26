@@ -7,6 +7,27 @@
 // browser the Agent can drive through `hamuna browser …`; a search there
 // runs in the user's real window.
 //
+// FALLBACK ORDER (why Playwright is NOT in the gated list)
+// -------------------------------------------------------
+// The product rule is "embedded browser first, Playwright as the fallback".
+// That is a SEQUENCING constraint, and this module can only express
+// permission constraints — a gate cannot say "try A before B". So the split
+// is:
+//
+//   - WebSearch / WebFetch   → denied. They are a *strictly worse* third
+//                              option (no cookies, no JS, degraded pages);
+//                              leaving them open would let the model skip
+//                              both browsers entirely.
+//   - mcp__playwright__*     → allowed. It is the sanctioned fallback, so
+//                              denying it would strand the Agent whenever the
+//                              embedded browser cannot open (no visible Chat
+//                              session, 15s open timeout) or cannot cope
+//                              (video upload over the 12 MiB inject limit).
+//                              "Prefer embedded" is carried by the system
+//                              prompt and by the deny reason below, which
+//                              names Playwright so the recovery path is
+//                              explicit instead of guessed.
+//
 // The gate is scoped to the Chat scenario on purpose. A cron job, an IM
 // bot, or a registered Agent has no user window to drive — denying
 // WebSearch there would leave it with no way to look anything up at all.
@@ -65,5 +86,6 @@ export function browserSearchDenyReason(toolName: string): string {
   const command = toolName === 'WebSearch'
     ? 'hamuna browser search "<query>"'
     : 'hamuna browser open <url> 然后 hamuna browser read';
-  return `Chat 场景下请使用内置浏览器查询，不要使用 ${toolName} 工具。改用 ${command}——它在你用户可见的那个浏览器窗口里跑，能拿到用户登录态和需要 JS 渲染的页面。`;
+  return `Chat 场景下请使用内置浏览器查询，不要使用 ${toolName} 工具。改用 ${command}——它在你用户可见的那个浏览器窗口里跑，能拿到用户登录态和需要 JS 渲染的页面。`
+    + ` 只有内置浏览器确实用不了时（报 "a Chat session is required"、打开超时、或需要多标签页）才退到 Playwright MCP（mcp__playwright__*），并说明为什么退。`;
 }

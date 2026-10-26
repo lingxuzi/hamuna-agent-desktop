@@ -104,7 +104,11 @@ export default defineConfig({
     '__BUILD_VERSIONS__': JSON.stringify(buildVersions),
   },
   server: {
-    port: 5173,
+    port: 5179,
+    // Without this, Vite silently walks to 5180+ when 5179 is taken and
+    // `tauri.conf.json::devUrl` keeps pointing at 5179 — the desktop window then
+    // loads whatever else owns that port. Fail loudly instead.
+    strictPort: true,
     proxy: {
       // All API endpoints under /api/ (excludes source files like /api/*.ts).
       // The excluded-source check must tolerate the HMR `?t=` timestamp query

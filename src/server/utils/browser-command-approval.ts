@@ -46,7 +46,7 @@
  *
  * `submit` is intentionally absent — see the module doc.
  */
-export const BROWSER_AUTO_ALLOWED_ACTIONS = ['status', 'state', 'list', 'open', 'navigate', 'read', 'search', 'click', 'fill'] as const;
+export const BROWSER_AUTO_ALLOWED_ACTIONS = ['status', 'state', 'list', 'open', 'navigate', 'read', 'search', 'click', 'fill', 'upload'] as const;
 
 /**
  * The browser actions that always need the user's explicit approval.
@@ -318,6 +318,21 @@ export function isBrowserCommandAutoAllowed(command: string): boolean {
 
     case 'fill':
       return rest.length === 0 && parseTargetFlags(flags, true) !== null;
+
+    case 'upload': {
+      // A target plus exactly one `--file <path>`. The file argument is what
+      // makes this different from `fill`: it reads bytes off disk and hands
+      // them to the page. It stays auto-allowed because the read is bounded
+      // by the same path blacklist as every other workspace read (`~/.ssh`,
+      // credentials dirs are rejected server-side) and selecting a file in a
+      // file input has no external side effect — only `submit` sends it
+      // anywhere.
+      const file = flags.get('file');
+      if (typeof file !== 'string' || file.length === 0) return false;
+      const targetFlags = new Map(flags);
+      targetFlags.delete('file');
+      return rest.length === 0 && parseTargetFlags(targetFlags, false) !== null;
+    }
 
     case 'search': {
       // The query is positional or `--query <text>`; `--engine <name>` may

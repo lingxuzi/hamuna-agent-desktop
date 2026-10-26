@@ -450,6 +450,7 @@ hamuna browser read                              # 当前页正文，输出 Mark
 hamuna browser click --selector "#submit"        # 点 CSS 选择器命中的元素
 hamuna browser click --text "Sign in"            # 点可见文字匹配的元素
 hamuna browser fill --selector "#q" --value "hamuna"
+hamuna browser upload --selector "input[type=file]" --file ./cover.png  # 选文件（≤12 MiB）
 hamuna browser submit --selector "#form"         # 提交表单（会弹审批）
 ```
 
@@ -470,9 +471,15 @@ hamuna browser submit --selector "#form"         # 提交表单（会弹审批�
 - `--text` 传元素可见文字：先精确匹配，再包含匹配
 - 两个都匹配不到会报错并列出候选可见元素，照着改 selector 或 text 重来
 
+**上传文件：**
+- `upload` 把本地文件塞进页面的 `<input type=file>`。找 `--selector` 命中的元素；命中的不是 file input 时，会在它内部找
+- **上限 12 MiB，且只适合图片**。文件是 base64 内联进页面脚本的，视频（动辄 50 MB+）超限直接报错，不会静默失败
+- 页面没有 file input 就会报错 —— 有些站点的「选择文件」按钮直接弹系统面板，脚本拦不住。这时告诉用户手动选，不要假装上传成功
+- 同一页有多个 file input 时，输出会提示数量，需要第二轮指定另一个
+
 **安全边界：**
 - `submit` 是唯一有外部副作用的动作（下单、发帖、发消息），**会走正常审批弹窗**，别绕过
-- `click` / `fill` / `open` / `read` / `search` / `status` 不会触发审批
+- `click` / `fill` / `upload` / `open` / `read` / `search` / `status` 不会触发审批
 - 浏览器是 session-scoped：只能操作自己这个 session 的面板
 
 ### Session 间通信（session, PRD 0.2.37）

@@ -41,7 +41,9 @@ easel/                          # 你的家
 
 - **五个 `easel-<层>` 是入口** — 每一层该干什么、该走哪个具体技能，看入口文件的分发表。
 - **具体技能命名 `easel-<层>-<技能>`** — 如 `easel-plan-topic-evaluator`、`easel-publish-persona-check`。
-- **共用参考在 `.claude/references/`** — 评分维度、钩子公式、文案框架、平台规范、去 AI 味。**别在技能里复制一份**，副本一漂移口径就裂了。
+- **共用参考在 `.claude/references/`** — 评分维度、钩子公式、文案框架、平台规范、去 AI 味、浏览器路由。**别在技能里复制一份**，副本一漂移口径就裂了。
+
+**碰网页之前读 `.claude/references/browser-routing.md`。** 一句话版：用户在场用内置浏览器（`hamuna browser`），无人值守不碰浏览器；视频上传超 12 MiB，内置浏览器装不下，走 headless。三个工具的登录态互不相通，别混用。
 
 **字数一律跑脚本，不靠肉眼数：**
 

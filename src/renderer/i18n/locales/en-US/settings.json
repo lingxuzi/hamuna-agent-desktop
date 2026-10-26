@@ -8,12 +8,41 @@
       "plugins": "Plugins",
       "tools": "Tools",
       "kb": "Knowledge Base",
+      "accounts": "Social Accounts",
       "bots": "Channel",
       "floatingBall": "Desktop Pet",
       "usageStats": "Usage",
       "general": "General",
       "shortcuts": "Shortcuts",
       "about": "About"
+    }
+  },
+  "accounts": {
+    "title": "Social Accounts",
+    "description": "Sign in to each platform here. The session is kept by the built-in browser and shared by every agent (chat, scheduled tasks, IM).",
+    "sharedHint": "One account per platform. Signing in again replaces the previous account.",
+    "login": "Sign in",
+    "relogin": "Sign in again",
+    "loginTitle": "Sign in to {{platform}}",
+    "loginHint": "Returns to the list automatically once you're signed in",
+    "back": "Back",
+    "loginSuccess": "Signed in to {{platform}}",
+    "loginTimeout": "Sign-in timed out after 5 minutes. Try again.",
+    "saveFailed": "Could not save account: {{message}}",
+    "displayNamePlaceholder": "Account name (optional)",
+    "status": {
+      "success": "Signed in",
+      "expired": "Expired",
+      "unknown": "Not signed in"
+    },
+    "platform": {
+      "xiaohongshu": "Xiaohongshu",
+      "douyin": "Douyin",
+      "kuaishou": "Kuaishou",
+      "weixin-channels": "WeChat Channels",
+      "bilibili": "Bilibili",
+      "zhihu": "Zhihu",
+      "wechat-mp": "WeChat Official Account"
     }
   },
   "kb": {

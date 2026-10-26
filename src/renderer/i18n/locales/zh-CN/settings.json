@@ -8,12 +8,41 @@
       "plugins": "插件 Plugins",
       "tools": "工具箱",
       "kb": "知识库",
+      "accounts": "社媒账号",
       "bots": "聊天机器人 Bot",
       "floatingBall": "桌面宠物",
       "usageStats": "使用统计",
       "general": "通用设置",
       "shortcuts": "快捷键",
       "about": "关于&反馈"
+    }
+  },
+  "accounts": {
+    "title": "社媒账号",
+    "description": "在这里登录各平台账号。登录态由应用内置浏览器保存，所有 Agent（对话 / 定时任务 / IM）共用同一份。",
+    "sharedHint": "同一平台只能登录一个账号。换号需要重新登录，旧账号会被覆盖。",
+    "login": "去登录",
+    "relogin": "重新登录",
+    "loginTitle": "登录 {{platform}}",
+    "loginHint": "登录成功后会自动返回列表",
+    "back": "返回",
+    "loginSuccess": "{{platform}} 登录成功",
+    "loginTimeout": "登录超时（5 分钟），请重试",
+    "saveFailed": "保存账号信息失败：{{message}}",
+    "displayNamePlaceholder": "账号名（可选，方便识别）",
+    "status": {
+      "success": "已登录",
+      "expired": "已失效",
+      "unknown": "未登录"
+    },
+    "platform": {
+      "xiaohongshu": "小红书",
+      "douyin": "抖音",
+      "kuaishou": "快手",
+      "weixin-channels": "微信视频号",
+      "bilibili": "B站",
+      "zhihu": "知乎",
+      "wechat-mp": "微信公众号"
     }
   },
   "kb": {

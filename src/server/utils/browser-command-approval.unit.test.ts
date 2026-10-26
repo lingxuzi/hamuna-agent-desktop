@@ -95,6 +95,24 @@ describe('isBrowserCommandAutoAllowed', () => {
     expect(isBrowserCommandAutoAllowed('hamuna browser search --query "tauri" --engine=bing')).toBe(true);
   });
 
+  it('allows upload with a target and a file', () => {
+    expect(isBrowserCommandAutoAllowed('hamuna browser upload --selector "input[type=file]" --file ./cover.png')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser upload --text "上传" --file /tmp/a.png')).toBe(true);
+    // `--file` is what distinguishes upload from fill; without it there is
+    // nothing to read, so the shape is not a valid upload.
+    expect(isBrowserCommandAutoAllowed('hamuna browser upload --selector "input[type=file]"')).toBe(false);
+    // Upload carries no free-text value; `--value` is a fill-only flag.
+    expect(isBrowserCommandAutoAllowed('hamuna browser upload --selector "#f" --file a.png --value x')).toBe(false);
+    expect(isBrowserCommandAutoAllowed('hamuna browser upload --file a.png')).toBe(false);
+  });
+
+  it('never auto-allows upload together with submit', () => {
+    // Selecting a file is inert; sending it is not. Submit must still prompt
+    // even though it now sits next to an auto-allowed verb.
+    expect(isBrowserSubmitCommand('hamuna browser submit --selector "#form"')).toBe(true);
+    expect(isBrowserSubmitCommand('hamuna browser upload --selector "#f" --file a.png')).toBe(false);
+  });
+
   it('rejects a search with no query', () => {
     expect(isBrowserCommandAutoAllowed('hamuna browser search')).toBe(false);
     expect(isBrowserCommandAutoAllowed('hamuna browser search --engine bing')).toBe(false);

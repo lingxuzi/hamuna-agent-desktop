@@ -144,6 +144,7 @@ import type {
 import { useSettingsNavigation } from './hooks/useSettingsNavigation';
 import { SettingsSidebar } from './components/SettingsSidebar';
 import { SkillsAgentsSection } from './sections/SkillsAgentsSection';
+import { SocialAccountsSection } from './sections/SocialAccountsSection';
 import { ToolboxSection } from './sections/ToolboxSection';
 
 // Memoized component for model tag list to avoid recreating presetModelIds on every render
@@ -4118,8 +4119,12 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
      />
     )}
 
+    {/* 社媒账号 — 宽布局（内嵌浏览器需要横向空间）。登录态是全局的记忆层，
+                    所有 Chat / IM / Cron 里的 agent 共享同一份浏览器 cookie。 */}
+    {activeSection === 'accounts' && <SocialAccountsSection isActive={isActive} />}
+
     {/* Other sections use narrower layout */}
-    <div className={`mx-auto max-w-xl px-8 py-8 ${['skills', 'agents', 'plugins', 'providers', 'mcp', 'desktop-pet'].includes(activeSection) ? 'hidden' : ''}`}>
+    <div className={`mx-auto max-w-xl px-8 py-8 ${['skills', 'agents', 'plugins', 'providers', 'mcp', 'desktop-pet', 'accounts'].includes(activeSection) ? 'hidden' : ''}`}>
 
      {activeSection === 'shortcuts' && (
       <div className="space-y-6">

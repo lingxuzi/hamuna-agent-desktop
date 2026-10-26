@@ -37,21 +37,6 @@
       "description": "Agnes Video 2.5 / 2.5 Flash / v2.0（whitelist + 参数转义）+ Agnes Image 2.5 Flash（text-to-image / img2img）",
       "hidesDefaultArgs": true,
       "enabled": true
-    },
-    {
-      "id": "hamuna-search",
-      "name": "网络搜索",
-      "type": "stdio",
-      "command": "npx",
-      "args": ["open-websearch@latest"],
-      "env": {
-        "MODE": "stdio",
-        "DEFAULT_SEARCH_ENGINE": "bing",
-        "ALLOWED_SEARCH_ENGINES": "bing,baidu,sogou,csdn"
-      },
-      "description": "Hamuna网络搜索服务",
-      "hidesDefaultArgs": true,
-      "enabled": true
     }
   ]
 }

@@ -7,9 +7,9 @@
 .DESCRIPTION
     Symptom this fixes: a previous `npm run tauri:dev` was closed from the
     console (Ctrl+C / killing the terminal / a crash), leaving the Vite dev
-    server holding port 5173 or the compiled binary still resident. The next
+    server holding port 5179 or the compiled binary still resident. The next
     `npm run tauri:dev` then races those leftovers: the new WebView spins
-    forever on localhost:5173, or cargo fails to overwrite a locked
+    forever on localhost:5179, or cargo fails to overwrite a locked
     target\debug\hamuna.exe, and the user sees a blank window that never paints.
 
     What this kills (matched on full command line, not just image name):
@@ -85,8 +85,8 @@ if (Test-Path $viteConfig) {
     }
 }
 if ($PortsToClean.Count -eq 0) {
-    $PortsToClean = @(5173)
-    Write-Warning "Could not read a port from vite.config.ts; falling back to 5173."
+    $PortsToClean = @(5179)
+    Write-Warning "Could not read a port from vite.config.ts; falling back to 5179."
 }
 
 # Matched against Win32_Process.CommandLine. Patterns are deliberately narrow:
@@ -318,7 +318,7 @@ foreach ($p in $stack) {
 }
 
 # 2. Orphan WebView2 sub-processes — the Rust/app side is already dead but the
-#    webview runtime is still alive holding localhost:5173. Without this the
+#    webview runtime is still alive holding localhost:5179. Without this the
 #    port stays held even though the app that owned it is gone.
 #    We only kill webviews whose ancestor chain reaches our stack, because
 #    msedgewebview2.exe is shared with Teams / Outlook / every other Tauri and

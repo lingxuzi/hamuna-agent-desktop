@@ -7,6 +7,7 @@ export type SettingsSection =
   | 'skills'
   | 'sub-agents'
   | 'plugins'
+  | 'accounts'
   | 'agent'
   | 'usage-stats'
   | 'desktop-pet'
@@ -21,6 +22,7 @@ export const VALID_SECTIONS: SettingsSection[] = [
   'skills',
   'sub-agents',
   'plugins',
+  'accounts',
   'agent',
   'usage-stats',
   'desktop-pet',

@@ -17,6 +17,7 @@ const NAV_ITEMS: Array<{ section: SettingsSection; labelKey: string; activeSecti
   { section: 'kb', labelKey: 'sidebar.nav.kb' },
   { section: 'plugins', labelKey: 'sidebar.nav.plugins' },
   { section: 'mcp', labelKey: 'sidebar.nav.tools' },
+  { section: 'accounts', labelKey: 'sidebar.nav.accounts' },
   { section: 'agent', labelKey: 'sidebar.nav.bots' },
   { section: 'desktop-pet', labelKey: 'sidebar.nav.floatingBall' },
   { section: 'usage-stats', labelKey: 'sidebar.nav.usageStats' },

@@ -289,3 +289,68 @@ describe('BrowserPanel session binding', () => {
     expect(setSessionCalls()).toHaveLength(0);
   });
 });
+
+/**
+ * Double-create regression. `cmd_browser_create` rejects a tabId that already
+ * owns a webview, and the renderer's second call lands AFTER the first one
+ * succeeded but BEFORE the parent has committed `browserAlive=true` — 20ms
+ * apart in the wild (unified-2026-10-25: 21.281 create → 21.297 created →
+ * 21.316 duplicate blocked). The rejection then called `onCreateFailed`, which
+ * tore down the working webview, so the first login attempt always failed and
+ * only a manual retry worked.
+ */
+describe('BrowserPanel create is issued once per tab', () => {
+  it('survives a parent re-render that changes callback identities mid-flight', async () => {
+    const onCreateFailed = vi.fn();
+    const view = render(
+      <BrowserPanel {...panelProps({ browserAlive: false })} onCreateFailed={onCreateFailed} />,
+    );
+    await flushFrame();
+    expect(createCalls()).toHaveLength(1);
+
+    // Parent still believes the webview is dead (it has not processed
+    // onBrowserCreated yet) and hands down fresh callbacks — the common shape
+    // of an inline arrow prop. Pre-fix this re-armed the create branch.
+    view.rerender(
+      <BrowserPanel {...panelProps({ browserAlive: false })} onCreateFailed={onCreateFailed} />,
+    );
+    await flushFrame();
+
+    expect(createCalls()).toHaveLength(1);
+    expect(onCreateFailed).not.toHaveBeenCalled();
+  });
+
+  it('survives an isVisible toggle while the parent still reports browserAlive=false', async () => {
+    const onCreateFailed = vi.fn();
+    const view = render(
+      <BrowserPanel {...panelProps({ browserAlive: false, isVisible: true })} onCreateFailed={onCreateFailed} />,
+    );
+    await flushFrame();
+    expect(createCalls()).toHaveLength(1);
+
+    view.rerender(
+      <BrowserPanel {...panelProps({ browserAlive: false, isVisible: false })} onCreateFailed={onCreateFailed} />,
+    );
+    await flushFrame();
+    view.rerender(
+      <BrowserPanel {...panelProps({ browserAlive: false, isVisible: true })} onCreateFailed={onCreateFailed} />,
+    );
+    await flushFrame();
+
+    expect(createCalls()).toHaveLength(1);
+    expect(onCreateFailed).not.toHaveBeenCalled();
+  });
+
+  it('creates again when the same instance is pointed at a different tabId', async () => {
+    const view = render(<BrowserPanel {...panelProps({ browserAlive: false })} />);
+    await flushFrame();
+    expect(createCalls()).toHaveLength(1);
+
+    view.rerender(<BrowserPanel {...panelProps({ browserAlive: false })} tabId="tab-2" />);
+    await flushFrame();
+
+    const creates = invokeMock.mock.calls.filter(([cmd]) => cmd === 'cmd_browser_create');
+    expect(creates).toHaveLength(2);
+    expect(creates[1][1]).toMatchObject({ tabId: 'tab-2' });
+  });
+});

@@ -48,6 +48,18 @@ const LOAD_TIMEOUT: Duration = Duration::from_secs(10);
 /// `LOAD_TIMEOUT`. See `wait_for_loaded` for the ceiling this leaves.
 const SAME_URL_SETTLE: Duration = Duration::from_millis(700);
 
+/// Ceiling on an uploaded file's raw size.
+///
+/// The file has to travel inside a JS string literal (`upload_script`), so it
+/// is base64-inflated 4/3 and then held in memory twice (agent payload +
+/// webview heap). 12 MiB covers the real image case — every publish target
+/// caps stills at 10 MB or less — and lands well under the 50 MB management
+/// API body limit. Video is deliberately out of reach: a 1-minute upload is
+/// 50–200 MB, so it would blow the body limit, the eval string, and the
+/// agent's context. Video posts must go through a headless runtime instead;
+/// see `agent-templates/easel/CLAUDE.md`.
+const MAX_UPLOAD_BYTES: usize = 12 * 1024 * 1024;
+
 // ──────────────────────────────────────────────────────────
 // Request / response shapes
 // ──────────────────────────────────────────────────────────
@@ -77,6 +89,14 @@ pub struct BrowserRequest {
     /// Search engine for `search` ("360" | "bing" | "baidu").
     #[serde(default)]
     pub engine: String,
+    /// Absolute path of the file to select in a file input, for `upload`.
+    ///
+    /// Must already be inside the workspace or an allowed attachment prefix —
+    /// this endpoint does no path validation of its own, because every caller
+    /// (the CLI) is the agent's own process and the browser is sandboxed. A
+    /// future HTTP-facing caller would need `path_safety` first.
+    #[serde(default)]
+    pub file: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -578,6 +598,80 @@ pub async fn browser_fill_handler(Json(input): Json<BrowserRequest>) -> Json<ser
     };
 
     let script = browser_agent::fill_script(&input.selector, &input.text, &input.value);
+    match run_script(&label, &script).await {
+        Ok(data) => {
+            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+        }
+        Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    }
+}
+
+/// `POST /api/browser/upload` — select a local file in a file input.
+///
+/// Reads the file, base64-encodes it, and hands it to `upload_script`. See
+/// `MAX_UPLOAD_BYTES` for why this is bounded and image-only, and
+/// `browser_agent::upload_script` for why the bytes have to be inline rather
+/// than fetched from a URL.
+///
+/// Fails loudly instead of silently doing nothing when the page has no file
+/// input: a publish flow that "succeeded" without the media attached is worse
+/// than one that stopped.
+pub async fn browser_upload_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
+    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+        Ok(found) => found,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    let raw = input.file.trim();
+    if raw.is_empty() {
+        return Json(
+            serde_json::to_value(BrowserResponse::err(
+                "A local file path is required (--file <path>)",
+            ))
+            .unwrap_or_default(),
+        );
+    }
+
+    let path = match crate::commands::validate_file_path(raw) {
+        Ok(p) => p,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            return Json(
+                serde_json::to_value(BrowserResponse::err(format!(
+                    "Could not read {}: {e}",
+                    path.display()
+                )))
+                .unwrap_or_default(),
+            )
+        }
+    };
+    if bytes.len() > MAX_UPLOAD_BYTES {
+        return Json(
+            serde_json::to_value(BrowserResponse::err(format!(
+                "File is {} MiB, over the {} MiB limit for in-page uploads. \
+                 Large files (video, long audio) cannot be injected through the \
+                 embedded browser — use a headless browser runtime instead.",
+                bytes.len() / (1024 * 1024),
+                MAX_UPLOAD_BYTES / (1024 * 1024)
+            )))
+            .unwrap_or_default(),
+        );
+    }
+
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "upload.bin".to_string());
+    // Same extension→MIME table the attachment protocol uses, so an upload
+    // and a preview of the same file agree on its type.
+    let mime = crate::attachment_protocol::mime_from_ext(&path);
+
+    let script = browser_agent::upload_script(&input.selector, &input.text, &file_name, mime, &b64);
     match run_script(&label, &script).await {
         Ok(data) => {
             Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())

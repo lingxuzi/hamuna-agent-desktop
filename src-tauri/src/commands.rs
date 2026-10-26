@@ -2448,7 +2448,7 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 
 // ============= CLI Sync =============
 
-const CLI_VERSION: &str = "42";
+const CLI_VERSION: &str = "43";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2654,7 +2654,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // interchangeable with a plain fetch; the skill is where an agent learns to
 // prefer it over the WebSearch / WebFetch tools.
 
-const SYSTEM_SKILLS_VERSION: &str = "65";
+const SYSTEM_SKILLS_VERSION: &str = "66";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

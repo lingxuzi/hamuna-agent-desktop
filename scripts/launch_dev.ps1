@@ -19,7 +19,7 @@ Start-Sleep -Seconds 2
 # script returns immediately and the dev server keeps running in the background.
 Write-Host ""
 Write-Host "Starting Tauri dev mode (background)..." -ForegroundColor Cyan
-Write-Host "  Vite dev server will start on http://localhost:5173" -ForegroundColor Yellow
+Write-Host "  Vite dev server will start on http://localhost:5179" -ForegroundColor Yellow
 Write-Host "  Tauri app window will open shortly" -ForegroundColor Yellow
 Write-Host "  Press F12 in the app window to open DevTools" -ForegroundColor Yellow
 Write-Host ""
@@ -40,15 +40,15 @@ Write-Host "  Errors: $ProjectDir\dev-stderr.log" -ForegroundColor Green
 Write-Host ""
 Write-Host "Waiting for Vite dev server to be ready..." -ForegroundColor Cyan
 
-# Poll for Vite to be ready (port 5173 listening)
+# Poll for Vite to be ready (port 5179 listening)
 $ready = $false
 for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Seconds 2
     try {
-        $conn = Test-NetConnection -ComputerName "127.0.0.1" -Port 5173 -InformationLevel Quiet -WarningAction SilentlyContinue
+        $conn = Test-NetConnection -ComputerName "127.0.0.1" -Port 5179 -InformationLevel Quiet -WarningAction SilentlyContinue
         if ($conn) {
             $ready = $true
-            Write-Host "  Vite ready on port 5173 (took ~$($i*2)s)" -ForegroundColor Green
+            Write-Host "  Vite ready on port 5179 (took ~$($i*2)s)" -ForegroundColor Green
             break
         }
     } catch {}

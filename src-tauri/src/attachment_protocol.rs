@@ -30,7 +30,7 @@ fn attachments_root() -> Option<PathBuf> {
     hamuna_data_dir().map(|d| d.join("attachments"))
 }
 
-fn mime_from_ext(path: &Path) -> &'static str {
+pub(crate) fn mime_from_ext(path: &Path) -> &'static str {
     let ext = path
         .extension()
         .and_then(|s| s.to_str())

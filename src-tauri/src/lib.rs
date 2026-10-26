@@ -166,7 +166,7 @@ fn classify_navigation(url: &Url) -> NavDecision {
     }
 
     // http(s): allow only localhost / 127.0.0.1 / tauri.localhost /
-    // ipc.localhost. Dev loads from http://localhost:5173, Windows prod from
+    // ipc.localhost. Dev loads from http://localhost:5179, Windows prod from
     // http://tauri.localhost, IPC bridges from http://ipc.localhost. Anything
     // else is external → hand to the OS browser and cancel.
     if scheme == "http" || scheme == "https" {
@@ -594,6 +594,7 @@ pub fn run() {
             browser::cmd_browser_show,
             browser::cmd_browser_hide,
             browser::cmd_browser_close,
+            browser::cmd_browser_query_visible,
             // File utility commands
             commands::cmd_read_workspace_file,
             commands::cmd_write_workspace_file,

@@ -142,6 +142,69 @@ pub fn fill_script(selector: &str, text: &str, value: &str) -> String {
     )
 }
 
+/// Set a file input's selection from base64 bytes.
+///
+/// WHY BASE64 AND NOT A URL
+/// ------------------------
+/// The only channel into the page is `eval_with_callback`'s script string
+/// (WebView2 `ExecuteScript` / WKWebView `evaluateJavaScript` both take a
+/// string). So the file has to be *inside* the script. That rules out
+/// `fetch('hamuna://…')` in the page: several publish targets (Xiaohongshu,
+/// Douyin) ship a `connect-src` CSP that rejects custom schemes, and the
+/// failure would surface as "upload did nothing" rather than an error.
+///
+/// Base64 costs 4/3 size and a JS string literal per file. That is acceptable
+/// for images (a 5 MB photo becomes ~7 MB of script) and is why video is
+/// rejected before it reaches here — see `MAX_UPLOAD_BYTES`.
+///
+/// `DataTransfer` is the only way to populate `input.files` from script;
+/// assigning to `.files` directly is ignored. React-controlled uploaders also
+/// need the `change` event dispatched, same reason `fill_script` dispatches
+/// `input`/`change`.
+///
+/// Returns `{ selector, name, size, inputCount }` — `inputCount` > 1 means the
+/// page has several file inputs and only the located one was touched.
+///
+/// `mime` comes from the caller (derived from the real file extension), NOT
+/// from `input.accept`: `accept` is frequently written as `.png,.jpg` or left
+/// empty, and copying that verbatim into `File.type` hands the site an
+/// extension where it expects a MIME type — some uploaders reject that.
+pub fn upload_script(selector: &str, text: &str, file_name: &str, mime: &str, base64: &str) -> String {
+    let sel = js_string(selector);
+    let txt = js_string(text);
+    let name = js_string(file_name);
+    let mime = js_string(mime);
+    let b64 = js_string(base64);
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const el = window.__hamunaLocate({sel}, {txt});
+  const tag = el.tagName.toLowerCase();
+  const input = tag === 'input' && el.type === 'file'
+    ? el
+    : el.querySelector && el.querySelector('input[type=file]');
+  if (!input) throw new Error('Target is not a file input and contains none (tag=' + tag + ')');
+
+  const bin = atob({b64});
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const file = new File([bytes], {name}, {{ type: {mime} }});
+
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+  input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+
+  return {{
+    selector: {sel} || {txt},
+    name: file.name,
+    size: file.size,
+    inputCount: document.querySelectorAll('input[type=file]').length
+  }};
+}})()"
+    )
+}
+
 /// Submit a form — either the form containing the target, or the target
 /// itself when it IS a form.
 ///
@@ -254,6 +317,24 @@ mod tests {
         assert_eq!(js_string("line1\nline2"), "\"line1\\nline2\"");
     }
 
+    /// The upload script carries the file as a JS string literal, so a base64
+    /// payload must not be able to terminate the literal and inject code.
+    /// Base64's alphabet has no quote or backslash, but the value is
+    /// attacker-adjacent (it comes from a path the agent was told to read), so
+    /// it goes through `js_string` like every other interpolated value.
+    #[test]
+    fn upload_script_embeds_payload_safely() {
+        let script = upload_script(
+            "input[type=file]",
+            "",
+            "cover.png",
+            "image/png",
+            "a\"+alert(1)+\"",
+        );
+        assert!(!script.contains("a\"+alert(1)"), "{script}");
+        assert!(script.contains(r#"a\"+alert(1)+\""#), "{script}");
+    }
+
     #[test]
     fn scripts_are_self_contained_expressions() {
         // Each script must be a single expression — WebView2's ExecuteScript
@@ -266,6 +347,7 @@ mod tests {
             document_html_script(),
             click_script("button", ""),
             fill_script("input", "", "hello"),
+            upload_script("input[type=file]", "", "a.png", "image/png", "iVBORw0KGgo="),
             submit_script("form", ""),
             search_results_script(),
         ] {
