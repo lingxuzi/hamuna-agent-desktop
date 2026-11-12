@@ -21,6 +21,3 @@ workspace/
 
 # Credentials (never commit secrets)
 .config/
-
-# tokensave local runtime state (has machine-specific paths / db; not workspace content)
-.tokensave/
