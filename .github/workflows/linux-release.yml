@@ -1,0 +1,376 @@
+name: Linux Release
+
+# 手动触发：编译 Linux x64 (AppImage + deb) → 上传 Cloudflare R2 → 自动 bump 版本号并回写仓库。
+#
+# 与 mac-release.yml / windows-release.yml 三方对称：同样 workflow_dispatch + bump +
+# R2 + commit/tag/push 模式，跨平台发版心智一致。
+#
+# 不自动写 CHANGELOG（与本地 pre_release 的人工流程分开），发版后人工补。
+#
+# Why x86_64-only: GitHub-hosted runner 只有 x64。aarch64 需要自托管机（AppImage
+# 打包链路对交叉编译不友好），workflow 端不重复此能力（加自托管 runner 时把
+# `runs-on` + `--target` 换成 matrix 即可，无新抽象必要）。
+#
+# Why 不调 ./build_linux.sh：build_linux.sh 是交互式（依赖检查 / .env 警告 / 末段发布
+# 提示），workflow 不能 answer prompts。资源 staging / R2 上传 / commit+tag+push 在
+# 脚本里是 read -p 后的后续动作，workflow 必须自己跑——直接内联步骤更直观
+# （与 mac-release.yml 同一取舍）。
+#
+# Linux 没有签名/公证：AppImage / deb 都无签名步骤，签名只用于 Tauri updater 的
+# `.AppImage.tar.gz.sig`（minisign，密钥同 mac/windows）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: '版本号提升类型（bump 后会自动 commit + tag + push）'
+        required: true
+        type: choice
+        default: 'patch'
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux x64 → R2
+    runs-on: ubuntu-24.04
+
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      # R2 默认值；可用 secrets.R2_BUCKET 覆盖
+      R2_BUCKET: ${{ secrets.R2_BUCKET || 'hamuna-agent' }}
+      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL || 'https://download.agent.hamuna.club' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          # Cache npm to skip the ~2m51s `npm ci` cold-run on subsequent releases.
+          # Key is auto-derived from package-lock.json hash; cache misses once on
+          # the first run, hits on every release that doesn't touch package-lock.
+          # Independent of the existing Swatinem/rust-cache step (separate store).
+          cache: 'npm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # ============================================================
+      # 0. 系统依赖
+      #
+      # Why 这些包（Tauri v2 Linux 官方依赖集 + 本项目额外项）：
+      #  - libwebkit2gtk-4.1-dev: Ubuntu 22.04+ 才有 4.1；20.04 仍停在 4.0，
+      #    Tauri 2 不支持（与 build_linux.sh 的 dpkg gate 同一条约束）
+      #  - libxdo-dev: tauri-plugin-global-shortcut 在 X11 下链 libxdo
+      #  - libgtk-3-dev: 本项目 linux-only 的 gtk crate（浏览器子 webview 定位）
+      #  - patchelf: linuxdeploy 重写 ELF 依赖路径
+      #  - libfuse2: linuxdeploy-plugin-appimage 是 AppImage；Tauri 走
+      #    --appimage-extract-and-run 跑它（无 FUSE 也能跑），但装上兜底——
+      #    哪条路径若直接 exec AppImage，缺 FUSE 会 dlopen 失败
+      # ============================================================
+      - name: Install Linux build dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl wget file \
+            libssl-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libwebkit2gtk-4.1-dev libxdo-dev \
+            patchelf libfuse2
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ============================================================
+      # 1. Bump 版本号（package.json 单一数据源；version 钩子同步
+      #    tauri.conf.json + Cargo.toml）。.npmrc 已设 git-tag-version=false，
+      #    此步只改文件、不 commit/tag。
+      # ============================================================
+      - name: Bump version
+        id: bump
+        run: |
+          set -euxo pipefail
+          npm version ${{ github.event.inputs.bump }} --no-git-tag-version
+          ver=$(node -p "require('./package.json').version")
+          echo "VERSION=$ver" >> "$GITHUB_ENV"
+          echo "Bumped to $ver"
+
+      # ============================================================
+      # 2. TypeScript 类型检查
+      #
+      # Why 在 CI 跑：本地 typecheck 通常在发版前 1-2 周就过了，期间 branch
+      # 可能又合了别的东西。发版窗口里再挂一次 typecheck 比事后回滚便宜。
+      # ============================================================
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      # ============================================================
+      # 3. 下载 gitignored 构建资源
+      #
+      # download_nodejs.sh 无参 = 当前平台（Linux → linux-x64），把 Node.js
+      # 官方发行版拉到 src-tauri/resources/nodejs/，Tauri 打进 AppImage 的
+      # /usr/lib/ 资源树。
+      # ============================================================
+      - name: Download Node.js runtime (bundled, linux-x64)
+        run: bash scripts/download_nodejs.sh
+
+      # ============================================================
+      # 4. Stage Claude SDK native binary (linux-x64)
+      #
+      # SDK 0.2.113+ 不再 ship cli.js/sdk.mjs/vendor，改为 per-platform native
+      # binary。`@anthropic-ai/claude-agent-sdk-linux-x64` 是 optionalDependencies，
+      # npm ci 已在 host arch 上装好。src-tauri/resources/claude-agent-sdk/ 整个
+      # 被 gitignore（无 .gitkeep），不 stage 的话 tauri build 会因
+      # bundle.resources 路径不存在直接失败。
+      # ============================================================
+      - name: Stage Claude SDK native binary (linux-x64)
+        run: |
+          set -euxo pipefail
+          SDK_SRC="node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude"
+          SDK_DEST="src-tauri/resources/claude-agent-sdk"
+
+          if [ ! -f "$SDK_SRC" ]; then
+            echo "::error::Claude SDK binary not found at $SDK_SRC"
+            exit 1
+          fi
+
+          rm -rf "$SDK_DEST"
+          mkdir -p "$SDK_DEST"
+          cp "$SDK_SRC" "$SDK_DEST/claude"
+          chmod +x "$SDK_DEST/claude"
+
+          # 必须是真 ELF：截断的 binary 能过存在性检查，运行时才炸
+          if ! file "$SDK_DEST/claude" | grep -q "ELF"; then
+            echo "::error::Claude SDK binary is not a valid ELF"
+            exit 1
+          fi
+
+          echo ">>> Claude SDK linux-x64 staged and validated"
+
+      # ============================================================
+      # 5. Pre-install sharp (linux-x64, glibc only)
+      #
+      # Why 必须删 musl 变体：npm 在 Linux 上会同时装 @img/sharp-linux-x64 与
+      # @img/sharp-linuxmusl-x64（两个都是 os=linux/cpu=x64 的 optional dep），
+      # 而 linuxdeploy 会扫描 AppDir 内所有 ELF —— musl libvips 找不到
+      # libc.musl-x86_64.so.1 会直接让打包失败。就算打包过了，AppImage 的
+      # glibc webkit 在 musl 宿主上也跑不起来。复刻 build_linux.sh 的清理逻辑。
+      # ============================================================
+      - name: Pre-install sharp (linux-x64, glibc only)
+        run: |
+          set -euxo pipefail
+          SHARP_DIR="src-tauri/resources/sharp-runtime"
+          rm -rf "$SHARP_DIR"
+          mkdir -p "$SHARP_DIR"
+          echo '{"name":"sharp-runtime","private":true,"version":"1.0.0","dependencies":{"sharp":"0.34.5"}}' > "$SHARP_DIR/package.json"
+          (cd "$SHARP_DIR" && npm install --no-audit --no-fund --no-save --ignore-scripts)
+          (cd "$SHARP_DIR" && npm install --no-save --force --no-audit --no-fund --ignore-scripts \
+            "@img/sharp-linux-x64@0.34.5" "@img/sharp-libvips-linux-x64@1.2.4")
+
+          SHARP_NODE="$SHARP_DIR/node_modules/@img/sharp-linux-x64/lib/sharp-linux-x64.node"
+          if [ ! -f "$SHARP_NODE" ]; then
+            echo "::error::sharp-linux-x64.node missing"
+            exit 1
+          fi
+
+          find "$SHARP_DIR/node_modules/@img" -maxdepth 1 -type d \
+            \( -name "sharp-linuxmusl*" -o -name "sharp-libvips-linuxmusl*" \
+            -o -name "sharp-darwin*" -o -name "sharp-libvips-darwin*" \
+            -o -name "sharp-win32*" -o -name "sharp-libvips-win32*" \
+            -o -name "sharp-wasm32" \) \
+            -exec rm -rf {} + 2>/dev/null || true
+
+          echo ">>> sharp linux-x64 (glibc) staged and validated"
+
+      # ============================================================
+      # 6. 构建前端 / 后端产物
+      # ============================================================
+      - name: Build server / bridge / cli
+        run: |
+          set -euxo pipefail
+          npm run build:server
+          npm run build:bridge
+          npm run build:cli
+
+      - name: Build tsx-runtime (linux-x64)
+        run: npm run build:tsx-runtime -- linux x64
+
+      # ============================================================
+      # 7. Playwright chromium
+      #
+      # Same reason as the other pipelines: `build:web` ends in
+      # verify:miniapp-error-surface, which drives a real Chromium, and the
+      # browser is not part of the npm install.
+      # ============================================================
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: npm run build:web
+
+      # ============================================================
+      # 8. Tauri release build (AppImage + deb + updater 签名)
+      #
+      # Why 只这两个 bundle：Linux 上只有 AppImage 能产出 updater 产物
+      # （Tauri v2 官方：AppImage → AppImage.tar.gz → AppImage.tar.gz.sig），
+      # deb 是给发行版用户装的。无 Linux 代码签名步骤。
+      #
+      # cuse externalBin：Linux 不发 cuse 包，beforeBuildCommand 里的
+      # ensure_cuse_stub.mjs 会放一个 /usr/bin/true 的 ELF 占位（runtime 层
+      # 对非 darwin/win 平台直接 early-return，placeholder 永不被执行）。
+      # ============================================================
+      - name: Build Tauri app (AppImage + deb + updater signature)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euxo pipefail
+          npm run tauri:build -- --target x86_64-unknown-linux-gnu --bundles appimage,deb
+
+      # ============================================================
+      # 9. Smoke-test (gates the upload)
+      #
+      # 挡住两类最常见的 Linux 发布失败：
+      #  - 打包器没产出 updater 产物（TAURI_SIGNING_PRIVATE_KEY 未配 → 无 .sig
+      #    → 应用内自动更新拿不到签名）
+      #  - 产物是截断/非 ELF（AppImage 被 linuxdeploy 写坏）
+      # ============================================================
+      - name: Smoke-test bundle
+        run: |
+          set -euxo pipefail
+          BUNDLE_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          APPIMAGE=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage" | head -1)
+          DEB=$(find "$BUNDLE_DIR/deb" -name "*.deb" | head -1)
+          TAR_GZ=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage.tar.gz" ! -name "*.sig" | head -1)
+          SIG=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage.tar.gz.sig" | head -1)
+
+          if [ -z "$APPIMAGE" ]; then echo "::error::.AppImage not found"; exit 1; fi
+          if [ -z "$DEB" ]; then echo "::error::.deb not found"; exit 1; fi
+          if [ -z "$TAR_GZ" ]; then echo "::error::updater .AppImage.tar.gz not found"; exit 1; fi
+          if [ -z "$SIG" ]; then echo "::error::updater .AppImage.tar.gz.sig not found (TAURI_SIGNING_PRIVATE_KEY unset?)"; exit 1; fi
+
+          # AppImage 必须是有效 ELF（linuxdeploy 只接受真 ELF）
+          if ! file "$APPIMAGE" | grep -q "ELF"; then
+            echo "::error::AppImage is not a valid ELF"
+            exit 1
+          fi
+
+          # deb 结构完整性（dpkg-deb 在 runner 上是现成的）
+          if ! dpkg-deb --info "$DEB" >/dev/null; then
+            echo "::error::dpkg-deb cannot read $DEB"
+            exit 1
+          fi
+
+          echo ">>> bundle OK: $APPIMAGE / $DEB"
+
+      # ============================================================
+      # 10. 上传到 Cloudflare R2（rclone；与 mac-release.yml 一致）
+      # ============================================================
+      - name: Install rclone
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSLO https://downloads.rclone.org/rclone-current-linux-amd64.zip
+          unzip -o rclone-current-linux-amd64.zip
+          RCLONE_DIR=$(find . -maxdepth 1 -type d -name "rclone-*" | head -1)
+          mkdir -p "$HOME/.ci"
+          cp "$RCLONE_DIR/rclone" "$HOME/.ci/rclone"
+          chmod +x "$HOME/.ci/rclone"
+          rm -rf "$RCLONE_DIR" rclone-current-linux-amd64.zip
+
+          # rclone 配置：无 BOM（rclone 拒收 BOM），凭证走 env var 不落盘
+          mkdir -p "$HOME/.config/rclone"
+          printf '%s\n' \
+            '[r2]' \
+            'type = s3' \
+            'provider = Cloudflare' \
+            'env_auth = true' \
+            "endpoint = https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            'acl = private' \
+            > "$HOME/.config/rclone/rclone.conf"
+
+          echo ">>> rclone ready at $HOME/.ci/rclone"
+
+      - name: Upload to R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euxo pipefail
+          RCLONE="$HOME/.ci/rclone"
+          BUNDLE_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          APPIMAGE=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage" | head -1)
+          DEB=$(find "$BUNDLE_DIR/deb" -name "*.deb" | head -1)
+          TAR_GZ=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage.tar.gz" ! -name "*.sig" | head -1)
+          SIG=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage.tar.gz.sig" | head -1)
+
+          $RCLONE copy "$APPIMAGE" "r2:${R2_BUCKET}/releases/v${VERSION}/" --s3-no-check-bucket
+          $RCLONE copy "$DEB" "r2:${R2_BUCKET}/releases/v${VERSION}/" --s3-no-check-bucket
+
+          # updater 产物用架构后缀命名，避免与未来其它架构的同名文件互相覆盖
+          UPDATE_NAME="HamunaAgent_${VERSION}_x86_64.AppImage.tar.gz"
+          $RCLONE copyto "$TAR_GZ" "r2:${R2_BUCKET}/releases/v${VERSION}/${UPDATE_NAME}" --s3-no-check-bucket
+          $RCLONE copyto "$SIG" "r2:${R2_BUCKET}/releases/v${VERSION}/${UPDATE_NAME}.sig" --s3-no-check-bucket
+
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          SIGNATURE=$(cat "$SIG")
+          MANIFEST_DIR=$(mktemp -d)
+
+          # linux-x86_64.json — Tauri Updater 读取这个
+          printf '{"version":"%s","notes":"HamunaAgent v%s","pub_date":"%s","signature":"%s","url":"%s/releases/v%s/%s"}\n' \
+            "$VERSION" "$VERSION" "$PUB_DATE" "$SIGNATURE" "$DOWNLOAD_BASE_URL" "$VERSION" "$UPDATE_NAME" \
+            > "$MANIFEST_DIR/linux-x86_64.json"
+
+          # latest_linux.json — 网站下载页读这个。
+          # 写 latest_linux.json 而不是 latest.json：mac-release.yml 占用后者，
+          # 两个平台各写各的清单文件，避免互相覆盖。
+          printf '{"version":"%s","pub_date":"%s","release_notes":"HamunaAgent v%s","downloads":{"linux_x64":{"name":"Linux x64","url":"%s/releases/v%s/%s"}}}\n' \
+            "$VERSION" "$PUB_DATE" "$VERSION" "$DOWNLOAD_BASE_URL" "$VERSION" "$(basename "$APPIMAGE")" \
+            > "$MANIFEST_DIR/latest_linux.json"
+
+          $RCLONE copy "$MANIFEST_DIR/" "r2:${R2_BUCKET}/update/" --s3-no-check-bucket
+          rm -rf "$MANIFEST_DIR"
+
+          echo ">>> R2 upload complete: v${VERSION}"
+          echo ">>>   updater: ${DOWNLOAD_BASE_URL}/update/linux-x86_64.json"
+          echo ">>>   website: ${DOWNLOAD_BASE_URL}/update/latest_linux.json"
+
+      # ============================================================
+      # 11. 回写仓库：commit + tag + push（workflow_dispatch 不会循环触发）
+      # ============================================================
+      - name: Commit and push version bump
+        run: |
+          set -euxo pipefail
+          echo "Pushing v$VERSION tag + version-bump commit"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          # 若构建意外改了其他文件（如 bundled dist），一并纳入避免污染
+          git status --short
+          if git diff --cached --quiet; then
+            echo "No version changes to commit — version bump may have already been committed"
+          else
+            git commit -m "v${VERSION}" -m "chore(release): bump to v${VERSION} via linux-release workflow"
+            git tag "v${VERSION}"
+            git push origin HEAD --tags
+          fi

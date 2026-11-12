@@ -1132,7 +1132,13 @@ fn get_updater_base_url() -> String {
 }
 
 /// Get the update target string for the current platform
-/// Supports macOS (ARM/Intel) and Windows (x64/ARM)
+/// Supports macOS (ARM/Intel), Windows (x64/ARM) and Linux (x64/ARM)
+///
+/// The string is both the updater's `{{target}}` platform key and the
+/// `<target>.json` manifest name under `<base>/update/`. It must match
+/// `device_identity::platform_identifier()` — the manifest publisher
+/// (`.github/workflows/{mac,windows,linux}-release.yml`) writes the file
+/// under exactly this name.
 fn get_update_target() -> &'static str {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
@@ -1150,11 +1156,21 @@ fn get_update_target() -> &'static str {
     {
         "windows-aarch64"
     }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        "linux-x86_64"
+    }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    {
+        "linux-aarch64"
+    }
     #[cfg(not(any(
         all(target_os = "macos", target_arch = "aarch64"),
         all(target_os = "macos", target_arch = "x86_64"),
         all(target_os = "windows", target_arch = "x86_64"),
         all(target_os = "windows", target_arch = "aarch64"),
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64"),
     )))]
     {
         "unknown"
@@ -1256,6 +1272,20 @@ pub async fn test_update_connectivity(app: AppHandle) -> Result<String, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The updater's platform key and the device fingerprint's platform id
+    /// must stay the same string: both name the `<target>.json` manifest that
+    /// `.github/workflows/{mac,windows,linux}-release.yml` publishes. A platform
+    /// branch added to one but not the other makes the app request a manifest
+    /// nobody writes (404 → "update check failed" in Settings > About).
+    #[test]
+    fn update_target_matches_device_platform_identifier() {
+        assert_eq!(
+            get_update_target(),
+            crate::device_identity::platform_identifier(),
+            "updater target and device platform id must be the same string"
+        );
+    }
 
     #[test]
     fn parses_windows_updater_temp_dir_names() {
