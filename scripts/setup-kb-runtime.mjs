@@ -29,9 +29,10 @@
 //
 // Usage: node scripts/setup-kb-runtime.mjs
 
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { selectKbPrebuilds } from './kb-prebuilds.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SCRIPT_DIR, '..');
@@ -56,4 +57,19 @@ for (const pkg of KB_RUNTIME_PACKAGES) {
 
 // Strip nested .bin shims (platform launcher junk, not needed at runtime).
 await rm(resolve(RUNTIME_DIR, 'better-sqlite3', 'node_modules'), { recursive: true, force: true }).catch(() => {});
+
+// Drop the prebuilds this runtime can never load. On Linux this is not
+// cosmetic: linuxdeploy resolves the DT_NEEDED of every ELF in the AppDir,
+// and an unreachable musl / foreign-arch prebuild makes it exit non-zero
+// with a bare "failed to run linuxdeploy" (Tauri discards its stderr).
+// See kb-prebuilds.mjs for the full rationale.
+const prebuildsDir = resolve(RUNTIME_DIR, 'better-sqlite3', 'prebuilds');
+const prebuilds = (await readdir(prebuildsDir)).filter((name) => name.endsWith('.node'));
+const kept = new Set(selectKbPrebuilds(prebuilds, { platform: process.platform, arch: process.arch }));
+for (const name of prebuilds) {
+  if (kept.has(name)) continue;
+  await rm(resolve(prebuildsDir, name), { force: true });
+  console.log(`  ↳ pruned unreachable prebuild ${name}`);
+}
+
 console.log(`✓ kb-runtime → ${RUNTIME_DIR}`);

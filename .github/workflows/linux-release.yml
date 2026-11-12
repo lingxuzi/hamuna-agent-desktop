@@ -246,6 +246,37 @@ jobs:
           npm run tauri:build -- --target x86_64-unknown-linux-gnu --bundles appimage,deb
 
       # ============================================================
+      # 8b. linuxdeploy 诊断（仅在打包失败时跑）
+      #
+      # Tauri 的 AppImage bundler 会丢弃 linuxdeploy 的 stdout/stderr，只把
+      # 失败压成一句 "failed to run linuxdeploy" —— CI 里看不到真正的原因
+      # （通常是 AppDir 里某个 ELF 的依赖在宿主上解析不到）。
+      # 这里用同样的参数手动跑一遍，把 stderr 打进 job log。
+      # ============================================================
+      - name: Diagnose linuxdeploy failure
+        if: failure()
+        run: |
+          set -euxo pipefail
+          APPDIR=$(find src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage \
+            -maxdepth 1 -name "*.AppDir" -type d | head -1)
+          if [ -z "$APPDIR" ]; then
+            echo "::error::no AppDir found — the failure was not in linuxdeploy"
+            exit 0
+          fi
+          echo ">>> AppDir: $APPDIR"
+          echo ">>> ELF payloads inside the AppDir:"
+          find "$APPDIR" -type f -print0 | xargs -0 file | grep "ELF" || true
+
+          LINUXDEPLOY=$(find "$HOME/.cache/tauri" -name "linuxdeploy-x86_64.AppImage" | head -1)
+          if [ -z "$LINUXDEPLOY" ]; then
+            echo "::error::linuxdeploy binary not found in the tauri cache"
+            exit 0
+          fi
+          OUTPUT="$RUNNER_TEMP/diagnose.AppImage" ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 \
+            "$LINUXDEPLOY" --appimage-extract-and-run --verbosity 3 \
+            --appdir "$APPDIR" --plugin gtk --output appimage || true
+
+      # ============================================================
       # 9. Smoke-test (gates the upload)
       #
       # 挡住两类最常见的 Linux 发布失败：

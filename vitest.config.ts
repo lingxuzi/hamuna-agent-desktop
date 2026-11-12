@@ -62,6 +62,7 @@ export default defineConfig({
             'src/renderer/**/*.test.ts',
             'src/cli/**/*.unit.test.ts',
             'src/server/**/*.unit.test.ts',
+            'scripts/**/*.unit.test.ts',
           ],
           setupFiles: ['src/test/setup-no-egress.ts'],
           // Fast pure tests — a tight timeout surfaces accidental real I/O.
