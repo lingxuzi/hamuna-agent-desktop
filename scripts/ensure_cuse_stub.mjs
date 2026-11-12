@@ -16,7 +16,7 @@
 //
 // `src-tauri/binaries/` is gitignored, so the placeholder never pollutes git.
 
-import { existsSync, copyFileSync, chmodSync } from 'node:fs';
+import { existsSync, copyFileSync, chmodSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,6 +48,12 @@ if (!trueBin) {
   process.exit(1);
 }
 
+// `src-tauri/binaries/` is gitignored and therefore absent on a fresh
+// checkout — copyFileSync fails with ENOENT when the destination's parent
+// directory does not exist (the source is fine, and the probe above would
+// have failed first otherwise). Create it here so the script is the single
+// owner of the stub, instead of every caller having to mkdir first.
+mkdirSync(path.dirname(stubPath), { recursive: true });
 copyFileSync(trueBin, stubPath);
 chmodSync(stubPath, 0o755);
 console.log(`[cuse-stub] created placeholder ${stubPath} (from ${trueBin})`);
