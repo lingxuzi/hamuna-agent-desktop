@@ -2609,12 +2609,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // To add a new system skill: drop the directory in `bundled-skills/`
 // (must contain a SKILL.md). The list is auto-derived at build time by
 // `scripts/generate-system-skills.mjs` (also wired into npm
-// `prebuild:server` / `prebuild:web` / `pretest` / `prelint` hooks and
+// `prebuild:server` / `prebuild:web` / `pretest` / `prelint` / `pretypecheck`
+// hooks and
 // `src-tauri/build.rs` as the bare-cargo fallback). Both
 // `src-tauri/src/system_skills.generated.rs` and
 // `src/shared/systemSkills.generated.ts` are regenerated before every
-// build/test/lint pass, so the Rust `const SYSTEM_SKILLS: &[&str]` and the
-// Node `SYSTEM_SKILLS: readonly string[]` cannot drift.
+// build/test/lint/typecheck pass, so the Rust `const SYSTEM_SKILLS: &[&str]`
+// and the Node `SYSTEM_SKILLS: readonly string[]` cannot drift.
 //
 // To remove a system skill: remove its directory from `bundled-skills/`.
 // On the next launch the orphan cleanup pass detects the snapshot/dir

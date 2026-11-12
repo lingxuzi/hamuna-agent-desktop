@@ -5,10 +5,11 @@ export const SYSTEM_SKILLS_VERSION = '66';
  * Re-export the generated SYSTEM_SKILLS list. The list itself is derived
  * from `bundled-skills/<name>/SKILL.md` by
  * `scripts/generate-system-skills.mjs`, invoked via the
- * `prebuild:server` / `prebuild:web` / `pretest` / `prelint` npm hooks and
+ * `prebuild:server` / `prebuild:web` / `pretest` / `prelint` / `pretypecheck`
+ * npm hooks and
  * `src-tauri/build.rs` (bare-cargo fallback). Both
  * `src-tauri/src/system_skills.generated.rs` and the file below are
- * regenerated before every build/test/lint pass, so the Rust
+ * regenerated before every build/test/lint/typecheck pass, so the Rust
  * `const SYSTEM_SKILLS: &[&str]` and this TS list cannot drift.
  *
  * To add a system skill: drop a directory with SKILL.md into

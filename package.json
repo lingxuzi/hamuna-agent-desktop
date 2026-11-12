@@ -2,7 +2,7 @@
   "name": "hamuna",
   "description": "HamunaAgent - Desktop Claude Code for everyone. AI-powered productivity, not just for developers.",
   "type": "module",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "license": "Apache-2.0",
   "packageManager": "npm@11.13.0",
   "engines": {
@@ -66,6 +66,7 @@
     "prebuild:web": "npm run generate:system-skills",
     "prelint": "npm run generate:system-skills",
     "pretest": "npm run generate:system-skills",
+    "pretypecheck": "npm run generate:system-skills",
     "package:managed-codex": "node scripts/package-managed-codex-runtime.mjs",
     "publish:managed-codex": "./publish_managed_codex_runtime.sh",
     "publish:managed-codex:win": "powershell -ExecutionPolicy Bypass -File ./publish_managed_codex_runtime.ps1",
