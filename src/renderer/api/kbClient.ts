@@ -99,6 +99,23 @@ export async function setKbMounts(workspace: string, kbIds: string[]): Promise<v
   await apiPostJson<{ ok: true }>('/api/admin/kb/mounts', { workspace, kbIds });
 }
 
+/**
+ * Ensure a workspace has the builtin auto-mounted KB (sino template family).
+ * Idempotent: reuses an existing KB of the same name (the store's create is
+ * case-insensitive-duplicate-throwing, so we look before we leap) and merges
+ * into — never clobbers — the workspace's existing mounts. Failures are
+ * non-fatal: template creation must not break because the KB layer hiccuped.
+ */
+export async function ensureTemplateKb(workspace: string, name: string): Promise<void> {
+  const kbs = await listKbs();
+  const existing = kbs.find((kb) => kb.name.toLowerCase() === name.toLowerCase());
+  const kb = existing ?? (await createKb(name));
+  const mounts = await listKbMounts();
+  const current = mounts[workspace] ?? [];
+  if (current.includes(kb.id)) return;
+  await setKbMounts(workspace, [...current, kb.id]);
+}
+
 export async function listKbDocs(kbId: string): Promise<KbDocMeta[]> {
   const r = await apiGetJson<{ ok: true; docs: KbDocMeta[] }>(`/api/admin/kb/docs?kbId=${encodeURIComponent(kbId)}`);
   return r.docs;

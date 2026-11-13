@@ -5,6 +5,8 @@ import { useToast } from '@/components/Toast';
 import { useConfig } from '@/hooks/useConfig';
 import { isBrowserDevMode, pickFolderForDialog } from '@/utils/browserMock';
 import { track } from '@/analytics';
+import { ensureTemplateKb } from '@/api/kbClient';
+import { SINO_TEMPLATE_ID } from '../../shared/ops';
 import type { WorkspaceTemplate } from '@/config/types';
 
 export interface AddWorkspacePathDialog {
@@ -71,6 +73,15 @@ export function useAddWorkspace() {
       templateSource: template.isBuiltin ? 'builtin' : 'user',
       agentDefaults: template.isBuiltin ? template.agentDefaults : undefined,
     });
+    // sino 模板的工作区自动挂一个空知识库：反思沉淀、skill 查询都落在它上面。
+    // 非致命——KB 层不可用（如全局 sidecar 未就绪）不该卡住工作区创建。
+    if (template.isBuiltin && template.id === SINO_TEMPLATE_ID) {
+      try {
+        await ensureTemplateKb(path, 'Sino 运营知识库');
+      } catch (err) {
+        console.warn('[useAddWorkspace] auto-mount KB failed (non-fatal):', err);
+      }
+    }
     track('workspace_create', { source: 'template' });
   }, [addProject]);
 
