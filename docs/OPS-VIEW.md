@@ -4,11 +4,11 @@
 
 ## 一句话
 
-在 Agent 聊天页里，为「运营 Agent 模板」创建的工作区加一个运营工作台：Agent 按 选题 → 素材 → 排期 → 复盘 四段编排产出内容，工作台把这四段的状态呈现成人可直接增删改的台账。
+在 Agent 聊天页里，为 **Sino**（运营 Agent 模板，`templateId: 'sino'`）创建的工作区加一个运营视图：Agent 按 选题 → 素材 → 排期 → 复盘 四段编排产出内容，运营视图把这四段的状态呈现成人可直接增删改的台账。
 
 ## 范围
 
-**做**：选题、素材、排期、复盘四域的台账与工作台界面；热点与对标账号作为选题输入；heartbeat 的分析与沉淀。
+**做**：选题、素材、排期、复盘四域的台账与运营视图界面；热点与对标账号作为选题输入；heartbeat 的分析与沉淀。
 
 **不做**：代做投放、平台凭据管理、登录态深读他人账号数据。
 
@@ -86,13 +86,13 @@
 ## 落点与交互
 
 - **位置**：Chat 页右侧面板区新增一个「运营」tab，与已有的 文件 / 终端 / 浏览器 并列。该 tab 有独占模式：隐藏另三个，面板拉满右侧约 50%，可手动收起。理由：三域形态差异大（选题卡片墙 / 素材列表+预览 / 排期月历），25% 竖条装不下月历。
-- **门控**：只有 `templateId` 为运营 Agent 模板的工作区才渲染这个 tab。依据是工作区已有的 `templateId`，不新增绑定字段。
-- **人机分工**：工作台能独立增删改，Agent 也能改同一份数据。视图的写 → Tauri invoke → Rust `OpsStore`；Agent 的写 → `hamuna ops` CLI → 管理 API → 同一个 `OpsStore`。**唯一写者是 Rust 侧**，两边不直接抢文件。
+- **门控**：只有 `templateId === 'sino'` 的工作区才渲染这个 tab。依据是工作区已有的 `templateId`，不新增绑定字段。
+- **人机分工**：运营视图能独立增删改，Agent 也能改同一份数据。视图的写 → Tauri invoke → Rust `OpsStore`；Agent 的写 → `hamuna ops` CLI → 管理 API → 同一个 `OpsStore`。**唯一写者是 Rust 侧**，两边不直接抢文件。
 - **刷新**：Agent 侧写入后由轮次完成事件触发重读；面板打开时也重读一次。
 
 ## 编排
 
-运营 Agent 模板自带四个 skill，域即段：
+Sino 模板自带四个 skill，域即段：
 
 | skill | 干什么 | 产出 |
 |---|---|---|
@@ -122,7 +122,7 @@
 | Rust 命令 | `src-tauri/src/commands.rs`（`cmd_ops_*`） |
 | Rust HTTP | `src-tauri/src/management_api.rs`（`/api/ops/*`） |
 | CLI | `src/cli/hamuna.ts`（`hamuna ops list|add|update|remove|review`） |
-| 模板 | `agent-templates/ops/`（CLAUDE.md / HEARTBEAT.md / rules / skills）+ `tauri.conf.json` 资源映射 + `PRESET_TEMPLATES` 条目 |
+| 模板 | `agent-templates/sino/`（CLAUDE.md / HEARTBEAT.md / rules / skills）+ `tauri.conf.json` 资源映射 + `PRESET_TEMPLATES` 条目 |
 | 前端 | `src/renderer/components/ops/`（面板 + 四域视图）+ `src/renderer/pages/Chat.tsx` 接入 |
 
 ## 实施顺序
@@ -130,7 +130,7 @@
 1. `src/shared/ops.ts` 类型 + 状态机单测 → `npm run test:unit`
 2. Rust `ops_store.rs` + 命令 + 管理 API + 单测 → `cargo test`
 3. CLI `hamuna ops` → 手动跑通增删改查
-4. 模板 `agent-templates/ops/` + 注册 → 从模板库能建出工作区
+4. 模板 `agent-templates/sino/` + 注册 → 从模板库能建出工作区
 5. 前端面板（先只读）→ 运营 tab 能显示四域
 6. 前端写入 → 走 invoke，双向可改
 7. 四个 skill + HEARTBEAT → Agent 能跑通一遍编排
