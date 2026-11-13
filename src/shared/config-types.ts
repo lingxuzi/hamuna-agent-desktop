@@ -7,6 +7,7 @@ import type { OfficialToolId, OfficialToolSettings } from './official-tools';
 import type { SocialAccount } from './socialPlatforms';
 import type { SubscriptionVerifyFailureKind } from './subscription';
 import { PLAYWRIGHT_MCP_PACKAGE_SPEC } from './mcpPackages';
+import { SINO_TEMPLATE_ID } from './ops';
 import managedCodexRuntimeLock from './managed-codex-runtime.json';
 import {
   DEFAULT_APPEARANCE_MODE,
@@ -583,6 +584,37 @@ export const PRESET_TEMPLATES: WorkspaceTemplate[] = [
     name: 'Mino',
     description: '能记忆、会进化的 AI Agent。从 minimal 开始，长成你想要的样子。',
     icon: 'lightning',
+    isBuiltin: true,
+    agentDefaults: {
+      enabled: true,
+      heartbeat: {
+        enabled: true,
+        intervalMinutes: 240,
+        ackMaxChars: 300,
+        activeHours: {
+          start: '09:00',
+          end: '21:00',
+          timezone: 'Asia/Shanghai',
+        },
+      },
+      memoryAutoUpdate: {
+        enabled: true,
+        intervalHours: 24,
+        queryThreshold: 3,
+        updateWindowStart: '21:00',
+        updateWindowEnd: '09:00',
+        updateWindowTimezone: undefined,
+      },
+      memoryEvolution: {
+        enabled: true,
+      },
+    },
+  },
+  {
+    id: SINO_TEMPLATE_ID,
+    name: 'Sino',
+    description: '内容运营 Agent。选题、素材、排期、复盘四段闭环，台账在右侧「运营」面板。',
+    icon: 'camera',
     isBuiltin: true,
     agentDefaults: {
       enabled: true,

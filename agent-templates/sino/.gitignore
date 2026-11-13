@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# 本地运行时
+.playwright-mcp/
+
+# 台账的写锁
+ops/state.json.lock
+
+# 草稿区
+workspace/
+
+# 备份
+*.zip
+
+# Claude Code 自动记忆（与工作区记忆系统分开）
+.claude-auto-memory/
+
+# 凭据（绝不提交）
+.config/
