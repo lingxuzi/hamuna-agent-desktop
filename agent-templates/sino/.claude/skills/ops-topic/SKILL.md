@@ -26,12 +26,14 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 | 来源 | 怎么拿 | `source` |
 |---|---|---|
-| 平台公开热榜 | 浏览器打开平台热榜页读；或 web 搜索「XX 平台 热榜 今天」 | `hotspot` |
-| 对标账号的公开内容 | 看公开主页最近发布、点赞高的几条。**只读公开页，不用登录态进后台** | `benchmark` |
+| 平台公开热榜 | `hamuna browser open <热榜URL>` → `hamuna browser read`，读返回的 markdown；或 web 搜索「XX 平台 热榜 今天」 | `hotspot` |
+| 对标账号的公开内容 | `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进后台** | `benchmark` |
 | 用户直接给的线索 | 用户粘贴的链接、截图描述、一句话 | `manual` / `benchmark` |
 | 上一轮复盘的结论 | `ops list rule` 里的 `active` 规则 | `reflection` |
 
 **采集边界**：公开热榜、公开主页、用户粘贴的内容可以读。他人账号后台、私域数据、需要登录才能看到的东西不碰。
+
+**用内嵌浏览器，不用系统浏览器。** `hamuna browser open` 打开的是 App 内嵌 webview（`hamuna browser read` 能把当前页读成 markdown），页面留在 App 里用户看得见，采集过程透明。打开失败（浏览器面板不可用）就退回 web 搜索，不要反复重试。
 
 ## 判断值不值得做
 
