@@ -227,7 +227,31 @@ jobs:
         run: npm run build:web
 
       # ============================================================
-      # 8. Tauri release build (AppImage + deb + updater 签名)
+      # 8a. 预取 AppImage runtime
+      #
+      # appimagetool 默认在打包那一刻从 GitHub 拉 type2 runtime（滚动 tag
+      # `continuous`）。网络抖一下、或者该资产被改名，整个 AppImage 打包就
+      # 挂在 appimagetool 内部，报错还埋在 stderr 里。这里自己带重试拉下来，
+      # 用 LDAI_RUNTIME_FILE 透传给输出插件（插件会转成 appimagetool 的
+      # --runtime-file），把"打包时隐式联网"变成"显式一步、失败可读"。
+      #
+      # Why 不缓存到 actions/cache：runtime 是滚动 tag 的产物，缓存会让我们
+      # 拿着一个已经和上游脱节的 runtime 发版。
+      # ============================================================
+      - name: Fetch AppImage runtime
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 5 --retry-delay 3 --retry-connrefused \
+            -o "$RUNNER_TEMP/runtime-x86_64" \
+            https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
+          if ! file "$RUNNER_TEMP/runtime-x86_64" | grep -q "ELF"; then
+            echo "::error::AppImage runtime is not a valid ELF"
+            exit 1
+          fi
+          echo ">>> AppImage runtime staged: $RUNNER_TEMP/runtime-x86_64"
+
+      # ============================================================
+      # 8b. Tauri release build (AppImage + deb + updater 签名)
       #
       # Why 只这两个 bundle：Linux 上只有 AppImage 能产出 updater 产物
       # （Tauri v2 官方：AppImage → AppImage.tar.gz → AppImage.tar.gz.sig），
@@ -241,40 +265,32 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # 预取好的 type2 runtime（见 8a），避免 appimagetool 在打包时联网
+          LDAI_RUNTIME_FILE: ${{ runner.temp }}/runtime-x86_64
         run: |
           set -euxo pipefail
           npm run tauri:build -- --target x86_64-unknown-linux-gnu --bundles appimage,deb
 
       # ============================================================
-      # 8b. linuxdeploy 诊断（仅在打包失败时跑）
+      # 8c. linuxdeploy 诊断（仅在打包失败时跑）
       #
-      # Tauri 的 AppImage bundler 会丢弃 linuxdeploy 的 stdout/stderr，只把
-      # 失败压成一句 "failed to run linuxdeploy" —— CI 里看不到真正的原因
-      # （通常是 AppDir 里某个 ELF 的依赖在宿主上解析不到）。
-      # 这里用同样的参数手动跑一遍，把 stderr 打进 job log。
+      # Tauri 的 AppImage bundler 默认丢弃 linuxdeploy 的 stdout/stderr，只把
+      # 失败压成一句 "failed to run linuxdeploy" —— CI 里看不到真正的原因。
+      #
+      # 这里重跑 bundler，而不是手搓 linuxdeploy：tauri bundle 每次都会先
+      # 清空 bundle/appimage，AppDir 是干净的；手搓会踩到上一次失败留下的
+      # GTK 软链（插件的 ln -s 没有 -f，重跑必 EEXIST，报出来的错是假的）。
+      # -vvv 让 bundler 走 output_ok 分支，linuxdeploy 的 stderr 会进 job log。
       # ============================================================
       - name: Diagnose linuxdeploy failure
         if: failure()
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          LDAI_RUNTIME_FILE: ${{ runner.temp }}/runtime-x86_64
         run: |
           set -euxo pipefail
-          APPDIR=$(find src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage \
-            -maxdepth 1 -name "*.AppDir" -type d | head -1)
-          if [ -z "$APPDIR" ]; then
-            echo "::error::no AppDir found — the failure was not in linuxdeploy"
-            exit 0
-          fi
-          echo ">>> AppDir: $APPDIR"
-          echo ">>> ELF payloads inside the AppDir:"
-          find "$APPDIR" -type f -print0 | xargs -0 file | grep "ELF" || true
-
-          LINUXDEPLOY=$(find "$HOME/.cache/tauri" -name "linuxdeploy-x86_64.AppImage" | head -1)
-          if [ -z "$LINUXDEPLOY" ]; then
-            echo "::error::linuxdeploy binary not found in the tauri cache"
-            exit 0
-          fi
-          OUTPUT="$RUNNER_TEMP/diagnose.AppImage" ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 \
-            "$LINUXDEPLOY" --appimage-extract-and-run --verbosity 3 \
-            --appdir "$APPDIR" --plugin gtk --output appimage || true
+          npx tauri bundle --target x86_64-unknown-linux-gnu --bundles appimage -vvv || true
 
       # ============================================================
       # 9. Smoke-test (gates the upload)
