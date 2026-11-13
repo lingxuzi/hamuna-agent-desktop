@@ -56,8 +56,7 @@ const SAME_URL_SETTLE: Duration = Duration::from_millis(700);
 /// caps stills at 10 MB or less — and lands well under the 50 MB management
 /// API body limit. Video is deliberately out of reach: a 1-minute upload is
 /// 50–200 MB, so it would blow the body limit, the eval string, and the
-/// agent's context. Video posts must go through a headless runtime instead;
-/// see `agent-templates/easel/CLAUDE.md`.
+/// agent's context. Video posts must go through a headless runtime instead.
 const MAX_UPLOAD_BYTES: usize = 12 * 1024 * 1024;
 
 // ──────────────────────────────────────────────────────────

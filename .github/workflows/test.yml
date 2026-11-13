@@ -111,7 +111,7 @@ jobs:
           # unconditionally: `> CLAUDE.md` would truncate the real file.
           # Kept in sync with the `../agent-templates/*` entries in
           # tauri.conf.json::bundle.resources.
-          for tpl in mino easel; do
+          for tpl in mino; do
             mkdir -p "agent-templates/$tpl"
             [ -f "agent-templates/$tpl/CLAUDE.md" ] \
               || printf '# CI placeholder for Tauri resource validation\n' > "agent-templates/$tpl/CLAUDE.md"

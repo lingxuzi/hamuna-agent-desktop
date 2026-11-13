@@ -162,8 +162,8 @@ check_dependency "codesign" "需要 Xcode Command Line Tools"
 check_dependency "lipo" "需要 Xcode Command Line Tools"
 check_dependency "otool" "需要 Xcode Command Line Tools"
 
-# 检查内置 Agent 模板（mino 默认工作区 + easel）
-for tpl in mino easel; do
+# 检查内置 Agent 模板（mino 默认工作区）
+for tpl in mino; do
     if [ ! -d "${PROJECT_DIR}/agent-templates/${tpl}" ] \
         || [ ! -f "${PROJECT_DIR}/agent-templates/${tpl}/CLAUDE.md" ]; then
         echo -e "${RED}错误: agent-templates/${tpl}/ 目录不存在或不完整!${NC}"

@@ -128,8 +128,8 @@ pub fn hamuna_data_dir() -> Option<PathBuf> {
 /// falls through to the Linux *installed* layout `/usr/lib/<name>`, which does
 /// not exist in dev. Every bundled lookup then fails while the resources sit
 /// untouched next to the exe: `bundled-skills not found:
-/// "/usr/lib/HamunaAgent/bundled-skills"`, admin-agent sync errors, easel
-/// templates "not found in bundled resources", Node.js unresolvable, embedded
+/// "/usr/lib/HamunaAgent/bundled-skills"`, admin-agent sync errors, bundled
+/// agent templates "not found in bundled resources", Node.js unresolvable, embedded
 /// terminal PATH missing the bundled binaries. The failure is quiet because most
 /// call sites treat a missing resource as "feature off".
 ///
