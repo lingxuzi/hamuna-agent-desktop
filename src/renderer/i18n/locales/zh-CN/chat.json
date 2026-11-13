@@ -367,7 +367,8 @@
         "undoFailed": "撤销失败：{{error}}",
         "undoFailedGeneric": "撤销失败",
         "multiTrashMoved": "已将 {{count}} 项移至废纸篓"
-      }
+      },
+      "ops": "运营"
     },
     "search": {
       "searching": "搜索中...",
@@ -1115,6 +1116,185 @@
     "modal": {
       "title": "余额不足，请充值",
       "subtitle": "当前余额 ¥{{balance}}，充值完成后再继续对话"
+    }
+  },
+  "ops": {
+    "title": "运营",
+    "close": "关闭运营视图",
+    "domain": {
+      "topic": "选题",
+      "asset": "素材",
+      "schedule": "排期",
+      "review": "复盘"
+    },
+    "status": {
+      "loading": "正在读取运营台账…",
+      "error": "读取失败：{{reason}}",
+      "retry": "重试"
+    },
+    "lead": {
+      "topic": "<b><num>{{pending}}</num> 条选题待加工</b>，其中 <b><num>{{hot}}</num> 条来自热点</b>，最该先做的是 <who>{{name}}</who>。",
+      "topicEmpty": "选题池是空的，先去拉一轮热点，或者手动加一条。",
+      "asset": "<b><num>{{producing}}</num> 条素材在制作中</b>，<b><num>{{due}}</num> 条今天该收尾</b>，卡住的是 <who>{{name}}</who>。",
+      "assetEmpty": "没有在制作的素材，从选题里挑一条开工。",
+      "schedule": "<b>本周排了 <num>{{week}}</num> 条</b>，<b><num>{{empty}}</num> 天还空着</b>，下一条是 <who>{{name}}</who>。",
+      "scheduleEmpty": "本周还没有排期，先定一条发布时间。",
+      "review": "<b><num>{{count}}</num> 条内容</b> 带来了 <b><num>{{views}}</num> 次播放</b>，表现最好的是 <who>{{name}}</who>。",
+      "reviewEmpty": "还没有复盘数据，导入一次账号表现就能开始。"
+    },
+    "metric": {
+      "topic": {
+        "pending": "待加工",
+        "produced": "已产素材",
+        "hotspot": "热点来源"
+      },
+      "asset": {
+        "producing": "制作中",
+        "pendingSchedule": "待排期",
+        "doneThisWeek": "本周完成"
+      },
+      "schedule": {
+        "thisWeek": "本周待发",
+        "pending": "待排期",
+        "emptyDays": "空缺日"
+      },
+      "review": {
+        "views": "总播放",
+        "interactions": "总互动",
+        "completion": "平均完播"
+      }
+    },
+    "dist": {
+      "empty": "还没有可统计的数据。",
+      "topic": {
+        "title": "来源分布",
+        "meta": "按条数"
+      },
+      "asset": {
+        "title": "状态分布",
+        "meta": "按条数"
+      },
+      "schedule": {
+        "title": "平台配额",
+        "meta": "本周"
+      },
+      "review": {
+        "title": "平台分布",
+        "meta": "按播放"
+      },
+      "topicSource": {
+        "hotspot": "热点",
+        "benchmark": "对标",
+        "reflection": "复盘回流",
+        "manual": "手动"
+      },
+      "assetStatus": {
+        "draft": "草稿",
+        "pending": "待排期",
+        "scheduled": "已排期",
+        "published": "已发布"
+      }
+    },
+    "pool": {
+      "topic": {
+        "title": "选题池",
+        "meta": "按优先级",
+        "col1": "选题 · 角度",
+        "col2": "热度",
+        "empty": "选题池是空的。"
+      },
+      "asset": {
+        "title": "制作中",
+        "meta": "按滞留时长",
+        "col1": "素材 · 卡点",
+        "col2": "完成度",
+        "empty": "没有在制作的素材。"
+      },
+      "schedule": {
+        "title": "本周",
+        "meta": "本周一到周日",
+        "col1": "时间 · 素材",
+        "col2": "平台",
+        "empty": "本周没有排期。",
+        "gapTitle": "还没排",
+        "gapSub": "从「素材」里挑一条补上",
+        "gapBadge": "空缺"
+      },
+      "review": {
+        "title": "表现最好的内容",
+        "meta": "按播放",
+        "col1": "内容",
+        "col2": "播放",
+        "empty": "还没有复盘数据。"
+      }
+    },
+    "row": {
+      "platformSub": "{{platform}} · {{detail}}",
+      "idle": "已滞留 {{days}} 天",
+      "progress": "{{n}}%",
+      "scheduleAt": "{{time}} · {{platform}}",
+      "completion": "完播 {{rate}}%",
+      "followers": "涨粉 {{n}}"
+    },
+    "chart": {
+      "title": "每日发布表现",
+      "meta": "近 15 天",
+      "aria": "近 15 天按发布日聚合的播放量折线图，峰值 {{peak}}",
+      "peak": "峰值 {{value}}",
+      "empty": "还没有可画的数据。"
+    },
+    "advice": {
+      "title": "给你的建议",
+      "meta": "上一轮复盘沉淀的规则",
+      "empty": "还没有沉淀下来的规则，做一轮复盘就会长出来。"
+    },
+    "dark": {
+      "emptyWhen": "暂无",
+      "emptyName": "这一域还没有可看的内容",
+      "idleDays": "已滞留 {{days}} 天",
+      "topic": {
+        "top": "最优先"
+      },
+      "asset": {
+        "top": "最该收尾"
+      },
+      "schedule": {
+        "top": "下一条"
+      },
+      "review": {
+        "top": "领跑优势",
+        "when": "按播放",
+        "name": "第 1 名领先第 2 名 {{pct}}%",
+        "namePlain": "目前只有一条有数据"
+      }
+    },
+    "notes": {
+      "title": "要点",
+      "meta": "{{n}} 条",
+      "topic": {
+        "1": "热点类选题要在 48 小时内开工，过窗口就凉。",
+        "2": "系列化选题固定发布时间，完播更稳。",
+        "3": "评论区高频提问是最省力的选题来源。",
+        "4": "复盘回流类换平台重发，成本最低。"
+      },
+      "asset": {
+        "1": "封面是唯一的卡点，标题写完就该定封面。",
+        "2": "分镜超过 4 个的素材，先出 1 个再看数据。",
+        "3": "定稿后 24 小时内必须排期，否则会沉底。",
+        "4": "复刻类素材优先换平台，不要改内容。"
+      },
+      "schedule": {
+        "1": "同一素材跨平台要隔至少一天，避免互相压量。",
+        "2": "空档优先补本周热度最高的那条。",
+        "3": "定档之后就不要再改，改了平台会重新排队。",
+        "4": "视频号发布要预留 30 分钟上传时间。"
+      },
+      "review": {
+        "1": "完播率低于 30% 的内容，先改开头三秒。",
+        "2": "标题带数字的笔记，点击率普遍更高。",
+        "3": "同一角度连续爆的，值得做成系列。",
+        "4": "涨粉快但完播低的内容，适合做引流不适合做留存。"
+      }
     }
   }
 }

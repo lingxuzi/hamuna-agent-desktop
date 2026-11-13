@@ -23,6 +23,7 @@ import {
   TerminalSquare,
   Search,
   Globe,
+  LayoutDashboard,
   PanelRightClose,
   X,
 } from "lucide-react";
@@ -167,6 +168,7 @@ const DirectoryPanel = memo(
       onOpenTerminal,
       terminalAlive,
       onOpenBrowser,
+      onOpenOps,
     },
     ref,
   ) {
@@ -3075,6 +3077,21 @@ const DirectoryPanel = memo(
                   className="flex h-6 w-6 items-center justify-center rounded text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
                 >
                   <Globe className="h-4 w-4" />
+                </button>
+              </Tip>
+            )}
+            {/* Operations ledger button — sino template only */}
+            {onOpenOps && (
+              <Tip label={t("workspaceFiles.directory.ops")} position="bottom">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenOps();
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--ink-muted)] transition-colors hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
                 </button>
               </Tip>
             )}

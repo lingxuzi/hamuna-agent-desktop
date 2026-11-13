@@ -1,0 +1,935 @@
+/* 运营视图 · 方向 D（dsh 外观语法 × app token）
+ *
+ * 小样在 `docs/ops-ui/d.html`，这里只搬**结构语法**：胶囊切域 / 弥散 Hero /
+ * 白卡 + 发丝线 / 深墨主角卡 / 三等分指标带 / 两档入场。
+ * 色值一律走 app token，所以深色模式自动跟随，不另写一套深色值。
+ *
+ * 两个色相分工（沿用 docs/OPS-VIEW-UI.md）：陶土 = 交互，冷青 = 数据。
+ *
+ * 字号只用七档梯子（12/14/16/18/20/22/28）。eslint 拦 `text-[Npx]`，但拦不住
+ * CSS 文件里的 font-size，所以这条在这里靠自觉 —— 改动时对照梯子。
+ * 圆角只用 6/10/14/9999。过渡 ≤200ms、只动 transform/opacity、不用弹跳。
+ */
+
+.ops {
+  --ops-serif: var(--font-serif-family);
+  --ops-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ops-dur: var(--duration-normal);
+  /* 数据色：深青。图表、分布条、要点圆点共用一支。 */
+  --ops-data: var(--accent-cool);
+  --ops-wash: color-mix(in srgb, var(--accent-warm) 26%, transparent);
+  --ops-dark: var(--button-dark-bg);
+  --ops-dark-text: var(--button-dark-text);
+  --ops-dark-dim: color-mix(in srgb, var(--button-dark-text) 72%, transparent);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--paper-elevated);
+  background-image: radial-gradient(720px 420px at 104% -12%, var(--ops-wash) 0%, transparent 60%);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  /* 容器查询的锚点：760 摊平、400 收窄都相对这块面板的宽度，不相对窗口。 */
+  container-type: inline-size;
+}
+
+.ops *,
+.ops *::before,
+.ops *::after {
+  box-sizing: border-box;
+}
+
+/* ── 顶栏 ─────────────────────────────────────────── */
+.ops-top {
+  flex: 0 0 auto;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+}
+
+.ops-pills {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--paper-inset);
+  border-radius: var(--theme-radius-full);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ops-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.ops-pills button {
+  flex: none;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-secondary);
+  background: none;
+  border: 0;
+  border-radius: var(--theme-radius-full);
+  padding: 7px 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-pills button:hover {
+  color: var(--ink);
+}
+/* 激活项：深墨底 + 白字。高对比，不用相近色。 */
+.ops-pills button[aria-selected='true'] {
+  background: var(--ops-dark);
+  color: var(--ops-dark-text);
+}
+
+.ops-top .ops-sp {
+  flex: 1;
+}
+
+.ops-ghost {
+  flex: none;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink-muted);
+  background: var(--paper-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  padding: 7px 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-ghost:hover {
+  border-color: var(--ink-subtle);
+  color: var(--ink);
+}
+
+/* ── 主体：内容区 + 右栏 ──────────────────────────── */
+.ops-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.ops-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+}
+/* 列内子项不许被压扁：Hero 是内容，不是可压缩的弹性盒 */
+.ops-main > * {
+  flex: none;
+}
+
+/* 右栏只有两张卡，天然比主区短，所以两张贴着排，不吸底。
+   试过 space-between（顶卡贴顶、末卡贴底），宽屏下把两张拉开 400px，
+   中间裂出一条空带，比留白更像出错。留白统一落在内容之后。 */
+.ops-rail {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── 卡片 ─────────────────────────────────────────── */
+.ops-card {
+  background: var(--paper-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-lg);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
+  padding: 18px 20px;
+}
+
+.ops-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ops-card-head h2 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.ops-card-head .ops-sp {
+  flex: 1;
+}
+.ops-card-head .ops-meta {
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ── Hero ─────────────────────────────────────────── */
+.ops-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--paper-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-lg);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
+  padding: 26px 28px 22px;
+}
+/* 右上暖色弥散：D 的主视觉，唯一"炫"的地方，其余保持安静。 */
+.ops-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(720px 360px at 92% -42%, var(--ops-wash) 0%, transparent 70%);
+  pointer-events: none;
+}
+.ops-hero > * {
+  position: relative;
+}
+
+.ops-hero-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 32px;
+}
+.ops-hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+.ops-hero h1 {
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  max-width: 640px;
+  text-wrap: balance;
+}
+.ops-hero h1 b {
+  font-weight: 700;
+}
+/* 数字用衬线，和正文拉开材质；「18.2万」「33%」不许从数字与单位之间断行。 */
+.ops-hero h1 .ops-num {
+  font-family: var(--ops-serif);
+  font-weight: 600;
+  font-size: 28px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.ops-hero h1 .ops-num small {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-muted);
+  margin-left: 1px;
+}
+
+.ops-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* 三个指标用 flex + 固定 gap：等分栅格右对齐时，间距仍随数字宽度变化。 */
+.ops-metrics {
+  flex: none;
+  display: flex;
+  gap: 28px;
+  justify-content: flex-end;
+}
+.ops-metrics > div {
+  text-align: right;
+}
+.ops-metrics dt {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--ink-muted);
+}
+.ops-metrics dd {
+  margin: 4px 0 0;
+  font-family: var(--ops-serif);
+  font-weight: 600;
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ops-metrics dd small {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-muted);
+  margin-left: 2px;
+}
+
+/* ── 胶囊按钮（Hero 动作 / 建议卡动作共用一套） ─────── */
+.ops-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--paper-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  padding: 8px 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease),
+    background var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease),
+    transform var(--ops-dur) var(--ops-ease);
+}
+.ops-act:hover {
+  border-color: var(--ink-subtle);
+}
+.ops-act svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* 主操作：深墨底。 */
+.ops-act.solid {
+  background: var(--ops-dark);
+  color: var(--ops-dark-text);
+  border-color: var(--ops-dark);
+}
+.ops-act.solid:hover {
+  background: var(--button-dark-bg-hover);
+  border-color: var(--button-dark-bg-hover);
+}
+/* 按下即回执：一次性动画落在被点的元素本身。 */
+@keyframes ops-press {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+.ops-act:active {
+  animation: ops-press 200ms var(--ops-ease);
+}
+.ops-act:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
+/* ── 卡片网格 ─────────────────────────────────────── */
+/* 复盘域四张卡排 2×2；非复盘域两张，显式指定位置让**主列表占宽列**——
+   靠 DOM 顺序会让分布卡占掉宽列、主列表被挤进窄列，正好反过来。 */
+.ops-grid {
+  display: grid;
+  grid-template-columns: 1.62fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.ops-grid-2 > .ops-c-top {
+  grid-row: 1;
+  grid-column: 1;
+}
+.ops-grid-2 > .ops-c-bars {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+/* ── 折线图 ───────────────────────────────────────── */
+/* 纵轴刻度用 HTML 画，SVG 保持无文字（viewBox 被横向拉伸，SVG 里的字会变形）。 */
+.ops-plot {
+  display: flex;
+  gap: 10px;
+}
+.ops-yaxis {
+  position: relative;
+  flex: 0 0 40px;
+  height: 168px;
+}
+/* 刻度与网格线共用同一组 y 值，标签绝对定位，否则 space-between 会摊开错位。 */
+.ops-yaxis span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.ops-yaxis span:nth-child(1) { top: 12px; }
+.ops-yaxis span:nth-child(2) { top: 83px; }
+.ops-yaxis span:nth-child(3) { top: 154px; }
+
+.ops-chart-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 168px;
+}
+.ops-chart {
+  width: 100%;
+  height: 168px;
+  display: block;
+  overflow: visible;
+}
+.ops-chart .axis {
+  stroke: var(--line-subtle);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.ops-chart .area {
+  fill: color-mix(in srgb, var(--ops-data) 12%, transparent);
+}
+.ops-chart .line {
+  fill: none;
+  stroke: var(--ops-data);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+/* 峰值标记用 HTML 画：SVG 被横向拉伸，圆点会被拉成椭圆。 */
+.ops-peak {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: var(--theme-radius-full);
+  background: var(--paper-elevated);
+  border: 2px solid var(--ops-data);
+}
+.ops-peak-tag {
+  position: absolute;
+  transform: translate(-100%, -50%);
+  margin-left: -10px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--paper-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-sm);
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+.ops-xaxis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-muted);
+  margin-top: 8px;
+}
+
+/* ── 分布条 ───────────────────────────────────────── */
+.ops-bars {
+  list-style: none;
+  display: grid;
+}
+.ops-bars li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-top: 1px solid var(--line-subtle);
+}
+.ops-bars li:first-child {
+  border-top: 0;
+}
+.ops-bars .name {
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-bars .val {
+  font-family: var(--ops-serif);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ops-bars .track {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: var(--theme-radius-full);
+  background: var(--paper-inset);
+  overflow: hidden;
+}
+.ops-bars .track i {
+  display: block;
+  height: 100%;
+  border-radius: var(--theme-radius-full);
+  background: var(--ops-data);
+}
+/* 对照组：同一张图里的基线，弱一档 */
+.ops-bars .track i.mut {
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+}
+.ops-bars.mini li {
+  padding: 6px 0;
+}
+.ops-bars.mini .name {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.ops-bars.mini .val {
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-secondary);
+}
+.ops-bars.mini .track {
+  height: 4px;
+}
+
+/* ── 主列表 ───────────────────────────────────────── */
+.ops-list-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-muted);
+  padding-bottom: 6px;
+}
+.ops-list {
+  list-style: none;
+  display: grid;
+}
+.ops-list li + li {
+  border-top: 1px solid var(--line-subtle);
+}
+.ops-list-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: default;
+}
+.ops-list .rank {
+  flex: none;
+  width: 16px;
+  font-family: var(--ops-serif);
+  font-size: 16px;
+  color: var(--ink-muted);
+}
+/* 字牌：中性底 + 深墨字。不上色相 —— 色相没有语义（同一个「早」出现两次却
+   不同色），而且白字压在陶土/橄榄/蓝灰上只有 2.6–3.8:1，不过 AA。 */
+.ops-list .thumb {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--theme-radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--paper-inset);
+  color: var(--ink-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+/* 平台色块：右下角 6px 小方，与首字合成双编码 —— 只看首字时
+   「早八人的早餐」和「早睡挑战」会撞成同一个字。 */
+.ops-list .thumb::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1.5px var(--paper-elevated);
+  background: var(--ink-subtle);
+}
+.ops-list .thumb[data-platform='douyin']::after { background: var(--ops-data); }
+.ops-list .thumb[data-platform='xiaohongshu']::after { background: var(--accent-warm); }
+.ops-list .thumb[data-platform='weixin-channels']::after { background: var(--ink-secondary); }
+.ops-list .thumb[data-platform='bilibili']::after { background: var(--accent-sky); }
+.ops-list .thumb[data-platform='kuaishou']::after { background: var(--warning); }
+.ops-list .thumb[data-platform='zhihu']::after { background: var(--info); }
+.ops-list .thumb[data-platform='wechat-mp']::after { background: var(--success); }
+
+/* 排期域的时间格：日期在上、星期在下，与字牌同宽同位，切域时列表左缘不跳。 */
+.ops-list .date {
+  flex: none;
+  width: 40px;
+  text-align: center;
+}
+.ops-list .date b {
+  display: block;
+  font-family: var(--ops-serif);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.ops-list .date small {
+  display: block;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-muted);
+  margin-top: 3px;
+}
+
+.ops-list .t {
+  flex: 1;
+  min-width: 0;
+}
+.ops-list .t strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-list .t small {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-list .n {
+  flex: none;
+  font-family: var(--ops-serif);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 排期的空档：整行压暗，右列改描边字 —— 是「这里缺一条」，不是一条内容。 */
+.ops-list .empty .t strong {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+.ops-list .empty .n {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  border: 1px dashed var(--line);
+  border-radius: var(--theme-radius-full);
+  padding: 4px 9px;
+}
+
+/* 空态：整张卡只有一行字，不摆骨架、不摆假数据。 */
+.ops-empty {
+  padding: 18px 0 6px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+/* ── 建议卡 ───────────────────────────────────────── */
+.ops-advice {
+  display: grid;
+  gap: 12px;
+}
+.ops-tip {
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-md);
+  padding: 12px 14px;
+  background: var(--paper);
+}
+.ops-tip strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.ops-tip p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  margin: 4px 0 10px;
+}
+.ops-tip .act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--paper-elevated);
+  border: 1px solid var(--ink-subtle);
+  border-radius: var(--theme-radius-full);
+  padding: 7px 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-tip .act:hover {
+  border-color: var(--ink);
+}
+.ops-tip .act.done {
+  color: var(--ops-data);
+  border-color: var(--ops-data);
+  background: color-mix(in srgb, var(--ops-data) 8%, var(--paper-elevated));
+}
+.ops-tip .act svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── 右栏：深墨主角卡 + 要点 ──────────────────────── */
+.ops-next {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: var(--ops-dark);
+  color: var(--ops-dark-text);
+  border-radius: var(--theme-radius-lg);
+  padding: 18px 20px;
+  cursor: default;
+}
+.ops-next .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ops-dark-dim);
+}
+.ops-next .top .pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--theme-radius-full);
+  background: currentColor;
+  animation: ops-pulse 1.8s var(--ops-ease) infinite;
+}
+.ops-next .big {
+  margin-top: 12px;
+  font-family: var(--ops-serif);
+  font-weight: 600;
+  font-size: 28px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ops-next .name {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.ops-next .foot {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ops-dark-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-notes {
+  list-style: none;
+  display: grid;
+}
+.ops-notes li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 9px;
+  align-items: start;
+  padding: 9px 0;
+  border-top: 1px solid var(--line-subtle);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-secondary);
+}
+.ops-notes li:first-child {
+  border-top: 0;
+}
+.ops-notes .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--theme-radius-full);
+  background: var(--ops-data);
+  margin-top: 7px;
+}
+
+/* ── 动效：入场递进 + 状态脉冲 ───────────────────── */
+@keyframes ops-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ops-hero,
+.ops-card,
+.ops-next {
+  animation: ops-rise 160ms var(--ops-ease) both;
+}
+/* 整场出场 = 160ms + 40ms delay = 200ms，压在单次过渡预算之内。
+   三档递进会让整场到 280ms，超预算，所以收成两档。 */
+.ops-grid > .ops-card:nth-child(2),
+.ops-grid > .ops-card:nth-child(3),
+.ops-grid > .ops-card:nth-child(4),
+.ops-rail > .ops-next,
+.ops-rail > .ops-card {
+  animation-delay: 40ms;
+}
+@keyframes ops-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ops-dark-text) 38%, transparent); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ── 读失败 / 加载中 ──────────────────────────────── */
+.ops-status {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  font-size: 14px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* ── 窄栏：摊平成一列 ──────────────────────────────
+   断点 760：落地宽度 380–600 全部走这一版。600px 下不摊平的话主区只剩 190px，
+   Hero 会被压成一列字。摊平用 display: contents 拆掉三层容器，再用显式 order
+   把卡片交错排成：Hero → 深墨主角卡 → 主列表 → 图表 → 分布 → 建议 → 要点。
+   **order 只声明在这个断点里** —— 放外面会让宽栏主区（flex 列）也按 order 排，
+   Hero 跑到网格后面。 */
+@container (max-width: 760px) {
+  .ops-body {
+    flex-direction: column;
+    overflow: auto;
+    padding: 0 14px 14px;
+  }
+  .ops-main,
+  .ops-rail,
+  .ops-grid {
+    display: contents;
+  }
+  .ops-hero { order: 1; }
+  .ops-next { order: 2; }
+  .ops-c-top { order: 3; }
+  .ops-c-chart { order: 4; }
+  .ops-c-bars { order: 5; }
+  .ops-c-adv { order: 6; }
+  .ops-c-note { order: 7; }
+
+  .ops-hero-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .ops-hero .ops-acts {
+    flex-wrap: wrap;
+  }
+  .ops-metrics {
+    gap: 22px;
+    justify-content: flex-start;
+  }
+  .ops-metrics > div {
+    text-align: left;
+  }
+  .ops-top {
+    padding: 0 14px;
+    gap: 8px;
+  }
+  .ops-main {
+    overflow: visible;
+  }
+}
+
+/* 终端宽度：390 下「胶囊 + 导出」两件必有一件让位。让的是导出——
+   它是次要动作，且 600 这一档仍保留（那个区间不进这个断点）。 */
+@container (max-width: 400px) {
+  .ops-hide-narrow {
+    display: none;
+  }
+  /* 390 下三个动作排不成 2+1 的残局，改单列全宽等高 */
+  .ops-hero .ops-acts {
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+  }
+  .ops-act {
+    height: 36px;
+    padding: 0 14px;
+  }
+  .ops-hero h1 {
+    font-size: 22px;
+    line-height: 1.45;
+  }
+  .ops-hero h1 .ops-num {
+    font-size: 22px;
+  }
+  /* 产品名整体换行，不许从中间劈开 */
+  .ops-hero h1 .ops-who {
+    white-space: nowrap;
+  }
+  .ops-metrics dd {
+    font-size: 22px;
+  }
+  .ops-next .big {
+    font-size: 22px;
+  }
+  .ops-card {
+    padding: 14px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops *,
+  .ops *::before,
+  .ops *::after {
+    animation-duration: 0.01ms !important;
+    /* delay 必须一起归零：递进靠 delay 做，只归零 duration 的话
+       reduced 下卡片仍会按 delay 逐个闪出来。 */
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+}

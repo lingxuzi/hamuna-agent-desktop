@@ -82,6 +82,8 @@ export interface DirectoryPanelProps {
   onOpenTerminal?: () => void;
   terminalAlive?: boolean;
   onOpenBrowser?: () => void;
+  /** 仅 `sino` 模板的工作区提供：其余模板不写 `ops/state.json`，入口会指向空台账。 */
+  onOpenOps?: () => void;
 }
 
 export type FilePreview = {

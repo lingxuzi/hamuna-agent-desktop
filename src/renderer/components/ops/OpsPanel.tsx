@@ -1,0 +1,447 @@
+import { useMemo, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
+import { X } from 'lucide-react';
+
+import type { OpsDomainId } from '../../../shared/ops';
+import { OPS_DOMAIN_IDS } from '../../../shared/ops';
+import {
+  deriveOpsView,
+  type OpsAssetView,
+  type OpsDarkCard as OpsDarkCardData,
+  type OpsReviewView,
+  type OpsScheduleView,
+  type OpsTopicView,
+  type OpsView,
+} from '../../../shared/ops-derive';
+import {
+  clockTime,
+  formatCompact,
+  formatInteger,
+  formatTick,
+  platformLabel,
+  shortDate,
+} from './opsFormat';
+import OpsHero from './OpsHero';
+import { OpsDistCard, OpsPoolCard } from './OpsCards';
+import { useOpsState } from './useOpsState';
+import './ops.css';
+
+/**
+ * 运营视图：选题 / 素材 / 排期 / 复盘 四域台账。
+ *
+ * 只读。写入（增删改、排期、录数据、写规则）在 Phase 6，所以这一版**不画动作
+ * 按钮**——画了却没有处理函数，等于给用户一个点了没反应的按钮。
+ *
+ * 四域共用一副外壳：顶栏胶囊切域 / Hero 结论句 + 指标带 / 卡片网格 / 右栏深墨
+ * 主角卡。差别只在内容与口径，口径全部来自 `shared/ops-derive.ts`，这里不做计算。
+ */
+export default function OpsPanel({
+  workspace,
+  onClose,
+}: {
+  workspace: string;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation('chat');
+  const [domain, setDomain] = useState<OpsDomainId>('topic');
+  const { state, loading, error, reload } = useOpsState(workspace);
+
+  // `now` 只在数据或域变化时重算：每次 render 都 new Date() 会让派生结果不稳，
+  // 且 useMemo 依赖里塞 Date 等于每帧失效。
+  const view = useMemo(() => deriveOpsView(state, domain, new Date()), [state, domain]);
+
+  return (
+    <div className="ops">
+      <header className="ops-top">
+        <div className="ops-pills" role="tablist" aria-label={t('ops.title')}>
+          {OPS_DOMAIN_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={domain === id}
+              onClick={() => setDomain(id)}
+            >
+              {t(`ops.domain.${id}`)}
+            </button>
+          ))}
+        </div>
+        <span className="ops-sp" />
+        <button
+          type="button"
+          className="ops-ghost"
+          onClick={onClose}
+          aria-label={t('ops.close')}
+          title={t('ops.close')}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      </header>
+
+      {loading ? (
+        <p className="ops-status">{t('ops.status.loading')}</p>
+      ) : error ? (
+        <div className="ops-status">
+          <span>{t('ops.status.error', { reason: error })}</span>
+          <button type="button" className="ops-ghost" onClick={reload}>
+            {t('ops.status.retry')}
+          </button>
+        </div>
+      ) : (
+        <div className="ops-body">
+          <div className="ops-main">
+            <OpsHero lead={<Lead view={view} />} metrics={view.metrics} />
+            <div className={`ops-grid ${view.domain === 'review' ? '' : 'ops-grid-2'}`}>
+              {view.domain === 'review' && <OpsChartCard view={view} />}
+              <OpsPoolCard view={view} />
+              <OpsDistCard view={view} />
+              {view.domain === 'review' && <OpsAdviceCard view={view} />}
+            </div>
+          </div>
+          <aside className="ops-rail">
+            <DarkCard dark={view.dark} />
+            <NotesCard domain={view.domain} />
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Hero 结论句：四域句式不同，逐域写死，不套模板 ─────────────── */
+
+function Lead({ view }: { view: OpsView }) {
+  switch (view.domain) {
+    case 'topic':
+      return <TopicLead view={view} />;
+    case 'asset':
+      return <AssetLead view={view} />;
+    case 'schedule':
+      return <ScheduleLead view={view} />;
+    case 'review':
+      return <ReviewLead view={view} />;
+  }
+}
+
+/** 数字走衬线大字、产品名整体不断行——两处 `<Trans>` 共用的组件表。 */
+const LEAD_COMPONENTS = {
+  b: <b />,
+  num: <span className="ops-num" />,
+  who: <b className="ops-who" />,
+};
+
+function TopicLead({ view }: { view: OpsTopicView }) {
+  const { t } = useTranslation('chat');
+  const focus = view.pool.find((row) => row.id === view.lead.focusId);
+  if (!focus) return <>{t('ops.lead.topicEmpty')}</>;
+  return (
+    <Trans
+      i18nKey="ops.lead.topic"
+      ns="chat"
+      components={LEAD_COMPONENTS}
+      values={{ pending: view.lead.pending, hot: view.lead.fromHotspot, name: focus.title }}
+    />
+  );
+}
+
+function AssetLead({ view }: { view: OpsAssetView }) {
+  const { t } = useTranslation('chat');
+  const blocked = view.pool.find((row) => row.id === view.lead.blockedId);
+  if (!blocked) return <>{t('ops.lead.assetEmpty')}</>;
+  return (
+    <Trans
+      i18nKey="ops.lead.asset"
+      ns="chat"
+      components={LEAD_COMPONENTS}
+      values={{ producing: view.lead.producing, due: view.lead.dueToday, name: blocked.title }}
+    />
+  );
+}
+
+function ScheduleLead({ view }: { view: OpsScheduleView }) {
+  const { t } = useTranslation('chat');
+  const next = view.pool.flatMap((day) => day.assets).find((a) => a.id === view.lead.nextId);
+  if (!next) return <>{t('ops.lead.scheduleEmpty')}</>;
+  return (
+    <Trans
+      i18nKey="ops.lead.schedule"
+      ns="chat"
+      components={LEAD_COMPONENTS}
+      values={{ week: view.lead.thisWeek, empty: view.lead.emptyDays, name: next.title }}
+    />
+  );
+}
+
+function ReviewLead({ view }: { view: OpsReviewView }) {
+  const { t, i18n } = useTranslation('chat');
+  const best = view.pool.find((row) => row.assetId === view.lead.bestId);
+  if (!best) return <>{t('ops.lead.reviewEmpty')}</>;
+  return (
+    <Trans
+      i18nKey="ops.lead.review"
+      ns="chat"
+      components={LEAD_COMPONENTS}
+      values={{
+        count: view.lead.published,
+        views: formatCompact(view.lead.totalViews, i18n.language),
+        name: best.title,
+      }}
+    />
+  );
+}
+
+/* ── 趋势图（仅复盘域） ───────────────────────────────────────── */
+
+const CHART_W = 640;
+const CHART_TOP = 12;
+const CHART_BOTTOM = 154;
+
+function OpsChartCard({ view }: { view: OpsReviewView }) {
+  const { t, i18n } = useTranslation('chat');
+  const series = view.series;
+  // series 恒有 15 个点（没数据的那天补 0），所以"有没有数据"要看总和而不是长度。
+  const hasData = series.some((p) => p.views > 0);
+  const max = Math.max(...series.map((p) => p.views), 1);
+  const lastIndex = Math.max(series.length - 1, 1);
+
+  const xOf = (i: number) => (i / lastIndex) * CHART_W;
+  const yOf = (v: number) => CHART_BOTTOM - (v / max) * (CHART_BOTTOM - CHART_TOP);
+
+  const line = series.map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i)} ${yOf(p.views)}`).join(' ');
+  const area = `${line} L${CHART_W} ${CHART_BOTTOM} L0 ${CHART_BOTTOM} Z`;
+
+  let peakIndex = 0;
+  for (let i = 1; i < series.length; i += 1) {
+    if (series[i].views > series[peakIndex].views) peakIndex = i;
+  }
+  const peak = series[peakIndex];
+  const peakLabel = formatCompact(peak.views, i18n.language);
+
+  // 横轴取 5 个等距刻度：15 天全标会挤成一团。
+  const ticks = [0, 3, 7, 11, lastIndex].filter(
+    (i, at, arr) => i < series.length && arr.indexOf(i) === at,
+  );
+
+  return (
+    <section className="ops-card ops-c-chart">
+      <div className="ops-card-head">
+        <h2>{t('ops.chart.title')}</h2>
+        <span className="ops-sp" />
+        <span className="ops-meta">{t('ops.chart.meta')}</span>
+      </div>
+      <div className="ops-plot">
+        {hasData ? (
+          <>
+            <div className="ops-yaxis" aria-hidden="true">
+              {[max, max / 2, 0].map((v) => (
+                <span key={v}>{formatTick(v, i18n.language)}</span>
+              ))}
+            </div>
+            <div className="ops-chart-wrap">
+              <svg
+                className="ops-chart"
+                viewBox={`0 0 ${CHART_W} 168`}
+                preserveAspectRatio="none"
+                role="img"
+                aria-label={t('ops.chart.aria', { peak: peakLabel })}
+              >
+                <line className="axis" x1="0" y1={CHART_TOP} x2={CHART_W} y2={CHART_TOP} />
+                <line className="axis" x1="0" y1={(CHART_TOP + CHART_BOTTOM) / 2} x2={CHART_W} y2={(CHART_TOP + CHART_BOTTOM) / 2} />
+                <line className="axis" x1="0" y1={CHART_BOTTOM} x2={CHART_W} y2={CHART_BOTTOM} />
+                <path className="area" d={area} />
+                <path className="line" d={line} />
+              </svg>
+              {/* 峰值点用 HTML 画：SVG 被横向拉伸，圆点会被拉成椭圆。 */}
+              <span
+                className="ops-peak"
+                aria-hidden="true"
+                style={{ left: `${(xOf(peakIndex) / CHART_W) * 100}%`, top: `${yOf(peak.views)}px` }}
+              />
+              <span
+                className="ops-peak-tag"
+                style={{ left: `${(xOf(peakIndex) / CHART_W) * 100}%`, top: `${yOf(peak.views)}px` }}
+              >
+                {t('ops.chart.peak', { value: peakLabel })}
+              </span>
+            </div>
+          </>
+        ) : (
+          // 空账本画一条贴着零轴的直线 + 两个「1」刻度，比不出图的空态更糟。
+          <p className="ops-empty">{t('ops.chart.empty')}</p>
+        )}
+      </div>
+      <div className="ops-xaxis">
+        {ticks.map((i) => (
+          <span key={series[i].date}>{shortDate(series[i].date, i18n.language)}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ── 建议卡（仅复盘域） ───────────────────────────────────────── */
+
+function OpsAdviceCard({ view }: { view: OpsReviewView }) {
+  const { t } = useTranslation('chat');
+  return (
+    <section className="ops-card ops-c-adv">
+      <div className="ops-card-head">
+        <h2>{t('ops.advice.title')}</h2>
+        <span className="ops-sp" />
+        <span className="ops-meta">{t('ops.advice.meta')}</span>
+      </div>
+      {view.advice.length === 0 ? (
+        <p className="ops-empty">{t('ops.advice.empty')}</p>
+      ) : (
+        <div className="ops-advice">
+          {view.advice.map((rule) => (
+            <div className="ops-tip" key={rule.id}>
+              <strong>{rule.name}</strong>
+              <p>{rule.rule}</p>
+              {rule.evidenceBars && rule.evidenceBars.length > 0 && (
+                <ul className="ops-bars mini">
+                  {rule.evidenceBars.map((bar) => (
+                    <li key={bar.name}>
+                      <span className="name">{bar.name}</span>
+                      <span className="val">{bar.val}</span>
+                      <span className="track">
+                        <i className={bar.mut ? 'mut' : undefined} style={{ width: `${bar.pct}%` }} />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ── 右栏：深墨主角卡 + 该域要点 ─────────────────────────────── */
+
+interface DarkParts {
+  top: string;
+  when: string;
+  big: string;
+  name: string;
+  foot: string;
+}
+
+function DarkCard({ dark }: { dark: OpsDarkCardData }) {
+  const { t, i18n } = useTranslation('chat');
+  const locale = i18n.language;
+  const parts = darkParts(dark, t, locale);
+
+  return (
+    <section className="ops-next">
+      <span className="top">
+        <span>{parts.top}</span>
+        <span>
+          <span className="pulse" /> <span>{parts.when}</span>
+        </span>
+      </span>
+      <div className="big">{parts.big}</div>
+      <div className="name">{parts.name}</div>
+      {parts.foot && <div className="foot">{parts.foot}</div>}
+    </section>
+  );
+}
+
+function darkParts(
+  dark: OpsDarkCardData,
+  t: (key: string, options?: Record<string, unknown>) => string,
+  locale: string,
+): DarkParts {
+  const empty: DarkParts = {
+    top: t(`ops.dark.${dark.kind}.top`),
+    when: t('ops.dark.emptyWhen'),
+    big: '—',
+    name: t('ops.dark.emptyName'),
+    foot: '',
+  };
+
+  switch (dark.kind) {
+    case 'topic': {
+      if (!dark.title) return empty;
+      return {
+        top: t('ops.dark.topic.top'),
+        when:
+          dark.idleDays === null
+            ? t('ops.dark.emptyWhen')
+            : t('ops.dark.idleDays', { days: dark.idleDays }),
+        big: dark.hotness === null ? '—' : formatCompact(dark.hotness, locale),
+        name: dark.title,
+        foot: [platformLabel(t, dark.platform), dark.source && t(`ops.dist.topicSource.${dark.source}`)]
+          .filter(Boolean)
+          .join(' · '),
+      };
+    }
+    case 'asset': {
+      if (!dark.title) return empty;
+      return {
+        top: t('ops.dark.asset.top'),
+        when:
+          dark.idleDays === null
+            ? t('ops.dark.emptyWhen')
+            : t('ops.dark.idleDays', { days: dark.idleDays }),
+        big: dark.progress === null ? '—' : `${dark.progress}%`,
+        name: dark.title,
+        foot: platformLabel(t, dark.platform),
+      };
+    }
+    case 'schedule': {
+      if (!dark.title || !dark.at) return empty;
+      return {
+        top: t('ops.dark.schedule.top'),
+        when: clockTime(dark.at, locale),
+        big: shortDate(dark.at, locale),
+        name: dark.title,
+        foot: platformLabel(t, dark.platform),
+      };
+    }
+    case 'review': {
+      if (!dark.title) return empty;
+      return {
+        top: t('ops.dark.review.top'),
+        when: t('ops.dark.review.when'),
+        big: dark.gap === null ? '—' : `+${formatInteger(dark.gap, locale)}`,
+        name:
+          dark.leadPct === null
+            ? t('ops.dark.review.namePlain')
+            : t('ops.dark.review.name', { pct: dark.leadPct }),
+        foot: [
+          dark.title,
+          dark.topViews === null ? null : formatInteger(dark.topViews, locale),
+          platformLabel(t, dark.platform),
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      };
+    }
+  }
+}
+
+const NOTES_COUNT = 4;
+
+function NotesCard({ domain }: { domain: OpsDomainId }) {
+  const { t } = useTranslation('chat');
+  return (
+    <section className="ops-card ops-c-note">
+      <div className="ops-card-head">
+        <h2>{t('ops.notes.title')}</h2>
+        <span className="ops-sp" />
+        <span className="ops-meta">{t('ops.notes.meta', { n: NOTES_COUNT })}</span>
+      </div>
+      <ul className="ops-notes">
+        {Array.from({ length: NOTES_COUNT }, (_, i) => (
+          <li key={i}>
+            <span className="dot" aria-hidden="true" />
+            <span>{t(`ops.notes.${domain}.${i + 1}`)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

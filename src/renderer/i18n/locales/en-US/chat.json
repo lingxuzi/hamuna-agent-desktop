@@ -367,7 +367,8 @@
         "undoFailed": "Undo failed: {{error}}",
         "undoFailedGeneric": "Undo failed",
         "multiTrashMoved": "Moved {{count}} item(s) to Trash"
-      }
+      },
+      "ops": "Operations"
     },
     "search": {
       "searching": "Searching...",
@@ -1115,6 +1116,185 @@
     "modal": {
       "title": "Insufficient balance — please top up",
       "subtitle": "Current balance ¥{{balance}}. Top up to continue the conversation."
+    }
+  },
+  "ops": {
+    "title": "Operations",
+    "close": "Close operations view",
+    "domain": {
+      "topic": "Topics",
+      "asset": "Assets",
+      "schedule": "Schedule",
+      "review": "Review"
+    },
+    "status": {
+      "loading": "Reading the operations ledger…",
+      "error": "Failed to read: {{reason}}",
+      "retry": "Retry"
+    },
+    "lead": {
+      "topic": "<b><num>{{pending}}</num> topics queued</b>, <b><num>{{hot}}</num> from trends</b>. Do <who>{{name}}</who> first.",
+      "topicEmpty": "The topic pool is empty. Pull trends or add one by hand.",
+      "asset": "<b><num>{{producing}}</num> assets in production</b>, <b><num>{{due}}</num> should wrap today</b>. <who>{{name}}</who> is stuck.",
+      "assetEmpty": "Nothing in production. Pick a topic and start one.",
+      "schedule": "<b><num>{{week}}</num> posts scheduled this week</b>, <b><num>{{empty}}</num> days still open</b>. Next up is <who>{{name}}</who>.",
+      "scheduleEmpty": "Nothing scheduled this week. Set a publish time first.",
+      "review": "<b><num>{{count}}</num> posts</b> brought <b><num>{{views}}</num> views</b>. Best performer is <who>{{name}}</who>.",
+      "reviewEmpty": "No review data yet. Import account performance to start."
+    },
+    "metric": {
+      "topic": {
+        "pending": "Queued",
+        "produced": "Produced",
+        "hotspot": "From trends"
+      },
+      "asset": {
+        "producing": "In production",
+        "pendingSchedule": "Unscheduled",
+        "doneThisWeek": "Done this week"
+      },
+      "schedule": {
+        "thisWeek": "Due this week",
+        "pending": "Unscheduled",
+        "emptyDays": "Open days"
+      },
+      "review": {
+        "views": "Total views",
+        "interactions": "Interactions",
+        "completion": "Avg completion"
+      }
+    },
+    "dist": {
+      "empty": "Nothing to count yet.",
+      "topic": {
+        "title": "By source",
+        "meta": "By count"
+      },
+      "asset": {
+        "title": "By status",
+        "meta": "By count"
+      },
+      "schedule": {
+        "title": "Platform quota",
+        "meta": "This week"
+      },
+      "review": {
+        "title": "By platform",
+        "meta": "By views"
+      },
+      "topicSource": {
+        "hotspot": "Trends",
+        "benchmark": "Benchmarks",
+        "reflection": "Review carry-over",
+        "manual": "Manual"
+      },
+      "assetStatus": {
+        "draft": "Draft",
+        "pending": "Unscheduled",
+        "scheduled": "Scheduled",
+        "published": "Published"
+      }
+    },
+    "pool": {
+      "topic": {
+        "title": "Topic pool",
+        "meta": "By priority",
+        "col1": "Topic · angle",
+        "col2": "Heat",
+        "empty": "The topic pool is empty."
+      },
+      "asset": {
+        "title": "In production",
+        "meta": "By idle time",
+        "col1": "Asset · blocker",
+        "col2": "Progress",
+        "empty": "Nothing in production."
+      },
+      "schedule": {
+        "title": "This week",
+        "meta": "Monday to Sunday",
+        "col1": "Time · asset",
+        "col2": "Platform",
+        "empty": "Nothing scheduled this week.",
+        "gapTitle": "Open slot",
+        "gapSub": "Pick one from Assets to fill it",
+        "gapBadge": "Open"
+      },
+      "review": {
+        "title": "Top performers",
+        "meta": "By views",
+        "col1": "Post",
+        "col2": "Views",
+        "empty": "No review data yet."
+      }
+    },
+    "row": {
+      "platformSub": "{{platform}} · {{detail}}",
+      "idle": "idle {{days}}d",
+      "progress": "{{n}}%",
+      "scheduleAt": "{{time}} · {{platform}}",
+      "completion": "{{rate}}% completion",
+      "followers": "+{{n}} followers"
+    },
+    "chart": {
+      "title": "Publishing performance",
+      "meta": "Last 15 days",
+      "aria": "Views by publish date over the last 15 days, peaking at {{peak}}",
+      "peak": "Peak {{value}}",
+      "empty": "No data to plot yet."
+    },
+    "advice": {
+      "title": "Suggestions",
+      "meta": "Rules from the last review",
+      "empty": "No rules distilled yet. Run a review and they will appear."
+    },
+    "dark": {
+      "emptyWhen": "—",
+      "emptyName": "Nothing to show in this domain yet",
+      "idleDays": "idle {{days}}d",
+      "topic": {
+        "top": "Top priority"
+      },
+      "asset": {
+        "top": "Most stalled"
+      },
+      "schedule": {
+        "top": "Next up"
+      },
+      "review": {
+        "top": "Lead",
+        "when": "By views",
+        "name": "#1 leads #2 by {{pct}}%",
+        "namePlain": "Only one post has data"
+      }
+    },
+    "notes": {
+      "title": "Notes",
+      "meta": "{{n}} items",
+      "topic": {
+        "1": "Trend topics must start within 48 hours or the window closes.",
+        "2": "Series posts publish at a fixed time; completion holds steadier.",
+        "3": "Repeated questions in comments are the cheapest topic source.",
+        "4": "Review carry-overs are cheapest to repost on another platform."
+      },
+      "asset": {
+        "1": "The cover is the only blocker — settle it once the title is done.",
+        "2": "For assets over 4 shots, ship one first and read the data.",
+        "3": "Schedule within 24 hours of final cut or it sinks.",
+        "4": "Repost remakes on another platform before rewriting them."
+      },
+      "schedule": {
+        "1": "Leave at least a day between the same asset on two platforms.",
+        "2": "Fill open slots with the hottest topic of the week.",
+        "3": "Do not reschedule once set; the platform re-queues it.",
+        "4": "Allow 30 minutes of upload time for Channels posts."
+      },
+      "review": {
+        "1": "Under 30% completion: fix the first three seconds.",
+        "2": "Titles with numbers generally earn higher click-through.",
+        "3": "An angle that hits twice in a row deserves a series.",
+        "4": "Fast follower growth with low completion means reach, not retention."
+      }
     }
   }
 }

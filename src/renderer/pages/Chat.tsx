@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Bot, Globe, History, Loader2, Plus, PanelRightOpen, RotateCcw, TerminalSquare, Waypoints, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bot, Globe, History, LayoutDashboard, Loader2, Plus, PanelRightOpen, RotateCcw, TerminalSquare, Waypoints, X } from 'lucide-react';
 import { forwardRef, lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -107,6 +107,7 @@ import {
   type RuntimeBackedProviderIdentity,
   type ProviderExecutionIntent,
 } from '../../shared/providerExecution';
+import { SINO_TEMPLATE_ID } from '../../shared/ops';
 import type { SessionOrigin } from '../../shared/session-origin';
 import type { CapabilityInitialSelect } from '../../shared/skillsTypes';
 import {
@@ -212,6 +213,7 @@ const FilePreviewModal = lazy(() => import('@/components/FilePreviewModal'));
 const LazyTerminalPanel = lazy(() => import('@/components/TerminalPanel').then(m => ({ default: m.TerminalPanel })));
 // Lazy load BrowserPanel for embedded browser
 const LazyBrowserPanel = lazy(() => import('@/components/BrowserPanel'));
+const LazyOpsPanel = lazy(() => import('@/components/ops/OpsPanel'));
 // Lazy load IntroductionOverlay for empty session welcome content
 const LazyIntroductionOverlay = lazy(() => import('@/components/IntroductionOverlay'));
 // Terminal chrome now uses CSS tokens that auto-switch with light/dark theme.
@@ -559,6 +561,10 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // Get config to find current project provider
   const { config, projects, providers, patchProject, apiKeys, providerVerifyStatus, refreshProviderData, refreshConfig } = useConfig();
   const currentProject = projects.find((p) => workspacePathsEqual(p.path, agentDir));
+  // The ops ledger only exists in `sino` workspaces — every other template never
+  // writes `ops/state.json`, so the entry would open a permanently empty panel.
+  const isSinoWorkspace = currentProject?.templateSource === 'builtin'
+    && currentProject.templateId === SINO_TEMPLATE_ID;
   // AgentConfig is source of truth for AI settings, Project is fallback for non-agent workspaces
   const currentAgent = currentProject?.agentId ? getAgentById(config, currentProject.agentId) : undefined;
   // Local provider state: snapshot from AgentConfig (priority) or Project at creation.
@@ -742,8 +748,11 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // false = terminal may be alive in background but not displayed.
   // Clicking terminal icon sets true; clicking terminal × sets false.
   const [terminalPinned, setTerminalPinned] = useState(false);
-  // Which view is active in the right panel: 'file', 'terminal', or 'browser'
-  const [splitActiveView, setSplitActiveView] = useState<'file' | 'terminal' | 'browser'>('file');
+  // Which view is active in the right panel: 'file', 'terminal', 'browser', or 'ops'
+  const [splitActiveView, setSplitActiveView] = useState<'file' | 'terminal' | 'browser' | 'ops'>('file');
+  // Operations ledger panel. Only offered for the `sino` builtin template —
+  // the four domains read `ops/state.json`, which other templates never write.
+  const [opsOpen, setOpsOpen] = useState(false);
 
   // ── Embedded browser state ──
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
@@ -761,7 +770,8 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // Derived: is the right split panel visible?
   const splitPanelVisible = splitFile !== null
     || (terminalPinned && (terminalAlive || splitActiveView === 'terminal'))
-    || (browserUrl !== null);
+    || (browserUrl !== null)
+    || opsOpen;
   // Should the terminal component stay mounted? (for xterm.js state preservation)
   const terminalMounted = terminalAlive || (terminalPinned && splitActiveView === 'terminal');
 
@@ -800,15 +810,24 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // Split panel acts as a buffer — absorbs Cmd+W before it reaches the tab.
   useCloseLayer(() => {
     if (!splitPanelVisible) return false;
+    if (splitActiveView === 'ops' && opsOpen) {
+      setOpsOpen(false);
+      if (browserUrl) setSplitActiveView('browser');
+      else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
+      else if (splitFile) setSplitActiveView('file');
+      return true;
+    }
     if (splitActiveView === 'file' && splitFile) {
       setSplitFile(null);
       if (browserUrl) setSplitActiveView('browser');
+      else if (opsOpen) setSplitActiveView('ops');
       else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
       return true;
     }
     if (splitActiveView === 'terminal' && terminalPinned) {
       setTerminalPinned(false);
       if (browserUrl) setSplitActiveView('browser');
+      else if (opsOpen) setSplitActiveView('ops');
       else if (splitFile) setSplitActiveView('file');
       return true;
     }
@@ -817,7 +836,8 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
       setBrowserAlive(false);
       setBrowserSourceFile(null);
       setBrowserCurrentUrl('');
-      if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
+      if (opsOpen) setSplitActiveView('ops');
+      else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
       else if (splitFile) setSplitActiveView('file');
       return true;
     }
@@ -944,6 +964,12 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     setSplitActiveView('browser');
   }, [startBrowserSplitTransitionIfNeeded]);
 
+  // Open the operations ledger in the split panel (DirectoryPanel header button).
+  const handleOpenOps = useCallback(() => {
+    setOpsOpen(true);
+    setSplitActiveView('ops');
+  }, []);
+
   const handleBrowserCreated = useCallback(() => setBrowserAlive(true), []);
   const handleBrowserCreateFailed = useCallback(() => {
     setBrowserAlive(false);
@@ -956,9 +982,10 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     setBrowserAlive(false);
     setBrowserSourceFile(null);
     setBrowserCurrentUrl('');
-    if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
+    if (opsOpen) setSplitActiveView('ops');
+    else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
     else if (splitFile) setSplitActiveView('file');
-  }, [terminalPinned, terminalAlive, splitFile]);
+  }, [terminalPinned, terminalAlive, splitFile, opsOpen]);
 
   // ── Agent-driven browser open ──
   //
@@ -5602,6 +5629,9 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
               onOpenTerminal={isSplitViewEnabled && !isNarrowLayout ? handleOpenTerminal : undefined}
               terminalAlive={terminalAlive}
               onOpenBrowser={isSplitViewEnabled && !isNarrowLayout ? handleOpenBrowser : undefined}
+              onOpenOps={
+                isSplitViewEnabled && !isNarrowLayout && isSinoWorkspace ? handleOpenOps : undefined
+              }
             />
           </div>
         </>
@@ -5625,7 +5655,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
           <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${!splitPanelVisible ? 'hidden' : ''}`}>
             {/* Tab switcher — only when 2+ views are active */}
             {(() => {
-              const activeViews = [splitFile, terminalPinned && terminalAlive, browserUrl].filter(Boolean).length;
+              const activeViews = [splitFile, terminalPinned && terminalAlive, browserUrl, opsOpen].filter(Boolean).length;
               return activeViews >= 2;
             })() && (
               <div className="flex h-9 flex-shrink-0 items-center gap-0.5 border-b border-[var(--line)] bg-[var(--paper-elevated)] px-2">
@@ -5738,6 +5768,38 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                     )}
                   </button>
                 )}
+                {/* Operations tab + its own × */}
+                {opsOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setSplitActiveView('ops')}
+                    className={`group relative flex items-center gap-1 rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
+                      splitActiveView === 'ops'
+                        ? 'text-[var(--ink)]'
+                        : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    <LayoutDashboard className="h-3 w-3" />
+                    {t('ops.title')}
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpsOpen(false);
+                        if (browserUrl) setSplitActiveView('browser');
+                        else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
+                        else if (splitFile) setSplitActiveView('file');
+                      }}
+                      className="ml-0.5 flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity hover:bg-[var(--paper-inset)] group-hover:opacity-100"
+                      title={t('ops.close')}
+                    >
+                      <span className="text-sm leading-none text-[var(--ink-muted)]">×</span>
+                    </span>
+                    {splitActiveView === 'ops' && (
+                      <div className="absolute inset-x-1 -bottom-[5px] h-[2px] rounded-full bg-[var(--accent-warm)]" />
+                    )}
+                  </button>
+                )}
               </div>
             )}
 
@@ -5792,7 +5854,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
             {terminalMounted && (
               <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${splitActiveView !== 'terminal' ? 'hidden' : ''}`}>
                 {/* Terminal header — only when tab switcher is NOT showing (single view) */}
-                {[splitFile, terminalPinned && terminalAlive, browserUrl].filter(Boolean).length < 2 && (
+                {[splitFile, terminalPinned && terminalAlive, browserUrl, opsOpen].filter(Boolean).length < 2 && (
                   <div className="flex h-9 flex-shrink-0 items-center justify-between bg-[var(--paper)] px-3">
                     <div className="flex items-center gap-1.5">
                       <TerminalSquare className="h-3.5 w-3.5 text-[var(--ink)]" />
@@ -5862,6 +5924,15 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                     onSwitchToEditor={handleBrowserSwitchToEditor}
                     onUrlChange={handleBrowserUrlChange}
                   />
+                </Suspense>
+              </div>
+            )}
+
+            {/* Operations ledger — reads `ops/state.json` through Rust invoke */}
+            {opsOpen && agentDir && (
+              <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${splitActiveView !== 'ops' ? 'hidden' : ''}`}>
+                <Suspense fallback={<div className="flex h-full items-center justify-center bg-[var(--paper)]"><Loader2 className="h-5 w-5 animate-spin text-[var(--ink-muted)]" /></div>}>
+                  <LazyOpsPanel workspace={agentDir} onClose={() => setOpsOpen(false)} />
                 </Suspense>
               </div>
             )}

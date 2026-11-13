@@ -15,6 +15,7 @@ import type {
   OpsAsset,
   OpsDomainId,
   OpsReview,
+  OpsRule,
   OpsState,
   OpsTopic,
   OpsTopicSource,
@@ -89,14 +90,40 @@ export interface OpsReviewRow {
 
 /**
  * 深墨主角卡。四个域共用一张卡，换的是内容——每个域给「这一域此刻最该看的那条」。
+ *
+ * `title` 由派生侧查好一并给出：renderer 再拿 id 去数组里找一遍，等于把同一份
+ * 查找写第二遍，且两处对「找不到时怎么办」的处理迟早不一致。
  */
 export type OpsDarkCard =
-  | { kind: 'topic'; topicId: string | null; hotness: number | null; idleDays: number | null }
-  | { kind: 'asset'; assetId: string | null; idleDays: number | null }
-  | { kind: 'schedule'; assetId: string | null; at: string | null }
+  | {
+      kind: 'topic';
+      topicId: string | null;
+      title: string | null;
+      platform: SocialPlatformId | null;
+      source: OpsTopicSource | null;
+      hotness: number | null;
+      idleDays: number | null;
+    }
+  | {
+      kind: 'asset';
+      assetId: string | null;
+      title: string | null;
+      platform: SocialPlatformId | null;
+      progress: number | null;
+      idleDays: number | null;
+    }
+  | {
+      kind: 'schedule';
+      assetId: string | null;
+      title: string | null;
+      platform: SocialPlatformId | null;
+      at: string | null;
+    }
   | {
       kind: 'review';
       topId: string | null;
+      title: string | null;
+      platform: SocialPlatformId | null;
       topViews: number | null;
       /** 领跑差距 = 第 1 名 − 第 2 名。不足两条时为 null。 */
       gap: number | null;
@@ -131,12 +158,36 @@ export interface OpsScheduleView {
   dark: OpsDarkCard;
 }
 
+/** 趋势图的一天：按**发布日**聚合的播放量。 */
+export interface OpsTrendPoint {
+  /** 本地日期 `YYYY-MM-DD`。 */
+  date: string;
+  views: number;
+}
+
+/** 趋势图窗口天数。 */
+export const OPS_TREND_DAYS = 15;
+
 export interface OpsReviewView {
   domain: 'review';
   metrics: OpsMetric[];
   lead: { published: number; totalViews: number; bestId: string | null };
   pool: OpsReviewRow[];
   dist: OpsDistBar[];
+  /**
+   * 近 `OPS_TREND_DAYS` 天按发布日聚合的播放量，缺数据的日子补 0。
+   *
+   * 口径是「这天发布的内容有多少播放」，不是「这天的播放量」——台账只有每条
+   * 内容的累计播放，没有逐日曲线。写成「每日播放」会是假仪表盘。
+   */
+  series: OpsTrendPoint[];
+  /**
+   * 建议卡：沉淀下来的规则，按置信度降序。
+   *
+   * 建议不是渲染层现算的洞察——它读的是 `rules`，也就是上一轮复盘真的写下来的
+   * 结论。没有规则就是空卡，不编。
+   */
+  advice: OpsRule[];
   /** 有数据的日期区间，给列表副标题用。 */
   range: { from: string | null; to: string | null };
   /** 距最近一次复盘的天数；null = 一条复盘都没有。 */
@@ -292,6 +343,9 @@ export function deriveTopicView(state: OpsState, now: Date): OpsTopicView {
     dark: {
       kind: 'topic',
       topicId: top?.id ?? null,
+      title: top?.title ?? null,
+      platform: top?.platform ?? null,
+      source: top?.source ?? null,
       hotness: top?.hotness ?? null,
       idleDays: top ? idleDays(top.updatedAt, now) : null,
     },
@@ -355,6 +409,9 @@ export function deriveAssetView(state: OpsState, now: Date): OpsAssetView {
     dark: {
       kind: 'asset',
       assetId: stalled?.id ?? null,
+      title: stalled?.title ?? null,
+      platform: stalled?.platform ?? null,
+      progress: stalled?.progress ?? null,
       idleDays: stalled ? idleDays(stalled.updatedAt, now) : null,
     },
   };
@@ -412,7 +469,13 @@ export function deriveScheduleView(state: OpsState, now: Date): OpsScheduleView 
         () => 1,
       ),
     ),
-    dark: { kind: 'schedule', assetId: next?.asset.id ?? null, at: next?.asset.scheduledAt ?? null },
+    dark: {
+      kind: 'schedule',
+      assetId: next?.asset.id ?? null,
+      title: next?.asset.title ?? null,
+      platform: next?.asset.platform ?? null,
+      at: next?.asset.scheduledAt ?? null,
+    },
   };
 }
 
@@ -462,6 +525,19 @@ export function deriveReviewView(state: OpsState, now: Date): OpsReviewView {
     .sort((a, b) => a.getTime() - b.getTime());
   const latest = publishedDates[publishedDates.length - 1] ?? null;
 
+  const byDay = new Map<string, number>();
+  for (const r of reviews) {
+    const published = parseDate(r.publishedAt);
+    if (!published) continue;
+    const key = localDateKey(published);
+    byDay.set(key, (byDay.get(key) ?? 0) + r.metrics.views);
+  }
+  const series: OpsTrendPoint[] = [];
+  for (let i = OPS_TREND_DAYS - 1; i >= 0; i -= 1) {
+    const key = localDateKey(addDays(startOfLocalDay(now), -i));
+    series.push({ date: key, views: byDay.get(key) ?? 0 });
+  }
+
   return {
     domain: 'review',
     metrics: [
@@ -475,6 +551,15 @@ export function deriveReviewView(state: OpsState, now: Date): OpsReviewView {
       'platform',
       sumEntries(reviews, (r) => r.platform, (r) => r.metrics.views),
     ),
+    series,
+    // 生效的规则优先：`proposed` 还没被用户点头，压在后面。
+    advice: [...state.rules]
+      .sort((a, b) => {
+        const rank = (r: OpsRule) => (r.status === 'active' ? 0 : 1);
+        if (rank(a) !== rank(b)) return rank(a) - rank(b);
+        return b.confidence - a.confidence;
+      })
+      .slice(0, 3),
     range: {
       from: publishedDates[0] ? publishedDates[0].toISOString() : null,
       to: latest ? latest.toISOString() : null,
@@ -483,6 +568,8 @@ export function deriveReviewView(state: OpsState, now: Date): OpsReviewView {
     dark: {
       kind: 'review',
       topId: top?.assetId ?? null,
+      title: top ? titleOf(top) : null,
+      platform: top?.platform ?? null,
       topViews: top?.metrics.views ?? null,
       gap,
       leadPct,
