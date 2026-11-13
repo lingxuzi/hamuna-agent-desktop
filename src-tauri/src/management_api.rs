@@ -267,6 +267,11 @@ pub async fn start_management_api() -> Result<u16, String> {
         )
         // Session Inbox cross-sidecar delivery (PRD 0.2.18)
         .route("/api/inbox/deliver", post(inbox_deliver_handler))
+        // 运营台账（ops/state.json）—— 唯一写者在 `ops_store.rs`，这里只把
+        // HTTP 请求翻译成 store 调用。CLI（`hamuna ops`）走的就是这条。
+        .route("/api/ops/read", post(ops_read_handler))
+        .route("/api/ops/upsert", post(ops_upsert_handler))
+        .route("/api/ops/delete", post(ops_delete_handler))
         // Session Event watch registration (PRD 0.2.37)
         .route("/api/session/watch", post(session_watch_handler))
         // Secret-bearing internal route. Identity is validated against the
@@ -2748,6 +2753,104 @@ async fn thought_create_handler(
     match store.create(input).await {
         Ok(t) => Json(serde_json::json!({ "ok": true, "thought": t })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+// ── 运营台账 ────────────────────────────────────────────────────────
+//
+// 台账的唯一写者在 `ops_store.rs`（锁内读-改-写 + 原子发布 + 坏文件不覆盖）。
+// 这里只做「HTTP → store 调用」的翻译：路径校验、合并、落盘都在 store 里。
+// CLI（`hamuna ops`）与跑 skill 的 Agent 走的就是这条；前端运营面板走
+// Tauri command，两条路最后落到同一个 store。
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpsReadRequest {
+    workspace: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpsUpsertRequest {
+    workspace: String,
+    item: crate::ops_store::OpsUpsert,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpsDeleteRequest {
+    workspace: String,
+    kind: crate::ops_store::OpsItemKind,
+    id: String,
+}
+
+/// 把工作区路径解析成 canonical 根目录。
+///
+/// 走 `path_safety::validate_workspace_root`（工作区路径的单点出口）：裸拼
+/// 字符串能让台账写到工作区外面去，而台账是「用户手写的业务数据」，写错地方
+/// 没人会发现。
+fn ops_workspace_root(workspace: &str) -> Result<std::path::PathBuf, String> {
+    crate::workspace_files::path_safety::validate_workspace_root(workspace)
+}
+
+async fn ops_read_handler(Json(req): Json<OpsReadRequest>) -> Json<serde_json::Value> {
+    let root = match ops_workspace_root(&req.workspace) {
+        Ok(root) => root,
+        Err(error) => return Json(serde_json::json!({ "ok": false, "error": error })),
+    };
+    // 文件 IO 放到 blocking 线程池——axum handler 跑在 tokio worker 上，
+    // 在那里同步读盘会占住 worker，把同 runtime 上的其它请求一起拖慢。
+    let result = tokio::task::spawn_blocking(move || crate::ops_store::read_state(&root)).await;
+    match result {
+        Ok(Ok(state)) => Json(serde_json::json!({ "ok": true, "state": state })),
+        Ok(Err(error)) => Json(serde_json::json!({ "ok": false, "error": error })),
+        Err(error) => Json(serde_json::json!({
+            "ok": false,
+            "error": format!("[ops-store] read task failed: {}", error),
+        })),
+    }
+}
+
+async fn ops_upsert_handler(Json(req): Json<OpsUpsertRequest>) -> Json<serde_json::Value> {
+    let root = match ops_workspace_root(&req.workspace) {
+        Ok(root) => root,
+        Err(error) => return Json(serde_json::json!({ "ok": false, "error": error })),
+    };
+    let item = req.item;
+    let result =
+        tokio::task::spawn_blocking(move || crate::ops_store::upsert_item(&root, item)).await;
+    match result {
+        Ok(Ok((state, id))) => {
+            crate::ops_store::emit_changed(&req.workspace);
+            Json(serde_json::json!({ "ok": true, "state": state, "id": id }))
+        }
+        Ok(Err(error)) => Json(serde_json::json!({ "ok": false, "error": error })),
+        Err(error) => Json(serde_json::json!({
+            "ok": false,
+            "error": format!("[ops-store] upsert task failed: {}", error),
+        })),
+    }
+}
+
+async fn ops_delete_handler(Json(req): Json<OpsDeleteRequest>) -> Json<serde_json::Value> {
+    let root = match ops_workspace_root(&req.workspace) {
+        Ok(root) => root,
+        Err(error) => return Json(serde_json::json!({ "ok": false, "error": error })),
+    };
+    let kind = req.kind;
+    let id = req.id;
+    let result =
+        tokio::task::spawn_blocking(move || crate::ops_store::delete_item(&root, kind, &id)).await;
+    match result {
+        Ok(Ok(state)) => {
+            crate::ops_store::emit_changed(&req.workspace);
+            Json(serde_json::json!({ "ok": true, "state": state }))
+        }
+        Ok(Err(error)) => Json(serde_json::json!({ "ok": false, "error": error })),
+        Err(error) => Json(serde_json::json!({
+            "ok": false,
+            "error": format!("[ops-store] delete task failed: {}", error),
+        })),
     }
 }
 

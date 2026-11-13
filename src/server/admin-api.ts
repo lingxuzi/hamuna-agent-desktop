@@ -28,6 +28,7 @@ import {
 import { deriveCliToolKind, type CliToolRegistryEntry } from '../shared/types/cliTools';
 import { workspacePathsEqual } from '../shared/workspacePath';
 import { IMAGE_UNDERSTANDING_TOOL_ID } from '../shared/official-tools';
+import type { OpsItemKind, OpsUpsertPayload } from '../shared/ops';
 import { removeProviderFromProxySettingsScope } from '../shared/proxyScope';
 import { removeCustomMcpServerCascade, McpRemovalError } from './services/mcp-removal';
 import { SDK_RESERVED_MCP_NAMES } from './agent-session';
@@ -2053,6 +2054,81 @@ Examples:
   hamuna goal update --status complete
   hamuna goal update --status blocked`,
 
+  ops: `hamuna ops — Manage the operations ledger (ops/state.json)
+
+The ledger is the working memory of a creator workspace: what to make, what
+is ready, what is scheduled, what worked. It lives in the current workspace;
+the operations panel in the app reads the same file.
+
+Commands:
+  list [kind]                  Show the ledger (kind: topic|asset|review|rule)
+  add <kind> [fields]          Create one record
+  update <kind> --id <id>      Change the fields you pass
+  remove <kind> --id <id>      Delete one record
+
+Both orders work: 'hamuna ops add topic' and 'hamuna ops topic add'.
+
+Topic fields:
+  --title <text>               Required on create
+  --platform <id>              Required on create (douyin, xiaohongshu, ...)
+  --note <text>                Why it is worth making
+  --angle <text>               The angle to take
+  --status <s>                 idea | planned | produced | dropped
+  --source <s>                 hotspot | benchmark | manual | reflection
+  --hotness <n>                Views of the reference content
+  --tag <text>                 Tag (repeatable)
+  --ref <text>                 Source reference (repeatable)
+
+Asset fields:
+  --title <text>               Required on create
+  --platform <id>              Required on create
+  --topic-id <id>              The topic this asset comes from
+  --body <text>                Script / body copy
+  --body-file <path>           Read the body from a local text file instead
+  --cover <path>               Cover image path in the workspace
+  --status <s>                 draft | ready | published
+  --scheduled-at <iso>         When it goes out
+  --published-at <iso>         When it actually went out
+  --progress <0-100>           Production progress
+  --image <path>               Image path in the workspace (repeatable)
+  --shot <json>                One shot: {"no":1,"visual":"...","voice":"...","seconds":3} (repeatable)
+
+Review fields:
+  --asset-id <id>              Required on create
+  --platform <id>              Required on create
+  --published-at <iso>         Required on create
+  --note <text>                What you concluded
+  --views <n> --likes <n> --comments <n> --shares <n> --saves <n> --followers <n>
+  --completion-rate <0-1>      Completion rate, when the platform reports it
+
+Rule fields:
+  --name <text>                Required on create
+  --rule <text>                Required on create
+  --source <s>                 reflection | manual | dialog
+  --status <s>                 proposed | active
+  --confidence <0-1>           How sure you are
+  --evidence <text>            Why you believe it
+  --evidence-bar <json>        One comparison bar: {"name":"...","val":"1.8x","pct":100} (repeatable)
+
+Options:
+  --workspace <path>           Target another workspace (default: this session's)
+  --json                       Machine-readable output
+
+Rules:
+  - 'update' is a patch: only the fields you pass change. Everything else on
+    the record stays as it is, so pass only what you mean to change.
+  - 'add' mints the id; the response prints it. Use that id for later
+    'update' / 'remove'.
+  - Never edit ops/state.json directly — the ledger has one writer, and a
+    hand-edit can race with a write and lose data.
+
+Examples:
+  hamuna ops list
+  hamuna ops list topic
+  hamuna ops add topic --title "选题标题" --platform douyin --tag 热点 --source hotspot
+  hamuna ops update topic --id topic-1a2b3c4d --status produced
+  hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300`,
+
   plugin: `hamuna plugin — Manage OpenClaw channel plugins (IM adapters from npm)
 
 Commands:
@@ -3176,6 +3252,51 @@ export async function handleCronStatus(payload: { workspacePath?: string }): Pro
     wrapped.hint = hint;
   }
   return wrapped;
+}
+
+// ---------------------------------------------------------------------------
+// 运营台账（ops/state.json）
+//
+// 台账的唯一写者是 Rust 侧的 `ops_store.rs`。这里不碰文件——工作区文件 IO
+// 走 Tauri invoke / Rust 管理 API（红线：Launcher 没有 Sidecar，工作区数据
+// 不走 sidecar HTTP）。本层只做「把请求转发过去 + 把错误翻成人话」。
+// ---------------------------------------------------------------------------
+
+/** 运营命令的工作区：调用方给了就用，没给就用当前 session 的工作区。 */
+function opsWorkspacePath(payload: { workspace?: string }): string {
+  const explicit = typeof payload.workspace === 'string' ? payload.workspace.trim() : '';
+  return explicit || defaultCronWorkspace();
+}
+
+export async function handleOpsRead(payload: { workspace?: string }): Promise<AdminResponse> {
+  const resp = await managementApi('/api/ops/read', 'POST', {
+    workspace: opsWorkspacePath(payload),
+  });
+  return wrapMgmtResponse(resp);
+}
+
+export async function handleOpsUpsert(payload: {
+  workspace?: string;
+  item: OpsUpsertPayload;
+}): Promise<AdminResponse> {
+  const resp = await managementApi('/api/ops/upsert', 'POST', {
+    workspace: opsWorkspacePath(payload),
+    item: payload.item,
+  });
+  return wrapMgmtResponse(resp);
+}
+
+export async function handleOpsDelete(payload: {
+  workspace?: string;
+  kind: OpsItemKind;
+  id: string;
+}): Promise<AdminResponse> {
+  const resp = await managementApi('/api/ops/delete', 'POST', {
+    workspace: opsWorkspacePath(payload),
+    kind: payload.kind,
+    id: payload.id,
+  });
+  return wrapMgmtResponse(resp);
 }
 
 function currentGoalContext(): { sessionId?: string; workspacePath: string; error?: string } {

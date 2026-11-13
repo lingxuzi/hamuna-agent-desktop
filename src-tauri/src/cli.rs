@@ -30,6 +30,9 @@ const CLI_COMMANDS: &[&str] = &[
     // PRD 0.2.36 — CLI tool registry. Without this, `hamuna tool list` via the
     // packaged binary silently launches the GUI instead of CLI mode.
     "tool",
+    // 运营台账 CLI. Without this, `hamuna ops list` via the packaged binary
+    // silently launches the GUI instead of CLI mode.
+    "ops",
 ];
 
 /// Check if the given args indicate CLI mode.

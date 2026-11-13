@@ -31,6 +31,17 @@ export type OpsDomainId = 'topic' | 'asset' | 'schedule' | 'review';
 
 export const OPS_DOMAIN_IDS: readonly OpsDomainId[] = ['topic', 'asset', 'schedule', 'review'];
 
+/** 台账记录类型。写入 / 删除时用来指明是哪一类。 */
+export type OpsItemKind = 'topic' | 'asset' | 'review' | 'rule' | 'style';
+
+export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
+  'topic',
+  'asset',
+  'review',
+  'rule',
+  'style',
+];
+
 /** 选题状态：想法 → 排进制作 → 已产出。 */
 export type OpsTopicStatus = 'idea' | 'planned' | 'produced' | 'dropped';
 
@@ -223,3 +234,25 @@ export function emptyOpsState(): OpsState {
     style: null,
   };
 }
+
+/**
+ * 每种记录可写的字段。写入载荷是**补丁**：只有出现的键会被写进去。
+ *
+ * 写者有三种（`hamuna ops` CLI、运营面板、跑 skill 的 Agent），它们几乎从不是
+ * 「重建整条记录」，而是「改其中几个字段」。让写者回填没改的字段，等于把实体
+ * 结构复制到每个写者里——加一个字段要改三处，三处迟早漂移。合并在 Rust 的
+ * `ops_store` 里做一次（锁内），写者只发自己动过的键。
+ */
+export interface OpsUpsertFieldMap {
+  topic: Partial<OpsTopic>;
+  asset: Partial<OpsAsset>;
+  review: Partial<Omit<OpsReview, 'metrics'>> & { metrics?: Partial<OpsReviewMetrics> };
+  rule: Partial<OpsRule>;
+  style: Partial<OpsStyle>;
+}
+
+/** 写入载荷：`kind` + 这次要动的字段。 */
+export type OpsUpsertPayload = {
+  [K in OpsItemKind]: { kind: K } & OpsUpsertFieldMap[K];
+}[OpsItemKind];
+

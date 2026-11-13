@@ -276,6 +276,34 @@ hamuna goal update --status blocked                  # AI 判断无法继续时�
 - 用户问"现在目标是什么/状态如何" → `goal get`
 - 不要用 `goal update` 表示用户取消；取消由 UI/宿主控制。
 
+### 运营台账（ops）
+
+运营台账是创作者工作区的「工作记忆」：做什么选题、素材做到哪一步、什么时候发、发完效果如何。它落在工作区的 `ops/state.json`，App 的「运营」面板读的是同一份文件。
+
+```bash
+hamuna ops list                                   # 全量台账（选题 / 素材 / 复盘 / 规则）
+hamuna ops list topic                             # 只看某一类
+hamuna ops add topic --title "标题" --platform douyin --tag 热点 --source hotspot
+hamuna ops update topic --id topic-1a2b3c4d --status produced
+hamuna ops remove topic --id topic-1a2b3c4d
+hamuna ops add asset --title "标题" --platform douyin --body-file script.md --progress 60
+hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \
+    --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300
+hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数字" --confidence 0.7 \
+    --evidence-bar '{"name":"有数字","val":"1.8x","pct":100}'
+```
+
+**何时用：**
+- 用户问「今天做什么」「有哪些选题」「素材到哪了」「上次那条数据怎么样」→ `ops list`（要结构化数据就加 `--json`）
+- 要落地一条新选题 / 新素材 / 一条复盘 / 一条经验 → 对应的 `ops add`
+- 改状态、补数据、记反思 → `ops update --id <id>`，**只传这次真要改的字段**
+
+**硬规则：**
+- **绝不手工编辑 `ops/state.json`**。台账只有一个写者（App 后端），手改会和正常写入竞争，丢数据。所有写操作都走 `hamuna ops`。
+- `update` 是**补丁语义**：没传的字段保持原样，不是清空；确实要清空才显式传空值。
+- `add` 的 id 由后端生成并在输出里打印；后续 `update` / `remove` 用这个 id。
+- 目标工作区默认是当前 session 的工作区；要写别处才加 `--workspace <path>`。
+
 ### 任务中心（task / thought）
 
 ```bash

@@ -2060,6 +2060,11 @@ async function routeAdminApi(pathname: string, payload: Record<string, unknown>)
   if (route === 'goal/create') return await api.handleGoalCreate(payload as Parameters<typeof api.handleGoalCreate>[0]);
   if (route === 'goal/update') return await api.handleGoalUpdate(payload as Parameters<typeof api.handleGoalUpdate>[0]);
 
+  // 运营台账（ops/state.json）。唯一写者在 Rust 侧 ops_store，这里只转发。
+  if (route === 'ops/read') return await api.handleOpsRead(payload as Parameters<typeof api.handleOpsRead>[0]);
+  if (route === 'ops/upsert') return await api.handleOpsUpsert(payload as Parameters<typeof api.handleOpsUpsert>[0]);
+  if (route === 'ops/delete') return await api.handleOpsDelete(payload as Parameters<typeof api.handleOpsDelete>[0]);
+
   // IM runtime commands. send-media + wake are session-scoped (require an
   // IM Bot / Agent Channel context — handlers reject otherwise). channels is
   // not session-scoped: it discovers all configured IM bots and works in any

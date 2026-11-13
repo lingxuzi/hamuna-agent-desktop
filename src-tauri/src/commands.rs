@@ -2448,7 +2448,11 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 
 // ============= CLI Sync =============
 
-const CLI_VERSION: &str = "43";
+// 44: adds the `hamuna ops` command family (list / add / update / remove over
+// the operations ledger). New CLI surface has to ship to existing installs,
+// otherwise the installed `hamuna` binary keeps running the old bundle and the
+// new command simply does not exist for the user.
+const CLI_VERSION: &str = "44";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2654,8 +2658,14 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // real browser (JS-rendered results, user's cookies), so it is not
 // interchangeable with a plain fetch; the skill is where an agent learns to
 // prefer it over the WebSearch / WebFetch tools.
+//
+// 67: hamuna-cli — document the `ops` command family, which reads and writes
+// the operations ledger. Without it an agent has no way to know the command
+// exists, and the one thing the ledger must never suffer is a second writer
+// (an agent editing ops/state.json by hand) — the skill is where that rule
+// gets stated.
 
-const SYSTEM_SKILLS_VERSION: &str = "66";
+const SYSTEM_SKILLS_VERSION: &str = "67";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

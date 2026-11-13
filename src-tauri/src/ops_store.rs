@@ -52,43 +52,51 @@ pub const OPS_PLATFORM_IDS: &[&str] = &[
 
 // ── 枚举 ────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// 状态 / 来源的缺省值。写者只发自己动过的字段，没发的那几个由这里的 default
+/// 兜住——所以这些 default 必须落在「最保守」的那一档（想法 / 草稿 / 提议 /
+/// 手动），而不是某个业务上更好看的值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OpsTopicStatus {
+    #[default]
     Idea,
     Planned,
     Produced,
     Dropped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OpsTopicSource {
     Hotspot,
     Benchmark,
+    #[default]
     Manual,
     Reflection,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OpsAssetStatus {
+    #[default]
     Draft,
     Ready,
     Published,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OpsRuleStatus {
+    #[default]
     Proposed,
     Active,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OpsRuleSource {
     Reflection,
+    #[default]
     Manual,
     Dialog,
 }
@@ -98,6 +106,8 @@ pub enum OpsRuleSource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsTopic {
+    /// 空 = 让 store 生成。id 由 store 拥有，三个写者不各自造。
+    #[serde(default)]
     pub id: String,
     pub title: String,
     #[serde(default)]
@@ -107,14 +117,18 @@ pub struct OpsTopic {
     pub platform: String,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
     pub status: OpsTopicStatus,
+    #[serde(default)]
     pub source: OpsTopicSource,
     #[serde(default)]
     pub source_refs: Vec<String>,
     /// 参考内容的播放量。`None` = 没有可比的参考内容，界面显示「—」而不是 0。
     #[serde(default)]
     pub hotness: Option<u64>,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub updated_at: String,
 }
 
@@ -130,6 +144,7 @@ pub struct OpsShot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsAsset {
+    #[serde(default)]
     pub id: String,
     /// 素材来自哪条选题。`None` = 手动导入的稿件，不挂选题。
     #[serde(default)]
@@ -148,24 +163,33 @@ pub struct OpsAsset {
     /// 排期时间。`None` = 未排期。
     #[serde(default)]
     pub scheduled_at: Option<String>,
+    #[serde(default)]
     pub status: OpsAssetStatus,
     #[serde(default)]
     pub published_at: Option<String>,
     /// 制作完成度 0–100。Agent 每次改素材更新一次。
     #[serde(default)]
     pub progress: u32,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsReviewMetrics {
+    #[serde(default)]
     pub views: u64,
+    #[serde(default)]
     pub likes: u64,
+    #[serde(default)]
     pub comments: u64,
+    #[serde(default)]
     pub shares: u64,
+    #[serde(default)]
     pub saves: u64,
+    #[serde(default)]
     pub followers: u64,
     /// 完播率 0–1。`None` = 平台不给这个指标。
     #[serde(default)]
@@ -175,13 +199,19 @@ pub struct OpsReviewMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsReview {
+    #[serde(default)]
     pub id: String,
     pub asset_id: String,
     pub platform: String,
     pub published_at: String,
+    /// 表现数据可以后补——刚投放还没数据就是全 0。所以这里要 `default`：
+    /// 补丁语义下「先建一条复盘、稍后再填指标」是正常用法，缺 `metrics`
+    /// 不该让整条记录反序列化失败。
+    #[serde(default)]
     pub metrics: OpsReviewMetrics,
     #[serde(default)]
     pub note: String,
+    #[serde(default)]
     pub created_at: String,
 }
 
@@ -201,22 +231,29 @@ pub struct OpsEvidenceBar {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsRule {
+    #[serde(default)]
     pub id: String,
     pub name: String,
     pub rule: String,
+    #[serde(default)]
     pub source: OpsRuleSource,
+    #[serde(default)]
     pub status: OpsRuleStatus,
+    #[serde(default)]
     pub confidence: f64,
+    #[serde(default)]
     pub evidence: String,
     /// 对照条。由反思侧算好存下，前端只渲染。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_bars: Option<Vec<OpsEvidenceBar>>,
+    #[serde(default)]
     pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsStyle {
+    #[serde(default)]
     pub id: String,
     pub name: String,
     #[serde(default)]
@@ -235,6 +272,7 @@ pub struct OpsStyle {
     pub avoid: Vec<String>,
     #[serde(default)]
     pub samples: Vec<String>,
+    #[serde(default)]
     pub updated_at: String,
 }
 
@@ -293,16 +331,23 @@ impl OpsItemKind {
     }
 }
 
-/// 写入载荷：内部标签 + 对应实体。JSON 形态是
-/// `{"kind":"topic", ...topic 字段}`——CLI、HTTP、invoke 三条路共用这一份。
+/// 写入载荷：一个 JSON 对象。`kind` 指明实体类型，其余键是这次要写的字段。
+///
+/// **为什么是「补丁」而不是「完整实体」**：写者有三种（`hamuna ops` CLI、
+/// 运营界面、跑 skill 的 Agent），它们几乎从不是「重建整条记录」，而是
+/// 「改其中几个字段」。让写者负责回填没改的字段，等于把实体结构复制到每个
+/// 写者里——加一个字段要改三处，而且三处迟早漂移。合并在 store 里做一次
+/// （在锁内），写者只发自己动过的那几个键。
+///
+/// 合并是**深一层**的：嵌套对象（如复盘的 `metrics`）逐键合并，否则
+/// 「只改播放量」会把其余五个指标抹掉。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum OpsUpsert {
-    Topic(OpsTopic),
-    Asset(OpsAsset),
-    Review(OpsReview),
-    Rule(OpsRule),
-    Style(OpsStyle),
+#[serde(rename_all = "camelCase")]
+pub struct OpsUpsert {
+    pub kind: OpsItemKind,
+    /// 实体字段。`kind` 之外的键都在这里。
+    #[serde(flatten)]
+    pub fields: serde_json::Map<String, serde_json::Value>,
 }
 
 // ── 校验 ────────────────────────────────────────────────────────────
@@ -454,10 +499,12 @@ fn to_io_err(msg: String) -> FileLockError {
     FileLockError::Io(std::io::Error::other(msg))
 }
 
-/// 锁内读-改-写，然后原子发布。
-fn mutate_state<F>(workspace_root: &Path, mutator: F) -> Result<OpsState, String>
+/// 锁内读-改-写，然后原子发布。mutator 的返回值原样带回——upsert 用它把
+/// 「刚写的那条记录的 id」交回调用方，省得调用方写完再 list 一遍找自己刚
+/// 写的那条。
+fn mutate_state<F, T>(workspace_root: &Path, mutator: F) -> Result<(OpsState, T), String>
 where
-    F: FnOnce(&mut OpsState) -> Result<(), String>,
+    F: FnOnce(&mut OpsState) -> Result<T, String>,
 {
     let paths = resolve_ops_paths(workspace_root)?;
     fs::create_dir_all(&paths.dir)
@@ -472,14 +519,14 @@ where
             timeout: Duration::from_secs(5),
             ..Default::default()
         },
-        move || -> Result<OpsState, FileLockError> {
+        move || -> Result<(OpsState, T), FileLockError> {
             let mut state = read_state_at(&state_path).map_err(to_io_err)?;
-            mutator(&mut state).map_err(to_io_err)?;
+            let value = mutator(&mut state).map_err(to_io_err)?;
             validate_state(&state).map_err(to_io_err)?;
             let content = serde_json::to_string_pretty(&state)
                 .map_err(|e| to_io_err(format!("[ops-store] Cannot serialize ops state: {}", e)))?;
             fs_atomic::atomic_publish(&state_path, &content, "ops-store").map_err(to_io_err)?;
-            Ok(state)
+            Ok((state, value))
         },
     );
 
@@ -489,20 +536,192 @@ where
     })
 }
 
-/// 写入或覆盖一条记录（同 id 覆盖）。
-pub fn upsert_item(workspace_root: &Path, item: OpsUpsert) -> Result<OpsState, String> {
-    mutate_state(workspace_root, |state| {
-        match item {
-            OpsUpsert::Topic(topic) => upsert_by_id(&mut state.topics, topic, |t| t.id.as_str()),
-            OpsUpsert::Asset(asset) => upsert_by_id(&mut state.assets, asset, |a| a.id.as_str()),
-            OpsUpsert::Review(review) => upsert_by_id(&mut state.reviews, review, |r| r.id.as_str()),
-            OpsUpsert::Rule(rule) => upsert_by_id(&mut state.rules, rule, |r| r.id.as_str()),
-            OpsUpsert::Style(style) => {
-                state.style = Some(style);
-                Ok(())
+/// 写入或更新一条记录。返回写入后的台账与**这条记录的 id**。
+///
+/// 载荷是**补丁**：只有出现的键会覆盖已有值（嵌套对象深合并）。同 id 覆盖，
+/// 新 id 新建。id 留空时由 store 生成——三个写者各自造 id 迟早撞车，撞了就
+/// 是覆盖别人的记录。
+pub fn upsert_item(
+    workspace_root: &Path,
+    item: OpsUpsert,
+) -> Result<(OpsState, String), String> {
+    let OpsUpsert { kind, fields } = item;
+    mutate_state(workspace_root, |state| match kind {
+        OpsItemKind::Topic => upsert_topic(state, fields),
+        OpsItemKind::Asset => upsert_asset(state, fields),
+        OpsItemKind::Review => upsert_review(state, fields),
+        OpsItemKind::Rule => upsert_rule(state, fields),
+        OpsItemKind::Style => upsert_style(state, fields),
+    })
+}
+
+/// 生成台账记录 id。带类型前缀，肉眼能看出是选题还是素材。
+fn generate_id(kind: &str) -> String {
+    format!("{}-{}", kind, &uuid::Uuid::new_v4().simple().to_string()[..8])
+}
+
+/// 台账里的时间戳统一走 ISO 8601（UTC），**毫秒精度**。
+///
+/// `to_rfc3339()` 会输出 9 位小数（纳秒）。V8（Node / Chromium）宽松地接受，
+/// WebKit 不保证——而这里的值最终喂给 renderer 的 `new Date(...)`，macOS 上
+/// 只有 WebKit。ES 规范只认 3 位小数，多出来的位数属于实现自选。
+fn now_iso() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+/// 从补丁里取出 id。没有 / 空串 = 新建。
+fn patch_id(patch: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+    patch
+        .get("id")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// 深合并：两边都是对象就逐键合并，否则补丁值整体覆盖。
+///
+/// 深一层是为了复盘的 `metrics`——只改播放量时如果整体替换 `metrics`，
+/// 其余五个指标就丢了。
+fn merge_values(base: &mut serde_json::Value, patch: &serde_json::Value) {
+    match (base, patch) {
+        (serde_json::Value::Object(base_map), serde_json::Value::Object(patch_map)) => {
+            for (key, value) in patch_map {
+                match base_map.get_mut(key) {
+                    Some(existing) => merge_values(existing, value),
+                    None => {
+                        base_map.insert(key.clone(), value.clone());
+                    }
+                }
             }
         }
-    })
+        (base, patch) => *base = patch.clone(),
+    }
+}
+
+/// 把补丁合并到已有记录上（`existing` 为 `None` 时就是新建），再反序列化成
+/// 实体。反序列化这一步就是 schema 校验：字段类型不对 / 必填缺失会在这里
+/// 报错，而不是等到落盘后才发现台账坏了。
+fn merge_patch<T>(existing: Option<&T>, patch: &serde_json::Map<String, serde_json::Value>) -> Result<T, String>
+where
+    T: Serialize + serde::de::DeserializeOwned,
+{
+    let mut merged = match existing {
+        Some(record) => serde_json::to_value(record)
+            .map_err(|e| format!("[ops-store] Cannot re-encode record: {}", e))?,
+        None => serde_json::Value::Object(serde_json::Map::new()),
+    };
+    if let Some(base) = merged.as_object_mut() {
+        for (key, value) in patch {
+            match base.get_mut(key) {
+                Some(existing_value) => merge_values(existing_value, value),
+                None => {
+                    base.insert(key.clone(), value.clone());
+                }
+            }
+        }
+    }
+    serde_json::from_value(merged)
+        .map_err(|e| format!("[ops-store] Invalid record payload: {}", e))
+}
+
+/// 决定一条记录的 `created_at`：已有记录保留最初的时间（改字段不该改「何时
+/// 创建」），新记录用补丁里的，没有就现在。
+fn resolve_created_at(existing_created_at: Option<&str>, patched: &str) -> String {
+    match existing_created_at {
+        Some(original) => original.to_string(),
+        None if patched.trim().is_empty() => now_iso(),
+        None => patched.to_string(),
+    }
+}
+
+fn upsert_topic(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let existing = id
+        .as_deref()
+        .and_then(|id| state.topics.iter().find(|topic| topic.id == id));
+    let mut topic: OpsTopic = merge_patch(existing, &patch)?;
+    if topic.id.trim().is_empty() {
+        topic.id = generate_id("topic");
+    }
+    topic.created_at = resolve_created_at(
+        existing.map(|old| old.created_at.as_str()),
+        &topic.created_at,
+    );
+    topic.updated_at = now_iso();
+    upsert_by_id(&mut state.topics, topic, |t| t.id.as_str())
+}
+
+fn upsert_asset(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let existing = id
+        .as_deref()
+        .and_then(|id| state.assets.iter().find(|asset| asset.id == id));
+    let mut asset: OpsAsset = merge_patch(existing, &patch)?;
+    if asset.id.trim().is_empty() {
+        asset.id = generate_id("asset");
+    }
+    asset.created_at = resolve_created_at(
+        existing.map(|old| old.created_at.as_str()),
+        &asset.created_at,
+    );
+    asset.updated_at = now_iso();
+    upsert_by_id(&mut state.assets, asset, |a| a.id.as_str())
+}
+
+fn upsert_review(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let existing = id
+        .as_deref()
+        .and_then(|id| state.reviews.iter().find(|review| review.id == id));
+    let mut review: OpsReview = merge_patch(existing, &patch)?;
+    if review.id.trim().is_empty() {
+        review.id = generate_id("review");
+    }
+    review.created_at = resolve_created_at(
+        existing.map(|old| old.created_at.as_str()),
+        &review.created_at,
+    );
+    upsert_by_id(&mut state.reviews, review, |r| r.id.as_str())
+}
+
+fn upsert_rule(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let existing = id
+        .as_deref()
+        .and_then(|id| state.rules.iter().find(|rule| rule.id == id));
+    let mut rule: OpsRule = merge_patch(existing, &patch)?;
+    if rule.id.trim().is_empty() {
+        rule.id = generate_id("rule");
+    }
+    rule.created_at = resolve_created_at(existing.map(|old| old.created_at.as_str()), &rule.created_at);
+    upsert_by_id(&mut state.rules, rule, |r| r.id.as_str())
+}
+
+fn upsert_style(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let existing = state.style.as_ref();
+    let mut style: OpsStyle = merge_patch(existing, &patch)?;
+    if style.id.trim().is_empty() {
+        style.id = "style".to_string();
+    }
+    style.updated_at = now_iso();
+    let id = style.id.clone();
+    state.style = Some(style);
+    Ok(id)
 }
 
 /// 删除一条记录。找不到就报错——静默成功会让调用方以为删掉了。
@@ -531,9 +750,10 @@ pub fn delete_item(
             Err(format!("No {} record with id {}", kind.as_str(), id))
         }
     })
+    .map(|(state, _)| state)
 }
 
-fn upsert_by_id<T, F>(list: &mut Vec<T>, item: T, id_of: F) -> Result<(), String>
+fn upsert_by_id<T, F>(list: &mut Vec<T>, item: T, id_of: F) -> Result<String, String>
 where
     F: Fn(&T) -> &str,
 {
@@ -545,7 +765,7 @@ where
         Some(slot) => *slot = item,
         None => list.push(item),
     }
-    Ok(())
+    Ok(id)
 }
 
 fn remove_by_id<T, F>(list: &mut Vec<T>, id: &str, id_of: F) -> bool
@@ -584,14 +804,25 @@ pub async fn cmd_ops_read(workspace: String) -> Result<OpsState, String> {
         .map_err(|e| format!("[ops-store] read task failed: {}", e))?
 }
 
+/// 写入结果：台账快照 + 刚写入那条记录的 id。
+///
+/// id 是新建时由 store 生成的——写者造不出它，只能由 store 回传。少了这个
+/// 回传，写者就得写完再 list 一遍去找自己刚写的那条。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpsUpsertOutcome {
+    pub state: OpsState,
+    pub id: String,
+}
+
 #[tauri::command]
-pub async fn cmd_ops_upsert(workspace: String, item: OpsUpsert) -> Result<OpsState, String> {
+pub async fn cmd_ops_upsert(workspace: String, item: OpsUpsert) -> Result<OpsUpsertOutcome, String> {
     let root = validate_workspace_root(&workspace)?;
-    let state = tauri::async_runtime::spawn_blocking(move || upsert_item(&root, item))
+    let (state, id) = tauri::async_runtime::spawn_blocking(move || upsert_item(&root, item))
         .await
         .map_err(|e| format!("[ops-store] upsert task failed: {}", e))??;
     emit_changed(&workspace);
-    Ok(state)
+    Ok(OpsUpsertOutcome { state, id })
 }
 
 #[tauri::command]
@@ -651,6 +882,20 @@ mod tests {
         }
     }
 
+    /// 把一个完整实体转成写入载荷（补丁）。
+    fn upsert(kind: OpsItemKind, item: &impl Serialize) -> OpsUpsert {
+        let value = serde_json::to_value(item).expect("serialize");
+        let fields = value
+            .as_object()
+            .cloned()
+            .expect("entity must serialize to a JSON object");
+        OpsUpsert { kind, fields }
+    }
+
+    fn topic_upsert(item: &OpsTopic) -> OpsUpsert {
+        upsert(OpsItemKind::Topic, item)
+    }
+
     #[test]
     fn missing_state_file_reads_as_empty_skeleton() {
         let ws = make_test_workspace("ops-empty");
@@ -664,7 +909,7 @@ mod tests {
     #[test]
     fn upsert_writes_then_reads_back() {
         let ws = make_test_workspace("ops-upsert");
-        let state = upsert_item(&ws, OpsUpsert::Topic(topic("t1"))).expect("upsert");
+        let (state, _) = upsert_item(&ws, topic_upsert(&topic("t1"))).expect("upsert");
         assert_eq!(state.topics.len(), 1);
 
         let reread = read_state(&ws).expect("read");
@@ -675,12 +920,12 @@ mod tests {
     }
 
     #[test]
-    fn upsert_with_same_id_replaces_instead_of_duplicating() {
+    fn upsert_with_same_id_updates_instead_of_duplicating() {
         let ws = make_test_workspace("ops-replace");
-        upsert_item(&ws, OpsUpsert::Topic(topic("t1"))).expect("first");
+        upsert_item(&ws, topic_upsert(&topic("t1"))).expect("first");
         let mut updated = topic("t1");
         updated.title = "改过的标题".to_string();
-        let state = upsert_item(&ws, OpsUpsert::Topic(updated)).expect("second");
+        let (state, _) = upsert_item(&ws, topic_upsert(&updated)).expect("second");
 
         assert_eq!(state.topics.len(), 1);
         assert_eq!(state.topics[0].title, "改过的标题");
@@ -690,7 +935,7 @@ mod tests {
     #[test]
     fn state_file_is_human_readable_json() {
         let ws = make_test_workspace("ops-readable");
-        upsert_item(&ws, OpsUpsert::Topic(topic("t1"))).expect("upsert");
+        upsert_item(&ws, topic_upsert(&topic("t1"))).expect("upsert");
 
         let raw = fs::read_to_string(ws.join("ops/state.json")).expect("read raw");
         assert!(raw.contains("\n"), "应该缩进排版而不是压成一行");
@@ -701,9 +946,9 @@ mod tests {
     #[test]
     fn delete_removes_only_the_target_record() {
         let ws = make_test_workspace("ops-delete");
-        upsert_item(&ws, OpsUpsert::Topic(topic("t1"))).expect("t1");
-        upsert_item(&ws, OpsUpsert::Topic(topic("t2"))).expect("t2");
-        upsert_item(&ws, OpsUpsert::Asset(asset("a1"))).expect("a1");
+        upsert_item(&ws, topic_upsert(&topic("t1"))).expect("t1");
+        upsert_item(&ws, topic_upsert(&topic("t2"))).expect("t2");
+        upsert_item(&ws, upsert(OpsItemKind::Asset, &asset("a1"))).expect("a1");
 
         let state = delete_item(&ws, OpsItemKind::Topic, "t1").expect("delete");
         assert_eq!(state.topics.len(), 1);
@@ -732,7 +977,7 @@ mod tests {
         assert!(err.contains("Cannot parse"), "错误信息: {}", err);
 
         // 坏文件绝不能被空状态盖掉——用户手写的台账比我们的默认值贵。
-        let write_err = upsert_item(&ws, OpsUpsert::Topic(topic("t1"))).expect_err("write should fail");
+        let write_err = upsert_item(&ws, topic_upsert(&topic("t1"))).expect_err("write should fail");
         assert!(write_err.contains("Cannot parse"), "错误信息: {}", write_err);
         assert_eq!(
             fs::read_to_string(&state_path).expect("read raw"),
@@ -746,7 +991,7 @@ mod tests {
         let ws = make_test_workspace("ops-platform");
         let mut bad = topic("t1");
         bad.platform = "tiktok".to_string();
-        let err = upsert_item(&ws, OpsUpsert::Topic(bad)).expect_err("should fail");
+        let err = upsert_item(&ws, topic_upsert(&bad)).expect_err("should fail");
         assert!(err.contains("Unknown platform"), "错误信息: {}", err);
         let _ = fs::remove_dir_all(&ws);
     }
@@ -756,7 +1001,7 @@ mod tests {
         let ws = make_test_workspace("ops-progress");
         let mut bad = asset("a1");
         bad.progress = 120;
-        let err = upsert_item(&ws, OpsUpsert::Asset(bad)).expect_err("should fail");
+        let err = upsert_item(&ws, upsert(OpsItemKind::Asset, &bad)).expect_err("should fail");
         assert!(err.contains("progress"), "错误信息: {}", err);
         let _ = fs::remove_dir_all(&ws);
     }
@@ -803,7 +1048,7 @@ mod tests {
             .map(|i| {
                 let root = root.clone();
                 std::thread::spawn(move || {
-                    upsert_item(&root, OpsUpsert::Topic(topic(&format!("t{}", i))))
+                    upsert_item(&root, topic_upsert(&topic(&format!("t{}", i))))
                         .expect("upsert should succeed");
                 })
             })
@@ -830,13 +1075,169 @@ mod tests {
             "updatedAt": "2026-11-01T09:00:00",
         });
         let upsert: OpsUpsert = serde_json::from_value(payload).expect("deserialize");
-        match upsert {
-            OpsUpsert::Topic(topic) => {
-                assert_eq!(topic.id, "t1");
-                assert_eq!(topic.source, OpsTopicSource::Hotspot);
-            }
-            other => panic!("expected topic, got {:?}", other),
-        }
+        assert_eq!(upsert.kind, OpsItemKind::Topic);
+        assert_eq!(upsert.fields.get("id").and_then(|v| v.as_str()), Some("t1"));
+        assert_eq!(
+            upsert.fields.get("source").and_then(|v| v.as_str()),
+            Some("hotspot")
+        );
+    }
+
+    #[test]
+    fn patch_merges_into_existing_record_without_dropping_other_fields() {
+        let ws = make_test_workspace("ops-patch-merge");
+        upsert_item(&ws, topic_upsert(&topic("t1"))).expect("seed");
+
+        // 只发要改的字段：标题之外的字段必须原样留下。
+        let patch = serde_json::json!({ "kind": "topic", "id": "t1", "status": "planned" });
+        let upsert: OpsUpsert = serde_json::from_value(patch).expect("deserialize");
+        let (state, _) = upsert_item(&ws, upsert).expect("upsert");
+
+        assert_eq!(state.topics.len(), 1);
+        assert_eq!(state.topics[0].status, OpsTopicStatus::Planned);
+        assert_eq!(state.topics[0].title, "选题 t1", "没发的字段不能被抹掉");
+        assert_eq!(state.topics[0].platform, "douyin");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn nested_object_patch_merges_one_level_deep() {
+        let ws = make_test_workspace("ops-patch-nested");
+        let review = OpsReview {
+            id: "r1".to_string(),
+            asset_id: "a1".to_string(),
+            platform: "douyin".to_string(),
+            published_at: "2026-11-01T09:00:00".to_string(),
+            metrics: OpsReviewMetrics {
+                views: 100,
+                likes: 10,
+                comments: 2,
+                shares: 3,
+                saves: 4,
+                followers: 50,
+                completion_rate: Some(0.4),
+            },
+            note: String::new(),
+            created_at: "2026-11-01T09:00:00".to_string(),
+        };
+        upsert_item(&ws, upsert(OpsItemKind::Review, &review)).expect("seed");
+
+        // 只改播放量：其余五个指标与完播率必须留着。
+        let patch = serde_json::json!({
+            "kind": "review",
+            "id": "r1",
+            "metrics": { "views": 900 },
+        });
+        let upsert: OpsUpsert = serde_json::from_value(patch).expect("deserialize");
+        let (state, _) = upsert_item(&ws, upsert).expect("upsert");
+
+        assert_eq!(state.reviews[0].metrics.views, 900);
+        assert_eq!(state.reviews[0].metrics.likes, 10);
+        assert_eq!(state.reviews[0].metrics.completion_rate, Some(0.4));
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn missing_id_gets_a_generated_one() {
+        let ws = make_test_workspace("ops-generate-id");
+        let patch = serde_json::json!({ "kind": "topic", "title": "选题", "platform": "douyin" });
+        let upsert: OpsUpsert = serde_json::from_value(patch).expect("deserialize");
+        let (state, id) = upsert_item(&ws, upsert).expect("upsert");
+
+        assert_eq!(state.topics.len(), 1);
+        assert!(
+            state.topics[0].id.starts_with("topic-"),
+            "id 应该由 store 生成并带类型前缀: {}",
+            state.topics[0].id
+        );
+        assert!(!state.topics[0].created_at.is_empty());
+        assert!(!state.topics[0].updated_at.is_empty());
+        assert_eq!(id, state.topics[0].id, "回传的 id 必须就是刚写入那条的 id");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn review_can_be_created_before_the_numbers_arrive() {
+        let ws = make_test_workspace("ops-review-no-metrics");
+        // 刚投放还没数据：只给必填字段，不给 metrics。
+        let patch = serde_json::json!({
+            "kind": "review",
+            "assetId": "a1",
+            "platform": "douyin",
+            "publishedAt": "2026-11-01T09:00:00+00:00",
+        });
+        let upsert: OpsUpsert = serde_json::from_value(patch).expect("deserialize");
+        let (state, id) = upsert_item(&ws, upsert).expect("upsert");
+
+        assert_eq!(state.reviews.len(), 1);
+        assert_eq!(state.reviews[0].metrics.views, 0, "缺 metrics 要补零而不是反序列化失败");
+        assert_eq!(state.reviews[0].metrics.likes, 0);
+        assert_eq!(id, state.reviews[0].id);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn upsert_returns_the_id_of_the_record_it_wrote() {
+        let ws = make_test_workspace("ops-upsert-id");
+        upsert_item(&ws, topic_upsert(&topic("t1"))).expect("seed");
+
+        let patch = serde_json::json!({ "kind": "topic", "id": "t1", "status": "produced" });
+        let upsert: OpsUpsert = serde_json::from_value(patch).expect("deserialize");
+        let (state, id) = upsert_item(&ws, upsert).expect("upsert");
+
+        assert_eq!(id, "t1");
+        assert_eq!(state.topics[0].id, "t1");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 时间戳精度必须是毫秒。`to_rfc3339()` 默认输出 9 位小数，renderer 在
+    /// macOS 的 WebKit 里 `new Date(...)` 不保证解析得了——ES 规范只认 3 位。
+    #[test]
+    fn timestamps_are_millisecond_precision() {
+        let ws = make_test_workspace("ops-timestamp-precision");
+        upsert_item(&ws, topic_upsert(&topic("t1"))).expect("seed");
+        let state = read_state(&ws).expect("read");
+        // 看 `updated_at`：`created_at` 可以由写者自带（fixture 就是），
+        // 只有 store 自己盖的 `updated_at` 才反映 `now_iso()` 的格式。
+        let created = &state.topics[0].updated_at;
+
+        let fractional = created
+            .split('.')
+            .nth(1)
+            .and_then(|rest| rest.split(['+', 'Z']).next())
+            .unwrap_or_else(|| panic!("时间戳缺少小数部分: {}", created));
+        assert_eq!(
+            fractional.len(),
+            3,
+            "时间戳必须是毫秒精度（3 位小数），实际 {}: {}",
+            fractional.len(),
+            created
+        );
+        assert!(created.ends_with('Z'), "UTC 时间戳用 Z 后缀: {}", created);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn update_preserves_created_at_and_refreshes_updated_at() {
+        let ws = make_test_workspace("ops-timestamps");
+        let mut seed = topic("t1");
+        seed.created_at = "2026-01-01T00:00:00+00:00".to_string();
+        seed.updated_at = "2026-01-01T00:00:00+00:00".to_string();
+        upsert_item(&ws, topic_upsert(&seed)).expect("seed");
+
+        let patch = serde_json::json!({ "kind": "topic", "id": "t1", "status": "produced" });
+        let upsert: OpsUpsert = serde_json::from_value(patch).expect("deserialize");
+        let (state, _) = upsert_item(&ws, upsert).expect("upsert");
+
+        assert_eq!(
+            state.topics[0].created_at, "2026-01-01T00:00:00+00:00",
+            "改字段不该改「何时创建」"
+        );
+        assert_ne!(
+            state.topics[0].updated_at, "2026-01-01T00:00:00+00:00",
+            "改字段必须刷新「何时更新」——派生的「本周完成」靠它"
+        );
+        let _ = fs::remove_dir_all(&ws);
     }
 }
 

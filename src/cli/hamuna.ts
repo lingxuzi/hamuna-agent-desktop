@@ -39,7 +39,11 @@ function isSpaceJsonInvocation(): boolean {
 export function parseArgs(args: string[]): { positional: string[]; flags: Record<string, unknown> } {
   const positional: string[] = [];
   const flags: Record<string, unknown> = {};
-  const repeatable = new Set(['args', 'env', 'headers', 'models', 'model-names', 'image', 'file', 'attachment']);
+  const repeatable = new Set([
+    'args', 'env', 'headers', 'models', 'model-names', 'image', 'file', 'attachment',
+    // ops ledger: repeatable fields of a topic / asset / rule
+    'tag', 'ref', 'shot', 'evidence-bar',
+  ]);
 
   // PRD 0.2.18 cross-review fix (Codex): added short-flag → long-flag mapping
   // so `hamuna session send <sid> -p "..."` works as documented in PRD §3.1
@@ -316,6 +320,7 @@ Commands:
   skill     Manage skills (install from URL, list, enable/disable, sync)
   cron      Manage scheduled tasks (list/add/runs/exit ...)
   goal      Manage the current session Goal (get/create/update)
+  ops       Manage the operations ledger (topics / assets / reviews / rules)
   task      Manage Task Center tasks (list/get/update-status/run/rerun ...)
   thought   Manage Task Center thoughts (list/create)
   space     Discover Cloud Goals and manage Space Issues/attachments
@@ -362,6 +367,11 @@ Examples:
   hamuna skill sync
   hamuna cron list
   hamuna goal get
+  hamuna ops list
+  hamuna ops add topic --title "选题标题" --platform douyin --tag 热点 --source hotspot
+  hamuna ops update topic --id topic-1a2b3c4d --status produced
+  hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \\
+      --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300
   hamuna goal create --objective-file goal-objective.txt --max-executions 12
   hamuna goal update --status complete
   hamuna runtime list                       # see installed runtimes + install hints
@@ -640,6 +650,22 @@ export function printResult(
   }
   if (group === 'goal') {
     printGoalResult(action, result.data as Record<string, unknown> | undefined);
+    return;
+  }
+  if (group === 'ops') {
+    const cmd = parseOpsCommand(action, rest);
+    const data = (result.data as Record<string, unknown> | undefined) ?? {};
+    const state = (data.state as Record<string, unknown> | undefined) ?? {};
+    // The store mints the id of a new record, so the write response carries
+    // it back; for update/remove the caller already knows the id.
+    const id = typeof data.id === 'string' && data.id
+      ? data.id
+      : (typeof flags.id === 'string' ? flags.id : '');
+    if (cmd.verb === 'list') {
+      printOpsState(state, cmd.kind);
+      return;
+    }
+    printOpsWriteResult(cmd.verb, cmd.kind, state, id);
     return;
   }
   if (group === 'space' && action === 'goal' && (rest[0] || 'list') === 'list') {
@@ -2236,6 +2262,331 @@ function formatObject(obj: Record<string, unknown> | undefined, indent = '  '): 
 }
 
 // ---------------------------------------------------------------------------
+// Operations ledger commands (hamuna ops)
+//
+// The ledger's only writer is the Rust `ops_store.rs`. This layer translates
+// CLI flags into a WRITE PAYLOAD: `kind` plus the fields that changed in
+// this call. Fields left out are NOT cleared — the merge happens inside the
+// Rust file lock, so a writer never has to echo back fields it did not touch.
+//
+// Both `hamuna ops add topic` (verb first) and `hamuna ops topic add` (kind
+// first) are accepted: an AI caller will guess either one, and a 404 on a
+// mis-guessed argument order is a wasted round trip.
+// ---------------------------------------------------------------------------
+
+const OPS_VERBS = ['list', 'add', 'update', 'remove'] as const;
+const OPS_KINDS = ['topic', 'asset', 'review', 'rule'] as const;
+
+type OpsKind = (typeof OPS_KINDS)[number];
+
+interface OpsCommand {
+  verb: string;
+  kind: string;
+}
+
+/** One writable field of one ops record type. */
+interface OpsFieldSpec {
+  /** Key in the ops entity. */
+  field: string;
+  /** Flag key after parseArgs' camelCase pass (`--topic-id` → `topicId`). */
+  flag: string;
+  type: 'text' | 'number' | 'list' | 'jsonList';
+  /** Mandatory when creating a record. Updates don't need it. */
+  required?: boolean;
+  /** Nested object the field lives in (review metrics). */
+  group?: string;
+  /** Alternative source: a file the value can be read from. */
+  fileFlag?: string;
+}
+
+const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
+  topic: [
+    { field: 'title', flag: 'title', type: 'text', required: true },
+    { field: 'platform', flag: 'platform', type: 'text', required: true },
+    { field: 'note', flag: 'note', type: 'text' },
+    { field: 'angle', flag: 'angle', type: 'text' },
+    { field: 'status', flag: 'status', type: 'text' },
+    { field: 'source', flag: 'source', type: 'text' },
+    { field: 'hotness', flag: 'hotness', type: 'number' },
+    { field: 'tags', flag: 'tag', type: 'list' },
+    { field: 'sourceRefs', flag: 'ref', type: 'list' },
+  ],
+  asset: [
+    { field: 'title', flag: 'title', type: 'text', required: true },
+    { field: 'platform', flag: 'platform', type: 'text', required: true },
+    { field: 'topicId', flag: 'topicId', type: 'text' },
+    { field: 'body', flag: 'body', type: 'text', fileFlag: 'bodyFile' },
+    { field: 'cover', flag: 'cover', type: 'text' },
+    { field: 'status', flag: 'status', type: 'text' },
+    { field: 'scheduledAt', flag: 'scheduledAt', type: 'text' },
+    { field: 'publishedAt', flag: 'publishedAt', type: 'text' },
+    { field: 'progress', flag: 'progress', type: 'number' },
+    { field: 'images', flag: 'image', type: 'list' },
+    { field: 'shots', flag: 'shot', type: 'jsonList' },
+  ],
+  review: [
+    { field: 'assetId', flag: 'assetId', type: 'text', required: true },
+    { field: 'platform', flag: 'platform', type: 'text', required: true },
+    { field: 'publishedAt', flag: 'publishedAt', type: 'text', required: true },
+    { field: 'note', flag: 'note', type: 'text' },
+    { field: 'views', flag: 'views', type: 'number', group: 'metrics' },
+    { field: 'likes', flag: 'likes', type: 'number', group: 'metrics' },
+    { field: 'comments', flag: 'comments', type: 'number', group: 'metrics' },
+    { field: 'shares', flag: 'shares', type: 'number', group: 'metrics' },
+    { field: 'saves', flag: 'saves', type: 'number', group: 'metrics' },
+    { field: 'followers', flag: 'followers', type: 'number', group: 'metrics' },
+    { field: 'completionRate', flag: 'completionRate', type: 'number', group: 'metrics' },
+  ],
+  rule: [
+    { field: 'name', flag: 'name', type: 'text', required: true },
+    { field: 'rule', flag: 'rule', type: 'text', required: true },
+    { field: 'source', flag: 'source', type: 'text' },
+    { field: 'status', flag: 'status', type: 'text' },
+    { field: 'confidence', flag: 'confidence', type: 'number' },
+    { field: 'evidence', flag: 'evidence', type: 'text' },
+    { field: 'evidenceBars', flag: 'evidenceBar', type: 'jsonList' },
+  ],
+};
+
+/** State keys of the ledger, per record kind. */
+const OPS_SECTIONS: Array<{ key: string; kind: OpsKind; label: string }> = [
+  { key: 'topics', kind: 'topic', label: 'Topics' },
+  { key: 'assets', kind: 'asset', label: 'Assets' },
+  { key: 'reviews', kind: 'review', label: 'Reviews' },
+  { key: 'rules', kind: 'rule', label: 'Rules' },
+];
+
+/**
+ * Normalize the argument order of `hamuna ops …`.
+ *
+ * Accepts `hamuna ops add topic` (verb first) and `hamuna ops topic add`
+ * (kind first). An AI caller will guess either one.
+ */
+function parseOpsCommand(action: string, rest: string[]): OpsCommand {
+  if ((OPS_VERBS as readonly string[]).includes(action)) {
+    const kind = rest.find((value) => (OPS_KINDS as readonly string[]).includes(value)) ?? '';
+    return { verb: action, kind };
+  }
+  if ((OPS_KINDS as readonly string[]).includes(action)) {
+    const verb = rest.find((value) => (OPS_VERBS as readonly string[]).includes(value)) ?? '';
+    return { verb, kind: action };
+  }
+  return { verb: action, kind: '' };
+}
+
+/** Flag key → the flag the user types (`topicId` → `--topic-id`). */
+function opsFlagLabel(flag: string): string {
+  return `--${flag.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)}`;
+}
+
+/**
+ * The workspace the ledger belongs to.
+ *
+ * Only sent when the caller names one: the ledger lives in the workspace the
+ * Session is working in, and the Sidecar resolves that. Defaulting to
+ * `process.cwd()` here would put the ledger wherever the shell happened to
+ * be — usually not the Session's workspace, and a stray `ops/state.json`
+ * nobody looks at.
+ */
+function opsWorkspaceFlag(flags: Record<string, unknown>): string | undefined {
+  const explicit = typeof flags.workspace === 'string' ? flags.workspace.trim() : '';
+  return explicit || undefined;
+}
+
+function opsStringFlag(flags: Record<string, unknown>, key: string): string | undefined {
+  const value = flags[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') {
+    console.error(`Error: ${opsFlagLabel(key)} requires a value.`);
+    process.exit(2);
+  }
+  return value;
+}
+
+function opsNumberFlag(flags: Record<string, unknown>, key: string): number | undefined {
+  const raw = flags[key];
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' && typeof raw !== 'number') {
+    console.error(`Error: ${opsFlagLabel(key)} requires a value.`);
+    process.exit(2);
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    console.error(`Error: ${opsFlagLabel(key)} must be a number, got "${raw}".`);
+    process.exit(2);
+  }
+  return value;
+}
+
+function opsListFlag(flags: Record<string, unknown>, key: string): string[] | undefined {
+  const value = flags[key];
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.map((entry) => String(entry));
+  console.error(`Error: ${opsFlagLabel(key)} requires a value.`);
+  process.exit(2);
+}
+
+/**
+ * Structured values (shots, evidence bars) travel as JSON objects — one
+ * encoding for every structured field, so the caller doesn't have to learn a
+ * second mini-syntax.
+ */
+function opsJsonListFlag(flags: Record<string, unknown>, key: string): unknown[] | undefined {
+  const raw = opsListFlag(flags, key);
+  if (!raw || raw.length === 0) return undefined;
+  return raw.map((entry) => {
+    try {
+      const parsed = JSON.parse(entry) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+      return parsed;
+    } catch {
+      console.error(`Error: ${opsFlagLabel(key)} must be a JSON object, got "${entry}".`);
+      process.exit(2);
+    }
+  });
+}
+
+/** Read one field out of the flags. `undefined` means "not passed". */
+function readOpsField(spec: OpsFieldSpec, flags: Record<string, unknown>): unknown {
+  let value: unknown;
+  if (spec.type === 'text') value = opsStringFlag(flags, spec.flag);
+  else if (spec.type === 'number') value = opsNumberFlag(flags, spec.flag);
+  else if (spec.type === 'list') value = opsListFlag(flags, spec.flag);
+  else value = opsJsonListFlag(flags, spec.flag);
+
+  if (value === undefined && spec.fileFlag) {
+    const path = opsStringFlag(flags, spec.fileFlag);
+    if (path) {
+      value = readTextFileFlag(path, opsFlagLabel(spec.fileFlag).replace(/^--/, '')).trim();
+    }
+  }
+  return value;
+}
+
+/**
+ * Translate the flags into the fields this call changes. Fields that were
+ * not passed stay out of the payload: the Rust store merges the patch onto
+ * the existing record, so an absent field means "leave it alone", not
+ * "clear it".
+ */
+function buildOpsItem(
+  kind: OpsKind,
+  flags: Record<string, unknown>,
+  creating: boolean,
+): Record<string, unknown> {
+  const item: Record<string, unknown> = {};
+  const missing: string[] = [];
+  for (const spec of OPS_FIELDS[kind]) {
+    const value = readOpsField(spec, flags);
+    if (value === undefined) {
+      if (creating && spec.required) missing.push(opsFlagLabel(spec.flag));
+      continue;
+    }
+    if (spec.group) {
+      const group = (item[spec.group] as Record<string, unknown> | undefined) ?? {};
+      group[spec.field] = value;
+      item[spec.group] = group;
+    } else {
+      item[spec.field] = value;
+    }
+  }
+  if (missing.length > 0) {
+    console.error(`Error: hamuna ops add ${kind} requires ${missing.join(' and ')}.`);
+    process.exit(2);
+  }
+  return item;
+}
+
+function opsRequireKind(kind: string): OpsKind {
+  if ((OPS_KINDS as readonly string[]).includes(kind)) return kind as OpsKind;
+  console.error(`Error: hamuna ops requires a kind (${OPS_KINDS.join('|')}).`);
+  process.exit(2);
+}
+
+function opsRecords(state: Record<string, unknown>, key: string): Record<string, unknown>[] {
+  const list = state[key];
+  return Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
+}
+
+function opsRecordById(
+  state: Record<string, unknown>,
+  kind: string,
+  id: string,
+): Record<string, unknown> | undefined {
+  const section = OPS_SECTIONS.find((entry) => entry.kind === kind);
+  if (!section) return undefined;
+  return opsRecords(state, section.key).find((record) => record.id === id);
+}
+
+/** Human-readable ledger view. `--json` carries the full state. */
+function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
+  const sections = onlyKind
+    ? OPS_SECTIONS.filter((section) => section.kind === onlyKind)
+    : OPS_SECTIONS;
+
+  let printed = 0;
+  for (const section of sections) {
+    const records = opsRecords(state, section.key);
+    console.log(`${section.label} (${records.length})`);
+    for (const record of records) {
+      printed++;
+      const id = typeof record.id === 'string' ? record.id : '-';
+      if (section.kind === 'topic') {
+        const hotness = typeof record.hotness === 'number' ? ` · hotness ${record.hotness}` : '';
+        console.log(
+          `  ${id}  ${String(record.title ?? '')}  ` +
+          `${String(record.platform ?? '')} · ${String(record.status ?? '')}${hotness}`,
+        );
+      } else if (section.kind === 'asset') {
+        const scheduled = record.scheduledAt ? ` · scheduled ${String(record.scheduledAt)}` : '';
+        console.log(
+          `  ${id}  ${String(record.title ?? '')}  ` +
+          `${String(record.platform ?? '')} · ${String(record.status ?? '')} · ` +
+          `${String(record.progress ?? 0)}%${scheduled}`,
+        );
+      } else if (section.kind === 'review') {
+        const metrics = (record.metrics ?? {}) as Record<string, unknown>;
+        const interactions =
+          Number(metrics.likes ?? 0) + Number(metrics.comments ?? 0) + Number(metrics.shares ?? 0);
+        console.log(
+          `  ${id}  ${String(record.publishedAt ?? '')}  ` +
+          `${String(record.platform ?? '')} · views ${String(metrics.views ?? 0)} · ` +
+          `interactions ${interactions}`,
+        );
+      } else {
+        console.log(
+          `  ${id}  ${String(record.name ?? '')}  ` +
+          `${String(record.status ?? '')} · confidence ${String(record.confidence ?? 0)}`,
+        );
+      }
+    }
+    if (records.length > 0) console.log('');
+  }
+  if (printed === 0) console.log('The ledger is empty.');
+}
+
+/** Echo the record that was written — its id is the handle for later edits. */
+function printOpsWriteResult(
+  verb: string,
+  kind: string,
+  state: Record<string, unknown>,
+  id: string,
+): void {
+  if (verb === 'remove') {
+    console.log(`✓ Removed ${kind} ${id}`);
+    return;
+  }
+  console.log(`✓ ${kind} ${id}`);
+  const record = id ? opsRecordById(state, kind, id) : undefined;
+  const title = record ? record.title ?? record.name ?? record.publishedAt : undefined;
+  if (title) console.log(`  ${String(title)}`);
+  if (verb === 'add' && id) {
+    console.log(`  Update: hamuna ops update ${kind} --id ${id} --<field> <value>`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Command routing
 // ---------------------------------------------------------------------------
 
@@ -2470,6 +2821,14 @@ export function buildRoute(group: string, action: string, rest: string[]): strin
     if (action === 'get' || action === 'list') return 'goal/get';
     if (action === 'create') return 'goal/create';
     if (action === 'update') return 'goal/update';
+  }
+  // Operations ledger. The verb decides the route; the kind travels in the
+  // body. `hamuna ops topic add` (kind first) resolves to the same verbs.
+  if (group === 'ops') {
+    const verb = parseOpsCommand(action, rest).verb;
+    if (verb === 'remove') return 'ops/delete';
+    if (verb === 'add' || verb === 'update') return 'ops/upsert';
+    return 'ops/read';
   }
   // `widget` only exists for readme lookup — any form of invocation
   // (`hamuna widget`, `hamuna widget chart`, `hamuna widget readme chart`)
@@ -3500,6 +3859,42 @@ export function buildRequestBody(
       return { status, reason: reason || undefined };
     }
     return {};
+  }
+
+  // Operations ledger. The body is a PATCH: only the fields the caller
+  // passed travel to the store, which merges them onto the existing record.
+  if (group === 'ops') {
+    const cmd = parseOpsCommand(action, rest);
+    const workspace = opsWorkspaceFlag(flags);
+    const scope = workspace ? { workspace } : {};
+    if (cmd.verb === 'list') {
+      return scope;
+    }
+    if (cmd.verb === 'add' || cmd.verb === 'update') {
+      const kind = opsRequireKind(cmd.kind);
+      const item = buildOpsItem(kind, flags, cmd.verb === 'add');
+      if (cmd.verb === 'update') {
+        const id = opsStringFlag(flags, 'id');
+        if (!id) {
+          console.error('Error: hamuna ops update requires --id.');
+          process.exit(2);
+        }
+        item.id = id;
+      }
+      return { ...scope, item: { kind, ...item } };
+    }
+    if (cmd.verb === 'remove') {
+      const kind = opsRequireKind(cmd.kind);
+      const id = opsStringFlag(flags, 'id');
+      if (!id) {
+        console.error('Error: hamuna ops remove requires --id.');
+        process.exit(2);
+      }
+      return { ...scope, kind, id };
+    }
+    console.error(`Error: unknown ops command "${cmd.verb}".`);
+    console.error(`  Usage: hamuna ops list|add|update|remove [${OPS_KINDS.join('|')}]`);
+    process.exit(2);
   }
 
   // CLI tool registry commands (PRD 0.2.36)

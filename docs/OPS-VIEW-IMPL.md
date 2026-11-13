@@ -114,10 +114,28 @@ Chat 右栏没有常驻 tab 条。真实结构是 `splitActiveView: 'file' | 'te
 |---|---|
 | Rust | `management_api.rs` 加 `/api/ops/read`、`/api/ops/upsert`、`/api/ops/delete`（`workspace` 必填，路径在 Rust 侧校验） |
 | Sidecar | `src/server/admin-api.ts` 加 `handleOpsRead/ Upsert/ Delete`，转发用现成的 `managementApi()`；`index.ts` 的 route 分发加 `ops/*` |
-| CLI | `src/cli/hamuna.ts` 加 `hamuna ops list\|add\|update\|remove` 与 `hamuna ops review add`，`--workspace` 缺省取 `process.cwd()` |
-| 验证 | session 里手动跑通：`hamuna ops list` → `add` → `list` 见到 → `update` → `remove`。写入后 `ops/state.json` 是合法 JSON 且人类可读 |
+| CLI | `src/cli/hamuna.ts` 加 `hamuna ops list\|add\|update\|remove` |
+| 验证 | 手动跑通：`hamuna ops list` → `add` → `list` 见到 → `update` → `remove`。写入后 `ops/state.json` 是合法 JSON 且人类可读 |
 
 **坑**：CLI 改动 MUST bump `CLI_VERSION` 并同步 `bundled-skills/hamuna-cli/SKILL.md` + `SYSTEM_SKILLS_VERSION`，否则用户的 CLI 不更新。
+
+**落地记录（Phase 3 完成后补）**：
+
+| 原计划 | 实际 | 为什么 |
+|---|---|---|
+| 写接口发完整实体 | 发**补丁**，只带这次改的字段 | 完整实体要求调用方先读一遍再回写，那正是三个写者最会踩的 read-modify-write 竞态。补丁让「只改播放量」在文件锁内完成合并，调用方不必知道其余字段长什么样 |
+| 写接口返回状态快照 | 额外回传 `id` | id 是 store 造的，调用方造不出来。不回传就得写完再 list 一遍去找自己刚建的那条 |
+| CLI 缺省 `--workspace` 取 `process.cwd()` | 缺省不传，由 Sidecar 按 session 上下文解析 | `process.cwd()` 是 Agent 子进程的 cwd，不是用户的工作区；而且在 Chat 里 Agent 的 cwd 可能与工作区不同。缺省交给 Sidecar 才和 `cron`/`task` 的口径一致 |
+| 只支持 `ops add topic` | 两种词序都收（`ops topic add`） | Agent 写命令时词序不固定，多认一种顺序比让它失败重试便宜 |
+| —— | `style` 不在 CLI 暴露 | 风格档案是面板独有的单条记录，没有脚本化的场景；加进去就是没人用的命令面 |
+| —— | 加 `src-tauri/tests/ops_management_api.rs` | 只有 Rust 单测的话，「CLI 发的 JSON 字段名和路由长什么样」没人验；这份测试走真 axum + 真落盘，覆盖 patch 语义与嵌套 `metrics` 合并 |
+
+**顺手修的两处**：
+
+1. `OpsReview.metrics` 加 `#[serde(default)]` —— 刚投放还没数据是正常起点，缺 `metrics` 不该让整条记录反序列化失败。
+2. `now_iso()` 改用 `to_rfc3339_opts(SecondsFormat::Millis, true)` —— 默认的 `to_rfc3339()` 输出 9 位小数（纳秒），ES 规范只认 3 位，V8 宽松解析而 WebKit 不保证；这个值最终喂给 macOS 渲染进程的 `new Date(...)`。单测 `timestamps_are_millisecond_precision` 钉住。
+
+**手动 E2E 实测结果**（真 Rust 管理 API + 真 Sidecar + 真 CLI，临时工作区）：`list`（空） → `add topic` → `list` 见到 → `update --status produced` → `add asset --body-file` → `add review --views/--likes/--comments` → `update review --views`（其余指标保留）→ `add rule --evidence-bar ×2` → `remove topic` → `list`。`ops/state.json` 是缩进过的合法 JSON，时间戳为 `2026-11-13T13:30:17.569Z`。错误路径也验了：未知平台 / 缺必填字段 / 缺 `--id` / 删不存在的 id / 未知动词，各自给出可读错误而非 panic。
 
 ### Phase 4 · Sino 模板 + 门控（约 3h）
 

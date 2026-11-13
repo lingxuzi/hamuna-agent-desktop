@@ -1012,3 +1012,115 @@ describe('hamuna CLI browser search', () => {
     expect(TOP_HELP).toContain('hamuna browser search "tauri webview"');
   });
 });
+
+describe('hamuna CLI operations ledger', () => {
+  it('routes every verb to the store route that matches it', () => {
+    expect(buildRoute('ops', 'list', [])).toBe('ops/read');
+    expect(buildRoute('ops', 'add', ['topic'])).toBe('ops/upsert');
+    expect(buildRoute('ops', 'update', ['topic'])).toBe('ops/upsert');
+    expect(buildRoute('ops', 'remove', ['topic'])).toBe('ops/delete');
+    // Kind-first order resolves to the same routes.
+    expect(buildRoute('ops', 'topic', ['add'])).toBe('ops/upsert');
+    expect(buildRoute('ops', 'topic', ['remove'])).toBe('ops/delete');
+  });
+
+  it('sends only the fields the caller changed', () => {
+    const body = buildRequestBody('ops', 'update', ['topic'], {
+      id: 'topic-1',
+      status: 'produced',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toEqual({ kind: 'topic', status: 'produced', id: 'topic-1' });
+    expect(body.item.title).toBeUndefined();
+    expect(body.item.tags).toBeUndefined();
+  });
+
+  it('builds a create payload from the required fields and the repeatable ones', () => {
+    const body = buildRequestBody('ops', 'add', ['topic'], {
+      title: '一条选题',
+      platform: 'douyin',
+      tag: ['热点', '对比'],
+      ref: 'https://example.com/hot',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toEqual({
+      kind: 'topic',
+      title: '一条选题',
+      platform: 'douyin',
+      tags: ['热点', '对比'],
+      sourceRefs: ['https://example.com/hot'],
+    });
+  });
+
+  it('keeps review metrics nested so a partial update keeps the other counters', () => {
+    const body = buildRequestBody('ops', 'update', ['review'], {
+      id: 'review-1',
+      views: 900,
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item.metrics).toEqual({ views: 900 });
+  });
+
+  it('omits the workspace unless one was named', () => {
+    expect(buildRequestBody('ops', 'list', [], {})).toEqual({});
+    expect(buildRequestBody('ops', 'list', [], { workspace: '/tmp/ws' })).toEqual({ workspace: '/tmp/ws' });
+  });
+
+  it('refuses a create without the fields the store requires', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('ops', 'add', ['topic'], { title: '无平台' })).toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('--platform'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('requires an id for update and remove', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('ops', 'update', ['topic'], { status: 'planned' })).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('ops', 'remove', ['topic'], {})).toThrow('process.exit(2)');
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('collects the repeatable ledger flags', () => {
+    const { flags } = parseArgs([
+      'ops', 'add', 'asset', '--tag', 'a', 'b', '--shot', '{"no":1}', '--shot', '{"no":2}',
+    ]);
+    expect(flags.tag).toEqual(['a', 'b']);
+    expect(flags.shot).toEqual(['{"no":1}', '{"no":2}']);
+  });
+
+  it('prints the ledger and the written record id', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      printResult('ops', 'list', {
+        success: true,
+        data: { state: { topics: [{ id: 'topic-1', title: '一条选题', platform: 'douyin', status: 'idea' }] } },
+      }, false);
+      expect(log.mock.calls.flat().join('\n')).toContain('topic-1');
+
+      log.mockClear();
+      printResult('ops', 'add', {
+        success: true,
+        data: { id: 'topic-9', state: { topics: [{ id: 'topic-9', title: '新选题' }] } },
+      }, false, {}, ['topic']);
+      const written = log.mock.calls.flat().join('\n');
+      expect(written).toContain('topic-9');
+      expect(written).toContain('hamuna ops update topic --id topic-9');
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
