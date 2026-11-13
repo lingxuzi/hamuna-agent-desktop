@@ -35,6 +35,7 @@ pub mod memory_auto_update;
 pub mod memory_evolution;
 pub mod notification;
 pub mod notification_badge;
+pub mod ops_store;
 pub mod perf_trace;
 pub mod process_cleanup;
 pub mod process_cmd;
@@ -651,6 +652,10 @@ pub fn run() {
             workspace_files::git_branch::cmd_workspace_git_branch,
             workspace_files::watcher::cmd_workspace_watch_start,
             workspace_files::watcher::cmd_workspace_watch_stop,
+            // 运营台账（ops/state.json）—— 唯一写者在 ops_store.rs
+            ops_store::cmd_ops_read,
+            ops_store::cmd_ops_upsert,
+            ops_store::cmd_ops_delete,
             // Full-text search commands
             search::cmd_search_sessions,
             search::cmd_search_workspace_files,

@@ -113,7 +113,11 @@ export interface OpsShot {
 /** 一条素材：正文 + 封面 + 配图（+ 分镜），到「可以直接投放」为止。 */
 export interface OpsAsset {
   id: string;
-  topicId: string;
+  /**
+   * 素材来自哪条选题。`null` = 手动导入的稿件，不挂选题——导入的素材是常见
+   * 起点，不该被迫先建一条选题才能记。
+   */
+  topicId: string | null;
   title: string;
   /** 正文 / 脚本。 */
   body: string;

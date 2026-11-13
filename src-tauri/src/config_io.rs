@@ -9,13 +9,11 @@
 //! lives in `crate::utils::file_lock`; this module just composes it.
 
 use std::fs::{self, OpenOptions};
-use std::io::Write;
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::utils::bom::strip_bom;
 use crate::utils::file_lock::{with_file_lock_blocking, FileLockError, FileLockOptions};
+use crate::utils::fs_atomic;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThemeBootstrapSelection {
@@ -104,58 +102,14 @@ pub fn read_theme_bootstrap_selection(config_path: &Path) -> ThemeBootstrapSelec
     }
 }
 
-fn write_all_synced(path: &Path, content: &str) -> Result<(), String> {
-    // Pattern 5 fix #12: explicitly request 0o600 on Unix so cross-process
-    // writers (Node sidecar / Rust commands / renderer) all produce config.json
-    // files with the same user-private permissions. Without this, Rust
-    // inherited the default umask (often 0o644) while Node enforced 0o600
-    // directly — leaving the file readable to other users.
-    #[cfg(unix)]
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|e| format!("[config-io] Cannot open tmp config: {}", e))?;
-    #[cfg(not(unix))]
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .map_err(|e| format!("[config-io] Cannot open tmp config: {}", e))?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| format!("[config-io] Cannot write tmp config: {}", e))?;
-    file.sync_all()
-        .map_err(|e| format!("[config-io] Cannot fsync tmp config: {}", e))?;
-    Ok(())
-}
-
 /// fsync the directory holding `path` so a fresh tmp+rename is durable across
 /// crashes. POSIX-only — Windows' `FlushFileBuffers` on a directory handle is
 /// a documented no-op (and would require `FILE_FLAG_BACKUP_SEMANTICS` just to
 /// open the handle), so the platform's own NTFS journaling is what we rely on
-/// there. Splitting unix/non-unix into two functions instead of cfg-gating the
-/// body keeps `path` from being flagged as unused on Windows.
-#[cfg(unix)]
-fn fsync_parent_dir(path: &Path) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        let dir = OpenOptions::new()
-            .read(true)
-            .open(parent)
-            .map_err(|e| format!("[config-io] Cannot open config dir for fsync: {}", e))?;
-        dir.sync_all()
-            .map_err(|e| format!("[config-io] Cannot fsync config dir: {}", e))?;
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn fsync_parent_dir(_path: &Path) -> Result<(), String> {
-    Ok(())
-}
-
+/// there.
+///
+/// 落盘的两个零件（写临时文件并 fsync、fsync 父目录）住在 `utils::fs_atomic`
+/// ——`ops/state.json`（用户自己的运营台账）要同样的耐久性，两边写两遍就会漂移。
 /// Per-platform OpenOptions for the fsync handler — Windows needs
 /// `GENERIC_WRITE` for `FlushFileBuffers`, Unix is fine with read-only
 /// (`fsync(2)` accepts a read-only fd).
@@ -213,7 +167,7 @@ where
             let tmp_path = config_path_owned.with_file_name("config.json.tmp.rust");
             let bak_path = config_path_owned.with_file_name("config.json.bak");
 
-            write_all_synced(&tmp_path, &content).map_err(to_io_err)?;
+            fs_atomic::write_all_synced(&tmp_path, &content, "config-io").map_err(to_io_err)?;
 
             if keep_backup && config_path_owned.exists() {
                 let _ = fs::copy(&config_path_owned, bak_path);
@@ -225,7 +179,7 @@ where
             // longer needed.
             fs::rename(&tmp_path, &config_path_owned)
                 .map_err(|e| to_io_err(format!("[config-io] Cannot rename tmp config: {}", e)))?;
-            fsync_parent_dir(&config_path_owned).map_err(to_io_err)?;
+            fs_atomic::fsync_parent_dir(&config_path_owned, "config-io").map_err(to_io_err)?;
 
             Ok(config)
         },

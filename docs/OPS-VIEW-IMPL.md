@@ -96,6 +96,18 @@ Chat 右栏没有常驻 tab 条。真实结构是 `splitActiveView: 'file' | 'te
 - 锁用 `with_file_lock_blocking`，Python 式 `tmp + rename` 会丢密钥级的并发问题（本项目已有结论）。
 - 不要 `tokio::spawn`。
 
+**落地记录（Phase 2 完成后补）**：
+
+| 原计划 | 实际 | 为什么 |
+|---|---|---|
+| 命令写进 `commands.rs` | 命令落在 `ops_store.rs` 自己身上 | `workspace_files/*` 每个模块自带自己的 `#[tauri::command]`；`commands.rs` 已经是 4000 行的杂物袋，运营台账自成一个模块更贴既有做法 |
+| `ops/state.json` 与 `ops/assets/` 各自做组件级路径判断 | 两者都走 `path_safety::resolve_inside_workspace` | 它已经是工作区路径的单点出口（拒 `Prefix`/`RootDir`/`ParentDir` 越界 + 词法越界），再造一套组件判断就是第二份规则 |
+| —— | 额外加一条：**`ops/` 或 `ops/state.json` 是 symlink 就拒绝读写** | 词法解析挡不住「目录本身是链接」；不挡的话一次写就能把台账打到工作区外面 |
+| `assets[].topicId` 必填 | 改成可空 | 手动导入的稿件是常见起点，不该被迫先建一条选题才能记 |
+| —— | 枚举 parity 落到 Rust 的 `include_str!` 单测上 | 读 `src/shared/ops.ts` 的枚举数组字面量，逐个核对 Rust 侧的值；改 TS 枚举不同步改 Rust，这条单测会红 |
+
+**顺手修的一处**：clippy 硬闸（`cargo clippy --all-targets -D clippy::disallowed_methods`）在本次开工前**就是红的** —— `build.rs` 用裸 `std::process::Command::new` 起 node，两个 sidecar 测试辅助函数同样如此。build script 是独立 crate，够不到 `crate::process_cmd::new()`，逐行放行并写明理由；另两处改走封装。闸门不打开，新的违规会被旧违规淹没。
+
 ### Phase 3 · 管理 API + CLI（约 3h）
 
 | 层 | 内容 |

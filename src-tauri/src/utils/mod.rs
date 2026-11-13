@@ -2,4 +2,5 @@
 
 pub mod bom;
 pub mod file_lock;
+pub mod fs_atomic;
 pub mod system_reminder;
