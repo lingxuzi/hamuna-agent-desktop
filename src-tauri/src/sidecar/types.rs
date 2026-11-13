@@ -190,14 +190,14 @@ mod lifecycle_contract_tests {
     fn spawn_idle_child() -> std::process::Child {
         #[cfg(windows)]
         {
-            std::process::Command::new("cmd")
+            crate::process_cmd::new("cmd")
                 .args(["/C", "ping", "-n", "30", "127.0.0.1", ">", "NUL"])
                 .spawn()
                 .expect("spawn idle child")
         }
         #[cfg(not(windows))]
         {
-            std::process::Command::new("sleep")
+            crate::process_cmd::new("sleep")
                 .arg("30")
                 .spawn()
                 .expect("spawn idle child")

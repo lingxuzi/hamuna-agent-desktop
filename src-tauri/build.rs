@@ -43,6 +43,10 @@ fn refresh_system_skills_const() {
     println!("cargo:rerun-if-changed={}", bundled_skills_dir.display());
     println!("cargo:rerun-if-changed={}", generator_script.display());
 
+    // `crate::process_cmd::new()` 是 lib crate 的封装，build script 是另一个
+    // crate，够不着——而这条 lint 的本意是「运行期 GUI 起子进程不要闪黑窗」。
+    // build script 跑在 cargo 自己的控制台里，没有 GUI 场景，所以逐行放行。
+    #[allow(clippy::disallowed_methods)]
     let status = std::process::Command::new("node")
         .arg(&generator_script)
         .current_dir(&repo_root)

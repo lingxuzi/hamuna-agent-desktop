@@ -1007,7 +1007,6 @@ mod check_instance_not_replaced_tests {
 
     use super::{check_instance_not_replaced, InstanceReplacedReason};
     use crate::sidecar::manager::SidecarManager;
-    use std::process::Command;
     use std::sync::{Arc, Mutex};
 
     /// Build a manager holding one fake instance at `port` under `tab_id`.
@@ -1016,9 +1015,11 @@ mod check_instance_not_replaced_tests {
     fn manager_with_instance(tab_id: &str, port: u16) -> Arc<Mutex<SidecarManager>> {
         let mut mgr = SidecarManager::new();
         #[cfg(unix)]
-        let child = Command::new("true").spawn().expect("spawn `true`");
+        let child = crate::process_cmd::new("true")
+            .spawn()
+            .expect("spawn `true`");
         #[cfg(windows)]
-        let child = Command::new("cmd")
+        let child = crate::process_cmd::new("cmd")
             .args(["/c", "exit", "0"])
             .spawn()
             .expect("spawn `cmd /c exit 0`");
