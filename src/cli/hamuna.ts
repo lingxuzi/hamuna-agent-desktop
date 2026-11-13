@@ -497,6 +497,17 @@ export function printResult(
   rest: string[] = [],
 ): void {
   if (jsonMode) {
+    if (group === 'ops') {
+      // `hamuna ops list rule --json` must return only that kind. The store
+      // always hands back the whole ledger; the narrowing belongs on the
+      // read side. Without it, a skill that asks for "the rules" gets every
+      // record and has to filter the JSON itself.
+      const cmd = parseOpsCommand(action, rest);
+      if (cmd.kind) {
+        console.log(JSON.stringify(filterOpsStateByKind(result, cmd.kind), null, 2));
+        return;
+      }
+    }
     console.log(JSON.stringify(result, null, 2));
     return;
   }
@@ -2517,6 +2528,25 @@ function opsRecordById(
   const section = OPS_SECTIONS.find((entry) => entry.kind === kind);
   if (!section) return undefined;
   return opsRecords(state, section.key).find((record) => record.id === id);
+}
+
+/**
+ * Narrow a ledger read to one record kind.
+ *
+ * The store answers every read with the whole ledger; the caller asked for
+ * one kind. The other sections come back as empty lists rather than being
+ * dropped, so the JSON shape stays stable across kinds.
+ */
+function filterOpsStateByKind(result: Record<string, unknown>, kind: string): Record<string, unknown> {
+  const data = (result.data as Record<string, unknown> | undefined) ?? {};
+  const state = (data.state as Record<string, unknown> | undefined) ?? {};
+  const section = OPS_SECTIONS.find((entry) => entry.kind === kind);
+  if (!section) return result;
+  const narrowed: Record<string, unknown> = {};
+  for (const entry of OPS_SECTIONS) {
+    narrowed[entry.key] = entry.key === section.key ? (state[entry.key] ?? []) : [];
+  }
+  return { ...result, data: { ...data, state: narrowed } };
 }
 
 /** Human-readable ledger view. `--json` carries the full state. */

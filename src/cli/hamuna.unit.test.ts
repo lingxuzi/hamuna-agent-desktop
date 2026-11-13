@@ -1102,6 +1102,34 @@ describe('hamuna CLI operations ledger', () => {
     expect(flags.shot).toEqual(['{"no":1}', '{"no":2}']);
   });
 
+  it('narrows a JSON read to the requested kind', () => {
+    // The store always answers with the whole ledger. A skill asking for
+    // "the rules" must not have to filter the JSON itself.
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      printResult('ops', 'list', {
+        success: true,
+        data: {
+          state: {
+            topics: [{ id: 'topic-1', title: '一条选题' }],
+            assets: [{ id: 'asset-1', title: '一条素材' }],
+            reviews: [{ id: 'review-1' }],
+            rules: [{ id: 'rule-1', name: '一条规则' }],
+          },
+        },
+      }, true, {}, ['rule']);
+      const printed = JSON.parse(log.mock.calls.flat().join('\n')) as {
+        data: { state: Record<string, unknown[]> };
+      };
+      expect(printed.data.state.rules).toHaveLength(1);
+      expect(printed.data.state.topics).toEqual([]);
+      expect(printed.data.state.assets).toEqual([]);
+      expect(printed.data.state.reviews).toEqual([]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('prints the ledger and the written record id', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {

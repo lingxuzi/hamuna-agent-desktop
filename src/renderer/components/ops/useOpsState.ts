@@ -1,6 +1,6 @@
 // 运营台账的读取入口。
 //
-// 只读：写路径（`cmd_ops_upsert` / `cmd_ops_delete`）留给 Phase 6，这里先不碰。
+// 只读：写路径在 opsWrite.ts（cmd_ops_upsert / cmd_ops_delete）。
 //
 // 三条约束：
 //  1. **不走 sidecar HTTP。** 工作区数据是 OS 文件，必须走 Tauri invoke ——
