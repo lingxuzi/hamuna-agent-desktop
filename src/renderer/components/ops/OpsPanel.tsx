@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { Check, Pencil, Plus, X } from 'lucide-react';
 
-import type { OpsDomainId } from '../../../shared/ops';
+import type { OpsAsset, OpsDomainId, OpsReview, OpsTopic } from '../../../shared/ops';
 import { OPS_DOMAIN_IDS } from '../../../shared/ops';
 import {
   deriveOpsView,
@@ -24,16 +24,22 @@ import {
 import OpsHero from './OpsHero';
 import { OpsDistCard, OpsPoolCard } from './OpsCards';
 import { useOpsState } from './useOpsState';
+import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
+import { opsErrorMessage, opsUpsert } from './opsWrite';
+import { useToastOptional } from '@/components/Toast';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import './ops.css';
 
 /**
  * 运营视图：选题 / 素材 / 排期 / 复盘 四域台账。
  *
- * 只读。写入（增删改、排期、录数据、写规则）在 Phase 6，所以这一版**不画动作
- * 按钮**——画了却没有处理函数，等于给用户一个点了没反应的按钮。
+ * 写入（Phase 6）：增删改走 `cmd_ops_upsert` / `cmd_ops_delete` 补丁语义。
+ * **没有乐观更新** —— 写成功后 Rust emit `ops:changed`，面板经 useOpsState
+ * 重读权威快照；写者本地再养一份 state 就是两套真相。
  *
- * 四域共用一副外壳：顶栏胶囊切域 / Hero 结论句 + 指标带 / 卡片网格 / 右栏深墨
- * 主角卡。差别只在内容与口径，口径全部来自 `shared/ops-derive.ts`，这里不做计算。
+ * 四域共用一副外壳：顶栏胶囊切域 / Hero 结论句 + 指标带 + 动作 / 卡片网格 /
+ * 右栏深墨主角卡。差别只在内容与口径，口径全部来自 `shared/ops-derive.ts`，
+ * 这里不做计算。
  */
 export default function OpsPanel({
   workspace,
@@ -44,11 +50,41 @@ export default function OpsPanel({
 }) {
   const { t } = useTranslation('chat');
   const [domain, setDomain] = useState<OpsDomainId>('topic');
+  const [form, setForm] = useState<FormRequest | null>(null);
+  const [deleting, setDeleting] = useState<{ kind: 'topic' | 'asset'; id: string; title: string } | null>(null);
   const { state, loading, error, reload } = useOpsState(workspace);
+  const toast = useToastOptional();
+
+  const notify = useCallback(
+    (message: string) => {
+      toast?.success(message);
+    },
+    [toast],
+  );
+
+  const fail = useCallback(
+    (err: unknown) => {
+      toast?.error(t('ops.toast.saveFailed', { reason: opsErrorMessage(err) }));
+    },
+    [toast, t],
+  );
 
   // `now` 只在数据或域变化时重算：每次 render 都 new Date() 会让派生结果不稳，
   // 且 useMemo 依赖里塞 Date 等于每帧失效。
   const view = useMemo(() => deriveOpsView(state, domain, new Date()), [state, domain]);
+
+  /** 建议卡「写进规则」：proposed → active，原地完成，不弹窗。 */
+  const activateRule = useCallback(
+    async (ruleId: string) => {
+      try {
+        await opsUpsert(workspace, { kind: 'rule', id: ruleId, status: 'active' });
+        notify(t('ops.toast.ruleActivated'));
+      } catch (err) {
+        fail(err);
+      }
+    },
+    [workspace, notify, fail, t],
+  );
 
   return (
     <div className="ops">
@@ -90,12 +126,34 @@ export default function OpsPanel({
       ) : (
         <div className="ops-body">
           <div className="ops-main">
-            <OpsHero lead={<Lead view={view} />} metrics={view.metrics} />
+            <OpsHero
+              lead={<Lead view={view} />}
+              metrics={view.metrics}
+              actions={
+                <HeroActions
+                  domain={domain}
+                  busy={form !== null || deleting !== null}
+                  onNewTopic={() => setForm({ kind: 'topic:new' })}
+                  onNewAsset={() => setForm({ kind: 'asset:new' })}
+                  onNewReview={() => setForm({ kind: 'review:new' })}
+                />
+              }
+            />
             <div className={`ops-grid ${view.domain === 'review' ? '' : 'ops-grid-2'}`}>
               {view.domain === 'review' && <OpsChartCard view={view} />}
-              <OpsPoolCard view={view} />
+              <OpsPoolCard
+                view={view}
+                onEditTopic={(topicId) => {
+                  const topic = state.topics.find((tp) => tp.id === topicId);
+                  if (topic) setForm({ kind: 'topic:edit', topic });
+                }}
+                onEditAsset={(assetId) => {
+                  const asset = state.assets.find((a) => a.id === assetId);
+                  if (asset) setForm({ kind: 'asset:edit', asset });
+                }}
+              />
               <OpsDistCard view={view} />
-              {view.domain === 'review' && <OpsAdviceCard view={view} />}
+              {view.domain === 'review' && <OpsAdviceCard view={view} onActivate={activateRule} />}
             </div>
           </div>
           <aside className="ops-rail">
@@ -104,7 +162,149 @@ export default function OpsPanel({
           </aside>
         </div>
       )}
+
+      {form && (
+        <FormHost
+          workspace={workspace}
+          request={form}
+          state={state}
+          onClose={() => setForm(null)}
+          onDone={(message) => {
+            setForm(null);
+            notify(message);
+          }}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title={t('ops.delete.title')}
+          message={t('ops.delete.message', { name: deleting.title })}
+          confirmText={t('ops.delete.confirm')}
+          cancelText={t('ops.form.cancel')}
+          confirmVariant="danger"
+          onConfirm={() => {
+            const target = deleting;
+            setDeleting(null);
+            void (async () => {
+              try {
+                const { opsDelete } = await import('./opsWrite');
+                await opsDelete(workspace, target.kind, target.id);
+                notify(t('ops.toast.deleted'));
+              } catch (err) {
+                fail(err);
+              }
+            })();
+          }}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/* ── 表单调度：一个 state 槽位挂三域对话框 ─────────── */
+
+type FormRequest =
+  | { kind: 'topic:new' }
+  | { kind: 'topic:edit'; topic: OpsTopic }
+  | { kind: 'asset:new' }
+  | { kind: 'asset:edit'; asset: OpsAsset }
+  | { kind: 'review:new' }
+  | { kind: 'review:edit'; review: OpsReview };
+
+function FormHost({
+  workspace,
+  request,
+  state,
+  onClose,
+  onDone,
+}: {
+  workspace: string;
+  request: FormRequest;
+  state: ReturnType<typeof useOpsState>['state'];
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  switch (request.kind) {
+    case 'topic:new':
+    case 'topic:edit':
+      return (
+        <TopicForm
+          workspace={workspace}
+          initial={request.kind === 'topic:edit' ? request.topic : undefined}
+          onClose={onClose}
+          onDone={onDone}
+        />
+      );
+    case 'asset:new':
+    case 'asset:edit':
+      return (
+        <AssetForm
+          workspace={workspace}
+          initial={request.kind === 'asset:edit' ? request.asset : undefined}
+          topics={state.topics.filter((tp) => tp.status !== 'dropped')}
+          onClose={onClose}
+          onDone={onDone}
+        />
+      );
+    case 'review:new':
+    case 'review:edit':
+      return (
+        <ReviewForm
+          workspace={workspace}
+          initial={request.kind === 'review:edit' ? request.review : undefined}
+          assets={state.assets}
+          onClose={onClose}
+          onDone={onDone}
+        />
+      );
+  }
+}
+
+/* ── Hero 动作：按域给「这域此刻最该做的三件事」 ──────────────── */
+
+interface HeroActionsProps {
+  domain: OpsDomainId;
+  /** 任一对话框 / 确认框开着时冻结 Hero 按钮，避免叠出两个编辑态。 */
+  busy: boolean;
+  onNewTopic: () => void;
+  onNewAsset: () => void;
+  onNewReview: () => void;
+}
+
+/** 只画**真能落盘**的动作：新建走表单对话框，写进台账。
+ *
+ * 拉热点 / 导入对标 / 同步日历是 Phase 8（采集段）的活，这一步不画——画了
+ * 没有处理函数，等于给一个点了没反应的按钮（Phase 5 的老教训）。排期域同理
+ * 不放 Hero 按钮：排期在素材行的铅笔入口与素材表单里完成。
+ */
+function HeroActions({ domain, busy, onNewTopic, onNewAsset, onNewReview }: HeroActionsProps) {
+  const { t } = useTranslation('chat');
+  if (domain === 'topic') {
+    return (
+      <button type="button" className="ops-act solid" disabled={busy} onClick={onNewTopic}>
+        <Plus aria-hidden="true" />
+        {t('ops.act.newTopic')}
+      </button>
+    );
+  }
+  if (domain === 'asset') {
+    return (
+      <button type="button" className="ops-act solid" disabled={busy} onClick={onNewAsset}>
+        <Plus aria-hidden="true" />
+        {t('ops.act.newAsset')}
+      </button>
+    );
+  }
+  if (domain === 'schedule') {
+    return null;
+  }
+  return (
+    <button type="button" className="ops-act solid" disabled={busy} onClick={onNewReview}>
+      <Pencil aria-hidden="true" />
+      {t('ops.act.manualEntry')}
+    </button>
   );
 }
 
@@ -281,7 +481,7 @@ function OpsChartCard({ view }: { view: OpsReviewView }) {
 
 /* ── 建议卡（仅复盘域） ───────────────────────────────────────── */
 
-function OpsAdviceCard({ view }: { view: OpsReviewView }) {
+function OpsAdviceCard({ view, onActivate }: { view: OpsReviewView; onActivate: (ruleId: string) => void }) {
   const { t } = useTranslation('chat');
   return (
     <section className="ops-card ops-c-adv">
@@ -310,6 +510,13 @@ function OpsAdviceCard({ view }: { view: OpsReviewView }) {
                     </li>
                   ))}
                 </ul>
+              )}
+              {/* proposed 才有「写进规则」：已生效的规则再点一次是空操作。 */}
+              {rule.status === 'proposed' && (
+                <button type="button" className="act" onClick={() => onActivate(rule.id)}>
+                  <Check aria-hidden="true" />
+                  {t('ops.advice.activate')}
+                </button>
               )}
             </div>
           ))}

@@ -933,3 +933,121 @@
     transition-delay: 0s !important;
   }
 }
+
+/* ── Phase 6：写入 ────────────────────────────────── */
+
+/* 行编辑入口：平时安静，悬停才浮出来 —— 编辑是次要动作，不与数据抢视线。 */
+.ops-list-row.editable .row-edit {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  background: var(--paper-elevated);
+  color: var(--ink-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--ops-dur) var(--ops-ease), border-color var(--ops-dur) var(--ops-ease),
+    color var(--ops-dur) var(--ops-ease);
+}
+.ops-list-row.editable:hover .row-edit,
+.ops-list-row.editable .row-edit:focus-visible {
+  opacity: 1;
+}
+.ops-list-row.editable .row-edit:hover {
+  border-color: var(--ink-subtle);
+  color: var(--ink);
+}
+
+/* 表单对话框。走 OverlayBackdrop + useCloseLayer，与 ConfirmDialog 同层（z 300）。 */
+.ops-form {
+  width: 100%;
+  max-width: 420px;
+  background: var(--paper-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-lg);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.18);
+  padding: 18px 20px 20px;
+  display: grid;
+  gap: 12px;
+}
+.ops-form-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 2px;
+}
+.ops-form-head h2 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.ops-form-head .ops-sp {
+  flex: 1;
+}
+.ops-field {
+  display: grid;
+  gap: 5px;
+}
+.ops-field > span {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ink-muted);
+}
+/* 输入框与全 app 的 INPUT_CLS 同语言，只是压缩到表单密度。 */
+.ops-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-md);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  resize: vertical;
+  transition: border-color var(--ops-dur) var(--ops-ease);
+}
+.ops-input:focus-visible {
+  outline: 2px solid var(--focus-border);
+  outline-offset: -1px;
+}
+.ops-input::placeholder {
+  color: var(--ink-muted);
+}
+.ops-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+.ops-form-hint {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+.ops-form-error {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--error);
+  overflow-wrap: anywhere;
+}
+.ops-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.ops-spin {
+  animation: ops-spin 0.9s linear infinite;
+}
+@keyframes ops-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-spin {
+    animation-duration: 0.01ms !important;
+  }
+}

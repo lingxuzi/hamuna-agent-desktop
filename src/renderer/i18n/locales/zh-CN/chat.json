@@ -1132,6 +1132,61 @@
       "error": "读取失败：{{reason}}",
       "retry": "重试"
     },
+    "act": {
+      "newTopic": "手动加选题",
+      "newAsset": "新建素材",
+      "manualEntry": "录入数据"
+    },
+    "form": {
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "topic": {
+        "new": "新建选题",
+        "edit": "编辑选题",
+        "title": "标题",
+        "platform": "目标平台",
+        "angle": "切入角度",
+        "anglePh": "同角度上一篇跑到 8,412",
+        "note": "为什么值得做",
+        "notePh": "评论区高频提问"
+      },
+      "asset": {
+        "new": "新建素材",
+        "edit": "编辑素材",
+        "title": "标题",
+        "topic": "挂靠选题",
+        "noTopic": "不挂靠选题（手动导入）",
+        "platform": "目标平台",
+        "scheduledAt": "排期时间"
+      },
+      "review": {
+        "new": "录入复盘数据",
+        "edit": "编辑复盘数据",
+        "asset": "对应素材",
+        "noAssets": "还没有素材，先建一条。",
+        "views": "播放",
+        "likes": "赞",
+        "comments": "评论",
+        "completion": "完播率 %"
+      }
+    },
+    "toast": {
+      "topicAdded": "已加入选题池",
+      "topicSaved": "选题已更新",
+      "assetAdded": "已新建素材",
+      "assetSaved": "素材已更新",
+      "reviewAdded": "已录入复盘数据",
+      "reviewSaved": "复盘数据已更新",
+      "ruleActivated": "已写进规则",
+      "deleted": "已删除",
+      "saveFailed": "保存失败：{{reason}}"
+    },
+    "delete": {
+      "title": "删除这条记录",
+      "message": "「{{name}}」将从台账里移除，操作不可撤销。",
+      "confirm": "删除"
+    },
     "lead": {
       "topic": "<b><num>{{pending}}</num> 条选题待加工</b>，其中 <b><num>{{hot}}</num> 条来自热点</b>，最该先做的是 <who>{{name}}</who>。",
       "topicEmpty": "选题池是空的，先去拉一轮热点，或者手动加一条。",
@@ -1234,7 +1289,8 @@
       "progress": "{{n}}%",
       "scheduleAt": "{{time}} · {{platform}}",
       "completion": "完播 {{rate}}%",
-      "followers": "涨粉 {{n}}"
+      "followers": "涨粉 {{n}}",
+      "edit": "编辑这条记录"
     },
     "chart": {
       "title": "每日发布表现",
@@ -1246,7 +1302,8 @@
     "advice": {
       "title": "给你的建议",
       "meta": "上一轮复盘沉淀的规则",
-      "empty": "还没有沉淀下来的规则，做一轮复盘就会长出来。"
+      "empty": "还没有沉淀下来的规则，做一轮复盘就会长出来。",
+      "activate": "写进规则"
     },
     "dark": {
       "emptyWhen": "暂无",

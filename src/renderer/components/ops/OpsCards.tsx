@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type {
@@ -98,12 +99,37 @@ function Thumb({ platform, title }: { platform: string | null; title: string }) 
   );
 }
 
+/** 可编辑行的壳：给标题旁一个铅笔入口。排期 / 复盘行不传 onEdit，原样渲染。 */
+function RowShell({ onEdit, children }: { onEdit?: () => void; children: React.ReactNode }) {
+  const { t } = useTranslation('chat');
+  if (!onEdit) return <div className="ops-list-row">{children}</div>;
+  return (
+    <div className="ops-list-row editable">
+      {children}
+      <button
+        type="button"
+        className="row-edit"
+        onClick={onEdit}
+        aria-label={t('ops.row.edit')}
+        title={t('ops.row.edit')}
+      >
+        <Pencil size={13} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 export function OpsPoolCard({
   view,
   className,
+  onEditTopic,
+  onEditAsset,
 }: {
   view: OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewView;
   className?: string;
+  /** 选题 / 素材行的编辑入口。排期与复盘行的编辑入口在素材 / 复盘域。 */
+  onEditTopic?: (topicId: string) => void;
+  onEditAsset?: (assetId: string) => void;
 }) {
   const { t, i18n } = useTranslation('chat');
   const head = `ops.pool.${view.domain}`;
@@ -121,7 +147,9 @@ export function OpsPoolCard({
             <span>{t(`${head}.col1`)}</span>
             <span>{t(`${head}.col2`)}</span>
           </div>
-          <ol className="ops-list">{renderRows(view, t, i18n.language)}</ol>
+          <ol className="ops-list">
+            {renderRows(view, t, i18n.language, { onEditTopic, onEditAsset })}
+          </ol>
         </>
       )}
     </OpsCard>
@@ -132,12 +160,13 @@ function renderRows(
   view: OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewView,
   t: (key: string, options?: Record<string, unknown>) => string,
   locale: string,
+  handlers: { onEditTopic?: (topicId: string) => void; onEditAsset?: (assetId: string) => void },
 ): React.ReactNode[] {
   switch (view.domain) {
     case 'topic':
       return view.pool.map((row) => (
         <li key={row.id}>
-          <div className="ops-list-row">
+          <RowShell onEdit={handlers.onEditTopic ? () => handlers.onEditTopic?.(row.id) : undefined}>
             <Thumb platform={row.platform} title={row.title} />
             <span className="t">
               <strong>{row.title}</strong>
@@ -149,13 +178,13 @@ function renderRows(
               </small>
             </span>
             <span className="n">{formatHotness(row.hotness, locale)}</span>
-          </div>
+          </RowShell>
         </li>
       ));
     case 'asset':
       return view.pool.map((row) => (
         <li key={row.id}>
-          <div className="ops-list-row">
+          <RowShell onEdit={handlers.onEditAsset ? () => handlers.onEditAsset?.(row.id) : undefined}>
             <Thumb platform={row.platform} title={row.title} />
             <span className="t">
               <strong>{row.title}</strong>
@@ -167,7 +196,7 @@ function renderRows(
               </small>
             </span>
             <span className="n">{t('ops.row.progress', { n: row.progress })}</span>
-          </div>
+          </RowShell>
         </li>
       ));
     case 'schedule':

@@ -1132,6 +1132,61 @@
       "error": "Failed to read: {{reason}}",
       "retry": "Retry"
     },
+    "act": {
+      "newTopic": "Add topic",
+      "newAsset": "New asset",
+      "manualEntry": "Enter data"
+    },
+    "form": {
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "topic": {
+        "new": "New topic",
+        "edit": "Edit topic",
+        "title": "Title",
+        "platform": "Target platform",
+        "angle": "Angle",
+        "anglePh": "The last one on this angle hit 8,412",
+        "note": "Why it's worth doing",
+        "notePh": "A frequently asked comment"
+      },
+      "asset": {
+        "new": "New asset",
+        "edit": "Edit asset",
+        "title": "Title",
+        "topic": "Linked topic",
+        "noTopic": "No linked topic (imported)",
+        "platform": "Target platform",
+        "scheduledAt": "Schedule"
+      },
+      "review": {
+        "new": "Enter review data",
+        "edit": "Edit review data",
+        "asset": "Asset",
+        "noAssets": "No assets yet. Create one first.",
+        "views": "Views",
+        "likes": "Likes",
+        "comments": "Comments",
+        "completion": "Completion %"
+      }
+    },
+    "toast": {
+      "topicAdded": "Added to the topic pool",
+      "topicSaved": "Topic updated",
+      "assetAdded": "Asset created",
+      "assetSaved": "Asset updated",
+      "reviewAdded": "Review data saved",
+      "reviewSaved": "Review data updated",
+      "ruleActivated": "Written into rules",
+      "deleted": "Deleted",
+      "saveFailed": "Save failed: {{reason}}"
+    },
+    "delete": {
+      "title": "Delete this record",
+      "message": "“{{name}}” will be removed from the ledger. This cannot be undone.",
+      "confirm": "Delete"
+    },
     "lead": {
       "topic": "<b><num>{{pending}}</num> topics queued</b>, <b><num>{{hot}}</num> from trends</b>. Do <who>{{name}}</who> first.",
       "topicEmpty": "The topic pool is empty. Pull trends or add one by hand.",
@@ -1234,7 +1289,8 @@
       "progress": "{{n}}%",
       "scheduleAt": "{{time}} · {{platform}}",
       "completion": "{{rate}}% completion",
-      "followers": "+{{n}} followers"
+      "followers": "+{{n}} followers",
+      "edit": "Edit this record"
     },
     "chart": {
       "title": "Publishing performance",
@@ -1246,7 +1302,8 @@
     "advice": {
       "title": "Suggestions",
       "meta": "Rules from the last review",
-      "empty": "No rules distilled yet. Run a review and they will appear."
+      "empty": "No rules distilled yet. Run a review and they will appear.",
+      "activate": "Write into rules"
     },
     "dark": {
       "emptyWhen": "—",
