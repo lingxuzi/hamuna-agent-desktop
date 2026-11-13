@@ -1,0 +1,25 @@
+{
+ "how": "Playwright emulateMedia({reducedMotion:'reduce'}) 后加载；不是靠猜。",
+ "matches": true,
+ "t0": {
+  "shot": "t0.png",
+  "note": "加载完成即截，7 个受控元素 opacity 全为 1"
+ },
+ "t800": {
+  "shot": "t800.png",
+  "note": "800ms 后，与 t0 逐元素一致（无级联空白）"
+ },
+ "computed": {
+  "animationDelay": "0s",
+  "animationDuration": "1e-05s"
+ },
+ "elements": [
+  ".dsh-hero",
+  ".dsh-c-chart",
+  ".dsh-c-bars",
+  ".dsh-c-top",
+  ".dsh-c-adv",
+  ".dsh-next",
+  ".dsh-c-note"
+ ]
+}

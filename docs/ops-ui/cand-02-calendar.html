@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方案 02 — 月历主线</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .bar {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .seg { display: flex; gap: 2px; padding: 2px; border-radius: var(--r-md); background: var(--paper-inset); }
+  .seg span {
+    padding: 5px 12px; border-radius: var(--r-sm);
+    font-size: 13px; color: var(--ink-muted);
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .seg span.on { background: var(--paper-elevated); color: var(--ink); box-shadow: var(--theme-shadow-xs); font-weight: 500; }
+  .bar .grow { flex: 1; }
+  .month { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+  .month small { font-size: 13px; font-weight: 400; color: var(--ink-subtle); margin-left: 6px; letter-spacing: 0; }
+
+  .main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px 20px 16px; overflow: hidden; }
+
+  /* —— 月历 —— */
+  .cal { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cal-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; margin-bottom: 6px; }
+  .cal-head span { font-size: 12px; color: var(--ink-subtle); text-align: center; }
+  .grid {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(6, 1fr);
+    gap: 1px; background: var(--line);
+    border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden;
+  }
+  .cell { background: var(--paper-elevated); padding: 5px 6px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+  .cell.out { background: var(--paper); }
+  .cell .d { font-size: 12px; color: var(--ink-subtle); font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .cell.today .d {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 19px; height: 19px; border-radius: var(--r-full);
+    background: var(--accent-warm); color: #fff; font-weight: 600;
+  }
+  /* 「邮票」：平台色的小方章，格里只放位置，标题在下方列表 */
+  .stamp {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 19px; min-width: 26px; padding: 0 6px;
+    border-radius: var(--r-sm);
+    font-size: 12px; line-height: 1; font-weight: 500;
+    background: var(--accent-warm-subtle); color: var(--accent-warm);
+  }
+  .stamp.cool { background: color-mix(in srgb, var(--accent-cool) 14%, transparent); color: var(--accent-cool); }
+  .stamp.sky { background: color-mix(in srgb, var(--accent-sky) 16%, transparent); color: var(--accent-sky); }
+  .stamp.done { background: var(--paper-inset); color: var(--ink-subtle); }
+  .stamps { display: flex; flex-wrap: wrap; gap: 3px; }
+  .cell .more { font-size: 11px; color: var(--ink-subtle); }
+
+  /* —— 底部条 —— */
+  .strip { flex: none; display: flex; gap: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper-elevated); padding: 12px 14px; }
+  .tile h3 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--ink-subtle); letter-spacing: .04em; display: flex; }
+  .tile h3 .grow { flex: 1; }
+  .tile.week { flex: 1.25; min-width: 0; }
+  .tile.perf { width: 208px; flex: none; }
+  .wk { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .wk + .wk { border-top: 1px solid var(--line-subtle); }
+  .wk .when { font-size: 12px; color: var(--ink-subtle); width: 74px; flex: none; font-variant-numeric: tabular-nums; }
+  .wk .ttl { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .num { font-size: 28px; font-weight: 600; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .num small { font-size: 12px; font-weight: 400; color: var(--ink-subtle); margin-left: 4px; letter-spacing: 0; }
+  .spark { width: 100%; height: 34px; display: block; margin-top: 6px; }
+  .spark path {
+    fill: none; stroke: var(--accent-warm); stroke-width: 1.75;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 320; stroke-dashoffset: 320;
+    animation: ops-draw 1.6s var(--ease) .2s forwards;
+  }
+  .spark .fill { fill: var(--accent-warm-subtle); stroke: none; opacity: 0; animation: ops-fade .6s var(--ease) 1.1s forwards; }
+  @keyframes ops-draw { to { stroke-dashoffset: 0; } }
+  @keyframes ops-fade { to { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tabbar">
+    <button class="tabbtn" aria-selected="false">文件<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">终端<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">浏览器<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="true">运营<span class="close">×</span></button>
+    <span class="spacer"></span>
+    <button class="ghost">独占视图</button>
+  </div>
+
+  <div class="bar">
+    <div class="seg"><span class="on">排期</span><span>选题</span><span>素材</span><span>复盘</span></div>
+    <span class="grow"></span>
+    <div class="month">11 月<small>2026 · 本周 3 条待发</small></div>
+    <button class="pill">今天</button>
+  </div>
+
+  <div class="main">
+    <div class="cal">
+      <div class="cal-head">
+        <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+      </div>
+      <div class="grid">
+        <div class="cell out"><span class="d">26</span></div><div class="cell out"><span class="d">27</span></div><div class="cell out"><span class="d">28</span></div><div class="cell out"><span class="d">29</span></div><div class="cell out"><span class="d">30</span></div><div class="cell out"><span class="d">31</span></div><div class="cell"><span class="d">1</span></div>
+        <div class="cell"><span class="d">2</span></div><div class="cell"><span class="d">3</span></div>
+        <div class="cell"><span class="d">4</span><div class="stamps"><span class="stamp">小红</span></div></div>
+        <div class="cell"><span class="d">5</span></div>
+        <div class="cell"><span class="d">6</span><div class="stamps"><span class="stamp">抖音</span></div></div>
+        <div class="cell"><span class="d">7</span></div><div class="cell"><span class="d">8</span></div>
+        <div class="cell"><span class="d">9</span></div><div class="cell"><span class="d">10</span></div>
+        <div class="cell"><span class="d">11</span><div class="stamps"><span class="stamp">小红</span></div></div>
+        <div class="cell"><span class="d">12</span></div>
+        <div class="cell today"><span class="d">13</span><div class="stamps"><span class="stamp cool">视频</span><span class="stamp sky">B站</span></div></div>
+        <div class="cell"><span class="d">14</span></div>
+        <div class="cell"><span class="d">15</span><div class="stamps"><span class="stamp">小红</span></div></div>
+        <div class="cell"><span class="d">16</span></div><div class="cell"><span class="d">17</span></div>
+        <div class="cell"><span class="d">18</span><div class="stamps"><span class="stamp">抖音</span></div></div>
+        <div class="cell"><span class="d">19</span></div><div class="cell"><span class="d">20</span></div><div class="cell"><span class="d">21</span></div><div class="cell"><span class="d">22</span></div>
+        <div class="cell"><span class="d">23</span></div><div class="cell"><span class="d">24</span></div><div class="cell"><span class="d">25</span></div><div class="cell"><span class="d">26</span></div><div class="cell"><span class="d">27</span></div><div class="cell"><span class="d">28</span></div><div class="cell"><span class="d">29</span></div>
+        <div class="cell"><span class="d">30</span></div><div class="cell out"><span class="d">1</span></div><div class="cell out"><span class="d">2</span></div><div class="cell out"><span class="d">3</span></div><div class="cell out"><span class="d">4</span></div><div class="cell out"><span class="d">5</span></div><div class="cell out"><span class="d">6</span></div>
+      </div>
+    </div>
+
+    <div class="strip">
+      <div class="tile week">
+        <h3>本周排期<span class="grow"></span><span>3 条</span></h3>
+        <div class="wk"><span class="when">11 月 15 日 19:30</span><span class="ttl">三种除味方案对比</span><span class="stamp">小红</span></div>
+        <div class="wk"><span class="when">11 月 18 日 12:00</span><span class="ttl">一平米厨房改造</span><span class="stamp">小红</span></div>
+        <div class="wk"><span class="when">11 月 19 日 20:00</span><span class="ttl">通勤包里的三件套</span><span class="stamp">抖音</span></div>
+      </div>
+
+      <div class="tile perf">
+        <h3>上周表现<span class="grow"></span>抖音</h3>
+        <div class="num">12,847<small>播放</small></div>
+        <svg class="spark" viewBox="0 0 180 34" aria-label="近七日播放走势">
+          <path class="fill" d="M0 28 L0 24 L20 20 L40 25 L60 15 L80 18 L100 8 L120 11 L140 4 L160 7 L180 6 L180 34 L0 34 Z" />
+          <path d="M0 24 L20 20 L40 25 L60 15 L80 18 L100 8 L120 11 L140 4 L160 7 L180 6" />
+        </svg>
+        <div style="margin-top:6px; display:flex; gap:12px; font-size:12px; color:var(--ink-muted)">
+          <span>赞 903</span><span>藏 261</span><span>评 46</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="agentbar">
+    <span class="pulse"></span>
+    <span>Agent 正在排本周第 4 条 · 素材已就绪，等你确认时间</span>
+  </div>
+</div>
+</body>
+</html>

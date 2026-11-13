@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方向 A · 回流环 — 运营视图</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .head { flex: 0 0 auto; display: flex; gap: 14px; padding: 12px 16px 10px; }
+  .ringcard { flex: none; width: 204px; padding: 10px; }
+  .ringcard svg { display: block; width: 184px; height: 184px; }
+  .side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .side .ttl { font: 700 22px/1.2 var(--sans); letter-spacing: -.01em; color: var(--ink); }
+  .side .ttl em { font: 700 12px/1 var(--mono); letter-spacing: .08em; color: var(--accent-text); font-style: normal; margin-right: 8px; }
+  .side .desc { font-size: 14px; line-height: 1.55; color: var(--mute); }
+  .side .acts { display: flex; gap: 8px; }
+  .legend { border-top: 1px solid var(--line); padding-top: 9px; display: grid; gap: 1px; }
+  .lrow { display: grid; grid-template-columns: 26px 1fr auto 62px; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; cursor: pointer; }
+  .lrow.on { background: var(--accent-soft); }
+  .lrow .n { font: 700 12px/1 var(--mono); color: var(--mute); }
+  .lrow.on .n, .lrow.on .nm { color: var(--ink); }
+  .lrow .nm { font: 700 14px/1 var(--sans); color: var(--ink); }
+  .lrow .c { font: 700 14px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); }
+
+  .list { padding: 0 16px 16px; display: grid; gap: 10px; }
+  .tcard { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: inset 0 1px 0 var(--inset-hi), var(--card-shadow); padding: 12px 14px; }
+  .tcard.busy { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--card-shadow); }
+  .tcard h3 { font: 700 16px/1.4 var(--sans); color: var(--ink); margin-bottom: 6px; }
+  .tcard .sub { font: 400 12px/1.55 var(--mono); letter-spacing: .02em; color: var(--mute); margin-top: 7px; }
+  .tcard .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tcard .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line-2); }
+  .tcard .foot .k { font: 400 12px/1 var(--mono); letter-spacing: .05em; color: var(--mute); }
+  .tcard .foot .k b { color: var(--accent-text); }
+  .tcard .foot .segs { width: 120px; }
+
+  .rule { border: 1px solid var(--data); border-radius: 14px; padding: 12px 14px; background: linear-gradient(180deg, var(--data-soft), var(--panel) 70%); }
+  .rule h3 { font: 700 16px/1.4 var(--sans); color: var(--data); }
+  .rule .rb { font-size: 14px; line-height: 1.6; color: var(--ink-2); margin-top: 5px; }
+  .rule .back { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding-top: 9px; border-top: 1px solid rgb(46 111 94 / 0.22); font: 400 12px/1 var(--mono); letter-spacing: .04em; color: var(--mute); }
+  .rule .back b { color: var(--data); }
+
+  .spark { width: 108px; height: 30px; display: block; }
+  .view { display: none; }
+  .view.on { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tabbar">
+    <button class="tabbtn" aria-selected="false">文件<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="false">终端<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="false">浏览器<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="true">运营<span class="x">×</span></button>
+    <span class="sp"></span>
+    <span class="mono-note">独占视图</span>
+  </div>
+
+  <!-- ============ 01 选题 ============ -->
+  <section class="view" data-v="topics">
+    <div class="head">
+      <div class="card ringcard" data-ring="0"></div>
+      <div class="side">
+        <div class="ttl"><em>01</em>选题</div>
+        <div class="desc">本周新增 3 条，其中 1 条由复盘规则反哺。Agent 正在把「老房子的夏季除味」做成小红书图文。</div>
+        <div class="acts"><button class="btn pri">新建选题</button><button class="btn">让 Agent 找热点</button></div>
+        <div class="legend" data-legend="0"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="scroll">
+        <div class="list">
+          <div class="tcard busy rise rise-1">
+            <h3>老房子的夏季除味：三步走，不用香氛</h3>
+            <div class="meta"><span class="tag">小红书</span><span class="tag amber">热点</span><span class="tag outline">制作中</span></div>
+            <div class="sub">评论区反复提到「梅雨味」，切入无人提过的老房墙皮返潮</div>
+            <div class="foot"><span class="k">完成度 <b>62%</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="tcard rise rise-2">
+            <h3>租房党的厨房收纳：房东不砸墙的 6 个位置</h3>
+            <div class="meta"><span class="tag">小红书</span><span class="tag gray">对标 · 住小帮</span><span class="tag gray">待加工</span></div>
+            <div class="foot"><span class="k">热度 <b>0.61</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="tcard rise rise-3">
+            <h3>通勤包里只留这三件</h3>
+            <div class="meta"><span class="tag">抖音</span><span class="tag green">来自复盘</span><span class="tag gray">待加工</span></div>
+            <div class="sub">依据规则「清单型封面点击高 1.8 倍」</div>
+            <div class="foot"><span class="k">热度 <b>0.48</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="tcard rise rise-4">
+            <h3>梅雨天的家电除味：冰箱、洗衣机、空调</h3>
+            <div class="meta"><span class="tag">视频号</span><span class="tag amber">热点</span><span class="tag gray">待加工</span></div>
+            <div class="foot"><span class="k">热度 <b>0.42</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel);">
+        <div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在制作「三种除味方案对比」· 预计 2 分钟</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 素材 ============ -->
+  <section class="view" data-v="assets">
+    <div class="head">
+      <div class="card ringcard" data-ring="1"></div>
+      <div class="side">
+        <div class="ttl"><em>02</em>素材</div>
+        <div class="desc">本周产出 2 条可发布素材，1 条制作中。已就绪的素材等你确认后进入排期。</div>
+        <div class="acts"><button class="btn pri">新建素材</button><button class="btn">让 Agent 出稿</button></div>
+        <div class="legend" data-legend="1"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="scroll">
+        <div class="list">
+          <div class="tcard rise rise-1">
+            <h3>三种除味方案对比</h3>
+            <div class="meta"><span class="tag">小红书</span><span class="tag green">待发布</span></div>
+            <div class="sub">正文 862 字 · 封面 1 张 · 配图 4 张 · 标题 3 版</div>
+            <div class="foot"><span class="k">完成度 <b>100%</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+          </div>
+          <div class="tcard busy rise rise-2">
+            <h3>6 个不砸墙的收纳位</h3>
+            <div class="meta"><span class="tag">小红书</span><span class="tag outline">制作中</span></div>
+            <div class="sub">正文 511 字 · 封面 2 张 · 配图 6 张</div>
+            <div class="foot"><span class="k">完成度 <b>42%</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="tcard rise rise-3">
+            <h3>通勤三件套图文</h3>
+            <div class="meta"><span class="tag">抖音</span><span class="tag gray">草稿</span></div>
+            <div class="sub">正文 388 字 · 封面 1 张 · 文案 2 版</div>
+            <div class="foot"><span class="k">完成度 <b>18%</b></span><span class="segs"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="tcard rise rise-4">
+            <h3>家电除味分镜脚本</h3>
+            <div class="meta"><span class="tag">视频号</span><span class="tag gray">草稿</span></div>
+            <div class="sub">分镜 9 格 · 口播稿 1 版</div>
+            <div class="foot"><span class="k">完成度 <b>9%</b></span><span class="segs"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel);">
+        <div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在制作「6 个不砸墙的收纳位」· 预计 3 分钟</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 排期 ============ -->
+  <section class="view" data-v="schedule">
+    <div class="head">
+      <div class="card ringcard" data-ring="2"></div>
+      <div class="side">
+        <div class="ttl"><em>03</em>排期</div>
+        <div class="desc">共 4 条排期，本周 3 条待发。发布后自动进入复盘。</div>
+        <div class="acts"><button class="btn pri">安排排期</button><button class="btn">同步到日历</button></div>
+        <div class="legend" data-legend="2"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="scroll">
+        <div class="list">
+          <div class="tcard rise rise-1">
+            <h3>11 月 15 日 · 19:30 &nbsp;三种除味方案对比</h3>
+            <div class="meta"><span class="tag">小红书</span><span class="tag green">素材已就绪</span><span class="tag gray">待发布</span></div>
+            <div class="foot"><span class="k">距发布 <b>2 天</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+          </div>
+          <div class="tcard rise rise-2">
+            <h3>11 月 18 日 · 12:00 &nbsp;一平米厨房改造</h3>
+            <div class="meta"><span class="tag">小红书</span><span class="tag green">素材已就绪</span><span class="tag gray">待发布</span></div>
+            <div class="foot"><span class="k">距发布 <b>5 天</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="tcard rise rise-3">
+            <h3>11 月 19 日 · 20:00 &nbsp;通勤包里的三件套</h3>
+            <div class="meta"><span class="tag">抖音</span><span class="tag gray">素材未就绪</span><span class="tag gray">待发布</span></div>
+            <div class="foot"><span class="k">距发布 <b>6 天</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="tcard rise rise-4">
+            <h3>11 月 21 日 · 19:00 &nbsp;6 个不砸墙的收纳位</h3>
+            <div class="meta"><span class="tag">小红书</span><span class="tag gray">素材未就绪</span><span class="tag gray">待发布</span></div>
+            <div class="foot"><span class="k">距发布 <b>8 天</b></span><span class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel);">
+        <div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在排本周第 4 条 · 素材已就绪，等你确认时间</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 复盘 ============ -->
+  <section class="view" data-v="reviews">
+    <div class="head">
+      <div class="card ringcard" data-ring="3"></div>
+      <div class="side">
+        <div class="ttl"><em>04</em>复盘</div>
+        <div class="desc">近 30 天复盘 12 条，沉淀 2 条规则并反哺 5 条选题。规则是唯一会回到选题的东西。</div>
+        <div class="acts"><button class="btn pri">沉淀新规则</button><button class="btn">拉取平台数据</button></div>
+        <div class="legend" data-legend="3"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="scroll">
+        <div class="list">
+          <div class="card rise rise-1" style="padding:0; overflow:hidden;">
+            <div class="rows">
+              <div class="row" style="grid-template-columns: 1fr auto 108px; padding:9px 14px;">
+                <span class="ttl">早八人的早餐<small>抖音 · 11 月 8 日</small></span>
+                <span class="num">12,847<small style="font:400 12px/1 var(--mono); color:var(--mute); margin-left:4px;">播放</small></span>
+                <svg class="spark" viewBox="0 0 108 30" aria-label="近七日播放走势">
+                  <path class="fill" d="M0 26 L0 22 L14 18 L28 23 L42 14 L56 17 L70 8 L84 11 L96 5 L108 8 L108 30 L0 30 Z"/>
+                  <path d="M0 22 L14 18 L28 23 L42 14 L56 17 L70 8 L84 11 L96 5 L108 8"/>
+                </svg>
+              </div>
+              <div class="row" style="grid-template-columns: 1fr auto; padding:9px 14px;">
+                <span class="ttl">出租屋灯光改造<small>小红书 · 11 月 6 日</small></span>
+                <span class="num">8,412<small style="font:400 12px/1 var(--mono); color:var(--mute); margin-left:4px;">播放</small></span>
+              </div>
+              <div class="row" style="grid-template-columns: 1fr auto; padding:9px 14px;">
+                <span class="ttl">早睡挑战 2.0<small>小红书 · 11 月 2 日</small></span>
+                <span class="num">6,930<small style="font:400 12px/1 var(--mono); color:var(--mute); margin-left:4px;">播放</small></span>
+              </div>
+            </div>
+          </div>
+          <div class="rule rise rise-2">
+            <h3>开头三秒先给结果，别铺垫</h3>
+            <div class="rb">铺垫式开头的 4 条笔记，平均完播比结果式开头低 41%。</div>
+            <div class="back"><span class="dot" style="color:var(--data)"></span>已反哺 <b>2 条选题</b> · 置信度 0.72</div>
+          </div>
+          <div class="rule rise rise-3">
+            <h3>清单型封面点击高 1.8 倍</h3>
+            <div class="rb">封面写清「3 件 / 6 个」这类数字的笔记，点击率是泛用封面的 1.8 倍。</div>
+            <div class="back"><span class="dot" style="color:var(--data)"></span>已反哺 <b>3 条选题</b> · 置信度 0.68</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel);">
+        <div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在分析「早八人的早餐」评论区 · 预计 1 分钟</span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const DOMAINS = [
+  { id: 'topics',   no: '01', name: '选题', cnt: 7,  fill: 5 },
+  { id: 'assets',   no: '02', name: '素材', cnt: 4,  fill: 4 },
+  { id: 'schedule', no: '03', name: '排期', cnt: 4,  fill: 3 },
+  { id: 'reviews',  no: '04', name: '复盘', cnt: 12, fill: 7 },
+];
+
+const RING = (a) => `
+<svg viewBox="0 0 200 200" aria-label="运营四域回流环">
+  <defs><radialGradient id="halo${a}"><stop offset="0" stop-color="#c26d3a" stop-opacity=".16"/><stop offset="1" stop-color="#c26d3a" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="100" cy="100" r="92" fill="url(#halo${a})"/>
+  <circle cx="100" cy="100" r="66" fill="none" stroke="rgb(28 22 18 / .18)" stroke-width="1.5" stroke-dasharray="2 6"/>
+  <path d="M 34 100 A 66 66 0 0 1 100 34" fill="none" stroke="#2e6f5e" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round"/>
+  <path d="M 88 34 L 81 30 L 81 38 Z" fill="#2e6f5e"/>
+  <path id="orbit${a}" d="M 100 34 A 66 66 0 1 1 99.9 34" fill="none"/>
+  <circle r="4" fill="#c26d3a"><animateMotion dur="16s" repeatCount="indefinite" rotate="auto"><mpath href="#orbit${a}"/></animateMotion></circle>
+  ${[0,1,2,3].map(i => {
+    const p = [[100,34],[166,100],[100,166],[34,100]][i];
+    const on = i === a;
+    return `${on ? `<circle cx="${p[0]}" cy="${p[1]}" r="21" fill="none" stroke="#c26d3a" stroke-width="2" opacity=".5"/>` : ''}
+      <circle cx="${p[0]}" cy="${p[1]}" r="13" fill="${on ? '#b05e2d' : '#4a423a'}"/>
+      <text x="${p[0]}" y="${p[1]}" text-anchor="middle" dy="4" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="12" font-weight="700" fill="#fff">0${i+1}</text>`;
+  }).join('')}
+  <text x="100" y="99" text-anchor="middle" font-family="'SF Pro Display', -apple-system, 'PingFang SC', sans-serif" font-size="28" font-weight="700" fill="#1c1612">${DOMAINS[a].cnt}</text>
+  <text x="100" y="117" text-anchor="middle" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="12" letter-spacing="1.5" fill="#6f6156">${DOMAINS[a].name}</text>
+</svg>`;
+
+const LEGEND = (a) => DOMAINS.map((d, i) => `
+  <div class="lrow${i === a ? ' on' : ''}" data-goto="${d.id}">
+    <span class="n">${d.no}</span><span class="nm">${d.name}</span><span class="c">${d.cnt}</span>
+    <span class="segs">${Array.from({length:8}, (_, k) => `<i class="${k < d.fill ? 'on' : ''}"></i>`).join('')}</span>
+  </div>`).join('');
+
+document.querySelectorAll('[data-ring]').forEach(el => { el.innerHTML = RING(+el.dataset.ring); });
+document.querySelectorAll('[data-legend]').forEach(el => { el.innerHTML = LEGEND(+el.dataset.legend); });
+
+function show(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.dataset.v === id));
+  if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
+}
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-goto]');
+  if (g) show(g.dataset.goto);
+});
+const q = new URLSearchParams(location.search).get('view');
+show(q || location.hash.slice(1) || 'topics');
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+[
+  {
+    "file": "all.png",
+    "state": "all",
+    "size": "620x800",
+    "zoom": 1,
+    "issues": [
+      "加载错误：Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:41183/favicon.ico"
+    ]
+  },
+  {
+    "file": "dark-all.png",
+    "state": "dark-all",
+    "size": "620x800",
+    "zoom": 1,
+    "issues": []
+  },
+  {
+    "file": "dark-reviews.png",
+    "state": "dark-reviews",
+    "size": "620x800",
+    "zoom": 1,
+    "issues": []
+  }
+]

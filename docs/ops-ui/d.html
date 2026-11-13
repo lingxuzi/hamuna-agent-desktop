@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>方向 D · dsh 外观复刻（app 风格） — 运营视图</title>
+<link rel="stylesheet" href="base.css" />
+<!-- ops-data.js 定义 window.opsData，必须先于 Alpine 执行（两者都 defer，靠顺序保证）。 -->
+<script defer src="ops-data.js"></script>
+<script defer src="vendor/alpine.min.js"></script>
+<style>
+/* 方向 D：复刻 dsh-media-desk 的**外观语法**，颜色/字体/圆角/动效全部换成 app token。
+ *
+ * 映射表（dsh → app）：
+ *   淡紫粉弥散 Hero      → app 暖色弥散（陶土光晕）
+ *   蓝色折线 / 条形       → --accent-cool 深青
+ *   黑色「下一条」卡       → --button-dark-bg
+ *   巨号衬线数字 40px     → --font-serif-family + 28px（app 七档字阶上限，差一档气势）
+ *   白卡 + 淡边 + 圆角 20 → --paper-elevated + --line + radius 14
+ *   pill 胶囊导航          → 保留胶囊形状（dsh 的识别度），实心用 --button-dark-bg
+ *
+ * 色值全部走 base.css 的 token（那边已经映射到 hamuna-default.css），
+ * 所以深色模式自动跟随，切主题时不需要改这里。
+ */
+.dsh {
+  --d-serif: var(--serif);
+  --d-line: var(--line);
+  --d-line-soft: var(--line-2);
+  --d-hair: var(--line-2);
+  --d-chart: var(--data);
+  --d-chart-fill: color-mix(in srgb, var(--data) 12%, transparent);
+  --d-dark: var(--deep);
+  --d-dark-2: var(--deep-2);
+  --d-dark-text: var(--deep-text);
+  --d-dark-dim: color-mix(in srgb, var(--d-dark-text) 72%, transparent);
+  --d-wash: var(--wash-strong);
+  /* 慢放开关（只在取证时用 ?slow=8 打开，见文件末尾脚本）。 */
+  --s: 1;
+}
+
+.dsh, .dsh * { box-sizing: border-box; }
+
+/* 面板铺满所在视口：截图按视口尺寸取，对比页里 iframe 也是视口尺寸，
+   避免固定宽高在两种容器里留出空白边。 */
+html, body { height: 100%; }
+body { background: var(--bg); container-type: inline-size; }
+
+.dsh {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  background-image: radial-gradient(720px 420px at 104% -12%, var(--d-wash) 0%, transparent 60%);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── 顶栏 ─────────────────────────────────────────── */
+.dsh-top {
+  flex: 0 0 auto;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+}
+.dsh-pills { display: flex; gap: 2px; padding: 3px; background: var(--faint); border-radius: 999px; }
+.dsh-pills button {
+  font: 500 14px/1 var(--sans);
+  color: var(--ink-2);
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  white-space: nowrap;
+  flex: none;
+  cursor: default;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.dsh-pills button:hover { color: var(--ink); }
+.dsh-pills button.on { background: var(--d-dark); color: var(--d-dark-text); }
+.dsh-top .sp { flex: 1; }
+.dsh-ghost {
+  font: 400 13px/1 var(--sans);
+  color: var(--mute);
+  background: var(--panel);
+  border: 1px solid var(--d-line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  white-space: nowrap;
+  flex: none;
+  cursor: default;
+}
+.dsh-ghost.solid { background: var(--d-dark); color: var(--d-dark-text); border-color: var(--d-dark); }
+
+/* ── 主体：内容区 + 右栏 ──────────────────────────── */
+.dsh-body { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 18px 18px; }
+/* 四个域共用一副外壳：结构相同，只有复盘多出趋势图与建议两张卡（x-if 决定在不在）。
+   order 只在窄栏摊平后才需要，所以整套顺序槽位declared在容器查询里——
+   放外面会连宽栏也生效，而宽栏主区是 flex 列，order 1 的 Hero 会被排到 order 0 的网格后面。 */
+/* 图标走 SVG sprite（见 body 顶部的 <symbol> 定义），这里只定尺寸；
+   描边/填充由 .dsh-act svg 等既有规则继承进来。 */
+.i { width: 14px; height: 14px; flex: none; }
+
+/* 排期域的时间格：日期在上、星期在下，与字牌同宽同位，切换域时列表左缘不跳 */
+.dsh-top-list .date { flex: none; width: 34px; text-align: center; }
+.dsh-top-list .date b { display: block; font-family: var(--d-serif); font-weight: 600; font-size: 14px; color: var(--ink); }
+.dsh-top-list .date small { display: block; font: 400 12px/1 var(--sans); color: var(--mute); margin-top: 3px; }
+.dsh-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+/* 列内子项不许被压扁：hero 是内容，不是可压缩的弹性盒 */
+.dsh-main > * { flex: none; }
+/* 右栏内容天然比主区短（复盘域只有两张卡）。让它跟着滚动吸顶，
+   空的地方是「滚动中右侧仍停着工具列」，不是一条断掉的空带。 */
+/* 右栏只有两张卡，天然比主区短，所以**两张贴着排**，不吸底。
+   试过 justify-content: space-between（顶卡贴顶、末卡贴底），宽屏下它把两张卡拉开
+   400px，中间裂出一条空带，比留白更像出错；也试过给末卡 flex:1，那会得到一张
+   3/4 空的大卡，更抢眼。留白统一落在内容之后，读作「这列到此为止」。 */
+.dsh-rail { flex: 0 0 300px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ── 卡片 ─────────────────────────────────────────── */
+.dsh-card {
+  background: var(--panel);
+  border: 1px solid var(--d-line);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 var(--inset-hi);
+  padding: 18px 20px;
+}
+.dsh-card.pad0 { padding: 0; overflow: hidden; }
+.dsh-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.dsh-card-head h2 { font: 700 16px/1.3 var(--sans); color: var(--ink); }
+.dsh-card-head .sp { flex: 1; }
+.dsh-card-head .meta { font: 400 12px/1 var(--mono); color: var(--mute); letter-spacing: .04em; }
+
+/* ── Hero（dsh 复盘页的主视觉） ───────────────────── */
+.dsh-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--d-line);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 var(--inset-hi);
+  padding: 26px 28px 22px;
+}
+.dsh-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(720px 360px at 92% -42%, var(--d-wash) 0%, transparent 70%);
+  pointer-events: none;
+}
+.dsh-hero > * { position: relative; }
+.dsh-hero h1 {
+  font: 400 28px/1.35 var(--sans);
+  letter-spacing: -.01em;
+  color: var(--ink);
+  max-width: 640px;
+  /* 宽栏里换行点落在分句后，靠宽度自然折；窄栏由断点接管 */
+  text-wrap: balance;
+}
+.dsh-hero h1 b { font-weight: 700; }
+.dsh-hero h1 .num { font-family: var(--d-serif); font-weight: 600; font-size: 28px; letter-spacing: 0; }
+.dsh-hero h1 .num small { font: 400 12px/1 var(--sans); color: var(--mute); margin-left: 1px; }
+/* 「18.2万」「33%」是同一个读数，不许从数字和单位之间断行 */
+.dsh-hero h1 .num { white-space: nowrap; }
+/* base.css 有全局 .row（grid + 内边距），这里清掉，避免串样式 */
+.dsh-hero .row { display: flex; align-items: flex-end; gap: 32px; padding: 0; border-top: 0; }
+.dsh-hero .copy { flex: 1; min-width: 0; }
+/* 三个指标用 flex + 固定 gap：等分栅格 + 右对齐时，间距仍会随数字宽度变化，
+   flex 的 gap 才是真正的等距。 */
+.dsh-metrics { display: flex; gap: 28px; flex: none; justify-content: flex-end; }
+.dsh-metrics > div { text-align: right; }
+.dsh-metrics dt { font: 400 12px/1.2 var(--sans); color: var(--mute); }
+.dsh-metrics dd { margin: 4px 0 0; font-family: var(--d-serif); font-weight: 600; font-size: 28px; line-height: 1.1; color: var(--ink); }
+.dsh-metrics dd small { font: 400 12px/1 var(--sans); color: var(--mute); margin-left: 2px; }
+.dsh-hero .acts { display: flex; gap: 8px; margin-top: 20px; }
+.dsh-act {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 13px/1 var(--sans);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--d-line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: default;
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease), opacity var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.dsh-act:hover { border-color: var(--mute); }
+/* 按下即回执：一次性动画落在被点的元素本身。
+   按钮的"进行中"是 900ms 后才回的文字，动效探测的窗口等不到，
+   所以按下这一刻必须有一次性的可视反馈。 */
+@keyframes dsh-press { 0% { transform: scale(1); } 40% { transform: scale(.96); } 100% { transform: scale(1); } }
+.dsh-act:active { animation: dsh-press 200ms var(--ease); }
+.dsh-tip .act:active { animation: dsh-press 200ms var(--ease); }
+.dsh-act.solid { background: var(--d-dark); color: var(--d-dark-text); border-color: var(--d-dark); }
+.dsh-act svg { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── 卡片网格 ─────────────────────────────────────── */
+/* 复盘域四张卡排成 2×2：左上趋势图（要横向尺度）、右上分布，左下排行、右下建议。
+   非复盘域只有排行 + 分布两张（.dsh-grid-2，由 Alpine 按域挂上，不用 :has()——
+   :has() 要 WebKit 15.4+，这份稿要被抄成 React，别埋一个隐性版本要求）。
+   显式指定位置而不是靠 DOM 顺序：否则分布卡落在宽列、排行被挤进窄列，主列表反而最窄。 */
+.dsh-grid { display: grid; grid-template-columns: 1.62fr 1fr; gap: 12px; align-items: start; }
+.dsh-grid-2 > .dsh-c-top { grid-row: 1; grid-column: 1; }
+.dsh-grid-2 > .dsh-c-bars { grid-row: 1; grid-column: 2; }
+
+/* 折线图：纵轴刻度用 HTML 画，SVG 保持无文字（viewBox 被横向拉伸，
+   SVG 里的字会跟着变形，所以刻度不做成 <text>）。 */
+.dsh-plot { display: flex; gap: 10px; }
+/* 刻度与网格线共用同一组 y 值（12 / 83 / 154），标签绝对定位上去，
+   否则 space-between 会把标签摊开、与网格线错位。 */
+.dsh-yaxis { position: relative; flex: 0 0 34px; height: 168px; }
+.dsh-yaxis span { position: absolute; right: 0; transform: translateY(-50%); font: 400 12px/1 var(--mono); color: var(--mute); }
+.dsh-yaxis span:nth-child(1) { top: 12px; }
+.dsh-yaxis span:nth-child(2) { top: 83px; }
+.dsh-yaxis span:nth-child(3) { top: 154px; }
+.dsh-chart-wrap { position: relative; flex: 1; min-width: 0; height: 168px; }
+.dsh-chart { width: 100%; height: 168px; display: block; overflow: visible; }
+.dsh-chart .axis { stroke: var(--d-hair); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.dsh-chart .area { fill: var(--d-chart-fill); }
+.dsh-chart .line { fill: none; stroke: var(--d-chart); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+/* 峰值标记用 HTML 画：SVG 被横向拉伸，圆点会被拉成椭圆 */
+.dsh-peak {
+  position: absolute; left: 78.6%; top: 15.6%;
+  width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 2px solid var(--d-chart);
+  box-sizing: border-box;
+}
+.dsh-peak-tag {
+  position: absolute; left: 78.6%; top: 15.6%;
+  transform: translate(-100%, -50%);
+  margin-left: -10px;
+  font: 700 12px/1 var(--mono); color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--d-line);
+  border-radius: 6px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+.dsh-xaxis { display: flex; justify-content: space-between; font: 400 12px/1 var(--mono); color: var(--mute); margin-top: 8px; }
+
+/* 条形（平台分布 / 建议里的证据条共用一套） */
+.dsh-bars { list-style: none; display: grid; }
+.dsh-bars li {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline;
+  padding: 9px 0;
+  border-top: 1px solid var(--d-line-soft);
+}
+.dsh-bars li:first-child { border-top: 0; }
+.dsh-bars .name { font: 400 14px/1.3 var(--sans); color: var(--ink-2); }
+.dsh-bars .val { font-family: var(--d-serif); font-weight: 600; font-size: 16px; color: var(--ink); }
+.dsh-bars .track { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--faint); overflow: hidden; }
+.dsh-bars .track i { display: block; height: 100%; border-radius: 999px; background: var(--d-chart); }
+/* 对照组：同一条形里的基线，弱一档 */
+.dsh-bars .track i.mut { background: var(--bar-muted); }
+.dsh-bars.mini li { padding: 6px 0; }
+.dsh-bars.mini .name { font: 400 12px/1.3 var(--sans); color: var(--mute); }
+.dsh-bars.mini .val { font: 700 12px/1 var(--mono); color: var(--ink-2); }
+.dsh-bars.mini .track { height: 4px; }
+
+/* Top 列表 */
+.dsh-list-head {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px;
+  font: 400 12px/1 var(--mono); color: var(--mute);
+  padding-bottom: 6px;
+}
+.dsh-top-list { list-style: none; display: grid; }
+.dsh-top-list li + li { border-top: 1px solid var(--d-line-soft); }
+.dsh-top-list button {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; background: none; border: 0; cursor: default; text-align: left;
+}
+.dsh-top-list .rank { font-family: var(--d-serif); font-size: 16px; color: var(--mute); width: 16px; flex: none; }
+/* 字牌：中性底 + 深墨字。不上色相——色相没有语义（同一个「早」出现两次却不同色），
+   而且白字压在陶土/橄榄/蓝灰上只有 2.6–3.8:1，不过 AA。真实封面在落地阶段接。 */
+.dsh-top-list .thumb {
+  position: relative; width: 34px; height: 34px; border-radius: 10px; flex: none;
+  display: grid; place-items: center;
+  background: var(--faint); color: var(--ink-2);
+  font: 700 14px/1 var(--sans);
+}
+/* 平台色块：右下角一个 8px 小方，与首字合成双编码——
+   只看首字时「早八人的早餐」和「早睡挑战」会撞成同一个字。 */
+.dsh-top-list .thumb::after {
+  content: ''; position: absolute; right: 3px; bottom: 3px;
+  width: 6px; height: 6px; border-radius: 2px;
+  box-shadow: 0 0 0 1.5px var(--panel);
+}
+.dsh-top-list .thumb.dy::after { background: var(--d-chart); }
+.dsh-top-list .thumb.xhs::after { background: var(--accent); }
+.dsh-top-list .thumb.sph::after { background: var(--ink-2); }
+.dsh-top-list .t { flex: 1; min-width: 0; }
+.dsh-top-list .t strong { display: block; font: 500 14px/1.4 var(--sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-top-list .t small { display: block; font: 400 12px/1.4 var(--sans); color: var(--mute); margin-top: 2px; }
+.dsh-top-list .n { font-family: var(--d-serif); font-weight: 600; font-size: 16px; color: var(--ink); flex: none; font-variant-numeric: tabular-nums; }
+/* 排期的空档：整行压暗，右列改描边字——是「这里缺一条」，不是一条内容 */
+.dsh-top-list .empty .t strong { color: var(--mute); font-weight: 500; }
+.dsh-top-list .empty .n { font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--mute); border: 1px dashed var(--line); border-radius: 999px; padding: 4px 9px; }
+
+/* 建议卡 */
+.dsh-advice { display: grid; gap: 12px; }
+.dsh-tip { border: 1px solid var(--d-line); border-radius: 10px; padding: 12px 14px; background: var(--faint); }
+.dsh-tip strong { display: block; font: 700 14px/1.4 var(--sans); color: var(--ink); }
+.dsh-tip p { font: 400 13px/1.5 var(--sans); color: var(--mute); margin: 4px 0 10px; }
+.dsh-tip .act {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 13px/1 var(--sans); color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--mute);
+  border-radius: 999px; padding: 7px 13px; cursor: default;
+}
+.dsh-tip .act svg { width: 13px; height: 13px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── 右栏：本期领跑（深墨主角卡）+ 复盘要点 ───────── */
+.dsh-next {
+  background: var(--d-dark);
+  color: var(--d-dark-text);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: block; width: 100%; text-align: left; border: 0; cursor: default;
+}
+.dsh-next .top { display: flex; justify-content: space-between; align-items: center; font: 400 12px/1 var(--sans); color: var(--d-dark-dim); }
+.dsh-next .top .pulse { width: 7px; height: 7px; border-radius: 999px; background: currentColor; display: inline-block; animation: dsh-pulse 1.8s var(--ease) infinite; }
+.dsh-next .big { font-family: var(--d-serif); font-weight: 600; font-size: 28px; line-height: 1.1; margin-top: 12px; font-variant-numeric: tabular-nums; }
+.dsh-next .name { font: 500 14px/1.45 var(--sans); margin-top: 6px; }
+.dsh-next .foot { font: 400 12px/1.4 var(--sans); color: var(--d-dark-dim); margin-top: 8px; }
+
+/* 复盘要点 */
+.dsh-notes { list-style: none; display: grid; }
+.dsh-notes li {
+  display: grid; grid-template-columns: auto 1fr; gap: 9px; align-items: start;
+  padding: 9px 0;
+  border-top: 1px solid var(--d-line-soft);
+  font: 400 13px/1.45 var(--sans); color: var(--ink-2);
+}
+.dsh-notes li:first-child { border-top: 0; }
+.dsh-notes .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--d-chart); margin-top: 6px; }
+
+/* ── 动效：入场递进 + 状态脉冲 ───────────────────── */
+@keyframes dsh-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.dsh-hero { animation: dsh-rise calc(160ms * var(--s)) var(--ease) both; }
+.dsh-card, .dsh-next { animation: dsh-rise calc(160ms * var(--s)) var(--ease) both; }
+/* 整场出场 = 160ms + 40ms delay = 200ms，压在单次过渡预算之内。
+   三档递进会让整场到 280ms，超预算，所以收成两档。 */
+.dsh-grid > .dsh-card:nth-child(2) { animation-delay: calc(40ms * var(--s)); }
+.dsh-grid > .dsh-card:nth-child(3) { animation-delay: calc(40ms * var(--s)); }
+.dsh-grid > .dsh-card:nth-child(4) { animation-delay: calc(40ms * var(--s)); }
+.dsh-rail > .dsh-next { animation-delay: calc(40ms * var(--s)); }
+.dsh-rail > .dsh-card { animation-delay: calc(40ms * var(--s)); }
+.dsh-pills button.on, .dsh-act, .dsh-tip .act, .dsh-next { transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+@keyframes dsh-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--d-dark-text) 38%, transparent); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ── 操作反馈 ─────────────────────────────────────── */
+.dsh-act:disabled { opacity: .72; }
+.dsh-act.solid:disabled { opacity: .82; }
+.dsh-tip .act.done { color: var(--d-chart); border-color: var(--d-chart); background: color-mix(in srgb, var(--d-chart) 8%, var(--panel)); }
+.dsh-toast {
+  position: absolute; right: 18px; bottom: 18px; z-index: 5;
+  font: 500 13px/1 var(--sans); color: var(--d-dark-text); background: var(--d-dark);
+  border-radius: 999px; padding: 9px 14px;
+  box-shadow: 0 8px 24px -12px rgb(28 22 18 / .45);
+  pointer-events: none;
+  /* 用 class 切换而不是 x-show：x-show 会逐帧写内联 style，
+     动效探测据此把回执误判成"一直循环"，也就看不到一次性反馈。
+     这里只有 .show 上挂一次性动画，探测能读到。 */
+  opacity: 0; visibility: hidden;
+}
+.dsh-toast.show { visibility: visible; animation: dsh-toast 200ms var(--ease) both; }
+@keyframes dsh-toast { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.dsh { position: relative; }
+
+/* ── 窄栏变体（我们真正的落地宽度 380–600px） ──────
+   窄栏里「主区 + 右栏」竖排会把主区压到只剩 150px，Hero 被挤扁。
+   所以窄栏下把三层摊平成一列，顺序按「先结论、再排行、后图表」：
+   排行是复盘的落点，不该被挤到第一屏之外。
+   断点 760：落地宽度 380–600 全部走这一版。600px 下不摊平的话主区只剩 190px，
+   Hero 会被压成一列字。 */
+@container (max-width: 760px) {
+  .dsh-body { flex-direction: column; overflow: auto; padding: 0 14px 14px; }
+  .dsh-main, .dsh-rail, .dsh-grid { display: contents; }
+  .dsh-body > * { flex: none; }
+  /* 摊平成一列后的顺序：结论 → 深墨主角卡 → 排行 → 图表 → 分布 → 建议 → 要点。
+     排行是复盘的落点，不能在第一屏之外，所以排在图表前面。
+     非复盘域没有图表与建议，o3/o5/o6 空着不进 DOM，其余照常顺延。 */
+  .dsh-hero { order: 1; }
+  .dsh-next { order: 2; }
+  .dsh-c-top { order: 3; }
+  .dsh-c-chart { order: 4; }
+  .dsh-c-bars { order: 5; }
+  .dsh-c-adv { order: 6; }
+  .dsh-c-note { order: 7; }
+  .dsh-hero .row { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .dsh-hero .acts { flex-wrap: wrap; }
+  .dsh-metrics { gap: 22px; justify-content: flex-start; }
+  .dsh-metrics > div { text-align: left; }
+  .dsh-top { padding: 0 14px; gap: 8px; }
+  /* 440px 以下顶栏放不下两个球的胶囊，容器内横向滚动，保底不换行 */
+  .dsh-pills { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .dsh-pills::-webkit-scrollbar { display: none; }
+  .dsh-toast { left: 14px; right: 14px; bottom: 14px; text-align: center; }
+}
+
+/* 终端宽度：390 下「胶囊 + 导出 + 助手」三件必有一件让位。
+   让的是导出——它是次要动作，且 600 这一档仍保留（见上：那个区间不进这个断点）。 */
+@container (max-width: 400px) {
+  .hide-narrow { display: none; }
+  /* 390 下三个动作排不成 2+1 的残局，改单列全宽等高 */
+  .dsh-hero .acts { flex-direction: column; align-items: stretch; }
+  .dsh-act { justify-content: center; height: 36px; padding: 0 14px; }
+  .dsh-hero h1 { font-size: 22px; line-height: 1.45; }
+  .dsh-hero h1 br { display: none; }
+  .dsh-hero h1 .num { font-size: 22px; }
+  /* 产品名整体换行，不许从中间劈开 */
+  .dsh-hero h1 .who { white-space: nowrap; }
+}
+</style>
+</head>
+<body>
+<div class="dsh" id="dsh" x-data="opsData()">
+
+  <header class="dsh-top">
+    <div class="dsh-pills">
+      <!-- 切域 = 换一整套内容，不是只换按钮底色（首轮评审的漏项）。 -->
+      <template x-for="t in ['选题','素材','排期','复盘']" :key="t">
+        <button :class="{ on: tab === t }" @click="tab = t" x-text="t"></button>
+      </template>
+    </div>
+    <span class="sp"></span>
+    <button class="dsh-ghost hide-narrow">导出</button>
+    <button class="dsh-ghost solid">助手</button>
+  </header>
+
+  <!-- 一个域 = 一份完整内容。x-if 让非当前域整体不出 DOM：
+       窄栏摊平后各卡片靠 order 槽位排，留着隐藏节点会占住槽位。
+       x-if 必须挂在 <template> 上，且内部只能有一个根元素。 -->
+  <template x-if="d">
+    <div class="dsh-body">
+
+      <div class="dsh-main">
+
+        <!-- Hero：结论句 + 指标带。句式四域共用，口径按域换（见 ops-data.js 顶部）。 -->
+        <section class="dsh-hero">
+          <div class="row">
+            <div class="copy">
+              <h1 x-html="d.lead"></h1>
+              <div class="acts">
+                <template x-for="(a, i) in d.acts" :key="a.k">
+                  <button class="dsh-act" :class="{ solid: i === 0 }" :disabled="busy !== ''" @click="run(a.k, a.msg)">
+                    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path :d="a.icon" /></svg>
+                    <span x-text="busy === a.k ? a.busy : a.label"></span>
+                  </button>
+                </template>
+              </div>
+            </div>
+            <dl class="dsh-metrics">
+              <template x-for="m in d.metrics" :key="m.dt">
+                <div>
+                  <dt x-text="m.dt"></dt>
+                  <dd><span x-text="m.dd"></span><small x-show="m.u" x-text="m.u"></small></dd>
+                </div>
+              </template>
+            </dl>
+          </div>
+        </section>
+
+        <div class="dsh-grid" :class="{ 'dsh-grid-2': tab !== '复盘' }">
+
+          <!-- 每日趋势：只有复盘域有播放量可画，其余三域此卡不渲染 -->
+          <template x-if="tab === '复盘'">
+            <section class="dsh-card dsh-c-chart">
+              <div class="dsh-card-head">
+                <h2>每日发布表现</h2>
+                <span class="sp"></span>
+                <span class="meta">近 15 天</span>
+              </div>
+              <div class="dsh-plot">
+                <div class="dsh-yaxis"><span>3万</span><span>1.5万</span><span>0</span></div>
+                <div class="dsh-chart-wrap">
+                  <svg class="dsh-chart" viewBox="0 0 640 168" preserveAspectRatio="none" role="img" aria-label="近 15 天每日播放折线图，峰值 2.7 万次播放">
+                    <line class="axis" x1="0" y1="12" x2="640" y2="12" />
+                    <line class="axis" x1="0" y1="83" x2="640" y2="83" />
+                    <line class="axis" x1="0" y1="154" x2="640" y2="154" />
+                    <path class="area" d="M0 154 L0 101.9 L46 120.9 L91 78.3 L137 94.8 L183 140.8 L229 99.6 L274 49.9 L320 96.3 L366 125.6 L411 113.8 L457 79.1 L503 26.2 L549 92.5 L594 109 L640 119.9 L640 154 Z" />
+                    <path class="line" d="M0 101.9 L46 120.9 L91 78.3 L137 94.8 L183 140.8 L229 99.6 L274 49.9 L320 96.3 L366 125.6 L411 113.8 L457 79.1 L503 26.2 L549 92.5 L594 109 L640 119.9" />
+                  </svg>
+                  <span class="dsh-peak" aria-hidden="true"></span>
+                  <span class="dsh-peak-tag">峰值 2.7万</span>
+                </div>
+              </div>
+              <div class="dsh-xaxis"><span>10/30</span><span>11/03</span><span>11/07</span><span>11/11</span><span>11/13</span></div>
+            </section>
+          </template>
+
+          <!-- 分布：四域共用一张卡，换的是标题 / 单位 / 条数 -->
+          <section class="dsh-card dsh-c-bars">
+            <div class="dsh-card-head">
+              <h2 x-text="d.dist.title"></h2>
+              <span class="sp"></span>
+              <span class="meta" x-text="d.dist.meta"></span>
+            </div>
+            <ul class="dsh-bars">
+              <template x-for="b in d.dist.bars" :key="b.name">
+                <li>
+                  <span class="name" x-text="b.name"></span>
+                  <span class="val" x-text="b.val"></span>
+                  <span class="track"><i :class="{ mut: b.mut }" :style="`width:${b.pct}%`"></i></span>
+                </li>
+              </template>
+            </ul>
+          </section>
+
+          <!-- 主列表：四域共用。首列按数据换形态——排行序号 / 字牌 / 日期 -->
+          <section class="dsh-card dsh-c-top">
+            <div class="dsh-card-head">
+              <h2 x-text="d.pool.title"></h2>
+              <span class="sp"></span>
+              <span class="meta" x-text="d.pool.meta"></span>
+            </div>
+            <div class="dsh-list-head">
+              <span x-text="d.pool.cols[0]"></span>
+              <span x-text="d.pool.cols[1]"></span>
+            </div>
+            <ol class="dsh-top-list">
+              <template x-for="(it, i) in d.pool.items" :key="i">
+                <li :class="{ empty: it.empty }"><button>
+                  <span class="rank" x-show="it.rank" x-text="it.rank"></span>
+                  <span class="date" x-show="it.ident.date"><b x-text="it.ident.v"></b><small x-text="it.ident.w"></small></span>
+                  <span class="thumb" x-show="!it.ident.date" :class="it.ident.p" x-text="it.ident.v"></span>
+                  <span class="t"><strong x-text="it.title"></strong><small x-text="it.sub"></small></span>
+                  <span class="n" x-text="it.n"></span>
+                </button></li>
+              </template>
+            </ol>
+          </section>
+
+          <!-- 建议：只有复盘域能给出「结论 + 对照数据」，且回写的是选题规则 -->
+          <template x-if="tab === '复盘'">
+            <section class="dsh-card dsh-c-adv">
+              <div class="dsh-card-head">
+                <h2>给你的建议</h2>
+                <span class="sp"></span>
+                <span class="meta">从数据里提炼</span>
+              </div>
+              <div class="dsh-advice">
+                <template x-for="r in [
+                  { id: '封面写数字', name: '标题里写清数字', text: '封面写清数字的笔记点击率是 1.8 倍。',
+                    bars: [{ name: '封面有数字', val: '1.8×', pct: 100 }, { name: '封面无数字', val: '1.0×', pct: 56, mut: true }] },
+                  { id: '开头直给结果', name: '开头三秒先给结果', text: '铺垫式开头的平均完播低 41%。',
+                    bars: [{ name: '直给结果', val: '49%', pct: 100 }, { name: '铺垫开场', val: '29%', pct: 59, mut: true }] }
+                ]" :key="r.id">
+                  <div class="dsh-tip">
+                    <strong x-text="r.name"></strong>
+                    <p x-text="r.text"></p>
+                    <ul class="dsh-bars mini">
+                      <template x-for="b in r.bars" :key="b.name">
+                        <li>
+                          <span class="name" x-text="b.name"></span>
+                          <span class="val" x-text="b.val"></span>
+                          <span class="track"><i :class="{ mut: b.mut }" :style="`width:${b.pct}%`"></i></span>
+                        </li>
+                      </template>
+                    </ul>
+                    <button class="act" :class="{ done: rules.includes(r.id) }" @click="rules.includes(r.id) || (rules.push(r.id), run(r.id, '已写进选题规则'))">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="rules.includes(r.id) ? 'M5 12l5 5 9-10' : 'M12 5v14M5 12h14'" /></svg>
+                      <span x-text="rules.includes(r.id) ? '已写进规则' : '写进规则'"></span>
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </section>
+          </template>
+        </div>
+      </div>
+
+      <!-- 右栏：深墨主角卡（域不同、形态同一张）+ 该域的要点 -->
+      <aside class="dsh-rail">
+        <button class="dsh-next">
+          <span class="top"><span x-text="d.rail.dark.top"></span><span><span class="pulse"></span> <span x-text="d.rail.dark.when"></span></span></span>
+          <div class="big" x-text="d.rail.dark.big"></div>
+          <div class="name" x-text="d.rail.dark.name"></div>
+          <div class="foot" x-text="d.rail.dark.foot"></div>
+        </button>
+
+        <section class="dsh-card dsh-c-note">
+          <div class="dsh-card-head">
+            <h2 x-text="d.rail.notes.title"></h2>
+            <span class="sp"></span>
+            <span class="meta" x-text="d.rail.notes.meta"></span>
+          </div>
+          <ul class="dsh-notes">
+            <template x-for="t in d.rail.notes.items" :key="t">
+              <li><span class="dot"></span><span x-text="t"></span></li>
+            </template>
+          </ul>
+        </section>
+      </aside>
+    </div>
+  </template>
+
+  <!-- 操作回执：窄栏里贴在底部，宽栏里靠右下 -->
+  <div class="dsh-toast" :class="toast &amp;&amp; 'show'" x-text="toast" role="status"></div>
+</div>
+
+<script>
+/* 宽窄两版由容器查询自动切换（见上方 @container），此处只保留两个手动入口：
+   ?narrow=1 在宽视口里强制窄栏版，方便对比；?scheme=dark 切深色。 */
+const q = new URLSearchParams(location.search);
+if (q.get('scheme') === 'dark') document.documentElement.dataset.scheme = 'dark';
+if (q.has('narrow')) document.getElementById('dsh').style.width = '600px';
+/* 出场总时长 200ms，录屏抓不到中间帧。两个取证开关：
+   ?slow=8  等比放慢（只动时长，不动曲线与位移），用于录屏；
+   ?freeze=<ms> 把所有动画精确定格在某一刻，用于取真正的开始/中间/结束三帧。 */
+if (q.has('slow')) {
+  const k = Number(q.get('slow')) || 8;
+  document.getElementById('dsh').style.setProperty('--s', String(k));
+  document.documentElement.style.setProperty('--dur', 200 * k + 'ms');
+}
+if (q.has('freeze')) {
+  const t = Number(q.get('freeze')) || 0;
+  addEventListener('load', () => {
+    // 定格动画：负的 animation-delay 把动画 seek 到 t，再暂停。
+    document.getAnimations().forEach(a => { a.pause(); a.currentTime = t; });
+    // 定格后再置一次，等 Alpine 把元素插完
+    requestAnimationFrame(() => document.getAnimations().forEach(a => { a.pause(); a.currentTime = t; }));
+  });
+}
+</script>
+</body>
+</html>

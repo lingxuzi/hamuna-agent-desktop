@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方案 03 — 台账</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .head {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .ring { width: 56px; height: 56px; flex: none; }
+  .ring svg { width: 56px; height: 56px; display: block; }
+  .head-txt { flex: 1; min-width: 0; }
+  .head-txt .t1 { font-size: 16px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; }
+  .head-txt .t2 { font-size: 13px; color: var(--ink-muted); margin-top: 2px; }
+  .head .pill { flex: none; }
+
+  /* 四段台账：用发丝线分组，不套卡片壳 */
+  .ledger { padding: 4px 20px 24px; }
+  .sec { padding: 12px 0 14px; border-bottom: 1px solid var(--line); }
+  .sec:last-child { border-bottom: 0; }
+  .sec-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .sec-h .name { font-size: 12px; font-weight: 600; color: var(--ink-muted); letter-spacing: .08em; }
+  .sec-h .cnt { font-size: 12px; color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .sec-h .grow { flex: 1; }
+  .sec-h .more { font-size: 12px; color: var(--ink-subtle); }
+
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0;
+  }
+  .row + .row { border-top: 1px solid var(--line-subtle); }
+  .row .ttl { flex: 1; min-width: 0; font-size: 14px; color: var(--ink); line-height: 1.45; }
+  .row .ttl small { display: block; font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+  .row .meta { display: flex; align-items: center; gap: 6px; flex: none; }
+  .row.hot .ttl { box-shadow: inset 2px 0 0 var(--accent-warm); padding-left: 10px; margin-left: -12px; }
+
+  .rule {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    background: var(--accent-warm-subtle);
+    border: 1px solid color-mix(in srgb, var(--accent-warm) 20%, transparent);
+  }
+  .rule .rt { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .rule .rb { font-size: 13px; color: var(--ink-secondary); line-height: 1.6; margin-top: 4px; }
+  .rule .back {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid color-mix(in srgb, var(--accent-warm) 18%, transparent);
+    font-size: 12px; color: var(--ink-muted);
+  }
+  .rule .back b { color: var(--ink-secondary); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tabbar">
+    <button class="tabbtn" aria-selected="false">文件<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">终端<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">浏览器<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="true">运营<span class="close">×</span></button>
+    <span class="spacer"></span>
+    <button class="ghost">独占视图</button>
+  </div>
+
+  <div class="head">
+    <div class="ring">
+      <svg viewBox="0 0 56 56" aria-label="四域回流状态">
+        <circle cx="28" cy="28" r="20" fill="none" stroke="var(--line-strong)" stroke-width="1.25" />
+        <path d="M 8 28 A 20 20 0 0 1 28 8" fill="none" stroke="var(--accent-warm)" stroke-width="1.75" stroke-dasharray="2.5 4" stroke-linecap="round" />
+        <circle cx="28" cy="8" r="3.4" fill="var(--accent-warm)" />
+        <circle cx="48" cy="28" r="2.6" fill="var(--paper-elevated)" stroke="var(--line-strong)" stroke-width="1.5" />
+        <circle cx="28" cy="48" r="2.6" fill="var(--paper-elevated)" stroke="var(--line-strong)" stroke-width="1.5" />
+        <circle cx="8" cy="28" r="2.6" fill="var(--paper-elevated)" stroke="var(--line-strong)" stroke-width="1.5" />
+      </svg>
+    </div>
+    <div class="head-txt">
+      <div class="t1">运营视图</div>
+      <div class="t2">本周 3 条待发 · 1 条制作中 · 3 条规则已沉淀</div>
+    </div>
+    <button class="pill primary">新建</button>
+  </div>
+
+  <div class="body">
+    <div class="scroll">
+      <div class="ledger">
+
+        <section class="sec">
+          <div class="sec-h"><span class="name">选题</span><span class="cnt">5</span><span class="grow"></span><span class="more">全部 ›</span></div>
+          <div class="row hot">
+            <div class="ttl">老房子的夏季除味：三步走，不用香氛<small>评论区反复提到「梅雨味」</small></div>
+            <div class="meta"><span class="chip ember"><span class="dot"></span>小红书</span><span class="chip sand">热点</span></div>
+          </div>
+          <div class="row">
+            <div class="ttl">通勤包里只留这三件<small>依据规则「清单型封面点击高 1.8 倍」</small></div>
+            <div class="meta"><span class="chip ember"><span class="dot"></span>抖音</span><span class="chip accent">来自复盘</span></div>
+          </div>
+        </section>
+
+        <section class="sec">
+          <div class="sec-h"><span class="name">素材</span><span class="cnt">3</span><span class="grow"></span><span class="more">全部 ›</span></div>
+          <div class="row">
+            <div class="ttl">三种除味方案对比<small>正文 862 字 · 封面 1 张 · 配图 4 张</small></div>
+            <div class="meta"><span class="chip ember"><span class="dot"></span>小红书</span><span class="chip">待发布</span></div>
+          </div>
+        </section>
+
+        <section class="sec">
+          <div class="sec-h"><span class="name">排期</span><span class="cnt">本周 3</span><span class="grow"></span><span class="more">月历 ›</span></div>
+          <div class="row">
+            <div class="ttl">11 月 15 日 19:30<small>三种除味方案对比 · 小红书</small></div>
+            <div class="meta"><span class="chip">待发布</span></div>
+          </div>
+        </section>
+
+        <section class="sec">
+          <div class="sec-h"><span class="name">复盘</span><span class="cnt">12</span><span class="grow"></span><span class="more">全部 ›</span></div>
+          <div class="row">
+            <div class="ttl">早八人的早餐<small>11 月 8 日发布 · 抖音</small></div>
+            <div class="meta"><span class="chip leaf">12,847 播放</span><span class="chip">赞 903</span></div>
+          </div>
+          <div class="rule">
+            <div class="rt">开头三秒先给结果，别铺垫</div>
+            <div class="rb">铺垫式开头的 4 条笔记，平均完播比结果式开头低 41%。</div>
+            <div class="back"><span class="dot" style="color:var(--accent-warm)"></span>已反哺 <b>2 条选题</b> · 置信度 0.72</div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <div class="agentbar">
+      <span class="pulse"></span>
+      <span>Agent 正在制作「三种除味方案对比」· 预计 2 分钟</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方向 C · 台账 — 运营视图</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .instr { flex: 0 0 auto; padding: 12px 16px 10px; background: linear-gradient(180deg, var(--wash), var(--panel) 72%); border-bottom: 1px solid var(--line); }
+  .instr .top { display: flex; align-items: center; gap: 12px; }
+  .instr .brand { flex: none; }
+  .instr .brand h1 { font: 700 20px/1.1 var(--sans); letter-spacing: -.01em; color: var(--ink); }
+  .instr .brand p { font: 400 12px/1.4 var(--mono); letter-spacing: .05em; color: var(--mute); margin-top: 4px; }
+  .instr .top .sp { flex: 1; }
+  .stats { display: flex; gap: 16px; flex: none; }
+  .stat { text-align: right; min-width: 62px; }
+  .stat label { display: block; font: 400 12px/1.2 var(--mono); letter-spacing: .06em; color: var(--mute); }
+  .stat b { display: block; font: 700 20px/1.2 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); margin-top: 2px; }
+  .stat b.acc { color: var(--accent-text); }
+
+  .filter { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .filter .sp { flex: 1; }
+  .search { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--faint); font: 400 12px/1 var(--mono); color: var(--mute); min-width: 148px; }
+
+  .ledger { flex: 1; min-height: 0; overflow: auto; padding: 0 16px 16px; }
+  .thead, .trow { display: grid; grid-template-columns: 72px 1fr 92px 124px; gap: 10px; align-items: center; }
+  .thead { position: sticky; top: 0; z-index: 2; padding: 11px 14px 8px; background-color: var(--bg);
+    background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.2px); background-size: 18px 18px; }
+  .thead span { font: 400 12px/1.2 var(--mono); letter-spacing: .08em; color: var(--mute); }
+  .thead span.r, .trow .r { text-align: right; }
+  .trow { padding: 10px 14px; background: var(--panel); border-top: 1px solid var(--line);
+    animation: ops-rise var(--dur) var(--ease) both; animation-delay: var(--d, 0ms); }
+  .trow:first-of-type { border-top: 1px solid var(--line); }
+  .trow .id { font: 400 12px/1 var(--mono); color: var(--mute); letter-spacing: .02em; }
+  .trow .ttl { min-width: 0; }
+  .trow .ttl .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    font-size: 14px; line-height: 1.4; color: var(--ink); }
+  .trow .ttl small { display: block; font: 400 12px/1.4 var(--mono); color: var(--mute); margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trow .pf { font: 400 12px/1 var(--mono); letter-spacing: .04em; color: var(--mute); }
+  .trow .mt { font: 700 14px/1 var(--mono); letter-spacing: .02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .trow .mt small { display: block; font: 400 12px/1.3 var(--mono); color: var(--mute); margin-top: 3px; letter-spacing: .04em; }
+  /* 回流行：青底 + 左侧轨，唯一的冷色，标记"这条来自复盘" */
+  .trow.rule { background: linear-gradient(90deg, var(--data-soft), var(--panel) 42%); box-shadow: inset 2px 0 0 var(--data); }
+  .trow.rule .ttl .t { font-weight: 700; color: var(--data); }
+  .trow.hot .ttl .t { color: var(--accent-text); font-weight: 700; }
+  .foot { flex: 0 0 auto; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); }
+  .view { display: none; }
+  .view.on { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tabbar">
+    <button class="tabbtn" aria-selected="false">文件<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="false">终端<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="false">浏览器<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="true">运营<span class="x">×</span></button>
+    <span class="sp"></span>
+    <span class="mono-note">独占视图</span>
+  </div>
+
+  <section class="view on" data-v="all">
+    <div class="instr">
+      <div class="top">
+        <div class="brand"><h1>运营台账</h1><p>本地优先 · 19 条记录 · 同步就绪</p></div>
+        <span class="sp"></span>
+        <div class="stats">
+          <div class="stat"><label>本周待发</label><b class="acc">3</b></div>
+          <div class="stat"><label>制作中</label><b>1</b></div>
+          <div class="stat"><label>已沉淀规则</label><b>2</b></div>
+          <div class="stat"><label>近 7 日发布</label><b>3</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="filter"><div class="seg" data-seg></div><span class="sp"></span><span class="search">搜索标题 / 编号</span><button class="btn mini">导出</button></div>
+    <div class="ledger"><div class="thead" data-head></div><div data-body></div></div>
+    <div class="foot"><div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在制作「三种除味方案对比」· 预计 2 分钟</span></div></div>
+  </section>
+</div>
+
+<script>
+const DOMS = [
+  { id: 'all', name: '全部' }, { id: 'topics', name: '选题' }, { id: 'assets', name: '素材' },
+  { id: 'schedule', name: '排期' }, { id: 'reviews', name: '复盘' },
+];
+
+const ROWS = [
+  { d:'topics', id:'t_5d19', t:'一平米厨房改造', s:'评论区追问厨房台面尺寸，顺带做选品', pf:'小红书', st:'待加工', mt:'热度 0.38', mt2:'11-16' },
+  { d:'topics', id:'t_4e78', t:'早睡挑战 2.0', s:'上期完播 29%，换开头重做', pf:'小红书', st:'已复盘', mt:'热度 0.31', mt2:'11-02' },
+  { d:'topics', id:'t_6a32', t:'梅雨天的家电除味：冰箱、洗衣机、空调', s:'平台热榜 · 家电类目第 3', pf:'视频号', st:'热点', mt:'热度 0.42', mt2:'11-13' },
+  { d:'topics', id:'t_7b55', t:'通勤包里只留这三件', s:'依据规则「清单型封面点击高 1.8 倍」', pf:'抖音', st:'来自复盘', mt:'热度 0.48', mt2:'11-11' },
+  { d:'topics', id:'t_8f21', t:'老房子的夏季除味：三步走，不用香氛', s:'评论区反复提到「梅雨味」', pf:'小红书', st:'制作中', mt:'热度 0.62', mt2:'11-04' },
+  { d:'topics', id:'t_9c04', t:'租房党的厨房收纳：房东不砸墙的 6 个位置', s:'对标账号 · 住小帮', pf:'小红书', st:'待加工', mt:'热度 0.61', mt2:'11-06' },
+  { d:'assets', id:'a_1f30', t:'家电除味分镜脚本', s:'分镜 9 格 · 口播稿 1 版', pf:'视频号', st:'草稿', mt:'完成 9%', mt2:'交付 11-21' },
+  { d:'assets', id:'a_2a94', t:'通勤三件套图文', s:'正文 388 字 · 封面 1 张', pf:'抖音', st:'草稿', mt:'完成 18%', mt2:'交付 11-19' },
+  { d:'assets', id:'a_3b61', t:'6 个不砸墙的收纳位', s:'正文 511 字 · 配图 6 张', pf:'小红书', st:'制作中', mt:'完成 42%', mt2:'交付 11-18' },
+  { d:'assets', id:'a_4c07', t:'三种除味方案对比', s:'正文 862 字 · 封面 1 张 · 配图 4 张', pf:'小红书', st:'待发布', mt:'完成 100%', mt2:'交付 11-15' },
+  { d:'schedule', id:'s_5f30', t:'6 个不砸墙的收纳位', s:'预计 0.9 万曝光', pf:'小红书', st:'素材未就绪', mt:'距发布 8 天', mt2:'11-21 19:00' },
+  { d:'schedule', id:'s_6a94', t:'通勤包里的三件套', s:'预计 2.4 万曝光', pf:'抖音', st:'素材未就绪', mt:'距发布 6 天', mt2:'11-19 20:00' },
+  { d:'schedule', id:'s_7c55', t:'一平米厨房改造', s:'预计 0.8 万曝光', pf:'小红书', st:'待发布', mt:'距发布 5 天', mt2:'11-18 12:00' },
+  { d:'schedule', id:'s_8f21', t:'三种除味方案对比', s:'预计 1.2 万曝光', pf:'小红书', st:'待发布', mt:'距发布 2 天', mt2:'11-15 19:30' },
+  { d:'reviews', id:'r_2c61', t:'早睡挑战 2.0', s:'完播 29% · 涨粉 21', pf:'小红书', st:'已发布', mt:'播放 6,930', mt2:'11-02' },
+  { d:'reviews', id:'r_3b77', t:'出租屋灯光改造', s:'完播 36% · 涨粉 38', pf:'小红书', st:'已发布', mt:'播放 8,412', mt2:'11-06' },
+  { d:'reviews', id:'r_4a12', t:'早八人的早餐', s:'完播 41% · 涨粉 62', pf:'抖音', st:'已发布', mt:'播放 12,847', mt2:'11-08' },
+  { d:'rule', id:'ru_01', t:'开头三秒先给结果，别铺垫', s:'铺垫式开头平均完播低 41%', pf:'规则', st:'已生效', mt:'置信度 0.72', mt2:'反哺 2 条选题' },
+  { d:'rule', id:'ru_02', t:'清单型封面点击高 1.8 倍', s:'封面写清数字的笔记点击率 ×1.8', pf:'规则', st:'已生效', mt:'置信度 0.68', mt2:'反哺 3 条选题' },
+];
+
+const HEAD = ['编号', '标题', '状态', '指标'];
+
+const FILT = {
+  all:       r => true,
+  topics:    r => r.d === 'topics',
+  assets:    r => r.d === 'assets',
+  schedule:  r => r.d === 'schedule',
+  reviews:   r => r.d === 'reviews' || r.d === 'rule',
+};
+
+/* 状态列只给三种状态上色，其余压成灰——列要能扫，不能每行都在喊 */
+const TONE = {
+  '制作中': 'outline', '热点': 'amber',
+  '来自复盘': 'data', '已复盘': 'data', '已生效': 'data',
+  '已发布': 'green',
+};
+
+const SEG = (a) => DOMS.map(d => `<button class="btn mini${d.id === a ? ' on' : ''}" data-goto="${d.id}">${d.name}</button>`).join('');
+const HEADHTML = () => `<div class="thead" data-head>${HEAD.map((h, i) => `<span${i === 3 ? ' class="r"' : ''}>${h}</span>`).join('')}</div>`;
+const BODY = (v) => ROWS.filter(FILT[v]).map((r, i) => `
+  <div class="trow${r.d === 'rule' ? ' rule' : ''}${r.st === '制作中' ? ' hot' : ''}" style="--d:${Math.min(i, 12) * 22}ms">
+    <span class="id">${r.id}</span>
+    <span class="ttl"><span class="t">${r.t}</span><small>${r.s} · ${r.pf}</small></span>
+    <span><span class="tag ${TONE[r.st] || 'gray'}">${r.st}</span></span>
+    <span class="mt r">${r.mt}<small>${r.mt2}</small></span>
+  </div>`).join('');
+
+function render(v) {
+  document.querySelector('[data-seg]').innerHTML = SEG(v);
+  document.querySelector('[data-head]').outerHTML = HEADHTML();
+  document.querySelector('[data-body]').innerHTML = BODY(v);
+  if (location.hash.slice(1) !== v) history.replaceState(null, '', '#' + v);
+}
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-goto]');
+  if (g) render(g.dataset.goto);
+});
+/* 深色对照：视图名带 dark- 前缀即切深色（截图工具只会带一个 query 参数） */
+const qp = new URLSearchParams(location.search);
+let view = qp.get('view') || location.hash.slice(1) || 'all';
+let scheme = qp.get('scheme') || 'light';
+if (view.indexOf('dark-') === 0) { scheme = 'dark'; view = view.slice(5); }
+document.documentElement.dataset.scheme = scheme;
+render(view);
+</script>
+</body>
+</html>

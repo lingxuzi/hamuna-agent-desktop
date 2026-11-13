@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方向 B · 月历主线 — 运营视图</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .bar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bar .nav { display: flex; align-items: center; gap: 6px; }
+  .bar .nav .m { font: 700 20px/1 var(--sans); letter-spacing: -.02em; color: var(--ink); }
+  .bar .nav .m small { font: 400 12px/1 var(--mono); letter-spacing: .06em; color: var(--mute); margin-left: 6px; }
+  .bar .sp { flex: 1; }
+  .bar .cnt { font: 400 12px/1 var(--mono); letter-spacing: .05em; color: var(--mute); }
+  .bar .cnt b { color: var(--accent-text); }
+
+  .calwrap { flex: 0 0 auto; padding: 12px 16px 0; }
+  .cal { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: inset 0 1px 0 var(--inset-hi), var(--card-shadow); }
+  .calhead { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .calhead span { font: 400 12px/1 var(--mono); letter-spacing: .08em; color: var(--mute); text-align: center; padding: 9px 0 7px; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 40px; background: var(--line); gap: 1px; }
+  .cell { background: var(--panel); padding: 4px 5px; display: flex; flex-direction: column; gap: 3px; justify-content: flex-start; overflow: hidden; }
+  .cell.out { background: var(--faint); }
+  .cell .d { font: 400 12px/1.3 var(--mono); color: var(--mute); font-variant-numeric: tabular-nums; }
+  .cell.today .d { display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; border-radius: 999px; background: var(--primary-bg); color: #fff; font-weight: 700; }
+  .marks { display: flex; flex-wrap: wrap; gap: 3px; }
+  .stamp { font: 700 12px/1 var(--mono); letter-spacing: .04em; padding: 3px 6px; border-radius: 999px; color: var(--accent-text); background: var(--accent-soft); white-space: nowrap; }
+  .stamp.sky { color: var(--data); background: var(--data-soft); }
+  .stamp.green { color: var(--green); background: var(--green-bg); }
+  .mk { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); }
+  .mk.sky { background: var(--data); }
+  .mk.gray { background: rgb(28 22 18 / 0.18); }
+  .mbar { display: block; width: 100%; height: 6px; border-radius: 999px; background: var(--accent-soft); margin-top: auto; }
+  .mbar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--ink), var(--accent)); }
+
+  .list { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
+  .lt { display: flex; align-items: baseline; justify-content: space-between; padding: 0 0 8px; }
+  .lt h2 { font: 700 14px/1.2 var(--mono); letter-spacing: .06em; color: var(--ink); }
+  .lt .r { font: 400 12px/1 var(--mono); letter-spacing: .05em; color: var(--mute); }
+  .rows { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: inset 0 1px 0 var(--inset-hi), var(--card-shadow); }
+  .row { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 10px; padding: 11px 14px; border-top: 1px solid var(--line-2); }
+  .row:first-child { border-top: 0; }
+  .row .when { font: 700 14px/1.3 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .row .when small { display: block; font: 400 12px/1.3 var(--mono); color: var(--mute); }
+  .row .ttl { font-size: 14px; color: var(--ink); line-height: 1.45; min-width: 0; }
+  .row .ttl small { display: block; font: 400 12px/1.5 var(--mono); letter-spacing: .02em; color: var(--mute); margin-top: 2px; }
+  .row .r { display: flex; align-items: center; gap: 6px; flex: none; }
+  .foot { flex: 0 0 auto; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); }
+  .view { display: none; }
+  .view.on { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tabbar">
+    <button class="tabbtn" aria-selected="false">文件<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="false">终端<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="false">浏览器<span class="x">×</span></button>
+    <button class="tabbtn" aria-selected="true">运营<span class="x">×</span></button>
+    <span class="sp"></span>
+    <span class="mono-note">独占视图</span>
+  </div>
+
+  <section class="view" data-v="schedule">
+    <div class="bar">
+      <div class="nav"><span class="m">11 月<small>2026</small></span></div>
+      <div class="seg" data-seg></div>
+      <span class="sp"></span>
+      <span class="cnt">本周 <b>3</b> 条待发</span>
+      <button class="btn mini">今天</button>
+    </div>
+    <div class="calwrap" data-cal></div>
+    <div class="list">
+      <div class="lt"><h2>本月排期</h2><span class="r">4 条 · 本周 3 条</span></div>
+      <div class="rows">
+        <div class="row"><span class="when">11-15<small>19:30</small></span><span class="ttl">三种除味方案对比<small>素材已就绪 · 预计 1.2 万曝光</small></span><span class="r"><span class="tag">小红书</span><span class="tag green">待发布</span></span></div>
+        <div class="row"><span class="when">11-18<small>12:00</small></span><span class="ttl">一平米厨房改造<small>素材已就绪 · 预计 0.8 万曝光</small></span><span class="r"><span class="tag">小红书</span><span class="tag green">待发布</span></span></div>
+        <div class="row"><span class="when">11-19<small>20:00</small></span><span class="ttl">通勤包里的三件套<small>素材未就绪 · 预计 2.4 万曝光</small></span><span class="r"><span class="tag">抖音</span><span class="tag gray">待发布</span></span></div>
+        <div class="row"><span class="when">11-21<small>19:00</small></span><span class="ttl">6 个不砸墙的收纳位<small>素材未就绪 · 预计 0.9 万曝光</small></span><span class="r"><span class="tag">小红书</span><span class="tag gray">待发布</span></span></div>
+      </div>
+    </div>
+    <div class="foot"><div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在排本周第 4 条 · 素材已就绪，等你确认时间</span></div></div>
+  </section>
+
+  <section class="view" data-v="topics">
+    <div class="bar">
+      <div class="nav"><span class="m">11 月<small>2026</small></span></div>
+      <div class="seg" data-seg></div>
+      <span class="sp"></span>
+      <span class="cnt">本月 <b>7</b> 条选题</span>
+      <button class="btn mini">今天</button>
+    </div>
+    <div class="calwrap" data-cal></div>
+    <div class="list">
+      <div class="lt"><h2>本月选题</h2><span class="r">按创建时间 · 1 条来自复盘</span></div>
+      <div class="rows">
+        <div class="row"><span class="when">11-04<small>热点</small></span><span class="ttl">老房子的夏季除味：三步走，不用香氛<small>评论区反复提到「梅雨味」</small></span><span class="r"><span class="tag">小红书</span><span class="tag outline">制作中</span></span></div>
+        <div class="row"><span class="when">11-06<small>对标</small></span><span class="ttl">租房党的厨房收纳：房东不砸墙的 6 个位置<small>对标账号 · 住小帮</small></span><span class="r"><span class="tag">小红书</span><span class="tag gray">待加工</span></span></div>
+        <div class="row"><span class="when">11-11<small>复盘</small></span><span class="ttl">通勤包里只留这三件<small>依据规则「清单型封面点击高 1.8 倍」</small></span><span class="r"><span class="tag">抖音</span><span class="tag green">来自复盘</span></span></div>
+        <div class="row"><span class="when">11-13<small>热点</small></span><span class="ttl">梅雨天的家电除味：冰箱、洗衣机、空调<small>平台热榜 · 家电类目第 3</small></span><span class="r"><span class="tag">视频号</span><span class="tag gray">待加工</span></span></div>
+      </div>
+    </div>
+    <div class="foot"><div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在整理「老房子的夏季除味」· 预计 2 分钟</span></div></div>
+  </section>
+
+  <section class="view" data-v="assets">
+    <div class="bar">
+      <div class="nav"><span class="m">11 月<small>2026</small></span></div>
+      <div class="seg" data-seg></div>
+      <span class="sp"></span>
+      <span class="cnt">本月 <b>4</b> 条素材</span>
+      <button class="btn mini">今天</button>
+    </div>
+    <div class="calwrap" data-cal></div>
+    <div class="list">
+      <div class="lt"><h2>本月素材</h2><span class="r">按交付日 · 1 条制作中</span></div>
+      <div class="rows">
+        <div class="row"><span class="when">11-15<small>交付</small></span><span class="ttl">三种除味方案对比<small>正文 862 字 · 封面 1 张 · 配图 4 张</small></span><span class="r"><span class="tag">小红书</span><span class="tag green">已就绪</span></span></div>
+        <div class="row"><span class="when">11-18<small>交付</small></span><span class="ttl">6 个不砸墙的收纳位<small>正文 511 字 · 封面 2 张 · 配图 6 张</small></span><span class="r"><span class="tag">小红书</span><span class="tag outline">制作中</span></span></div>
+        <div class="row"><span class="when">11-19<small>交付</small></span><span class="ttl">通勤三件套图文<small>正文 388 字 · 封面 1 张 · 文案 2 版</small></span><span class="r"><span class="tag">抖音</span><span class="tag gray">草稿</span></span></div>
+        <div class="row"><span class="when">11-21<small>交付</small></span><span class="ttl">家电除味分镜脚本<small>分镜 9 格 · 口播稿 1 版</small></span><span class="r"><span class="tag">视频号</span><span class="tag gray">草稿</span></span></div>
+      </div>
+    </div>
+    <div class="foot"><div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在制作「6 个不砸墙的收纳位」· 预计 3 分钟</span></div></div>
+  </section>
+
+  <section class="view" data-v="reviews">
+    <div class="bar">
+      <div class="nav"><span class="m">11 月<small>2026</small></span></div>
+      <div class="seg" data-seg></div>
+      <span class="sp"></span>
+      <span class="cnt">本月 <b>3</b> 条已发布</span>
+
+      <button class="btn mini">今天</button>
+    </div>
+    <div class="calwrap" data-cal></div>
+    <div class="list">
+      <div class="lt"><h2>本月已发布</h2><span class="r">柱高 = 播放量</span></div>
+      <div class="rows">
+        <div class="row"><span class="when">11-08<small>抖音</small></span><span class="ttl">早八人的早餐<small>完播 41% · 涨粉 62</small></span><span class="r"><span class="num">12,847</span></span></div>
+        <div class="row"><span class="when">11-06<small>小红书</small></span><span class="ttl">出租屋灯光改造<small>完播 36% · 涨粉 38</small></span><span class="r"><span class="num">8,412</span></span></div>
+        <div class="row"><span class="when">11-02<small>小红书</small></span><span class="ttl">早睡挑战 2.0<small>完播 29% · 涨粉 21</small></span><span class="r"><span class="num">6,930</span></span></div>
+      </div>
+      <div class="lt" style="margin-top:10px"><h2>已沉淀规则</h2><span class="r">2 条 · 反哺 5 条选题</span></div>
+      <div class="rows">
+        <div class="row" style="grid-template-columns: 1fr auto"><span class="ttl">开头三秒先给结果，别铺垫</span><span class="r"><span class="tag green">反哺 2 条</span></span></div>
+        <div class="row" style="grid-template-columns: 1fr auto"><span class="ttl">清单型封面点击高 1.8 倍</span><span class="r"><span class="tag green">反哺 3 条</span></span></div>
+      </div>
+    </div>
+    <div class="foot"><div class="stageline"><span class="dot"></span><b>AGENT</b><span>正在分析「早八人的早餐」评论区 · 预计 1 分钟</span></div></div>
+  </section>
+</div>
+
+<script>
+const DOMS = [
+  { id: 'schedule', name: '排期' }, { id: 'topics', name: '选题' },
+  { id: 'assets', name: '素材' }, { id: 'reviews', name: '复盘' },
+];
+const SEG = (active) => DOMS.map(d => `<button class="btn mini${d.id === active ? ' on' : ''}" data-goto="${d.id}">${d.name}</button>`).join('');
+
+const SKEL = [
+  ['out',26],['out',27],['out',28],['out',29],['out',30],['out',31],[null,1],
+  [null,2],[null,3],[null,4],[null,5],[null,6],[null,7],[null,8],
+  [null,9],[null,10],[null,11],[null,12],[null,13],[null,14],[null,15],
+  [null,16],[null,17],[null,18],[null,19],[null,20],[null,21],[null,22],
+  [null,23],[null,24],[null,25],[null,26],[null,27],[null,28],[null,29],
+  [null,30],['out',1],['out',2],['out',3],['out',4],['out',5],['out',6],
+];
+
+const MARKS = {
+  schedule: {
+    4:['<span class="stamp">小红</span>'], 6:['<span class="stamp sky">抖音</span>'],
+    11:['<span class="stamp">小红</span>'], 13:['<span class="stamp green">视频</span>'],
+    15:['<span class="stamp">小红</span>'], 18:['<span class="stamp">小红</span>'],
+    19:['<span class="stamp sky">抖音</span>'], 21:['<span class="stamp">小红</span>'],
+  },
+  topics: {
+    4:['<span class="mk"></span>'], 6:['<span class="mk"></span>'], 11:['<span class="mk"></span>'],
+    13:['<span class="mk"></span>'], 16:['<span class="mk gray"></span>'], 20:['<span class="mk gray"></span>'],
+  },
+  assets: {
+    15:['<span class="mk"></span>'], 18:['<span class="mk"></span>'], 19:['<span class="mk sky"></span>'], 21:['<span class="mk sky"></span>'],
+  },
+  reviews: {
+    2:['<span class="mbar"><i style="width:54%"></i></span>'],
+    6:['<span class="mbar"><i style="width:66%"></i></span>'],
+    8:['<span class="mbar"><i style="width:100%"></i></span>'],
+  },
+};
+
+const CAL = (v) => `
+<div class="cal">
+  <div class="calhead">${['一','二','三','四','五','六','日'].map(d => `<span>${d}</span>`).join('')}</div>
+  <div class="grid">
+    ${SKEL.map(([c, d]) => {
+      const today = c === null && d === 13;
+      const mk = (c === null && MARKS[v] && MARKS[v][d]) || [];
+      return `<div class="cell${c ? ' out' : ''}${today ? ' today' : ''}"><span class="d">${d}</span>${mk.length ? `<span class="marks">${mk.join('')}</span>` : ''}</div>`;
+    }).join('')}
+  </div>
+</div>`;
+
+document.querySelectorAll('[data-cal]').forEach(el => { el.innerHTML = CAL(el.closest('.view').dataset.v); });
+document.querySelectorAll('[data-seg]').forEach(el => { el.innerHTML = SEG(el.closest('.view').dataset.v); });
+
+function show(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.dataset.v === id));
+  if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
+}
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-goto]');
+  if (g) show(g.dataset.goto);
+});
+const q = new URLSearchParams(location.search).get('view');
+show(q || location.hash.slice(1) || 'schedule');
+</script>
+</body>
+</html>

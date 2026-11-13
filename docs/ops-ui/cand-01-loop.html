@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方案 01 — 回流环</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  /* 头部：左环右说明 */
+  .head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px 20px 12px;
+  }
+  .ring { position: relative; width: 260px; height: 297px; flex: none; }
+  .ring svg { display: block; width: 260px; height: 297px; }
+  .node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    white-space: nowrap;
+  }
+  .node .n-name { font-size: 12px; color: var(--ink-muted); letter-spacing: .02em; }
+  .node .n-count { font-size: 14px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .node.on .n-name { color: var(--accent); }
+  .node.on .n-count { color: var(--accent); }
+  .node .n-cap { position: absolute; }
+
+  .head-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .eyebrow { font-size: 12px; color: var(--ink-subtle); letter-spacing: .06em; }
+  .domain-name { font-size: 22px; font-weight: 600; line-height: 1.3; letter-spacing: -.02em; color: var(--ink); }
+  .domain-sub { font-size: 14px; color: var(--ink-muted); line-height: 1.6; }
+  .reflow {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--r-md);
+    background: var(--accent-warm-subtle);
+    border: 1px solid color-mix(in srgb, var(--accent-warm) 22%, transparent);
+    font-size: 13px; line-height: 1.55; color: var(--ink-secondary);
+  }
+  .reflow b { color: var(--accent); font-weight: 600; }
+
+  /* 列表 */
+  .list { display: flex; flex-direction: column; gap: 8px; padding: 0 20px 20px; }
+  .card {
+    position: relative;
+    padding: 12px 14px 12px 16px;
+    border-radius: var(--r-md);
+    background: var(--paper-elevated);
+    border: 1px solid var(--line);
+    box-shadow: var(--theme-shadow-xs);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card.busy::before {
+    content: '';
+    position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px;
+    border-radius: var(--r-full);
+    background: var(--accent-warm);
+  }
+  .card .title { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.45; }
+  .card .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .card .note { font-size: 13px; color: var(--ink-muted); line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tabbar">
+    <button class="tabbtn" aria-selected="false">文件<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">终端<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">浏览器<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="true">运营<span class="close">×</span></button>
+    <span class="spacer"></span>
+    <button class="ghost">独占视图</button>
+  </div>
+
+  <div class="body">
+    <div class="head">
+      <!-- 四域环：顺时针 = 生产流（选题→素材→排期→复盘），左上那段虚线 = 回流（复盘→选题） -->
+      <div class="ring">
+        <svg viewBox="0 0 280 320" aria-label="运营四域回流环">
+          <circle cx="140" cy="160" r="96" fill="none" stroke="var(--line-strong)" stroke-width="1.5" />
+          <path d="M 44 160 A 96 96 0 0 1 140 64" fill="none"
+                stroke="var(--accent-warm)" stroke-width="2" stroke-dasharray="3 5" stroke-linecap="round" opacity=".85" />
+          <path id="orbit" d="M 140 64 A 96 96 0 1 1 139.9 64" fill="none" />
+
+          <circle r="4.5" fill="var(--accent-warm)">
+            <animateMotion dur="14s" repeatCount="indefinite" rotate="auto"><mpath href="#orbit" /></animateMotion>
+          </circle>
+          <circle r="3.5" fill="var(--accent-warm)" opacity=".9">
+            <animateMotion dur="14s" repeatCount="indefinite" rotate="auto"
+                           calcMode="linear" keyPoints="0.75;1" keyTimes="0;1"><mpath href="#orbit" /></animateMotion>
+          </circle>
+
+          <!-- 节点 -->
+          <circle cx="140" cy="64" r="7" fill="var(--paper-elevated)" stroke="var(--accent-warm)" stroke-width="2.5" />
+          <circle cx="236" cy="160" r="6" fill="var(--paper-elevated)" stroke="var(--line-strong)" stroke-width="2" />
+          <circle cx="140" cy="256" r="6" fill="var(--paper-elevated)" stroke="var(--line-strong)" stroke-width="2" />
+          <circle cx="44" cy="160" r="6" fill="var(--paper-elevated)" stroke="var(--line-strong)" stroke-width="2" />
+        </svg>
+
+        <div class="node on" style="left:50%; top:20%; transform:translate(-50%,-120%)">
+          <span class="n-name">选题</span><span class="n-count">7</span>
+        </div>
+        <div class="node" style="left:84.3%; top:50%; transform:translate(24%,-50%)">
+          <span class="n-name">素材</span><span class="n-count">4</span>
+        </div>
+        <div class="node" style="left:50%; top:80%; transform:translate(-50%,18%)">
+          <span class="n-name">排期</span><span class="n-count">3</span>
+        </div>
+        <div class="node" style="left:15.7%; top:50%; transform:translate(-124%,-50%)">
+          <span class="n-name">复盘</span><span class="n-count">12</span>
+        </div>
+      </div>
+
+      <div class="head-side">
+        <div class="eyebrow">运营视图</div>
+        <div class="domain-name">选题</div>
+        <div class="domain-sub">本周新增 3 条，1 条来自复盘沉淀。<br />Agent 正在把「老房子的夏季除味」做成小红书图文。</div>
+        <div class="reflow">
+          <span class="dot" style="margin-top:6px; color:var(--accent-warm)"></span>
+          <span><b>3 条规则</b>已反哺选题：<br />「开头三秒先给结果，别铺垫」</span>
+        </div>
+        <div style="display:flex; gap:8px">
+          <button class="pill primary">新建选题</button>
+          <button class="pill">让 Agent 找热点</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="scroll">
+      <div class="list">
+        <div class="card busy rise rise-1">
+          <div class="title">老房子的夏季除味：三步走，不用香氛</div>
+          <div class="meta">
+            <span class="chip ember"><span class="dot"></span>小红书</span>
+            <span class="chip sand">热点</span>
+            <span class="chip">制作中</span>
+          </div>
+          <div class="note">评论区反复提到「梅雨味」，切入无人提过的老房墙皮返潮。</div>
+        </div>
+
+        <div class="card rise rise-2">
+          <div class="title">租房党的厨房收纳：房东不砸墙的 6 个位置</div>
+          <div class="meta">
+            <span class="chip ember"><span class="dot"></span>小红书</span>
+            <span class="chip sky">对标 · 住小帮</span>
+            <span class="chip">待加工</span>
+          </div>
+        </div>
+
+        <div class="card rise rise-3">
+          <div class="title">通勤包里只留这三件</div>
+          <div class="meta">
+            <span class="chip ember"><span class="dot"></span>抖音</span>
+            <span class="chip accent">来自复盘</span>
+            <span class="chip">待加工</span>
+          </div>
+          <div class="note">依据规则「清单型封面点击高 1.8 倍」。</div>
+        </div>
+
+        <div class="card rise rise-4">
+          <div class="title">梅雨天的家电除味：冰箱、洗衣机、空调</div>
+          <div class="meta">
+            <span class="chip leaf"><span class="dot"></span>视频号</span>
+            <span class="chip sand">热点</span>
+            <span class="chip">待加工</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="agentbar">
+      <span class="pulse"></span>
+      <span>Agent 正在制作「三种除味方案对比」· 预计 2 分钟</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+ "how": "shoot.mjs --record + --steps，先点主操作再点「写进规则」",
+ "frames": [
+  "step1-import-press.jpg 按下瞬间（dsh-press 回执）",
+  "step2-importing.jpg 按钮变「导入中…」且三个动作均 disabled",
+  "step3-rule-written.jpg 规则按钮变「已写进规则」+ 勾选图标"
+ ],
+ "why": "复评指出「主操作反馈、状态切换来路是没做，不是没拍到」；本轮在交付物里真的补上。"
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "project": "HamunaAgent · 运营视图",
+  "brief": "Chat 页右栏第 4 个 tab「运营」，承载选题 / 素材 / 排期 / 复盘 四域。三份分歧在信息结构：环（周期）／月历（时间）／台账（并列）。合成一份 = 整套四域页面，切分段即可换域。四份共用同一套 app 主题配色（hamuna-default 暖纸色 + 陶土 / 深青双色相）。",
+  "round": "02",
+  "lang": "zh",
+  "candidates": [
+    {
+      "id": "baseline",
+      "name": "现状 — 右栏没有运营视图",
+      "concept": "面板只是文件预览，四个域无处可去。做基线，让另外三份有对照。",
+      "typography": "等宽 14px / 1.75，与右栏现有文件预览一致",
+      "palette": ["#faf6ee", "#fffcf7", "#1c1612", "#6f6156"],
+      "traits": ["只读 JSON 预览", "无运营信息层级", "四域不可见"],
+      "kind": "html",
+      "source": "z0-baseline.html",
+      "baseline": true
+    },
+    {
+      "id": "a-loop",
+      "name": "方向 A · 回流环",
+      "concept": "环就是导航：四域按生产顺序排在环上，左上那段虚线是复盘回到选题的「回流」。点环上节点或右侧图例换域。",
+      "typography": "app 等宽字体做微标签与环心编号 + app 正文字体做大计数（28px）",
+      "palette": ["#faf6ee", "#b05e2d", "#2e6f5e", "#6f6156"],
+      "traits": ["环即导航", "回流边是主角", "每屏都带全局四域态", "段序 = 生产顺序"],
+      "kind": "html",
+      "source": "a.html",
+      "interactive": true
+    },
+    {
+      "id": "b-calendar",
+      "name": "方向 B · 月历主线",
+      "concept": "时间轴是骨架，四域是同一条月历上的不同标记：排期用平台章、选题用点、素材用点、复盘用播放柱。下方列表按当前域换分组。",
+      "typography": "app 等宽字体做日期与微标签 + app 正文字体做标题",
+      "palette": ["#faf6ee", "#b05e2d", "#2e6f5e", "#236d4a"],
+      "traits": ["月历恒在", "域只换标记与列表", "日历格高度一致", "柱高 = 播放量"],
+      "kind": "html",
+      "source": "b.html",
+      "interactive": true
+    },
+    {
+      "id": "c-ledger",
+      "name": "方向 C · 台账（已归档）",
+      "concept": "一张跨域总表，域只是筛选器。编号贯穿全表，规则行用深青渐变底 + 左侧轨标成「回流来源」。密度最高，一屏看全 19 条记录。**结构已被 D 取代**，保留作对照。",
+      "typography": "app 等宽字体做编号与指标 + app 正文字体做标题与统计数字",
+      "palette": ["#faf6ee", "#b05e2d", "#2e6f5e", "#9c5027"],
+      "traits": ["总表 + 筛选", "跨域编号", "规则行标记回流", "顶部四指标常驻", "状态列只给三种状态上色"],
+      "kind": "html",
+      "source": "c.html",
+      "interactive": true
+    },
+    {
+      "id": "d-dsh",
+      "name": "方向 D · dsh 复刻（已选定）",
+      "concept": "照搬 dsh-media-desk 的外观与结构：Hero 一句话结论 + 指标带、胶囊导航、深墨主角卡、卡片网格。四域共用一副外壳，切域换的是整套内容。颜色/字体/圆角全部换成 app token，宽屏与窄栏（容器查询 760 / 400 两档断点）自动切换。",
+      "typography": "app 正文字体做标题 + 衬线做数字（28px，受七档字阶上限约束）",
+      "palette": ["#faf6ee", "#1c1612", "#2e6f5e", "#c26d3a"],
+      "traits": ["Hero 结论句", "指标带按域换口径", "深墨主角卡", "胶囊导航", "四域各一套内容", "窄栏自动降级"],
+      "kind": "html",
+      "source": "d.html",
+      "interactive": true
+    }
+  ]
+}

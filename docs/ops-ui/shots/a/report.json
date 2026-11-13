@@ -1,0 +1,32 @@
+[
+  {
+    "file": "topics.png",
+    "state": "topics",
+    "size": "620x800",
+    "zoom": 1,
+    "issues": [
+      "加载错误：Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:41337/favicon.ico"
+    ]
+  },
+  {
+    "file": "assets.png",
+    "state": "assets",
+    "size": "620x800",
+    "zoom": 1,
+    "issues": []
+  },
+  {
+    "file": "schedule.png",
+    "state": "schedule",
+    "size": "620x800",
+    "zoom": 1,
+    "issues": []
+  },
+  {
+    "file": "reviews.png",
+    "state": "reviews",
+    "size": "620x800",
+    "zoom": 1,
+    "issues": []
+  }
+]

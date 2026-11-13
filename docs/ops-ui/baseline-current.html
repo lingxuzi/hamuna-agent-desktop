@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>现状 — Chat 右栏（文件 / 终端 / 浏览器）</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .shell { width: 600px; height: 780px; }
+  .preview { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .crumb { font-size: 12px; color: var(--ink-subtle); display: flex; gap: 6px; align-items: center; }
+  .doc { font-family: var(--font-code); font-size: 13px; line-height: 1.75; color: var(--ink-secondary); }
+  .doc b { color: var(--ink); font-weight: 600; }
+  .doc i { color: var(--ink-faint); font-style: normal; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tabbar">
+    <button class="tabbtn" aria-selected="true">文件<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">终端<span class="close">×</span></button>
+    <button class="tabbtn" aria-selected="false">浏览器<span class="close">×</span></button>
+  </div>
+  <div class="body">
+    <div class="preview">
+      <div class="crumb">workspace <span>/</span> ops <span>/</span> state.json</div>
+      <div class="doc">
+<pre>{
+  <b>"version"</b>: 1,
+  <b>"topics"</b>: [
+    { "id": "t_8f21", "title": "老房子的夏季除味",
+      "platform": "xiaohongshu",
+      "status": "planned" }
+  ],
+  <b>"assets"</b>: [
+    { "id": "a_4c07", "topicId": "t_8f21",
+      "title": "三种除味方案对比",
+      "scheduledAt": "2026-11-15T19:30:00+08:00" }
+  ],
+  <b>"reviews"</b>: [],
+  <b>"rules"</b>: []
+}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
