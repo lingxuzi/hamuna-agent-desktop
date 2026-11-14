@@ -21,6 +21,12 @@ vi.mock('@tauri-apps/api/core', async () => {
   };
 });
 
+// The chat composer is a contentEditable (RichComposer) so `/skill` and
+// `@asset` render as inline chips. It is located by its textbox role; typing
+// goes through user-event, which dispatches the input events the composer
+// listens for.
+const composer = () => screen.getByRole('textbox');
+
 const workspaceMocks = vi.hoisted(() => ({
   service: {
     isAvailable: true,
@@ -82,7 +88,7 @@ describe('SimpleChatInput send paths', () => {
     const user = userEvent.setup();
     const onSend = renderInput();
 
-    const textarea = screen.getByPlaceholderText('输入消息，使用 @ 引用文件，/ 使用技能...');
+    const textarea = composer();
     await user.type(textarea, 'chat hello');
     await user.click(screen.getByTitle(/发送/));
 
@@ -211,7 +217,7 @@ describe('SimpleChatInput send paths', () => {
       },
     });
 
-    const textarea = screen.getByPlaceholderText('输入消息，使用 @ 引用文件，/ 使用技能...');
+    const textarea = composer();
     await user.type(textarea, 'subscription hello');
     await user.click(screen.getByTitle(/发送/));
 
@@ -300,7 +306,7 @@ describe('SimpleChatInput send paths', () => {
     const user = userEvent.setup();
     const onSend = renderInput({ mode: 'launcher' });
 
-    const textarea = screen.getByPlaceholderText('今天，想干点啥？');
+    const textarea = composer();
     await user.type(textarea, 'launcher hello');
     await user.click(screen.getByTitle(/发送/));
 
@@ -312,7 +318,7 @@ describe('SimpleChatInput send paths', () => {
     const user = userEvent.setup();
     renderInput({ mode: 'launcher', providerAvailable: true });
 
-    expect(screen.getByPlaceholderText('What do you want to do today?')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'What do you want to do today?' })).toBeInTheDocument();
     expect(screen.getByTitle('Add context')).toBeInTheDocument();
     expect(screen.getByTitle('Switch execution mode')).toBeInTheDocument();
     expect(screen.getByTitle('Switch model')).toBeInTheDocument();
@@ -331,7 +337,7 @@ describe('SimpleChatInput send paths', () => {
 
   it('accepts pasted image attachments without routing through workspace file IO for external runtimes', async () => {
     renderInput({ mode: 'launcher' });
-    const textarea = screen.getByPlaceholderText('今天，想干点啥？');
+    const textarea = composer();
     const image = new File(['png'], 'clip.png', { type: 'image/png' });
 
     fireEvent.paste(textarea, {
@@ -352,7 +358,7 @@ describe('SimpleChatInput send paths', () => {
 
   it('pastes non-image attachments as workspace file references', async () => {
     renderInput({ mode: 'launcher', workspacePath: '/workspace' });
-    const textarea = screen.getByPlaceholderText('今天，想干点啥？');
+    const textarea = composer();
     const file = new File(['hello'], 'pasted.txt', { type: 'text/plain' });
 
     fireEvent.paste(textarea, {
@@ -366,7 +372,7 @@ describe('SimpleChatInput send paths', () => {
       },
     });
 
-    await waitFor(() => expect(textarea).toHaveValue('@hamuna_files/pasted.txt '));
+    await waitFor(() => expect(textarea.textContent).toBe('@hamuna_files/pasted.txt '));
     expect(workspaceMocks.service.importBase64Files).toHaveBeenCalledWith({
       files: [{ name: 'pasted.txt', content: expect.any(String) }],
       targetDir: 'hamuna_files',
@@ -383,7 +389,7 @@ describe('SimpleChatInput send paths', () => {
     );
 
     renderInput({ mode: 'launcher', workspacePath: '/workspace' });
-    const textarea = screen.getByPlaceholderText('今天，想干点啥？');
+    const textarea = composer();
     const file = new File(['hello'], 'pasted.txt', { type: 'text/plain' });
 
     fireEvent.paste(textarea, {
@@ -405,15 +411,15 @@ describe('SimpleChatInput send paths', () => {
     });
 
     await waitFor(() => {
-      expect((textarea as HTMLTextAreaElement).value).toContain('keep me');
-      expect((textarea as HTMLTextAreaElement).value).toContain('@hamuna_files/pasted.txt');
+      expect(textarea.textContent).toContain('keep me');
+      expect(textarea.textContent).toContain('@hamuna_files/pasted.txt');
     });
   });
 
   it('copies dropped filesystem paths as workspace file references through the imperative handle', async () => {
     const ref = createRef<SimpleChatInputHandle>();
     renderInput({ mode: 'launcher', ref, workspacePath: '/workspace' });
-    const textarea = screen.getByPlaceholderText('今天，想干点啥？');
+    const textarea = composer();
 
     await act(async () => {
       const handle = ref.current;
@@ -421,7 +427,7 @@ describe('SimpleChatInput send paths', () => {
       await handle.processDroppedFilePaths(['/tmp/report.pdf']);
     });
 
-    await waitFor(() => expect(textarea).toHaveValue('@hamuna_files/report.pdf '));
+    await waitFor(() => expect(textarea.textContent).toBe('@hamuna_files/report.pdf '));
     expect(workspaceMocks.service.copyPaths).toHaveBeenCalledWith({
       sourcePaths: ['/tmp/report.pdf'],
       targetDir: 'hamuna_files',
@@ -440,7 +446,7 @@ describe('SimpleChatInput send paths', () => {
     );
 
     renderInput({ mode: 'launcher', ref, workspacePath: '/workspace' });
-    const textarea = screen.getByPlaceholderText('今天，想干点啥？');
+    const textarea = composer();
 
     const handle = ref.current;
     if (!handle?.processDroppedFilePaths) throw new Error('SimpleChatInput ref was not mounted');
@@ -454,8 +460,8 @@ describe('SimpleChatInput send paths', () => {
     });
 
     await waitFor(() => {
-      expect((textarea as HTMLTextAreaElement).value).toContain('keep me');
-      expect((textarea as HTMLTextAreaElement).value).toContain('@hamuna_files/report.pdf');
+      expect(textarea.textContent).toContain('keep me');
+      expect(textarea.textContent).toContain('@hamuna_files/report.pdf');
     });
   });
 

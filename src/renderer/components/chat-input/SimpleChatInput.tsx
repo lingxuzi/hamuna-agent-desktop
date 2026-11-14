@@ -1,5 +1,7 @@
 import { AlertCircle, ChevronRight, ChevronUp, Gauge, Loader, Loader2, Paperclip, Plus, Send, Square, X, FileText, AtSign, Wrench, Timer, Settings2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react';
+
+import RichComposer, { asTextarea, type ComposerFacade } from './RichComposer';
 import { useTranslation } from 'react-i18next';
 
 import Tip from '@/components/Tip';
@@ -293,9 +295,28 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
   }, [composerConfigLockedReason]);
 
   const { openPreview } = useImagePreview();
-  // Use external ref if provided, otherwise use internal ref
-  const internalRef = useRef<HTMLTextAreaElement>(null);
-  const textareaRef = inputRef ?? internalRef;
+  // Use external ref if provided, otherwise use internal ref.
+  //
+  // The visible editor is a contentEditable (RichComposer) so `/skill` and
+  // `@asset` markers can render as inline chips. All ~30 call sites still speak
+  // HTMLTextAreaElement, so `composerFacadeRef` carries a duck-typed object and
+  // `asTextarea` is the single cast that bridges the two. `externalFacadeRef` is
+  // the same object mirrored onto the caller-supplied ref (Chat.tsx reads
+  // `.value` / `setSelectionRange` off it).
+  const internalFacadeRef = useRef<ComposerFacade | null>(null);
+  const externalFacadeRef = useRef<ComposerFacade | null>(null);
+  const composerFacadeRef = inputRef ? externalFacadeRef : internalFacadeRef;
+  // Stable proxy: `.current` always reads through to whichever facade the
+  // composer installed, so call sites keep their `textareaRef.current?.x`
+  // shape and never capture a null from the first render.
+  const textareaRef = useMemo<React.RefObject<HTMLTextAreaElement | null>>(
+    () => ({
+      get current() {
+        return asTextarea(composerFacadeRef.current);
+      },
+    } as React.RefObject<HTMLTextAreaElement | null>),
+    [composerFacadeRef],
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Anchor refs for Popover-based dropdowns. The textarea wrapper anchors
   // the @file and /slash menus (both sit at the bottom of the textarea
@@ -631,14 +652,21 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
 
     // Add space before if needed (not at start, not after space/newline)
     const needsSpaceBefore = before.length > 0 && !/[\s]$/.test(before);
-    // Add space after if needed (not at end, not before space/newline)
-    const needsSpaceAfter = after.length > 0 && !/^[\s]/.test(after);
+    // Always separate the token from what follows it — even at the end of the
+    // input. A marker with nothing after it would swallow the next character
+    // the user types and fall back to plain text; the trailing space keeps it
+    // a chip of its own.
+    const needsSpaceAfter = after.length > 0 ? !/^[\s]/.test(after) : true;
 
     const newValue = `${before}${needsSpaceBefore ? ' ' : ''}${references}${needsSpaceAfter ? ' ' : ''}${after}`;
     setInputValue(newValue);
 
-    // Focus textarea and set cursor after the inserted references
-    const newCursorPos = cursorPos + (needsSpaceBefore ? 1 : 0) + references.length + (needsSpaceAfter ? 1 : 0);
+    // Focus textarea and set cursor after the inserted references — and after
+    // the separator that follows them. The composer renders a reference as a
+    // chip, and a caret glued to the chip would swallow the next character
+    // the user types.
+    const separator = needsSpaceAfter ? ' ' : (after.match(/^\s*/)?.[0] ?? '');
+    const newCursorPos = cursorPos + (needsSpaceBefore ? 1 : 0) + references.length + separator.length;
     setTimeout(() => {
       textareaRef.current?.focus();
       textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos);
@@ -647,7 +675,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
 
   // Append a reference token to the END of input with leading-space padding and
   // guaranteed trailing space. Used by file-preview 「引用文件」/ 「引用」 selection.
-  // Distinct from `insertReferences` (insert at cursor, no trailing space) — appending
+  // Distinct from `insertReferences` (insert at the cursor) — appending
   // and trailing-space matter for the file-preview UX where the user always wants a
   // ready-to-type position right after the token.
   const appendReferenceToken = useCallback((token: string) => {
@@ -674,10 +702,15 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
     const before = currentInput.slice(0, cursorPos);
     const after = currentInput.slice(cursorPos);
     const needsSpaceBefore = before.length > 0 && !/[\s]$/.test(before);
-    const needsSpaceAfter = after.length > 0 && !/^[\s]/.test(after);
+    // Same rule as the @references: the marker always ends separated from what
+    // follows, so the next character the user types cannot merge into it.
+    const needsSpaceAfter = after.length > 0 ? !/^[\s]/.test(after) : true;
     const newValue = `${before}${needsSpaceBefore ? ' ' : ''}${slashCmd}${needsSpaceAfter ? ' ' : ''}${after}`;
     setInputValue(newValue);
-    const newCursorPos = cursorPos + (needsSpaceBefore ? 1 : 0) + slashCmd.length + (needsSpaceAfter ? 1 : 0);
+    // The caret lands after the command and after the separator that follows
+    // it — same reason as in `insertReferences`.
+    const separator = needsSpaceAfter ? ' ' : (after.match(/^\s*/)?.[0] ?? '');
+    const newCursorPos = cursorPos + (needsSpaceBefore ? 1 : 0) + slashCmd.length + separator.length;
     setTimeout(() => {
       textareaRef.current?.focus();
       textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos);
@@ -806,10 +839,10 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
     };
   }, [fileSearchQuery, showFileSearch, mentionTab]);
 
-  // Handle text input change (detect @ and / and backspace)
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    const cursorPos = e.target.selectionStart;
+  // Handle text input change (detect @ and / and backspace). RichComposer
+  // passes the plain text and caret offset; the signature replaced the old
+  // ChangeEvent<HTMLTextAreaElement> shape when the editor became contentEditable.
+  const handleInputChange = useCallback((newValue: string, cursorPos: number) => {
 
     // Track current state locally to avoid stale closure issues
     let currentShowFileSearch = showFileSearch;
@@ -1059,7 +1092,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
   // eslint-disable-next-line react-hooks/exhaustive-deps -- textareaRef is a stable ref
   }, [slashPosition, inputValue, slashSearchQuery, handleSkillSelect, onSlashAction, showConfigLockedReason]);
 
-  const handleKeyDown = useCallback(async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = useCallback(async (event: React.KeyboardEvent<HTMLElement>) => {
     // Shift+Tab to cycle permission mode
     if (event.key === 'Tab' && event.shiftKey) {
       event.preventDefault();
@@ -1415,18 +1448,20 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
             </div>
           )}
 
-          {/* Textarea area */}
+          {/* Editor area. RichComposer renders `/skill` and `@asset` markers as
+              inline chips inside the text flow; textContent stays identical to
+              `inputValue`, so every downstream path is unchanged. */}
           <div ref={textareaWrapperRef} className="relative px-4 pt-3">
-            <textarea
-              ref={textareaRef}
+            <RichComposer
               value={inputValue}
-              // Bug #123: lock the textarea while the repetition-warning
-              // dialog is open. Without this, an IME composition during the
-              // dialog window could mutate inputValue between detection and
-              // the user's confirm click — the dialog would describe content
-              // that no longer matches what handleSend reads.
-              readOnly={!!repetitionWarning}
               onChange={handleInputChange}
+              facadeRef={composerFacadeRef}
+              // Bug #123: lock the field while the repetition-warning dialog is
+              // open. Without this, an IME composition during the dialog window
+              // could mutate inputValue between detection and the user's confirm
+              // click — the dialog would describe content that no longer
+              // matches what handleSend reads.
+              readOnly={!!repetitionWarning}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onCompositionStart={handleCompositionStart}
@@ -1436,8 +1471,7 @@ const SimpleChatInput = memo(forwardRef<SimpleChatInputHandle, SimpleChatInputPr
                   ? t('input.launcherPlaceholder')
                   : t('input.placeholder')
               }
-              rows={effectiveMinLines}
-              className="block w-full resize-none bg-transparent text-base leading-relaxed text-[var(--ink)] outline-none placeholder:text-[var(--ink-muted)]"
+              className="resize-none bg-transparent text-base leading-relaxed text-[var(--ink)]"
               style={{
                 minHeight: `${LINE_HEIGHT * effectiveMinLines}px`,
                 maxHeight: `${LINE_HEIGHT * MAX_LINES}px`,
