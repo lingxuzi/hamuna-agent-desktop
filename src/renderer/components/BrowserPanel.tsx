@@ -78,6 +78,16 @@ interface BrowserPanelProps {
   workspace?: string | null;
   onCreateFailed: () => void;
   /**
+   * Single-page mode: the panel hosts exactly one page, so the tab strip is
+   * hidden and no extra tab can be opened.
+   *
+   * The social-login takeover needs this. Its probe addresses the owner and
+   * Rust resolves that to the owner's SELECTED tab — a second tab would take
+   * the selection away from the login page, and the probe would poll a blank
+   * page forever. A login page has no use for a tab strip anyway.
+   */
+  singleTab?: boolean;
+  /**
    * Called once a native webview of this panel exists. Consumers that need
    * to know "the browser is up" (the social-login probe polls the page)
    * use it; the panel itself does not need the answer.
@@ -104,6 +114,7 @@ export default function BrowserPanel({
   sourceFile,
   workspace,
   onCreateFailed,
+  singleTab = false,
   onBrowserCreated,
   onClose,
   onSwitchToEditor,
@@ -356,7 +367,11 @@ export default function BrowserPanel({
   // The agent asks for a tab by URL; the renderer is the only side that can
   // create a webview. Chat.tsx listens to the same event to bring the browser
   // view on screen — this side creates the tab.
+  //
+  // A single-page panel does not register the listener at all: an extra tab
+  // would steal the owner selection from the page the parent probes.
   useEffect(() => {
+    if (singleTab) return;
     const ac = new AbortController();
 
     void listenWithCleanup<{ url?: string }>(
@@ -370,7 +385,7 @@ export default function BrowserPanel({
     );
 
     return () => ac.abort();
-  }, [tabId, createTab]);
+  }, [tabId, createTab, singleTab]);
 
   // ── Geometry reconciler (issue #339) ──
   //
@@ -494,9 +509,10 @@ export default function BrowserPanel({
   }, [onClose, setTabs, setActiveTabId]);
 
   const handleNewTab = useCallback(() => {
+    if (singleTab) return;
     if (tabsRef.current.length >= MAX_BROWSER_TABS) return;
     void createTab(BROWSER_BLANK_URL);
-  }, [createTab]);
+  }, [createTab, singleTab]);
 
   // ── Navigation handlers ──
   const handleGoBack = useCallback(() => {
@@ -583,7 +599,7 @@ export default function BrowserPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Tab strip — one native webview per tab, frontmost one on screen */}
-      {tabs.length > 0 && (
+      {!singleTab && tabs.length > 0 && (
         <div className="flex h-7 flex-shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--paper)] px-1.5">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;

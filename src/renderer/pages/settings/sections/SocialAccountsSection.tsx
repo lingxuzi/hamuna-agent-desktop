@@ -218,6 +218,10 @@ export function SocialAccountsSection({ isActive = true }: SocialAccountsSection
               url={activeLogin.platform.loginUrl}
               isVisible={isActive}
               isDraggingSplit={false}
+              // One page per login: the probe below polls the owner's selected
+              // tab, so a second tab would take the selection away from the
+              // login page and the probe would never see the logged-in state.
+              singleTab
               onBrowserCreated={handleBrowserCreated}
               onCreateFailed={closeLogin}
               onClose={closeLogin}

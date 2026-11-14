@@ -9,7 +9,8 @@
  *   - clicking a tab selects that native webview;
  *   - closing the frontmost tab promotes the newest remaining one;
  *   - closing the last tab tears the whole panel down;
- *   - the agent's `browser open --new-tab` request creates a tab too.
+ *   - the agent's `browser open --new-tab` request creates a tab too;
+ *   - a single-page panel shows no strip and refuses extra tabs.
  *
  * The native side (Rust) is mocked — what matters here is the renderer's
  * bookkeeping of which tab is frontmost, because that is what decides which
@@ -258,5 +259,22 @@ describe('BrowserPanel tab strip', () => {
     expect(tabWrappers(container)).toHaveLength(2);
     // The agent's page is the frontmost one.
     expect(urlBarText(container)).toContain('https://agent.example');
+  });
+
+  it('keeps a single-page panel on one tab', async () => {
+    // The social-login takeover polls the owner's SELECTED tab (Rust resolves
+    // the owner id to it), so a second tab would take the selection away from
+    // the login page and the probe would never see the logged-in state.
+    const { container } = render(<BrowserPanel {...panelProps({ singleTab: true })} />);
+    await flush();
+
+    expect(createCalls()).toHaveLength(1);
+    // No strip at all — neither the new-tab button nor a per-tab close button.
+    expect(container.querySelector(`button[aria-label="${label('newTab')}"]`)).toBeNull();
+    expect(container.querySelector(`button[aria-label="${label('closeTab')}"]`)).toBeNull();
+    // The agent's request is not even subscribed in this mode.
+    expect(listeners.get('browser:agent-new-tab-request:tab-1')).toBeUndefined();
+    // The page itself is still shown.
+    expect(urlBarText(container)).toContain('https://example.com');
   });
 });
