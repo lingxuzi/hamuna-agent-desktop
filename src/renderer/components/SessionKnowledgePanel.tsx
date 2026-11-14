@@ -1,15 +1,14 @@
-// SessionKnowledgePanel — per-conversation knowledge dashboard, horizontal strip.
+// SessionKnowledgePanel — per-conversation knowledge dashboard popover.
 //
-// Visual language borrowed from the neural-creator-dashboard reference:
-// deep space ground, an additive-halo orb, drifting jellyfish, glowing curves and
-// pulses travelling along them. What is deliberately NOT copied: the reference's
-// 1280×720 orb.mp4 and its whole-page topbar/home-stage layout. The orb is
-// repainted frame-by-frame into a <canvas> (paintVideo below) instead of shown as
-// a bare <video> — some embedded WebViews decode video but never composite the
-// frame, which leaves the orb invisible. The <video> stays in the DOM at
-// opacity 0 purely to drive playback.
+// Visual language: SETS MACHINE's gene-pool mesh (filled nodes with thin paper
+// strokes, ambient drift, birth pulse rings, dashed selection rings, hairline
+// edges) repainted in the app theme tokens, plus pulse particles travelling
+// along relations. The graph engine (KbGraphView) owns that rendering; this
+// component owns the popover shell.
 //
-// The strip runs full-width along the bottom of the chat content area.
+// Shell: a 4:3 popover that unfolds from the toolbar toggle button like a
+// sheet of paper (transform-origin top-right, scaleY → scaleX two-stage ease).
+// Width ≈ 40% of the app viewport, so it never covers the whole conversation.
 
 import { Waypoints, X, LocateFixed } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -19,8 +18,6 @@ import { useTabState } from '@/context/TabContext';
 import { renderGraph, stopAnimation, updateGraph, type GraphNode, type GraphView } from '@/components/KbGraphView';
 import type { KbGraph } from '@/api/kbClient';
 import type { SessionKnowledgeGraph } from '../../shared/sessionKnowledge';
-import orbSrc from '@/assets/knowledge/orb.mp4';
-import jellySrc from '@/assets/knowledge/jellyfish.mp4';
 import './SessionKnowledgePanel.css';
 
 interface SessionKnowledgePanelProps {
@@ -28,137 +25,20 @@ interface SessionKnowledgePanelProps {
   onLocateMessage: (messageId: string) => void;
 }
 
-/** Posters double as the pre-roll frame: a video that has not decoded yet would
- *  otherwise leave a hole in the orb for the first few hundred ms. */
-const ORB_POSTER =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="34" fill="#232523"/><circle cx="50" cy="50" r="22" fill="#3a3d3a"/><circle cx="42" cy="44" r="8" fill="#e6cf98" opacity=".55"/></svg>`,
-  );
-
-interface VideoPair {
-  video: HTMLVideoElement | null;
-  canvas: HTMLCanvasElement | null;
-  stamp: number;
-  ready: boolean;
-}
-
-const posterCache = new Map<string, HTMLImageElement>();
-function posterOf(url: string): HTMLImageElement | null {
-  if (!url) return null;
-  let img = posterCache.get(url);
-  if (!img) {
-    img = new Image();
-    img.src = url;
-    posterCache.set(url, img);
-  }
-  return img;
-}
-
-/** Draw the current video frame into its canvas, cover-cropped. Mirrors
- *  `paintVideo()` in the reference project: the element that paints is always a
- *  canvas, never the <video> itself. */
-function paintVideo(pair: VideoPair): void {
-  const { video, canvas } = pair;
-  if (!video || !canvas) return;
-  const cw = canvas.clientWidth;
-  const ch = canvas.clientHeight;
-  if (!cw || !ch) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const W = Math.round(cw * dpr);
-  const H = Math.round(ch * dpr);
-  const resized = canvas.width !== W || canvas.height !== H;
-  if (resized) canvas.width = W;
-  if (resized) canvas.height = H;
-  const ready = video.readyState >= 2 && video.videoWidth > 0;
-  const poster = posterOf(video.poster);
-  if (!ready && !poster) return;
-  const sw0 = ready ? video.videoWidth : poster!.naturalWidth;
-  const sh0 = ready ? video.videoHeight : poster!.naturalHeight;
-  if (!sw0 || !sh0) return;
-  const stamp = ready ? video.currentTime : -1;
-  if (!resized && stamp === pair.stamp && ready === pair.ready) return;
-  pair.stamp = stamp;
-  pair.ready = ready;
-  // object-fit: cover
-  const k = Math.max(W / sw0, H / sh0);
-  const sw = W / k;
-  const sh = H / k;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.clearRect(0, 0, W, H);
-  ctx.drawImage(ready ? video : poster!, (sw0 - sw) / 2, (sh0 - sh) / 2, sw, sh, 0, 0, W, H);
-}
-
-function prefersReducedMotion(): boolean {
-  // jsdom defines the `matchMedia` key without implementing it, so the guard
-  // has to check the value is callable, not just that the key exists.
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 export default function SessionKnowledgePanel({ onClose, onLocateMessage }: SessionKnowledgePanelProps) {
   const { t } = useTranslation('chat');
   const { knowledgeGraph, knowledgeExtracting } = useTabState();
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewRef = useRef<GraphView | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
+  const [unfolded, setUnfolded] = useState(false);
 
-  // ── Orb + jellyfish ────────────────────────────────────────────────────
-  // Ambient scene behind the graph: an orb breathing at center-left and a
-  // jellyfish drifting along it. Both are decorative, so they sit under
-  // pointer-events:none and never intercept node clicks.
-  const orbVideoRef = useRef<HTMLVideoElement | null>(null);
-  const orbCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const jellyVideoRef = useRef<HTMLVideoElement | null>(null);
-  const jellyCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const orbPairRef = useRef<VideoPair>({ video: null, canvas: null, stamp: -1, ready: false });
-  const jellyPairRef = useRef<VideoPair>({ video: null, canvas: null, stamp: -1, ready: false });
-
+  // Paper-unfold: mount hidden, then flip the class on the next frame so the
+  // transition actually plays (scaleY 0.6 → 1, then scaleX finishes the sheet).
   useEffect(() => {
-    const reduced = prefersReducedMotion();
-    orbPairRef.current.video = orbVideoRef.current;
-    orbPairRef.current.canvas = orbCanvasRef.current;
-    jellyPairRef.current.video = jellyVideoRef.current;
-    jellyPairRef.current.canvas = jellyCanvasRef.current;
-    let raf = 0;
-    let warned = false;
-
-    const tick = () => {
-      // Schedule the next frame BEFORE drawing: one bad frame must not freeze
-      // the scene permanently (reference project hit exactly this bug).
-      raf = requestAnimationFrame(tick);
-      try {
-        paintVideo(orbPairRef.current);
-        paintVideo(jellyPairRef.current);
-      } catch (err) {
-        if (!warned) {
-          warned = true;
-          console.error('[SessionKnowledgePanel] scene frame failed:', err);
-        }
-      }
-    };
-    raf = requestAnimationFrame(tick);
-
-    const vids = [orbVideoRef.current, jellyVideoRef.current].filter((v): v is HTMLVideoElement => !!v);
-    const sync = () => {
-      for (const v of vids) {
-        if (reduced || document.hidden) {
-          v.pause();
-          continue;
-        }
-        // jsdom's play() returns undefined rather than a promise; guard both.
-        const r = v.play() as Promise<void> | undefined;
-        if (r && typeof r.catch === 'function') r.catch(() => undefined);
-      }
-    };
-    sync();
-    document.addEventListener('visibilitychange', sync);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      document.removeEventListener('visibilitychange', sync);
-    };
+    const raf = requestAnimationFrame(() => setUnfolded(true));
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   // Mount: build the graph view. Unmount / graph-identity change: stop raf.
@@ -190,7 +70,7 @@ export default function SessionKnowledgePanel({ onClose, onLocateMessage }: Sess
   }, []);
 
   // Incremental updates: merge new entities/relations into the live view
-  // without resetting positions.
+  // without resetting positions — new nodes carry their own birth pulse.
   const lastGraphRef = useRef<SessionKnowledgeGraph | null>(null);
   useEffect(() => {
     const view = viewRef.current;
@@ -225,24 +105,12 @@ export default function SessionKnowledgePanel({ onClose, onLocateMessage }: Sess
 
   return (
     <div
-      className="skp-root"
+      ref={rootRef}
+      className={`skp-root ${unfolded ? 'skp-open' : ''}`}
       role="complementary"
       aria-label={t('shell.knowledge.title')}
       onMouseDown={e => e.stopPropagation()}
     >
-      {/* Ambient scene — decorative, must never swallow graph clicks. */}
-      <div className="skp-scene" aria-hidden="true">
-        <div className="skp-orb">
-          <div className="skp-orb-halo" />
-          <video ref={orbVideoRef} className="skp-vsrc" src={orbSrc} poster={ORB_POSTER} muted loop playsInline autoPlay preload="auto" />
-          <canvas ref={orbCanvasRef} className="skp-vid skp-orb-vid" />
-        </div>
-        <div className="skp-jelly">
-          <video ref={jellyVideoRef} className="skp-vsrc" src={jellySrc} muted loop playsInline autoPlay preload="auto" />
-          <canvas ref={jellyCanvasRef} className="skp-vid skp-jelly-vid" />
-        </div>
-      </div>
-
       <div className="skp-bar">
         <Waypoints className={`skp-icon ${knowledgeExtracting ? 'skp-pulse' : ''}`} />
         <span className="skp-title">{t('shell.knowledge.title')}</span>
@@ -258,13 +126,34 @@ export default function SessionKnowledgePanel({ onClose, onLocateMessage }: Sess
         </button>
       </div>
 
-      <div className="skp-stage">
-        <canvas ref={canvasRef} className="skp-canvas" />
-        {(!stats || stats.entities === 0) && (
-          <div className="skp-empty">
-            <Waypoints className="skp-empty-icon" />
-            <p className="skp-empty-p">{t('shell.knowledge.empty')}</p>
-            <p className="skp-empty-hint">{t('shell.knowledge.emptyHint')}</p>
+      <div className="skp-body">
+        <div className="skp-stage">
+          <canvas ref={canvasRef} className="skp-canvas" />
+          {(!stats || stats.entities === 0) && (
+            <div className="skp-empty">
+              <Waypoints className="skp-empty-icon" />
+              <p className="skp-empty-p">{t('shell.knowledge.empty')}</p>
+              <p className="skp-empty-hint">{t('shell.knowledge.emptyHint')}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Concept ledger — numbered scan column; selection syncs both ways
+            (ledger row ⇆ graph node). Hidden when nothing extracted yet. */}
+        {stats && stats.entities > 0 && (
+          <div className="skp-ledger">
+            {knowledgeGraph?.entities.slice(0, 24).map((e, i) => (
+              <button
+                key={e.id}
+                type="button"
+                className={`skp-row ${selected?.id === e.id ? 'skp-row-sel' : ''}`}
+                onClick={() => setSelected(viewRef.current?.nodes.find(n => n.id === e.id) ?? null)}
+              >
+                <span className="skp-row-no">{String(i + 1).padStart(2, '0')}</span>
+                <span className="skp-row-nm">{e.label}</span>
+                <span className="skp-row-ct">{e.sources?.length ?? 0}</span>
+              </button>
+            ))}
           </div>
         )}
       </div>

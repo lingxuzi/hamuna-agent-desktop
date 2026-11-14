@@ -30,6 +30,8 @@ interface GraphNode extends d3.SimulationNodeDatum {
   sources: string[];
   /** relations touching this node (computed once links resolve) */
   rels: { label: string; other: string; typed: boolean }[];
+  /** SETS-style ambient drift phase (per-node, fixed at spawn) */
+  driftPhase: number;
 }
 
 interface GraphLink {
@@ -54,6 +56,12 @@ interface GraphView {
   expanded: Set<string>;
   raf: number;
   destroyed: boolean;
+  /** SETS-style birth animation: node id → spawn timestamp (seconds, performance clock) */
+  births: Map<string, number>;
+  /** pulse particles travelling along links: {link, k(0..1), speed} */
+  pulses: { link: GraphLink; k: number; speed: number }[];
+  /** last frame time for particle integration */
+  lastT: number;
   /** localized tooltip labels */
   ui: { type: string; sources: string; relations: string };
 }
@@ -75,10 +83,39 @@ function cssVar(name: string, fallback: string, root?: HTMLElement): string {
   return v || fallback;
 }
 
+/** #rrggbb → rgba(r,g,b,a). Falls back to the fallback color's alpha when the
+ *  token is not a plain hex (e.g. oklch()) — callers only use this for soft
+ *  washes, so a conservative fallback is fine. */
+function hexA(hex: string, a: number, fallback: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  return fallback.replace(/[\d.]+\)$/, `${a})`);
+}
+
+/** Ambient drift (SETS nodeXY): small per-node sinusoidal wander on top of the
+ *  force layout — the graph feels alive without fighting the physics. */
+function driftPos(n: GraphNode, t: number): { x: number; y: number } {
+  return {
+    x: (n.x ?? 0) + Math.sin(t * 0.5 + n.driftPhase) * 3,
+    y: (n.y ?? 0) + Math.cos(t * 0.42 + n.driftPhase * 1.3) * 2.5,
+  };
+}
+
+const easeInOut = (x: number): number => {
+  const c = Math.max(0, Math.min(1, x));
+  return c < 0.5 ? 4 * c * c * c : 1 - Math.pow(-2 * c + 2, 3) / 2;
+};
+
 /** Main render loop: redraw the canvas every frame while animating. */
 function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+
+  const now = performance.now() / 1000;
+  const dt = Math.min(0.1, Math.max(0, now - (view.lastT || now)));
+  view.lastT = now;
 
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
@@ -90,15 +127,19 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
 
   const { transform, nodes, links } = view;
   const isLarge = nodes.length > LARGE_THRESHOLD;
+  const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  const accent = cssVar('--accent', '#4f8cff', canvas);
   const colors = {
-    link: cssVar('--line', '#d0d0d0', canvas),
-    linkTyped: cssVar('--accent', '#4f8cff', canvas),
-    node: cssVar('--accent', '#4f8cff', canvas),
+    paper: cssVar('--paper', '#fafafa', canvas),
+    line: cssVar('--line', '#d0d0d0', canvas),
+    accent,
     nodeText: cssVar('--ink', '#222', canvas),
     labelText: cssVar('--ink-muted', '#888', canvas),
-    hover: cssVar('--button-primary-bg', '#4f8cff', canvas),
+    hover: cssVar('--ink-muted', '#888', canvas),
   };
+  // Accent wash fallback when --accent isn't plain hex (e.g. oklch themes).
+  const accentWash = hexA(accent, 0.08, 'rgba(79,140,255,0.08)');
 
   ctx.save();
   ctx.translate(transform.x, transform.y);
@@ -111,7 +152,6 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
   const expanded = view.expanded;
   const visible = new Set<GraphLink>();
   if (expanded.size > 0) {
-    // All edges touching any expanded node.
     for (const l of links) {
       const s = l.source as GraphNode;
       const t = l.target as GraphNode;
@@ -137,26 +177,32 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
     }
   }
 
-  // Links.
-  ctx.lineWidth = 1 / transform.k;
-  ctx.globalAlpha = 0.7;
+  // Positions with ambient drift (cached per frame for edges + nodes).
+  const P = new Map<GraphNode, { x: number; y: number }>();
+  for (const n of nodes) if (n.x != null) P.set(n, driftPos(n, now));
+
+  // Links — thin species-colored strokes (SETS 0.7px hairlines).
+  ctx.lineWidth = 0.7 / transform.k;
+  ctx.globalAlpha = 0.75;
   ctx.beginPath();
   let any = false;
   for (const l of visible) {
     const s = l.source as GraphNode;
     const t = l.target as GraphNode;
-    if (s.x == null || t.x == null) continue;
+    const ps = P.get(s);
+    const pt = P.get(t);
+    if (!ps || !pt) continue;
     any = true;
-    ctx.moveTo(s.x ?? 0, s.y ?? 0);
-    ctx.lineTo(t.x ?? 0, t.y ?? 0);
+    ctx.moveTo(ps.x, ps.y);
+    ctx.lineTo(pt.x, pt.y);
   }
   if (any) {
-    ctx.strokeStyle = colors.link;
+    ctx.strokeStyle = colors.line;
     ctx.stroke();
   }
   // Typed links drawn over, slightly thicker + accent colored.
-  ctx.globalAlpha = 0.85;
-  ctx.lineWidth = 1.8 / transform.k;
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1.4 / transform.k;
   ctx.beginPath();
   let typedDrawn = false;
   for (const l of visible) {
@@ -164,31 +210,115 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
     typedDrawn = true;
     const s = l.source as GraphNode;
     const t = l.target as GraphNode;
-    if (s.x == null || t.x == null) continue;
-    ctx.moveTo(s.x ?? 0, s.y ?? 0);
-    ctx.lineTo(t.x ?? 0, t.y ?? 0);
+    const ps = P.get(s);
+    const pt = P.get(t);
+    if (!ps || !pt) continue;
+    ctx.moveTo(ps.x, ps.y);
+    ctx.lineTo(pt.x, pt.y);
   }
   if (typedDrawn) {
-    ctx.strokeStyle = colors.linkTyped;
+    ctx.strokeStyle = hexA(accent, 0.55, accentWash);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
 
-  // Nodes.
-  const r = isLarge ? 5 : 7;
-  ctx.fillStyle = colors.node;
-  for (const n of nodes) {
-    if (n.x == null) continue;
-    ctx.beginPath();
-    ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, Math.PI * 2);
-    ctx.fill();
+  // ── Pulse particles (SETS lineage pulses, generalized): small glowing
+  // heads travelling along visible links. Reduced-motion or huge graphs
+  // disable them — they are pure decoration.
+  if (!reduced && !isLarge && visible.size > 0) {
+    // Maintain the particle pool: one particle per link, staggered phases.
+    const alive = view.pulses.filter((p) => visible.has(p.link));
+    if (alive.length !== view.pulses.length) {
+      view.pulses = alive;
+      for (const l of visible) {
+        if (!view.pulses.some((p) => p.link === l)) {
+          view.pulses.push({ link: l, k: Math.random(), speed: 0.25 + Math.random() * 0.2 });
+        }
+      }
+    }
+    for (const p of view.pulses) {
+      p.k = (p.k + p.speed * dt) % 1;
+      const s = p.link.source as GraphNode;
+      const t = p.link.target as GraphNode;
+      const ps = P.get(s);
+      const pt = P.get(t);
+      if (!ps || !pt) continue;
+      const e = easeInOut(p.k);
+      const x = ps.x + (pt.x - ps.x) * e;
+      const y = ps.y + (pt.y - ps.y) * e;
+      // Trailing stroke (parent→child feel).
+      ctx.strokeStyle = hexA(accent, 0.4, accentWash);
+      ctx.lineWidth = 1.6 / transform.k;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ps.x, ps.y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      // Glow head.
+      const rr = 5 / transform.k;
+      const hg = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      hg.addColorStop(0, hexA(accent, 0.85, accentWash));
+      hg.addColorStop(1, hexA(accent, 0, accentWash));
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(x, y, rr, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  // Hover highlight.
-  if (view.hover && view.hover.x != null) {
-    ctx.fillStyle = colors.hover;
+
+  // ── Nodes — SETS language: filled circles + thin paper-colored stroke, a
+  // breathing halo on some nodes, birth pulse ring + label on new nodes.
+  const r = isLarge ? 5 : 7;
+  for (const n of nodes) {
+    const p = P.get(n);
+    if (!p) continue;
     ctx.beginPath();
-    ctx.arc(view.hover.x ?? 0, view.hover.y ?? 0, r + 3, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    const isHover = view.hover === n;
+    const isInspected = view.expanded.has(n.id);
+    ctx.fillStyle = isHover || isInspected ? hexA(accent, 0.95, accentWash) : hexA(accent, 0.82, accentWash);
     ctx.fill();
+    ctx.strokeStyle = colors.paper;
+    ctx.lineWidth = 1 / transform.k;
+    ctx.stroke();
+    if (isHover || isInspected) {
+      ctx.strokeStyle = hexA(accent, 0.9, accentWash);
+      ctx.lineWidth = 1.6 / transform.k;
+      ctx.setLineDash([3 / transform.k, 3 / transform.k]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r + 6 / transform.k, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // Birth pulses: expanding ring + fading label for nodes spawned recently.
+  if (!reduced) {
+    for (const [id, t0] of view.births) {
+      const k = (now - t0) / 1.2;
+      if (k >= 1) {
+        view.births.delete(id);
+        continue;
+      }
+      const n = nodes.find((nd) => nd.id === id);
+      const p = n ? P.get(n) : null;
+      if (!p || !n) continue;
+      ctx.strokeStyle = hexA(accent, 1 - k, accentWash);
+      ctx.lineWidth = 1.5 / transform.k;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r + 4 + k * 24, 0, Math.PI * 2);
+      ctx.stroke();
+      if (k < 0.7) {
+        ctx.globalAlpha = 1 - k / 0.7;
+        ctx.font = `${11 / transform.k}px system-ui, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = colors.accent;
+        ctx.fillText(n.label, p.x + r + 7 / transform.k, p.y - 9 / transform.k - (k * 8) / transform.k);
+        ctx.globalAlpha = 1;
+      }
+    }
   }
 
   // Labels: always for small graphs; for large graphs only when zoomed in
@@ -263,7 +393,7 @@ function drawFrame(view: GraphView, canvas: HTMLCanvasElement): void {
     for (let i = 1; i < lines.length; i++) {
       const y = py + lineH / 2 + 4 + i * lineH;
       if (lines[i] === relHeader) {
-        ctx.fillStyle = colors.linkTyped;
+        ctx.fillStyle = colors.accent;
       } else if (lines[i].startsWith('  ')) {
         ctx.fillStyle = cssVar('--ink-muted', '#888', canvas);
       } else {
@@ -300,11 +430,13 @@ function updateGraph(view: GraphView, host: HTMLCanvasElement, graph: KbGraph): 
       entityType: e.entityType,
       sources: e.sources ?? [],
       rels: [],
+      driftPhase: Math.random() * Math.PI * 2,
       x: cx + (Math.random() - 0.5) * 120,
       y: cy + (Math.random() - 0.5) * 120,
     };
     view.nodes.push(n);
     existing.set(key, n);
+    view.births.set(n.id, performance.now() / 1000);
     added++;
   }
   if (added === 0) return false;
@@ -377,6 +509,7 @@ function renderGraph(
     entityType: e.entityType,
     sources: e.sources ?? [],
     rels: [],
+    driftPhase: Math.random() * Math.PI * 2,
   }));
   const nodeIds = new Set(nodes.map((n) => n.id));
 
@@ -436,10 +569,16 @@ function renderGraph(
     dragOffset: null,
     hover: null,
     expanded: new Set<string>(),
+    births: new Map<string, number>(),
+    pulses: [],
+    lastT: 0,
     raf: 0,
     destroyed: false,
     ui,
   };
+  // Stagger the initial birth pulses so the first render reads as "the graph
+  // assembling itself" rather than a synchronized flash.
+  nodes.forEach((n, i) => view.births.set(n.id, performance.now() / 1000 + i * 0.08));
 
   // ── interaction: zoom / pan / drag ────────────────────────────────────
 
