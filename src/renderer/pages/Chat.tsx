@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Bot, Globe, History, LayoutDashboard, Loader2, Plus, PanelRightOpen, RotateCcw, TerminalSquare, Waypoints, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bot, Globe, History, Loader2, Plus, PanelRightOpen, RotateCcw, TerminalSquare, Waypoints, X } from 'lucide-react';
 import { forwardRef, lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -748,10 +748,13 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // false = terminal may be alive in background but not displayed.
   // Clicking terminal icon sets true; clicking terminal × sets false.
   const [terminalPinned, setTerminalPinned] = useState(false);
-  // Which view is active in the right panel: 'file', 'terminal', 'browser', or 'ops'
-  const [splitActiveView, setSplitActiveView] = useState<'file' | 'terminal' | 'browser' | 'ops'>('file');
-  // Operations ledger panel. Only offered for the `sino` builtin template —
-  // the four domains read `ops/state.json`, which other templates never write.
+  // Which view is active in the right panel: 'file', 'terminal', or 'browser'
+  const [splitActiveView, setSplitActiveView] = useState<'file' | 'terminal' | 'browser'>('file');
+  // Operations ledger — a floating sheet over the chat, NOT a split view.
+  // The four domains want ~1100px; squeezed into a split panel the sidebar
+  // shrinks the chat column and every text block in the ledger wraps badly.
+  // Only offered for the `sino` builtin template — the domains read
+  // `ops/state.json`, which other templates never write.
   const [opsOpen, setOpsOpen] = useState(false);
 
   // ── Embedded browser state ──
@@ -769,8 +772,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // Derived: is the right split panel visible?
   const splitPanelVisible = splitFile !== null
     || (terminalPinned && (terminalAlive || splitActiveView === 'terminal'))
-    || (browserUrl !== null)
-    || opsOpen;
+    || (browserUrl !== null);
   // Should the terminal component stay mounted? (for xterm.js state preservation)
   const terminalMounted = terminalAlive || (terminalPinned && splitActiveView === 'terminal');
 
@@ -809,24 +811,15 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // Split panel acts as a buffer — absorbs Cmd+W before it reaches the tab.
   useCloseLayer(() => {
     if (!splitPanelVisible) return false;
-    if (splitActiveView === 'ops' && opsOpen) {
-      setOpsOpen(false);
-      if (browserUrl) setSplitActiveView('browser');
-      else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
-      else if (splitFile) setSplitActiveView('file');
-      return true;
-    }
     if (splitActiveView === 'file' && splitFile) {
       setSplitFile(null);
       if (browserUrl) setSplitActiveView('browser');
-      else if (opsOpen) setSplitActiveView('ops');
       else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
       return true;
     }
     if (splitActiveView === 'terminal' && terminalPinned) {
       setTerminalPinned(false);
       if (browserUrl) setSplitActiveView('browser');
-      else if (opsOpen) setSplitActiveView('ops');
       else if (splitFile) setSplitActiveView('file');
       return true;
     }
@@ -834,8 +827,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
       setBrowserUrl(null);
       setBrowserSourceFile(null);
       setBrowserCurrentUrl('');
-      if (opsOpen) setSplitActiveView('ops');
-      else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
+      if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
       else if (splitFile) setSplitActiveView('file');
       return true;
     }
@@ -962,10 +954,10 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     setSplitActiveView('browser');
   }, [startBrowserSplitTransitionIfNeeded]);
 
-  // Open the operations ledger in the split panel (DirectoryPanel header button).
+  // Open the operations ledger sheet. It floats over the chat instead of
+  // taking the split panel — see the `opsOpen` declaration for why.
   const handleOpenOps = useCallback(() => {
     setOpsOpen(true);
-    setSplitActiveView('ops');
   }, []);
 
   const handleBrowserCreateFailed = useCallback(() => {
@@ -977,10 +969,9 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     setBrowserUrl(null);
     setBrowserSourceFile(null);
     setBrowserCurrentUrl('');
-    if (opsOpen) setSplitActiveView('ops');
-    else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
+    if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
     else if (splitFile) setSplitActiveView('file');
-  }, [terminalPinned, terminalAlive, splitFile, opsOpen]);
+  }, [terminalPinned, terminalAlive, splitFile]);
 
   // ── Agent-driven browser open ──
   //
@@ -3413,6 +3404,20 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     if (!isActive && knowledgePanelOpen) closeKnowledgePanel();
   }, [isActive, knowledgePanelOpen, closeKnowledgePanel]);
 
+  // ── Operations ledger sheet (运营工作台) ──
+  // Same floating-sheet behaviour as the knowledge dashboard: Cmd+W dismisses
+  // it before the split panel or the tab, and switching tabs closes it — a
+  // sheet that stays "open" on a tab you cannot see is a state the user has
+  // no way to observe.
+  useCloseLayer(() => {
+    if (!opsOpen) return false;
+    setOpsOpen(false);
+    return true;
+  }, 100);
+  useEffect(() => {
+    if (!isActive && opsOpen) setOpsOpen(false);
+  }, [isActive, opsOpen]);
+
   // Auto-focus input when Tab becomes active
   useEffect(() => {
     if (isActive && inputRef.current) {
@@ -5284,6 +5289,14 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
           {knowledgePanelOpen && (
             <SessionKnowledgePanel onClose={closeKnowledgePanel} onLocateMessage={handleNavigateToQuery} />
           )}
+          {/* Operations ledger — reads `ops/state.json` through Rust invoke.
+              Floats over the chat (like the knowledge dashboard) instead of
+              taking the split panel, which crushed its text blocks. */}
+          {opsOpen && agentDir && (
+            <Suspense fallback={null}>
+              <LazyOpsPanel workspace={agentDir} onClose={() => setOpsOpen(false)} />
+            </Suspense>
+          )}
           {/* Drop zone overlay for file drag */}
           <DropZoneOverlay
             isVisible={isAnyDragActive && (!isTauriDragging || activeZoneId === 'chat-content' || activeZoneId === null)}
@@ -5663,7 +5676,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
           <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${!splitPanelVisible ? 'hidden' : ''}`}>
             {/* Tab switcher — only when 2+ views are active */}
             {(() => {
-              const activeViews = [splitFile, terminalPinned && terminalAlive, browserUrl, opsOpen].filter(Boolean).length;
+              const activeViews = [splitFile, terminalPinned && terminalAlive, browserUrl].filter(Boolean).length;
               return activeViews >= 2;
             })() && (
               <div className="flex h-9 flex-shrink-0 items-center gap-0.5 border-b border-[var(--line)] bg-[var(--paper-elevated)] px-2">
@@ -5775,38 +5788,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                     )}
                   </button>
                 )}
-                {/* Operations tab + its own × */}
-                {opsOpen && (
-                  <button
-                    type="button"
-                    onClick={() => setSplitActiveView('ops')}
-                    className={`group relative flex items-center gap-1 rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
-                      splitActiveView === 'ops'
-                        ? 'text-[var(--ink)]'
-                        : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'
-                    }`}
-                  >
-                    <LayoutDashboard className="h-3 w-3" />
-                    {t('ops.title')}
-                    <span
-                      role="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpsOpen(false);
-                        if (browserUrl) setSplitActiveView('browser');
-                        else if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
-                        else if (splitFile) setSplitActiveView('file');
-                      }}
-                      className="ml-0.5 flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity hover:bg-[var(--paper-inset)] group-hover:opacity-100"
-                      title={t('ops.close')}
-                    >
-                      <span className="text-sm leading-none text-[var(--ink-muted)]">×</span>
-                    </span>
-                    {splitActiveView === 'ops' && (
-                      <div className="absolute inset-x-1 -bottom-[5px] h-[2px] rounded-full bg-[var(--accent-warm)]" />
-                    )}
-                  </button>
-                )}
               </div>
             )}
 
@@ -5861,7 +5842,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
             {terminalMounted && (
               <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${splitActiveView !== 'terminal' ? 'hidden' : ''}`}>
                 {/* Terminal header — only when tab switcher is NOT showing (single view) */}
-                {[splitFile, terminalPinned && terminalAlive, browserUrl, opsOpen].filter(Boolean).length < 2 && (
+                {[splitFile, terminalPinned && terminalAlive, browserUrl].filter(Boolean).length < 2 && (
                   <div className="flex h-9 flex-shrink-0 items-center justify-between bg-[var(--paper)] px-3">
                     <div className="flex items-center gap-1.5">
                       <TerminalSquare className="h-3.5 w-3.5 text-[var(--ink)]" />
@@ -5933,14 +5914,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
               </div>
             )}
 
-            {/* Operations ledger — reads `ops/state.json` through Rust invoke */}
-            {opsOpen && agentDir && (
-              <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${splitActiveView !== 'ops' ? 'hidden' : ''}`}>
-                <Suspense fallback={<div className="flex h-full items-center justify-center bg-[var(--paper)]"><Loader2 className="h-5 w-5 animate-spin text-[var(--ink-muted)]" /></div>}>
-                  <LazyOpsPanel workspace={agentDir} onClose={() => setOpsOpen(false)} />
-                </Suspense>
-              </div>
-            )}
           </div>
         </>
       )}

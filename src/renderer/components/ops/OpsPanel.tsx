@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Check, Pencil, Plus, X } from 'lucide-react';
 
@@ -49,6 +49,12 @@ export default function OpsPanel({
   onClose: () => void;
 }) {
   const { t } = useTranslation('chat');
+  // 展开动效：先挂载再翻 class，否则 transition 不会播（与知识看板同一手法）。
+  const [unfolded, setUnfolded] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setUnfolded(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
   const [domain, setDomain] = useState<OpsDomainId>('topic');
   const [form, setForm] = useState<FormRequest | null>(null);
   const [deleting, setDeleting] = useState<{ kind: 'topic' | 'asset'; id: string; title: string } | null>(null);
@@ -87,7 +93,7 @@ export default function OpsPanel({
   );
 
   return (
-    <div className="ops">
+    <div className={`ops ops-pop ${unfolded ? 'ops-pop-open' : ''}`}>
       <header className="ops-top">
         <div className="ops-pills" role="tablist" aria-label={t('ops.title')}>
           {OPS_DOMAIN_IDS.map((id) => (

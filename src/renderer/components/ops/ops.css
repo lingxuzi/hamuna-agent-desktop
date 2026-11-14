@@ -11,6 +11,49 @@
  * 圆角只用 6/10/14/9999。过渡 ≤200ms、只动 transform/opacity、不用弹跳。
  */
 
+/* ── 悬浮外壳 ─────────────────────────────────────── */
+/* 运营视图不占 split 面板：侧栏一旦收窄，四域台账的文字组件全被压变形。
+   改用与对话知识看板同一套纸张展开语言——从工具按钮方向（右上）展开，
+   不遮全屏，关掉即收起。宽度按内容需求定：760 以下 ops 会摊成单列，
+   所以窄屏也要给足。 */
+/* Two classes on purpose: `.ops` below sets `height: 100%` for the old
+   split-panel host, and equal specificity would let it win by source order. */
+.ops.ops-pop {
+  /* `.ops *` sets border-box for descendants only; the shell's own 1px border
+     and radius would otherwise add to the measured height. */
+  box-sizing: border-box;
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 100;
+  /* 相对所在内容区的宽度，不是视口：工作区侧栏开着时聊天列会更窄，
+     用 vw 会溢出被祖先的 overflow:hidden 切掉。 */
+  width: min(calc(100% - 20px), 1180px);
+  /* 高度由内容决定，只封顶：空台账不该撑出 820 高的空纸。 */
+  height: auto;
+  max-height: min(calc(100% - 12px), 860px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-lg, 14px);
+  box-shadow:
+    var(--theme-shadow-xl, 0 24px 48px rgb(28 22 18 / 0.2)),
+    0 1px 0 rgb(255 255 255 / 0.04) inset;
+  transform: perspective(1200px) rotateX(6deg) scale(0.94);
+  transform-origin: top right;
+  opacity: 0;
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    opacity 180ms ease-out;
+}
+
+.ops-pop.ops-pop-open {
+  transform: none;
+  opacity: 1;
+}
+
+
 .ops {
   --ops-serif: var(--font-serif-family);
   --ops-ease: cubic-bezier(0.16, 1, 0.3, 1);
