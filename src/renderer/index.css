@@ -1033,3 +1033,129 @@ code {
   line-height: 1.35;
   white-space: normal;
 }
+
+/* ── RichComposer / inline reference chips ──────────────────────────────
+ *
+ * The chat composer is a contentEditable so `/skill` and `@asset` markers can
+ * live INSIDE the text flow as non-editable chips (matching the reference
+ * design). Two things textareas got for free have to be re-created here:
+ *   1. the placeholder — ::before, shown only while the field is empty;
+ *   2. the chip look — filled pill with a type icon, themed via accent
+ *      tokens so it follows every Theme package including dark mode.
+ */
+
+.cc-root {
+  display: block;
+  width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  outline: none;
+  cursor: text;
+}
+
+.cc-root:empty::before,
+.cc-root:has(> .cc-chip:only-child)::before {
+  content: none;
+}
+
+/* Placeholder. `:empty` is not enough once a chip exists, so the data
+   attribute doubles as the guard: React re-renders the node with
+   data-placeholder and the rule keys off real emptiness only. */
+.cc-root:empty:not(:focus)::before {
+  content: attr(data-placeholder);
+  color: var(--ink-muted);
+  pointer-events: none;
+}
+
+/* Chromium keeps a stray <br> in a cleared contentEditable. Treat that as
+   empty too, otherwise the placeholder never comes back after clearing. */
+.cc-root:has(> br:only-child):not(:focus)::before {
+  content: attr(data-placeholder);
+  color: var(--ink-muted);
+  pointer-events: none;
+}
+
+.cc-chip {
+  /* Type-specific colour + icon; the type classes override these. */
+  --chip-color: var(--ink-muted);
+  --chip-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'/%3E");
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: baseline;
+  padding: 1px 6px 1px 1.6em;
+  margin-inline: 1px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.92em;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+  color: var(--chip-color);
+  border-color: color-mix(in srgb, var(--chip-color) 34%, transparent);
+  background: color-mix(in srgb, var(--chip-color) 16%, transparent);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Type icon. A masked pseudo-element rather than an inline SVG: the chip's
+   textContent must stay byte-identical to the composer's value, and a
+   pseudo-element adds no node to the DOM at all. Out of flow on purpose —
+   a flex item would hijack the chip's baseline and lift its text off the
+   surrounding line. */
+.cc-chip::before {
+  content: '';
+  position: absolute;
+  left: 0.35em;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.9em;
+  height: 0.9em;
+  background-color: currentColor;
+  -webkit-mask-image: var(--chip-icon);
+  mask-image: var(--chip-icon);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* Icons are lucide's (v0.554.0) — sparkles for a skill, file-text for a
+   referenced asset — redrawn as masks so they inherit the chip's colour. */
+.cc-chip-skill {
+  --chip-color: var(--accent);
+  --chip-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z'/%3E%3Cpath d='M20 2v4'/%3E%3Cpath d='M22 4h-4'/%3E%3Ccircle cx='4' cy='20' r='2'/%3E%3C/svg%3E");
+}
+
+.cc-chip-asset {
+  --chip-color: var(--accent-cool);
+  --chip-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E");
+}
+
+/* Hover deepens the tint and lifts the pill off the composer surface. */
+.cc-chip:hover {
+  border-color: color-mix(in srgb, var(--chip-color) 55%, transparent);
+  background: color-mix(in srgb, var(--chip-color) 24%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The leading / or @ stays in the DOM (textContent parity + caret offsets)
+   but is redundant once the chip styling marks it as a reference. */
+.cc-chip-prefix {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cc-chip {
+    transition:
+      background-color var(--duration-fast, 150ms) ease-out,
+      border-color var(--duration-fast, 150ms) ease-out,
+      box-shadow var(--duration-fast, 150ms) ease-out,
+      transform var(--duration-fast, 150ms) ease-out;
+  }
+
+  .cc-chip:hover {
+    transform: translateY(-1px);
+  }
+}
