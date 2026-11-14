@@ -1054,6 +1054,52 @@ describe('hamuna CLI browser login surface', () => {
   });
 });
 
+describe('hamuna CLI browser multi-tab surface', () => {
+  it('routes the tab verbs to their own admin routes', () => {
+    expect(buildRoute('browser', 'tabs', [])).toBe('browser/tabs');
+    expect(buildRoute('browser', 'select', [])).toBe('browser/select');
+  });
+
+  it('asks for the tab list without any extra payload', () => {
+    expect(buildRequestBody('browser', 'tabs', [], {})).toEqual({});
+    expect(buildRequestBody('browser', 'tabs', [], { session: 's1' })).toEqual({ sessionId: 's1' });
+  });
+
+  it('takes the tab index from --tab as a number', () => {
+    expect(buildRequestBody('browser', 'select', [], { tab: '2' })).toMatchObject({ tab: 2 });
+  });
+
+  it('rejects a select with no tab index', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'select', [], {})).toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('browser select requires --tab'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('opens in an extra tab only when --new-tab is given', () => {
+    expect(buildRequestBody('browser', 'open', ['https://example.com'], {})).toMatchObject({
+      url: 'https://example.com',
+    });
+    expect(buildRequestBody('browser', 'open', ['https://example.com'], {}).newTab).toBeUndefined();
+    expect(buildRequestBody('browser', 'open', ['https://example.com'], { newTab: true })).toMatchObject({
+      url: 'https://example.com',
+      newTab: true,
+    });
+  });
+
+  it('advertises the multi-tab commands in the top help', () => {
+    expect(TOP_HELP).toContain('hamuna browser tabs');
+    expect(TOP_HELP).toContain('hamuna browser select');
+  });
+});
+
 describe('hamuna CLI operations ledger', () => {
   it('routes every verb to the store route that matches it', () => {
     expect(buildRoute('ops', 'list', [])).toBe('ops/read');

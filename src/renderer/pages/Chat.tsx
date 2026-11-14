@@ -756,7 +756,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
 
   // ── Embedded browser state ──
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
-  const [browserAlive, setBrowserAlive] = useState(false);
   // When browser is previewing a local file, store its metadata for editor toggle
   const [browserSourceFile, setBrowserSourceFile] = useState<{ name: string; content: string; size: number; path: string } | null>(null);
   // Live URL surfaced from BrowserPanel (Rust `browser:url-changed`). Drives
@@ -833,7 +832,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     }
     if (splitActiveView === 'browser' && browserUrl) {
       setBrowserUrl(null);
-      setBrowserAlive(false);
       setBrowserSourceFile(null);
       setBrowserCurrentUrl('');
       if (opsOpen) setSplitActiveView('ops');
@@ -970,16 +968,13 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     setSplitActiveView('ops');
   }, []);
 
-  const handleBrowserCreated = useCallback(() => setBrowserAlive(true), []);
   const handleBrowserCreateFailed = useCallback(() => {
-    setBrowserAlive(false);
     setBrowserUrl(null);
     setBrowserSourceFile(null);
     setBrowserCurrentUrl('');
   }, []);
   const handleBrowserClose = useCallback(() => {
     setBrowserUrl(null);
-    setBrowserAlive(false);
     setBrowserSourceFile(null);
     setBrowserCurrentUrl('');
     if (opsOpen) setSplitActiveView('ops');
@@ -1022,6 +1017,19 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
         }
         startBrowserSplitTransitionIfNeeded();
         setBrowserUrl((prev) => prev ?? BROWSER_BLANK_URL);
+        setSplitActiveView('browser');
+      },
+      ac.signal,
+    );
+
+    // The agent asked for one more browser tab. The panel creates the tab
+    // (only the renderer can create a webview); this side makes sure the
+    // browser view is on screen — a tab nobody can see is a tab nobody can
+    // watch the agent work in.
+    void listenWithCleanup<{ url?: string }>(
+      `browser:agent-new-tab-request:${tabId}`,
+      () => {
+        startBrowserSplitTransitionIfNeeded();
         setSplitActiveView('browser');
       },
       ac.signal,
@@ -5752,7 +5760,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                       onClick={(e) => {
                         e.stopPropagation();
                         setBrowserUrl(null);
-                        setBrowserAlive(false);
                         setBrowserSourceFile(null);
                         setBrowserCurrentUrl('');
                         if (terminalPinned && terminalAlive) setSplitActiveView('terminal');
@@ -5915,10 +5922,8 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                     isVisible={isActive && splitPanelVisible && splitActiveView === 'browser'}
                     isDraggingSplit={isDraggingSplit}
                     isSplitTransitioning={isSplitWidthTransitioning}
-                    browserAlive={browserAlive}
                     sourceFile={browserSourceFile}
                     workspace={agentDir}
-                    onBrowserCreated={handleBrowserCreated}
                     onCreateFailed={handleBrowserCreateFailed}
                     onClose={handleBrowserClose}
                     onSwitchToEditor={handleBrowserSwitchToEditor}

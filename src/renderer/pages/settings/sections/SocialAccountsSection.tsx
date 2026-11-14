@@ -218,7 +218,6 @@ export function SocialAccountsSection({ isActive = true }: SocialAccountsSection
               url={activeLogin.platform.loginUrl}
               isVisible={isActive}
               isDraggingSplit={false}
-              browserAlive={browserAlive}
               onBrowserCreated={handleBrowserCreated}
               onCreateFailed={closeLogin}
               onClose={closeLogin}

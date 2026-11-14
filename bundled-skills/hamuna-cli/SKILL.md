@@ -483,7 +483,16 @@ hamuna browser submit --selector "#form"         # 提交表单（会弹审批�
 hamuna browser images                            # 列出可见图片 + 索引
 hamuna browser image-data --index 0              # 存一张图片到工作区（默认 hamuna_files/temp/）
 printf %s "$PASSWORD" | hamuna browser login --user me@example.com --password-stdin
+hamuna browser open https://example.com --new-tab  # 在新标签页打开（当前页不变）
+hamuna browser tabs                             # 列出当前打开的标签页
+hamuna browser select --tab 0                   # 把第 0 个标签页切到最前
 ```
+
+**多标签：**
+- 浏览器面板最多同时开 **3** 个标签页。索引按创建顺序排，`browser tabs` 的输出就是索引号
+- **当前生效的是"被选中"的那个标签页**——`read` / `click` / `fill` 全部打在它身上。要操作别的标签页，先 `browser select --tab <n>`
+- 跨标签页取材：先 `browser open --new-tab <url>` 拿第 2 个页面 → 切过去 `browser select --tab 1` → `read` → 切回 `browser select --tab 0`
+- `open`（不带 `--new-tab`）会**替换当前标签页的页面**，不是新开一个。怕丢页面就用 `--new-tab`
 
 **登录流程（含验证码）：**
 1. `browser open <登录页>`
@@ -501,6 +510,7 @@ printf %s "$PASSWORD" | hamuna browser login --user me@example.com --password-st
 - 需要先填表再提交 → `browser fill` → `browser submit`
 - 需要登录 → `browser login`（见上面「登录流程」），不要自己拼 fill 拼密码
 - 需要在页面上翻找链接再进二级页 → `read` 拿到 Markdown 后再 `open` 下一个 URL
+- 要同时看两个页面（对比、留一个待填的表单）→ `open --new-tab` + `tabs` + `select`（见上面「多标签」）
 
 **搜索：**
 - `search` 在**用户自己那个浏览器窗口**里跑：结果页由真实浏览器渲染（JS 执行、过人机校验），用户的 cookie 也生效——需要登录才看得到的内容，`search` 能搜到而普通 HTTP 请求搜不到

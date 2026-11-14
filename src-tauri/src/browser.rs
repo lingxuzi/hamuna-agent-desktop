@@ -275,11 +275,30 @@ pub fn parse_agent_url(url: &str) -> Result<Url, String> {
     Ok(parsed)
 }
 
-/// Per-tab browser session.
-struct BrowserSession {
+/// How many browser tabs one owner (Chat tab) may hold at a time.
+///
+/// A hard cap, not a suggestion: every tab is a live native webview with its
+/// own process-level resources, so an uncapped strip would let a stray
+/// "open in new tab" loop eat the machine.
+pub const MAX_BROWSER_TABS: usize = 3;
+
+/// One embedded browser tab — a single native child Webview.
+///
+/// A Chat tab owns up to [`MAX_BROWSER_TABS`] of these. Two ids matter and
+/// they are NOT the same thing:
+///
+/// - `owner_tab_id` — the renderer's tab id (the Chat tab, or
+///   `social-login-<platform>`). Groups the tabs of one panel.
+/// - the map key — the *browser tab id* (`bt-7`), one per webview. This is
+///   what the renderer passes back and what the native events are keyed by.
+///
+/// The agent never sees either: it addresses the browser by Chat session id
+/// and always lands on the owner's **selected** tab.
+#[derive(Clone)]
+pub struct BrowserSession {
     webview_label: String,
-    #[allow(dead_code)]
-    tab_id: String,
+    /// Renderer-side owner tab id — see the type docs.
+    owner_tab_id: String,
     /// Chat session that owns this tab. The agent CLI addresses the browser
     /// by session id (it only knows `HAMUNA_SESSION_ID`), never by tab id —
     /// tab ids are a renderer-only concept.
@@ -289,11 +308,18 @@ struct BrowserSession {
     /// the browser to the new id (see `cmd_browser_set_session`), so this field
     /// always holds the id the agent will actually use.
     session_id: Option<String>,
-    /// Monotonic creation stamp. A session that closed and reopened its
-    /// browser leaves only one live entry (close removes the old one), but
-    /// "most recently created" is the honest tiebreak for lookup.
+    /// Monotonic creation stamp. It doubles as the display order of a
+    /// owner's tabs (oldest first) and as the agent-facing tab index.
     created_at: u64,
-    visible: bool,
+    /// Frontmost tab of its owner — the one the agent drives.
+    selected: bool,
+    /// Whether the owner's panel is on screen.
+    ///
+    /// Native visibility is *derived*, never stored per tab: a tab is visible
+    /// iff `panel_visible && selected`. One rule, one place (`apply_visibility`),
+    /// so "which webview is on screen" can never disagree with "which tab the
+    /// agent is driving".
+    panel_visible: bool,
     /// Cache last-known position/size for show-after-hide restoration.
     last_x: f64,
     last_y: f64,
@@ -301,8 +327,32 @@ struct BrowserSession {
     last_height: f64,
 }
 
+impl BrowserSession {
+    /// The renderer-side owner (the Chat tab) this browser tab belongs to.
+    pub fn owner_tab_id(&self) -> &str {
+        &self.owner_tab_id
+    }
+
+    /// Whether this tab is the frontmost one of its owner.
+    pub fn is_selected(&self) -> bool {
+        self.selected
+    }
+
+    /// The native webview label backing this tab.
+    pub fn webview_label(&self) -> &str {
+        &self.webview_label
+    }
+}
+
 pub struct BrowserManager {
+    /// browser tab id → session.
     sessions: Mutex<HashMap<String, BrowserSession>>,
+    /// browser tab id → last known URL.
+    ///
+    /// A separate *sync* mutex because the webview's navigation callbacks
+    /// fire on the UI thread and cannot await the async session lock. Kept
+    /// apart from the session map so a slow page cannot block the registry.
+    urls: std::sync::Mutex<HashMap<String, String>>,
 }
 
 /// Global handle to the one `BrowserManager`, so the Rust Management API can
@@ -335,34 +385,132 @@ impl BrowserManager {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             sessions: Mutex::new(HashMap::new()),
+            urls: std::sync::Mutex::new(HashMap::new()),
         })
+    }
+
+    /// Record the URL a browser tab is on (called from the navigation hooks).
+    pub fn record_url(&self, browser_tab_id: &str, url: String) {
+        if let Ok(mut urls) = self.urls.lock() {
+            urls.insert(browser_tab_id.to_string(), url);
+        }
+    }
+
+    /// Last known URL of a browser tab.
+    pub fn url_of(&self, browser_tab_id: &str) -> Option<String> {
+        self.urls.lock().ok()?.get(browser_tab_id).cloned()
+    }
+
+    /// Drop the cached URL of a closed browser tab.
+    pub fn forget_url(&self, browser_tab_id: &str) {
+        if let Ok(mut urls) = self.urls.lock() {
+            urls.remove(browser_tab_id);
+        }
+    }
+
+    /// The owner tab id of the browser that serves `session_id`.
+    pub async fn owner_for_session_id(&self, session_id: &str) -> Option<String> {
+        let sessions = self.sessions.lock().await;
+        sessions
+            .values()
+            .find(|session| session.session_id.as_deref() == Some(session_id))
+            .map(|session| session.owner_tab_id.clone())
+    }
+
+    /// Every tab of one owner, oldest first.
+    ///
+    /// Creation order is the display order of the tab strip and the index
+    /// space the agent sees (`browser tabs`).
+    pub async fn tabs_of_owner(&self, owner_tab_id: &str) -> Vec<(String, BrowserSession)> {
+        let sessions = self.sessions.lock().await;
+        let mut tabs: Vec<(String, BrowserSession)> = sessions
+            .iter()
+            .filter(|(_, session)| session.owner_tab_id == owner_tab_id)
+            .map(|(id, session)| (id.clone(), session.clone()))
+            .collect();
+        tabs.sort_by_key(|(_, session)| session.created_at);
+        tabs
+    }
+
+    /// The selected (frontmost) tab of one owner.
+    ///
+    /// Falls back to the newest tab when none is marked selected — that only
+    /// happens mid-teardown, and "newest" is the least surprising answer.
+    pub async fn selected_tab_of_owner(
+        &self,
+        owner_tab_id: &str,
+    ) -> Option<(String, BrowserSession)> {
+        let tabs = self.tabs_of_owner(owner_tab_id).await;
+        tabs.iter()
+            .find(|(_, session)| session.selected)
+            .cloned()
+            .or_else(|| tabs.last().cloned())
+    }
+
+    /// Can this owner open one more browser tab?
+    ///
+    /// The cap is a hard limit, not a suggestion: every tab is a live native
+    /// webview with its own process-level resources, so an uncapped strip
+    /// would let a stray "open in new tab" loop eat the machine.
+    pub async fn has_tab_capacity(&self, owner_tab_id: &str) -> bool {
+        self.tabs_of_owner(owner_tab_id).await.len() < MAX_BROWSER_TABS
     }
 
     /// Find the browser session owned by a Chat session id.
     ///
     /// The agent CLI addresses the browser by `HAMUNA_SESSION_ID` — it has no
-    /// way to know the renderer-side tab id. Returns the most recently
-    /// created match so that a session that reopened its browser resolves to
-    /// the current one rather than a stale entry.
+    /// way to know the renderer-side tab id. The owner's *selected* tab wins:
+    /// with several tabs open, "the browser" is the one the user is looking
+    /// at, and it is the one the agent should be driving.
     pub async fn session_for_session_id(&self, session_id: &str) -> Option<(String, String)> {
         let sessions = self.sessions.lock().await;
-        sessions
+        let mut matches: Vec<(&String, &BrowserSession)> = sessions
             .iter()
             .filter(|(_, session)| session.session_id.as_deref() == Some(session_id))
-            .max_by_key(|(_, session)| session.created_at)
-            .map(|(tab_id, session)| (tab_id.clone(), session.webview_label.clone()))
+            .collect();
+        matches.sort_by_key(|(_, session)| session.created_at);
+        let chosen = matches
+            .iter()
+            .rev()
+            .find(|(_, session)| session.selected)
+            .or_else(|| matches.last())?;
+        Some((chosen.0.clone(), chosen.1.webview_label.clone()))
     }
 
-    /// The most recently created browser session, regardless of owner.
+    /// The most recently created browser tab, regardless of owner.
     ///
     /// Fallback for callers with no Chat session to address — the CLI's
     /// `status` command, and agents running outside a Chat (cron, IM).
     pub async fn any_session(&self) -> Option<(String, String)> {
         let sessions = self.sessions.lock().await;
-        sessions
+        let mut owners: HashMap<&str, u64> = HashMap::new();
+        for session in sessions.values() {
+            let slot = owners.entry(session.owner_tab_id.as_str()).or_insert(0);
+            *slot = (*slot).max(session.created_at);
+        }
+        let newest_owner = owners.into_iter().max_by_key(|(_, stamp)| *stamp)?.0;
+        let chosen = sessions
             .iter()
-            .max_by_key(|(_, session)| session.created_at)
-            .map(|(tab_id, session)| (tab_id.clone(), session.webview_label.clone()))
+            .filter(|(_, session)| session.owner_tab_id == newest_owner)
+            .max_by_key(|(_, session)| session.created_at)?;
+        Some((chosen.0.clone(), chosen.1.webview_label.clone()))
+    }
+
+    /// The owner tab id of the most recently created browser, regardless of owner.
+    ///
+    /// Counterpart of [`Self::any_session`] for callers that work in owner
+    /// space (the tab strip) rather than in webview space.
+    pub async fn any_owner(&self) -> Option<String> {
+        let sessions = self.sessions.lock().await;
+        let mut owners: HashMap<&str, u64> = HashMap::new();
+        for session in sessions.values() {
+            let slot = owners.entry(session.owner_tab_id.as_str()).or_insert(0);
+            *slot = (*slot).max(session.created_at);
+        }
+        owners
+            .into_iter()
+            .max_by_key(|(_, stamp)| *stamp)
+            .map(|(owner, _)| owner.to_string())
     }
 
     /// Wait until a browser session for `session_id` exists.
@@ -673,7 +821,9 @@ fn on_main_thread<T: Send + 'static>(
 // IPC Commands
 // ──────────────────────────────────────────────────────────
 
-/// Create a child Webview for the given tab, positioned at (x, y) with (width, height).
+/// Create a child Webview for the given owner tab, positioned at (x, y) with
+/// (width, height). Returns the new **browser tab id** — the renderer keys
+/// every later call (and every native event) by it.
 #[tauri::command]
 pub async fn cmd_browser_create(
     app: AppHandle,
@@ -685,13 +835,41 @@ pub async fn cmd_browser_create(
     width: f64,
     height: f64,
     session_id: Option<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let _update_spawn_permit = crate::sidecar::begin_update_spawn_permit()?;
-    let label = format!("browser-{}", tab_id);
+
+    // One owner holds at most MAX_BROWSER_TABS webviews. Checked before
+    // anything is created so a rejected call leaves no webview behind.
+    {
+        let sessions = state.sessions.lock().await;
+        let open = sessions
+            .values()
+            .filter(|session| session.owner_tab_id == tab_id)
+            .count();
+        if open >= MAX_BROWSER_TABS {
+            ulog_info!(
+                "[browser] Tab limit reached for owner {} ({}/{})",
+                tab_id,
+                open,
+                MAX_BROWSER_TABS
+            );
+            return Err(format!(
+                "This browser already has {MAX_BROWSER_TABS} tabs — close one before opening another."
+            ));
+        }
+    }
+
+    // The browser tab id is its own identity: the owner tab id may hold several
+    // webviews, so it cannot be the map key. `bt-<seq>` is unique for the app's
+    // lifetime and is a valid Tauri webview label / event-name suffix.
+    let seq = next_session_seq();
+    let browser_tab_id = format!("bt-{}", seq);
+    let label = format!("browser-{}", browser_tab_id);
 
     ulog_info!(
-        "[browser] cmd_browser_create: tab={} url={} pos=({},{}) size={}x{}",
+        "[browser] cmd_browser_create: owner={} browser_tab={} url={} pos=({},{}) size={}x{}",
         tab_id,
+        browser_tab_id,
         url,
         x,
         y,
@@ -716,24 +894,19 @@ pub async fn cmd_browser_create(
         (width, height)
     };
 
-    // Prevent duplicate creation
-    {
-        let sessions = state.sessions.lock().await;
-        if sessions.contains_key(&tab_id) {
-            ulog_info!("[browser] Duplicate creation blocked for tab {}", tab_id);
-            return Err(format!("Browser already exists for tab {}", tab_id));
-        }
-    }
-
     let parsed_url = parse_url_or_path(&url)?;
 
     // Clone values for closures
     let app_nav = app.clone();
-    let tab_id_nav = tab_id.clone();
+    let tab_id_nav = browser_tab_id.clone();
     let app_load = app.clone();
-    let tab_id_load = tab_id.clone();
+    let tab_id_load = browser_tab_id.clone();
     let app_new_win = app.clone();
     let label_new_win = label.clone();
+    // The navigation hooks run on the UI thread — they cannot await the async
+    // session lock, so the URL goes into the manager's sync URL map.
+    let manager_nav = state.inner().clone();
+    let manager_load = state.inner().clone();
 
     let builder = WebviewBuilder::new(&label, tauri::WebviewUrl::External(parsed_url.clone()))
         .user_agent(BROWSER_USER_AGENT)
@@ -781,6 +954,7 @@ pub async fn cmd_browser_create(
             // Emit URL changes for http/https/file (skip about:, data:, blob: noise)
             if scheme == "http" || scheme == "https" || scheme == "file" {
                 ulog_info!("[browser] on_navigation ALLOW: {}", nav_url);
+                manager_nav.record_url(&tab_id_nav, nav_url.to_string());
                 let _ = app_nav.emit(
                     &format!("browser:url-changed:{}", tab_id_nav),
                     nav_url.to_string(),
@@ -816,6 +990,7 @@ pub async fn cmd_browser_create(
                     // here panics inside wry's url_from_webview when WKWebView.URL
                     // is nil (notably for about:blank in transient states), which
                     // tao's stop_app_on_panic then escalates to a process crash.
+                    manager_load.record_url(&tab_id_load, url_str.clone());
                     let _ = app_load.emit(
                         &format!("browser:url-changed:{}", tab_id_load),
                         url_str.clone(),
@@ -888,29 +1063,189 @@ pub async fn cmd_browser_create(
     // wry-0.54.4/src/wkwebview/mod.rs:1349. add_child returning Ok is itself
     // sufficient evidence that the webview was created.
 
-    // Store session
-    let mut sessions = state.sessions.lock().await;
-    sessions.insert(
-        tab_id.clone(),
-        BrowserSession {
-            webview_label: label.clone(),
-            tab_id: tab_id.clone(),
-            session_id,
-            created_at: next_session_seq(),
-            visible: true,
-            last_x: x,
-            last_y: y,
-            last_width: width,
-            last_height: height,
-        },
+    // Store session. The new tab becomes the owner's frontmost one — the same
+    // rule the agent sees ("the browser" = the tab on screen).
+    {
+        let mut sessions = state.sessions.lock().await;
+        for session in sessions.values_mut() {
+            if session.owner_tab_id == tab_id {
+                session.selected = false;
+            }
+        }
+        sessions.insert(
+            browser_tab_id.clone(),
+            BrowserSession {
+                webview_label: label.clone(),
+                owner_tab_id: tab_id.clone(),
+                session_id,
+                created_at: seq,
+                selected: true,
+                // The renderer only creates a tab while the panel is on
+                // screen, so the owner is visible from the start.
+                panel_visible: true,
+                last_x: x,
+                last_y: y,
+                last_width: width,
+                last_height: height,
+            },
+        );
+    }
+
+    // Hand the webviews over to the new frontmost tab (the previous one goes
+    // off-screen).
+    apply_visibility(&app, &state, &tab_id).await;
+
+    let _ = app.emit(
+        &format!("browser:tab-selected:{}", tab_id),
+        browser_tab_id.clone(),
     );
 
     ulog_info!(
-        "[browser] Created webview '{}' for tab {} — session stored",
+        "[browser] Created webview '{}' ({}) for owner {} — session stored",
         label,
+        browser_tab_id,
         tab_id
     );
+    Ok(browser_tab_id)
+}
+
+/// Push (x, y, width, height) onto a native webview.
+///
+/// Linux has no working `set_position`/`set_size`: wry only applies them
+/// when the webview's parent is a `GtkFixed` at creation time, and Tauri
+/// builds child webviews into the window's `GtkBox`. The webview lives in
+/// the overlay host's `GtkFixed` instead, so it is moved there directly.
+#[cfg(target_os = "linux")]
+fn apply_geometry(
+    app: &AppHandle,
+    webview: &tauri::Webview,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let window = app
+        .get_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+    linux_layout::move_to(&window, webview, x, y, width, height).map_err(|e| {
+        ulog_warn!(
+            "[browser] move_to({}, {}) {}x{} failed: {}",
+            x,
+            y,
+            width,
+            height,
+            e
+        );
+        e
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_geometry(
+    _app: &AppHandle,
+    webview: &tauri::Webview,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    webview
+        .set_position(LogicalPosition::new(x, y))
+        .map_err(|e| {
+            ulog_warn!("[browser] set_position({}, {}) failed: {}", x, y, e);
+            format!("set_position failed: {e}")
+        })?;
+    webview
+        .set_size(LogicalSize::new(width, height))
+        .map_err(|e| {
+            ulog_warn!("[browser] set_size({}x{}) failed: {}", width, height, e);
+            format!("set_size failed: {e}")
+        })
+}
+
+/// Enforce the native-visibility invariant for one owner.
+///
+/// The selected tab is on screen iff the owner's panel is on screen; every
+/// other tab of that owner is hidden. One rule, applied from one place, so
+/// "what the user sees" and "what the agent drives" can never drift apart.
+async fn apply_visibility(app: &AppHandle, state: &BrowserManager, owner_tab_id: &str) {
+    let tabs = state.tabs_of_owner(owner_tab_id).await;
+    for (browser_tab_id, session) in tabs {
+        let Some(webview) = app.get_webview(&session.webview_label) else {
+            continue;
+        };
+        let should_show = session.panel_visible && session.selected;
+        if should_show {
+            // SHOW restores the cached geometry — the reconciler keeps that
+            // cache current even while the tab is hidden.
+            if let Err(e) = apply_geometry(
+                app,
+                &webview,
+                session.last_x,
+                session.last_y,
+                session.last_width,
+                session.last_height,
+            ) {
+                ulog_warn!(
+                    "[browser] SHOW geometry restore failed for tab {}: {}",
+                    browser_tab_id,
+                    e
+                );
+            }
+            let _ = webview.show();
+        } else {
+            let _ = webview.hide();
+        }
+    }
+}
+
+/// Select one browser tab of an owner — the frontmost one.
+///
+/// The renderer calls this when the user picks a tab; the agent reaches it
+/// through `browser select`. Either way the native visibility follows.
+pub async fn select_browser_tab(
+    app: &AppHandle,
+    state: &BrowserManager,
+    browser_tab_id: &str,
+) -> Result<(), String> {
+    let owner_tab_id = {
+        let mut sessions = state.sessions.lock().await;
+        let owner = sessions
+            .get(browser_tab_id)
+            .map(|session| session.owner_tab_id.clone())
+            .ok_or_else(|| format!("No browser tab {}", browser_tab_id))?;
+        for (id, session) in sessions.iter_mut() {
+            if session.owner_tab_id == owner {
+                session.selected = id == browser_tab_id;
+            }
+        }
+        owner
+    };
+
+    apply_visibility(app, state, &owner_tab_id).await;
+
+    // Tell the renderer which tab is frontmost — the agent can select a tab
+    // behind the user's back, and the strip has to follow.
+    let _ = app.emit(
+        &format!("browser:tab-selected:{}", owner_tab_id),
+        browser_tab_id.to_string(),
+    );
+    ulog_info!(
+        "[browser] Selected tab {} of owner {}",
+        browser_tab_id,
+        owner_tab_id
+    );
     Ok(())
+}
+
+/// Tauri command wrapper around [`select_browser_tab`].
+#[tauri::command]
+pub async fn cmd_browser_select(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+    browser_tab_id: String,
+) -> Result<(), String> {
+    select_browser_tab(&app, &state, &browser_tab_id).await
 }
 
 /// Re-bind a tab's browser to a Chat session id.
@@ -921,30 +1256,36 @@ pub async fn cmd_browser_create(
 /// `HAMUNA_SESSION_ID` from its environment), so the browser has to be
 /// re-pointed when the upgrade happens — otherwise every agent command would
 /// look up a browser that does not exist.
+///
+/// Owner-scoped: every tab of the panel belongs to the same Chat session.
 #[tauri::command]
 pub async fn cmd_browser_set_session(
     state: tauri::State<'_, Arc<BrowserManager>>,
     tab_id: String,
     session_id: Option<String>,
 ) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().await;
-    let session = sessions
-        .get_mut(&tab_id)
-        .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
     let next = session_id.filter(|id| !id.trim().is_empty());
-    if session.session_id != next {
-        ulog_info!(
-            "[browser] Rebinding browser for tab {}: session {:?} -> {:?}",
-            tab_id,
-            session.session_id,
-            next
-        );
-        session.session_id = next;
+    let mut sessions = state.sessions.lock().await;
+    let mut rebound = false;
+    for session in sessions.values_mut() {
+        if session.owner_tab_id == tab_id && session.session_id != next {
+            ulog_info!(
+                "[browser] Rebinding browser for owner {}: session {:?} -> {:?}",
+                tab_id,
+                session.session_id,
+                next
+            );
+            session.session_id = next.clone();
+            rebound = true;
+        }
+    }
+    if !rebound && !sessions.values().any(|s| s.owner_tab_id == tab_id) {
+        return Err(format!("No browser for tab {}", tab_id));
     }
     Ok(())
 }
 
-/// Navigate the existing browser webview to a new URL.
+/// Navigate the owner's frontmost browser tab to a new URL.
 #[tauri::command]
 pub async fn cmd_browser_navigate(
     app: AppHandle,
@@ -953,9 +1294,9 @@ pub async fn cmd_browser_navigate(
     url: String,
 ) -> Result<(), String> {
     ulog_info!("[browser] cmd_browser_navigate: tab={} url={}", tab_id, url);
-    let sessions = state.sessions.lock().await;
-    let session = sessions
-        .get(&tab_id)
+    let (_, session) = state
+        .selected_tab_of_owner(&tab_id)
+        .await
         .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
 
     let parsed_url = parse_url_or_path(&url)?;
@@ -989,12 +1330,11 @@ pub async fn cmd_browser_query_visible(
     tab_id: String,
     selector: String,
 ) -> Result<bool, String> {
-    let sessions = state.sessions.lock().await;
-    let session = sessions
-        .get(&tab_id)
+    let (_, session) = state
+        .selected_tab_of_owner(&tab_id)
+        .await
         .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
     let label = session.webview_label.clone();
-    drop(sessions);
 
     let webview = app
         .get_webview(&label)
@@ -1025,16 +1365,16 @@ pub async fn cmd_browser_query_visible(
         .map(|v| v.as_bool().unwrap_or(false))
 }
 
-/// Go back in browser history.
+/// Go back in browser history (owner's frontmost tab).
 #[tauri::command]
 pub async fn cmd_browser_go_back(
     app: AppHandle,
     state: tauri::State<'_, Arc<BrowserManager>>,
     tab_id: String,
 ) -> Result<(), String> {
-    let sessions = state.sessions.lock().await;
-    let session = sessions
-        .get(&tab_id)
+    let (_, session) = state
+        .selected_tab_of_owner(&tab_id)
+        .await
         .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
 
     let webview = app
@@ -1046,16 +1386,16 @@ pub async fn cmd_browser_go_back(
         .map_err(|e| format!("Go back failed: {e}"))
 }
 
-/// Go forward in browser history.
+/// Go forward in browser history (owner's frontmost tab).
 #[tauri::command]
 pub async fn cmd_browser_go_forward(
     app: AppHandle,
     state: tauri::State<'_, Arc<BrowserManager>>,
     tab_id: String,
 ) -> Result<(), String> {
-    let sessions = state.sessions.lock().await;
-    let session = sessions
-        .get(&tab_id)
+    let (_, session) = state
+        .selected_tab_of_owner(&tab_id)
+        .await
         .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
 
     let webview = app
@@ -1067,16 +1407,16 @@ pub async fn cmd_browser_go_forward(
         .map_err(|e| format!("Go forward failed: {e}"))
 }
 
-/// Reload the current page.
+/// Reload the current page (owner's frontmost tab).
 #[tauri::command]
 pub async fn cmd_browser_reload(
     app: AppHandle,
     state: tauri::State<'_, Arc<BrowserManager>>,
     tab_id: String,
 ) -> Result<(), String> {
-    let sessions = state.sessions.lock().await;
-    let session = sessions
-        .get(&tab_id)
+    let (_, session) = state
+        .selected_tab_of_owner(&tab_id)
+        .await
         .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
 
     let webview = app
@@ -1087,6 +1427,11 @@ pub async fn cmd_browser_reload(
 }
 
 /// Update webview position and size.
+///
+/// Owner-scoped: every tab of the panel lives in the same rectangle, so the
+/// cached geometry is written to all of them while only the visible one is
+/// moved natively. A hidden tab is re-placed by the SHOW path, which restores
+/// the cached geometry.
 #[tauri::command]
 pub async fn cmd_browser_resize(
     app: AppHandle,
@@ -1115,18 +1460,32 @@ pub async fn cmd_browser_resize(
     // Update cached position, then release the session lock before touching
     // the native webview — the Linux path waits on a main-thread round trip
     // and must not block the other browser commands behind it.
-    let webview_label = {
+    let selected_label = {
         let mut sessions = state.sessions.lock().await;
-        let session = sessions
-            .get_mut(&tab_id)
-            .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
-        session.last_x = x;
-        session.last_y = y;
-        session.last_width = width;
-        session.last_height = height;
-        session.webview_label.clone()
+        let mut selected_label: Option<String> = None;
+        let mut found = false;
+        for session in sessions.values_mut() {
+            if session.owner_tab_id != tab_id {
+                continue;
+            }
+            found = true;
+            session.last_x = x;
+            session.last_y = y;
+            session.last_width = width;
+            session.last_height = height;
+            if session.selected {
+                selected_label = Some(session.webview_label.clone());
+            }
+        }
+        if !found {
+            return Err(format!("No browser for tab {}", tab_id));
+        }
+        selected_label
     };
 
+    let Some(webview_label) = selected_label else {
+        return Ok(());
+    };
     let webview = app
         .get_webview(&webview_label)
         .ok_or_else(|| "Webview not found".to_string())?;
@@ -1138,175 +1497,142 @@ pub async fn cmd_browser_resize(
     // #339 post-mortem). Returning Err makes the renderer clear its synced
     // marker and retry on the next frame. Errors are exceptional (webview
     // teardown races), so the log cannot spam.
-    //
-    // Linux has no working `set_position`/`set_size`: wry only applies them
-    // when the webview's parent is a `GtkFixed` at creation time, and Tauri
-    // builds child webviews into the window's `GtkBox`. The webview lives in
-    // the overlay host's `GtkFixed` instead, so move it there directly.
-    #[cfg(target_os = "linux")]
-    {
-        let window = app
-            .get_window("main")
-            .ok_or_else(|| "Main window not found".to_string())?;
-        linux_layout::move_to(&window, &webview, x, y, width, height).map_err(|e| {
-            ulog_warn!(
-                "[browser] move_to({}, {}) {}x{} failed for tab {}: {}",
-                x,
-                y,
-                width,
-                height,
-                tab_id,
-                e
-            );
-            e
-        })?;
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        webview
-            .set_position(LogicalPosition::new(x, y))
-            .map_err(|e| {
-                ulog_warn!(
-                    "[browser] set_position({}, {}) failed for tab {}: {}",
-                    x,
-                    y,
-                    tab_id,
-                    e
-                );
-                format!("set_position failed: {e}")
-            })?;
-        webview
-            .set_size(LogicalSize::new(width, height))
-            .map_err(|e| {
-                ulog_warn!(
-                    "[browser] set_size({}x{}) failed for tab {}: {}",
-                    width,
-                    height,
-                    tab_id,
-                    e
-                );
-                format!("set_size failed: {e}")
-            })?;
-    }
+    apply_geometry(&app, &webview, x, y, width, height)?;
     Ok(())
 }
 
-/// Show the browser webview (restore from hidden state).
+/// Show the browser panel (owner's tabs).
+///
+/// The panel's frontmost tab goes on screen, the rest stay hidden.
 #[tauri::command]
 pub async fn cmd_browser_show(
     app: AppHandle,
     state: tauri::State<'_, Arc<BrowserManager>>,
     tab_id: String,
 ) -> Result<(), String> {
-    // Snapshot the session state, then release the lock before the native
-    // calls — the Linux path waits on a main-thread round trip.
-    let (webview_label, last_x, last_y, last_width, last_height) = {
-        let mut sessions = state.sessions.lock().await;
-        let session = sessions
-            .get_mut(&tab_id)
-            .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
-
-        if session.visible {
-            return Ok(());
-        }
-
-        session.visible = true;
-        (
-            session.webview_label.clone(),
-            session.last_x,
-            session.last_y,
-            session.last_width,
-            session.last_height,
-        )
-    };
-
-    let webview = app
-        .get_webview(&webview_label)
-        .ok_or_else(|| "Webview not found".to_string())?;
-
-    // Restore position and show
-    #[cfg(target_os = "linux")]
     {
-        // `set_position`/`set_size` are no-ops on Linux (wry only applies
-        // them to a `GtkFixed` parent), so re-apply the geometry in the
-        // overlay host instead.
-        if let Some(window) = app.get_window("main") {
-            if let Err(e) =
-                linux_layout::move_to(&window, &webview, last_x, last_y, last_width, last_height)
-            {
-                ulog_warn!("[browser] SHOW move_to failed for tab {}: {}", tab_id, e);
+        let mut sessions = state.sessions.lock().await;
+        let mut found = false;
+        for session in sessions.values_mut() {
+            if session.owner_tab_id == tab_id {
+                session.panel_visible = true;
+                found = true;
             }
         }
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        if let Err(e) = webview.set_position(LogicalPosition::new(last_x, last_y)) {
-            ulog_warn!(
-                "[browser] SHOW set_position failed for tab {}: {}",
-                tab_id,
-                e
-            );
-        }
-        if let Err(e) = webview.set_size(LogicalSize::new(last_width, last_height)) {
-            ulog_warn!("[browser] SHOW set_size failed for tab {}: {}", tab_id, e);
+        if !found {
+            return Err(format!("No browser for tab {}", tab_id));
         }
     }
-    let _ = webview.show();
-    ulog_info!(
-        "[browser] SHOW webview '{}' at ({},{}) {}x{}",
-        webview_label,
-        last_x,
-        last_y,
-        last_width,
-        last_height
-    );
+    apply_visibility(&app, &state, &tab_id).await;
     Ok(())
 }
 
-/// Hide the browser webview (move off-screen).
+/// Hide the browser panel (owner's tabs).
 #[tauri::command]
 pub async fn cmd_browser_hide(
     app: AppHandle,
     state: tauri::State<'_, Arc<BrowserManager>>,
     tab_id: String,
 ) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().await;
-    let session = sessions
-        .get_mut(&tab_id)
-        .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
-
-    if !session.visible {
-        return Ok(());
+    {
+        let mut sessions = state.sessions.lock().await;
+        let mut found = false;
+        for session in sessions.values_mut() {
+            if session.owner_tab_id == tab_id {
+                session.panel_visible = false;
+                found = true;
+            }
+        }
+        if !found {
+            return Err(format!("No browser for tab {}", tab_id));
+        }
     }
-
-    let webview = app
-        .get_webview(&session.webview_label)
-        .ok_or_else(|| "Webview not found".to_string())?;
-
-    let _ = webview.hide();
-    session.visible = false;
-    ulog_info!("[browser] HIDE webview '{}'", session.webview_label);
+    apply_visibility(&app, &state, &tab_id).await;
     Ok(())
 }
 
-/// Destroy the browser webview for a tab.
+/// Destroy one browser tab.
+///
+/// Closing the frontmost tab promotes the next-newest one, so the panel never
+/// ends up with a tab that is registered but not on screen.
 #[tauri::command]
-pub async fn cmd_browser_close(
+pub async fn cmd_browser_close_tab(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+    browser_tab_id: String,
+) -> Result<(), String> {
+    let (owner_tab_id, was_selected, label) = {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions
+            .remove(&browser_tab_id)
+            .ok_or_else(|| format!("No browser tab {}", browser_tab_id))?;
+        (
+            session.owner_tab_id.clone(),
+            session.selected,
+            session.webview_label.clone(),
+        )
+    };
+
+    if let Some(webview) = app.get_webview(&label) {
+        let _ = webview.close();
+    }
+    state.forget_url(&browser_tab_id);
+
+    if was_selected {
+        // Promote the newest remaining tab of this owner.
+        let tabs = state.tabs_of_owner(&owner_tab_id).await;
+        if let Some((promote_id, _)) = tabs.last() {
+            let mut sessions = state.sessions.lock().await;
+            for (id, session) in sessions.iter_mut() {
+                if session.owner_tab_id == owner_tab_id {
+                    session.selected = id == promote_id;
+                }
+            }
+            let _ = app.emit(
+                &format!("browser:tab-selected:{}", owner_tab_id),
+                promote_id.clone(),
+            );
+        }
+    }
+
+    apply_visibility(&app, &state, &owner_tab_id).await;
+    ulog_info!(
+        "[browser] Closed tab {} of owner {}",
+        browser_tab_id,
+        owner_tab_id
+    );
+    Ok(())
+}
+
+/// Destroy every browser tab of one owner (panel unmount).
+#[tauri::command]
+pub async fn cmd_browser_close_owner(
     app: AppHandle,
     state: tauri::State<'_, Arc<BrowserManager>>,
     tab_id: String,
 ) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().await;
-    if let Some(session) = sessions.remove(&tab_id) {
-        if let Some(webview) = app.get_webview(&session.webview_label) {
+    let closed: Vec<(String, String)> = {
+        let mut sessions = state.sessions.lock().await;
+        let ids: Vec<String> = sessions
+            .iter()
+            .filter(|(_, session)| session.owner_tab_id == tab_id)
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| {
+                sessions
+                    .remove(&id)
+                    .map(|session| (id, session.webview_label))
+            })
+            .collect()
+    };
+    for (id, label) in closed {
+        if let Some(webview) = app.get_webview(&label) {
             let _ = webview.close();
         }
-        ulog_info!(
-            "[browser] Closed webview '{}' for tab {}",
-            session.webview_label,
-            tab_id
-        );
+        state.forget_url(&id);
     }
+    ulog_info!("[browser] Closed all tabs of owner {}", tab_id);
     Ok(())
 }
 
@@ -1439,6 +1765,110 @@ mod tests {
     fn real_bounds_are_accepted() {
         assert!(!is_degenerate_bounds(694.0, 662.0));
         assert!(!is_degenerate_bounds(1.0, 1.0));
+    }
+
+    // ── Multi-tab model ──
+    //
+    // One Chat tab owns up to MAX_BROWSER_TABS browser tabs. The agent never
+    // sees their ids: it addresses them by index (creation order) and always
+    // lands on the owner's *selected* tab — "the browser" is the tab the user
+    // is looking at.
+
+    fn test_session(
+        owner: &str,
+        session_id: &str,
+        created_at: u64,
+        selected: bool,
+    ) -> super::BrowserSession {
+        super::BrowserSession {
+            webview_label: format!("browser-{created_at}"),
+            owner_tab_id: owner.to_string(),
+            session_id: Some(session_id.to_string()),
+            created_at,
+            selected,
+            panel_visible: true,
+            last_x: 0.0,
+            last_y: 0.0,
+            last_width: 100.0,
+            last_height: 100.0,
+        }
+    }
+
+    async fn manager_with(
+        tabs: Vec<super::BrowserSession>,
+    ) -> std::sync::Arc<super::BrowserManager> {
+        let manager = super::BrowserManager::new();
+        {
+            let mut sessions = manager.sessions.lock().await;
+            for (index, session) in tabs.into_iter().enumerate() {
+                sessions.insert(format!("bt-{}", index + 1), session);
+            }
+        }
+        manager
+    }
+
+    #[tokio::test]
+    async fn tabs_are_grouped_by_owner_and_listed_in_creation_order() {
+        let manager = manager_with(vec![
+            test_session("chat-2", "s2", 30, true),
+            test_session("chat-1", "s1", 20, true),
+            test_session("chat-1", "s1", 10, false),
+        ])
+        .await;
+
+        let tabs = manager.tabs_of_owner("chat-1").await;
+        assert_eq!(tabs.len(), 2);
+        // Creation order IS the agent-facing index space — the tab strip
+        // shows them in exactly this order.
+        assert_eq!(tabs[0].1.created_at, 10);
+        assert_eq!(tabs[1].1.created_at, 20);
+
+        // Another owner's tabs never leak into the list.
+        assert_eq!(manager.tabs_of_owner("chat-2").await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_selected_tab_is_the_one_the_agent_drives() {
+        let manager = manager_with(vec![
+            test_session("chat-1", "s1", 10, false),
+            test_session("chat-1", "s1", 20, true),
+            test_session("chat-1", "s1", 30, false),
+        ])
+        .await;
+
+        let (tab_id, _) = manager.selected_tab_of_owner("chat-1").await.unwrap();
+        assert_eq!(tab_id, "bt-2");
+
+        // The agent's session lookup lands on the same tab.
+        let (_, label) = manager.session_for_session_id("s1").await.unwrap();
+        assert_eq!(label, "browser-20");
+    }
+
+    #[tokio::test]
+    async fn tab_capacity_is_capped_at_three_per_owner() {
+        let manager = manager_with(vec![
+            test_session("chat-1", "s1", 10, true),
+            test_session("chat-1", "s1", 20, false),
+            test_session("chat-1", "s1", 30, false),
+            // A different owner's tab does NOT consume chat-1's capacity.
+            test_session("chat-2", "s2", 40, true),
+        ])
+        .await;
+
+        assert_eq!(super::MAX_BROWSER_TABS, 3);
+        assert!(!manager.has_tab_capacity("chat-1").await);
+        assert!(manager.has_tab_capacity("chat-2").await);
+    }
+
+    #[tokio::test]
+    async fn any_owner_falls_back_to_the_most_recently_used_panel() {
+        let manager = manager_with(vec![
+            test_session("chat-1", "s1", 10, true),
+            test_session("chat-2", "s2", 40, true),
+        ])
+        .await;
+
+        assert_eq!(manager.any_owner().await.as_deref(), Some("chat-2"));
     }
 
     #[cfg(target_os = "windows")]

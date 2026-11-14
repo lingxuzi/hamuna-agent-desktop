@@ -2455,7 +2455,10 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // 45: adds `browser images` / `image-data` / `login`. Existing installs keep
 // the old bundle otherwise, and a captcha-aware login is unreachable without
 // those three subcommands.
-const CLI_VERSION: &str = "45";
+// 46: adds `browser tabs` / `browser select` / `browser open --new-tab` — the
+// multi-tab browser surface. Without a bump an existing install keeps the old
+// bundle and the agent can only ever drive one tab.
+const CLI_VERSION: &str = "46";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2672,8 +2675,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // captcha-aware login flow is 5 ordered steps; an agent that guesses at it
 // re-fills the form after every failed submit, and a submit on a stale captcha
 // can burn a real lockout counter on the site.
+//
+// 69: hamuna-cli — document `browser tabs` / `browser select` /
+// `browser open --new-tab`. Tabs are addressed by index, and the selected tab
+// is the one every later browser command drives — an agent that navigates
+// without knowing which tab is in front silently reads the wrong page.
 
-const SYSTEM_SKILLS_VERSION: &str = "68";
+const SYSTEM_SKILLS_VERSION: &str = "69";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3356,9 +3364,11 @@ mod system_skills_tests {
         // agent — it is read-only; writes and shell are hard-denied. 63 documented
         // the browser command family, 64 kept that wording stable. The v37
         // contracts on CLI / memory-update / docs are still valid; only the version
-        // anchor has to track the constant.
-        assert_eq!(CLI_VERSION, "42");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "65");
+        // anchor has to track the constant. 46 added the multi-tab browser
+        // surface (`browser tabs` / `browser select` / `--new-tab`), and 69
+        // documents it in hamuna-cli's SKILL.md.
+        assert_eq!(CLI_VERSION, "46");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "69");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));

@@ -199,6 +199,8 @@
     "openExternal": "在浏览器中打开",
     "close": "关闭浏览器",
     "newTab": "新标签页",
+    "closeTab": "关闭标签页",
+    "noBounds": "浏览器面板尚未显示",
     "blankHint": "在上方地址栏输入网址或粘贴链接"
   },
   "imagePreview": {

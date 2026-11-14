@@ -353,6 +353,9 @@ Examples:
   hamuna vision analyze --image hamuna_files/screenshot.png --prompt "Summarize the UI state"
   hamuna browser search "tauri webview"         # search through the embedded browser
   hamuna browser open https://example.com        # drive the app's embedded browser
+  hamuna browser open https://example.com --new-tab   # open it in a new tab
+  hamuna browser tabs                           # list the open tabs
+  hamuna browser select --tab 0                 # bring tab 0 to the front
   hamuna browser read                           # current page as markdown
   hamuna browser click --text "Sign in"
   hamuna browser fill --selector "#q" --value "hamuna"
@@ -2133,6 +2136,30 @@ function printBrowserResult(action: string, result: Record<string, unknown>, fla
     return;
   }
 
+  if (action === 'tabs') {
+    const tabs = Array.isArray(data.tabs) ? data.tabs : [];
+    if (!tabs.length) {
+      console.log('(no browser tabs open)');
+      return;
+    }
+    for (const item of tabs) {
+      if (!item || typeof item !== 'object') continue;
+      const row = item as Record<string, unknown>;
+      const index = typeof row.index === 'number' ? row.index : 0;
+      const url = typeof row.url === 'string' && row.url ? row.url : '(unknown url)';
+      const selected = row.selected === true ? '  ← selected' : '';
+      console.log(`[${index}] ${url}${selected}`);
+    }
+    return;
+  }
+
+  if (action === 'select') {
+    const index = typeof data.index === 'number' ? data.index : 0;
+    const url = typeof data.url === 'string' && data.url ? data.url : '';
+    console.log(`✓ selected tab ${index}${url ? ` (${url})` : ''}`);
+    return;
+  }
+
   if (action === 'click') {
     const label = typeof data.label === 'string' && data.label ? data.label : '(unlabeled)';
     console.log(`✓ clicked ${label}`);
@@ -3820,10 +3847,26 @@ export function buildRequestBody(
         console.error('  Usage: hamuna browser open https://example.com');
         process.exit(2);
       }
-      return { ...base, url };
+      // `--new-tab` opens the URL in an extra tab of the same panel instead
+      // of replacing the current page.
+      const newTab = flags.newTab === true;
+      return { ...base, url, ...(newTab ? { newTab } : {}) };
     }
     if (action === 'status' || action === 'state' || action === 'list') {
       return base;
+    }
+    if (action === 'tabs') {
+      return base;
+    }
+    if (action === 'select') {
+      assertStringFlag(flags.tab, 'tab');
+      const raw = typeof flags.tab === 'string' ? flags.tab : rest[0];
+      const tab = Number.parseInt(String(raw ?? ''), 10);
+      if (!Number.isInteger(tab) || tab < 0) {
+        console.error('Error: browser select requires --tab <n> from `hamuna browser tabs`.');
+        process.exit(2);
+      }
+      return { ...base, tab };
     }
     if (action === 'read') {
       return base;

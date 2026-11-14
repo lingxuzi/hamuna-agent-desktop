@@ -13,6 +13,13 @@
 // `React.lazy()` split.
 export const BROWSER_BLANK_URL = 'data:text/html;charset=utf-8,%3Chtml%3E%3C%2Fhtml%3E';
 
+// How many tabs one browser panel may hold at a time.
+//
+// KEEP IN SYNC with `MAX_BROWSER_TABS` in `src-tauri/src/browser.rs` — Rust
+// enforces the cap when a webview is created, this copy only decides whether
+// the "+" button is still offered.
+export const MAX_BROWSER_TABS = 3;
+
 // Minimum container width/height (CSS px) before we let the OS-level browser
 // webview be created or resized to match it.
 //

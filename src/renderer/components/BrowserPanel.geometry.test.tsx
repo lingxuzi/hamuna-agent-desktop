@@ -84,7 +84,7 @@ function createCalls(): Array<{ x: number; y: number; width: number; height: num
     .map(([, args]) => args as { x: number; y: number; width: number; height: number });
 }
 
-function panelProps(overrides: { isVisible?: boolean; isSplitTransitioning?: boolean; browserAlive?: boolean; sessionId?: string | null } = {}) {
+function panelProps(overrides: { isVisible?: boolean; isSplitTransitioning?: boolean; sessionId?: string | null } = {}) {
   return {
     tabId: 'tab-1',
     url: 'https://example.com',
@@ -92,7 +92,6 @@ function panelProps(overrides: { isVisible?: boolean; isSplitTransitioning?: boo
     isVisible: overrides.isVisible ?? true,
     isDraggingSplit: false,
     isSplitTransitioning: overrides.isSplitTransitioning ?? false,
-    browserAlive: overrides.browserAlive ?? true,
     sourceFile: null,
     onBrowserCreated: vi.fn(),
     onCreateFailed: vi.fn(),
@@ -104,9 +103,22 @@ function renderPanel() {
   return render(<BrowserPanel {...panelProps()} />);
 }
 
+/**
+ * The panel creates its first webview on mount, and only THEN does the
+ * reconciler start (there is nothing to converge before the webview exists).
+ * One flush settles the create promise; the reconciler's first tick lands on
+ * the next frame.
+ */
+async function settleCreate() {
+  await flushFrame();
+}
+
+let createdTabSeq = 0;
+
 beforeEach(() => {
   rafCallbacks = new Map();
   rafIdCounter = 0;
+  createdTabSeq = 0;
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     rafIdCounter += 1;
     rafCallbacks.set(rafIdCounter, cb);
@@ -120,7 +132,13 @@ beforeEach(() => {
   );
   containerRect = { x: 698, y: 80, width: 690, height: 662 };
   invokeMock.mockClear();
-  invokeMock.mockImplementation(async () => undefined);
+  invokeMock.mockImplementation(async (cmd: string) => {
+    if (cmd === 'cmd_browser_create') {
+      createdTabSeq += 1;
+      return `bt-${createdTabSeq}`;
+    }
+    return undefined;
+  });
 });
 
 afterEach(() => {
@@ -132,14 +150,14 @@ afterEach(() => {
 describe('BrowserPanel geometry reconciler (#339)', () => {
   it('does not create the native webview from split-transition sliver bounds', async () => {
     containerRect = { x: 1223, y: 80, width: 165, height: 662 };
-    const view = render(<BrowserPanel {...panelProps({ browserAlive: false, isSplitTransitioning: true })} />);
+    const view = render(<BrowserPanel {...panelProps({ isSplitTransitioning: true })} />);
 
     await flushFrame();
     await flushFrame();
     expect(createCalls()).toHaveLength(0);
 
     containerRect = { x: 698, y: 80, width: 690, height: 662 };
-    view.rerender(<BrowserPanel {...panelProps({ browserAlive: false, isSplitTransitioning: false })} />);
+    view.rerender(<BrowserPanel {...panelProps({ isSplitTransitioning: false })} />);
     await flushFrame();
 
     expect(createCalls()).toHaveLength(1);
@@ -148,6 +166,7 @@ describe('BrowserPanel geometry reconciler (#339)', () => {
 
   it('keeps converging onto the container rect across successive layout moves', async () => {
     renderPanel();
+    await settleCreate();
 
     // Frame 1: first usable rect delivered.
     await flushFrame();
@@ -171,6 +190,7 @@ describe('BrowserPanel geometry reconciler (#339)', () => {
 
   it('stays idle while the rect is unchanged (no IPC churn at rest)', async () => {
     renderPanel();
+    await settleCreate();
     await flushFrame();
     expect(resizeCalls()).toHaveLength(1);
 
@@ -181,6 +201,7 @@ describe('BrowserPanel geometry reconciler (#339)', () => {
 
   it('retries on the next frame when a resize invoke fails', async () => {
     renderPanel();
+    await settleCreate();
     await flushFrame();
     expect(resizeCalls()).toHaveLength(1);
 
@@ -210,10 +231,15 @@ describe('BrowserPanel geometry reconciler (#339)', () => {
           resolveFirst = () => res(undefined);
         });
       }
+      if (cmd === 'cmd_browser_create') {
+        createdTabSeq += 1;
+        return Promise.resolve(`bt-${createdTabSeq}`);
+      }
       return Promise.resolve(undefined);
     });
 
     const view = render(<BrowserPanel {...panelProps()} />);
+    await settleCreate();
     await flushFrame();
     expect(resizeCalls()).toHaveLength(1); // pending, unresolved
 
@@ -242,8 +268,10 @@ describe('BrowserPanel geometry reconciler (#339)', () => {
     await flushFrame();
     expect(resizeCalls()).toHaveLength(0);
 
-    // Once the container lays out for real, the reconciler picks it up.
+    // Once the container lays out for real, the reconciler picks it up — the
+    // create settles on this frame, the reconciler's first tick on the next.
     containerRect = { x: 440, y: 95, width: 820, height: 610 };
+    await flushFrame();
     await flushFrame();
     expect(resizeCalls()).toHaveLength(1);
   });
@@ -263,7 +291,7 @@ describe('BrowserPanel session binding', () => {
   }
 
   it('creates the webview with the current session id', async () => {
-    render(<BrowserPanel {...panelProps({ browserAlive: false, sessionId: 'session-abc' })} />);
+    render(<BrowserPanel {...panelProps({ sessionId: 'session-abc' })} />);
     await flushFrame();
 
     const creates = invokeMock.mock.calls.filter(([cmd]) => cmd === 'cmd_browser_create');
@@ -272,10 +300,10 @@ describe('BrowserPanel session binding', () => {
   });
 
   it('re-binds when the session id is upgraded', async () => {
-    const view = render(<BrowserPanel {...panelProps({ browserAlive: true, sessionId: 'pending-tab-1' })} />);
-    await flushFrame();
+    const view = render(<BrowserPanel {...panelProps({ sessionId: 'pending-tab-1' })} />);
+    await settleCreate();
 
-    view.rerender(<BrowserPanel {...panelProps({ browserAlive: true, sessionId: 'session-real' })} />);
+    view.rerender(<BrowserPanel {...panelProps({ sessionId: 'session-real' })} />);
     await flushFrame();
 
     const binds = setSessionCalls();
@@ -284,7 +312,13 @@ describe('BrowserPanel session binding', () => {
   });
 
   it('does not bind before the webview exists', async () => {
-    render(<BrowserPanel {...panelProps({ browserAlive: false, sessionId: 'session-abc' })} />);
+    // The create never settles — the webview does not exist yet, so there is
+    // nothing to bind the session id to.
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'cmd_browser_create') return new Promise<unknown>(() => {});
+      return undefined;
+    });
+    render(<BrowserPanel {...panelProps({ sessionId: 'session-abc' })} />);
     await flushFrame();
     expect(setSessionCalls()).toHaveLength(0);
   });
@@ -293,26 +327,25 @@ describe('BrowserPanel session binding', () => {
 /**
  * Double-create regression. `cmd_browser_create` rejects a tabId that already
  * owns a webview, and the renderer's second call lands AFTER the first one
- * succeeded but BEFORE the parent has committed `browserAlive=true` — 20ms
- * apart in the wild (unified-2026-10-25: 21.281 create → 21.297 created →
- * 21.316 duplicate blocked). The rejection then called `onCreateFailed`, which
- * tore down the working webview, so the first login attempt always failed and
- * only a manual retry worked.
+ * succeeded but BEFORE the panel has committed the tab — 20ms apart in the
+ * wild (unified-2026-10-25: 21.281 create → 21.297 created → 21.316
+ * duplicate blocked). The rejection then called `onCreateFailed`, which tore
+ * down the working webview, so the first login attempt always failed and only
+ * a manual retry worked.
  */
 describe('BrowserPanel create is issued once per tab', () => {
   it('survives a parent re-render that changes callback identities mid-flight', async () => {
     const onCreateFailed = vi.fn();
     const view = render(
-      <BrowserPanel {...panelProps({ browserAlive: false })} onCreateFailed={onCreateFailed} />,
+      <BrowserPanel {...panelProps()} onCreateFailed={onCreateFailed} />,
     );
     await flushFrame();
     expect(createCalls()).toHaveLength(1);
 
-    // Parent still believes the webview is dead (it has not processed
-    // onBrowserCreated yet) and hands down fresh callbacks — the common shape
-    // of an inline arrow prop. Pre-fix this re-armed the create branch.
+    // Parent hands down fresh callbacks — the common shape of an inline arrow
+    // prop. Pre-fix this re-armed the create branch.
     view.rerender(
-      <BrowserPanel {...panelProps({ browserAlive: false })} onCreateFailed={onCreateFailed} />,
+      <BrowserPanel {...panelProps()} onCreateFailed={onCreateFailed} />,
     );
     await flushFrame();
 
@@ -320,20 +353,20 @@ describe('BrowserPanel create is issued once per tab', () => {
     expect(onCreateFailed).not.toHaveBeenCalled();
   });
 
-  it('survives an isVisible toggle while the parent still reports browserAlive=false', async () => {
+  it('survives an isVisible toggle while the create is still in flight', async () => {
     const onCreateFailed = vi.fn();
     const view = render(
-      <BrowserPanel {...panelProps({ browserAlive: false, isVisible: true })} onCreateFailed={onCreateFailed} />,
+      <BrowserPanel {...panelProps({ isVisible: true })} onCreateFailed={onCreateFailed} />,
     );
     await flushFrame();
     expect(createCalls()).toHaveLength(1);
 
     view.rerender(
-      <BrowserPanel {...panelProps({ browserAlive: false, isVisible: false })} onCreateFailed={onCreateFailed} />,
+      <BrowserPanel {...panelProps({ isVisible: false })} onCreateFailed={onCreateFailed} />,
     );
     await flushFrame();
     view.rerender(
-      <BrowserPanel {...panelProps({ browserAlive: false, isVisible: true })} onCreateFailed={onCreateFailed} />,
+      <BrowserPanel {...panelProps({ isVisible: true })} onCreateFailed={onCreateFailed} />,
     );
     await flushFrame();
 
@@ -342,11 +375,11 @@ describe('BrowserPanel create is issued once per tab', () => {
   });
 
   it('creates again when the same instance is pointed at a different tabId', async () => {
-    const view = render(<BrowserPanel {...panelProps({ browserAlive: false })} />);
+    const view = render(<BrowserPanel {...panelProps()} />);
     await flushFrame();
     expect(createCalls()).toHaveLength(1);
 
-    view.rerender(<BrowserPanel {...panelProps({ browserAlive: false })} tabId="tab-2" />);
+    view.rerender(<BrowserPanel {...panelProps()} tabId="tab-2" />);
     await flushFrame();
 
     const creates = invokeMock.mock.calls.filter(([cmd]) => cmd === 'cmd_browser_create');

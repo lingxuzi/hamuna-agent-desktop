@@ -35,6 +35,12 @@ const MAX_IMAGE_EDGE: u32 = 1024;
 /// its bounds.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// Bound on waiting for the renderer to create an extra browser tab.
+///
+/// The renderer owns the webview creation (it knows the container geometry),
+/// so an agent-requested tab is a round trip: ask, then wait for it to land.
+const NEW_TAB_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// Bound on a search: the engine page has to load AND paint its result list
 /// before the DOM holds anything to extract.
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(25);
@@ -111,6 +117,12 @@ pub struct BrowserRequest {
     /// Image index (from `browser images`) for `image-data`.
     #[serde(default)]
     pub index: u32,
+    /// Tab index (from `browser tabs`) for `select`.
+    #[serde(default)]
+    pub tab: u32,
+    /// Open the URL in a NEW browser tab instead of the current one.
+    #[serde(default)]
+    pub new_tab: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -174,6 +186,29 @@ async fn resolve_browser(session_id: &str) -> Result<(String, String), String> {
     })
 }
 
+/// Resolve a Chat session id to the owner tab id that groups the browser tabs.
+///
+/// Same fallback ladder as [`resolve_browser`]: an explicit session id wins,
+/// an empty one falls back to the most recently used browser.
+async fn resolve_owner(session_id: &str) -> Result<String, String> {
+    let manager =
+        get_browser_manager().ok_or_else(|| "Browser manager not initialized".to_string())?;
+
+    if !session_id.trim().is_empty() {
+        if let Some(owner) = manager.owner_for_session_id(session_id).await {
+            return Ok(owner);
+        }
+        return Err(format!(
+            "No browser is open for session {}. Ask the user to open the browser panel, or run `hamuna browser open <url>` to open one.",
+            session_id
+        ));
+    }
+
+    manager.any_owner().await.ok_or_else(|| {
+        "No browser is open. Run `hamuna browser open <url>` to open one.".to_string()
+    })
+}
+
 // ──────────────────────────────────────────────────────────
 // Handlers
 // ──────────────────────────────────────────────────────────
@@ -193,10 +228,112 @@ pub async fn browser_state_handler(Query(query): Query<BrowserRequest>) -> Json<
     }
 }
 
+/// `POST /api/browser/tabs` — list the tabs of the session's browser panel.
+///
+/// The agent never sees browser tab ids — those are a renderer-side concept.
+/// It addresses tabs by their index in creation order, which is exactly the
+/// order the tab strip shows them in.
+pub async fn browser_tabs_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
+    let manager = match get_browser_manager() {
+        Some(manager) => manager,
+        None => {
+            return Json(
+                serde_json::to_value(BrowserResponse::err("Browser manager not initialized"))
+                    .unwrap_or_default(),
+            )
+        }
+    };
+    let owner = match resolve_owner(&input.session_id).await {
+        Ok(owner) => owner,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    let tabs = manager.tabs_of_owner(&owner).await;
+    let items: Vec<serde_json::Value> = tabs
+        .iter()
+        .enumerate()
+        .map(|(index, (id, session))| {
+            serde_json::json!({
+                "index": index,
+                "url": manager.url_of(id).unwrap_or_default(),
+                "selected": session.is_selected(),
+            })
+        })
+        .collect();
+
+    Json(
+        serde_json::to_value(BrowserResponse::ok(
+            serde_json::json!({
+                "tabs": items,
+                "count": tabs.len(),
+                "max": crate::browser::MAX_BROWSER_TABS,
+            }),
+            false,
+        ))
+        .unwrap_or_default(),
+    )
+}
+
+/// `POST /api/browser/select` — make tab `tab` the frontmost one.
+///
+/// Selecting a tab also makes it the one the agent drives: the agent's next
+/// `browser read` lands on whatever is on screen.
+pub async fn browser_select_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
+    let manager = match get_browser_manager() {
+        Some(manager) => manager,
+        None => {
+            return Json(
+                serde_json::to_value(BrowserResponse::err("Browser manager not initialized"))
+                    .unwrap_or_default(),
+            )
+        }
+    };
+    let owner = match resolve_owner(&input.session_id).await {
+        Ok(owner) => owner,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    let tabs = manager.tabs_of_owner(&owner).await;
+    let Some((browser_tab_id, _)) = tabs.get(input.tab as usize) else {
+        return Json(serde_json::to_value(BrowserResponse::err(format!(
+            "Tab {} does not exist — this browser has {} tab(s). Run `hamuna browser tabs` to list them.",
+            input.tab,
+            tabs.len()
+        )))
+        .unwrap_or_default());
+    };
+
+    let app = match get_app_handle() {
+        Some(app) => app,
+        None => {
+            return Json(
+                serde_json::to_value(BrowserResponse::err("App handle not initialized"))
+                    .unwrap_or_default(),
+            )
+        }
+    };
+
+    if let Err(e) = crate::browser::select_browser_tab(&app, &manager, browser_tab_id).await {
+        return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default());
+    }
+
+    Json(
+        serde_json::to_value(BrowserResponse::ok(
+            serde_json::json!({ "index": input.tab, "url": manager.url_of(browser_tab_id).unwrap_or_default() }),
+            false,
+        ))
+        .unwrap_or_default(),
+    )
+}
+
 /// `POST /api/browser/navigate` — open a URL in the embedded browser.
 ///
 /// When the Chat has no browser session yet, the handler asks the renderer
 /// to open the panel, waits for the webview to appear, then navigates.
+///
+/// With `new_tab`, the URL lands in an extra tab of the same panel instead of
+/// the frontmost one — the agent's way of keeping a reference page open while
+/// it works on another.
 pub async fn browser_navigate_handler(
     Json(input): Json<BrowserRequest>,
 ) -> Json<serde_json::Value> {
@@ -205,6 +342,19 @@ pub async fn browser_navigate_handler(
         return Json(
             serde_json::to_value(BrowserResponse::err("A URL is required")).unwrap_or_default(),
         );
+    }
+
+    if input.new_tab {
+        return match open_in_new_tab(&input.session_id, &url).await {
+            Ok(tab_id) => Json(
+                serde_json::to_value(BrowserResponse::ok(
+                    serde_json::json!({ "url": url, "tabId": tab_id }),
+                    false,
+                ))
+                .unwrap_or_default(),
+            ),
+            Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+        };
     }
 
     let (tab_id, label, opened) = match resolve_or_open_browser(&input.session_id).await {
@@ -839,6 +989,63 @@ pub async fn request_browser_open(session_id: &str) -> Result<(), String> {
         serde_json::json!({ "sessionId": session_id }),
     )
     .map_err(|e| format!("Failed to request browser open: {e}"))
+}
+
+/// Open `url` in an extra tab of the session's browser panel.
+///
+/// Only the renderer can create a webview (it owns the container geometry), so
+/// this is a round trip: ask the renderer, then wait for the new tab to show
+/// up in the registry. The new tab becomes the owner's frontmost one, which is
+/// also the one the agent drives next.
+async fn open_in_new_tab(session_id: &str, url: &str) -> Result<String, String> {
+    let manager =
+        get_browser_manager().ok_or_else(|| "Browser manager not initialized".to_string())?;
+
+    let owner = manager
+        .owner_for_session_id(session_id)
+        .await
+        .ok_or_else(|| {
+            format!(
+                "No browser is open for session {session_id}. Run `hamuna browser open <url>` first."
+            )
+        })?;
+
+    let before = manager.tabs_of_owner(&owner).await.len();
+    if !manager.has_tab_capacity(&owner).await {
+        return Err(format!(
+            "This browser already has {before} tabs (max {}) — close one before opening another.",
+            crate::browser::MAX_BROWSER_TABS
+        ));
+    }
+
+    request_browser_new_tab(&owner, url).await?;
+
+    let deadline = std::time::Instant::now() + NEW_TAB_TIMEOUT;
+    loop {
+        let tabs = manager.tabs_of_owner(&owner).await;
+        if tabs.len() > before {
+            let (tab_id, _) = tabs.last().expect("tabs is non-empty");
+            return Ok(tab_id.clone());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err("Timed out waiting for the new browser tab to open.".to_string());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+    }
+}
+
+/// Ask the renderer to create one more browser tab for `owner_tab_id`.
+///
+/// The event name carries the owner so a Chat tab only reacts to its own
+/// request — several browser panels can be open at once.
+pub async fn request_browser_new_tab(owner_tab_id: &str, url: &str) -> Result<(), String> {
+    let app = get_app_handle().ok_or_else(|| "App handle not initialized".to_string())?;
+    use tauri::Emitter;
+    app.emit(
+        &format!("browser:agent-new-tab-request:{owner_tab_id}"),
+        serde_json::json!({ "url": url }),
+    )
+    .map_err(|e| format!("Failed to request a new browser tab: {e}"))
 }
 
 #[cfg(test)]

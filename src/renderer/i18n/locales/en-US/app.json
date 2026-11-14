@@ -199,6 +199,8 @@
     "openExternal": "Open in browser",
     "close": "Close browser",
     "newTab": "New tab",
+    "closeTab": "Close tab",
+    "noBounds": "The browser panel is not on screen yet",
     "blankHint": "Enter a URL or paste a link in the address bar above"
   },
   "imagePreview": {

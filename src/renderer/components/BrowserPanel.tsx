@@ -1,9 +1,13 @@
 /**
  * BrowserPanel — Embedded browser preview panel for the split view.
  *
- * Renders a navigation toolbar + a placeholder container. The actual
- * web content is rendered by a native Tauri child Webview positioned
+ * Renders a tab strip + a navigation toolbar + a placeholder container. The
+ * actual web content is rendered by native Tauri child Webviews positioned
  * over the placeholder using absolute coordinates (OS-level overlay).
+ *
+ * One panel owns up to MAX_BROWSER_TABS native webviews. Only the frontmost
+ * one is on screen; the others stay alive so switching tabs is instant and
+ * keeps each page's own state.
  *
  * The toolbar always includes a close button (×), so the separate
  * single-view header in Chat.tsx is not needed — one row handles
@@ -14,10 +18,11 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listenWithCleanup } from '@/utils/tauriListen';
-import { ChevronLeft, ChevronRight, Code2, RotateCw, ExternalLink, Loader2, Globe, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Code2, RotateCw, ExternalLink, Loader2, Globe, X, Plus } from 'lucide-react';
 import { openExternal } from '@/utils/openExternal';
 import {
   BROWSER_BLANK_URL,
+  MAX_BROWSER_TABS,
   shouldSyncBrowserBounds,
   toUsableBrowserBounds,
   type BrowserBounds,
@@ -25,6 +30,27 @@ import {
 import { useBrowserOverlayGuard } from '@/hooks/useBrowserOverlayGuard';
 import { useToast } from '@/components/Toast';
 import Tip from '@/components/Tip';
+
+/**
+ * One embedded browser tab — a native child webview owned by this panel.
+ *
+ * `id` is Rust's browser tab id (`bt-7`): the key of every per-tab native
+ * event and the handle every select/close call takes. It is NOT the owner
+ * tab id — that one groups the tabs of a panel.
+ */
+interface BrowserTab {
+  id: string;
+  /** The URL the tab was opened with — the blank sentinel for a fresh tab. */
+  seedUrl: string;
+  /** The URL the tab is on right now. */
+  url: string;
+  loading: boolean;
+  /** Whether the tab ever left its seed page (the blank-state latch). */
+  hasNavigated: boolean;
+}
+
+/** How long a tab creation waits for the container to be laid out. */
+const CREATE_BOUNDS_TIMEOUT_MS = 5000;
 
 interface BrowserPanelProps {
   tabId: string;
@@ -40,7 +66,6 @@ interface BrowserPanelProps {
   isVisible: boolean;
   isDraggingSplit: boolean;
   isSplitTransitioning?: boolean;
-  browserAlive: boolean;
   /** When previewing a local file, stores its metadata for editor toggle */
   sourceFile?: { name: string; content: string; size: number; path: string } | null;
   /**
@@ -51,8 +76,13 @@ interface BrowserPanelProps {
    * drive workspace.
    */
   workspace?: string | null;
-  onBrowserCreated: () => void;
   onCreateFailed: () => void;
+  /**
+   * Called once a native webview of this panel exists. Consumers that need
+   * to know "the browser is up" (the social-login probe polls the page)
+   * use it; the panel itself does not need the answer.
+   */
+  onBrowserCreated?: () => void;
   onClose: () => void;
   /** Switch to code editor view (only available when sourceFile is set) */
   onSwitchToEditor?: () => void;
@@ -71,11 +101,10 @@ export default function BrowserPanel({
   isVisible,
   isDraggingSplit,
   isSplitTransitioning = false,
-  browserAlive,
   sourceFile,
   workspace,
-  onBrowserCreated,
   onCreateFailed,
+  onBrowserCreated,
   onClose,
   onSwitchToEditor,
   onUrlChange,
@@ -83,19 +112,34 @@ export default function BrowserPanel({
   const { t } = useTranslation('app');
   const urlPlaceholder = t('browserPanel.urlPlaceholder');
   const containerRef = useRef<HTMLDivElement>(null);
-  const [currentUrl, setCurrentUrl] = useState(url ?? '');
-  const [isLoading, setIsLoading] = useState(false);
-  // Which tabId this instance has already issued a create for. NOT an in-flight
-  // flag: `cmd_browser_create` rejects a tab that already owns a webview
-  // ("Browser already exists"), while this effect legitimately re-runs during
-  // the in-flight window — a parent handing down a fresh callback identity, or
-  // `isVisible` toggling with the tab. Releasing the flag when the promise
-  // settled left that window open: the rejected second create raised a toast
-  // AND `onCreateFailed` tore down the webview that had just succeeded.
-  // Keyed by tabId so a same-instance tab switch still creates. Clearing on
-  // failure is deliberately omitted — a retry needs a remount with a new
-  // tabId, otherwise "already exists" would loop.
-  const createdForTabRef = useRef<string | null>(null);
+
+  // ── Tab registry ──
+  //
+  // The panel owns its tabs: Rust owns the native webviews, the renderer owns
+  // which one is frontmost and what each shows. The refs are the source of
+  // truth so callbacks can read the current list without being re-created —
+  // a fresh callback identity would re-arm the create effect.
+  const [tabs, setTabsState] = useState<BrowserTab[]>([]);
+  const tabsRef = useRef<BrowserTab[]>([]);
+  const setTabs = useCallback((next: BrowserTab[] | ((prev: BrowserTab[]) => BrowserTab[])) => {
+    const value = typeof next === 'function' ? next(tabsRef.current) : next;
+    tabsRef.current = value;
+    setTabsState(value);
+  }, []);
+
+  const [activeTabId, setActiveTabIdState] = useState<string | null>(null);
+  const activeTabIdRef = useRef<string | null>(null);
+  const setActiveTabId = useCallback((id: string | null) => {
+    activeTabIdRef.current = id;
+    setActiveTabIdState(id);
+  }, []);
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const hasTabs = tabs.length > 0;
+
+  // Overlay detection — an open modal covers the native webview, so the
+  // webview has to be hidden while one is up.
+  const overlayDetected = useBrowserOverlayGuard(hasTabs);
 
   // Toast accessed via ref so the create effect doesn't list it as a dep
   // (project convention — see CLAUDE.md react_stability_rules). Ref is
@@ -110,30 +154,22 @@ export default function BrowserPanel({
   const onUrlChangeRef = useRef(onUrlChange);
   useEffect(() => { onUrlChangeRef.current = onUrlChange; }, [onUrlChange]);
 
+  const onBrowserCreatedRef = useRef(onBrowserCreated);
+  useEffect(() => { onBrowserCreatedRef.current = onBrowserCreated; }, [onBrowserCreated]);
+
   // Mount-tracking ref to gate post-resolve setState in async chains, guarding
   // the close→reopen race where an unmounted instance's create promise still
-  // resolves and would otherwise mutate parent state for the new instance's
-  // tabId. Must be declared BEFORE any effect that depends on it.
+  // resolves and would otherwise mutate state for the new instance's tabId.
+  // Must be declared BEFORE any effect that depends on it.
   const isMountedRef = useRef(true);
   useEffect(() => () => { isMountedRef.current = false; }, []);
 
-  // Whether this webview has ever navigated to a real (non-blank) URL. Once
-  // true, subsequent visits to the blank page (e.g. via browser back-button)
-  // are shown by the native webview rather than overridden by our React empty
-  // state — letting the user see the actual history page instead of the
-  // "new tab" UI on every back-press.
-  const [hasNavigated, setHasNavigated] = useState(false);
-
-  // ── Editable URL bar state ──
-  const [urlEditing, setUrlEditing] = useState(false);
-  const [urlDraft, setUrlDraft] = useState('');
-  const urlInputRef = useRef<HTMLInputElement>(null);
-
-  // Overlay detection
-  const overlayDetected = useBrowserOverlayGuard(browserAlive);
-
   // Track the last URL we told the webview to load
   const lastRequestedUrlRef = useRef<string | null>(null);
+  // Guards against issuing a second create while the first is still in
+  // flight — Rust would reject it ("already exists") and the rejection would
+  // tear down the webview that had just been created.
+  const createInFlightRef = useRef(false);
   const lastSyncedBoundsRef = useRef<BrowserBounds | null>(null);
   // Resize-invoke serialization marker. A ref (not effect-local state) so it
   // survives reconciler effect restarts: if visibility toggles while a resize
@@ -149,84 +185,102 @@ export default function BrowserPanel({
     return toUsableBrowserBounds(el.getBoundingClientRect());
   }, []);
 
-  // ── Create or navigate webview when url prop changes ──
-  useEffect(() => {
-    if (!url) return;
-    // While the split panel is in its Windows transition-suspension window,
-    // the native webview is hidden specifically because the DOM rect is still
-    // moving. If no webview exists yet, wait instead of seeding Rust's SHOW
-    // cache with that transitional rect. Once alive, the reconciler below keeps
-    // syncing even during suspension so existing webviews still converge.
-    if (!browserAlive && isSplitTransitioning) return;
-    let cancelled = false;
-    let rafId = 0;
-
-    const createWithBounds = (bounds: BrowserBounds) => {
-      createdForTabRef.current = tabId;
-      lastRequestedUrlRef.current = url;
-      lastSyncedBoundsRef.current = bounds;
-
-      invoke('cmd_browser_create', {
-        tabId, url,
-        x: bounds.x, y: bounds.y,
-        width: bounds.width, height: bounds.height,
-        sessionId: sessionId ?? null,
-      })
-        .then(() => {
-          // Cross-instance race: this resolution may belong to an unmounted
-          // BrowserPanel whose `tabId` has been reused by a fresh instance
-          // (close → reopen). Calling cmd_browser_close here would kill the
-          // new instance's webview. The unmount-cleanup effect already handles
-          // teardown for unmounted instances; bail without touching state.
-          if (!isMountedRef.current) return;
-          if (cancelled) {
-            // Same instance, but deps changed mid-create (e.g. url updated).
-            // Sync browserAlive=true so the navigate branch on the next effect
-            // run can target the new URL via cmd_browser_navigate.
-            onBrowserCreated();
+  /**
+   * Create one native webview and register it as a tab of this panel.
+   *
+   * The webview can only be created by the renderer (it owns the container
+   * geometry), so this waits for a usable rect before handing the call to
+   * Rust. A mid-transition rect would park the native webview at the wrong
+   * position (issue #290) — hence the wait rather than a one-shot read.
+   */
+  const createTab = useCallback((seedUrl: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const deadline = Date.now() + CREATE_BOUNDS_TIMEOUT_MS;
+      const attempt = () => {
+        if (!isMountedRef.current) { resolve(null); return; }
+        const bounds = readUsableBounds();
+        if (!bounds) {
+          if (Date.now() > deadline) {
+            toastRef.current.error(t('browserPanel.openFailed', { message: t('browserPanel.noBounds') }));
+            resolve(null);
             return;
           }
-          onBrowserCreated();
+          requestAnimationFrame(attempt);
+          return;
+        }
+        invoke<string>('cmd_browser_create', {
+          tabId, url: seedUrl,
+          x: bounds.x, y: bounds.y,
+          width: bounds.width, height: bounds.height,
+          sessionId: sessionId ?? null,
         })
-        .catch((err) => {
-          if (!isMountedRef.current) return;
-          console.error('[browser] Create failed:', err);
-          if (!cancelled) {
+          .then((id) => {
+            if (!isMountedRef.current) { resolve(null); return; }
+            setTabs((prev) => (prev.some((tab) => tab.id === id) ? prev : [
+              ...prev,
+              { id, seedUrl, url: seedUrl, loading: false, hasNavigated: false },
+            ]));
+            setActiveTabId(id);
+            onBrowserCreatedRef.current?.();
+            resolve(id);
+          })
+          .catch((err) => {
+            if (!isMountedRef.current) { resolve(null); return; }
+            console.error('[browser] Create failed:', err);
             const msg = typeof err === 'string' ? err : (err?.message ?? String(err));
             toastRef.current.error(t('browserPanel.openFailed', { message: msg }));
-            onCreateFailed();
-          }
-        })
-    };
+            // A failure that leaves the panel with NO tab is panel-level (the
+            // seed URL could not be opened) — the parent tears the panel down.
+            // A failure on an extra tab only loses that tab.
+            if (tabsRef.current.length === 0) onCreateFailed();
+            resolve(null);
+          });
+      };
+      attempt();
+    });
+  }, [tabId, sessionId, readUsableBounds, onCreateFailed, t, setTabs, setActiveTabId]);
 
-    const waitForUsableBounds = () => {
-      if (cancelled || createdForTabRef.current === tabId) return;
-      const bounds = readUsableBounds();
-      if (bounds) {
-        createWithBounds(bounds);
-        return;
-      }
-      rafId = requestAnimationFrame(waitForUsableBounds);
-    };
-
-    if (!browserAlive && createdForTabRef.current !== tabId && isVisible) {
-      // Create at the first usable rect after any known split-transition
-      // suspension (#290 degenerate-bounds floor). The previous "wait for the
-      // rect to hold still across N frames" dance (a8cd4f47) is still gone: a
-      // momentarily-stable sample says nothing about whether the layout will
-      // move again (#339), so create-time precision cannot be the only owner.
-      // After creation, the reconciler below owns convergence.
-      waitForUsableBounds();
-    } else if (browserAlive && url !== lastRequestedUrlRef.current) {
+  // ── Seed / navigate ──
+  //
+  // The parent's `url` prop is the panel's seed URL: the first time it is set
+  // the panel opens a tab with it. Later changes navigate the FRONTMOST tab —
+  // "open this link in the browser" means "show it in the browser I am using".
+  useEffect(() => {
+    if (!url) return;
+    if (tabsRef.current.length === 0) {
+      // No tab yet — open one, but only while the panel is on screen and
+      // settled (a transition rect would misplace the native webview).
+      if (!isVisible || isSplitTransitioning || createInFlightRef.current) return;
+      createInFlightRef.current = true;
+      lastRequestedUrlRef.current = url;
+      void createTab(url).finally(() => { createInFlightRef.current = false; });
+      return;
+    }
+    if (url !== lastRequestedUrlRef.current) {
       lastRequestedUrlRef.current = url;
       invoke('cmd_browser_navigate', { tabId, url }).catch(() => {});
     }
+  }, [url, isVisible, isSplitTransitioning, tabId, hasTabs, createTab]);
 
-    return () => {
-      cancelled = true;
-      if (rafId) cancelAnimationFrame(rafId);
-    };
-  }, [url, browserAlive, isVisible, isSplitTransitioning, tabId, sessionId, onBrowserCreated, onCreateFailed, readUsableBounds, t]);
+  // ── Owner change ──
+  //
+  // The tabs belong to the owner tab id. Pointing the same instance at a
+  // different owner means a different panel — the old tabs must go, and the
+  // new owner starts from scratch. The reset must be a side effect (it has to
+  // fire together with the native teardown), so the setState-in-effect rule is
+  // disabled here rather than moving the reset to render, where `setTabs`
+  // would read a ref during render — a worse violation.
+  const ownerTabIdRef = useRef(tabId);
+  useEffect(() => {
+    if (ownerTabIdRef.current === tabId) return;
+    const previousOwner = ownerTabIdRef.current;
+    ownerTabIdRef.current = tabId;
+    invoke('cmd_browser_close_owner', { tabId: previousOwner }).catch(() => {});
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTabs([]);
+    setActiveTabId(null);
+    lastRequestedUrlRef.current = null;
+  }, [tabId, setTabs, setActiveTabId]);
 
   // ── Re-bind the browser to the Chat session id ──
   //
@@ -237,39 +291,86 @@ export default function BrowserPanel({
   // re-pointed at the new id — otherwise every agent command would look up a
   // browser that does not exist under that id.
   useEffect(() => {
-    if (!browserAlive) return;
+    if (!hasTabs) return;
     invoke('cmd_browser_set_session', {
       tabId,
       sessionId: sessionId ?? null,
     }).catch(() => {});
-  }, [browserAlive, tabId, sessionId]);
+  }, [hasTabs, tabId, sessionId]);
 
   // ── Listen for URL/loading events from Rust ──
+  //
+  // One listener pair per browser tab — the native events are keyed by the
+  // browser tab id, not by the owner.
+  const tabIdsKey = tabs.map((tab) => tab.id).join(',');
   useEffect(() => {
-    if (!browserAlive) return;
+    if (!tabIdsKey) return;
     const ac = new AbortController();
 
-    void listenWithCleanup<string>(`browser:url-changed:${tabId}`, (event) => {
-      const next = event.payload;
-      setCurrentUrl(next);
-      // Latch hasNavigated on first real navigation — lets the React empty
-      // state release control over the panel for the rest of this webview's
-      // lifetime. Anchored to the scheme (anything but `data:`) rather than
-      // string equality with BROWSER_BLANK_URL: WebKit reports the data: URL
-      // back with Tauri's CSP `<meta>` injection appended, so equality check
-      // breaks and the latch would fire on the very first blank-page load.
-      if (next && !next.startsWith('data:')) {
-        setHasNavigated((prev) => (prev ? prev : true));
-      }
-      onUrlChangeRef.current?.(next);
-    }, ac.signal);
+    for (const id of tabIdsKey.split(',')) {
+      void listenWithCleanup<string>(`browser:url-changed:${id}`, (event) => {
+        const next = event.payload;
+        setTabs((prev) => prev.map((tab) => {
+          if (tab.id !== id) return tab;
+          // Latch hasNavigated on the first real navigation — lets the React
+          // empty state release control over the tab for the rest of its
+          // lifetime. Anchored to the scheme (anything but `data:`) rather
+          // than string equality with BROWSER_BLANK_URL: WebKit reports the
+          // data: URL back with Tauri's CSP `<meta>` injection appended, so
+          // equality check breaks and the latch would fire on the very first
+          // blank-page load.
+          const navigated = tab.hasNavigated || (!!next && !next.startsWith('data:'));
+          return { ...tab, url: next, hasNavigated: navigated };
+        }));
+        if (id === activeTabIdRef.current) onUrlChangeRef.current?.(next);
+      }, ac.signal);
 
-    void listenWithCleanup<boolean>(`browser:loading:${tabId}`, (event) => {
-      setIsLoading(event.payload);
+      void listenWithCleanup<boolean>(`browser:loading:${id}`, (event) => {
+        setTabs((prev) => prev.map((tab) => (tab.id === id ? { ...tab, loading: event.payload } : tab)));
+      }, ac.signal);
+    }
+
+    return () => ac.abort();
+  }, [tabIdsKey, setTabs]);
+
+  // ── Frontmost tab ──
+  //
+  // Rust owns the native visibility and announces every change — the agent
+  // can switch tabs behind the user's back, and the strip has to follow.
+  useEffect(() => {
+    const ac = new AbortController();
+
+    void listenWithCleanup<string>(`browser:tab-selected:${tabId}`, (event) => {
+      const selected = event.payload;
+      if (!selected) return;
+      setActiveTabId(selected);
+      const tab = tabsRef.current.find((candidate) => candidate.id === selected);
+      if (tab) onUrlChangeRef.current?.(tab.url);
     }, ac.signal);
 
     return () => ac.abort();
-  }, [browserAlive, tabId]);
+  }, [tabId, setActiveTabId]);
+
+  // ── Agent-requested extra tab ──
+  //
+  // The agent asks for a tab by URL; the renderer is the only side that can
+  // create a webview. Chat.tsx listens to the same event to bring the browser
+  // view on screen — this side creates the tab.
+  useEffect(() => {
+    const ac = new AbortController();
+
+    void listenWithCleanup<{ url?: string }>(
+      `browser:agent-new-tab-request:${tabId}`,
+      (event) => {
+        const requested = event.payload?.url;
+        if (!requested) return;
+        void createTab(requested);
+      },
+      ac.signal,
+    );
+
+    return () => ac.abort();
+  }, [tabId, createTab]);
 
   // ── Geometry reconciler (issue #339) ──
   //
@@ -294,7 +395,7 @@ export default function BrowserPanel({
   // cmd_browser_resize updates Rust's cached geometry on hidden webviews, so
   // the next SHOW restores the current rect, not a stale one.
   useEffect(() => {
-    if (!browserAlive || !isVisible) return;
+    if (!hasTabs || !isVisible) return;
     let rafId = 0;
     let disposed = false;
     const tick = () => {
@@ -328,27 +429,28 @@ export default function BrowserPanel({
       disposed = true;
       if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [browserAlive, isVisible, readUsableBounds, tabId]);
+  }, [hasTabs, isVisible, readUsableBounds, tabId]);
 
   // Blank-state detection.
   //
-  // Anchored to the `url` prop (the URL the parent asked us to load) and a
-  // one-way `hasNavigated` latch — NOT to the moving `currentUrl`. This means:
-  //   - Toolbar-opened browser (parent passes BROWSER_BLANK_URL) → blank state
+  // Anchored to the tab's SEED url and a one-way `hasNavigated` latch — NOT
+  // to the moving `url`. This means:
+  //   - Toolbar-opened browser (seed = BROWSER_BLANK_URL) → blank state
   //     until the user types a URL and navigates away.
-  //   - User opens a chat link (parent passes 'https://…') → never blank.
+  //   - User opens a chat link (seed = 'https://…') → never blank.
   //   - User navigates from blank → site → presses Back to the blank page →
   //     hasNavigated stays true, so the native webview keeps control instead
   //     of our React empty state hijacking the back button.
-  //
-  // Avoiding `currentUrl` here also sidesteps the race where create resolves
-  // a frame before the first `browser:url-changed` event arrives (an empty
-  // `currentUrl` would otherwise hide the just-alive webview).
-  const isBlankPage = url === BROWSER_BLANK_URL && !hasNavigated;
+  const isBlankPage = activeTab !== null
+    && activeTab.seedUrl === BROWSER_BLANK_URL
+    && !activeTab.hasNavigated;
+
+  const currentUrl = activeTab?.url ?? '';
+  const isLoading = activeTab?.loading ?? false;
 
   // ── Consolidated show/hide ──
   useEffect(() => {
-    if (!browserAlive) return;
+    if (!hasTabs) return;
     const nativeViewSuspended = isDraggingSplit || isSplitTransitioning;
     const shouldShow = isVisible && !nativeViewSuspended && !overlayDetected && !isBlankPage;
     if (shouldShow) {
@@ -359,13 +461,42 @@ export default function BrowserPanel({
     } else {
       invoke('cmd_browser_hide', { tabId }).catch(() => {});
     }
-  }, [isVisible, isDraggingSplit, isSplitTransitioning, overlayDetected, browserAlive, isBlankPage, tabId]);
+  }, [hasTabs, isVisible, isDraggingSplit, isSplitTransitioning, overlayDetected, isBlankPage, tabId]);
 
   // ── Cleanup on unmount ──
   useEffect(() => {
     const tid = tabId;
-    return () => { invoke('cmd_browser_close', { tabId: tid }).catch(() => {}); };
+    return () => { invoke('cmd_browser_close_owner', { tabId: tid }).catch(() => {}); };
   }, [tabId]);
+
+  // ── Tab actions ──
+  const handleSelectTab = useCallback((browserTabId: string) => {
+    setActiveTabId(browserTabId);
+    invoke('cmd_browser_select', { browserTabId }).catch(() => {});
+  }, [setActiveTabId]);
+
+  const handleCloseTab = useCallback((browserTabId: string) => {
+    invoke('cmd_browser_close_tab', { browserTabId }).catch(() => {});
+    const remaining = tabsRef.current.filter((tab) => tab.id !== browserTabId);
+    setTabs(remaining);
+    if (remaining.length === 0) {
+      // The last tab is gone — the browser panel itself has nothing to show.
+      onClose();
+      return;
+    }
+    if (activeTabIdRef.current === browserTabId) {
+      // Rust promotes the newest remaining tab; mirror that locally so the
+      // strip and the native overlay agree immediately.
+      const promoted = remaining[remaining.length - 1];
+      setActiveTabId(promoted.id);
+      onUrlChangeRef.current?.(promoted.url);
+    }
+  }, [onClose, setTabs, setActiveTabId]);
+
+  const handleNewTab = useCallback(() => {
+    if (tabsRef.current.length >= MAX_BROWSER_TABS) return;
+    void createTab(BROWSER_BLANK_URL);
+  }, [createTab]);
 
   // ── Navigation handlers ──
   const handleGoBack = useCallback(() => {
@@ -389,6 +520,10 @@ export default function BrowserPanel({
   }, [currentUrl, workspace]);
 
   // ── URL bar editing ──
+  const [urlEditing, setUrlEditing] = useState(false);
+  const [urlDraft, setUrlDraft] = useState('');
+  const urlInputRef = useRef<HTMLInputElement>(null);
+
   const handleUrlClick = useCallback(() => {
     // On blank state, start with empty draft so user can type immediately.
     setUrlDraft(isBlankPage ? '' : currentUrl);
@@ -432,8 +567,68 @@ export default function BrowserPanel({
   const navBtn =
     'flex h-7 w-7 items-center justify-center rounded-md text-[var(--ink-muted)] hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]';
 
+  // Tab strip — every control shares one height so the row reads as one band.
+  const tabBtn =
+    'flex h-6 min-w-0 max-w-[150px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-xs';
+
+  const tabLabel = (tab: BrowserTab): string => {
+    if (tab.seedUrl === BROWSER_BLANK_URL && !tab.hasNavigated) return t('browserPanel.newTab');
+    try {
+      return new URL(tab.url).hostname || tab.url;
+    } catch {
+      return tab.url || t('browserPanel.newTab');
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
+      {/* Tab strip — one native webview per tab, frontmost one on screen */}
+      {tabs.length > 0 && (
+        <div className="flex h-7 flex-shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--paper)] px-1.5">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                className={`${tabBtn} ${
+                  isActive
+                    ? 'bg-[var(--paper-inset)] text-[var(--ink)]'
+                    : 'text-[var(--ink-muted)] hover:bg-[var(--paper-inset)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleSelectTab(tab.id)}
+                  className="min-w-0 flex-1 truncate text-left"
+                  title={tab.url || tabLabel(tab)}
+                >
+                  {tabLabel(tab)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCloseTab(tab.id)}
+                  aria-label={t('browserPanel.closeTab')}
+                  className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded text-[var(--ink-faint)] hover:bg-[var(--paper)] hover:text-[var(--ink)]"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
+          <Tip label={t('browserPanel.newTab')} position="bottom">
+            <button
+              type="button"
+              aria-label={t('browserPanel.newTab')}
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-muted)] hover:bg-[var(--paper-inset)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={handleNewTab}
+              disabled={tabs.length >= MAX_BROWSER_TABS}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
+        </div>
+      )}
+
       {/* Navigation toolbar — always includes close button (single row for all states) */}
       <div className="relative flex h-9 flex-shrink-0 items-center gap-0.5 border-b border-[var(--line)] bg-[var(--paper)] px-2">
         <Tip label={t('browserPanel.back')} position="bottom">
@@ -521,7 +716,7 @@ export default function BrowserPanel({
 
       {/* Placeholder container — native Webview overlays this area */}
       <div ref={containerRef} className="relative min-h-0 flex-1 bg-[var(--paper)]">
-        {!browserAlive && !isBlankPage && (
+        {!hasTabs && !isBlankPage && (
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-2 text-[var(--ink-subtle)]">
               <Globe className="h-6 w-6" />
@@ -565,7 +760,7 @@ export default function BrowserPanel({
           </button>
         )}
 
-        {(isDraggingSplit || isSplitTransitioning) && browserAlive && !isBlankPage && (
+        {(isDraggingSplit || isSplitTransitioning) && hasTabs && !isBlankPage && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--paper)]/80 backdrop-blur-md">
             <div className="flex flex-col items-center gap-2 text-[var(--ink-subtle)]">
               <Globe className="h-5 w-5" />

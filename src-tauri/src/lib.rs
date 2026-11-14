@@ -586,6 +586,7 @@ pub fn run() {
             terminal::cmd_terminal_close,
             // Browser commands (embedded webview)
             browser::cmd_browser_create,
+            browser::cmd_browser_select,
             browser::cmd_browser_set_session,
             browser::cmd_browser_navigate,
             browser::cmd_browser_go_back,
@@ -594,7 +595,8 @@ pub fn run() {
             browser::cmd_browser_resize,
             browser::cmd_browser_show,
             browser::cmd_browser_hide,
-            browser::cmd_browser_close,
+            browser::cmd_browser_close_tab,
+            browser::cmd_browser_close_owner,
             browser::cmd_browser_query_visible,
             // File utility commands
             commands::cmd_read_workspace_file,

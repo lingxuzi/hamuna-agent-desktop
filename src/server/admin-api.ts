@@ -1834,6 +1834,8 @@ Commands:
   images                     List visible images with an index
   image-data --index <n>     Save one image to a workspace file
   login --user <name>        Fill username + password (password via stdin)
+  tabs                       List the open tabs (indexed by creation order)
+  select --tab <n>           Bring tab <n> to the front
 
 Targeting:
   --selector <css>           CSS selector for the target element
@@ -1847,6 +1849,8 @@ Options:
   --query <text>             Search query (for 'search'; may also be positional)
   --engine <name>            Search engine: 360 (default) | bing | baidu
   --index <n>                Image index (for 'image-data'; from 'images')
+  --tab <n>                  Tab index (for 'select'; from 'tabs')
+  --new-tab                  Open in a new tab (for 'open'); max 3 tabs
   --output <path>            Where to write the image (default
                              hamuna_files/temp/captcha-<ts>.png)
   --password-stdin           Read the password from stdin (for 'login')
@@ -1876,7 +1880,14 @@ Login flow (captcha aware):
   The password never appears in argv or in the page's console — it goes in
   through stdin and is embedded in one eval payload. Cookies persist across
   panel close/reopen, so a login survives for the rest of the app session.
-  'login' never submits by itself: reading the captcha has to happen first.`,
+  'login' never submits by itself: reading the captcha has to happen first.
+
+Tabs:
+  The panel holds up to 3 tabs. 'tabs' lists them in creation order and
+  prints the index of each; 'select --tab <n>' brings one to the front.
+  Every other command drives the SELECTED tab, so switch before acting on a
+  background tab. 'open --new-tab' adds a tab instead of replacing the
+  current page.`,
   mcp: `hamuna mcp — Manage MCP tool servers
 
 Commands:

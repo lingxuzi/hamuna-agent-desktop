@@ -192,6 +192,14 @@ pub async fn start_management_api() -> Result<u16, String> {
             post(crate::browser_api::browser_navigate_handler),
         )
         .route(
+            "/api/browser/tabs",
+            post(crate::browser_api::browser_tabs_handler),
+        )
+        .route(
+            "/api/browser/select",
+            post(crate::browser_api::browser_select_handler),
+        )
+        .route(
             "/api/browser/read",
             post(crate::browser_api::browser_read_handler),
         )

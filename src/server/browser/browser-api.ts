@@ -47,6 +47,10 @@ export interface BrowserActionPayload {
   password?: string;
   /** Image index (from `images`) for `image-data`. */
   index?: number;
+  /** Tab index (from `tabs`) for `select`. */
+  tab?: number;
+  /** Open the URL in a new browser tab instead of the current one. */
+  newTab?: boolean;
 }
 
 /**
@@ -149,6 +153,8 @@ async function callBrowser(
       fields.filter(([, value]) => typeof value === 'string' && value !== ''),
     );
     if (typeof payload.index === 'number') body.index = payload.index;
+    if (typeof payload.tab === 'number') body.tab = payload.tab;
+    if (payload.newTab) body.new_tab = true;
   }
 
   // managementApi never throws — transport errors come back as `ok: false`,
@@ -196,7 +202,44 @@ export async function handleBrowserNavigate(payload: BrowserActionPayload): Prom
   return ok({
     url: typeof data.url === 'string' ? data.url : url,
     opened: response.opened === true,
+    newTab: payload.newTab === true,
   });
+}
+
+/**
+ * `hamuna browser tabs` — list the open tabs of the browser panel.
+ *
+ * Tabs are addressed by index in creation order, which is the order the tab
+ * strip shows them in — the agent never sees the internal browser tab ids.
+ */
+export async function handleBrowserTabs(payload: BrowserActionPayload): Promise<AdminResponse> {
+  const { response, error } = await callBrowser('/api/browser/tabs', 'POST', payload);
+  if (error) return error;
+  const data = payloadOf(response);
+  const tabs = Array.isArray(data.tabs) ? data.tabs : [];
+  return ok({
+    tabs,
+    count: typeof data.count === 'number' ? data.count : tabs.length,
+    max: typeof data.max === 'number' ? data.max : 0,
+  });
+}
+
+/**
+ * `hamuna browser select --tab N` — bring tab N to the front.
+ *
+ * The selected tab is the one every later browser command drives.
+ */
+export async function handleBrowserSelect(payload: BrowserActionPayload): Promise<AdminResponse> {
+  if (typeof payload.tab !== 'number' || !Number.isInteger(payload.tab) || payload.tab < 0) {
+    return {
+      success: false,
+      error: 'A tab index is required: pass --tab <n> from `hamuna browser tabs`.',
+      suggestedCommand: 'hamuna browser tabs',
+    };
+  }
+  const { response, error } = await callBrowser('/api/browser/select', 'POST', payload);
+  if (error) return error;
+  return ok(payloadOf(response));
 }
 
 /**
@@ -404,6 +447,10 @@ export async function handleBrowserAction(
     case 'navigate':
     case 'open':
       return handleBrowserNavigate(payload);
+    case 'tabs':
+      return handleBrowserTabs(payload);
+    case 'select':
+      return handleBrowserSelect(payload);
     case 'read':
       return handleBrowserRead(payload);
     case 'search':
@@ -423,7 +470,7 @@ export async function handleBrowserAction(
     default:
       return {
         success: false,
-        error: `Unknown browser action: ${action}. Use state | open | read | search | click | fill | submit | images | image-data | login.`,
+        error: `Unknown browser action: ${action}. Use state | open | tabs | select | read | search | click | fill | submit | images | image-data | login.`,
       };
   }
 }
