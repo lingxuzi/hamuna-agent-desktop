@@ -12,6 +12,7 @@
 
 import { managementApi } from '../utils/management-api-client';
 import { getSessionEngine } from '../session-engine/selector';
+import { recordEmbeddedBrowserOutcome } from '../utils/embedded-browser-quota';
 import { htmlToMarkdown } from './html-to-markdown';
 
 export interface AdminResponse<T = unknown> {
@@ -40,6 +41,12 @@ export interface BrowserActionPayload {
   query?: string;
   /** Search engine for `search` ("360" | "bing" | "baidu"). */
   engine?: string;
+  /** Username for `login`. Never echoed back or logged. */
+  username?: string;
+  /** Password for `login`. Never echoed back or logged. */
+  password?: string;
+  /** Image index (from `images`) for `image-data`. */
+  index?: number;
 }
 
 /**
@@ -122,6 +129,11 @@ async function callBrowser(
     ['value', payload.value],
     ['query', payload.query],
     ['engine', payload.engine],
+    // Credentials are POST-only. A query string lands in Rust's request log
+    // and in any URL a future caller prints, so they are added below, after
+    // the GET branch has already built its target.
+    ['username', method === 'POST' ? payload.username : undefined],
+    ['password', method === 'POST' ? payload.password : undefined],
   ];
 
   let target = path;
@@ -136,10 +148,18 @@ async function callBrowser(
     body = Object.fromEntries(
       fields.filter(([, value]) => typeof value === 'string' && value !== ''),
     );
+    if (typeof payload.index === 'number') body.index = payload.index;
   }
 
+  // managementApi never throws — transport errors come back as `ok: false`,
+  // which is exactly a real embedded-browser failure (Rust bridge down, open
+  // timeout, dead webview). This is the ONLY place that health is observable;
+  // argument validation happens in the handlers above and never reaches here,
+  // so a model typo cannot spend the Playwright quota.
   const resp = await managementApi(target, method, body, { timeoutMs: BROWSER_TIMEOUT_MS });
-  if (resp.ok !== true) {
+  const ok = resp.ok === true;
+  recordEmbeddedBrowserOutcome(ok);
+  if (!ok) {
     return { response: resp, error: mgmtError(resp, `Browser request failed: ${path}`) };
   }
   return { response: resp, error: null };
@@ -302,6 +322,72 @@ export async function handleBrowserSearch(payload: BrowserActionPayload): Promis
 }
 
 /**
+ * `hamuna browser images` — list the page's visible images with indices.
+ *
+ * The index is what `image-data` takes back, so the agent never has to hold a
+ * URL: a captcha's URL usually resolves to a different picture per cookie, and
+ * fetching it from the sidecar would hand the agent an image that is not the
+ * one on screen.
+ */
+export async function handleBrowserImages(payload: BrowserActionPayload): Promise<AdminResponse> {
+  const { response, error } = await callBrowser('/api/browser/images', 'POST', payload);
+  if (error) return error;
+  const data = payloadOf(response);
+  const images = Array.isArray(data.images) ? data.images : [];
+  return ok({ count: typeof data.count === 'number' ? data.count : images.length, images });
+}
+
+/**
+ * `hamuna browser image-data --index N` — one image's pixels as a data URL.
+ *
+ * Kept separate from `images` because the payload is large (hundreds of KB of
+ * base64) and most listings do not need it.
+ */
+export async function handleBrowserImageData(payload: BrowserActionPayload): Promise<AdminResponse> {
+  if (typeof payload.index !== 'number' || !Number.isInteger(payload.index) || payload.index < 0) {
+    return {
+      success: false,
+      error: 'An image index is required: pass --index <n> from `hamuna browser images`.',
+      suggestedCommand: 'hamuna browser images',
+    };
+  }
+  const { response, error } = await callBrowser('/api/browser/image-data', 'POST', payload);
+  if (error) return error;
+  return ok(payloadOf(response));
+}
+
+/**
+ * `hamuna browser login --user X --password-stdin` — fill a login form.
+ *
+ * Returns what was filled and whether a captcha blocks submission, but never
+ * echoes the values. The caller decides whether to read the captcha first;
+ * submitting stays a separate, user-approved `submit`.
+ */
+export async function handleBrowserLogin(payload: BrowserActionPayload): Promise<AdminResponse> {
+  const username = (payload.username ?? '').trim();
+  if (!username) {
+    return {
+      success: false,
+      error: 'A username is required.',
+      suggestedCommand: 'hamuna browser login --user me@example.com --password-stdin',
+    };
+  }
+  if (typeof payload.password !== 'string' || payload.password === '') {
+    return {
+      success: false,
+      error: 'A password is required. Pipe it in with --password-stdin so it never lands in shell history.',
+      suggestedCommand: 'hamuna browser login --user me@example.com --password-stdin',
+    };
+  }
+  const { response, error } = await callBrowser('/api/browser/login', 'POST', {
+    ...payload,
+    username,
+  });
+  if (error) return error;
+  return ok(payloadOf(response));
+}
+
+/**
  * Dispatch a `browser/<action>` admin route.
  *
  * Lives behind a dynamic import at the call site so the HTML→markdown
@@ -322,6 +408,12 @@ export async function handleBrowserAction(
       return handleBrowserRead(payload);
     case 'search':
       return handleBrowserSearch(payload);
+    case 'images':
+      return handleBrowserImages(payload);
+    case 'image-data':
+      return handleBrowserImageData(payload);
+    case 'login':
+      return handleBrowserLogin(payload);
     case 'click':
       return handleBrowserClick(payload);
     case 'fill':
@@ -331,7 +423,7 @@ export async function handleBrowserAction(
     default:
       return {
         success: false,
-        error: `Unknown browser action: ${action}. Use state | open | read | search | click | fill | submit.`,
+        error: `Unknown browser action: ${action}. Use state | open | read | search | click | fill | submit | images | image-data | login.`,
       };
   }
 }

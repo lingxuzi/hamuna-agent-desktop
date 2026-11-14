@@ -480,12 +480,26 @@ hamuna browser click --text "Sign in"            # 点可见文字匹配的元�
 hamuna browser fill --selector "#q" --value "hamuna"
 hamuna browser upload --selector "input[type=file]" --file ./cover.png  # 选文件（≤12 MiB）
 hamuna browser submit --selector "#form"         # 提交表单（会弹审批）
+hamuna browser images                            # 列出可见图片 + 索引
+hamuna browser image-data --index 0              # 存一张图片到工作区（默认 hamuna_files/temp/）
+printf %s "$PASSWORD" | hamuna browser login --user me@example.com --password-stdin
 ```
+
+**登录流程（含验证码）：**
+1. `browser open <登录页>`
+2. `printf %s "$PASSWORD" | browser login --user <账号> --password-stdin` —— 密码走 stdin，不进 argv / shell 历史；命令本身**不提交**，只填好并告诉你有没有验证码
+3. 有验证码时：`browser images` 拿索引 → `browser image-data --index <n>` 存成工作区文件 → 用 Read 工具看那张图读出验证码
+4. `browser fill --selector "<验证码输入框>" --value "<码>"`
+5. `browser submit --text "登录"`
+
+- 短信验证码、滑块这类内置浏览器做不了的，直接让用户在面板里自己完成，不要硬试
+- 登录态靠 cookie 持久，面板关掉重开还在
 
 **何时用：**
 - **要搜资料 / 查网页 → 用 `browser search`**，不要用 WebSearch / WebFetch 工具
 - 用户让你"去网页上查一下 / 打开某个页面看看" → `browser search` 拿结果 → `browser open` 细读
 - 需要先填表再提交 → `browser fill` → `browser submit`
+- 需要登录 → `browser login`（见上面「登录流程」），不要自己拼 fill 拼密码
 - 需要在页面上翻找链接再进二级页 → `read` 拿到 Markdown 后再 `open` 下一个 URL
 
 **搜索：**

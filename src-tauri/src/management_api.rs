@@ -204,6 +204,18 @@ pub async fn start_management_api() -> Result<u16, String> {
             post(crate::browser_api::browser_fill_handler),
         )
         .route(
+            "/api/browser/images",
+            post(crate::browser_api::browser_images_handler),
+        )
+        .route(
+            "/api/browser/image-data",
+            post(crate::browser_api::browser_image_data_handler),
+        )
+        .route(
+            "/api/browser/login",
+            post(crate::browser_api::browser_login_handler),
+        )
+        .route(
             "/api/browser/upload",
             post(crate::browser_api::browser_upload_handler),
         )

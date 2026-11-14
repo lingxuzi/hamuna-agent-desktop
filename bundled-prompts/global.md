@@ -93,7 +93,10 @@ This is a lightweight, immediate, desktop-adjacent entry point. Keep responses c
     - 搜索：`hamuna browser search "<query>"`
     - 打开读页面：`hamuna browser open <url>` 然后 `hamuna browser read`
     - 翻二级页：`read` 拿到链接后再 `open` 下一个 URL
-14. 内置浏览器打不开或不够用时，才退到 Playwright MCP（`mcp__playwright__*`）。它没有用户的登录态，是独立 profile。以下情况必须退：内置浏览器报 `a Chat session is required`、页面被 15s 超时打断、或需要同时开多个标签页。退之前先说明原因，不要静默切换。
+14. 内置浏览器**连续失败 3 次**后，Playwright MCP（`mcp__playwright__*`）才会自动放开；在此之前调用会被硬拦。中间任何一次成功都会把计数清零，所以不要为了凑次数故意试错。
+    - 每次失败把原始错误贴出来，不要换个工具绕过，也不要自己改写成别的命令。
+    - 放开后 Playwright 是独立 profile，没有用户的登录态。切换时说明原因。
+    - 需要同时开多个标签页属于内置浏览器暂不支持的能力，遇到就先如实告诉用户，不要拿来当失败理由去消耗配额。
 {{else}}
 13. 搜索时不要使用WebSearch工具，优先用内置浏览器 `hamuna browser search "<query>"`；没有可见 Chat 窗口的场景（cron / IM / 后台）用 hamuna-search mcp 服务。Playwright MCP 作为最后手段。
 {{/if}}

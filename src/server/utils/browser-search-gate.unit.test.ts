@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   BROWSER_SEARCH_GATED_TOOLS,
@@ -6,6 +6,11 @@ import {
   isBrowserSearchGatedScenario,
   shouldDenyForBrowserSearch,
 } from './browser-search-gate';
+import {
+  PLAYWRIGHT_FALLBACK_THRESHOLD,
+  recordEmbeddedBrowserOutcome,
+  resetEmbeddedBrowserQuota,
+} from './embedded-browser-quota';
 import type { InteractionScenario } from '../system-prompt';
 
 // The Chat declares itself with `surface: 'chat'` — that is the ONLY surface
@@ -26,6 +31,8 @@ const registeredAgent: InteractionScenario = {
 const agentChannel: InteractionScenario = { type: 'agent-channel', platform: 'wechat', sourceType: 'group' };
 
 describe('browser search gate', () => {
+  beforeEach(() => resetEmbeddedBrowserQuota());
+
   it('denies WebSearch and WebFetch in the Chat', () => {
     expect(shouldDenyForBrowserSearch('WebSearch', chat)).toBe(true);
     expect(shouldDenyForBrowserSearch('WebFetch', chat)).toBe(true);
@@ -68,5 +75,40 @@ describe('browser search gate', () => {
     for (const tool of BROWSER_SEARCH_GATED_TOOLS) {
       expect(shouldDenyForBrowserSearch(tool, chat)).toBe(true);
     }
+  });
+
+  describe('Playwright quota', () => {
+    const playwrightTool = 'mcp__playwright__browser_navigate';
+
+    it('denies Playwright in the Chat until the embedded browser fails N times', () => {
+      for (let i = 0; i < PLAYWRIGHT_FALLBACK_THRESHOLD - 1; i++) {
+        recordEmbeddedBrowserOutcome(false);
+        expect(shouldDenyForBrowserSearch(playwrightTool, chat)).toBe(true);
+      }
+      recordEmbeddedBrowserOutcome(false);
+      expect(shouldDenyForBrowserSearch(playwrightTool, chat)).toBe(false);
+    });
+
+    it('closes the quota again after a success', () => {
+      for (let i = 0; i < PLAYWRIGHT_FALLBACK_THRESHOLD; i++) recordEmbeddedBrowserOutcome(false);
+      expect(shouldDenyForBrowserSearch(playwrightTool, chat)).toBe(false);
+      recordEmbeddedBrowserOutcome(true);
+      expect(shouldDenyForBrowserSearch(playwrightTool, chat)).toBe(true);
+    });
+
+    it('never gates Playwright outside the Chat — there is no embedded browser there', () => {
+      for (const scenario of [floatingBall, bareDesktop, cron, im, registeredAgent, agentChannel]) {
+        expect(shouldDenyForBrowserSearch(playwrightTool, scenario)).toBe(false);
+      }
+    });
+
+    it('names the remaining attempts in the deny reason', () => {
+      recordEmbeddedBrowserOutcome(false);
+      const reason = browserSearchDenyReason(playwrightTool);
+      expect(reason).toContain('1');
+      expect(reason).toContain('hamuna browser open');
+      // It must NOT point the model at WebSearch as an escape hatch.
+      expect(reason).not.toContain('WebSearch');
+    });
   });
 });

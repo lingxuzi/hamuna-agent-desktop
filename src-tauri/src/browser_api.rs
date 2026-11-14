@@ -25,6 +25,12 @@ use crate::ulog_warn;
 /// loader) must not hang the agent's turn forever.
 const EVAL_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Longest edge, in pixels, that `image-data` will encode. A captcha is tens
+/// of pixels; the cap exists so a full-page hero banner cannot push a huge
+/// base64 blob through the eval transport (which is a JS source string, not a
+/// binary channel).
+const MAX_IMAGE_EDGE: u32 = 1024;
+
 /// Bound on waiting for the renderer to open the browser panel and report
 /// its bounds.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
@@ -96,6 +102,15 @@ pub struct BrowserRequest {
     /// future HTTP-facing caller would need `path_safety` first.
     #[serde(default)]
     pub file: String,
+    /// Username for `login`. Never logged; see `browser_agent::login_script`.
+    #[serde(default)]
+    pub username: String,
+    /// Password for `login`. Never logged; see `browser_agent::login_script`.
+    #[serde(default)]
+    pub password: String,
+    /// Image index (from `browser images`) for `image-data`.
+    #[serde(default)]
+    pub index: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -690,6 +705,86 @@ pub async fn browser_submit_handler(Json(input): Json<BrowserRequest>) -> Json<s
     };
 
     let script = browser_agent::submit_script(&input.selector, &input.text);
+    match run_script(&label, &script).await {
+        Ok(data) => {
+            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+        }
+        Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    }
+}
+
+/// `POST /api/browser/images` — list the page's visible images.
+///
+/// The agent needs this before it can see a captcha: it returns a stable
+/// index per image, and `image-data` takes that index back. The `src` URL is
+/// informational only — a captcha URL usually resolves differently per
+/// cookie, so the agent must not fetch it from outside the page.
+pub async fn browser_images_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
+    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+        Ok(found) => found,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    let script = browser_agent::document_images_script();
+    match run_script(&label, &script).await {
+        Ok(data) => {
+            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+        }
+        Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    }
+}
+
+/// `POST /api/browser/image-data` — one image's pixels, as a data URL.
+///
+/// Read in-page via canvas (`browser_agent::image_data_script` explains why),
+/// so the bytes are exactly what the user is looking at. A cross-origin image
+/// fails loudly instead of returning a different picture.
+pub async fn browser_image_data_handler(
+    Json(input): Json<BrowserRequest>,
+) -> Json<serde_json::Value> {
+    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+        Ok(found) => found,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    let script = browser_agent::image_data_script(input.index, MAX_IMAGE_EDGE);
+    match run_script(&label, &script).await {
+        Ok(data) => {
+            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+        }
+        Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    }
+}
+
+/// `POST /api/browser/login` — fill username + password and report whether a
+/// captcha stands in the way.
+///
+/// Deliberately does NOT submit: the caller needs a chance to read the captcha
+/// first. `submit` stays a separate, user-approved step.
+pub async fn browser_login_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
+    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+        Ok(found) => found,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    if input.username.is_empty() {
+        return Json(
+            serde_json::to_value(BrowserResponse::err(
+                "A username is required (--user <name>)",
+            ))
+            .unwrap_or_default(),
+        );
+    }
+    if input.password.is_empty() {
+        return Json(
+            serde_json::to_value(BrowserResponse::err(
+                "A password is required (--password-stdin reads it from stdin)",
+            ))
+            .unwrap_or_default(),
+        );
+    }
+
+    let script = browser_agent::login_script(&input.username, &input.password);
     match run_script(&label, &script).await {
         Ok(data) => {
             Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())

@@ -796,7 +796,7 @@ export function printResult(
     return;
   }
   if (group === 'browser') {
-    printBrowserResult(action, result);
+    printBrowserResult(action, result, flags);
     return;
   }
   if (group === 'diagnose') {
@@ -2105,7 +2105,7 @@ function printThoughtList(thoughts: Array<Record<string, unknown>>): void {
  * `read` prints the markdown page body raw — that IS the payload the agent
  * wants, and wrapping it in a label would only add noise for an LLM reader.
  */
-function printBrowserResult(action: string, result: Record<string, unknown>): void {
+function printBrowserResult(action: string, result: Record<string, unknown>, flags: Record<string, unknown>): void {
   const data = (result.data as Record<string, unknown>) ?? {};
 
   if (action === 'read') {
@@ -2160,6 +2160,78 @@ function printBrowserResult(action: string, result: Record<string, unknown>): vo
   if (action === 'submit') {
     const label = typeof data.label === 'string' && data.label ? data.label : '(form)';
     console.log(`✓ submitted ${label}`);
+    return;
+  }
+
+  if (action === 'images') {
+    const images = Array.isArray(data.images) ? data.images : [];
+    if (!images.length) {
+      console.log('(no visible images on this page)');
+      return;
+    }
+    for (const item of images) {
+      if (!item || typeof item !== 'object') continue;
+      const row = item as Record<string, unknown>;
+      const index = typeof row.index === 'number' ? row.index : 0;
+      const w = typeof row.width === 'number' ? row.width : 0;
+      const h = typeof row.height === 'number' ? row.height : 0;
+      const alt = typeof row.alt === 'string' && row.alt ? row.alt : '(no alt)';
+      console.log(`[${index}] ${w}x${h} ${alt}`);
+      // The src is informational. A captcha URL resolves differently per
+      // cookie, so the agent must read pixels through `image-data`, not here.
+      if (typeof row.src === 'string' && row.src) console.log(`    ${row.src}`);
+    }
+    console.log('');
+    console.log('Read one with: hamuna browser image-data --index <n>');
+    return;
+  }
+
+  if (action === 'image-data') {
+    const dataUrl = typeof data.dataUrl === 'string' ? data.dataUrl : '';
+    const w = typeof data.width === 'number' ? data.width : 0;
+    const h = typeof data.height === 'number' ? data.height : 0;
+    if (!dataUrl) {
+      console.log(formatObject(data));
+      return;
+    }
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+    if (!match) {
+      console.error('Error: browser returned a malformed data URL.');
+      process.exit(1);
+    }
+    const [, mime, b64] = match;
+    const ext = mime === 'image/jpeg' ? 'jpg' : mime.split('/')[1] || 'png';
+    // Default output path is the spec the prompt tells the agent to use:
+    // `hamuna_files/temp/` is already gitignored and is one of the prefixes
+    // the attachment readers accept.
+    const rel = typeof flags.output === 'string' && flags.output.trim()
+      ? flags.output.trim()
+      : `hamuna_files/temp/captcha-${Date.now()}.${ext}`;
+    const path = require('path') as typeof import('path');
+    const absolute = path.isAbsolute(rel) ? rel : path.resolve(process.cwd(), rel);
+    const fs = require('fs') as typeof import('fs');
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, Buffer.from(b64, 'base64'));
+    // Print the workspace-relative path — that is what a `Read` tool accepts,
+    // and an absolute path would leak the user's home directory into the turn.
+    console.log(`✓ saved ${w}x${h} image (${mime}) → ${path.isAbsolute(rel) ? absolute : rel}`);
+    return;
+  }
+
+  if (action === 'login') {
+    const captcha = data.captcha === true;
+    const kind = typeof data.captchaKind === 'string' ? data.captchaKind : 'none';
+    console.log('✓ filled username and password');
+    if (captcha) {
+      console.log(`  captcha: yes (${kind}) — read it before submitting:`);
+      console.log('    1) hamuna browser images');
+      console.log('    2) hamuna browser image-data --index <n>');
+      console.log('    3) decode the data URL to a workspace file, then Read it');
+      console.log('    4) hamuna browser fill --selector "<captcha input>" --value "<code>"');
+    } else {
+      console.log('  captcha: no');
+    }
+    console.log('  (nothing submitted yet — call `hamuna browser submit` when ready)');
     return;
   }
 
@@ -3738,6 +3810,7 @@ export function buildRequestBody(
     assertStringFlag(flags.query, 'query');
     assertStringFlag(flags.engine, 'engine');
     assertStringFlag(flags.file, 'file');
+    assertStringFlag(flags.user, 'user');
     const sessionId = typeof flags.session === 'string' ? flags.session : undefined;
     const base: Record<string, unknown> = sessionId ? { sessionId } : {};
     if (action === 'open' || action === 'navigate') {
@@ -3754,6 +3827,43 @@ export function buildRequestBody(
     }
     if (action === 'read') {
       return base;
+    }
+    if (action === 'images') {
+      return base;
+    }
+    if (action === 'image-data') {
+      const raw = typeof flags.index === 'string' ? flags.index : rest[0];
+      const index = Number.parseInt(String(raw ?? ''), 10);
+      if (!Number.isInteger(index) || index < 0) {
+        console.error('Error: browser image-data requires --index <n> from `hamuna browser images`.');
+        process.exit(2);
+      }
+      return { ...base, index };
+    }
+    if (action === 'login') {
+      const user = typeof flags.user === 'string' ? flags.user.trim() : '';
+      if (!user) {
+        console.error('Error: browser login requires --user <name or email>.');
+        console.error('  Usage: hamuna browser login --user me@example.com --password-stdin');
+        process.exit(2);
+      }
+      const fs = require('fs') as typeof import('fs');
+      let password = '';
+      try {
+        // Always stdin: a `--password` flag would land the secret in shell
+        // history and in this process's argv (`ps` shows it).
+        password = fs.readFileSync(0, 'utf-8');
+      } catch {
+        console.error('Error: browser login reads the password from stdin.');
+        console.error('  Usage: printf %s "$PASSWORD" | hamuna browser login --user me@example.com --password-stdin');
+        process.exit(2);
+      }
+      password = password.replace(/\r?\n$/, '');
+      if (!password) {
+        console.error('Error: stdin was empty — no password to fill.');
+        process.exit(2);
+      }
+      return { ...base, username: user, password };
     }
     if (action === 'search') {
       // The query may come as a positional arg or as --query; a bare

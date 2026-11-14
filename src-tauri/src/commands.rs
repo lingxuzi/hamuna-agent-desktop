@@ -2452,7 +2452,10 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // the operations ledger). New CLI surface has to ship to existing installs,
 // otherwise the installed `hamuna` binary keeps running the old bundle and the
 // new command simply does not exist for the user.
-const CLI_VERSION: &str = "44";
+// 45: adds `browser images` / `image-data` / `login`. Existing installs keep
+// the old bundle otherwise, and a captcha-aware login is unreachable without
+// those three subcommands.
+const CLI_VERSION: &str = "45";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2664,8 +2667,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // exists, and the one thing the ledger must never suffer is a second writer
 // (an agent editing ops/state.json by hand) — the skill is where that rule
 // gets stated.
+//
+// 68: hamuna-cli — document `browser images` / `image-data` / `login`. The
+// captcha-aware login flow is 5 ordered steps; an agent that guesses at it
+// re-fills the form after every failed submit, and a submit on a stale captcha
+// can burn a real lockout counter on the site.
 
-const SYSTEM_SKILLS_VERSION: &str = "67";
+const SYSTEM_SKILLS_VERSION: &str = "68";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

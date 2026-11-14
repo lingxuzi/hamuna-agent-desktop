@@ -95,6 +95,95 @@ pub fn document_html_script() -> String {
     )
 }
 
+/// List the page's images with a stable index, src, dimensions and alt text.
+///
+/// WHY THIS EXISTS
+/// ---------------
+/// The agent needs to *see* a captcha before it can read it, and the only
+/// reliable way to get those pixels is in-page: a captcha image URL usually
+/// resolves to a different image per cookie, so downloading it from the
+/// sidecar would return a picture that does not match what the user sees.
+/// The returned `src` is an index into this list, not a URL — see
+/// `image_data_script` for how the agent turns it back into bytes.
+///
+/// `visible` filters out tracking pixels and `display:none` assets that would
+/// otherwise waste the agent's attention. Only same-document images are
+/// listed; iframes are skipped because `contentDocument` is cross-origin on
+/// most login pages, and a cross-origin canvas read would fail anyway.
+pub fn document_images_script() -> String {
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const imgs = Array.from(document.images || []);
+  const out = [];
+  imgs.forEach((img, index) => {{
+    const r = img.getBoundingClientRect();
+    const st = window.getComputedStyle(img);
+    const visible = r.width > 8 && r.height > 8 && st.visibility !== 'hidden' && st.display !== 'none' && st.opacity !== '0';
+    if (!visible) return;
+    out.push({{
+      index,
+      src: img.currentSrc || img.src || '',
+      alt: (img.alt || '').slice(0, 200),
+      width: Math.round(r.width),
+      height: Math.round(r.height),
+      naturalWidth: img.naturalWidth || 0,
+      naturalHeight: img.naturalHeight || 0
+    }});
+  }});
+  return {{ count: out.length, images: out }};
+}})()"
+    )
+}
+
+/// Read one image's pixels into a data URL, by the index `document_images_script`
+/// returned. `max_edge` downscales very large images before encoding so the
+/// payload stays inside the eval transport — a captcha is tens of pixels, but
+/// a hero banner is thousands.
+///
+/// WHY CANVAS AND NOT `fetch`
+/// --------------------------
+/// `wrap_eval_script` evaluates a SYNCHRONOUS expression; a returned Promise
+/// stringifies to `{}`. Canvas drawing plus `toDataURL` is synchronous, so it
+/// fits the existing transport with no change to the shared wrapper. The
+/// image must be same-origin (or CORS-enabled) or the canvas is tainted and
+/// `toDataURL` throws — that is the correct outcome here: a cross-origin
+/// image cannot be trusted to be the captcha anyway.
+pub fn image_data_script(index: u32, max_edge: u32) -> String {
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const img = Array.from(document.images || [])[{index}];
+  if (!img) throw new Error('No image at that index — call `hamuna browser images` again for the current list');
+  if (!img.complete) throw new Error('Image has not finished loading yet');
+  const w = img.naturalWidth || 0;
+  const h = img.naturalHeight || 0;
+  if (!w || !h) throw new Error('Image has no pixel data (broken or blocked src)');
+  const scale = Math.min(1, {max_edge} / Math.max(w, h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(w * scale));
+  canvas.height = Math.max(1, Math.round(h * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not create a 2D canvas context');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  let url;
+  try {{
+    url = canvas.toDataURL('image/png');
+  }} catch (e) {{
+    throw new Error('Image is cross-origin and cannot be read (canvas tainted). Ask the user to look at it instead.');
+  }}
+  return {{
+    dataUrl: url,
+    mime: 'image/png',
+    width: canvas.width,
+    height: canvas.height,
+    originalWidth: w,
+    originalHeight: h,
+    alt: (img.alt || '').slice(0, 200),
+    src: (img.currentSrc || img.src || '').slice(0, 500)
+  }};
+}})()"
+    )
+}
+
 /// Click an element located by CSS selector or visible text.
 ///
 /// Returns a description of what was clicked so the agent can confirm it hit
@@ -200,6 +289,77 @@ pub fn upload_script(selector: &str, text: &str, file_name: &str, mime: &str, ba
     name: file.name,
     size: file.size,
     inputCount: document.querySelectorAll('input[type=file]').length
+  }};
+}})()"
+    )
+}
+
+/// Fill a username/password pair and submit the login form.
+///
+/// WHY THIS IS ONE SCRIPT AND NOT `fill` + `fill` + `submit`
+/// --------------------------------------------------------
+/// Splitting it lets the password land in two extra places: the CLI's Bash
+/// command string (history, logs) and the agent's own tool-call records. As a
+/// single script the password only ever exists in this one eval payload, which
+/// is never logged.
+///
+/// FIELD DETECTION is deliberately heuristic and ordered, because login forms
+/// are not standardised:
+///   - password: the first visible `input[type=password]`
+///   - username: the first visible `input[type=email|tel]`, else an input whose
+///     `name`/`id`/`autocomplete` looks like a user field, else the first
+///     visible text input preceding the password field in DOM order.
+///
+/// Returns the discovered metadata so the caller can report what it filled
+/// WITHOUT echoing the values. `captcha` tells the agent a challenge exists and
+/// it must read the image before submitting, so it can stop here instead of
+/// bouncing off a failed submit.
+pub fn login_script(user: &str, password: &str) -> String {
+    let u = js_string(user);
+    let p = js_string(password);
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const visible = (el) => {{
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    const st = window.getComputedStyle(el);
+    return st.visibility !== 'hidden' && st.display !== 'none' && st.opacity !== '0';
+  }};
+  const setValue = (el, value) => {{
+    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (setter && setter.set) setter.set.call(el, value); else el.value = value;
+    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+  }};
+  const all = Array.from(document.querySelectorAll('input, textarea'));
+  const passwordEl = all.find((el) => visible(el) && el.type === 'password');
+  if (!passwordEl) throw new Error('No visible password field found on this page. Navigate to the login page first.');
+
+  const USER_HINT = /user|email|phone|mobile|account|login|identifier/i;
+  const described = (el) => ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('autocomplete') || '') + ' ' + (el.placeholder || ''));
+  const candidates = all.filter((el) => visible(el) && (el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email' || el.type === 'tel'));
+  const usernameEl =
+    candidates.find((el) => el.type === 'email' || el.type === 'tel')
+    || candidates.find((el) => USER_HINT.test(described(el)))
+    || candidates.find((el) => all.indexOf(el) < all.indexOf(passwordEl));
+
+  if (!usernameEl) throw new Error('No visible username field found — this may be a passwordless or phone-code login.');
+  setValue(usernameEl, {u});
+  setValue(passwordEl, {p});
+
+  // Captcha detection: a visible image whose alt/src/class/id says captcha, or
+  // a visible input named like one. Reported, not solved — the caller decides.
+  const CAPTCHA_HINT = /captcha|verify|vcode|checkcode|验证码|認証/i;
+  const captchaInput = all.find((el) => visible(el) && CAPTCHA_HINT.test(described(el)));
+  const captchaImage = Array.from(document.images || []).find((img) => visible(img) && CAPTCHA_HINT.test((img.alt || '') + ' ' + (img.id || '') + ' ' + (img.className || '') + ' ' + (img.src || '')));
+
+  return {{
+    usernameFilled: {{ tag: usernameEl.tagName.toLowerCase(), type: usernameEl.type || 'text' }},
+    passwordFilled: true,
+    captcha: Boolean(captchaInput || captchaImage),
+    captchaKind: captchaInput && captchaImage ? 'image+input' : captchaImage ? 'image' : captchaInput ? 'input' : 'none'
   }};
 }})()"
     )

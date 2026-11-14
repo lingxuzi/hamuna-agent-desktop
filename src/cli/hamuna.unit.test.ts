@@ -1013,6 +1013,47 @@ describe('hamuna CLI browser search', () => {
   });
 });
 
+describe('hamuna CLI browser login surface', () => {
+  it('sends no credentials for images', () => {
+    expect(buildRequestBody('browser', 'images', [], {})).toEqual({});
+    expect(buildRequestBody('browser', 'images', [], { session: 's1' })).toEqual({ sessionId: 's1' });
+  });
+
+  it('takes the image index from --index or positionally', () => {
+    expect(buildRequestBody('browser', 'image-data', [], { index: '2' })).toMatchObject({ index: 2 });
+    expect(buildRequestBody('browser', 'image-data', ['3'], {})).toMatchObject({ index: 3 });
+  });
+
+  it('rejects an image-data call with no usable index', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'image-data', [], {})).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'image-data', [], { index: '-1' })).toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('browser image-data requires --index'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('rejects a login with no --user before reading stdin', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'login', [], {})).toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('browser login requires --user'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+});
+
 describe('hamuna CLI operations ledger', () => {
   it('routes every verb to the store route that matches it', () => {
     expect(buildRoute('ops', 'list', [])).toBe('ops/read');

@@ -1831,6 +1831,9 @@ Commands:
   click                      Click an element (--selector or --text)
   fill                       Set an input's value (--selector or --text + --value)
   submit                     Submit a form (--selector or --text)
+  images                     List visible images with an index
+  image-data --index <n>     Save one image to a workspace file
+  login --user <name>        Fill username + password (password via stdin)
 
 Targeting:
   --selector <css>           CSS selector for the target element
@@ -1843,6 +1846,10 @@ Options:
   --url <url>                URL (for 'open'; may also be positional)
   --query <text>             Search query (for 'search'; may also be positional)
   --engine <name>            Search engine: 360 (default) | bing | baidu
+  --index <n>                Image index (for 'image-data'; from 'images')
+  --output <path>            Where to write the image (default
+                             hamuna_files/temp/captcha-<ts>.png)
+  --password-stdin           Read the password from stdin (for 'login')
   --session <id>             Target a specific Chat session's browser
   --json                     Machine-readable output
 
@@ -1855,7 +1862,21 @@ Notes:
   'search' runs in that same window: the engine's result page is rendered by
   a real browser (JS runs, bot challenges resolve) and the user's cookies
   apply, so a search sees what the user would see. It prints title / url /
-  snippet per result. Prefer it over the WebSearch / WebFetch tools.`,
+  snippet per result. Prefer it over the WebSearch / WebFetch tools.
+
+Login flow (captcha aware):
+  1. hamuna browser open <login-url>
+  2. printf %s "$PASSWORD" | hamuna browser login --user <name> --password-stdin
+       → reports whether a captcha is present
+  3. If yes: hamuna browser images  →  hamuna browser image-data --index <n>
+       → it prints the saved workspace path; open it to read the code
+  4. hamuna browser fill --selector "<captcha input>" --value "<code>"
+  5. hamuna browser submit --text "Sign in"
+
+  The password never appears in argv or in the page's console — it goes in
+  through stdin and is embedded in one eval payload. Cookies persist across
+  panel close/reopen, so a login survives for the rest of the app session.
+  'login' never submits by itself: reading the captcha has to happen first.`,
   mcp: `hamuna mcp — Manage MCP tool servers
 
 Commands:
