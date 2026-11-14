@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "lang": "zh",
+  "project": "HamunaAgent 知识看板",
+  "brief": "对话知识看板（会话级概念/关系图谱横条）：同一份内容，比较配色、字体、控件和版式气质",
+  "round": "风格卡片",
+  "candidates": [
+    {
+      "id": "deck",
+      "name": "深空观察台（现版）",
+      "concept": "现状延续：深色底、鎏金强调，光晕球体与水母作氛围，图谱浮在深空之上。",
+      "typography": "标题 PingFang SC · 正文 PingFang SC · 数字 Avenir Next",
+      "palette": [
+        "#0D0E0E",
+        "#ECECE9",
+        "#E6CF98",
+        "#E3B3C4"
+      ],
+      "traits": [
+        "近黑底",
+        "鎏金强调",
+        "光晕氛围"
+      ],
+      "kind": "html",
+      "source": "card-deck.html"
+    },
+    {
+      "id": "atlas",
+      "name": "测绘手稿",
+      "concept": "把概念图谱当作一张科学测绘图：纸面米白、墨线细描、测绘注记，技术获得文献的厚度。",
+      "typography": "标题 Songti SC · 正文 PingFang SC · 数字 Georgia",
+      "palette": [
+        "#F2EFE7",
+        "#26241F",
+        "#3E6B5C",
+        "#B4643C"
+      ],
+      "traits": [
+        "纸面米白",
+        "墨线细描",
+        "测绘注记感"
+      ],
+      "kind": "html",
+      "source": "card-atlas.html"
+    },
+    {
+      "id": "observatory",
+      "name": "天文台墨蓝",
+      "concept": "夜间观测记录：墨蓝作底，星图般的图谱在上，琥珀色只标注正在提取的活跃概念。",
+      "typography": "标题 PingFang SC · 正文 PingFang SC · 数字 Avenir Next",
+      "palette": [
+        "#101823",
+        "#E4E9F0",
+        "#E8B45E",
+        "#E07A6A"
+      ],
+      "traits": [
+        "墨蓝底",
+        "琥珀活跃标注",
+        "星图气质"
+      ],
+      "kind": "html",
+      "source": "card-observatory.html"
+    },
+    {
+      "id": "print",
+      "name": "单色印刷",
+      "concept": "反 AI 套路的高对比单色：黑白灰 + 一点朱红，图谱像铅字排印的关系表，克制而锋利。",
+      "typography": "标题 Songti SC · 正文 PingFang SC · 数字 Menlo",
+      "palette": [
+        "#111111",
+        "#F2F2F0",
+        "#D8482E",
+        "#D8482E"
+      ],
+      "traits": [
+        "黑白灰",
+        "朱红一点",
+        "铅字排印感"
+      ],
+      "kind": "html",
+      "source": "card-print.html"
+    },
+    {
+      "id": "garden",
+      "name": "暖纸花园",
+      "concept": "知识像一座正在生长的花园：暖纸底、苔绿与陶土色点缀，生长中的概念用嫩芽色标出。",
+      "typography": "标题 Songti SC · 正文 PingFang SC · 数字 Georgia",
+      "palette": [
+        "#F5F1E8",
+        "#332E27",
+        "#6E8B5E",
+        "#C07A45"
+      ],
+      "traits": [
+        "暖纸底",
+        "苔绿陶土",
+        "生长隐喻"
+      ],
+      "kind": "html",
+      "source": "card-garden.html"
+    },
+    {
+      "id": "terminal",
+      "name": "仪器面板",
+      "concept": "像一台测量仪器：深灰面板、等宽数字、荧光青只给读数和活动指示，工程感来自精密而非发光。",
+      "typography": "标题 PingFang SC · 正文 PingFang SC · 数字 Menlo",
+      "palette": [
+        "#1B1D1C",
+        "#DDE2DF",
+        "#5FD9B8",
+        "#E5B45B"
+      ],
+      "traits": [
+        "深灰面板",
+        "等宽数字",
+        "荧光青读数"
+      ],
+      "kind": "html",
+      "source": "card-terminal.html"
+    }
+  ]
+}

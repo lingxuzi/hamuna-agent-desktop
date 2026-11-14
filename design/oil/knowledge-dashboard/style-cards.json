@@ -1,0 +1,61 @@
+{
+  "project": "HamunaAgent 知识看板",
+  "lang": "zh",
+  "round": "风格卡片",
+  "brief": "对话知识看板（会话级概念/关系图谱横条）：同一份内容，比较配色、字体、控件和版式气质",
+  "content": {
+    "title": "对话知识看板",
+    "body": "本会话已从对话中提取出 12 个概念、9 条关系。点击节点查看关系与来源消息。",
+    "number": "12 / 9",
+    "number_label": "概念 / 关系",
+    "primary": "查看来源",
+    "secondary": "收起",
+    "tags": ["提取中", "来源消息"],
+    "input_label": "搜索概念",
+    "input_value": "Sidecar"
+  },
+  "cards": [
+    {
+      "id": "deck", "name": "深空观察台（现版）", "concept": "现状延续：深色底、鎏金强调，光晕球体与水母作氛围，图谱浮在深空之上。",
+      "traits": ["近黑底", "鎏金强调", "光晕氛围"],
+      "colors": {"bg": "#0D0E0E", "surface": "#1A1B1B", "text": "#ECECE9", "muted": "#75766F", "accent": "#E6CF98", "accent_text": "#1A1B1B", "line": "#2A2B2A", "warn": "#E3B3C4"},
+      "fonts": {"display": "\"PingFang SC\", sans-serif", "body": "\"PingFang SC\", sans-serif", "number": "\"Avenir Next\", sans-serif"},
+      "display_weight": 500, "radius": 12, "border": "hairline", "shadow": "soft", "density": "airy", "layout": "fullbleed"
+    },
+    {
+      "id": "atlas", "name": "测绘手稿", "concept": "把概念图谱当作一张科学测绘图：纸面米白、墨线细描、测绘注记，技术获得文献的厚度。",
+      "traits": ["纸面米白", "墨线细描", "测绘注记感"],
+      "colors": {"bg": "#F2EFE7", "surface": "#FBF9F3", "text": "#26241F", "muted": "#7C776A", "accent": "#3E6B5C", "accent_text": "#FFFFFF", "line": "#DCD6C6", "warn": "#B4643C"},
+      "fonts": {"display": "\"Songti SC\", serif", "body": "\"PingFang SC\", sans-serif", "number": "Georgia, serif"},
+      "display_weight": 600, "radius": 2, "border": "hairline", "shadow": "none", "density": "regular", "layout": "hero-split"
+    },
+    {
+      "id": "observatory", "name": "天文台墨蓝", "concept": "夜间观测记录：墨蓝作底，星图般的图谱在上，琥珀色只标注正在提取的活跃概念。",
+      "traits": ["墨蓝底", "琥珀活跃标注", "星图气质"],
+      "colors": {"bg": "#101823", "surface": "#1A2430", "text": "#E4E9F0", "muted": "#8B97A6", "accent": "#E8B45E", "accent_text": "#1A2430", "line": "#2B3644", "warn": "#E07A6A"},
+      "fonts": {"display": "\"PingFang SC\", sans-serif", "body": "\"PingFang SC\", sans-serif", "number": "\"Avenir Next\", sans-serif"},
+      "display_weight": 500, "radius": 8, "border": "hairline", "shadow": "soft", "density": "regular", "layout": "fullbleed"
+    },
+    {
+      "id": "print", "name": "单色印刷", "concept": "反 AI 套路的高对比单色：黑白灰 + 一点朱红，图谱像铅字排印的关系表，克制而锋利。",
+      "traits": ["黑白灰", "朱红一点", "铅字排印感"],
+      "colors": {"bg": "#111111", "surface": "#1C1C1C", "text": "#F2F2F0", "muted": "#8A8A86", "accent": "#D8482E", "accent_text": "#FFFFFF", "line": "#333333", "warn": "#D8482E"},
+      "fonts": {"display": "\"Songti SC\", serif", "body": "\"PingFang SC\", sans-serif", "number": "Menlo, monospace"},
+      "display_weight": 700, "radius": 0, "border": "solid", "shadow": "none", "density": "compact", "layout": "hero-center"
+    },
+    {
+      "id": "garden", "name": "暖纸花园", "concept": "知识像一座正在生长的花园：暖纸底、苔绿与陶土色点缀，生长中的概念用嫩芽色标出。",
+      "traits": ["暖纸底", "苔绿陶土", "生长隐喻"],
+      "colors": {"bg": "#F5F1E8", "surface": "#FDFBF5", "text": "#332E27", "muted": "#847C6E", "accent": "#6E8B5E", "accent_text": "#FFFFFF", "line": "#E3DCCE", "warn": "#C07A45"},
+      "fonts": {"display": "\"Songti SC\", serif", "body": "\"PingFang SC\", sans-serif", "number": "Georgia, serif"},
+      "display_weight": 500, "radius": 14, "border": "none", "shadow": "soft", "density": "airy", "layout": "hero-split"
+    },
+    {
+      "id": "terminal", "name": "仪器面板", "concept": "像一台测量仪器：深灰面板、等宽数字、荧光青只给读数和活动指示，工程感来自精密而非发光。",
+      "traits": ["深灰面板", "等宽数字", "荧光青读数"],
+      "colors": {"bg": "#1B1D1C", "surface": "#242726", "text": "#DDE2DF", "muted": "#8C948F", "accent": "#5FD9B8", "accent_text": "#1B1D1C", "line": "#303433", "warn": "#E5B45B"},
+      "fonts": {"display": "\"PingFang SC\", sans-serif", "body": "\"PingFang SC\", sans-serif", "number": "Menlo, monospace"},
+      "display_weight": 500, "radius": 4, "border": "solid", "shadow": "none", "density": "compact", "layout": "sidebar-table"
+    }
+  ]
+}

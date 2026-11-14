@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>知识看板 · SETS 节点语言 × App 配色 — 原型</title>
+<style>
+  :root{
+    --paper:#faf6ee; --surface:#fffcf7; --inset:#e8dccf;
+    --ink:#1c1612; --ink-2:#6f6156; --line:#dcd0c0;
+    --accent:#c26d3a; --sage:#7b8f6b; --cool:#2e6f5e; --sky:#7ba3b8; --heartbeat:#c75050;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--paper);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:13px;padding:32px}
+  h1{font-size:16px;font-weight:600;margin-bottom:4px}
+  .sub{color:var(--ink-2);font-size:12.5px;margin-bottom:24px}
+  .panel{position:relative;height:380px;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    box-shadow:0 6px 18px -12px rgba(28,22,18,.25)}
+  .bar{position:relative;display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .bar .title{font-weight:600;font-size:13px}
+  .bar .stat{color:var(--ink-2);font-size:12px;font-variant-numeric:tabular-nums}
+  .bar .extracting{margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-size:12px}
+  .bar .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:blink 1.6s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  canvas{display:block;width:100%;height:100%;cursor:crosshair}
+  .hint{margin-top:12px;color:var(--ink-2);font-size:12px;line-height:1.8}
+  .hint b{color:var(--accent);font-weight:600}
+</style>
+</head>
+<body>
+<h1>SETS 节点语言 × Hamuna 配色</h1>
+<p class="sub">漂移节点 · 诞生脉冲 · 消亡扩散环 · 选中虚线环 · 悬停标签 —— 全部取自 SETS MACHINE 的 drawMesh，颜色换成 App 主题 token。等几秒会持续有概念「诞生」，偶有「消亡」。</p>
+<div class="panel">
+  <div class="bar">
+    <span class="title">对话知识看板</span>
+    <span class="stat" id="stat">概念 0 · 关系 0</span>
+    <span class="extracting"><span class="dot"></span>提取中</span>
+  </div>
+  <canvas id="mesh"></canvas>
+</div>
+<p class="hint">交互：<b>悬停</b>节点看虚线环标签 · <b>点击</b>选中（陶土虚线环）· 点击空白取消。每 2 秒左右诞生一个新概念（父→子脉冲线 + 光晕头 + 扩散环），随机一个旧概念「被合并」淡出（灰扩散环）。</p>
+<script>
+const C = {
+  ink:'#1c1612', mute:'#6f6156', line:'#dcd0c0', paper:'#faf6ee', surface:'#fffcf7',
+  accent:'#c26d3a', sage:'#7b8f6b', cool:'#2e6f5e', sky:'#7ba3b8', heart:'#c75050', grey:'#a69a90',
+};
+const SPECIES = [
+  { color:C.accent, cx:.50, cy:.30 },
+  { color:C.cool,   cx:.82, cy:.55 },
+  { color:C.sage,   cx:.22, cy:.55 },
+  { color:C.sky,    cx:.52, cy:.82 },
+];
+const NAMES = ['Sidecar','SSE 代理','Pre-warm','会话隔离','Tab 状态','abortPersistentSession','workspacePath','withConfigLock','MCP 指纹','resumeSessionId','canUseTool','task_store','tantivy','jieba 分词','Plugin Bridge','esbuild'];
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const ease=x=>{x=clamp(x,0,1);return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+const hexA=(hex,a)=>{const n=parseInt(hex.slice(1),16);return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`};
+const hash=k=>{let x=Math.imul(k^0x9e3779b9,0x85ebca6b);x^=x>>>13;x=Math.imul(x,0xc2b2ae35);x^=x>>>16;return(x>>>0)/4294967296};
+
+const el=document.getElementById('mesh');
+const cv={el,g:el.getContext('2d'),w:1,h:1};
+function fit(){const r=el.getBoundingClientRect(),d=window.devicePixelRatio||1;
+  cv.w=Math.max(1,r.width);cv.h=Math.max(1,r.height);
+  el.width=Math.round(cv.w*d);el.height=Math.round(cv.h*d);cv.g.setTransform(d,0,0,d,0,0)}
+fit();new ResizeObserver(fit).observe(el);
+
+// world
+let tNow = 0;
+const nodes=new Map(),edges=[],lineage=[];
+let nextId=1,dieTimer=0;
+const famOf=i=>i%4;
+function nodeXY(n,t){return [n.x*cv.w+Math.sin(t*.5+n.ph)*3, n.y*cv.h+Math.cos(t*.42+n.ph*1.3)*2.5]}
+function addNode(parentId){
+  const id=nextId++;const fam=famOf(id);
+  // spawn near parent (or anywhere for seeds)
+  let x=clamp(.08+hash(id*7)*.84,.1,.9), y=clamp(.1+hash(id*13)*.8,.15,.88);
+  if(parentId){const p=nodes.get(parentId);if(p){x=clamp(p.x+(hash(id*3)-.5)*.3,.08,.92);y=clamp(p.y+(hash(id*5)-.5)*.3,.12,.9)}}
+  const n={id,x,y,ph:hash(id*11)*Math.PI*2,r:4+hash(id*17)*3.5,fam,alpha:0,scale:0,born:tNow,dies:null,dying:false,halo:hash(id*23)<.3,name:NAMES[(id-1)%NAMES.length]+(id>NAMES.length?' '+'·'+id:'')};
+  nodes.set(id,n);
+  if(parentId){lineage.push({from:parentId,to:id,t0:tNow});const p=nodes.get(parentId);
+    if(p){edges.push([parentId,id,famOf(parentId)!==fam]);}}
+  return n;
+}
+// seeds
+for(let i=0;i<5;i++)addNode(null);
+let lastBirth=tNow;
+
+let hover=null,inspect=null;
+const pick=e=>{const r=el.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=16;
+  for(const n of nodes.values()){if(n.alpha<.3||n.dying)continue;const[px,py]=nodeXY(n,tNow);
+    const d=Math.hypot(px-x,py-y);if(d<bd+n.r){bd=d;best=n.id}}
+  return best};
+el.addEventListener('pointermove',e=>{hover=pick(e);el.classList.toggle('hand',!!hover);el.style.cursor=hover?'pointer':'crosshair'});
+el.addEventListener('pointerleave',()=>hover=null);
+el.addEventListener('click',e=>{const p=pick(e);inspect=p||null});
+
+const stat=document.getElementById('stat');
+function nodeStates(ct){
+  const births=[],deaths=[];
+  for(const n of nodes.values()){
+    if(n.dies!==null){const k=clamp((ct-n.dies)/1.2,0,1);if(k<1)deaths.push([n.id,k,'✕ '+n.name]);else{nodes.delete(n.id)}}
+    else if(ct-n.born<1.2&&n.born>0)births.push([n.id,(ct-n.born)/1.2,n.name]);
+  }
+  return{births,deaths};
+}
+
+let last=performance.now();
+function frame(now){
+  const dt=(now-last)/1000;last=now;tNow+=dt;
+  // growth simulation: birth every ~2.2s, occasionally kill
+  if(tNow-lastBirth>2.2&&nodes.size<24){
+    const ids=[...nodes.keys()].filter(id=>!nodes.get(id).dies);
+    const pid=ids[Math.floor(hash(Math.floor(tNow*7))*ids.length)]||null;
+    addNode(pid);lastBirth=tNow;
+    if(nodes.size>16&&hash(Math.floor(tNow*13))<.6){const victims=ids.filter(id=>id!==pid);
+      if(victims.length){const v=victims[Math.floor(hash(Math.floor(tNow*17))*victims.length)];const n=nodes.get(v);if(n&&!n.dying){n.dying=true;n.dies=tNow+hash(v)*.5}}}
+  }
+  // fade in
+  for(const n of nodes.values()){
+    n.alpha=clamp(n.alpha+dt*3,0,n.dies!==null?1:.92);
+    n.scale=clamp(n.scale+dt*4,0,1);
+  }
+  draw();
+  stat.textContent=`概念 ${[...nodes.values()].filter(n=>n.dies===null).length} · 关系 ${edges.length}`;
+  requestAnimationFrame(frame);
+}
+function draw(){
+  const{g,w,h}=cv,t=tNow;
+  g.clearRect(0,0,w,h);
+  const P=new Map();nodes.forEach(n=>P.set(n.id,nodeXY(n,t)));
+  // species ambient washes
+  SPECIES.forEach(sp=>{const x=sp.cx*w,y=sp.cy*h,rad=Math.min(w,h)*.38;
+    const gr=g.createRadialGradient(x,y,0,x,y,rad);gr.addColorStop(0,hexA(sp.color,.07));gr.addColorStop(1,hexA(sp.color,0));
+    g.fillStyle=gr;g.fillRect(x-rad,y-rad,rad*2,rad*2)});
+  // dotted paper texture (App --theme-body-texture)
+  g.fillStyle='rgba(28,22,18,0.05)';
+  for(let x=8;x<w;x+=18)for(let y=8;y<h;y+=18){g.fillRect(x,y,1,1)}
+  const vis=n=>n.alpha>.02;
+  // edges
+  g.lineWidth=.7;
+  edges.forEach(([a,b])=>{const na=nodes.get(a),nb=nodes.get(b);if(!na||!nb||!vis(na)||!vis(nb))return;
+    const pa=P.get(a),pb=P.get(b),al=Math.min(na.alpha,nb.alpha);
+    g.strokeStyle=hexA(SPECIES[na.fam].color,.3*al);
+    g.beginPath();g.moveTo(pa[0],pa[1]);g.lineTo(pb[0],pb[1]);g.stroke()});
+  // lineage pulses
+  lineage.forEach(({from,to,t0})=>{
+    const na=nodes.get(from),nb=nodes.get(to);if(!na||!nb)return;
+    const k=(tNow-t0)/.6;if(k<0||k>1.6)return;
+    const pa=P.get(from),pb=P.get(to),col=SPECIES[nb.fam].color,e=ease(Math.min(1,k));
+    const x=lerp(pa[0],pb[0],e),y=lerp(pa[1],pb[1],e),fade=k>1?1-(k-1)/.6:1;
+    g.strokeStyle=hexA(col,.55*fade);g.lineWidth=1.6;g.lineCap='round';
+    g.beginPath();g.moveTo(pa[0],pa[1]);g.lineTo(x,y);g.stroke();g.lineCap='butt';
+    if(k<1){const hg=g.createRadialGradient(x,y,0,x,y,11);
+      hg.addColorStop(0,hexA(col,.9));hg.addColorStop(1,hexA(col,0));
+      g.fillStyle=hg;g.beginPath();g.arc(x,y,11,0,Math.PI*2);g.fill()}});
+  // nodes
+  nodes.forEach(n=>{if(!vis(n))return;
+    const[x,y]=P.get(n.id),col=SPECIES[n.fam].color,rr=n.r*n.scale;
+    g.globalAlpha=n.alpha;
+    if(n.halo){g.fillStyle=hexA(col,.13);g.beginPath();g.arc(x,y,rr+5+2*Math.sin(t*2+n.ph),0,Math.PI*2);g.fill()}
+    g.beginPath();g.arc(x,y,Math.max(.5,rr),0,Math.PI*2);
+    if(n.dying){g.fillStyle=C.surface;g.fill();g.strokeStyle=C.grey;g.lineWidth=1.2;g.stroke()}
+    else{g.fillStyle=hexA(col,.92);g.fill();g.strokeStyle=C.surface;g.lineWidth=1;g.stroke()}
+    g.globalAlpha=1});
+  // birth/death rings
+  const ring=(id,k,color,label)=>{const n=nodes.get(id);if(!n)return;const[x,y]=P.get(id);
+    g.strokeStyle=hexA(color,1-k);g.lineWidth=1.5;
+    g.beginPath();g.arc(x,y,n.r+4+k*24,0,Math.PI*2);g.stroke();
+    if(label&&k<.7){g.globalAlpha=1-k/.7;g.font='600 11px "PingFang SC","Microsoft YaHei",sans-serif';
+      g.textAlign='left';g.textBaseline='middle';g.fillStyle=color;g.fillText(label,x+n.r+7,y-9-k*8);g.globalAlpha=1}};
+  const{births,deaths}=nodeStates(tNow);
+  births.forEach(([id,k,lab])=>ring(id,k,C.accent,lab));
+  deaths.forEach(([id,k,lab])=>ring(id,k,C.grey,lab));
+  // name labels on hover/inspect
+  const mark=(id,color,dashed,label)=>{const n=nodes.get(id);if(!n||!vis(n))return;
+    const[x,y]=P.get(id),rr=n.r*n.scale+7;
+    g.strokeStyle=color;g.lineWidth=1.6;if(dashed)g.setLineDash([3,3]);
+    g.beginPath();g.arc(x,y,rr,0,Math.PI*2);g.stroke();g.setLineDash([]);
+    g.font='600 11px "PingFang SC","Microsoft YaHei",sans-serif';const tw=g.measureText(label).width+14;
+    const lx=clamp(x-tw/2,4,w-tw-4),ly=y-rr-24<4?y+rr+4:y-rr-22;
+    g.fillStyle=color;g.beginPath();g.roundRect(lx,ly,tw,20,5);g.fill();
+    g.fillStyle=C.surface;g.textAlign='center';g.textBaseline='middle';g.fillText(label,lx+tw/2,ly+10.5)};
+  if(hover&&hover!==inspect)mark(hover,C.mute,true,nodes.get(hover).name);
+  if(inspect)mark(inspect,C.accent,true,nodes.get(inspect).name);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
