@@ -47,7 +47,11 @@ export function OpsDirectionCard({
         <ol className="ops-list ops-dirs">
           {view.pool.map((row) => (
             <DirectionRow
-              key={row.id}
+              // 没立过方向的平台没有记录 id，用平台当身份。直接用 row.id 会让
+              // 多行共用同一个 key（null → "null"），React 对不上旧子树就会
+              // 重挂载并反复报重复 key —— 在 DEV 下每次 reconcile 都报一次，
+              // 叠加日志回灌就是「点方向整个 app 卡死」。
+              key={row.id ?? `platform:${row.platform}`}
               row={row}
               busy={busy}
               onWriteBrief={onWriteBrief}

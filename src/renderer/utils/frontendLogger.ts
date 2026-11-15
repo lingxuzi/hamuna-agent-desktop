@@ -363,7 +363,13 @@ function createAndDispatch(level: LogLevel, args: unknown[]): void {
 
   // Back-compat: also dispatch the legacy CustomEvent so any consumer
   // that hasn't migrated to subscribeFrontendLogs() still gets the entry.
-  window.dispatchEvent(new CustomEvent(REACT_LOG_EVENT, { detail: entry }));
+  //
+  // 延到微任务再派发：console.* 可能在 React 渲染过程中被调用（React 自己
+  // 报重复 key / 渲染期更新就会打 console.error），同步派发会让订阅者在别人
+  // 的渲染过程中 setState —— 和 v0.2.35「点方向整个 app 卡死」是同一条链。
+  queueMicrotask(() => {
+    window.dispatchEvent(new CustomEvent(REACT_LOG_EVENT, { detail: entry }));
+  });
 
   // Add to buffer for persistence (cap when circuit is broken to prevent memory leak)
   if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES && logBuffer.length >= MAX_BUFFER_SIZE * 2) {

@@ -29,7 +29,7 @@ import { useChatSearch, isHighlightApiSupported } from '@/hooks/useChatSearch';
 import SelectionCommentMenu from '@/components/SelectionCommentMenu';
 import TerminalReasonBanner from '@/components/TerminalReasonBanner';
 import RuntimeDiagnosticsBanner from '@/components/RuntimeDiagnosticsBanner';
-import { UnifiedLogsPanel } from '@/components/UnifiedLogsPanel';
+import { TabUnifiedLogsPanel } from '@/components/UnifiedLogsPanel';
 import WorkspaceConfigPanel, { type Tab as WorkspaceTab } from '@/components/WorkspaceConfigPanel';
 import CronTaskSettingsModal, {
   GOAL_SLASH_PRESET,
@@ -478,7 +478,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     sessionRuntimeSource,
     sessionMeta,
     setSessionMeta,
-    unifiedLogs,
     systemInitInfo: _systemInitInfo,
     sdkSlashCommands,
     runtimeDiagnostics,
@@ -503,7 +502,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     resetSession,
     adoptMigratedSession,
     adoptSessionId,
-    clearUnifiedLogs,
     respondPermission,
     respondAskUserQuestion,
     apiPost,
@@ -5408,12 +5406,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
             );
           })()}
           {/* Unified Logs Panel - fullscreen modal displaying logs */}
-          <UnifiedLogsPanel
-            sseLogs={unifiedLogs}
-            isVisible={showLogs}
-            onClose={() => setShowLogs(false)}
-            onClearAll={clearUnifiedLogs}
-          />
+          <TabUnifiedLogsPanel isVisible={showLogs} onClose={() => setShowLogs(false)} />
 
           {/* Query Navigator — floating right-side panel for quick session navigation */}
           <QueryNavigator

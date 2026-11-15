@@ -89,7 +89,6 @@ export interface TabState {
 
     // Agent info
     logs: string[];
-    unifiedLogs: LogEntry[];
     systemInitInfo: SystemInitInfo | null;
     /**
      * Slash commands reported by the active builtin SDK subprocess. This is
@@ -187,7 +186,6 @@ export interface TabContextValue extends TabState {
     // Logs
     appendLog: (line: string) => void;
     appendUnifiedLog: (entry: LogEntry) => void;
-    clearUnifiedLogs: () => void;
 
     // System info
     setSystemInitInfo: Dispatch<SetStateAction<SystemInitInfo | null>>;
@@ -291,7 +289,6 @@ const defaultContextValue: TabContextValue = {
     sessionRuntimeSource: null,
     sessionMeta: null,
     logs: [],
-    unifiedLogs: [],
     systemInitInfo: null,
     sdkSlashCommands: [],
     runtimeDiagnostics: null,
@@ -315,7 +312,6 @@ const defaultContextValue: TabContextValue = {
     setSessionState: () => { },
     appendLog: () => { },
     appendUnifiedLog: () => { },
-    clearUnifiedLogs: () => { },
     setSystemInitInfo: () => { },
     setAgentError: () => { },
     setLastTerminalReason: () => { },

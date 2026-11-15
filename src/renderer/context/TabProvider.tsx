@@ -71,6 +71,7 @@ import { parsePartialJson } from '@/utils/parsePartialJson';
 import { enqueuePermissionRequest, peekPermissionRequest, removePermissionRequest } from '@/utils/permissionQueue';
 import { i18n } from '@/i18n';
 import { subscribeFrontendLogs, setCurrentTabId } from '@/utils/frontendLogger';
+import { appendUnifiedLog as appendUnifiedLogEntry, clearUnifiedLogsForTab } from '@/utils/unifiedLogStore';
 import { getTabServerUrl, proxyFetch, isTauri, getSessionActivation, getSessionPort, ensureSessionSidecar, resetTabServerUrlCache, setActiveCorrelation } from '@/api/tauriClient';
 import { fetchJsonLargeValueRef } from '@/api/largeValueRef';
 import { resolveAttachmentUrl } from '@/utils/attachmentUrl';
@@ -688,7 +689,6 @@ export default function TabProvider({
     }, [appConfig, agentDir, sessionRuntime, sessionRuntimeSource]);
     const [sessionMeta, setSessionMeta] = useState<SessionMetadata | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
-    const [unifiedLogs, setUnifiedLogs] = useState<LogEntry[]>([]);
     const [systemInitInfo, setSystemInitInfo] = useState<SystemInitInfo | null>(null);
     const [sdkSlashCommands, setSdkSlashCommands] = useState<SlashCommand[]>([]);
     // Issue #194 — runtime diagnostics snapshot for external runtimes (Codex
@@ -938,7 +938,8 @@ export default function TabProvider({
         setSystemNotice(null);
         setAgentError(null);
         setLastTerminalReason(null);
-        setUnifiedLogs([]);
+        // 日志列表归 unifiedLogStore：这里只清本 tab 自己的条目，别 tab 的与全局日志留着。
+        clearUnifiedLogsForTab(tabId);
         setLogs([]);
         setSessionMeta(null);
         setSessionRuntimeSource(null);
@@ -1063,7 +1064,8 @@ export default function TabProvider({
         setSystemNotice(null);
         setAgentError(null);
         setLastTerminalReason(null);
-        setUnifiedLogs([]);
+        // 日志列表归 unifiedLogStore：这里只清本 tab 自己的条目，别 tab 的与全局日志留着。
+        clearUnifiedLogsForTab(tabId);
         setLogs([]);
         setSessionMeta(null);
         setSessionRuntimeSource(null);
@@ -1141,22 +1143,19 @@ export default function TabProvider({
         });
     }, []);
 
-    // Append unified log entry (from SSE chat:log events) - keep max 3000
+    // Append unified log entry.
+    //
+    // 这份列表**不是** React state：它住在包住整个聊天界面的 Provider 里，
+    // 一条日志就会重渲染产生它的界面 → 界面重渲染又产生日志 → 无限循环
+    // （v0.2.35「点方向整个 app 卡死」）。数据归 unifiedLogStore，显示归
+    // 日志面板那个叶子组件（`TabUnifiedLogsPanel`）。
+    //
+    // `tabId` 只在条目自己没带归属时补上：SSE 的 `chat:log` 是「这个 tab 的
+    // sidecar 报上来的」，得归到这个 tab；Rust 与全局 console 日志没有归属，
+    // 保持无 tabId，各 tab 的面板都能看到（与旧实现一致）。
     const appendUnifiedLog = useCallback((entry: LogEntry) => {
-        setUnifiedLogs(prev => {
-            const next = [...prev, entry];
-            if (next.length > 3000) {
-                return next.slice(-3000);
-            }
-            return next;
-        });
-    }, []);
-
-    // Clear all unified logs
-    const clearUnifiedLogs = useCallback(() => {
-        setUnifiedLogs([]);
-        setLogs([]);
-    }, []);
+        appendUnifiedLogEntry(entry, tabId);
+    }, [tabId]);
 
     // Pattern 6: subscribe to the global FrontendLogStore with a tab-id
     // filter. Replaces the legacy "every TabProvider keeps its own copy of
@@ -1164,10 +1163,10 @@ export default function TabProvider({
     // and entries stamped for THIS tab are surfaced to its UI panel.
     useEffect(() => {
         const unsubscribe = subscribeFrontendLogs((entry) => {
-            appendUnifiedLog(entry);
+            appendUnifiedLogEntry(entry);
         }, tabId);
         return () => { unsubscribe(); };
-    }, [appendUnifiedLog, tabId]);
+    }, [tabId]);
 
     // Pattern 6 (FIXED): Chat tab registry for renderer correlation. App.tsx
     // owns the active tab across Launcher / Settings / TaskCenter / Chat; each
@@ -1217,10 +1216,11 @@ export default function TabProvider({
         void listenWithCleanup<LogEntry>('log:rust', (event) => {
             // Add to unified logs for UI display only
             // Do NOT call queueLogsForPersistence - that would cause infinite loop
-            appendUnifiedLog(event.payload);
+            // Rust 日志没有 tab 归属：原样入 store，各 tab 的面板都能看到。
+            appendUnifiedLogEntry(event.payload);
         }, ac.signal);
         return () => ac.abort();
-    }, [appendUnifiedLog]);
+    }, []);
 
     // ─── RAF batching for streaming chunks ───
     // Accumulates text chunks and flushes once per animation frame (~16ms),
@@ -5004,7 +5004,6 @@ export default function TabProvider({
         sessionRuntimeSource,
         sessionMeta,
         logs,
-        unifiedLogs,
         systemInitInfo,
         sdkSlashCommands,
         runtimeDiagnostics,
@@ -5028,7 +5027,6 @@ export default function TabProvider({
         setSessionState,
         appendLog,
         appendUnifiedLog,
-        clearUnifiedLogs,
         setSystemInitInfo,
         setAgentError,
         setLastTerminalReason,
@@ -5053,8 +5051,8 @@ export default function TabProvider({
         forceExecuteQueuedMessage,
     }), [
         tabId, agentDir, currentSessionId, messages, historyMessages, streamingMessage, firstItemIndex, hasMoreBefore, isLoading, isSessionLoading, sessionState, sessionRuntime, sessionRuntimeSource, sessionMeta,
-        logs, unifiedLogs, systemInitInfo, sdkSlashCommands, runtimeDiagnostics, agentError, systemStatus, systemNotice, contextUsage, agentPlanTodos, lastTerminalReason, pendingPermission, pendingAskUserQuestion, pendingExitPlanMode, pendingEnterPlanMode, toolCompleteCount, queuedMessages, isConnected, knowledgeGraph, knowledgeExtracting,
-        setMessages, appendLog, appendUnifiedLog, clearUnifiedLogs, sendMessage, stopResponse, loadSession, loadOlderMessages, resetSession, adoptMigratedSession, adoptSessionId,
+        logs, systemInitInfo, sdkSlashCommands, runtimeDiagnostics, agentError, systemStatus, systemNotice, contextUsage, agentPlanTodos, lastTerminalReason, pendingPermission, pendingAskUserQuestion, pendingExitPlanMode, pendingEnterPlanMode, toolCompleteCount, queuedMessages, isConnected, knowledgeGraph, knowledgeExtracting,
+        setMessages, appendLog, appendUnifiedLog, sendMessage, stopResponse, loadSession, loadOlderMessages, resetSession, adoptMigratedSession, adoptSessionId,
         apiGetJson, postJson, apiPutJson, apiDeleteJson, respondPermission, respondAskUserQuestion, respondExitPlanMode, cancelQueuedMessage, forceExecuteQueuedMessage
     ]);
 

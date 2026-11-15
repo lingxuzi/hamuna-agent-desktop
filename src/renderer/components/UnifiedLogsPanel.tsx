@@ -7,11 +7,13 @@ import { createPortal } from 'react-dom';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { useCloseLayer } from '@/hooks/useCloseLayer';
+import { useTabApiOptional } from '@/context/TabContext';
+import { clearUnifiedLogs, snapshotUnifiedLogs, subscribeUnifiedLogs } from '@/utils/unifiedLogStore';
 import type { LogEntry, LogLevel, LogSource } from '@/types/log';
 import OverlayBackdrop from '@/components/OverlayBackdrop';
 
 interface UnifiedLogsPanelProps {
-    /** Logs received from SSE via TabProvider */
+    /** Logs to display */
     sseLogs: LogEntry[];
     /** Whether to show the panel */
     isVisible: boolean;
@@ -91,6 +93,43 @@ function highlightText(text: string, query: string): React.ReactNode {
     }
     if (lastIndex < text.length) parts.push(text.slice(lastIndex));
     return parts.length > 0 ? parts : text;
+}
+
+/**
+ * Tab 版面板：自己订阅 `unifiedLogStore`，把「这个 tab 的 + 全局的」日志喂给
+ * 纯展示的 `UnifiedLogsPanel`。
+ *
+ * **为什么列表状态在这里而不是在 TabProvider**：`console.*` 会由 React 自己
+ * 在渲染过程中触发（重复 key、渲染期更新）。列表一旦住在包住整个聊天界面的
+ * Provider 里，就是「产生日志的界面被日志重渲染」的无限循环 —— v0.2.35
+ * 「点方向整个 app 卡死」。放在叶子组件里，面板关着时连渲染都没有。
+ */
+export function TabUnifiedLogsPanel({ isVisible, onClose }: { isVisible: boolean; onClose: () => void }) {
+    const tabId = useTabApiOptional()?.tabId;
+    const [logs, setLogs] = useState<LogEntry[]>([]);
+
+    // 只在打开时订阅：面板关着就不该因为日志而重渲染。打开那一刻取快照补历史。
+    useEffect(() => {
+        if (!isVisible) return;
+        const sync = () => { setLogs(visibleForTab(snapshotUnifiedLogs(), tabId)); };
+        sync();
+        return subscribeUnifiedLogs(sync);
+    }, [isVisible, tabId]);
+
+    return (
+        <UnifiedLogsPanel
+            sseLogs={logs}
+            isVisible={isVisible}
+            onClose={onClose}
+            onClearAll={() => { clearUnifiedLogs(); }}
+        />
+    );
+}
+
+/** 面板可见范围：本 tab 自己的条目 + 没有归属的全局条目。 */
+function visibleForTab(entries: LogEntry[], tabId: string | undefined): LogEntry[] {
+    if (!tabId) return entries;
+    return entries.filter((e) => !e.tabId || e.tabId === tabId);
 }
 
 export function UnifiedLogsPanel({ sseLogs, isVisible, onClose, onClearAll }: UnifiedLogsPanelProps) {
