@@ -161,6 +161,9 @@ pub struct OpsAsset {
     /// 期望观众做的动作。和 `product` 一起构成 CTA 的锚。
     #[serde(default)]
     pub cta: String,
+    /// 原始物料在工作区里的位置，如 `ops/assets/imported/2026-11-15/折叠桌批次/`。
+    #[serde(default)]
+    pub source_ref: Option<String>,
     /// 工作区内的相对路径，如 `ops/assets/cover.png`。
     #[serde(default)]
     pub cover: Option<String>,
@@ -883,6 +886,7 @@ mod tests {
             body: String::new(),
             product: String::new(),
             cta: String::new(),
+            source_ref: None,
             cover: None,
             images: Vec::new(),
             shots: Vec::new(),
@@ -1096,6 +1100,68 @@ mod tests {
             upsert.fields.get("source").and_then(|v| v.as_str()),
             Some("hotspot")
         );
+    }
+
+    #[test]
+    fn asset_source_ref_round_trips_through_the_ledger() {
+        let ws = make_test_workspace("ops-asset-source-ref");
+        let mut a = asset("a1");
+        a.source_ref = Some("ops/assets/imported/2026-11-15/折叠桌".to_string());
+        upsert_item(&ws, upsert(OpsItemKind::Asset, &a)).expect("upsert");
+
+        let reread = read_state(&ws).expect("read");
+        assert_eq!(reread.assets.len(), 1);
+        assert_eq!(
+            reread.assets[0].source_ref.as_deref(),
+            Some("ops/assets/imported/2026-11-15/折叠桌")
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn ledger_written_before_the_intake_fields_still_loads() {
+        // 老台账没有 product / cta / sourceRef / platformWorkId。这些字段是
+        // `#[serde(default)]` 的原因：升级不能让用户已有的台账直接解析失败。
+        let ws = make_test_workspace("ops-legacy-asset");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        fs::write(
+            ops_dir.join("state.json"),
+            r#"{
+              "version": 1,
+              "topics": [],
+              "assets": [{
+                "id": "a1",
+                "topicId": null,
+                "title": "老素材",
+                "body": "正文",
+                "cover": null,
+                "images": [],
+                "shots": [],
+                "platform": "douyin",
+                "scheduledAt": null,
+                "status": "published",
+                "publishedAt": "2026-11-01T09:00:00",
+                "progress": 100,
+                "createdAt": "2026-11-01T09:00:00",
+                "updatedAt": "2026-11-01T09:00:00"
+              }],
+              "reviews": [],
+              "rules": [],
+              "style": null
+            }"#,
+        )
+        .expect("write");
+
+        let state = read_state(&ws).expect("read");
+        assert_eq!(state.assets.len(), 1);
+        let a = &state.assets[0];
+        assert_eq!(a.title, "老素材");
+        assert_eq!(a.product, "");
+        assert_eq!(a.cta, "");
+        assert!(a.source_ref.is_none());
+        assert!(a.platform_work_id.is_none());
+        let _ = fs::remove_dir_all(&ws);
     }
 
     #[test]

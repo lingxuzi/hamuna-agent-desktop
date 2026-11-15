@@ -287,7 +287,8 @@ hamuna ops add topic --title "标题" --platform douyin --tag 热点 --source ho
 hamuna ops update topic --id topic-1a2b3c4d --status produced
 hamuna ops remove topic --id topic-1a2b3c4d
 hamuna ops add asset --title "标题" --platform douyin --body-file script.md --progress 60 \
-    --product "露营折叠桌" --cta "进店看新款"
+    --product "露营折叠桌" --cta "进店看新款" \
+    --source-ref ops/assets/imported/2026-11-15/折叠桌批次
 hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \
     --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300
 hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数字" --confidence 0.7 \
@@ -309,6 +310,8 @@ hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数
 | `published` | 回读到平台作品列表里真的有这一条才算 |
 
 **`unverified` 不是 `published` 的近义词**，是它的未证状态。没有回读证据就把素材标成 `published`，等于对用户撒谎——界面上「已发布」意味着它真的在线。回读到作品 id 后一并 `--platform-work-id` 回填。
+
+**`--product` / `--cta` / `--source-ref` 是给「人丢物料进来」这条路径用的**：产品、要观众做的动作、以及原始物料在工作区里的位置（做稿时回原件看卖点的指针）。纯内容不带转化就前两个都留空，别编。
 
 **硬规则：**
 - **绝不手工编辑 `ops/state.json`**。台账只有一个写者（App 后端），手改会和正常写入竞争，丢数据。所有写操作都走 `hamuna ops`。

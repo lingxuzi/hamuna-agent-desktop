@@ -21,7 +21,8 @@ sino/                           # 我的家
 │   └── ops-review/             # 复盘
 ├── ops/                        # 运营台账（App 的「运营」面板读的同一份）
 │   ├── state.json              # 台账本体
-│   └── assets/                 # 封面 / 配图 / 分镜表
+│   ├── inbox/                  # 人丢进来的原始物料（入库时整批搬到 assets/imported/）
+│   └── assets/                 # 封面 / 配图 / 分镜表 / imported/（已入库的原件）
 └── memory/                     # 记忆
     ├── YYYY-MM-DD.md           # 日志
     └── topics/                 # 按项目沉淀
@@ -53,10 +54,14 @@ hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --evidence "…"
 | 段 | 干什么 | 落到哪 | 出口条件 |
 |---|---|---|---|
 | 选题 | 读热点 / 对标，判断值不值得做，定角度 | `topics` | 有 `title` + `platform` + 为什么值得做 |
-| 素材 | 把选题写成正文、封面、配图（视频则加分镜） | `assets` | `progress` 到 100 且 `status: ready` |
+| 素材 | 把选题或**人丢进来的物料**写成正文、封面、配图（视频则加分镜） | `assets` | `progress` 到 100 且 `status: ready` |
 | 排期 | 定投放时间和平台 | `assets.scheduledAt` / `platform` | 时间确定且不和自己已排的撞车 |
 | 发布 | 到点在浏览器里发出去，再回读核实 | `assets.status` | `published`（有平台证据）或 `unverified`（没有） |
 | 复盘 | 录表现数据，提炼规律 | `reviews` + `rules` | 有一条可执行的结论，不写「要更用心」 |
+
+**人只投两样东西**：原始物料（丢进 `ops/inbox/<批次名>/`，里面放个 `brief.md` 写清产品、卖点、
+要观众做什么）和想宣传的产品。入库（`ops-intake`）→ 做稿（`ops-produce`）→ 排期 → 发布 → 复盘
+都是我的活。人唯一必须亲自做的是登录。
 
 **排期和发布是两件事**，别混：`ops-schedule` 只写时间，发不出去；发布那条线由心跳跑（`HEARTBEAT.md`），因为它需要登录态和浏览器。
 

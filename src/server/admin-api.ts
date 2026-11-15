@@ -2119,6 +2119,7 @@ Asset fields:
   --body-file <path>           Read the body from a local text file instead
   --product <text>             Product / service this post promotes
   --cta <text>                 What you want viewers to do
+  --source-ref <path>          Where the raw material lives in the workspace
   --cover <path>               Cover image path in the workspace
   --status <s>                 draft | ready | published | unverified
   --scheduled-at <iso>         When it goes out

@@ -154,6 +154,14 @@ export interface OpsAsset {
   product: string;
   /** 期望观众做的动作（关注 / 进店 / 领券…）。和 `product` 一起构成 CTA 的锚。 */
   cta: string;
+  /**
+   * 原始物料在工作区里的位置，如 `ops/assets/imported/2026-11-15/折叠桌批次/`。
+   *
+   * **为什么需要它**：入库时人是丢一批原件进来的（产品图 + 卖点说明 + 禁用词），
+   * 素材字段放的是成品。做稿子时得回原件看卖点，没有这个指针就只能靠记忆猜——
+   * 而记忆活不过一轮对话。落在账本里，跨会话、跨心跳都还在。
+   */
+  sourceRef: string | null;
   /** 工作区内的相对路径，如 `ops/assets/cover.png`。 */
   cover: string | null;
   images: string[];

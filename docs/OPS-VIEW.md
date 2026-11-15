@@ -10,7 +10,7 @@
 
 **做**：选题、素材、排期、复盘四域的台账与运营视图界面；热点与对标账号作为选题输入；heartbeat 的分析与沉淀。
 
-**不做**：代做投放、平台凭据管理、登录态深读他人账号数据。
+**不做**：平台凭据管理、登录态深读他人账号数据、给他人作品评论 / 私信 / 加好友。
 
 ## 四个域
 
@@ -44,16 +44,20 @@
   }],
   "assets": [{
     "id": "a_<uuid>",
-    "topicId": "t_<uuid>",
+    "topicId": "t_<uuid> | null",
     "title": "string",
     "body": "string",              // 正文 / 脚本
+    "product": "string",           // 这条内容要宣传的产品 / 服务
+    "cta": "string",               // 期望观众做的动作
+    "sourceRef": "ops/assets/imported/<date>/<batch> | null",  // 原始物料在哪
     "cover": "ops/assets/<file>",
     "images": ["ops/assets/<file>"],
     "shots": [{ "no": 1, "visual": "...", "voice": "...", "seconds": 6 }],
     "platform": "douyin",
     "scheduledAt": "ISO | null",
-    "status": "draft | ready | published",
+    "status": "draft | ready | published | unverified",
     "publishedAt": "ISO | null",
+    "platformWorkId": "string | null",   // 平台侧作品 id，回读核实后才填得出
     "createdAt": "ISO", "updatedAt": "ISO"
   }],
   "reviews": [{
@@ -92,25 +96,31 @@
 
 ## 编排
 
-Sino 模板自带四个 skill，域即段：
+Sino 模板自带五个 skill，域即段：
 
 | skill | 干什么 | 产出 |
 |---|---|---|
 | `ops-topic` | 读热点 + 对标，定选题 | topics |
-| `ops-produce` | 把选题变成素材 | assets |
+| `ops-intake` | 把人丢进 `ops/inbox/` 的原始物料变成素材，原件归档到 `ops/assets/imported/` | assets |
+| `ops-produce` | 把选题或物料变成素材 | assets |
 | `ops-schedule` | 排期 | assets 的排期字段 |
 | `ops-review` | 分析已投放素材的表现，反思沉淀 | reviews + rules |
 
 热点与对标是**选题的输入源**，不是独立域：选题的 `source` 字段记 `hotspot` / `benchmark`，`sourceRefs` 留来源线索。
 
-**heartbeat** 分两段：
-- 采集 —— 手动触发（内嵌浏览器带登录态），读创作者后台表现数据；无人值守场景不采。
+**物料入库**同理是一条输入路径而不是一个域：人把物料丢进 `ops/inbox/<批次名>/`（可选放一份
+`brief.md` 写清产品、卖点、要观众做什么），入库时整批搬到 `ops/assets/imported/`。搬走本身就是
+「处理过了」的标记——不另设状态文件、不另建索引。素材的 `sourceRef` 指回那批原件。
+
+**heartbeat** 分三段：
+- 入库 —— 扫 `ops/inbox/`，有批次就入库并接着做稿。
+- 采集 —— 无人值守时读创作者后台表现数据；**登录态失效就跳过并通报**，不要用猜的数字填。
 - 分析反思 —— 可无人值守：读本地表现数据 → 产出 `rules`（`source: reflection`）→ 反哺选题与制作。
 
 ## 采集边界
 
 - 允许：web 搜索、平台**公开**热榜页（`open` / `read` 免审批，可无人值守跑）、用户粘贴链接或文本。
-- 禁止：用登录态深读他人账号的后台数据；代做投放。
+- 禁止：用登录态深读他人账号的后台数据；给他人作品评论、私信、加好友。
 - `submit` 类命令（可能真的发帖）仍走既有审批。
 
 ## 模块落点

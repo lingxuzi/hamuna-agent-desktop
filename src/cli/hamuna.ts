@@ -2428,6 +2428,7 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'body', flag: 'body', type: 'text', fileFlag: 'bodyFile' },
     { field: 'product', flag: 'product', type: 'text' },
     { field: 'cta', flag: 'cta', type: 'text' },
+    { field: 'sourceRef', flag: 'sourceRef', type: 'text' },
     { field: 'cover', flag: 'cover', type: 'text' },
     { field: 'status', flag: 'status', type: 'text' },
     { field: 'scheduledAt', flag: 'scheduledAt', type: 'text' },

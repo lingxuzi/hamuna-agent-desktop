@@ -1168,6 +1168,22 @@ describe('hamuna CLI operations ledger', () => {
     });
   });
 
+  it('carries the source-ref through so intake can point back at the raw material', () => {
+    // sourceRef is the only pointer from a ledger entry back to the batch of
+    // raw files the human dropped in. If it gets dropped here, the produce
+    // step has nothing to read the selling points from and starts guessing.
+    const body = buildRequestBody('ops', 'add', ['asset'], {
+      title: '露营折叠桌',
+      platform: 'douyin',
+      sourceRef: 'ops/assets/imported/2026-11-15/折叠桌',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toMatchObject({
+      kind: 'asset',
+      sourceRef: 'ops/assets/imported/2026-11-15/折叠桌',
+    });
+  });
+
   it('omits the workspace unless one was named', () => {
     expect(buildRequestBody('ops', 'list', [], {})).toEqual({});
     expect(buildRequestBody('ops', 'list', [], { workspace: '/tmp/ws' })).toEqual({ workspace: '/tmp/ws' });

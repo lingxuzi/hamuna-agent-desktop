@@ -35,6 +35,7 @@ function asset(patch: Partial<OpsAsset> & Pick<OpsAsset, 'id'>): OpsAsset {
     body: '',
     product: '',
     cta: '',
+    sourceRef: null,
     cover: null,
     images: [],
     shots: [],

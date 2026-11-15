@@ -59,6 +59,7 @@ function stateWithData(): OpsState {
         body: '',
         product: '',
         cta: '',
+        sourceRef: null,
         cover: null,
         images: [],
         shots: [],
