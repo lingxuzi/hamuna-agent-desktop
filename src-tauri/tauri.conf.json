@@ -72,7 +72,7 @@
       "binaries/cuse"
     ],
     "macOS": {
-      "minimumSystemVersion": "13.0",
+      "minimumSystemVersion": "14.0",
       "entitlements": "Entitlements.plist",
       "exceptionDomain": "",
       "frameworks": [],

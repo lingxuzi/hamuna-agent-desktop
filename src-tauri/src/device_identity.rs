@@ -153,7 +153,7 @@ fn get_primary_mac_address() -> Option<String> {
         .map(|mac| mac.to_string())
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
+pub(crate) fn hex_encode(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         s.push_str(&format!("{byte:02x}"));

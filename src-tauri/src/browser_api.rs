@@ -186,6 +186,33 @@ async fn resolve_browser(session_id: &str) -> Result<(String, String), String> {
     })
 }
 
+/// Resolve a Chat session id to a browser webview label, **without** the
+/// "any live browser" fallback.
+///
+/// The fallback in [`resolve_browser`] picks the most recently created browser
+/// in the whole app — and now that each workspace has its own browser profile,
+/// that browser may hold a **different workspace's** login. The session id is
+/// what ties a browser to a workspace (session ids are globally unique), so
+/// anything that reaches *through* the browser into another workspace's data has
+/// no business running without one.
+///
+/// The line is drawn by **effect, not by verb**:
+/// - strict: clicking / filling / uploading / submitting / logging in changes
+///   the page (typing into somebody else's account, publishing from it), and
+///   `read` / `image-data` pull page content *out* of that browser and into
+///   this session's context or workspace;
+/// - loose: `state` / `tabs` / `select` / `fields` / `images` only report what
+///   is on screen, which is how you find out whether a browser is open at all.
+async fn resolve_browser_strict(session_id: &str) -> Result<(String, String), String> {
+    if session_id.trim().is_empty() {
+        return Err(
+            "This browser action needs a Chat session id — it must not act on a browser that belongs to another workspace. Open the browser panel in this workspace, or pass --session <id>."
+                .to_string(),
+        );
+    }
+    resolve_browser(session_id).await
+}
+
 /// Resolve a Chat session id to the owner tab id that groups the browser tabs.
 ///
 /// Same fallback ladder as [`resolve_browser`]: an explicit session id wins,
@@ -740,7 +767,7 @@ pub async fn browser_read_handler(Json(input): Json<BrowserRequest>) -> Json<ser
 
 /// `POST /api/browser/click` — click an element.
 pub async fn browser_click_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
-    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+    let (_tab_id, label) = match resolve_browser_strict(&input.session_id).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
@@ -756,7 +783,7 @@ pub async fn browser_click_handler(Json(input): Json<BrowserRequest>) -> Json<se
 
 /// `POST /api/browser/fill` — set an input's value.
 pub async fn browser_fill_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
-    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+    let (_tab_id, label) = match resolve_browser_strict(&input.session_id).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
@@ -781,7 +808,7 @@ pub async fn browser_fill_handler(Json(input): Json<BrowserRequest>) -> Json<ser
 /// input: a publish flow that "succeeded" without the media attached is worse
 /// than one that stopped.
 pub async fn browser_upload_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
-    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+    let (_tab_id, label) = match resolve_browser_strict(&input.session_id).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
@@ -849,7 +876,7 @@ pub async fn browser_upload_handler(Json(input): Json<BrowserRequest>) -> Json<s
 /// The CLI gates this behind user approval; the handler itself does not
 /// re-check, because by the time it runs the approval already happened.
 pub async fn browser_submit_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
-    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+    let (_tab_id, label) = match resolve_browser_strict(&input.session_id).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
@@ -934,7 +961,7 @@ pub async fn browser_image_data_handler(
 /// Deliberately does NOT submit: the caller needs a chance to read the captcha
 /// first. `submit` stays a separate, user-approved step.
 pub async fn browser_login_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
-    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+    let (_tab_id, label) = match resolve_browser_strict(&input.session_id).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
@@ -1073,6 +1100,19 @@ pub async fn request_browser_new_tab(owner_tab_id: &str, url: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::has_landed;
+
+    /// A write without a session id must be refused — not silently aimed at
+    /// whichever browser was opened last (which may be another workspace's).
+    #[tokio::test]
+    async fn write_actions_refuse_to_act_without_a_session_id() {
+        let err = super::resolve_browser_strict("")
+            .await
+            .expect_err("must refuse");
+        assert!(
+            err.contains("session id"),
+            "错误要说清缺的是 session id: {err}"
+        );
+    }
 
     /// Regression guard for "`hamuna browser open https://x` followed by
     /// `hamuna browser read` returns the *previous* page".

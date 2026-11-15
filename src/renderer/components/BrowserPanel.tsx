@@ -69,11 +69,15 @@ interface BrowserPanelProps {
   /** When previewing a local file, stores its metadata for editor toggle */
   sourceFile?: { name: string; content: string; size: number; path: string } | null;
   /**
-   * Active chat workspace path. Forwarded to `openExternal()` when the user
-   * clicks "open in external browser" so Rust can accept workspace files
-   * outside home/tmp (e.g. Windows `D:\workspace\foo.html`). Issue #125
-   * follow-up — without this the path validator rejects every non-system-
-   * drive workspace.
+   * Active chat workspace path. Two things depend on it:
+   *
+   * 1. Forwarded to `openExternal()` when the user clicks "open in external
+   *    browser" so Rust can accept workspace files outside home/tmp (e.g.
+   *    Windows `D:\workspace\foo.html`). Issue #125 follow-up — without this
+   *    the path validator rejects every non-system-drive workspace.
+   * 2. Rust derives the **browser profile** from it: each workspace gets its
+   *    own cookie jar, so a login in one workspace is invisible in another.
+   *    Without it the panel falls back to the app-wide shared profile.
    */
   workspace?: string | null;
   onCreateFailed: () => void;
@@ -224,6 +228,9 @@ export default function BrowserPanel({
           x: bounds.x, y: bounds.y,
           width: bounds.width, height: bounds.height,
           sessionId: sessionId ?? null,
+          // 每个工作区一套浏览器 profile：cookie 不跨工作区，所以登录态天然
+          // 是工作区级的。缺了它，这个面板会落回全 App 共享的 profile。
+          workspace: workspace ?? null,
         })
           .then((id) => {
             if (!isMountedRef.current) { resolve(null); return; }
@@ -249,7 +256,7 @@ export default function BrowserPanel({
       };
       attempt();
     });
-  }, [tabId, sessionId, readUsableBounds, onCreateFailed, t, setTabs, setActiveTabId]);
+  }, [tabId, sessionId, workspace, readUsableBounds, onCreateFailed, t, setTabs, setActiveTabId]);
 
   // ── Seed / navigate ──
   //

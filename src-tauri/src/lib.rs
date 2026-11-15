@@ -6,6 +6,7 @@ pub mod attachment_protocol;
 pub mod browser;
 pub mod browser_agent;
 pub mod browser_api;
+pub mod browser_profile;
 pub mod browser_throttle;
 pub mod cli;
 pub mod clipboard;

@@ -2694,8 +2694,14 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // account list of the workspace it is operating, and it must not write the
 // login state — that field's authority is the browser cookie, and an agent
 // asserting "logged in" would make the UI promise a publish it cannot do.
+//
+// 75: hamuna-cli — state that the persistent login is per-workspace. The cookie
+// jar is now a workspace-scoped browser profile, so "the panel remembers the
+// login" is only true inside the workspace that logged in. An agent that reads
+// "logged out" as "the cookie expired" would ask the user to re-login for a
+// workspace that was never logged in — or the other way round.
 
-const SYSTEM_SKILLS_VERSION: &str = "74";
+const SYSTEM_SKILLS_VERSION: &str = "75";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3385,13 +3391,14 @@ mod system_skills_tests {
         // 50 adds the `direction` ops kind (`--proposal-file` / `--accept-proposal`
         // / `--reject-proposal`) and lets `ops update direction` locate the record
         // by `--platform`; 73 documents both. 51 adds the `account` ops kind (one
-        // account per platform, addressed by `--platform`); 74 documents it.
+        // account per platform, addressed by `--platform`); 74 documents it. 75
+        // documents that the persisted login is per-workspace.
         //
         // The anchor was left at 46/69 while the constants moved on to 48/71, so
         // this test had been red at HEAD for a reason unrelated to any behaviour
         // — do not re-derive a rule from it, just keep it in step.
         assert_eq!(CLI_VERSION, "51");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "74");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "75");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));

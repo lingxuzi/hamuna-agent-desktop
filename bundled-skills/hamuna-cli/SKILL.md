@@ -573,7 +573,7 @@ hamuna browser select --tab 0                   # 把第 0 个标签页切到最
 5. `browser submit --text "登录"`
 
 - 短信验证码、滑块这类内置浏览器做不了的，直接让用户在面板里自己完成，不要硬试
-- 登录态靠 cookie 持久，面板关掉重开还在
+- 登录态靠 cookie 持久，面板关掉重开还在，**但只在本工作区有效**——每个工作区一套独立的浏览器 profile，换工作区要重新登录一次
 
 **何时用：**
 - **要搜资料 / 查网页 → 用 `browser search`**，不要用 WebSearch / WebFetch 工具

@@ -13,6 +13,7 @@ use tauri::{
 };
 use tokio::sync::Mutex;
 
+use crate::browser_profile;
 use crate::{ulog_info, ulog_warn};
 use std::path::Path;
 
@@ -835,6 +836,7 @@ pub async fn cmd_browser_create(
     width: f64,
     height: f64,
     session_id: Option<String>,
+    workspace: Option<String>,
 ) -> Result<String, String> {
     let _update_spawn_permit = crate::sidecar::begin_update_spawn_permit()?;
 
@@ -896,6 +898,30 @@ pub async fn cmd_browser_create(
 
     let parsed_url = parse_url_or_path(&url)?;
 
+    // 每个工作区一套浏览器 profile：cookie / localStorage / IndexedDB 都不跨
+    // 工作区，所以「在 A 工作区登录的号」在 B 工作区根本不存在。
+    //
+    // 传了工作区却推不出 profile 时**直接失败**，不回落共享 profile —— 回落
+    // 等于「以为隔离了其实没隔离」，那比没有隔离更危险：用户会拿一个不属于
+    // 这个工作区的登录态去发布。
+    let profile = match workspace
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+    {
+        Some(workspace) => Some(browser_profile::profile_for_workspace(workspace)?),
+        None => None,
+    };
+    if let Some(profile) = &profile {
+        ulog_info!(
+            "[browser] workspace profile {} for owner {}",
+            profile.key,
+            tab_id
+        );
+        #[cfg(not(target_os = "macos"))]
+        profile.ensure_data_directory()?;
+    }
+
     // Clone values for closures
     let app_nav = app.clone();
     let tab_id_nav = browser_tab_id.clone();
@@ -908,7 +934,7 @@ pub async fn cmd_browser_create(
     let manager_nav = state.inner().clone();
     let manager_load = state.inner().clone();
 
-    let builder = WebviewBuilder::new(&label, tauri::WebviewUrl::External(parsed_url.clone()))
+    let mut builder = WebviewBuilder::new(&label, tauri::WebviewUrl::External(parsed_url.clone()))
         .user_agent(BROWSER_USER_AGENT)
         .initialization_script(BROWSER_INIT_SCRIPT)
         .on_navigation(move |nav_url| {
@@ -1014,6 +1040,19 @@ pub async fn cmd_browser_create(
             });
             tauri::webview::NewWindowResponse::Deny
         });
+
+    // 平台各走各的隔离机制（见 browser_profile.rs）：
+    // macOS 14+ 用命名的 WKWebView data store（`data_directory` 在 WKWebView
+    // 上不存在），Windows / Linux 用独立的 data 目录（`data_store_identifier`
+    // 在这两个平台上被 wry 忽略）。
+    #[cfg(target_os = "macos")]
+    if let Some(profile) = &profile {
+        builder = builder.data_store_identifier(profile.data_store_identifier);
+    }
+    #[cfg(not(target_os = "macos"))]
+    if let Some(profile) = &profile {
+        builder = builder.data_directory(profile.data_directory.clone());
+    }
 
     // Get the Window (not WebviewWindow) to add a child webview
     let window = app
