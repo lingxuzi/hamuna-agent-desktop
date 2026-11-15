@@ -281,7 +281,7 @@ hamuna goal update --status blocked                  # AI 判断无法继续时�
 运营台账是创作者工作区的「工作记忆」：做什么选题、素材做到哪一步、什么时候发、发完效果如何。它落在工作区的 `ops/state.json`，App 的「运营」面板读的是同一份文件。
 
 ```bash
-hamuna ops list                                   # 全量台账（选题 / 素材 / 复盘 / 规则）
+hamuna ops list                                   # 全量台账（方向 / 选题 / 素材 / 复盘 / 规则）
 hamuna ops list topic                             # 只看某一类
 hamuna ops add topic --title "标题" --platform douyin --tag 热点 --source hotspot
 hamuna ops update topic --id topic-1a2b3c4d --status produced
@@ -293,7 +293,33 @@ hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \
     --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300
 hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数字" --confidence 0.7 \
     --evidence-bar '{"name":"有数字","val":"1.8x","pct":100}'
+
+# 运营方向：每个平台一条，按 platform 定位（不用 --id）
+hamuna ops update direction --platform douyin --brief "想让人记住我们懂露营装备"
+hamuna ops update direction --platform douyin --positioning "夜间露营装备实测" \
+    --audience "预算有限的入门者" --pillar 装备实测 --pillar 夜间场景 \
+    --goal "3 个月 5000 粉" --cadence "一周 3 条" --status active
+hamuna ops update direction --platform douyin --proposal-file /tmp/proposal.json  # 提修订
+hamuna ops update direction --platform douyin --accept-proposal                  # 采纳
+hamuna ops update direction --platform douyin --reject-proposal                  # 驳回
 ```
+
+**方向是唯一按 `--platform` 定位、不需要 `--id` 的记录。** 每个平台至多一条，后端从
+platform 派生 id（`dir-<platform>`），所以重复 `update --platform X` 永远落在同一条上。
+平台重复会直接报错——那是数据损坏，不是正常状态。
+
+**采纳 / 驳回修订是动作，不是字段。** `--accept-proposal` 让后端把挂在这条记录上的
+`proposal` 整段替换进主字段并置 `status: active`；`--reject-proposal` 只丢掉 proposal。
+两者互斥，也都不能和 `--proposal` / `--proposal-file` 同用。
+
+**`--proposal-file` 收一个 JSON 对象**，字段是完整新值（不是差异）+ `rationale`：
+
+```json
+{ "positioning": "…", "audience": "…", "pillars": ["…"],
+  "goal": "…", "cadence": "…", "rationale": "为什么现在该改" }
+```
+
+`rationale` 会原样显示给用户，是他决定点不点的唯一依据——别写「优化定位」这种没有信息量的话。
 
 **何时用：**
 - 用户问「今天做什么」「有哪些选题」「素材到哪了」「上次那条数据怎么样」→ `ops list`（要结构化数据就加 `--json`）
@@ -315,6 +341,7 @@ hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数
 
 **硬规则：**
 - **绝不手工编辑 `ops/state.json`**。台账只有一个写者（App 后端），手改会和正常写入竞争，丢数据。所有写操作都走 `hamuna ops`。
+- **方向改已生效的（`status: active`）必须走 `--proposal`**，不能直接 `--positioning` 覆盖——那是用户的既定决策，要点头才改。冷启动（还没有记录 / `draft`）才直接写。
 - `update` 是**补丁语义**：没传的字段保持原样，不是清空；确实要清空才显式传空值。
 - `add` 的 id 由后端生成并在输出里打印；后续 `update` / `remove` 用这个 id。
 - 目标工作区默认是当前 session 的工作区；要写别处才加 `--workspace <path>`。

@@ -2461,7 +2461,7 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // 49: adds `platforms` (发布规格) and `browser publish` / `browser fill --value-file`
 // — the ops-publish line. Without a bump an existing install keeps a CLI that
 // has no publish verb, and the publish skill has nothing to call.
-const CLI_VERSION: &str = "49";
+const CLI_VERSION: &str = "50";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2684,7 +2684,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // is the one every later browser command drives — an agent that navigates
 // without knowing which tab is in front silently reads the wrong page.
 
-const SYSTEM_SKILLS_VERSION: &str = "72";
+const SYSTEM_SKILLS_VERSION: &str = "73";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3371,12 +3371,15 @@ mod system_skills_tests {
         // surface (`browser tabs` / `browser select` / `--new-tab`), and 69
         // documents it in hamuna-cli's SKILL.md. 49 adds `hamuna platforms` and
         // `browser publish` / `browser fill --value-file`; 72 documents them.
+        // 50 adds the `direction` ops kind (`--proposal-file` / `--accept-proposal`
+        // / `--reject-proposal`) and lets `ops update direction` locate the record
+        // by `--platform`; 73 documents both.
         //
         // The anchor was left at 46/69 while the constants moved on to 48/71, so
         // this test had been red at HEAD for a reason unrelated to any behaviour
         // — do not re-derive a rule from it, just keep it in step.
-        assert_eq!(CLI_VERSION, "49");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "72");
+        assert_eq!(CLI_VERSION, "50");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "73");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));
@@ -3388,6 +3391,11 @@ mod system_skills_tests {
         assert!(bundled.contains("hamuna goal create --objective-file goal-objective.txt"));
         assert!(bundled.contains("workspace 或系统 temp 均可"));
         assert!(bundled.contains("--max-executions <正整数>"));
+        // Direction surface: the docs must keep documenting both the
+        // platform-keyed update and the accept/reject action keys, because an
+        // agent that only saw `--id` would go looking for an id that does not exist.
+        assert!(bundled.contains("hamuna ops update direction --platform douyin --accept-proposal"));
+        assert!(bundled.contains("--proposal-file"));
 
         let memory_update = include_str!("../../bundled-skills/hamuna-memory-update/SKILL.md");
         assert!(

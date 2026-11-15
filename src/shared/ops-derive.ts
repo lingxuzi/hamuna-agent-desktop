@@ -13,6 +13,7 @@
 
 import type {
   OpsAsset,
+  OpsDirectionStatus,
   OpsDomainId,
   OpsReview,
   OpsRule,
@@ -34,7 +35,7 @@ export interface OpsMetric {
 }
 
 /** 分布条的口径种类，决定 renderer 从哪个 i18n 命名空间取标签。 */
-export type OpsDistKind = 'platform' | 'topicSource' | 'assetStatus';
+export type OpsDistKind = 'platform' | 'topicSource' | 'assetStatus' | 'directionStatus';
 
 export interface OpsDistBar {
   kind: OpsDistKind;
@@ -129,6 +130,17 @@ export type OpsDarkCard =
       gap: number | null;
       /** 领先百分比 = 差距 ÷ 第 2 名。 */
       leadPct: number | null;
+    }
+  | {
+      kind: 'direction';
+      directionId: string | null;
+      /** 定位；还没结构化时回落到人给的原话。 */
+      title: string | null;
+      platform: SocialPlatformId | null;
+      /** 待确认修订的提议时刻。`null` = 没有修订在等。 */
+      proposedAt: string | null;
+      /** 距上次更新的天数。 */
+      idleDays: number | null;
     };
 
 export interface OpsTopicView {
@@ -195,7 +207,144 @@ export interface OpsReviewView {
   dark: OpsDarkCard;
 }
 
-export type OpsView = OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewView;
+export type OpsView =
+  | OpsTopicView
+  | OpsAssetView
+  | OpsScheduleView
+  | OpsReviewView
+  | OpsDirectionView;
+
+/* ── 方向域 ───────────────────────────────────────────────────── */
+
+/**
+ * 一个平台的方向行。
+ *
+ * `draft` 与「没有方向」是两件事：没有方向 = 这个账号还没被定义过（写一句原话
+ * 就行）；`draft` = 有原话但还没结构化（点一次「交给 Agent 整理」）。
+ */
+export interface OpsDirectionRow {
+  /**
+   * 记录 id。`null` = 这个平台还没有方向记录 —— 账号在台账里出现过（有选题或
+   * 素材），但没被定义过。这种行只能「写方向」，没有可采纳的修订。
+   */
+  id: string | null;
+  platform: SocialPlatformId;
+  brief: string;
+  positioning: string;
+  audience: string;
+  pillars: string[];
+  goal: string;
+  cadence: string;
+  status: OpsDirectionStatus;
+  /** 有修订在等确认。 */
+  hasProposal: boolean;
+  /** 修订的理由，列表副文本优先用它 —— 人此刻要判断的正是这次改动。 */
+  proposalRationale: string | null;
+  /** 距上次更新的天数。没有记录时为 null。 */
+  idleDays: number | null;
+}
+
+export interface OpsDirectionView {
+  domain: 'direction';
+  metrics: OpsMetric[];
+  lead: {
+    /** 已生效的方向数。 */
+    active: number;
+    /** 有修订待确认的方向数。 */
+    pending: number;
+    /** 拿到焦点的那条（有修订的优先，其次最久没动的）。 */
+    focusId: string | null;
+  };
+  pool: OpsDirectionRow[];
+  dist: OpsDistBar[];
+  dark: OpsDarkCard;
+}
+
+const DIRECTION_STATUS_ORDER: readonly OpsDirectionStatus[] = ['active', 'draft'];
+
+export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionView {
+  const { directions } = state;
+  const active = directions.filter((d) => d.status === 'active').length;
+  const pending = directions.filter((d) => d.proposal !== null).length;
+
+  const rows: OpsDirectionRow[] = directions.map((d) => ({
+    id: d.id,
+    platform: d.platform,
+    brief: d.brief,
+    positioning: d.positioning,
+    audience: d.audience,
+    pillars: d.pillars,
+    goal: d.goal,
+    cadence: d.cadence,
+    status: d.status,
+    hasProposal: d.proposal !== null,
+    proposalRationale: d.proposal?.rationale ?? null,
+    idleDays: idleDays(d.updatedAt, now),
+  }));
+
+  // 有内容但还没立方向的平台也要出现，否则「这个号没定义过」在界面里根本
+  // 不可见 —— 而它恰恰是人最该处理的一行。平台清单从台账里已有的记录推，
+  // 不另养一份。
+  const covered = new Set(rows.map((row) => row.platform));
+  const platformsInUse = new Set<SocialPlatformId>();
+  for (const topic of state.topics) platformsInUse.add(topic.platform);
+  for (const asset of state.assets) platformsInUse.add(asset.platform);
+  for (const platform of [...platformsInUse].sort()) {
+    if (covered.has(platform)) continue;
+    rows.push({
+      id: null,
+      platform,
+      brief: '',
+      positioning: '',
+      audience: '',
+      pillars: [],
+      goal: '',
+      cadence: '',
+      status: 'draft',
+      hasProposal: false,
+      proposalRationale: null,
+      idleDays: null,
+    });
+  }
+
+  // 排序：没定义过的先上（一步就能做完），其次有修订要点头的（在等人做事），
+  // 最后是最久没动过的（越久越可能已经偏了）。
+  const pool = [...rows].sort((a, b) => {
+    const rank = (row: OpsDirectionRow) => {
+      if (row.id === null) return 0;
+      if (row.hasProposal) return 1;
+      return 2;
+    };
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    return (b.idleDays ?? 0) - (a.idleDays ?? 0);
+  });
+
+  const focus = pool[0] ?? null;
+  const focusSource = focus?.id ? directions.find((d) => d.id === focus.id) : undefined;
+
+  return {
+    domain: 'direction',
+    metrics: [
+      { key: 'ops.metric.direction.active', value: active, unit: 'count' },
+      { key: 'ops.metric.direction.pending', value: pending, unit: 'count' },
+      { key: 'ops.metric.direction.covered', value: directions.length, unit: 'count' },
+    ],
+    lead: { active, pending, focusId: focus?.id ?? null },
+    pool,
+    dist: buildBars(
+      'directionStatus',
+      countEntries(directions, (d) => d.status, DIRECTION_STATUS_ORDER),
+    ),
+    dark: {
+      kind: 'direction',
+      directionId: focus?.id ?? null,
+      title: focus ? focus.positioning || focus.brief || null : null,
+      platform: focus?.platform ?? null,
+      proposedAt: focusSource?.proposal?.proposedAt ?? null,
+      idleDays: focus?.idleDays ?? null,
+    },
+  };
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -597,6 +746,8 @@ export function deriveReviewView(state: OpsState, now: Date): OpsReviewView {
 /** 按域取视图。 */
 export function deriveOpsView(state: OpsState, domain: OpsDomainId, now: Date): OpsView {
   switch (domain) {
+    case 'direction':
+      return deriveDirectionView(state, now);
     case 'topic':
       return deriveTopicView(state, now);
     case 'asset':

@@ -26,13 +26,25 @@ export const OPS_STATE_RELATIVE_PATH = 'ops/state.json';
 /** 素材文件在工作区内的相对目录。 */
 export const OPS_ASSETS_RELATIVE_DIR = 'ops/assets';
 
-/** 四个域。排期不是独立实体，是素材排期字段的投影。 */
-export type OpsDomainId = 'topic' | 'asset' | 'schedule' | 'review';
+/**
+ * 五个域。排期不是独立实体，是素材排期字段的投影。
+ *
+ * `direction`（方向）是唯一一个**按平台**而不是按记录排的域：一个平台一条，
+ * 讲的是「这个账号写给谁、讲什么、要达成什么」。其余四域是流水线，方向是
+ * 流水线的输入。
+ */
+export type OpsDomainId = 'topic' | 'asset' | 'schedule' | 'review' | 'direction';
 
-export const OPS_DOMAIN_IDS: readonly OpsDomainId[] = ['topic', 'asset', 'schedule', 'review'];
+export const OPS_DOMAIN_IDS: readonly OpsDomainId[] = [
+  'direction',
+  'topic',
+  'asset',
+  'schedule',
+  'review',
+];
 
 /** 台账记录类型。写入 / 删除时用来指明是哪一类。 */
-export type OpsItemKind = 'topic' | 'asset' | 'review' | 'rule' | 'style';
+export type OpsItemKind = 'topic' | 'asset' | 'review' | 'rule' | 'style' | 'direction';
 
 export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'topic',
@@ -40,6 +52,7 @@ export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'review',
   'rule',
   'style',
+  'direction',
 ];
 
 /** 选题状态：想法 → 排进制作 → 已产出。 */
@@ -102,6 +115,9 @@ export const isOpsRuleStatus = (value: unknown): value is OpsRuleStatus =>
 
 export const isOpsRuleSource = (value: unknown): value is OpsRuleSource =>
   isOneOf(value, OPS_RULE_SOURCES);
+
+export const isOpsDirectionStatus = (value: unknown): value is OpsDirectionStatus =>
+  isOneOf(value, OPS_DIRECTION_STATUSES);
 
 /** 一条选题：值得做成什么，还不含成品。 */
 export interface OpsTopic {
@@ -233,6 +249,68 @@ export interface OpsRule {
   createdAt: string;
 }
 
+/**
+ * 一条运营方向：**一个平台一条**。
+ *
+ * 分工不对称，这是这张卡存在的全部理由：
+ * - `brief` 是人写的原话，可以很模糊（「想让人记住我们是懂露营装备的」）。
+ * - `positioning` / `audience` / `pillars` / `goal` / `cadence` 是 Agent 把这句
+ *   模糊的话结构化出来的产物，人只在采纳修订时点头。
+ *
+ * 没有 `brief` 的方向是凭空编的，没有结构化字段的方向是不能执行的。两者都
+ * 允许暂时缺失（`status: 'draft'`），但只有 `active` 的方向才算「定下来了」。
+ */
+export interface OpsDirection {
+  id: string;
+  platform: SocialPlatformId;
+  /** 人给的原话。可以很模糊 —— 结构化是 Agent 的活。 */
+  brief: string;
+  /** 这个账号一句话定位。空 = 还没结构化。 */
+  positioning: string;
+  /** 写给谁看。 */
+  audience: string;
+  /** 内容支柱：反复讲的几件事。选题从这里长出来。 */
+  pillars: string[];
+  /** 要达成什么（涨粉 / 转化 / 品牌认知…）。 */
+  goal: string;
+  /** 节奏，如「每周 3 条，周二 / 四 / 六」。 */
+  cadence: string;
+  /** `draft` = 还没结构化，`active` = 定下来了。 */
+  status: OpsDirectionStatus;
+  /**
+   * Agent 提请的修订。**嵌套在记录里而不是第二条记录**：采纳修订必须是
+   * 一次原子操作（写新值 + 清 proposal），拆成两条记录就要靠跨记录的不变量
+   * 保证「每平台只有一条 active」，并发写守不住。
+   */
+  proposal: OpsDirectionProposal | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 方向状态：草稿 → 生效。 */
+export type OpsDirectionStatus = 'draft' | 'active';
+
+export const OPS_DIRECTION_STATUSES: readonly OpsDirectionStatus[] = ['draft', 'active'];
+
+/**
+ * 一条待确认的修订。字段是**完整的新值**，不是差异 —— 人看到的是「改成
+ * 这样」，确认就整段替换。给差异等于让人在脑子里做合并。
+ */
+export interface OpsDirectionProposal {
+  /** 建议的新定位 / 受众 / 支柱 / 目标 / 节奏。 */
+  positioning: string;
+  audience: string;
+  pillars: string[];
+  goal: string;
+  cadence: string;
+  /** 为什么要改。 */
+  rationale: string;
+  /** 支撑这次修订的证据，如「近 14 天 3 条晚 9 点发布的内容完播率高 40%」。 */
+  evidence: string;
+  /** 提议时刻。 */
+  proposedAt: string;
+}
+
 /** 风格卡：工作区级，单条。 */
 export interface OpsStyle {
   id: string;
@@ -251,6 +329,8 @@ export interface OpsStyle {
 /** `ops/state.json` 的完整形态。 */
 export interface OpsState {
   version: number;
+  /** 每平台一条。key 是 `platform`，由 Rust 侧校验唯一。 */
+  directions: OpsDirection[];
   topics: OpsTopic[];
   assets: OpsAsset[];
   reviews: OpsReview[];
@@ -262,6 +342,7 @@ export interface OpsState {
 export function emptyOpsState(): OpsState {
   return {
     version: OPS_STATE_VERSION,
+    directions: [],
     topics: [],
     assets: [],
     reviews: [],
@@ -284,6 +365,7 @@ export interface OpsUpsertFieldMap {
   review: Partial<Omit<OpsReview, 'metrics'>> & { metrics?: Partial<OpsReviewMetrics> };
   rule: Partial<OpsRule>;
   style: Partial<OpsStyle>;
+  direction: Partial<OpsDirection>;
 }
 
 /** 写入载荷：`kind` + 这次要动的字段。 */

@@ -1125,7 +1125,8 @@
       "topic": "选题",
       "asset": "素材",
       "schedule": "排期",
-      "review": "复盘"
+      "review": "复盘",
+      "direction": "方向"
     },
     "status": {
       "loading": "正在读取运营台账…",
@@ -1184,7 +1185,10 @@
       "reviewSaved": "复盘数据已更新",
       "ruleActivated": "已写进规则",
       "deleted": "已删除",
-      "saveFailed": "保存失败：{{reason}}"
+      "saveFailed": "保存失败：{{reason}}",
+      "directionSaved": "方向原话已保存",
+      "proposalAccepted": "已采纳修订，方向已更新",
+      "proposalRejected": "已驳回修订"
     },
     "delete": {
       "title": "删除这条记录",
@@ -1199,7 +1203,9 @@
       "schedule": "<b>本周排了 <num>{{week}}</num> 条</b>，<b><num>{{empty}}</num> 天还空着</b>，下一条是 <who>{{name}}</who>。",
       "scheduleEmpty": "本周还没有排期，先定一条发布时间。",
       "review": "<b><num>{{count}}</num> 条内容</b> 带来了 <b><num>{{views}}</num> 次播放</b>，表现最好的是 <who>{{name}}</who>。",
-      "reviewEmpty": "还没有复盘数据，导入一次账号表现就能开始。"
+      "reviewEmpty": "还没有复盘数据，导入一次账号表现就能开始。",
+      "direction": "<b><num>{{active}}</num> 个账号已定方向</b>，<b><num>{{pending}}</num> 条修订等你点头</b>，先看 <who>{{name}}</who>。",
+      "directionEmpty": "还没有账号方向。给一个平台写一句你想让这个号成为什么，Agent 会把它整理成可执行的方向。"
     },
     "metric": {
       "topic": {
@@ -1221,6 +1227,11 @@
         "views": "总播放",
         "interactions": "总互动",
         "completion": "平均完播"
+      },
+      "direction": {
+        "active": "已定方向",
+        "pending": "待确认修订",
+        "covered": "覆盖平台"
       }
     },
     "dist": {
@@ -1253,6 +1264,14 @@
         "scheduled": "已排期",
         "unverified": "待核实",
         "published": "已发布"
+      },
+      "direction": {
+        "title": "定稿进度",
+        "meta": "按平台"
+      },
+      "directionStatus": {
+        "active": "已生效",
+        "draft": "草稿"
       }
     },
     "pool": {
@@ -1286,6 +1305,11 @@
         "col1": "内容",
         "col2": "播放",
         "empty": "还没有复盘数据。"
+      },
+      "direction": {
+        "title": "账号方向",
+        "meta": "账号怎么运营",
+        "empty": "还没有账号。先在选题或素材里给某个平台建一条，方向会在这里出现。"
       }
     },
     "row": {
@@ -1295,7 +1319,8 @@
       "scheduleAt": "{{time}} · {{platform}}",
       "completion": "完播 {{rate}}%",
       "followers": "涨粉 {{n}}",
-      "edit": "编辑这条记录"
+      "edit": "编辑这条记录",
+      "directionPending": "修订：{{reason}}"
     },
     "chart": {
       "title": "每日发布表现",
@@ -1328,6 +1353,11 @@
         "when": "按播放",
         "name": "第 1 名领先第 2 名 {{pct}}%",
         "namePlain": "目前只有一条有数据"
+      },
+      "direction": {
+        "top": "最该先定",
+        "pending": "有修订待确认",
+        "footPending": "采纳后即为新方向"
       }
     },
     "notes": {
@@ -1356,7 +1386,34 @@
         "2": "标题带数字的笔记，点击率普遍更高。",
         "3": "同一角度连续爆的，值得做成系列。",
         "4": "涨粉快但完播低的内容，适合做引流不适合做留存。"
+      },
+      "direction": {
+        "1": "方向是流水线的输入：选题、素材、排期都从它长出来。",
+        "2": "写一句模糊的话就够，结构化交给 Agent。",
+        "3": "Agent 复盘后可能提议改方向，改动要你点头才生效。",
+        "4": "一个平台一条方向，改平台等于换一个账号。"
       }
+    },
+    "direction": {
+      "formTitle": "这个账号要成为什么",
+      "brief": "用一句话说清",
+      "briefPh": "想让人记住我们是懂露营装备的，主要讲夜间露营",
+      "briefHint": "写多模糊都行。保存后点「交给 Agent 整理」，它会拆成定位、受众、内容支柱和节奏。",
+      "writeBrief": "写方向",
+      "editBrief": "改方向原话",
+      "structure": "交给 Agent 整理",
+      "revise": "让 Agent 复盘后修订",
+      "needBrief": "先写一句方向原话",
+      "noBrief": "还没写方向",
+      "idleSub": "已 {{days}} 天没动",
+      "proposalSub": "修订：{{reason}}",
+      "audience": "写给谁",
+      "goal": "要达成什么",
+      "cadence": "节奏",
+      "pillars": "内容支柱",
+      "accept": "采纳修订",
+      "reject": "驳回",
+      "askAgent": "【运营方向】平台：{{platform}}（id: {{platformId}}）。我的原话：「{{brief}}」。请按 ops-direction skill 整理这个账号的运营方向并写回台账。"
     }
   }
 }

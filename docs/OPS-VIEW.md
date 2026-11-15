@@ -12,16 +12,25 @@
 
 **不做**：平台凭据管理、登录态深读他人账号数据、给他人作品评论 / 私信 / 加好友。
 
-## 四个域
+## 五个域
 
 | 域 | 是什么 | 谁写 |
 |---|---|---|
+| 方向 | 每个平台「这个号是什么」：定位、受众、内容支柱、目标、节奏 | 人给一句原话，Agent 结构化；已生效的改动由 Agent 提修订、人采纳 |
 | 选题 | 待加工的内容意图（角度、目标平台、来源） | Agent 提，视图可改 |
 | 素材 | 成品：正文 + 封面 + 配图（+ 分镜） | Agent 产，视图可改 |
 | 排期 | 素材的投放时间与目标平台 | Agent 排，视图可改 |
 | 复盘 | 已投放素材的表现数据 + 分析结论 | 采集（手动）+ heartbeat 反思 |
 
 排期不是独立实体，是素材的两个字段（`scheduledAt` / `platform`）在月历上的投影 —— 与参考项目一致，少一个概念。
+
+方向不是第五个抽屉，是其余四域共用的前提：选题判断「值不值得做」读的是它，复盘沉淀的
+`rules` 要能反过来改它。**一个平台一条**，唯一性是 `validate_state` 里的结构约束而不是
+调用方约定——重复平台直接拒写，因为那意味着两份互相矛盾的定位同时存在。
+
+方向的修订**嵌在记录里**（`proposal` 字段），所以「人点采纳」是一次原子写；
+`--accept-proposal` / `--reject-proposal` 是 Rust 侧的**动作键**，不是字段——调用方
+不需要知道 proposal 里有哪些字段，也就不需要把字段清单复制到每一个写者里。
 
 ## 数据模型
 
@@ -30,6 +39,24 @@
 ```jsonc
 {
   "version": 1,
+  "directions": [{                 // 每个平台一条，唯一性在 Rust validate_state 里硬校验
+    "id": "dir-<platform>",        // 从平台派生，所以同平台重复 upsert 落在同一条
+    "platform": "douyin",
+    "brief": "string",             // 用户原话，可以很模糊
+    "positioning": "string",       // 以下是 Agent 结构化的结果
+    "audience": "string",
+    "pillars": ["string"],
+    "goal": "string",
+    "cadence": "string",
+    "status": "draft | active",
+    "proposal": {                  // 待确认修订；嵌套 → 采纳是一次原子写
+      "positioning": "string", "audience": "string", "pillars": ["string"],
+      "goal": "string", "cadence": "string",
+      "rationale": "string",       // 面板上原样显示给用户，是唯一的采纳依据
+      "evidence": "string", "proposedAt": "ISO"
+    },
+    "createdAt": "ISO", "updatedAt": "ISO"
+  }],
   "topics": [{
     "id": "t_<uuid>",
     "title": "string",
@@ -96,10 +123,11 @@
 
 ## 编排
 
-Sino 模板自带六个 skill，域即段：
+Sino 模板自带七个 skill，域即段：
 
 | skill | 干什么 | 产出 |
 |---|---|---|
+| `ops-direction` | 把用户一句模糊原话拆成定位 / 受众 / 内容支柱 / 目标 / 节奏；跑过几轮后按数据提修订 | directions |
 | `ops-topic` | 读热点 + 对标，定选题 | topics |
 | `ops-intake` | 把人丢进 `ops/inbox/` 的原始物料变成素材，原件归档到 `ops/assets/imported/` | assets |
 | `ops-produce` | 把选题或物料变成素材 | assets |
@@ -164,7 +192,7 @@ Sino 模板自带六个 skill，域即段：
 | Rust HTTP | `src-tauri/src/management_api.rs`（`/api/ops/*`） |
 | CLI | `src/cli/hamuna.ts`（`hamuna ops list|add|update|remove|review`） |
 | 模板 | `agent-templates/sino/`（CLAUDE.md / HEARTBEAT.md / rules / skills）+ `tauri.conf.json` 资源映射 + `PRESET_TEMPLATES` 条目 |
-| 前端 | `src/renderer/components/ops/`（面板 + 四域视图）+ `src/renderer/pages/Chat.tsx` 接入 |
+| 前端 | `src/renderer/components/ops/`（面板 + 五域视图）+ `src/renderer/pages/Chat.tsx` 接入 |
 
 ## 实施顺序
 
@@ -174,5 +202,5 @@ Sino 模板自带六个 skill，域即段：
 4. 模板 `agent-templates/sino/` + 注册 → 从模板库能建出工作区
 5. 前端面板（先只读）→ 运营 tab 能显示四域
 6. 前端写入 → 走 invoke，双向可改
-7. 六个 skill + HEARTBEAT → Agent 能跑通一遍编排（含发布 + 回读）
+7. 七个 skill + HEARTBEAT → Agent 能跑通一遍编排（含发布 + 回读）
 8. 热点 / 对标采集 → 选题能带来源

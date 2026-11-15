@@ -320,7 +320,7 @@ Commands:
   skill     Manage skills (install from URL, list, enable/disable, sync)
   cron      Manage scheduled tasks (list/add/runs/exit ...)
   goal      Manage the current session Goal (get/create/update)
-  ops       Manage the operations ledger (topics / assets / reviews / rules)
+  ops       Manage the operations ledger (directions / topics / assets / reviews / rules)
   task      Manage Task Center tasks (list/get/update-status/run/rerun ...)
   thought   Manage Task Center thoughts (list/create)
   space     Discover Cloud Goals and manage Space Issues/attachments
@@ -376,6 +376,13 @@ Examples:
   hamuna cron list
   hamuna goal get
   hamuna ops list
+  hamuna ops add direction --platform douyin --brief "想让人记住我们懂露营装备"
+  hamuna ops update direction --platform douyin --positioning "夜间露营装备测评" \\
+      --pillar 装备测评 --pillar 露营场景 --status active
+  hamuna ops update direction --platform douyin \\
+      --proposal '{"positioning":"夜间露营测评","rationale":"晚间内容表现更好"}'  # agent proposes
+  hamuna ops update direction --platform douyin --accept-proposal                  # human accepts
+  hamuna ops update direction --platform douyin --reject-proposal                  # human declines
   hamuna ops add topic --title "选题标题" --platform douyin --tag 热点 --source hotspot
   hamuna ops update topic --id topic-1a2b3c4d --status produced
   hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \\
@@ -2482,7 +2489,7 @@ function formatObject(obj: Record<string, unknown> | undefined, indent = '  '): 
 // ---------------------------------------------------------------------------
 
 const OPS_VERBS = ['list', 'add', 'update', 'remove'] as const;
-const OPS_KINDS = ['topic', 'asset', 'review', 'rule'] as const;
+const OPS_KINDS = ['direction', 'topic', 'asset', 'review', 'rule'] as const;
 
 type OpsKind = (typeof OPS_KINDS)[number];
 
@@ -2497,7 +2504,7 @@ interface OpsFieldSpec {
   field: string;
   /** Flag key after parseArgs' camelCase pass (`--topic-id` → `topicId`). */
   flag: string;
-  type: 'text' | 'number' | 'list' | 'jsonList';
+  type: 'text' | 'number' | 'list' | 'jsonList' | 'jsonObj';
   /** Mandatory when creating a record. Updates don't need it. */
   required?: boolean;
   /** Nested object the field lives in (review metrics). */
@@ -2507,6 +2514,24 @@ interface OpsFieldSpec {
 }
 
 const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
+  direction: [
+    { field: 'platform', flag: 'platform', type: 'text', required: true },
+    { field: 'brief', flag: 'brief', type: 'text', fileFlag: 'briefFile' },
+    { field: 'positioning', flag: 'positioning', type: 'text' },
+    { field: 'audience', flag: 'audience', type: 'text' },
+    { field: 'pillars', flag: 'pillar', type: 'list' },
+    { field: 'goal', flag: 'goal', type: 'text' },
+    { field: 'cadence', flag: 'cadence', type: 'text' },
+    { field: 'status', flag: 'status', type: 'text' },
+    // The revision the agent is proposing. Accepting it is NOT expressed as
+    // "copy every field here" — that would duplicate the field list into every
+    // caller. `--accept-proposal` / `--reject-proposal` become flags the Rust
+    // store applies atomically (see `upsert_direction`).
+    // `--proposal-file` exists because a revision carries four multi-line
+    // Chinese fields; inline shell quoting on that is where the caller loses
+    // a day. Same file source as `--body-file`.
+    { field: 'proposal', flag: 'proposal', type: 'jsonObj', fileFlag: 'proposalFile' },
+  ],
   topic: [
     { field: 'title', flag: 'title', type: 'text', required: true },
     { field: 'platform', flag: 'platform', type: 'text', required: true },
@@ -2561,6 +2586,7 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
 
 /** State keys of the ledger, per record kind. */
 const OPS_SECTIONS: Array<{ key: string; kind: OpsKind; label: string }> = [
+  { key: 'directions', kind: 'direction', label: 'Directions' },
   { key: 'topics', kind: 'topic', label: 'Topics' },
   { key: 'assets', kind: 'asset', label: 'Assets' },
   { key: 'reviews', kind: 'review', label: 'Reviews' },
@@ -2658,18 +2684,45 @@ function opsJsonListFlag(flags: Record<string, unknown>, key: string): unknown[]
   });
 }
 
+/** Read one structured JSON object (direction proposals). */
+function opsJsonObjFlag(flags: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
+  const raw = opsStringFlag(flags, key);
+  if (raw === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+    return parsed as Record<string, unknown>;
+  } catch {
+    console.error(`Error: ${opsFlagLabel(key)} must be a JSON object, got "${raw}".`);
+    process.exit(2);
+  }
+}
+
 /** Read one field out of the flags. `undefined` means "not passed". */
 function readOpsField(spec: OpsFieldSpec, flags: Record<string, unknown>): unknown {
   let value: unknown;
   if (spec.type === 'text') value = opsStringFlag(flags, spec.flag);
   else if (spec.type === 'number') value = opsNumberFlag(flags, spec.flag);
   else if (spec.type === 'list') value = opsListFlag(flags, spec.flag);
+  else if (spec.type === 'jsonObj') value = opsJsonObjFlag(flags, spec.flag);
   else value = opsJsonListFlag(flags, spec.flag);
 
   if (value === undefined && spec.fileFlag) {
     const path = opsStringFlag(flags, spec.fileFlag);
     if (path) {
-      value = readTextFileFlag(path, opsFlagLabel(spec.fileFlag).replace(/^--/, '')).trim();
+      const raw = readTextFileFlag(path, opsFlagLabel(spec.fileFlag).replace(/^--/, '')).trim();
+      // A JSON field read from a file must still end up an object, not a
+      // string — handing Rust a string makes it fail schema validation.
+      if (spec.type === 'jsonObj') {
+        try {
+          value = JSON.parse(raw) as unknown;
+        } catch {
+          console.error(`Error: ${opsFlagLabel(spec.fileFlag)} must contain a JSON object.`);
+          process.exit(2);
+        }
+      } else {
+        value = raw;
+      }
     }
   }
   return value;
@@ -2705,6 +2758,24 @@ function buildOpsItem(
   if (missing.length > 0) {
     console.error(`Error: hamuna ops add ${kind} requires ${missing.join(' and ')}.`);
     process.exit(2);
+  }
+  if (kind === 'direction') {
+    // Accepting / rejecting a revision is a store-side action, not a caller-side
+    // field copy — the caller must not have to know which fields a proposal
+    // contains. Both flags are mutually exclusive with each other and with
+    // --proposal.
+    const accept = flags.acceptProposal === true;
+    const reject = flags.rejectProposal === true;
+    if (accept && reject) {
+      console.error('Error: --accept-proposal and --reject-proposal are mutually exclusive.');
+      process.exit(2);
+    }
+    if ((accept || reject) && item.proposal !== undefined) {
+      console.error('Error: cannot combine --proposal with --accept-proposal / --reject-proposal.');
+      process.exit(2);
+    }
+    if (accept) item.acceptProposal = true;
+    if (reject) item.rejectProposal = true;
   }
   return item;
 }
@@ -2762,7 +2833,14 @@ function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
     for (const record of records) {
       printed++;
       const id = typeof record.id === 'string' ? record.id : '-';
-      if (section.kind === 'topic') {
+      if (section.kind === 'direction') {
+        const proposal = record.proposal ? ' · revision pending' : '';
+        const line = record.positioning || record.brief || '';
+        console.log(
+          `  ${id}  ${String(record.platform ?? '')} · ${String(record.status ?? '')}${proposal}`,
+        );
+        if (line) console.log(`    ${String(line)}`);
+      } else if (section.kind === 'topic') {
         const hotness = typeof record.hotness === 'number' ? ` · hotness ${record.hotness}` : '';
         console.log(
           `  ${id}  ${String(record.title ?? '')}  ` +
@@ -2809,7 +2887,9 @@ function printOpsWriteResult(
   }
   console.log(`✓ ${kind} ${id}`);
   const record = id ? opsRecordById(state, kind, id) : undefined;
-  const title = record ? record.title ?? record.name ?? record.publishedAt : undefined;
+  const title = record
+    ? record.title ?? record.name ?? record.publishedAt ?? record.positioning ?? record.brief
+    : undefined;
   if (title) console.log(`  ${String(title)}`);
   if (verb === 'add' && id) {
     console.log(`  Update: hamuna ops update ${kind} --id ${id} --<field> <value>`);
@@ -4223,11 +4303,18 @@ export function buildRequestBody(
       const item = buildOpsItem(kind, flags, cmd.verb === 'add');
       if (cmd.verb === 'update') {
         const id = opsStringFlag(flags, 'id');
-        if (!id) {
-          console.error('Error: hamuna ops update requires --id.');
+        // 方向是唯一按平台定位的记录（每平台一条，id 从平台派生）。要求
+        // `--id` 会让调用方先去 list 一遍把 id 抄回来，而 platform 已经在
+        // 补丁里了 —— Rust 侧 `upsert_direction` 会用它找到同一条。
+        if (!id && !(kind === 'direction' && item.platform !== undefined)) {
+          console.error(
+            kind === 'direction'
+              ? 'Error: hamuna ops update direction requires --id or --platform.'
+              : 'Error: hamuna ops update requires --id.',
+          );
           process.exit(2);
         }
-        item.id = id;
+        if (id) item.id = id;
       }
       return { ...scope, item: { kind, ...item } };
     }

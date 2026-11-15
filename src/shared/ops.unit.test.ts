@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   OPS_ASSET_STATUSES,
+  OPS_DIRECTION_STATUSES,
   OPS_DOMAIN_IDS,
   OPS_RULE_SOURCES,
   OPS_RULE_STATUSES,
@@ -10,6 +11,7 @@ import {
   SINO_TEMPLATE_ID,
   emptyOpsState,
   isOpsAssetStatus,
+  isOpsDirectionStatus,
   isOpsRuleSource,
   isOpsRuleStatus,
   isOpsTopicSource,
@@ -61,9 +63,17 @@ describe('ops 枚举', () => {
     for (const source of OPS_TOPIC_SOURCES) expect(isOpsTopicSource(source)).toBe(true);
   });
 
-  it('四个域与模板 id 是稳定契约', () => {
-    expect(OPS_DOMAIN_IDS).toEqual(['topic', 'asset', 'schedule', 'review']);
+  it('五个域与模板 id 是稳定契约', () => {
+    // 方向排在第一位：它是其余四域共用的前提，面板默认落地就在这一域。
+    expect(OPS_DOMAIN_IDS).toEqual(['direction', 'topic', 'asset', 'schedule', 'review']);
     expect(SINO_TEMPLATE_ID).toBe('sino');
+  });
+
+  it('方向状态两态：草案（可被 Agent 直接写）与已生效（只能提修订）', () => {
+    expect(OPS_DIRECTION_STATUSES).toEqual(['draft', 'active']);
+    expect(isOpsDirectionStatus('draft')).toBe(true);
+    expect(isOpsDirectionStatus('active')).toBe(true);
+    expect(isOpsDirectionStatus('archived')).toBe(false);
   });
 });
 
@@ -71,6 +81,7 @@ describe('emptyOpsState', () => {
   it('是合法空骨架，不是 undefined 字段', () => {
     const state = emptyOpsState();
     expect(state.version).toBe(OPS_STATE_VERSION);
+    expect(state.directions).toEqual([]);
     expect(state.topics).toEqual([]);
     expect(state.assets).toEqual([]);
     expect(state.reviews).toEqual([]);

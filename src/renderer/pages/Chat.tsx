@@ -5294,7 +5294,16 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
               taking the split panel, which crushed its text blocks. */}
           {opsOpen && agentDir && (
             <Suspense fallback={null}>
-              <LazyOpsPanel workspace={agentDir} onClose={() => setOpsOpen(false)} />
+              <LazyOpsPanel
+                workspace={agentDir}
+                onClose={() => setOpsOpen(false)}
+                onSendToAgent={(text) => {
+                  // 面板关掉再把消息送进去：否则用户看到的是自己的话被面板
+                  // 盖住，不知道到底有没有发出去。
+                  setOpsOpen(false);
+                  void sendMessage(text);
+                }}
+              />
             </Suspense>
           )}
           {/* Drop zone overlay for file drag */}

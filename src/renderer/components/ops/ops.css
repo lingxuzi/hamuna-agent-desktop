@@ -689,6 +689,78 @@
   padding: 4px 9px;
 }
 
+/* ── 方向域：可展开行 + 待确认修订 ──────────────────
+   方向行是唯一带动作的台账行，所以行下还要挂一块正文和一个动作条。
+   正文缩到 46px = 字牌(34) + 行内 gap(12)，与标题左缘对齐；不缩的话
+   展开后正文顶到卡片左缘，看上去像换了一张卡。 */
+.ops-dir-toggle {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.ops-dir-toggle:disabled {
+  cursor: default;
+}
+.ops-dir-toggle:focus-visible {
+  outline: 2px solid var(--focus-border);
+  outline-offset: 2px;
+  border-radius: var(--theme-radius-sm);
+}
+.ops-dir-body {
+  margin: 0 0 4px 46px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+.ops-dir-body dt {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.ops-dir-body dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+}
+.ops-dir-pillars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ops-dir-pillar {
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  padding: 3px 9px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-secondary);
+  background: var(--paper-inset);
+  overflow-wrap: anywhere;
+}
+/* 动作条：窄栏放不下就整颗换行 —— 不让文字先溢出按钮，也不给按钮定死宽度
+   后把字挤到边框上。并排时同 padding 同 line-height，高度天然一致。 */
+.ops-dir-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 12px 46px;
+}
+/* 有修订在等：左侧一道暖色竖条，扫一眼就知道哪一行在找我。 */
+.ops-dirs li.pending {
+  box-shadow: inset 2px 0 0 var(--accent-warm);
+}
+
 /* 空态：整张卡只有一行字，不摆骨架、不摆假数据。 */
 .ops-empty {
   padding: 18px 0 6px;

@@ -1125,7 +1125,8 @@
       "topic": "Topics",
       "asset": "Assets",
       "schedule": "Schedule",
-      "review": "Review"
+      "review": "Review",
+      "direction": "Direction"
     },
     "status": {
       "loading": "Reading the operations ledger…",
@@ -1184,7 +1185,10 @@
       "reviewSaved": "Review data updated",
       "ruleActivated": "Written into rules",
       "deleted": "Deleted",
-      "saveFailed": "Save failed: {{reason}}"
+      "saveFailed": "Save failed: {{reason}}",
+      "directionSaved": "Brief saved",
+      "proposalAccepted": "Revision accepted — direction updated",
+      "proposalRejected": "Revision rejected"
     },
     "delete": {
       "title": "Delete this record",
@@ -1199,7 +1203,9 @@
       "schedule": "<b><num>{{week}}</num> posts scheduled this week</b>, <b><num>{{empty}}</num> days still open</b>. Next up is <who>{{name}}</who>.",
       "scheduleEmpty": "Nothing scheduled this week. Set a publish time first.",
       "review": "<b><num>{{count}}</num> posts</b> brought <b><num>{{views}}</num> views</b>. Best performer is <who>{{name}}</who>.",
-      "reviewEmpty": "No review data yet. Import account performance to start."
+      "reviewEmpty": "No review data yet. Import account performance to start.",
+      "direction": "<b><num>{{active}}</num> accounts have a direction</b>, <b><num>{{pending}}</num> revisions wait for you</b>. Start with <who>{{name}}</who>.",
+      "directionEmpty": "No directions yet. Write one line about what this account should be, and the Agent turns it into something executable."
     },
     "metric": {
       "topic": {
@@ -1221,6 +1227,11 @@
         "views": "Total views",
         "interactions": "Interactions",
         "completion": "Avg completion"
+      },
+      "direction": {
+        "active": "Directions set",
+        "pending": "Revisions waiting",
+        "covered": "Platforms"
       }
     },
     "dist": {
@@ -1253,6 +1264,14 @@
         "scheduled": "Scheduled",
         "unverified": "Unverified",
         "published": "Published"
+      },
+      "direction": {
+        "title": "Readiness",
+        "meta": "By platform"
+      },
+      "directionStatus": {
+        "active": "Active",
+        "draft": "Draft"
       }
     },
     "pool": {
@@ -1286,6 +1305,11 @@
         "col1": "Post",
         "col2": "Views",
         "empty": "No review data yet."
+      },
+      "direction": {
+        "title": "Account directions",
+        "meta": "How each account runs",
+        "empty": "No accounts yet. Add a topic or asset for a platform and its direction shows up here."
       }
     },
     "row": {
@@ -1295,7 +1319,8 @@
       "scheduleAt": "{{time}} · {{platform}}",
       "completion": "{{rate}}% completion",
       "followers": "+{{n}} followers",
-      "edit": "Edit this record"
+      "edit": "Edit this record",
+      "directionPending": "Revision: {{reason}}"
     },
     "chart": {
       "title": "Publishing performance",
@@ -1328,6 +1353,11 @@
         "when": "By views",
         "name": "#1 leads #2 by {{pct}}%",
         "namePlain": "Only one post has data"
+      },
+      "direction": {
+        "top": "Define this first",
+        "pending": "Revision waiting",
+        "footPending": "Accepting makes it the new direction"
       }
     },
     "notes": {
@@ -1356,7 +1386,34 @@
         "2": "Titles with numbers generally earn higher click-through.",
         "3": "An angle that hits twice in a row deserves a series.",
         "4": "Fast follower growth with low completion means reach, not retention."
+      },
+      "direction": {
+        "1": "The direction feeds the whole pipeline: topics, assets and schedule all grow from it.",
+        "2": "One vague sentence is enough — the Agent structures it.",
+        "3": "After a review the Agent may propose a revision; it only takes effect when you accept.",
+        "4": "One direction per platform. Changing the platform means a different account."
       }
+    },
+    "direction": {
+      "formTitle": "What this account should be",
+      "brief": "Say it in one sentence",
+      "briefPh": "I want people to remember us as the ones who know camping gear; mostly night camping",
+      "briefHint": "As vague as you like. After saving, hit \"Let the Agent structure it\" — it splits into positioning, audience, content pillars and cadence.",
+      "writeBrief": "Write direction",
+      "editBrief": "Edit the brief",
+      "structure": "Let the Agent structure it",
+      "revise": "Ask the Agent to revise",
+      "needBrief": "Write a brief first",
+      "noBrief": "No direction yet",
+      "idleSub": "Untouched for {{days}} days",
+      "proposalSub": "Revision: {{reason}}",
+      "audience": "Audience",
+      "goal": "Goal",
+      "cadence": "Cadence",
+      "pillars": "Content pillars",
+      "accept": "Accept revision",
+      "reject": "Reject",
+      "askAgent": "[Operations direction] Platform: {{platform}} (id: {{platformId}}). My own words: \"{{brief}}\". Follow the ops-direction skill to structure this account's direction and write it back to the ledger."
     }
   }
 }

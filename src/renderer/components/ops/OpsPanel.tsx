@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Check, Pencil, Plus, X } from 'lucide-react';
 
+import type { SocialPlatformId } from '../../../shared/socialPlatforms';
 import type { OpsAsset, OpsDomainId, OpsReview, OpsTopic } from '../../../shared/ops';
 import { OPS_DOMAIN_IDS } from '../../../shared/ops';
 import {
   deriveOpsView,
   type OpsAssetView,
   type OpsDarkCard as OpsDarkCardData,
+  type OpsDirectionRow,
+  type OpsDirectionView,
   type OpsReviewView,
   type OpsScheduleView,
   type OpsTopicView,
@@ -23,6 +26,8 @@ import {
 } from './opsFormat';
 import OpsHero from './OpsHero';
 import { OpsDistCard, OpsPoolCard } from './OpsCards';
+import { OpsDirectionCard } from './OpsDirectionCard';
+import { DirectionBriefForm } from './DirectionBriefForm';
 import { useOpsState } from './useOpsState';
 import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
 import { opsErrorMessage, opsUpsert } from './opsWrite';
@@ -44,9 +49,18 @@ import './ops.css';
 export default function OpsPanel({
   workspace,
   onClose,
+  onSendToAgent,
 }: {
   workspace: string;
   onClose: () => void;
+  /**
+   * 把一条普通用户消息送进本 Tab 的会话。
+   *
+   * 方向域需要它：结构化方向是 Agent 的活，面板只负责把「这句话 + 纪律」
+   * 交给它。**不在这里拼 CLI 命令** —— 拼了就是把 skill 的步骤复制进组件，
+   * 那边改一步这里就错一步。
+   */
+  onSendToAgent: (text: string) => void;
 }) {
   const { t } = useTranslation('chat');
   // 展开动效：先挂载再翻 class，否则 transition 不会播（与知识看板同一手法）。
@@ -57,6 +71,8 @@ export default function OpsPanel({
   }, []);
   const [domain, setDomain] = useState<OpsDomainId>('topic');
   const [form, setForm] = useState<FormRequest | null>(null);
+  /** 方向动作一个在飞时冻结全部方向按钮，避免连点写出两个修订。 */
+  const [directionBusy, setDirectionBusy] = useState(false);
   const [deleting, setDeleting] = useState<{ kind: 'topic' | 'asset'; id: string; title: string } | null>(null);
   const { state, loading, error, reload } = useOpsState(workspace);
   const toast = useToastOptional();
@@ -87,6 +103,50 @@ export default function OpsPanel({
         notify(t('ops.toast.ruleActivated'));
       } catch (err) {
         fail(err);
+      }
+    },
+    [workspace, notify, fail, t],
+  );
+
+  /**
+   * 把一行方向交给 Agent。
+   *
+   * 消息里放的是**人的原话 + 要 Agent 做什么**，不放字段清单：结构化口径在
+   * `ops-direction` skill 里，那边改口径这里不用跟着改。平台 id 必须带上 ——
+   * 会话里可能有多个账号，Agent 从对话里推不出用户在说哪一个。
+   */
+  const askAgentAboutDirection = useCallback(
+    (row: OpsDirectionRow) => {
+      onSendToAgent(
+        t('ops.direction.askAgent', {
+          platform: t(`settings:accounts.platform.${row.platform}`),
+          platformId: row.platform,
+          brief: row.brief.trim(),
+        }),
+      );
+    },
+    [onSendToAgent, t],
+  );
+
+  /** 采纳 / 驳回修订。两种都是 store 侧一个动作键，不再发字段值。 */
+  const resolveProposal = useCallback(
+    async (row: OpsDirectionRow, action: 'accept' | 'reject') => {
+      setDirectionBusy(true);
+      try {
+        await opsUpsert(workspace, {
+          kind: 'direction',
+          platform: row.platform,
+          [action === 'accept' ? 'acceptProposal' : 'rejectProposal']: true,
+        });
+        notify(
+          action === 'accept'
+            ? t('ops.toast.proposalAccepted')
+            : t('ops.toast.proposalRejected'),
+        );
+      } catch (err) {
+        fail(err);
+      } finally {
+        setDirectionBusy(false);
       }
     },
     [workspace, notify, fail, t],
@@ -147,17 +207,31 @@ export default function OpsPanel({
             />
             <div className={`ops-grid ${view.domain === 'review' ? '' : 'ops-grid-2'}`}>
               {view.domain === 'review' && <OpsChartCard view={view} />}
-              <OpsPoolCard
-                view={view}
-                onEditTopic={(topicId) => {
-                  const topic = state.topics.find((tp) => tp.id === topicId);
-                  if (topic) setForm({ kind: 'topic:edit', topic });
-                }}
-                onEditAsset={(assetId) => {
-                  const asset = state.assets.find((a) => a.id === assetId);
-                  if (asset) setForm({ kind: 'asset:edit', asset });
-                }}
-              />
+              {view.domain === 'direction' ? (
+                <OpsDirectionCard
+                  view={view}
+                  busy={directionBusy || form !== null || deleting !== null}
+                  onWriteBrief={(platform) => {
+                    const row = view.pool.find((r) => r.platform === platform);
+                    setForm({ kind: 'direction:brief', platform, brief: row?.brief ?? '' });
+                  }}
+                  onAskAgent={askAgentAboutDirection}
+                  onAcceptProposal={(row) => void resolveProposal(row, 'accept')}
+                  onRejectProposal={(row) => void resolveProposal(row, 'reject')}
+                />
+              ) : (
+                <OpsPoolCard
+                  view={view}
+                  onEditTopic={(topicId) => {
+                    const topic = state.topics.find((tp) => tp.id === topicId);
+                    if (topic) setForm({ kind: 'topic:edit', topic });
+                  }}
+                  onEditAsset={(assetId) => {
+                    const asset = state.assets.find((a) => a.id === assetId);
+                    if (asset) setForm({ kind: 'asset:edit', asset });
+                  }}
+                />
+              )}
               <OpsDistCard view={view} />
               {view.domain === 'review' && <OpsAdviceCard view={view} onActivate={activateRule} />}
             </div>
@@ -217,7 +291,8 @@ type FormRequest =
   | { kind: 'asset:new' }
   | { kind: 'asset:edit'; asset: OpsAsset }
   | { kind: 'review:new' }
-  | { kind: 'review:edit'; review: OpsReview };
+  | { kind: 'review:edit'; review: OpsReview }
+  | { kind: 'direction:brief'; platform: SocialPlatformId; brief: string };
 
 function FormHost({
   workspace,
@@ -265,6 +340,18 @@ function FormHost({
           onDone={onDone}
         />
       );
+    case 'direction:brief':
+      return (
+        <DirectionBriefForm
+          workspace={workspace}
+          platform={request.platform}
+          brief={request.brief}
+          // 已经有这条记录了：改平台等于换一条记录，所以锁住。
+          platformLocked={state.directions.some((d) => d.platform === request.platform)}
+          onClose={onClose}
+          onDone={onDone}
+        />
+      );
   }
 }
 
@@ -287,6 +374,9 @@ interface HeroActionsProps {
  */
 function HeroActions({ domain, busy, onNewTopic, onNewAsset, onNewReview }: HeroActionsProps) {
   const { t } = useTranslation('chat');
+  // 方向域的「新动作」就在每一行上（写方向 / 交给 Agent），Hero 再放一个
+  // 重复入口只会让人以为它和行上的按钮不同。等方向为空时需要引导看空态文案。
+  if (domain === 'direction') return null;
   if (domain === 'topic') {
     return (
       <button type="button" className="ops-act solid" disabled={busy} onClick={onNewTopic}>
@@ -318,6 +408,8 @@ function HeroActions({ domain, busy, onNewTopic, onNewAsset, onNewReview }: Hero
 
 function Lead({ view }: { view: OpsView }) {
   switch (view.domain) {
+    case 'direction':
+      return <DirectionLead view={view} />;
     case 'topic':
       return <TopicLead view={view} />;
     case 'asset':
@@ -327,6 +419,21 @@ function Lead({ view }: { view: OpsView }) {
     case 'review':
       return <ReviewLead view={view} />;
   }
+}
+
+function DirectionLead({ view }: { view: OpsDirectionView }) {
+  const { t } = useTranslation('chat');
+  const focus = view.pool.find((row) => row.id === view.lead.focusId) ?? view.pool[0];
+  if (!focus) return <>{t('ops.lead.directionEmpty')}</>;
+  const name = focus.positioning || focus.brief || t('ops.direction.noBrief');
+  return (
+    <Trans
+      i18nKey="ops.lead.direction"
+      ns="chat"
+      components={LEAD_COMPONENTS}
+      values={{ active: view.lead.active, pending: view.lead.pending, name }}
+    />
+  );
 }
 
 /** 数字走衬线大字、产品名整体不断行——两处 `<Trans>` 共用的组件表。 */
@@ -576,6 +683,22 @@ function darkParts(
   };
 
   switch (dark.kind) {
+    case 'direction': {
+      if (!dark.title) return empty;
+      return {
+        top: t('ops.dark.direction.top'),
+        when:
+          dark.proposedAt !== null
+            ? t('ops.dark.direction.pending')
+            : dark.idleDays === null
+              ? t('ops.dark.emptyWhen')
+              : t('ops.dark.idleDays', { days: dark.idleDays }),
+        // 方向域没有数字指标，「大数」位置放平台名——它是这张卡的身份。
+        big: dark.platform ? platformLabel(t, dark.platform) : '—',
+        name: dark.title,
+        foot: dark.proposedAt !== null ? t('ops.dark.direction.footPending') : '',
+      };
+    }
     case 'topic': {
       if (!dark.title) return empty;
       return {

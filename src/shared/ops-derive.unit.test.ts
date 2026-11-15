@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { OpsAsset, OpsReview, OpsState, OpsTopic } from './ops';
+import type { OpsAsset, OpsDirection, OpsReview, OpsState, OpsTopic } from './ops';
 import {
   deriveAssetView,
+  deriveDirectionView,
   deriveOpsView,
   deriveReviewView,
   deriveScheduleView,
@@ -72,7 +73,16 @@ function review(patch: Partial<OpsReview> & Pick<OpsReview, 'id'>): OpsReview {
 }
 
 function state(patch: Partial<OpsState> = {}): OpsState {
-  return { version: 1, topics: [], assets: [], reviews: [], rules: [], style: null, ...patch };
+  return {
+    version: 1,
+    directions: [],
+    topics: [],
+    assets: [],
+    reviews: [],
+    rules: [],
+    style: null,
+    ...patch,
+  };
 }
 
 const TOPICS: OpsTopic[] = [
@@ -399,11 +409,97 @@ describe('复盘域派生', () => {
   });
 });
 
+describe('方向域', () => {
+  function direction(patch: Partial<OpsDirection> & Pick<OpsDirection, 'id' | 'platform'>): OpsDirection {
+    return {
+      brief: '',
+      positioning: '',
+      audience: '',
+      pillars: [],
+      goal: '',
+      cadence: '',
+      status: 'draft',
+      proposal: null,
+      createdAt: '2026-11-01T09:00:00',
+      updatedAt: '2026-11-01T09:00:00',
+      ...patch,
+    };
+  }
+
+  it('有内容但没立方向的平台也出现在池里，且 id 是 null', () => {
+    // 这一行不存在的话，「这个号从来没定义过方向」在界面上完全不可见，
+    // 而它恰恰是最该被人处理的一行。
+    const view = deriveDirectionView(
+      state({ topics: [topic({ id: 't1', platform: 'xiaohongshu' })] }),
+      NOW,
+    );
+    expect(view.pool).toHaveLength(1);
+    expect(view.pool[0]).toMatchObject({ id: null, platform: 'xiaohongshu', idleDays: null });
+    expect(view.dark).toMatchObject({ kind: 'direction', directionId: null });
+  });
+
+  it('排序：没定义过 → 有修订待确认 → 最久没动', () => {
+    const view = deriveDirectionView(
+      state({
+        topics: [topic({ id: 't1', platform: 'bilibili' })],
+        directions: [
+          direction({ id: 'dir-zhihu', platform: 'zhihu', updatedAt: '2026-11-12T09:00:00' }),
+          direction({
+            id: 'dir-douyin',
+            platform: 'douyin',
+            proposal: {
+              positioning: 'x',
+              audience: '',
+              pillars: [],
+              goal: '',
+              cadence: '',
+              rationale: '晚间数据更好',
+              evidence: '',
+              proposedAt: '2026-11-12T09:00:00',
+            },
+          }),
+        ],
+      }),
+      NOW,
+    );
+    expect(view.pool.map((row) => row.platform)).toEqual(['bilibili', 'douyin', 'zhihu']);
+    expect(view.pool[1].proposalRationale).toBe('晚间数据更好');
+  });
+
+  it('修订把定位 / 受众 / 支柱都带出来，但 proposal 只影响 sub 文案', () => {
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          direction({
+            id: 'dir-douyin',
+            platform: 'douyin',
+            status: 'active',
+            brief: '想让人记住我们懂露营装备',
+            positioning: '白天露营装备测评',
+            audience: '入门者',
+            pillars: ['装备实测'],
+          }),
+        ],
+      }),
+      NOW,
+    );
+    // 采纳前主字段不变——修订是待确认的，不该提前生效。
+    expect(view.pool[0]).toMatchObject({
+      positioning: '白天露营装备测评',
+      audience: '入门者',
+      pillars: ['装备实测'],
+      hasProposal: false,
+      proposalRationale: null,
+    });
+    expect(view.lead).toEqual({ active: 1, pending: 0, focusId: 'dir-douyin' });
+  });
+});
+
 describe('空数据不炸', () => {
   const empty = state();
 
-  it('四个域都能派生，且不出现 NaN', () => {
-    for (const domain of ['topic', 'asset', 'schedule', 'review'] as const) {
+  it('五个域都能派生，且不出现 NaN', () => {
+    for (const domain of ['direction', 'topic', 'asset', 'schedule', 'review'] as const) {
       const view = deriveOpsView(empty, domain, NOW);
       const values = view.metrics.map((m) => m.value);
       expect(values.some((v) => typeof v === 'number' && Number.isNaN(v))).toBe(false);

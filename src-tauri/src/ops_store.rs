@@ -265,6 +265,71 @@ pub struct OpsRule {
     pub created_at: String,
 }
 
+/// 一条运营方向：**一个平台一条**。
+///
+/// 字段分工不对称：`brief` 是人写的原话（可以很模糊），其余是 Agent 结构化
+/// 出来的产物。两个方向共用同一平台会被 `validate_state` 拒掉——「每平台一条」
+/// 是结构性的不变量，不是调用方约定。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpsDirection {
+    #[serde(default)]
+    pub id: String,
+    pub platform: String,
+    #[serde(default)]
+    pub brief: String,
+    #[serde(default)]
+    pub positioning: String,
+    #[serde(default)]
+    pub audience: String,
+    #[serde(default)]
+    pub pillars: Vec<String>,
+    #[serde(default)]
+    pub goal: String,
+    #[serde(default)]
+    pub cadence: String,
+    #[serde(default)]
+    pub status: OpsDirectionStatus,
+    /// 待确认的修订。嵌套在记录里，所以采纳修订是一次原子写。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<OpsDirectionProposal>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OpsDirectionStatus {
+    #[default]
+    Draft,
+    Active,
+}
+
+/// 一条待确认的修订。字段是**完整的新值**，不是差异：人看到「改成这样」，
+/// 确认就整段替换。给差异等于让人在脑子里做合并。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpsDirectionProposal {
+    #[serde(default)]
+    pub positioning: String,
+    #[serde(default)]
+    pub audience: String,
+    #[serde(default)]
+    pub pillars: Vec<String>,
+    #[serde(default)]
+    pub goal: String,
+    #[serde(default)]
+    pub cadence: String,
+    #[serde(default)]
+    pub rationale: String,
+    #[serde(default)]
+    pub evidence: String,
+    #[serde(default)]
+    pub proposed_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsStyle {
@@ -296,6 +361,9 @@ pub struct OpsStyle {
 #[serde(rename_all = "camelCase")]
 pub struct OpsState {
     pub version: u32,
+    /// 每平台一条。唯一性由 `validate_state` 守。
+    #[serde(default)]
+    pub directions: Vec<OpsDirection>,
     #[serde(default)]
     pub topics: Vec<OpsTopic>,
     #[serde(default)]
@@ -314,6 +382,7 @@ impl OpsState {
     pub fn empty() -> Self {
         Self {
             version: OPS_STATE_VERSION,
+            directions: Vec::new(),
             topics: Vec::new(),
             assets: Vec::new(),
             reviews: Vec::new(),
@@ -327,6 +396,7 @@ impl OpsState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OpsItemKind {
+    Direction,
     Topic,
     Asset,
     Review,
@@ -337,6 +407,7 @@ pub enum OpsItemKind {
 impl OpsItemKind {
     pub fn as_str(&self) -> &'static str {
         match self {
+            OpsItemKind::Direction => "direction",
             OpsItemKind::Topic => "topic",
             OpsItemKind::Asset => "asset",
             OpsItemKind::Review => "review",
@@ -405,6 +476,21 @@ pub fn validate_state(state: &OpsState) -> Result<(), String> {
     check_ids("asset", state.assets.iter().map(|a| a.id.as_str()))?;
     check_ids("review", state.reviews.iter().map(|r| r.id.as_str()))?;
     check_ids("rule", state.rules.iter().map(|r| r.id.as_str()))?;
+    check_ids("direction", state.directions.iter().map(|d| d.id.as_str()))?;
+
+    // 「一个平台一条方向」在这里守。放进 validate 而不是 upsert，是因为
+    // state.json 是人手可编辑的——手抄一份进来也得被拒，否则同一个平台出现
+    // 两条方向时，界面按平台查会静默取到其中一条。
+    let mut seen_platforms: HashSet<&str> = HashSet::new();
+    for direction in &state.directions {
+        check_platform(&direction.platform)?;
+        if !seen_platforms.insert(direction.platform.as_str()) {
+            return Err(format!(
+                "Duplicate direction for platform: {} (one direction per platform)",
+                direction.platform
+            ));
+        }
+    }
 
     for topic in &state.topics {
         check_platform(&topic.platform)?;
@@ -562,6 +648,7 @@ pub fn upsert_item(
 ) -> Result<(OpsState, String), String> {
     let OpsUpsert { kind, fields } = item;
     mutate_state(workspace_root, |state| match kind {
+        OpsItemKind::Direction => upsert_direction(state, fields),
         OpsItemKind::Topic => upsert_topic(state, fields),
         OpsItemKind::Asset => upsert_asset(state, fields),
         OpsItemKind::Review => upsert_review(state, fields),
@@ -724,6 +811,76 @@ fn upsert_rule(
     upsert_by_id(&mut state.rules, rule, |r| r.id.as_str())
 }
 
+/// 写方向。除了 id，**也认 `platform` 作为天然键**：Agent 从来不知道方向记录
+/// 的 id，但一定知道平台；要求它先 list 一次再 upsert 是白跑一轮。
+///
+/// 采纳修订也走这里：一次 payload 里同时给新字段和 `proposal: null`，锁内一次
+/// 写完——分两次（先改值再清 proposal）中间崩掉会留下「已采纳但仍在等你确认」
+/// 的状态。
+fn upsert_direction(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    // 采纳 / 驳回修订是**动作**，不是字段：这两个键不进补丁合并，先取出来。
+    // 让调用方自己把 proposal 的每个字段抄一遍等于把字段清单复制到每个写者里。
+    let accept = patch
+        .get("acceptProposal")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let reject = patch
+        .get("rejectProposal")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let mut fields = patch;
+    fields.remove("acceptProposal");
+    fields.remove("rejectProposal");
+
+    let id = patch_id(&fields);
+    let platform = fields
+        .get("platform")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let existing = match id.as_deref() {
+        Some(id) => state.directions.iter().find(|d| d.id == id),
+        None => platform
+            .as_deref()
+            .and_then(|p| state.directions.iter().find(|d| d.platform == p)),
+    };
+
+    let mut direction: OpsDirection = merge_patch(existing, &fields)?;
+    if direction.id.trim().is_empty() {
+        direction.id = match platform.as_deref() {
+            // id 从平台派生：同平台重复 upsert 落在同一条上，不靠调用方记 id。
+            Some(p) => format!("dir-{}", p),
+            None => generate_id("direction"),
+        };
+    }
+
+    if accept {
+        let proposal = direction
+            .proposal
+            .take()
+            .ok_or_else(|| format!("Direction {} has no pending revision to accept", direction.id))?;
+        direction.positioning = proposal.positioning;
+        direction.audience = proposal.audience;
+        direction.pillars = proposal.pillars;
+        direction.goal = proposal.goal;
+        direction.cadence = proposal.cadence;
+        // 采纳即生效：人点了头就是「定下来了」，不需要再点一次。
+        direction.status = OpsDirectionStatus::Active;
+    } else if reject {
+        // 驳回只丢修订，其余字段保持原样——驳回的是「改成这样」，不是方向本身。
+        direction.proposal = None;
+    }
+
+    direction.created_at =
+        resolve_created_at(existing.map(|old| old.created_at.as_str()), &direction.created_at);
+    direction.updated_at = now_iso();
+    upsert_by_id(&mut state.directions, direction, |d| d.id.as_str())
+}
+
 fn upsert_style(
     state: &mut OpsState,
     patch: serde_json::Map<String, serde_json::Value>,
@@ -747,6 +904,9 @@ pub fn delete_item(
 ) -> Result<OpsState, String> {
     mutate_state(workspace_root, |state| {
         let removed = match kind {
+            OpsItemKind::Direction => {
+                remove_by_id(&mut state.directions, id, |d| d.id.as_str())
+            }
             OpsItemKind::Topic => remove_by_id(&mut state.topics, id, |t| t.id.as_str()),
             OpsItemKind::Asset => remove_by_id(&mut state.assets, id, |a| a.id.as_str()),
             OpsItemKind::Review => remove_by_id(&mut state.reviews, id, |r| r.id.as_str()),
@@ -913,6 +1073,151 @@ mod tests {
 
     fn topic_upsert(item: &OpsTopic) -> OpsUpsert {
         upsert(OpsItemKind::Topic, item)
+    }
+
+    fn direction(platform: &str, brief: &str) -> serde_json::Map<String, serde_json::Value> {
+        serde_json::json!({ "platform": platform, "brief": brief })
+            .as_object()
+            .cloned()
+            .expect("object")
+    }
+
+    #[test]
+    fn direction_upsert_keys_on_platform_when_no_id_is_given() {
+        let ws = make_test_workspace("ops-direction-key");
+        let (_, first) = upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "先做露营装备") },
+        )
+        .expect("first");
+        // 第二次不带 id，只带平台 + 新字段：必须落在同一条上。
+        let (state, second) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Direction,
+                fields: direction("douyin", "改成做城市露营"),
+            },
+        )
+        .expect("second");
+
+        assert_eq!(first, second, "同平台必须复用同一条方向");
+        assert_eq!(state.directions.len(), 1);
+        assert_eq!(state.directions[0].brief, "改成做城市露营");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_accepting_a_proposal_clears_it_in_one_write() {
+        let ws = make_test_workspace("ops-direction-accept");
+        upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+
+        // Agent 提议一版修订。
+        let propose = serde_json::json!({
+            "platform": "douyin",
+            "proposal": {
+                "positioning": "夜间露营装备测评",
+                "rationale": "近两周晚间发布的内容表现更好",
+                "evidence": "3 条晚 9 点内容完播率高 40%",
+                "proposedAt": "2026-11-15T10:00:00.000Z",
+            },
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: propose })
+                .expect("propose");
+        assert!(state.directions[0].proposal.is_some());
+
+        // 人确认：一个动作键，store 在锁内把 proposal 的值搬进正文字段并清掉修订。
+        let accept = serde_json::json!({ "platform": "douyin", "acceptProposal": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: accept })
+                .expect("accept");
+
+        assert!(state.directions[0].proposal.is_none(), "采纳后修订必须清掉");
+        assert_eq!(state.directions[0].positioning, "夜间露营装备测评");
+        assert!(matches!(state.directions[0].status, OpsDirectionStatus::Active));
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn rejecting_a_proposal_keeps_the_direction_itself() {
+        let ws = make_test_workspace("ops-direction-reject");
+        upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+        let propose = serde_json::json!({
+            "platform": "douyin",
+            "proposal": { "positioning": "不该采纳的定位", "rationale": "猜的" },
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: propose })
+            .expect("propose");
+
+        let reject = serde_json::json!({ "platform": "douyin", "rejectProposal": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: reject })
+                .expect("reject");
+
+        assert!(state.directions[0].proposal.is_none());
+        // 驳回的是修订，不是方向：原话和已有定位都还在。
+        assert_eq!(state.directions[0].brief, "露营装备");
+        assert_eq!(state.directions[0].positioning, "");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn accepting_a_proposal_when_none_exists_reports_error() {
+        let ws = make_test_workspace("ops-direction-accept-none");
+        upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+        let accept = serde_json::json!({ "platform": "douyin", "acceptProposal": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let err = upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: accept })
+            .expect_err("should fail");
+        assert!(err.contains("no pending revision"), "错误要说清原因: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn duplicate_direction_for_one_platform_is_rejected() {
+        // 手写一份 state.json：同一平台两条方向。
+        let ws = make_test_workspace("ops-direction-dup");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        let raw = serde_json::json!({
+            "version": OPS_STATE_VERSION,
+            "directions": [
+                { "id": "dir-a", "platform": "douyin", "brief": "a" },
+                { "id": "dir-b", "platform": "douyin", "brief": "b" },
+            ],
+        })
+        .to_string();
+        fs::write(ops_dir.join("state.json"), raw).expect("write");
+
+        let err = read_state(&ws).expect_err("must reject");
+        assert!(err.contains("Duplicate direction"), "错误要说清是重复: {}", err);
+        let _ = fs::remove_dir_all(&ws);
     }
 
     #[test]
@@ -1377,6 +1682,13 @@ mod parity_tests {
         }
         for value in ["reflection", "manual", "dialog"] {
             assert_ts_array_has(TS_OPS, "OPS_RULE_SOURCES", value);
+        }
+    }
+
+    #[test]
+    fn direction_status_values_exist_in_ts_contract() {
+        for value in ["draft", "active"] {
+            assert_ts_array_has(TS_OPS, "OPS_DIRECTION_STATUSES", value);
         }
     }
 

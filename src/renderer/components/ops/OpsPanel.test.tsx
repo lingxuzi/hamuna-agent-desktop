@@ -107,10 +107,10 @@ function stateWithData(): OpsState {
   };
 }
 
-function renderPanel() {
+function renderPanel(onSendToAgent: (text: string) => void = vi.fn()) {
   return render(
     <ToastProvider>
-      <OpsPanel workspace={WORKSPACE} onClose={vi.fn()} />
+      <OpsPanel workspace={WORKSPACE} onClose={vi.fn()} onSendToAgent={onSendToAgent} />
     </ToastProvider>,
   );
 }
