@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { Check, Pencil, Plus, X } from 'lucide-react';
+import { Check, ChevronLeft, Pencil, Plus, X } from 'lucide-react';
 
-import type { SocialPlatformId } from '../../../shared/socialPlatforms';
+import { getSocialPlatform, type SocialPlatformId } from '../../../shared/socialPlatforms';
 import type { OpsAsset, OpsDomainId, OpsReview, OpsTopic } from '../../../shared/ops';
 import { OPS_DOMAIN_IDS } from '../../../shared/ops';
 import {
@@ -28,6 +28,7 @@ import OpsHero from './OpsHero';
 import { OpsDistCard, OpsPoolCard } from './OpsCards';
 import { OpsDirectionCard } from './OpsDirectionCard';
 import { DirectionBriefForm } from './DirectionBriefForm';
+import { OpsAccountLogin, OpsAccounts } from './OpsAccounts';
 import { useOpsState } from './useOpsState';
 import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
 import { opsErrorMessage, opsUpsert } from './opsWrite';
@@ -70,12 +71,31 @@ export default function OpsPanel({
     return () => cancelAnimationFrame(raf);
   }, []);
   const [domain, setDomain] = useState<OpsDomainId>('topic');
+  // 账号视图不是流水线域，不塞进 `OPS_DOMAIN_IDS`：那是「选题 / 素材 / 排期 /
+  // 复盘 / 方向」的流水线，账号是这台机器在这个工作区上的另一件东西。顶栏
+  // 一个按钮切过去，胶囊行让位给「返回」。
+  const [pane, setPane] = useState<'domains' | 'accounts'>('domains');
+  /** 正在登录的平台。非空 = 面板让给浏览器。 */
+  const [loginPlatform, setLoginPlatform] = useState<SocialPlatformId | null>(null);
   const [form, setForm] = useState<FormRequest | null>(null);
   /** 方向动作一个在飞时冻结全部方向按钮，避免连点写出两个修订。 */
   const [directionBusy, setDirectionBusy] = useState(false);
   const [deleting, setDeleting] = useState<{ kind: 'topic' | 'asset'; id: string; title: string } | null>(null);
   const { state, loading, error, reload } = useOpsState(workspace);
   const toast = useToastOptional();
+
+  /**
+   * 顶栏那个「返回」按层退：先退出登录接管回账号清单，再从账号清单回四域台账。
+   * 两层共用一个按钮，是因为它们是同一次「往回走」的两步 —— 分成两个按钮会
+   * 让用户以为「返回」有两种含义。
+   */
+  const goBack = useCallback(() => {
+    if (loginPlatform) {
+      setLoginPlatform(null);
+      return;
+    }
+    setPane('domains');
+  }, [loginPlatform]);
 
   const notify = useCallback(
     (message: string) => {
@@ -153,22 +173,38 @@ export default function OpsPanel({
   );
 
   return (
-    <div className={`ops ops-pop ${unfolded ? 'ops-pop-open' : ''}`}>
+    <div
+      className={`ops ops-pop ${unfolded ? 'ops-pop-open' : ''} ${
+        loginPlatform ? 'ops-takeover-mode' : ''
+      }`}
+    >
       <header className="ops-top">
-        <div className="ops-pills" role="tablist" aria-label={t('ops.title')}>
-          {OPS_DOMAIN_IDS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={domain === id}
-              onClick={() => setDomain(id)}
-            >
-              {t(`ops.domain.${id}`)}
-            </button>
-          ))}
-        </div>
+        {pane === 'domains' ? (
+          <div className="ops-pills" role="tablist" aria-label={t('ops.title')}>
+            {OPS_DOMAIN_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={domain === id}
+                onClick={() => setDomain(id)}
+              >
+                {t(`ops.domain.${id}`)}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button type="button" className="ops-ghost" onClick={goBack}>
+            <ChevronLeft size={14} aria-hidden="true" />
+            {t('ops.account.back')}
+          </button>
+        )}
         <span className="ops-sp" />
+        {pane === 'domains' && (
+          <button type="button" className="ops-ghost" onClick={() => setPane('accounts')}>
+            {t('ops.account.open')}
+          </button>
+        )}
         <button
           type="button"
           className="ops-ghost"
@@ -180,7 +216,13 @@ export default function OpsPanel({
         </button>
       </header>
 
-      {loading ? (
+      {loginPlatform ? (
+        <OpsAccountLogin
+          workspace={workspace}
+          platform={getSocialPlatform(loginPlatform)}
+          onClose={() => setLoginPlatform(null)}
+        />
+      ) : loading ? (
         <p className="ops-status">{t('ops.status.loading')}</p>
       ) : error ? (
         <div className="ops-status">
@@ -188,6 +230,16 @@ export default function OpsPanel({
           <button type="button" className="ops-ghost" onClick={reload}>
             {t('ops.status.retry')}
           </button>
+        </div>
+      ) : pane === 'accounts' ? (
+        <div className="ops-body">
+          <div className="ops-main">
+            <OpsAccounts
+              workspace={workspace}
+              accounts={state.accounts}
+              onLogin={(platform) => setLoginPlatform(platform)}
+            />
+          </div>
         </div>
       ) : (
         <div className="ops-body">

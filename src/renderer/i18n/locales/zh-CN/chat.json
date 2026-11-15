@@ -1394,6 +1394,26 @@
         "4": "一个平台一条方向，改平台等于换一个账号。"
       }
     },
+    "account": {
+      "open": "账号",
+      "title": "账号",
+      "scopeHint": "登录态只在本工作区有效",
+      "namePlaceholder": "账号名（可选，方便识别）",
+      "status": {
+        "success": "已登录",
+        "expired": "已失效",
+        "unknown": "未登录"
+      },
+      "lastChecked": "上次确认 {{date}}",
+      "login": "去登录",
+      "relogin": "重新登录",
+      "loginTitle": "登录 {{platform}}",
+      "loginHint": "在下面的窗口里完成登录，成功后自动返回",
+      "back": "返回",
+      "loginSuccess": "{{platform}} 登录成功",
+      "loginTimeout": "登录超时（5 分钟），请重试",
+      "saveFailed": "保存账号信息失败：{{message}}"
+    },
     "direction": {
       "formTitle": "这个账号要成为什么",
       "brief": "用一句话说清",

@@ -15,6 +15,7 @@ import {
   needsSelectorProbe,
   resolveLoginState,
   withSocialAccount,
+  type SocialAccount,
 } from './socialPlatforms';
 
 const check = (id: Parameters<typeof getSocialPlatform>[0], url: string) =>
@@ -196,23 +197,37 @@ describe('发布侧平台全貌（登录表 + 规格表合并）', () => {
 describe('withSocialAccount', () => {
   it('写一个平台不丢其他平台的记录（浅合并会丢，这是它存在的理由）', () => {
     const before = {
-      xiaohongshu: { lastLoginState: 'success' as const, displayName: '主号' },
-      douyin: { lastLoginState: 'expired' as const },
+      xiaohongshu: { autoPublish: true },
+      douyin: { autoPublish: false },
     };
-    const after = withSocialAccount(before, 'zhihu', { lastLoginState: 'success' });
-    expect(after.douyin).toEqual({ lastLoginState: 'expired' });
-    expect(after.xiaohongshu).toEqual({ lastLoginState: 'success', displayName: '主号' });
-    expect(after.zhihu.lastLoginState).toBe('success');
+    const after = withSocialAccount(before, 'zhihu', { autoPublish: true });
+    expect(after.douyin).toEqual({ autoPublish: false });
+    expect(after.xiaohongshu).toEqual({ autoPublish: true });
+    expect(after.zhihu.autoPublish).toBe(true);
   });
 
-  it('patch 合并进既有记录而不是整条替换', () => {
-    const before = { xiaohongshu: { lastLoginState: 'success' as const, displayName: '主号' } };
-    const after = withSocialAccount(before, 'xiaohongshu', { lastLoginState: 'expired' });
-    expect(after.xiaohongshu).toEqual({ lastLoginState: 'expired', displayName: '主号' });
+  it('整条替换：老配置里的全局账号字段（displayName / lastLoginState）不留在授权条目里', () => {
+    // 全局账号表已经搬到工作区台账。留着旧字段 = 全局一份登录态、工作区一份
+    // 登录态，两份迟早打架（老的那份还写着「已登录」）。
+    const before = {
+      xiaohongshu: {
+        displayName: '主号',
+        lastLoginState: 'success',
+        lastCheckedAt: 1760000000,
+        autoPublish: true,
+      },
+    } as unknown as Record<string, SocialAccount>;
+    const after = withSocialAccount(before, 'xiaohongshu', { autoPublish: false });
+    expect(after.xiaohongshu).toEqual({ autoPublish: false });
   });
 
-  it('没有历史记录时给出 unknown 兜底', () => {
-    expect(withSocialAccount(undefined, 'bilibili', {}).bilibili).toEqual({ lastLoginState: 'unknown' });
+  it('没带 autoPublish 的补丁保留原有授权', () => {
+    const before = { xiaohongshu: { autoPublish: true } };
+    expect(withSocialAccount(before, 'xiaohongshu', {}).xiaohongshu).toEqual({ autoPublish: true });
+  });
+
+  it('没有历史记录时不凭空造出授权', () => {
+    expect(withSocialAccount(undefined, 'bilibili', {}).bilibili).toEqual({});
   });
 });
 
@@ -243,12 +258,12 @@ describe('发布范围（授权能覆盖哪些域名）', () => {
 
 describe('无人值守发布授权', () => {
   it('只有显式开启才算授权', () => {
-    expect(isAutoPublishGranted({ douyin: { lastLoginState: 'success' } }, 'douyin')).toBe(false);
-    expect(isAutoPublishGranted({ douyin: { lastLoginState: 'success', autoPublish: true } }, 'douyin')).toBe(true);
+    expect(isAutoPublishGranted({ douyin: {} }, 'douyin')).toBe(false);
+    expect(isAutoPublishGranted({ douyin: { autoPublish: true } }, 'douyin')).toBe(true);
   });
 
   it('授权只对它自己的平台生效', () => {
-    const accounts = { douyin: { lastLoginState: 'success' as const, autoPublish: true } };
+    const accounts = { douyin: { autoPublish: true } };
     expect(isAutoPublishGranted(accounts, 'douyin')).toBe(true);
     expect(isAutoPublishGranted(accounts, 'xiaohongshu')).toBe(false);
   });

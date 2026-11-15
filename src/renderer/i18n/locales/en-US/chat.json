@@ -1394,6 +1394,26 @@
         "4": "One direction per platform. Changing the platform means a different account."
       }
     },
+    "account": {
+      "open": "Accounts",
+      "title": "Accounts",
+      "scopeHint": "Sign-in state applies to this workspace only",
+      "namePlaceholder": "Account name (optional)",
+      "status": {
+        "success": "Signed in",
+        "expired": "Expired",
+        "unknown": "Not signed in"
+      },
+      "lastChecked": "Last checked {{date}}",
+      "login": "Sign in",
+      "relogin": "Sign in again",
+      "loginTitle": "Sign in to {{platform}}",
+      "loginHint": "Finish the sign-in in the window below; you'll return automatically",
+      "back": "Back",
+      "loginSuccess": "Signed in to {{platform}}",
+      "loginTimeout": "Sign-in timed out after 5 minutes. Try again.",
+      "saveFailed": "Could not save the account: {{message}}"
+    },
     "direction": {
       "formTitle": "What this account should be",
       "brief": "Say it in one sentence",

@@ -404,22 +404,20 @@ export function isPlatformPublishHost(id: SocialPlatformId, url: string): boolea
 }
 
 /**
- * 一个社媒平台的账号记忆。
+ * 一个社媒平台的**发布授权**。
  *
- * **这不是登录态的权威。** 登录态的唯一权威是内嵌浏览器里那份 cookie 的现场
- * 状态（`browser.rs` 的 webview 不带 `data_directory`，全 App 共用一个
- * WebKit/WebView2 数据目录 —— 用户在任意 Tab 登录一次，所有 agent 的
- * `hamuna browser` 就是登录态）。这里只记「上次真正确认登录成功」的结果，
- * 供设置页展示和 agent 决策参考；任何发布前置校验 MUST 现场探一次，
- * 不得仅凭 `lastLoginState` 放行。
+ * 这里只剩授权，不再装账号。账号（哪个号、叫什么、登录没登录）是**工作区级**
+ * 的事，落在工作区台账 `ops/state.json` 的 `accounts` 里 —— 新建一个工作区
+ * 就是一套新的账号体系，两个工作区的登录态互不可见。
+ *
+ * 授权反过来是**本机 + 平台级**的能力开关：用户在这台机器上允许某个平台被
+ * 无人值守地发布，与哪个工作区的号无关，所以它留在设置里，全工作区共享一份。
+ *
+ * 登录态的权威是浏览器 cookie（各自的浏览器 profile），不在这里 —— 所以这个
+ * 类型里一个登录态字段都没有。留着它们会造出第二份真相：全局一份写着
+ * 「已登录」、工作区一份写着「未登录」，界面显示哪一份全看谁先被读到。
  */
 export interface SocialAccount {
-  /** 平台侧显示的账号名，用户手填（渲染器没有 eval 通道，读不到页面上的昵称）。 */
-  displayName?: string;
-  /** L1 记忆层。`unknown` = 从未登录过或从未校验过。 */
-  lastLoginState: 'success' | 'expired' | 'unknown';
-  /** 上次写入 `lastLoginState` 的 Unix 秒。 */
-  lastCheckedAt?: number;
   /**
    * 用户显式授权的「无人值守发布」。
    *
@@ -497,23 +495,23 @@ export function resolveLoginState(
 }
 
 /**
- * 把一次账号变更合并进整张 `socialAccounts` 表。
+ * 把一次授权变更写进整张 `socialAccounts` 表。
  *
  * 存在的唯一理由：写盘时的合并必须是**按平台**的。`updateConfig({ socialAccounts })`
- * 在根上浅合并 —— 登一次小红书会把抖音/快手的记录整条冲掉。这个函数把「按平台合并」
- * 这条不变量变成可断言的东西，而不是靠调用方记得写 spread。
+ * 在根上浅合并 —— 改一次小红书的授权会把抖音/快手的记录整条冲掉。这个函数把
+ * 「按平台合并」这条不变量变成可断言的东西，而不是靠调用方记得写 spread。
+ *
+ * 平台条目是**整条替换**，不是逐字段合并：老配置里存过 `displayName` /
+ * `lastLoginState` / `lastCheckedAt`（全局账号表时代留下的），那些字段已经
+ * 搬到工作区台账去了。留着它们 = 全局与工作区各存一份登录态，两份迟早打架。
  */
 export function withSocialAccount(
   previous: Record<string, SocialAccount> | undefined,
   platformId: SocialPlatformId,
   patch: Partial<SocialAccount>,
 ): Record<string, SocialAccount> {
-  return {
-    ...previous,
-    [platformId]: {
-      lastLoginState: 'unknown',
-      ...previous?.[platformId],
-      ...patch,
-    },
-  };
+  const base = { ...previous };
+  const autoPublish = patch.autoPublish ?? base[platformId]?.autoPublish;
+  base[platformId] = autoPublish === undefined ? {} : { autoPublish };
+  return base;
 }

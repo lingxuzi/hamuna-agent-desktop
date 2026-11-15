@@ -1166,3 +1166,175 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ── 账号视图（工作区级） ──────────────────────────────────
+   账号不是流水线域，不占顶栏胶囊位：胶囊是「选题 / 素材 / 排期 / 复盘 /
+   方向」这条流水线，账号是这台机器在这个工作区上的另一件东西。顶栏一个
+   「账号」按钮切过去，胶囊行让位给「返回」。 */
+
+.ops-acc-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ops-acc-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.ops-acc-row:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.ops-acc-badge {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--theme-radius-md);
+  background: var(--paper-inset);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ops-acc-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ops-acc-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ops-acc-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 登录态徽标：已登录才上色，其余两档都安静 —— 「未确认」不是错误状态，
+   只是还没有信息。 */
+.ops-acc-state {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--theme-radius-full);
+  background: var(--paper-inset);
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ops-acc-state.is-success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.ops-acc-time {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.ops-acc-input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--theme-radius-sm);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  transition: border-color var(--ops-dur) var(--ops-ease);
+}
+.ops-acc-input::placeholder {
+  color: var(--ink-faint);
+}
+.ops-acc-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ops-acc-act {
+  flex: none;
+  padding: 7px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--theme-radius-full);
+  background: var(--paper-elevated);
+  color: var(--ink-secondary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-acc-act:hover {
+  border-color: var(--ink-subtle);
+  color: var(--ink);
+}
+
+/* ── 登录接管：整个面板让给浏览器 ──────────────────────────
+   原生 webview 是 OS 级浮层，位置来自 getBoundingClientRect，CSS 的
+   overflow 裁不到它。面板平时是内容高度（空台账不该撑出一张空纸），登录
+   接管必须有个确定高度，否则浏览器容器没有可用的矩形可用。 */
+.ops.ops-pop.ops-takeover-mode {
+  height: min(calc(100% - 12px), 620px);
+}
+
+.ops-takeover {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.ops-takeover-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.ops-takeover-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.ops-takeover-hint {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.ops-takeover-web {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-lg);
+  background: var(--paper);
+}
+
+@container (max-width: 520px) {
+  .ops-acc-row {
+    flex-wrap: wrap;
+  }
+  .ops-acc-main {
+    flex-basis: 100%;
+    order: 3;
+  }
+  .ops-acc-act {
+    margin-left: auto;
+  }
+}
