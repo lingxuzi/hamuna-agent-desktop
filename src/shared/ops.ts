@@ -44,7 +44,14 @@ export const OPS_DOMAIN_IDS: readonly OpsDomainId[] = [
 ];
 
 /** 台账记录类型。写入 / 删除时用来指明是哪一类。 */
-export type OpsItemKind = 'topic' | 'asset' | 'review' | 'rule' | 'style' | 'direction';
+export type OpsItemKind =
+  | 'topic'
+  | 'asset'
+  | 'review'
+  | 'rule'
+  | 'style'
+  | 'direction'
+  | 'account';
 
 export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'topic',
@@ -53,6 +60,7 @@ export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'rule',
   'style',
   'direction',
+  'account',
 ];
 
 /** 选题状态：想法 → 排进制作 → 已产出。 */
@@ -118,6 +126,9 @@ export const isOpsRuleSource = (value: unknown): value is OpsRuleSource =>
 
 export const isOpsDirectionStatus = (value: unknown): value is OpsDirectionStatus =>
   isOneOf(value, OPS_DIRECTION_STATUSES);
+
+export const isOpsLoginState = (value: unknown): value is OpsLoginState =>
+  isOneOf(value, OPS_LOGIN_STATES);
 
 /** 一条选题：值得做成什么，还不含成品。 */
 export interface OpsTopic {
@@ -293,6 +304,16 @@ export type OpsDirectionStatus = 'draft' | 'active';
 export const OPS_DIRECTION_STATUSES: readonly OpsDirectionStatus[] = ['draft', 'active'];
 
 /**
+ * 登录态的**缓存值**。
+ *
+ * `unknown` 是默认档，也是最保守的一档：没确认过就当没登录——宁可多问一次人，
+ * 也不要拿一个可能是假的「已登录」去自动发布。
+ */
+export type OpsLoginState = 'unknown' | 'success' | 'expired';
+
+export const OPS_LOGIN_STATES: readonly OpsLoginState[] = ['unknown', 'success', 'expired'];
+
+/**
  * 一条待确认的修订。字段是**完整的新值**，不是差异 —— 人看到的是「改成
  * 这样」，确认就整段替换。给差异等于让人在脑子里做合并。
  */
@@ -309,6 +330,29 @@ export interface OpsDirectionProposal {
   evidence: string;
   /** 提议时刻。 */
   proposedAt: string;
+}
+
+/**
+ * 一个工作区里、某个平台的账号：**一个平台一条**。
+ *
+ * 这是「账号体系跟着工作区走」的落点。同一个平台在两个工作区里是两个不同的
+ * 账号——各自的登录态存在各自的浏览器 profile 里，互不可见。
+ *
+ * `loginState` 是**缓存的确认**，不是实时状态：登录态的真正权威是浏览器
+ * cookie，界面显示的是「上次确认登录成功」。cookie 掉了而这里还写着
+ * `success` 是可能的，所以字段名不叫 `loggedIn`。
+ */
+export interface OpsAccount {
+  id: string;
+  platform: SocialPlatformId;
+  /** 人给这个号起的名字（「露营装备小王」）。空 = 还没起。 */
+  displayName: string;
+  /** 上次确认的登录态。默认 `unknown` = 从没确认过。 */
+  loginState: OpsLoginState;
+  /** 上次确认登录状态的时刻（ISO 8601）。`null` = 从没确认过。 */
+  lastCheckedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** 风格卡：工作区级，单条。 */
@@ -331,6 +375,8 @@ export interface OpsState {
   version: number;
   /** 每平台一条。key 是 `platform`，由 Rust 侧校验唯一。 */
   directions: OpsDirection[];
+  /** 每平台一条。账号清单是**工作区级**的——新建工作区就是一套新账号体系。 */
+  accounts: OpsAccount[];
   topics: OpsTopic[];
   assets: OpsAsset[];
   reviews: OpsReview[];
@@ -343,6 +389,7 @@ export function emptyOpsState(): OpsState {
   return {
     version: OPS_STATE_VERSION,
     directions: [],
+    accounts: [],
     topics: [],
     assets: [],
     reviews: [],
@@ -366,6 +413,7 @@ export interface OpsUpsertFieldMap {
   rule: Partial<OpsRule>;
   style: Partial<OpsStyle>;
   direction: Partial<OpsDirection>;
+  account: Partial<OpsAccount>;
 }
 
 /** 写入载荷：`kind` + 这次要动的字段。 */

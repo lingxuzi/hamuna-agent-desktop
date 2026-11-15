@@ -2461,7 +2461,11 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // 49: adds `platforms` (发布规格) and `browser publish` / `browser fill --value-file`
 // — the ops-publish line. Without a bump an existing install keeps a CLI that
 // has no publish verb, and the publish skill has nothing to call.
-const CLI_VERSION: &str = "50";
+// 51: adds the `account` ops kind — the per-workspace account registry. An
+// agent needs to read which account a workspace publishes as (`ops list account`)
+// before it drives a publish; without the bump an existing install keeps a CLI
+// that silently filters the new section out of every ledger read.
+const CLI_VERSION: &str = "51";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2683,8 +2687,15 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // `browser open --new-tab`. Tabs are addressed by index, and the selected tab
 // is the one every later browser command drives — an agent that navigates
 // without knowing which tab is in front silently reads the wrong page.
+//
+// 74: hamuna-cli — document the `account` ops kind. The account registry is
+// per-workspace (each workspace has its own browser profile, so its own
+// logins), which is exactly the fact an agent cannot guess: it must read the
+// account list of the workspace it is operating, and it must not write the
+// login state — that field's authority is the browser cookie, and an agent
+// asserting "logged in" would make the UI promise a publish it cannot do.
 
-const SYSTEM_SKILLS_VERSION: &str = "73";
+const SYSTEM_SKILLS_VERSION: &str = "74";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3373,13 +3384,14 @@ mod system_skills_tests {
         // `browser publish` / `browser fill --value-file`; 72 documents them.
         // 50 adds the `direction` ops kind (`--proposal-file` / `--accept-proposal`
         // / `--reject-proposal`) and lets `ops update direction` locate the record
-        // by `--platform`; 73 documents both.
+        // by `--platform`; 73 documents both. 51 adds the `account` ops kind (one
+        // account per platform, addressed by `--platform`); 74 documents it.
         //
         // The anchor was left at 46/69 while the constants moved on to 48/71, so
         // this test had been red at HEAD for a reason unrelated to any behaviour
         // — do not re-derive a rule from it, just keep it in step.
-        assert_eq!(CLI_VERSION, "50");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "73");
+        assert_eq!(CLI_VERSION, "51");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "74");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));
@@ -3396,6 +3408,10 @@ mod system_skills_tests {
         // agent that only saw `--id` would go looking for an id that does not exist.
         assert!(bundled.contains("hamuna ops update direction --platform douyin --accept-proposal"));
         assert!(bundled.contains("--proposal-file"));
+        // Account surface: one account per platform, located by `--platform` — the
+        // same platform-keyed shape as `direction`. The agent must be able to
+        // find it in the docs, and must not be told it can set the login state.
+        assert!(bundled.contains("hamuna ops update account --platform douyin --display-name"));
 
         let memory_update = include_str!("../../bundled-skills/hamuna-memory-update/SKILL.md");
         assert!(

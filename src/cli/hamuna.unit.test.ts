@@ -1148,6 +1148,38 @@ describe('hamuna CLI operations ledger', () => {
     expect(body.item.metrics).toEqual({ views: 900 });
   });
 
+  it('lets the agent rename an account but never declare it logged in', () => {
+    // 登录态的权威是浏览器 cookie。CLI 的字段白名单里没有 loginState →
+    // 调用方传了也进不了载荷。Agent 自己说「已登录」会让界面显示「已登录」
+    // 而实际没登录，然后照着这个假状态去自动发布。
+    const body = buildRequestBody('ops', 'update', ['account'], {
+      platform: 'douyin',
+      displayName: '露营装备小王',
+      loginState: 'success',
+      lastCheckedAt: '2026-11-15T10:00:00.000Z',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toEqual({
+      kind: 'account',
+      platform: 'douyin',
+      displayName: '露营装备小王',
+    });
+  });
+
+  it('requires a platform when creating an account', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('ops', 'add', ['account'], { displayName: '无名号' })).toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('--platform'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
   it('carries the product / cta / platform-work-id fields through to the ledger', () => {
     // These three are the fields the publish lane writes back through; if a
     // flag is missing from OPS_FIELDS it is silently dropped here, and the

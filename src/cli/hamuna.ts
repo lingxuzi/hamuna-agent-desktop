@@ -2489,9 +2489,17 @@ function formatObject(obj: Record<string, unknown> | undefined, indent = '  '): 
 // ---------------------------------------------------------------------------
 
 const OPS_VERBS = ['list', 'add', 'update', 'remove'] as const;
-const OPS_KINDS = ['direction', 'topic', 'asset', 'review', 'rule'] as const;
+const OPS_KINDS = ['direction', 'topic', 'asset', 'review', 'rule', 'account'] as const;
 
 type OpsKind = (typeof OPS_KINDS)[number];
+
+/**
+ * 按平台定位的记录类型：每平台一条，id 从平台派生。
+ *
+ * 这类记录的 update 不要求 `--id`——调用方手上通常只有平台，让它先 list
+ * 一遍把 id 抄回来是白跑一趟（Rust 侧会用平台找到同一条）。
+ */
+const OPS_PLATFORM_KEYED_KINDS: readonly OpsKind[] = ['direction', 'account'];
 
 interface OpsCommand {
   verb: string;
@@ -2582,6 +2590,13 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'evidence', flag: 'evidence', type: 'text' },
     { field: 'evidenceBars', flag: 'evidenceBar', type: 'jsonList' },
   ],
+  account: [
+    { field: 'platform', flag: 'platform', type: 'text', required: true },
+    // 只有账号名是 Agent 能写的。登录态与「上次确认时间」**不给 Agent 写**：
+    // 登录态的权威是浏览器 cookie，Agent 自己说「已登录」不算数——那会让
+    // 界面显示「已登录」而实际没登录，然后照着这个假状态去自动发布。
+    { field: 'displayName', flag: 'displayName', type: 'text' },
+  ],
 };
 
 /** State keys of the ledger, per record kind. */
@@ -2591,6 +2606,7 @@ const OPS_SECTIONS: Array<{ key: string; kind: OpsKind; label: string }> = [
   { key: 'assets', kind: 'asset', label: 'Assets' },
   { key: 'reviews', kind: 'review', label: 'Reviews' },
   { key: 'rules', kind: 'rule', label: 'Rules' },
+  { key: 'accounts', kind: 'account', label: 'Accounts' },
 ];
 
 /**
@@ -2861,6 +2877,15 @@ function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
           `  ${id}  ${String(record.publishedAt ?? '')}  ` +
           `${String(record.platform ?? '')} · views ${String(metrics.views ?? 0)} · ` +
           `interactions ${interactions}`,
+        );
+      } else if (section.kind === 'account') {
+        // 账号清单：平台 + 登录态 + 账号名。登录态是**缓存的确认**，不是实时
+        // 状态——所以打印成「上次确认」而不是「已登录」。
+        const name = String(record.displayName ?? '');
+        const checked = record.lastCheckedAt ? ` · checked ${String(record.lastCheckedAt)}` : '';
+        console.log(
+          `  ${id}  ${String(record.platform ?? '')} · ` +
+          `${String(record.loginState ?? 'unknown')}${checked}${name ? `  ${name}` : ''}`,
         );
       } else {
         console.log(
@@ -4303,13 +4328,14 @@ export function buildRequestBody(
       const item = buildOpsItem(kind, flags, cmd.verb === 'add');
       if (cmd.verb === 'update') {
         const id = opsStringFlag(flags, 'id');
-        // 方向是唯一按平台定位的记录（每平台一条，id 从平台派生）。要求
+        // 按平台定位的记录（方向、账号）：每平台一条，id 从平台派生。要求
         // `--id` 会让调用方先去 list 一遍把 id 抄回来，而 platform 已经在
-        // 补丁里了 —— Rust 侧 `upsert_direction` 会用它找到同一条。
-        if (!id && !(kind === 'direction' && item.platform !== undefined)) {
+        // 补丁里了 —— Rust 侧的 upsert 会用它找到同一条。
+        const platformKeyed = OPS_PLATFORM_KEYED_KINDS.includes(kind);
+        if (!id && !(platformKeyed && item.platform !== undefined)) {
           console.error(
-            kind === 'direction'
-              ? 'Error: hamuna ops update direction requires --id or --platform.'
+            platformKeyed
+              ? `Error: hamuna ops update ${kind} requires --id or --platform.`
               : 'Error: hamuna ops update requires --id.',
           );
           process.exit(2);

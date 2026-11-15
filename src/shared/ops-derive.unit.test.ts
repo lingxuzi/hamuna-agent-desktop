@@ -76,6 +76,7 @@ function state(patch: Partial<OpsState> = {}): OpsState {
   return {
     version: 1,
     directions: [],
+    accounts: [],
     topics: [],
     assets: [],
     reviews: [],

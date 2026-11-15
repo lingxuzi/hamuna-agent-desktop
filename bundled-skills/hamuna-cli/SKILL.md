@@ -302,11 +302,15 @@ hamuna ops update direction --platform douyin --positioning "夜间露营装备�
 hamuna ops update direction --platform douyin --proposal-file /tmp/proposal.json  # 提修订
 hamuna ops update direction --platform douyin --accept-proposal                  # 采纳
 hamuna ops update direction --platform douyin --reject-proposal                  # 驳回
+
+# 账号清单：每个平台一条，也按 platform 定位（不用 --id）
+hamuna ops list account                             # 本工作区的号 + 登录态
+hamuna ops update account --platform douyin --display-name "露营装备小王"
 ```
 
-**方向是唯一按 `--platform` 定位、不需要 `--id` 的记录。** 每个平台至多一条，后端从
-platform 派生 id（`dir-<platform>`），所以重复 `update --platform X` 永远落在同一条上。
-平台重复会直接报错——那是数据损坏，不是正常状态。
+**方向和账号是按 `--platform` 定位、不需要 `--id` 的记录。** 每个平台至多一条，后端从
+platform 派生 id（方向 `dir-<platform>`、账号 `acc-<platform>`），所以重复
+`update --platform X` 永远落在同一条上。平台重复会直接报错——那是数据损坏，不是正常状态。
 
 **采纳 / 驳回修订是动作，不是字段。** `--accept-proposal` 让后端把挂在这条记录上的
 `proposal` 整段替换进主字段并置 `status: active`；`--reject-proposal` 只丢掉 proposal。
@@ -321,8 +325,13 @@ platform 派生 id（`dir-<platform>`），所以重复 `update --platform X` �
 
 `rationale` 会原样显示给用户，是他决定点不点的唯一依据——别写「优化定位」这种没有信息量的话。
 
+**账号是工作区级的。** 账号清单和它的登录态都落在**当前工作区**的台账里——每个工作区有自己的一套浏览器 profile（cookie 不互通），所以换个工作区就是另一批号、另一份登录态。`hamuna ops list account` 只列当前工作区的号；要操作别的工作区就带 `--workspace <path>`。
+
+**你能写的只有账号名（`--display-name`）。** 登录态（`loginState`）**不开放给 CLI**：它的权威是浏览器 cookie，Agent 自己说「已登录」不算数——那会让界面显示「已登录」而实际没登录，然后照着这个假状态去自动发布。登录在 App 的运营台里由人完成。
+
 **何时用：**
 - 用户问「今天做什么」「有哪些选题」「素材到哪了」「上次那条数据怎么样」→ `ops list`（要结构化数据就加 `--json`）
+- 要知道这个工作区的号叫什么、登录态如何 → `ops list account`（**先读再发**：发到哪个号取决于这个）
 - 要落地一条新选题 / 新素材 / 一条复盘 / 一条经验 → 对应的 `ops add`
 - 改状态、补数据、记反思 → `ops update --id <id>`，**只传这次真要改的字段**
 

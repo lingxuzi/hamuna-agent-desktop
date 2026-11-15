@@ -330,6 +330,45 @@ pub struct OpsDirectionProposal {
     pub proposed_at: String,
 }
 
+/// 一个工作区里、某个平台的账号：**一个平台一条**。
+///
+/// 这是「账号体系跟着工作区走」的落点。同一个平台在两个工作区里是两个不同的
+/// 账号——各自的登录态存在各自的浏览器 profile 里（见
+/// `src-tauri/src/browser_profile.rs`），互不可见。
+///
+/// `login_state` 是**缓存的确认**，不是实时状态：登录态的真正权威是浏览器
+/// cookie，界面显示的是「上次确认登录成功」。cookie 掉了而这里还写着
+/// `success` 是可能的，所以字段名不叫 `loggedIn`。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpsAccount {
+    #[serde(default)]
+    pub id: String,
+    pub platform: String,
+    /// 人给这个号起的名字（「露营装备小王」）。空 = 还没起。
+    #[serde(default)]
+    pub display_name: String,
+    #[serde(default)]
+    pub login_state: OpsLoginState,
+    /// 上次确认登录状态的时刻（ISO 8601）。`None` = 从没确认过。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_checked_at: Option<String>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// 登录态的缓存值。默认 `unknown` —— 最保守的那一档：没确认过就当没登录。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OpsLoginState {
+    #[default]
+    Unknown,
+    Success,
+    Expired,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsStyle {
@@ -364,6 +403,9 @@ pub struct OpsState {
     /// 每平台一条。唯一性由 `validate_state` 守。
     #[serde(default)]
     pub directions: Vec<OpsDirection>,
+    /// 每平台一条。账号清单是**工作区级**的——新建工作区就是一套新账号体系。
+    #[serde(default)]
+    pub accounts: Vec<OpsAccount>,
     #[serde(default)]
     pub topics: Vec<OpsTopic>,
     #[serde(default)]
@@ -383,6 +425,7 @@ impl OpsState {
         Self {
             version: OPS_STATE_VERSION,
             directions: Vec::new(),
+            accounts: Vec::new(),
             topics: Vec::new(),
             assets: Vec::new(),
             reviews: Vec::new(),
@@ -397,6 +440,7 @@ impl OpsState {
 #[serde(rename_all = "camelCase")]
 pub enum OpsItemKind {
     Direction,
+    Account,
     Topic,
     Asset,
     Review,
@@ -408,6 +452,7 @@ impl OpsItemKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             OpsItemKind::Direction => "direction",
+            OpsItemKind::Account => "account",
             OpsItemKind::Topic => "topic",
             OpsItemKind::Asset => "asset",
             OpsItemKind::Review => "review",
@@ -477,6 +522,20 @@ pub fn validate_state(state: &OpsState) -> Result<(), String> {
     check_ids("review", state.reviews.iter().map(|r| r.id.as_str()))?;
     check_ids("rule", state.rules.iter().map(|r| r.id.as_str()))?;
     check_ids("direction", state.directions.iter().map(|d| d.id.as_str()))?;
+    check_ids("account", state.accounts.iter().map(|a| a.id.as_str()))?;
+
+    // 「一个平台一条账号」和方向同理：同平台出现两条账号时，界面按平台查会
+    // 静默取到其中一条，而取到哪条决定了「发布发到哪个号」。
+    let mut seen_account_platforms: HashSet<&str> = HashSet::new();
+    for account in &state.accounts {
+        check_platform(&account.platform)?;
+        if !seen_account_platforms.insert(account.platform.as_str()) {
+            return Err(format!(
+                "Duplicate account for platform: {} (one account per platform)",
+                account.platform
+            ));
+        }
+    }
 
     // 「一个平台一条方向」在这里守。放进 validate 而不是 upsert，是因为
     // state.json 是人手可编辑的——手抄一份进来也得被拒，否则同一个平台出现
@@ -649,6 +708,7 @@ pub fn upsert_item(
     let OpsUpsert { kind, fields } = item;
     mutate_state(workspace_root, |state| match kind {
         OpsItemKind::Direction => upsert_direction(state, fields),
+        OpsItemKind::Account => upsert_account(state, fields),
         OpsItemKind::Topic => upsert_topic(state, fields),
         OpsItemKind::Asset => upsert_asset(state, fields),
         OpsItemKind::Review => upsert_review(state, fields),
@@ -881,6 +941,43 @@ fn upsert_direction(
     upsert_by_id(&mut state.directions, direction, |d| d.id.as_str())
 }
 
+/// 写账号。除了 id，**也认 `platform` 作为天然键**：账号天然是「一个平台一个
+/// 号」，调用方（尤其是 Agent）知道平台就够了，不必先 list 一遍找 id。
+///
+/// 平台是必填的：没有平台的账号既没法找到登录页，也没法校验唯一性。
+fn upsert_account(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let platform = patch
+        .get("platform")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let existing = match id.as_deref() {
+        Some(id) => state.accounts.iter().find(|a| a.id == id),
+        None => platform
+            .as_deref()
+            .and_then(|p| state.accounts.iter().find(|a| a.platform == p)),
+    };
+
+    let mut account: OpsAccount = merge_patch(existing, &patch)?;
+    if account.platform.trim().is_empty() {
+        return Err("account requires a platform".to_string());
+    }
+    if account.id.trim().is_empty() {
+        // id 从平台派生：同平台重复 upsert 落在同一条上，不靠调用方记 id。
+        account.id = format!("acc-{}", account.platform);
+    }
+
+    account.created_at =
+        resolve_created_at(existing.map(|old| old.created_at.as_str()), &account.created_at);
+    account.updated_at = now_iso();
+    upsert_by_id(&mut state.accounts, account, |a| a.id.as_str())
+}
+
 fn upsert_style(
     state: &mut OpsState,
     patch: serde_json::Map<String, serde_json::Value>,
@@ -906,6 +1003,9 @@ pub fn delete_item(
         let removed = match kind {
             OpsItemKind::Direction => {
                 remove_by_id(&mut state.directions, id, |d| d.id.as_str())
+            }
+            OpsItemKind::Account => {
+                remove_by_id(&mut state.accounts, id, |a| a.id.as_str())
             }
             OpsItemKind::Topic => remove_by_id(&mut state.topics, id, |t| t.id.as_str()),
             OpsItemKind::Asset => remove_by_id(&mut state.assets, id, |a| a.id.as_str()),
@@ -1217,6 +1317,122 @@ mod tests {
 
         let err = read_state(&ws).expect_err("must reject");
         assert!(err.contains("Duplicate direction"), "错误要说清是重复: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn account_upsert_keys_on_platform_when_no_id_is_given() {
+        let ws = make_test_workspace("ops-account-key");
+        let (_, first) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Account,
+                fields: serde_json::json!({ "platform": "douyin", "displayName": "露营小王" })
+                    .as_object()
+                    .cloned()
+                    .expect("object"),
+            },
+        )
+        .expect("first");
+        // 第二次不带 id，只带平台 + 新名字：必须落在同一条上。
+        let (state, second) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Account,
+                fields: serde_json::json!({ "platform": "douyin", "displayName": "露营小李" })
+                    .as_object()
+                    .cloned()
+                    .expect("object"),
+            },
+        )
+        .expect("second");
+
+        assert_eq!(first, second, "同平台必须复用同一条账号");
+        assert_eq!(state.accounts.len(), 1);
+        assert_eq!(state.accounts[0].display_name, "露营小李");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn account_name_upsert_does_not_clobber_the_login_state() {
+        // 只改名字不该把登录态冲掉——登录态是界面确认的结果，Agent 改个名
+        // 就把它重置成 unknown，等于逼人重新登录一次。
+        let ws = make_test_workspace("ops-account-merge");
+        upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Account,
+                fields: serde_json::json!({
+                    "platform": "douyin",
+                    "displayName": "露营小王",
+                    "loginState": "success",
+                    "lastCheckedAt": "2026-11-15T10:00:00.000Z",
+                })
+                .as_object()
+                .cloned()
+                .expect("object"),
+            },
+        )
+        .expect("seed");
+
+        let (state, _) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Account,
+                fields: serde_json::json!({ "platform": "douyin", "displayName": "露营小李" })
+                    .as_object()
+                    .cloned()
+                    .expect("object"),
+            },
+        )
+        .expect("rename");
+
+        assert_eq!(state.accounts.len(), 1);
+        assert_eq!(state.accounts[0].display_name, "露营小李");
+        assert_eq!(state.accounts[0].login_state, OpsLoginState::Success);
+        assert_eq!(
+            state.accounts[0].last_checked_at.as_deref(),
+            Some("2026-11-15T10:00:00.000Z")
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn account_without_a_platform_is_rejected() {
+        let ws = make_test_workspace("ops-account-no-platform");
+        let err = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Account,
+                fields: serde_json::json!({ "displayName": "无名号" })
+                    .as_object()
+                    .cloned()
+                    .expect("object"),
+            },
+        )
+        .expect_err("must reject");
+        assert!(err.contains("platform"), "错误要说清缺平台: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn duplicate_account_for_one_platform_is_rejected() {
+        // 手写一份 state.json：同一平台两个账号。
+        let ws = make_test_workspace("ops-account-dup");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        let raw = serde_json::json!({
+            "version": OPS_STATE_VERSION,
+            "accounts": [
+                { "id": "acc-a", "platform": "douyin" },
+                { "id": "acc-b", "platform": "douyin" },
+            ],
+        })
+        .to_string();
+        fs::write(ops_dir.join("state.json"), raw).expect("write");
+
+        let err = read_state(&ws).expect_err("must reject");
+        assert!(err.contains("Duplicate account"), "错误要说清是重复: {}", err);
         let _ = fs::remove_dir_all(&ws);
     }
 
@@ -1635,9 +1851,15 @@ mod parity_tests {
     const TS_PLATFORMS: &str = include_str!("../../src/shared/socialPlatforms.ts");
 
     /// 取 TS 里 `const NAME: readonly ... = [...];` 那一段的字面量。
+    ///
+    /// 找的是**声明**，不是第一个出现：同名常量常常先在别处被引用
+    /// （`isOneOf(value, OPS_DIRECTION_STATUSES)` 就排在声明前面），命中引用
+    /// 会把「字面量」截成一句函数调用，断言随之永远失败——方向状态那条
+    /// parity 测试已经这么红了一段时间。
     fn ts_array_literal(source: &str, name: &str) -> String {
+        let decl = format!("export const {}:", name);
         let idx = source
-            .find(name)
+            .find(decl.as_str())
             .unwrap_or_else(|| panic!("TS 契约里找不到 {}", name));
         let rest = &source[idx..];
         let end = rest.find(';').unwrap_or(rest.len());
@@ -1689,6 +1911,30 @@ mod parity_tests {
     fn direction_status_values_exist_in_ts_contract() {
         for value in ["draft", "active"] {
             assert_ts_array_has(TS_OPS, "OPS_DIRECTION_STATUSES", value);
+        }
+    }
+
+    #[test]
+    fn login_state_values_exist_in_ts_contract() {
+        for value in ["unknown", "success", "expired"] {
+            assert_ts_array_has(TS_OPS, "OPS_LOGIN_STATES", value);
+        }
+    }
+
+    /// 台账记录类型的枚举两侧必须一致：Rust 多一种而 TS 没有，界面就写不出
+    /// 那条记录（或反过来读出一个不认识的 kind）。
+    #[test]
+    fn item_kinds_exist_in_ts_contract() {
+        for kind in [
+            OpsItemKind::Topic,
+            OpsItemKind::Asset,
+            OpsItemKind::Review,
+            OpsItemKind::Rule,
+            OpsItemKind::Style,
+            OpsItemKind::Direction,
+            OpsItemKind::Account,
+        ] {
+            assert_ts_array_has(TS_OPS, "OPS_ITEM_KINDS", kind.as_str());
         }
     }
 
