@@ -96,7 +96,7 @@
 
 ## 编排
 
-Sino 模板自带五个 skill，域即段：
+Sino 模板自带六个 skill，域即段：
 
 | skill | 干什么 | 产出 |
 |---|---|---|
@@ -104,6 +104,7 @@ Sino 模板自带五个 skill，域即段：
 | `ops-intake` | 把人丢进 `ops/inbox/` 的原始物料变成素材，原件归档到 `ops/assets/imported/` | assets |
 | `ops-produce` | 把选题或物料变成素材 | assets |
 | `ops-schedule` | 排期 | assets 的排期字段 |
+| `ops-publish` | 到点在浏览器里发出去，再回创作者后台回读核实 | assets 的 `status` / `publishedAt` / `platformWorkId` |
 | `ops-review` | 分析已投放素材的表现，反思沉淀 | reviews + rules |
 
 热点与对标是**选题的输入源**，不是独立域：选题的 `source` 字段记 `hotspot` / `benchmark`，`sourceRefs` 留来源线索。
@@ -112,16 +113,46 @@ Sino 模板自带五个 skill，域即段：
 `brief.md` 写清产品、卖点、要观众做什么），入库时整批搬到 `ops/assets/imported/`。搬走本身就是
 「处理过了」的标记——不另设状态文件、不另建索引。素材的 `sourceRef` 指回那批原件。
 
-**heartbeat** 分三段：
+**heartbeat** 四条自动段：
+- 发布 —— 到点的 `ready` 素材发出去，再回读核实；**登录态失效就整轮停下通报**。
 - 入库 —— 扫 `ops/inbox/`，有批次就入库并接着做稿。
 - 采集 —— 无人值守时读创作者后台表现数据；**登录态失效就跳过并通报**，不要用猜的数字填。
 - 分析反思 —— 可无人值守：读本地表现数据 → 产出 `rules`（`source: reflection`）→ 反哺选题与制作。
+
+## 平台规格层
+
+平台上限和创作者后台路径会变，而 agent 模板**只在建工作区时拷一次**，改了不会补给老工作区。
+所以规格不进模板：它放在 App 侧（`src/shared/socialPlatforms.ts`），随 App 升级，agent 通过
+`hamuna platforms <id> --json` 读。
+
+规格回答「在这个平台上发一条内容需要知道什么」：形态（平台接受 ∩ 我们传得过去）、字数 / 图片 /
+话题上限、发布页、作品列表页、数据页、登录探针（`url` / `text`）与登录墙标记。
+
+**缺字段 = 还没核实**，不是「没有」。缺 URL 时从 `creatorHomeUrl` 进后台现场找入口，找到的真实
+路径记进工作区记忆。给一个猜的地址，发布线会拿着它跑一圈再失败。
+
+## 发布授权模型
+
+`unverified` / `published` 这条分界线只有在**发布确实是 agent 做的**时候才有意义，所以发布必须
+可无人值守，同时又不能变成「随便哪个页面点一下」。
+
+三层，缺一层授权就名不副实：
+
+1. **审批层**（`agent-session.ts`）—— `hamuna browser publish` 是受闸动作。用户在
+   设置 → 社交账号里给某个平台开了「允许自动发布」，这个平台的发布才免审批；其余照弹。
+   授权只能从设置页写（`socialAccounts` 在 `handleConfigSet` 的 `protectedKeys` 里），
+   agent 不能给自己授权。
+2. **范围层**（`browser-api.ts`）—— 当前页面必须在该平台的**创作者后台域**内
+   （`isPlatformPublishHost`，精确匹配 host）。B 站在 `passport.bilibili.com` 登录、
+   `member.bilibili.com` 发布，所以判的是后台域名不是登录域名。
+3. **动词层**（`browser-command-approval.ts`）—— `publish` 与 `submit` 同为受闸动作，
+   **永不进自动放行名单**。用 `browser click` 点「发布」绕得过整套闸，所以在模板规则里明确封掉。
 
 ## 采集边界
 
 - 允许：web 搜索、平台**公开**热榜页（`open` / `read` 免审批，可无人值守跑）、用户粘贴链接或文本。
 - 禁止：用登录态深读他人账号的后台数据；给他人作品评论、私信、加好友。
-- `submit` 类命令（可能真的发帖）仍走既有审批。
+- `submit` / `publish`（可能真的发帖）走审批；`publish` 可被按平台的常驻授权免掉。
 
 ## 模块落点
 
@@ -143,5 +174,5 @@ Sino 模板自带五个 skill，域即段：
 4. 模板 `agent-templates/sino/` + 注册 → 从模板库能建出工作区
 5. 前端面板（先只读）→ 运营 tab 能显示四域
 6. 前端写入 → 走 invoke，双向可改
-7. 四个 skill + HEARTBEAT → Agent 能跑通一遍编排
+7. 六个 skill + HEARTBEAT → Agent 能跑通一遍编排（含发布 + 回读）
 8. 热点 / 对标采集 → 选题能带来源

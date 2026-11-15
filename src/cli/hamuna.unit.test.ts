@@ -1275,3 +1275,142 @@ describe('hamuna CLI operations ledger', () => {
     }
   });
 });
+
+describe('hamuna platforms', () => {
+  it('列表和单个平台走同一个 route —— 平台 id 是 body 里的筛选条件，不是路由段', () => {
+    expect(buildRoute('platforms', 'list', [])).toBe('platforms/list');
+    expect(buildRoute('platforms', 'douyin', [])).toBe('platforms/list');
+    expect(buildRequestBody('platforms', 'list', [], {})).toEqual({});
+    expect(buildRequestBody('platforms', 'douyin', ['douyin'], {})).toEqual({ id: 'douyin' });
+  });
+
+  it('帮助里写得出这个命令', () => {
+    expect(TOP_HELP).toContain('hamuna platforms');
+  });
+
+  it('单平台输出带形态和上限，列表输出每个平台一行', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      printResult('platforms', 'douyin', {
+        success: true,
+        data: {
+          id: 'douyin',
+          mediaKinds: ['image-text'],
+          creatorHomeUrl: 'https://creator.douyin.com/',
+          publishUrl: 'https://creator.douyin.com/creator-micro/content/upload',
+          limits: { maxTitleLength: 30, maxImages: 12 },
+        },
+      }, false);
+      const detail = log.mock.calls.flat().join('\n');
+      expect(detail).toContain('image-text');
+      expect(detail).toContain('maxTitleLength=30');
+
+      log.mockClear();
+      printResult('platforms', 'list', {
+        success: true,
+        data: [
+          { id: 'douyin', mediaKinds: ['image-text'], publishUrl: 'https://creator.douyin.com/x' },
+          { id: 'kuaishou', mediaKinds: ['image-text'] },
+        ],
+      }, false);
+      const list = log.mock.calls.flat().join('\n');
+      expect(list).toContain('douyin');
+      // 没核实过的平台不编 URL —— 显示成「未核实」而不是留白或瞎填。
+      expect(list).toContain('(not verified)');
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe('hamuna browser publish', () => {
+  it('平台 id 和目标一起进 body', () => {
+    expect(buildRoute('browser', 'publish', [])).toBe('browser/publish');
+    expect(buildRequestBody('browser', 'publish', [], {
+      platform: 'douyin',
+      text: '发布',
+    })).toEqual({ platform: 'douyin', text: '发布' });
+    expect(buildRequestBody('browser', 'publish', [], {
+      platform: 'douyin',
+      selector: '#publish-btn',
+    })).toEqual({ platform: 'douyin', selector: '#publish-btn' });
+  });
+
+  it('没有平台就是用法错误（发布必须指名道姓）', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    try {
+      expect(() => buildRequestBody('browser', 'publish', [], { text: '发布' }))
+        .toThrow('process.exit(2)');
+    } finally {
+      exit.mockRestore();
+    }
+  });
+
+  it('没有目标也是用法错误', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    try {
+      expect(() => buildRequestBody('browser', 'publish', [], { platform: 'douyin' }))
+        .toThrow('process.exit(2)');
+    } finally {
+      exit.mockRestore();
+    }
+  });
+
+  it('帮助里写得出这个命令', () => {
+    expect(TOP_HELP).toContain('hamuna browser publish --platform douyin');
+  });
+});
+
+describe('hamuna browser fill --value-file', () => {
+  const exitWith = () => vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    throw new Error(`process.exit(${code})`);
+  }) as typeof process.exit);
+
+  it('从文件读值——多行文案不该走 argv（换行会让 fill 掉出自动放行）', () => {
+    const root = mkdtempSync(join(process.cwd(), '.fill-value-file-test-'));
+    try {
+      const draft = join(root, 'publish.txt');
+      writeFileSync(draft, '标题\n正文第一行\n#话题', 'utf8');
+      const body = buildRequestBody('browser', 'fill', [], {
+        selector: '#desc',
+        valueFile: draft,
+      });
+      expect(body).toEqual({ selector: '#desc', value: '标题\n正文第一行\n#话题' });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('--value 和 --value-file 同时给是用法错误（静默取一个会让另一个看起来生效了）', () => {
+    const exit = exitWith();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'fill', [], {
+        selector: '#desc',
+        value: 'a',
+        valueFile: 'b.txt',
+      })).toThrow('process.exit(2)');
+    } finally {
+      error.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  it('文件读不出来就报错退出，不静默填空字符串', () => {
+    const exit = exitWith();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'fill', [], {
+        selector: '#desc',
+        valueFile: 'definitely-missing.txt',
+      })).toThrow('process.exit(1)');
+    } finally {
+      error.mockRestore();
+      exit.mockRestore();
+    }
+  });
+});

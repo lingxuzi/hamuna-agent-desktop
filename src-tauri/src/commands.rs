@@ -2458,7 +2458,10 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // 46: adds `browser tabs` / `browser select` / `browser open --new-tab` — the
 // multi-tab browser surface. Without a bump an existing install keeps the old
 // bundle and the agent can only ever drive one tab.
-const CLI_VERSION: &str = "48";
+// 49: adds `platforms` (发布规格) and `browser publish` / `browser fill --value-file`
+// — the ops-publish line. Without a bump an existing install keeps a CLI that
+// has no publish verb, and the publish skill has nothing to call.
+const CLI_VERSION: &str = "49";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2681,7 +2684,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // is the one every later browser command drives — an agent that navigates
 // without knowing which tab is in front silently reads the wrong page.
 
-const SYSTEM_SKILLS_VERSION: &str = "71";
+const SYSTEM_SKILLS_VERSION: &str = "72";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3366,9 +3369,14 @@ mod system_skills_tests {
         // contracts on CLI / memory-update / docs are still valid; only the version
         // anchor has to track the constant. 46 added the multi-tab browser
         // surface (`browser tabs` / `browser select` / `--new-tab`), and 69
-        // documents it in hamuna-cli's SKILL.md.
-        assert_eq!(CLI_VERSION, "46");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "69");
+        // documents it in hamuna-cli's SKILL.md. 49 adds `hamuna platforms` and
+        // `browser publish` / `browser fill --value-file`; 72 documents them.
+        //
+        // The anchor was left at 46/69 while the constants moved on to 48/71, so
+        // this test had been red at HEAD for a reason unrelated to any behaviour
+        // — do not re-derive a rule from it, just keep it in step.
+        assert_eq!(CLI_VERSION, "49");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "72");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));

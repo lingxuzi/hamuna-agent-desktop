@@ -34,7 +34,7 @@ import {
   type InterruptReceipt,
 } from './utils/inflight-terminal';
 import { shouldBlockToolInPlanMode, planModeDenyMessage, isPlanModeInEffect, PLAN_MODE_READONLY_TOOLS, PLAN_MODE_HOST_INTERACTION_TOOLS, applyPermissionModeSelection, computePlanExitState, computeRestoredPlanState } from './utils/plan-mode-gate';
-import { isBrowserCommandAutoAllowed, isBrowserSubmitCommand } from './utils/browser-command-approval';
+import { isBrowserCommandAutoAllowed, parseBrowserGatedCommand } from './utils/browser-command-approval';
 import { shouldDenyForBrowserSearch, browserSearchDenyReason } from './utils/browser-search-gate';
 import { decideMiniAppTool, loadMiniAppGrantsForApp } from './miniapp-permission-gate';
 import { planRetraction } from './utils/message-retraction';
@@ -101,6 +101,7 @@ import { createLiveUserMessageReplay } from '../shared/chatMessageReplay';
 import { isPendingSessionId } from '../shared/constants';
 import { workspacePathsEqual } from '../shared/workspacePath';
 import { normalizeReasoningEffort, isSdkEffortLevel } from '../shared/reasoningEffort';
+import { isAutoPublishGranted } from '../shared/socialPlatforms';
 import { computeContextUsage } from '../shared/contextUsage';
 import {
   chooseBuiltinContextUsageModel,
@@ -4450,14 +4451,32 @@ async function checkToolPermission(
 
   // 3. Check if user already granted "always allow" in this session
   //
-  //    EXCEPT for `hamuna browser submit`: that grant is keyed by TOOL NAME
-  //    ("Bash"), so a session-wide Bash grant would silently swallow the
-  //    submit gate — the one browser action with an externally-visible side
-  //    effect. The submit check runs BEFORE the session grant so a submit
-  //    always reaches the approval prompt.
-  if (toolName === 'Bash' && isBrowserSubmitCommand(bashCommandOf(input))) {
-    console.log(`[permission] Bash: browser submit needs explicit approval (bypasses session grant)`);
-    return promptUser(toolName, input, mode, signal);
+  //    EXCEPT for the gated browser actions (`submit` / `publish`): that grant
+  //    is keyed by TOOL NAME ("Bash"), so a session-wide Bash grant would
+  //    silently swallow the gate — the browser actions with an
+  //    externally-visible side effect. The gate runs BEFORE the session grant
+  //    so those actions always reach the approval prompt.
+  //
+  //    `publish` carries a platform id, so the gate can honour a standing
+  //    per-platform grant the user set in Settings ("post to Douyin without
+  //    asking me every time"). The grant lives in config and only the Settings
+  //    UI can write it (`socialAccounts` is protected from `hamuna config
+  //    set`), so an agent cannot widen its own permissions.
+  if (toolName === 'Bash') {
+    const gated = parseBrowserGatedCommand(bashCommandOf(input));
+    if (gated) {
+      if (gated.action === 'publish' && gated.platform) {
+        // Read the grant lazily — only a publish command pays for the config read.
+        const granted = isAutoPublishGranted(loadAdminConfig().socialAccounts, gated.platform);
+        if (granted) {
+          console.log(`[permission] Bash: browser publish to ${gated.platform} allowed by standing grant`);
+          return 'allow';
+        }
+      }
+      const target = gated.platform ? `publish to ${gated.platform}` : gated.action;
+      console.log(`[permission] Bash: browser ${target} needs explicit approval (bypasses session grant)`);
+      return promptUser(toolName, input, mode, signal);
+    }
   }
 
   if (sessionAlwaysAllowed.has(toolName)) {

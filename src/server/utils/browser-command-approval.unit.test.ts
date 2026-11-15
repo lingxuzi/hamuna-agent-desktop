@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   BROWSER_APPROVAL_REQUIRED_ACTIONS,
   BROWSER_AUTO_ALLOWED_ACTIONS,
+  isBrowserApprovalRequiredCommand,
   isBrowserCommandAutoAllowed,
-  isBrowserSubmitCommand,
+  parseBrowserGatedCommand,
 } from './browser-command-approval';
 
 describe('isBrowserCommandAutoAllowed', () => {
@@ -52,6 +53,12 @@ describe('isBrowserCommandAutoAllowed', () => {
     expect(isBrowserCommandAutoAllowed('hamuna browser click --text "Sign in"')).toBe(true);
     expect(isBrowserCommandAutoAllowed("hamuna browser click --text 'Sign in'")).toBe(true);
     expect(isBrowserCommandAutoAllowed('hamuna browser fill --selector "#q" --value "hello world"')).toBe(true);
+  });
+
+  it('allows fill --value-file — 多行文案只能走文件，argv 里的换行会被这里判成不可证', () => {
+    expect(isBrowserCommandAutoAllowed('hamuna browser fill --selector "#desc" --value-file ops/assets/a.publish.txt')).toBe(true);
+    // 只有 fill 有这个 flag；click 带它就是形状不对。
+    expect(isBrowserCommandAutoAllowed('hamuna browser click --selector "#a" --value-file x.txt')).toBe(false);
   });
 
   it('rejects a click or fill with no target', () => {
@@ -109,8 +116,8 @@ describe('isBrowserCommandAutoAllowed', () => {
   it('never auto-allows upload together with submit', () => {
     // Selecting a file is inert; sending it is not. Submit must still prompt
     // even though it now sits next to an auto-allowed verb.
-    expect(isBrowserSubmitCommand('hamuna browser submit --selector "#form"')).toBe(true);
-    expect(isBrowserSubmitCommand('hamuna browser upload --selector "#f" --file a.png')).toBe(false);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser submit --selector "#form"')).toBe(true);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser upload --selector "#f" --file a.png')).toBe(false);
   });
 
   it('rejects a search with no query', () => {
@@ -126,7 +133,7 @@ describe('isBrowserCommandAutoAllowed', () => {
   });
 });
 
-describe('isBrowserSubmitCommand', () => {
+describe('isBrowserApprovalRequiredCommand', () => {
   it('keeps the auto-allow list and the approval-required list disjoint', () => {
     // The two lists answer different questions, so an overlap is not a
     // contradiction — but it IS a bug: an action in both would be
@@ -138,25 +145,74 @@ describe('isBrowserSubmitCommand', () => {
   });
 
   it('recognizes the submit action', () => {
-    expect(isBrowserSubmitCommand('hamuna browser submit --selector "#form"')).toBe(true);
-    expect(isBrowserSubmitCommand('hamuna browser submit --text "Pay now"')).toBe(true);
-    expect(isBrowserSubmitCommand('hamuna browser submit --session abc-123 --selector "#f"')).toBe(true);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser submit --selector "#form"')).toBe(true);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser submit --text "Pay now"')).toBe(true);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser submit --session abc-123 --selector "#f"')).toBe(true);
   });
 
   it('recognizes submit even with a malformed tail (safe direction)', () => {
     // A broken submit must still prompt — it then fails at the CLI.
-    expect(isBrowserSubmitCommand('hamuna browser submit')).toBe(true);
-    expect(isBrowserSubmitCommand('hamuna browser submit --selector')).toBe(true);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser submit')).toBe(true);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser submit --selector')).toBe(true);
   });
 
   it('does not match other browser actions', () => {
-    expect(isBrowserSubmitCommand('hamuna browser read')).toBe(false);
-    expect(isBrowserSubmitCommand('hamuna browser click --text "Submit"')).toBe(false);
-    expect(isBrowserSubmitCommand('hamuna cron list')).toBe(false);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser read')).toBe(false);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser click --text "Submit"')).toBe(false);
+    expect(isBrowserApprovalRequiredCommand('hamuna cron list')).toBe(false);
   });
 
   it('does not match a submit smuggled through a second command', () => {
-    expect(isBrowserSubmitCommand('hamuna browser read; hamuna browser submit')).toBe(false);
-    expect(isBrowserSubmitCommand('hamuna browser read\nhamuna browser submit')).toBe(false);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser read; hamuna browser submit')).toBe(false);
+    expect(isBrowserApprovalRequiredCommand('hamuna browser read\nhamuna browser submit')).toBe(false);
+  });
+
+  it('gates publish, and never auto-allows it', () => {
+    // Publishing is the same kind of side effect as submitting, so it must
+    // never fall out of the gate — including for a platform the user granted
+    // unattended publishing to. The grant is honoured one layer up (the
+    // permission gate), not by putting the verb on the allowlist.
+    expect(BROWSER_APPROVAL_REQUIRED_ACTIONS).toContain('publish');
+    expect(isBrowserApprovalRequiredCommand('hamuna browser publish --platform douyin --text "发布"')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser publish --platform douyin --text "发布"')).toBe(false);
+  });
+});
+
+describe('parseBrowserGatedCommand', () => {
+  it('reports the action and the publish target platform', () => {
+    expect(parseBrowserGatedCommand('hamuna browser publish --platform douyin --text "发布"')).toEqual({
+      action: 'publish',
+      platform: 'douyin',
+    });
+    expect(parseBrowserGatedCommand('hamuna browser publish --platform=wechat-mp --selector "#btn"')).toEqual({
+      action: 'publish',
+      platform: 'wechat-mp',
+    });
+  });
+
+  it('reports submit without a platform', () => {
+    expect(parseBrowserGatedCommand('hamuna browser submit --selector "#f"')).toEqual({
+      action: 'submit',
+      platform: null,
+    });
+  });
+
+  it('reports a malformed publish with no platform (it still prompts)', () => {
+    // Missing `--platform` must not be read as "no target, so nothing to
+    // approve" — it must still reach the prompt, which then fails at the CLI.
+    expect(parseBrowserGatedCommand('hamuna browser publish')).toEqual({
+      action: 'publish',
+      platform: null,
+    });
+    expect(parseBrowserGatedCommand('hamuna browser publish --platform')).toEqual({
+      action: 'publish',
+      platform: null,
+    });
+  });
+
+  it('returns null for commands that are not gated browser actions', () => {
+    expect(parseBrowserGatedCommand('hamuna browser click --text "发布"')).toBeNull();
+    expect(parseBrowserGatedCommand('hamuna browser read')).toBeNull();
+    expect(parseBrowserGatedCommand('hamuna cron list')).toBeNull();
   });
 });

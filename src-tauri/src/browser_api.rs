@@ -884,6 +884,28 @@ pub async fn browser_images_handler(Json(input): Json<BrowserRequest>) -> Json<s
     }
 }
 
+/// `POST /api/browser/fields` — the page's visible form fields and buttons,
+/// each with a CSS selector that resolves to it.
+///
+/// The discovery primitive for agent-driven forms: without it the agent can
+/// click buttons it can read but cannot find the textbox it has to type into.
+pub async fn browser_fields_handler(
+    Json(input): Json<BrowserRequest>,
+) -> Json<serde_json::Value> {
+    let (_tab_id, label) = match resolve_browser(&input.session_id).await {
+        Ok(found) => found,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    let script = browser_agent::fields_script();
+    match run_script(&label, &script).await {
+        Ok(data) => {
+            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+        }
+        Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    }
+}
+
 /// `POST /api/browser/image-data` — one image's pixels, as a data URL.
 ///
 /// Read in-page via canvas (`browser_agent::image_data_script` explains why),

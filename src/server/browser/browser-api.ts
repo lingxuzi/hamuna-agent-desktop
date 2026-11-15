@@ -14,6 +14,11 @@ import { managementApi } from '../utils/management-api-client';
 import { getSessionEngine } from '../session-engine/selector';
 import { recordEmbeddedBrowserOutcome } from '../utils/embedded-browser-quota';
 import { htmlToMarkdown } from './html-to-markdown';
+import {
+  getSocialPlatformPublishProfile,
+  isPlatformPublishHost,
+  isSocialPlatformId,
+} from '../../shared/socialPlatforms';
 
 export interface AdminResponse<T = unknown> {
   success: boolean;
@@ -41,6 +46,10 @@ export interface BrowserActionPayload {
   query?: string;
   /** Search engine for `search` ("360" | "bing" | "baidu"). */
   engine?: string;
+  /** Absolute path of the file to put into a file input, for `upload`. */
+  file?: string;
+  /** Target platform id, for `publish` (e.g. `douyin`). */
+  platform?: string;
   /** Username for `login`. Never echoed back or logged. */
   username?: string;
   /** Password for `login`. Never echoed back or logged. */
@@ -138,6 +147,9 @@ async function callBrowser(
     // the GET branch has already built its target.
     ['username', method === 'POST' ? payload.username : undefined],
     ['password', method === 'POST' ? payload.password : undefined],
+    // Same reasoning as the credentials: a local path in the query string
+    // would end up in Rust's request log.
+    ['file', method === 'POST' ? payload.file : undefined],
   ];
 
   let target = path;
@@ -310,6 +322,64 @@ export async function handleBrowserFill(payload: BrowserActionPayload): Promise<
 }
 
 /**
+ * `hamuna browser fields` — the page's visible form fields and buttons, each
+ * with a CSS selector that resolves to it.
+ *
+ * The discovery primitive. Text lookup finds buttons, but a textbox has no
+ * text to find — its "text" is its value, and an empty textbox has none. So
+ * without this, an agent can press "发布" but cannot find the description box
+ * to type into. Each entry carries a selector so the agent never has to guess
+ * one.
+ */
+export async function handleBrowserFields(payload: BrowserActionPayload): Promise<AdminResponse> {
+  const { response, error } = await callBrowser('/api/browser/fields', 'POST', payload);
+  if (error) return error;
+  const data = payloadOf(response);
+  const fields = Array.isArray(data.fields) ? data.fields : [];
+  return ok({ count: typeof data.count === 'number' ? data.count : fields.length, fields });
+}
+
+/**
+ * `hamuna browser upload --selector <css> | --text <label> --file <path>`
+ *
+ * Puts a local file into a `<input type=file>`. This is how media gets onto a
+ * publish page — the Rust side reads the bytes and inlines them as base64.
+ *
+ * **The Rust side owns the path rules** (`validate_file_path`: absolute, not
+ * blacklisted) and the size ceiling (`MAX_UPLOAD_BYTES`, 12 MiB, image-only
+ * in practice). This layer only forwards the path; it deliberately does not
+ * re-implement either check, because two implementations of the same rule
+ * drift.
+ */
+export async function handleBrowserUpload(payload: BrowserActionPayload): Promise<AdminResponse> {
+  if (!payload.selector && !payload.text) {
+    return {
+      success: false,
+      error: 'A target is required: pass --selector <css> or --text <visible label>.',
+      suggestedCommand: 'hamuna browser upload --selector "input[type=file]" --file ./cover.png',
+    };
+  }
+  const file = (payload.file ?? '').trim();
+  if (!file) {
+    return {
+      success: false,
+      error: 'A file path is required: pass --file <path>.',
+      suggestedCommand: 'hamuna browser upload --selector "input[type=file]" --file ./cover.png',
+    };
+  }
+  const { response, error } = await callBrowser('/api/browser/upload', 'POST', { ...payload, file });
+  if (error) return error;
+  const data = payloadOf(response);
+  return ok({
+    uploaded: true,
+    name: data.name,
+    size: data.size,
+    inputCount: data.inputCount,
+    selector: data.selector,
+  });
+}
+
+/**
  * `hamuna browser submit --selector <css> | --text <label>`
  *
  * Submitting is the one externally-visible side effect (an order, a post, a
@@ -327,6 +397,74 @@ export async function handleBrowserSubmit(payload: BrowserActionPayload): Promis
   const data = payloadOf(response);
   return ok({
     submitted: true,
+    label: data.label,
+  });
+}
+
+/**
+ * `hamuna browser publish --platform <id> --selector <css> | --text <label>`
+ *
+ * 发布的**唯一合规路径**。机制上它是一次点击，但它是**带名字的点击**：平台跟
+ * 命令一起走，所以两道闸各有其位：
+ *
+ * - 审批层（`agent-session.ts`）：这个平台有没有用户的常驻授权？有就免打扰，
+ *   没有就弹审批。
+ * - 范围层（这里）：当前页面是不是这个平台的创作者后台？不是就拒绝。
+ *
+ * 范围检查是 `--platform` 不是装饰的原因 —— 抖音的授权是"在抖音后台发不用问"，
+ * 不是"在任何地方发都不用问"。
+ */
+export async function handleBrowserPublish(payload: BrowserActionPayload): Promise<AdminResponse> {
+  const platform = (payload.platform ?? '').trim();
+  if (!platform) {
+    return {
+      success: false,
+      error: 'A platform is required: pass --platform <id>.',
+      suggestedCommand: 'hamuna browser publish --platform douyin --text "发布"',
+    };
+  }
+  if (!isSocialPlatformId(platform)) {
+    return {
+      success: false,
+      error: `Unknown social platform '${platform}'. Run \`hamuna platforms\` to list the supported ids.`,
+    };
+  }
+  if (!payload.selector && !payload.text) {
+    return {
+      success: false,
+      error: 'A target is required: pass --selector <css> or --text <visible label>.',
+      suggestedCommand: `hamuna browser publish --platform ${platform} --text "发布"`,
+    };
+  }
+
+  // 范围检查：先看当前页面在不在这个平台的创作者后台域内。
+  // 只带 session —— 发布目标的文字不进 query string（Rust 把请求 URL 记进日志）。
+  const state = await callBrowser('/api/browser/state', 'GET', { sessionId: payload.sessionId });
+  if (state.error) return state.error;
+  const currentUrl = typeof payloadOf(state.response).url === 'string'
+    ? (payloadOf(state.response).url as string)
+    : '';
+  if (!isPlatformPublishHost(platform, currentUrl)) {
+    return {
+      success: false,
+      error: `Current page (${currentUrl || 'unknown url'}) is not ${platform}'s creator backend — refusing to publish.`,
+      recoveryHint: {
+        recoveryCommand: `hamuna browser open ${
+          getSocialPlatformPublishProfile(platform).creatorHomeUrl
+        }`,
+        message: 'Open the platform creator backend first; publishing is only allowed inside it.',
+      },
+    };
+  }
+
+  const { response, error } = await callBrowser('/api/browser/click', 'POST', payload);
+  if (error) return error;
+  const data = payloadOf(response);
+  return ok({
+    published: true,
+    platform,
+    url: currentUrl,
+    tag: data.tag,
     label: data.label,
   });
 }
@@ -465,12 +603,18 @@ export async function handleBrowserAction(
       return handleBrowserClick(payload);
     case 'fill':
       return handleBrowserFill(payload);
+    case 'upload':
+      return handleBrowserUpload(payload);
+    case 'fields':
+      return handleBrowserFields(payload);
     case 'submit':
       return handleBrowserSubmit(payload);
+    case 'publish':
+      return handleBrowserPublish(payload);
     default:
       return {
         success: false,
-        error: `Unknown browser action: ${action}. Use state | open | tabs | select | read | search | click | fill | submit | images | image-data | login.`,
+        error: `Unknown browser action: ${action}. Use state | open | tabs | select | read | search | click | fill | upload | fields | submit | publish | images | image-data | login.`,
       };
   }
 }

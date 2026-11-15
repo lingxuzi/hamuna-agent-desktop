@@ -43,7 +43,9 @@
       "bilibili": "Bilibili",
       "zhihu": "Zhihu",
       "wechat-mp": "WeChat Official Account"
-    }
+    },
+    "autoPublish": "Publish unattended",
+    "autoPublishHint": "When on, the agent publishes to this platform without asking for confirmation each time."
   },
   "kb": {
     "title": "Knowledge Base",

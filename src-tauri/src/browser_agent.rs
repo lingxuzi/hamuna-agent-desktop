@@ -50,6 +50,41 @@ const INSTALL_HELPERS: &str = r#"
         type: el.getAttribute('type') || undefined,
       }));
     };
+    const __hamunaCssPath = (el) => {
+      // A CSS selector that resolves to exactly this element. `#id` when the
+      // id is unique; otherwise a structural path up to the nearest id'd
+      // ancestor, with `:nth-of-type` disambiguating siblings.
+      if (el.id) {
+        const byId = '#' + CSS.escape(el.id);
+        try {
+          if (document.querySelectorAll(byId).length === 1) return byId;
+        } catch (e) { /* fall through to the structural path */ }
+      }
+      const parts = [];
+      let node = el;
+      while (node && node.nodeType === 1 && parts.length < 12) {
+        let part = node.tagName.toLowerCase();
+        if (node.id) {
+          parts.unshift('#' + CSS.escape(node.id));
+          break;
+        }
+        const parent = node.parentElement;
+        if (parent) {
+          const same = Array.from(parent.children).filter((c) => c.tagName === node.tagName);
+          if (same.length > 1) part += ':nth-of-type(' + (same.indexOf(node) + 1) + ')';
+        }
+        parts.unshift(part);
+        node = parent;
+      }
+      return parts.join(' > ');
+    };
+    const __hamunaFieldAttrs = (el) => [
+      el.getAttribute('placeholder'),
+      el.getAttribute('aria-label'),
+      el.getAttribute('data-placeholder'),
+      el.getAttribute('name'),
+      el.getAttribute('title'),
+    ].filter(Boolean).join(' ').toLowerCase();
     const __hamunaLocate = (selector, text) => {
       if (selector) {
         const el = document.querySelector(selector);
@@ -58,16 +93,21 @@ const INSTALL_HELPERS: &str = r#"
       }
       if (!text) throw new Error('Either a CSS selector or a text query is required');
       const needle = text.trim().toLowerCase();
-      const pool = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role=button],[role=link]'));
+      const pool = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role=button],[role=link],[role=tab],[contenteditable]'));
       const visible = pool.filter(__hamunaVisible);
       const texts = visible.map((el) => __hamunaLabel(el).toLowerCase());
       let idx = texts.findIndex((t) => t === needle);
       if (idx === -1) idx = texts.findIndex((t) => t.includes(needle));
-      if (idx === -1) {
-        const cands = __hamunaCandidates().map((c) => c.label).filter(Boolean);
-        throw new Error('No visible element matches text: ' + text + '. Candidates: ' + (cands.slice(0, 20).join(' | ') || '(none)'));
-      }
-      return visible[idx];
+      if (idx !== -1) return visible[idx];
+      // Second pass: a form field identified by its placeholder / aria-label.
+      // The label pass cannot see it — a textbox's "text" is its value, and an
+      // empty textbox has no text at all. Without this pass there is no way
+      // to say "the 作品描述 box" and no way to publish anything.
+      const fields = Array.from(document.querySelectorAll('input,textarea,select,[contenteditable]')).filter(__hamunaVisible);
+      const byField = fields.find((el) => __hamunaFieldAttrs(el).includes(needle));
+      if (byField) return byField;
+      const cands = __hamunaCandidates().map((c) => c.label).filter(Boolean);
+      throw new Error('No visible element matches text: ' + text + '. Candidates: ' + (cands.slice(0, 20).join(' | ') || '(none)'));
     };
     window.__hamunaLocate = __hamunaLocate;
     window.__hamunaCandidates = __hamunaCandidates;
@@ -92,6 +132,56 @@ pub fn page_state_script() -> String {
 pub fn document_html_script() -> String {
     format!(
         "{INSTALL_HELPERS} && (() => document.documentElement ? document.documentElement.outerHTML : '')()"
+    )
+}
+
+/// List the page's visible form fields and buttons, each with a CSS selector
+/// that resolves to exactly that element.
+///
+/// WHY THIS EXISTS
+/// ---------------
+/// The agent can only act on a page through `click --selector` / `fill
+/// --selector`, and it cannot invent a selector for a page it has never seen.
+/// Text lookup finds buttons — but a textbox has no text to find: its "text"
+/// is its value, and an empty textbox has none. So there was no way to say
+/// "the 作品描述 box", and every publish flow stalled exactly there.
+///
+/// This is the discovery primitive: read the fields, pick one by placeholder
+/// or label, then act with the returned selector. It is what keeps a
+/// publish skill free of hardcoded selectors — the DOM differs per platform
+/// and changes without notice, so guessing is guaranteed to rot.
+///
+/// Only visible elements are listed: an invisible input is one the agent
+/// cannot act on, and a page with hundreds of hidden inputs (every framework
+/// ships some) would drown the useful ones.
+pub fn fields_script() -> String {
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const sel = 'input,textarea,select,[contenteditable],button,a,[role=button],[role=tab]';
+  const visible = (el) => {{
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    const st = window.getComputedStyle(el);
+    return st.visibility !== 'hidden' && st.display !== 'none' && st.opacity !== '0';
+  }};
+  const attr = (el, name) => el.getAttribute(name) || undefined;
+  const fields = Array.from(document.querySelectorAll(sel)).filter(visible).slice(0, 150).map((el) => {{
+    const tag = el.tagName.toLowerCase();
+    const editable = tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+    return {{
+      kind: editable ? 'field' : (tag === 'a' ? 'link' : 'button'),
+      tag,
+      type: attr(el, 'type'),
+      placeholder: attr(el, 'placeholder') || attr(el, 'data-placeholder'),
+      ariaLabel: attr(el, 'aria-label'),
+      name: attr(el, 'name'),
+      accept: attr(el, 'accept'),
+      text: (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 60),
+      selector: window.__hamunaCssPath(el),
+    }};
+  }});
+  return {{ count: fields.length, fields }};
+}})()"
     )
 }
 
@@ -209,6 +299,11 @@ pub fn click_script(selector: &str, text: &str) -> String {
 /// Dispatches `input` and `change` events so frameworks with controlled
 /// components (React, Vue) actually register the new value — setting
 /// `.value` alone is silently ignored by many of them.
+///
+/// **A contenteditable has no `value`.** Writing `el.value = …` on a div
+/// creates a stray JS property and the page shows nothing — which looks like
+/// "the fill silently did nothing". The text of a contenteditable lives in
+/// `textContent`, so that is what gets written.
 pub fn fill_script(selector: &str, text: &str, value: &str) -> String {
     let sel = js_string(selector);
     let txt = js_string(text);
@@ -219,11 +314,14 @@ pub fn fill_script(selector: &str, text: &str, value: &str) -> String {
   const tag = el.tagName.toLowerCase();
   const isEditable = tag === 'input' || tag === 'textarea' || el.isContentEditable;
   if (!isEditable) throw new Error('Element is not fillable (tag=' + tag + ')');
-  const proto = tag === 'input' ? window.HTMLInputElement.prototype
-    : tag === 'textarea' ? window.HTMLTextAreaElement.prototype
-    : window.HTMLDivElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(proto, 'value');
-  if (setter && setter.set) setter.set.call(el, {val}); else el.value = {val};
+  if (tag === 'input' || tag === 'textarea') {{
+    const proto = tag === 'input' ? window.HTMLInputElement.prototype
+      : window.HTMLTextAreaElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (setter && setter.set) setter.set.call(el, {val}); else el.value = {val};
+  }} else {{
+    el.textContent = {val};
+  }}
   el.dispatchEvent(new Event('input', {{ bubbles: true }}));
   el.dispatchEvent(new Event('change', {{ bubbles: true }}));
   return {{ tag, label: window.__hamunaLabel(el) }};
@@ -250,6 +348,12 @@ pub fn fill_script(selector: &str, text: &str, value: &str) -> String {
 /// assigning to `.files` directly is ignored. React-controlled uploaders also
 /// need the `change` event dispatched, same reason `fill_script` dispatches
 /// `input`/`change`.
+///
+/// **The new file is APPENDED, not substituted.** `input.files = dt.files`
+/// replaces the whole `FileList`, so a fresh `DataTransfer` would drop every
+/// image uploaded before this call — and a multi-image publish (Douyin 图文
+/// wants up to 12) would silently end up with one. So the existing files are
+/// copied into the new `DataTransfer` first.
 ///
 /// Returns `{ selector, name, size, inputCount }` — `inputCount` > 1 means the
 /// page has several file inputs and only the located one was touched.
@@ -279,6 +383,9 @@ pub fn upload_script(selector: &str, text: &str, file_name: &str, mime: &str, ba
   const file = new File([bytes], {name}, {{ type: {mime} }});
 
   const dt = new DataTransfer();
+  // Append: keep the files that were already in the input. A fresh
+  // DataTransfer would replace the FileList and drop earlier images.
+  if (input.files) Array.from(input.files).forEach((f) => dt.items.add(f));
   dt.items.add(file);
   input.files = dt.files;
   input.dispatchEvent(new Event('input', {{ bubbles: true }}));
@@ -493,6 +600,62 @@ mod tests {
         );
         assert!(!script.contains("a\"+alert(1)"), "{script}");
         assert!(script.contains(r#"a\"+alert(1)+\""#), "{script}");
+    }
+
+    /// A contenteditable has no `value` — writing one creates a stray JS
+    /// property and the page shows nothing, which reads as "the fill silently
+    /// did nothing". The text of a contenteditable lives in `textContent`.
+    #[test]
+    fn fill_script_writes_text_content_for_contenteditable() {
+        let script = fill_script("", "作品描述", "hello");
+        assert!(script.contains("el.textContent ="), "{script}");
+        // The input / textarea path must keep using the native value setter —
+        // React-controlled inputs ignore a plain `el.value =`.
+        assert!(script.contains("setter.set.call(el"), "{script}");
+    }
+
+    /// The agent can only act on a page through a selector, and it cannot
+    /// invent one. `fields` is the discovery primitive; it must hand back a
+    /// selector that resolves to each element.
+    #[test]
+    fn fields_script_returns_a_selector_per_field() {
+        let script = fields_script();
+        assert!(script.contains("__hamunaCssPath"), "{script}");
+        assert!(script.contains("fields"), "{script}");
+        // A publish form's file input is the one thing the agent MUST find.
+        assert!(script.contains("input"), "{script}");
+    }
+
+    /// Text lookup finds buttons, but a textbox has no text to find — its
+    /// "text" is its value, and an empty textbox has none. Without matching
+    /// the placeholder / aria-label there is no way to say "the 作品描述 box".
+    #[test]
+    fn locate_can_find_a_field_by_its_placeholder() {
+        assert!(INSTALL_HELPERS.contains("__hamunaFieldAttrs"), "{INSTALL_HELPERS}");
+        assert!(INSTALL_HELPERS.contains("data-placeholder"), "{INSTALL_HELPERS}");
+    }
+
+    /// A multi-image publish (Douyin 图文 up to 12) uploads one file per call
+    /// into the SAME input. `input.files = dt.files` replaces the FileList, so
+    /// a fresh DataTransfer would leave only the last image. The script must
+    /// carry the previous files over.
+    #[test]
+    fn upload_script_appends_instead_of_replacing() {
+        let script = upload_script(
+            "input[type=file]",
+            "",
+            "cover.png",
+            "image/png",
+            "iVBORw0KGgo=",
+        );
+        assert!(
+            script.contains("Array.from(input.files)"),
+            "upload must carry over the files already in the input:\n{script}"
+        );
+        assert!(
+            script.contains("dt.items.add(file)"),
+            "upload must add the new file:\n{script}"
+        );
     }
 
     #[test]

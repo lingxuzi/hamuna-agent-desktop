@@ -2016,6 +2016,9 @@ async function routeAdminApi(pathname: string, payload: Record<string, unknown>)
   if (route === 'vision/readme') return await api.handleVisionReadme();
   if (route === 'vision/analyze') return await api.handleVisionAnalyze(payload as Parameters<typeof api.handleVisionAnalyze>[0]);
 
+  // Social platform publish specs (static product data, shipped with the app)
+  if (route === 'platforms/list') return api.handlePlatformsList(payload as Parameters<typeof api.handlePlatformsList>[0]);
+
   // Model commands
   if (route === 'model/list') return api.handleModelList();
   if (route === 'model/add') return api.handleModelAdd(payload as Parameters<typeof api.handleModelAdd>[0]);

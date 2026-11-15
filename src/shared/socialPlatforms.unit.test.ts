@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   SOCIAL_PLATFORMS,
+  SOCIAL_PLATFORM_SPECS,
+  canPublishTo,
   getSocialPlatform,
+  getSocialPlatformPublishProfile,
+  getSocialPlatformPublishHosts,
+  getSocialPlatformSpec,
+  isAutoPublishGranted,
   isLoggedInUrl,
+  isPlatformPublishHost,
+  isSocialPlatformId,
+  listSocialPlatformPublishProfiles,
   needsSelectorProbe,
   resolveLoginState,
   withSocialAccount,
@@ -112,6 +121,78 @@ describe('resolveLoginState', () => {
   });
 });
 
+describe('发布规格层', () => {
+  it('每个登录平台都有规格，规格 id 唯一', () => {
+    // 规格表和登录表是两张表，但必须覆盖同一批平台 —— 少一个就意味着
+    // 「登录得上却没法发」。
+    const specIds = SOCIAL_PLATFORM_SPECS.map((s) => s.id);
+    expect(new Set(specIds).size).toBe(specIds.length);
+    for (const p of SOCIAL_PLATFORMS) {
+      expect(specIds).toContain(p.id);
+    }
+  });
+
+  it('规格里的 URL 都是 https', () => {
+    for (const spec of SOCIAL_PLATFORM_SPECS) {
+      expect(spec.creatorHomeUrl).toMatch(/^https:/);
+      for (const url of [spec.publishUrl, spec.workListUrl, spec.analyticsUrl]) {
+        if (url) expect(url).toMatch(/^https:/);
+      }
+    }
+  });
+
+  it('抖音：图文可投，视频不可投（浏览器通道一次只能内联 12 MiB）', () => {
+    const douyin = getSocialPlatformSpec('douyin');
+    expect(canPublishTo(douyin, 'image-text')).toBe(true);
+    // 抖音本身能收视频 —— 但走不过我们的传输通道，所以规格里不列。
+    expect(canPublishTo(douyin, 'video')).toBe(false);
+  });
+
+  it('抖音的限制值是平台侧的硬限制，不受传输通道影响', () => {
+    const douyin = getSocialPlatformSpec('douyin');
+    expect(douyin.limits?.maxTitleLength).toBe(30);
+    expect(douyin.limits?.maxImages).toBe(12);
+    expect(douyin.limits?.topicMaxCount).toBe(5);
+  });
+
+  it('没核实的 URL 宁可缺着也不给猜的地址', () => {
+    // 缺字段 = 「现场探测」，给错地址 = 发布线拿着错 URL 跑一圈再失败。
+    for (const spec of SOCIAL_PLATFORM_SPECS) {
+      for (const url of [spec.publishUrl, spec.workListUrl, spec.analyticsUrl]) {
+        if (url) expect(url).not.toContain(' ');
+      }
+    }
+    expect(getSocialPlatformSpec('kuaishou').publishUrl).toBeUndefined();
+  });
+
+  it('未知平台 id 直接炸，不静默返回空规格', () => {
+    expect(() => getSocialPlatformSpec('not-a-platform' as never)).toThrow();
+  });
+});
+
+describe('发布侧平台全貌（登录表 + 规格表合并）', () => {
+  it('抖音走文本探针 —— 扫码前后 URL 一样，URL 判不出登录', () => {
+    const douyin = getSocialPlatformPublishProfile('douyin');
+    expect(douyin.loginProbe).toBe('text');
+    expect(douyin.loginWallMarkers.length).toBeGreaterThan(0);
+  });
+
+  it('其余平台走 URL 探针，且登录墙标记永远有值', () => {
+    for (const profile of listSocialPlatformPublishProfiles()) {
+      if (profile.id === 'douyin') continue;
+      expect(profile.loginProbe).toBe('url');
+      // 缺了标记就得靠猜，猜错的方向是「在登录墙上点发布」。
+      expect(profile.loginWallMarkers.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('每个平台都带得上登录入口', () => {
+    for (const profile of listSocialPlatformPublishProfiles()) {
+      expect(profile.loginUrl).toMatch(/^https:/);
+    }
+  });
+});
+
 describe('withSocialAccount', () => {
   it('写一个平台不丢其他平台的记录（浅合并会丢，这是它存在的理由）', () => {
     const before = {
@@ -132,5 +213,57 @@ describe('withSocialAccount', () => {
 
   it('没有历史记录时给出 unknown 兜底', () => {
     expect(withSocialAccount(undefined, 'bilibili', {}).bilibili).toEqual({ lastLoginState: 'unknown' });
+  });
+});
+
+describe('发布范围（授权能覆盖哪些域名）', () => {
+  it('抖音的发布页在授权范围内，其它域不在', () => {
+    expect(isPlatformPublishHost('douyin', 'https://creator.douyin.com/creator-micro/content/upload')).toBe(true);
+    expect(isPlatformPublishHost('douyin', 'https://creator.douyin.com/')).toBe(true);
+    expect(isPlatformPublishHost('douyin', 'https://www.douyin.com/')).toBe(false);
+    expect(isPlatformPublishHost('douyin', 'https://evil.creator.douyin.com.attacker.test/')).toBe(false);
+  });
+
+  it('用创作者后台域名而不是登录域名判定（B 站在 passport 登录、member 发布）', () => {
+    expect(isPlatformPublishHost('bilibili', 'https://member.bilibili.com/platform/upload/video/frame')).toBe(true);
+    expect(isPlatformPublishHost('bilibili', 'https://passport.bilibili.com/login')).toBe(false);
+  });
+
+  it('每个平台都至少有一个可发布域名（否则发布永远被拒）', () => {
+    for (const platform of SOCIAL_PLATFORMS) {
+      expect(getSocialPlatformPublishHosts(platform.id).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('非 http(s) 的页面一律不在范围内', () => {
+    expect(isPlatformPublishHost('douyin', 'about:blank')).toBe(false);
+    expect(isPlatformPublishHost('douyin', '')).toBe(false);
+  });
+});
+
+describe('无人值守发布授权', () => {
+  it('只有显式开启才算授权', () => {
+    expect(isAutoPublishGranted({ douyin: { lastLoginState: 'success' } }, 'douyin')).toBe(false);
+    expect(isAutoPublishGranted({ douyin: { lastLoginState: 'success', autoPublish: true } }, 'douyin')).toBe(true);
+  });
+
+  it('授权只对它自己的平台生效', () => {
+    const accounts = { douyin: { lastLoginState: 'success' as const, autoPublish: true } };
+    expect(isAutoPublishGranted(accounts, 'douyin')).toBe(true);
+    expect(isAutoPublishGranted(accounts, 'xiaohongshu')).toBe(false);
+  });
+
+  it('账号表形状不对时按没授权处理', () => {
+    expect(isAutoPublishGranted(undefined, 'douyin')).toBe(false);
+    expect(isAutoPublishGranted('nonsense', 'douyin')).toBe(false);
+    expect(isAutoPublishGranted({ douyin: 'nonsense' }, 'douyin')).toBe(false);
+  });
+});
+
+describe('平台 id 校验', () => {
+  it('只认注册过的 id', () => {
+    expect(isSocialPlatformId('douyin')).toBe(true);
+    expect(isSocialPlatformId('Douyin')).toBe(false);
+    expect(isSocialPlatformId('tiktok')).toBe(false);
   });
 });

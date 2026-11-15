@@ -14,6 +14,13 @@
  * externally-visible side effect, so it MUST reach the normal `canUseTool`
  * approval prompt — the user sees the command and decides.
  *
+ * `publish` is the same kind of action with one addition: it names the target
+ * platform (`--platform <id>`). That lets the gate honour a standing grant the
+ * user set per platform in Settings — "post to Douyin without asking me every
+ * time" — while every other platform still prompts. The grant is written by the
+ * Settings UI only; `hamuna config set` cannot grant it, so an agent cannot
+ * authorize itself.
+ *
  * TWO INDEPENDENT QUESTIONS, TWO FUNCTIONS
  * ----------------------------------------
  * "May this run unattended?" (`isBrowserCommandAutoAllowed`) and "must this
@@ -44,21 +51,35 @@
 /**
  * Browser sub-commands that may run without an approval prompt.
  *
- * `submit` is intentionally absent — see the module doc.
+ * `submit` and `publish` are intentionally absent — see the module doc.
  */
-export const BROWSER_AUTO_ALLOWED_ACTIONS = ['status', 'state', 'list', 'open', 'navigate', 'read', 'search', 'click', 'fill', 'upload'] as const;
+export const BROWSER_AUTO_ALLOWED_ACTIONS = ['status', 'state', 'list', 'open', 'navigate', 'read', 'search', 'click', 'fill', 'upload', 'fields'] as const;
 
 /**
- * The browser actions that always need the user's explicit approval.
+ * The browser actions that need the user's explicit approval.
  *
  * Kept as an exported constant (not just a comment) so the skill doc, the CLI
  * help, and this policy can be checked against each other.
  *
- * This list is the SOURCE of truth for the submit gate — `isBrowserSubmitCommand`
- * consults it, so adding an action here immediately makes it prompt even when
- * it is also in `BROWSER_AUTO_ALLOWED_ACTIONS`.
+ * This list is the SOURCE of truth for the approval gate —
+ * `isBrowserApprovalRequiredCommand` consults it, so adding an action here
+ * immediately makes it prompt even when it is also in
+ * `BROWSER_AUTO_ALLOWED_ACTIONS`.
+ *
+ * `publish` sits here next to `submit` because it is the same kind of action:
+ * an externally-visible post on a platform's creator backend. The difference is
+ * that `publish` carries a platform id, so the gate can honour a standing
+ * per-platform grant the user set in Settings (unattended publishing for the
+ * platforms the user explicitly opted into) instead of prompting every time.
  */
-export const BROWSER_APPROVAL_REQUIRED_ACTIONS = ['submit'] as const;
+export const BROWSER_APPROVAL_REQUIRED_ACTIONS = ['submit', 'publish'] as const;
+
+/** 需要审批的 browser 动作名。 */
+export type BrowserApprovalRequiredAction = (typeof BROWSER_APPROVAL_REQUIRED_ACTIONS)[number];
+
+function isBrowserApprovalRequiredAction(action: string): action is BrowserApprovalRequiredAction {
+  return (BROWSER_APPROVAL_REQUIRED_ACTIONS as readonly string[]).includes(action);
+}
 
 /** A parsed argv token. */
 interface CmdToken {
@@ -229,8 +250,8 @@ function actionFlags(flags: Map<string, string | true>): Map<string, string | tr
 function parseTargetFlags(
   flags: Map<string, string | true>,
   allowValue: boolean,
-): { selector?: string; text?: string; value?: string } | null {
-  const out: { selector?: string; text?: string; value?: string } = {};
+): { selector?: string; text?: string; value?: string; valueFile?: string } | null {
+  const out: { selector?: string; text?: string; value?: string; valueFile?: string } = {};
 
   for (const [key, value] of flags) {
     if (typeof value !== 'string') return null; // flag arrived without a value
@@ -244,6 +265,13 @@ function parseTargetFlags(
       if (!allowValue) return null;
       if (out.value !== undefined) return null;
       out.value = value;
+    } else if (key === 'value-file') {
+      // `--value-file` is fill-only, same as `--value`. It carries a workspace
+      // path the CLI reads and inlines, so it is as inert as `--file` on
+      // upload: no external side effect until `submit` / `publish`.
+      if (!allowValue) return null;
+      if (out.valueFile !== undefined) return null;
+      out.valueFile = value;
     } else {
       return null; // unknown flag
     }
@@ -301,6 +329,7 @@ export function isBrowserCommandAutoAllowed(command: string): boolean {
     case 'state':
     case 'list':
     case 'read':
+    case 'fields':
       return rest.length === 0 && flags.size === 0;
 
     case 'open':
@@ -358,22 +387,50 @@ export function isBrowserCommandAutoAllowed(command: string): boolean {
 }
 
 /**
- * Match `hamuna browser submit …` — the one browser action that always needs
- * the user's explicit approval.
+ * Match `hamuna browser submit …` / `hamuna browser publish …` — the browser
+ * actions that need the user's explicit approval.
  *
  * This exists SEPARATELY from `isBrowserCommandAutoAllowed` because "not
  * auto-allowed" and "must prompt" are different claims. The user can grant
  * Bash a session-wide "always allow" from the permission card, and that grant
  * is keyed by TOOL NAME — so a blanket "not in the allowlist" would let a
- * session-level Bash grant silently swallow `submit` too. The submit gate has
- * to be checked at a point where the session grant cannot reach it.
+ * session-level Bash grant silently swallow `submit` too. The gate has to be
+ * checked at a point where the session grant cannot reach it.
  *
  * The command shape is matched loosely here on purpose: the point is to
- * recognize "this is a submit", not to validate it. A malformed submit still
- * prompts (and then fails at the CLI), which is the safe direction.
+ * recognize "this is a gated action", not to validate it. A malformed one
+ * still prompts (and then fails at the CLI), which is the safe direction.
  */
-export function isBrowserSubmitCommand(command: string): boolean {
+export function isBrowserApprovalRequiredCommand(command: string): boolean {
+  return parseBrowserGatedCommand(command) !== null;
+}
+
+/** 一个需要审批的 browser 动作。 */
+export interface BrowserGatedCommand {
+  action: BrowserApprovalRequiredAction;
+  /**
+   * 发布目标平台。
+   *
+   * `submit` 没有平台；畸形的 `publish`（`--platform` 缺失或没带值）也没有 ——
+   * 这两种情况都照样弹审批，方向是安全的那一侧。
+   */
+  platform: string | null;
+}
+
+/**
+ * 解析一条需要审批的 browser 命令。
+ *
+ * 不是 `hamuna browser …`、或者动作不在 `BROWSER_APPROVAL_REQUIRED_ACTIONS`
+ * 里 → 返回 null（这条命令不受本模块管）。
+ */
+export function parseBrowserGatedCommand(command: string): BrowserGatedCommand | null {
   const parsed = parseBrowserCommand(command);
-  if (!parsed) return false;
-  return (BROWSER_APPROVAL_REQUIRED_ACTIONS as readonly string[]).includes(parsed.action);
+  if (!parsed) return null;
+  if (!isBrowserApprovalRequiredAction(parsed.action)) return null;
+
+  const platform = parsed.action === 'publish' ? parsed.flags.get('platform') : undefined;
+  return {
+    action: parsed.action,
+    platform: typeof platform === 'string' && platform.trim() ? platform.trim() : null,
+  };
 }

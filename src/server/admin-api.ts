@@ -28,6 +28,7 @@ import {
 import { deriveCliToolKind, type CliToolRegistryEntry } from '../shared/types/cliTools';
 import { workspacePathsEqual } from '../shared/workspacePath';
 import { IMAGE_UNDERSTANDING_TOOL_ID } from '../shared/official-tools';
+import { listSocialPlatformPublishProfiles } from '../shared/socialPlatforms';
 import type { OpsItemKind, OpsUpsertPayload } from '../shared/ops';
 import { removeProviderFromProxySettingsScope } from '../shared/proxyScope';
 import { removeCustomMcpServerCascade, McpRemovalError } from './services/mcp-removal';
@@ -859,6 +860,39 @@ export async function handleVisionAnalyze(payload: {
 }
 
 // ---------------------------------------------------------------------------
+// Social Platform Handlers
+// ---------------------------------------------------------------------------
+
+/**
+ * `hamuna platforms [id]` — 发布规格。
+ *
+ * 这份数据是 App 侧的静态常量（`src/shared/socialPlatforms.ts`），不是用户配置，
+ * 所以不落盘、不进 `config.json`。存在的理由是**规格必须随 App 升级**：平台上限
+ * 和后台路径会变，放在 agent 模板里就只对新建的工作区生效，老工作区永远拿不到。
+ *
+ * 缺字段 = 没核实过。发布线遇到缺失的 URL 时从 `creatorHomeUrl` 出发现场找入口，
+ * 不猜地址。
+ */
+export function handlePlatformsList(payload: { id?: string } = {}): AdminResponse {
+  const id = payload.id?.trim();
+  if (id) {
+    const profile = listSocialPlatformPublishProfiles().find((p) => p.id === id);
+    if (!profile) {
+      return {
+        success: false,
+        error: `Unknown social platform '${id}'.`,
+        recoveryHint: {
+          recoveryCommand: 'hamuna platforms',
+          message: 'Run `hamuna platforms` to list the supported platform ids.',
+        },
+      };
+    }
+    return { success: true, data: profile };
+  }
+  return { success: true, data: listSocialPlatformPublishProfiles() };
+}
+
+// ---------------------------------------------------------------------------
 // Model Provider Handlers
 // ---------------------------------------------------------------------------
 
@@ -1687,9 +1721,17 @@ export async function handleConfigSet(payload: { key: string; value: unknown; dr
   }
 
   // Protect structural/sensitive keys that have dedicated commands
-  const protectedKeys = ['providerApiKeys', 'providerVerifyStatus', 'agents', 'mcpServers', 'mcpEnabledServers', 'mcpServerEnv', 'mcpServerArgs', 'imBotConfigs', 'cliToolEnv'];
+  //
+  // `socialAccounts` is in this list for a specific reason: it carries the
+  // per-platform "post unattended" grant (`autoPublish`). If the CLI could
+  // write it, an agent could grant itself permission to publish without
+  // asking — the grant has to stay a decision the user makes in Settings.
+  const protectedKeys = ['providerApiKeys', 'providerVerifyStatus', 'agents', 'mcpServers', 'mcpEnabledServers', 'mcpServerEnv', 'mcpServerArgs', 'imBotConfigs', 'cliToolEnv', 'socialAccounts'];
   const rootKey = key.split('.')[0];
   if (protectedKeys.includes(rootKey)) {
+    if (rootKey === 'socialAccounts') {
+      return { success: false, error: `Cannot set '${key}' via config set. Social account settings (including unattended publishing) are only changed from Settings → Social Accounts.` };
+    }
     return { success: false, error: `Cannot set '${key}' via config set. Use dedicated commands (e.g., 'hamuna mcp', 'hamuna agent', 'hamuna model set-key').` };
   }
 

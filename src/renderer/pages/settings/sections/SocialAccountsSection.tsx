@@ -284,6 +284,33 @@ export function SocialAccountsSection({ isActive = true }: SocialAccountsSection
                     void writeAccount(platform.id, { displayName: next || undefined });
                   }}
                 />
+
+                {/* Unattended publishing. The switch and its label share the
+                    same 20px line box so the pair reads as one control. */}
+                <div className="mt-1.5 flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={account?.autoPublish === true}
+                    aria-label={t('accounts.autoPublish')}
+                    title={t('accounts.autoPublishHint')}
+                    onClick={() => {
+                      void writeAccount(platform.id, { autoPublish: account?.autoPublish !== true });
+                    }}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+                      account?.autoPublish === true ? 'bg-[var(--accent)]' : 'bg-[var(--line-strong)]'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-[var(--toggle-thumb)] shadow-sm ring-0 transition-transform ${
+                        account?.autoPublish === true ? 'translate-x-4' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-xs leading-5 text-[var(--ink-muted)]">
+                    {t('accounts.autoPublish')}
+                  </span>
+                </div>
               </div>
 
               <button

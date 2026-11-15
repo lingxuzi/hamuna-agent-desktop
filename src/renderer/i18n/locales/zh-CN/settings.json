@@ -43,7 +43,9 @@
       "bilibili": "B站",
       "zhihu": "知乎",
       "wechat-mp": "微信公众号"
-    }
+    },
+    "autoPublish": "允许自动发布",
+    "autoPublishHint": "开启后，Agent 在该平台发布内容时不再逐条请求确认。"
   },
   "kb": {
     "title": "知识库",

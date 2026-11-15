@@ -309,7 +309,7 @@ hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数
 | `unverified` | **已提交，但没有平台侧证据**。发布后回读不到它，就只能停在这里 |
 | `published` | 回读到平台作品列表里真的有这一条才算 |
 
-**`unverified` 不是 `published` 的近义词**，是它的未证状态。没有回读证据就把素材标成 `published`，等于对用户撒谎——界面上「已发布」意味着它真的在线。回读到作品 id 后一并 `--platform-work-id` 回填。
+**`unverified` 不是 `published` 的近义词**，是它的未证状态。没有回读证据就把素材标成 `published`，等于对用户撒谎——界面上「已发布」意味着它真的在线。`--platform-work-id` **只在作品列表里真的读得到那个 id 时才回填**，读不到就空着——编一个 id 会让下次回读误以为已经核实过。
 
 **`--product` / `--cta` / `--source-ref` 是给「人丢物料进来」这条路径用的**：产品、要观众做的动作、以及原始物料在工作区里的位置（做稿时回原件看卖点的指针）。纯内容不带转化就前两个都留空，别编。
 
@@ -318,6 +318,23 @@ hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数
 - `update` 是**补丁语义**：没传的字段保持原样，不是清空；确实要清空才显式传空值。
 - `add` 的 id 由后端生成并在输出里打印；后续 `update` / `remove` 用这个 id。
 - 目标工作区默认是当前 session 的工作区；要写别处才加 `--workspace <path>`。
+
+### 社媒平台规格（platforms）
+
+发布前先查这个平台长什么样，别照记忆写编辑器和上限。
+
+```bash
+hamuna platforms                    # 所有平台：id / 支持的形态 / 发布页
+hamuna platforms douyin --json      # 单平台全貌：形态、发布页、作品列表页、上限、登录墙标记
+```
+
+**已核实的字段**：`creatorHomeUrl` / `publishUrl` / `workListUrl` / `analyticsUrl`
+**上限**：`limits`（标题 / 正文字数、图片张数、话题个数、允许的扩展名）
+**登录探针**：`loginProbe: 'url'` 看 URL 判定；`'text'` 看页面文字里有没有 `loginWallMarkers`（抖音是 `text`——扫码前后 URL 一样）
+
+**缺字段 = 还没核实**，不是「没有」。缺 URL 就从 `creatorHomeUrl` 进后台现场找入口，找到的真实路径记进工作区记忆，下次直接用。**不要猜一个地址去撞。**
+
+`mediaKinds` 是「平台接受 ∩ 我们传得过去」：抖音能收视频，但浏览器通道一次只能内联 12 MiB，所以现在只有 `image-text`。
 
 ### 任务中心（task / thought）
 
@@ -493,7 +510,10 @@ hamuna browser read                              # 当前页正文，输出 Mark
 hamuna browser click --selector "#submit"        # 点 CSS 选择器命中的元素
 hamuna browser click --text "Sign in"            # 点可见文字匹配的元素
 hamuna browser fill --selector "#q" --value "hamuna"
+hamuna browser fill --selector "#desc" --value-file ops/assets/a.publish.txt  # 多行文本走文件
 hamuna browser upload --selector "input[type=file]" --file ./cover.png  # 选文件（≤12 MiB）
+hamuna browser fields                            # 列出可见表单控件 / 按钮 + 每个的可用选择器
+hamuna browser publish --platform douyin --text "发布"  # 发布（受审批闸控制，见下）
 hamuna browser submit --selector "#form"         # 提交表单（会弹审批）
 hamuna browser images                            # 列出可见图片 + 索引
 hamuna browser image-data --index 0              # 存一张图片到工作区（默认 hamuna_files/temp/）
@@ -537,6 +557,13 @@ hamuna browser select --tab 0                   # 把第 0 个标签页切到最
 - `--selector` 传 CSS 选择器，优先命中
 - `--text` 传元素可见文字：先精确匹配，再包含匹配
 - 两个都匹配不到会报错并列出候选可见元素，照着改 selector 或 text 重来
+- **不要猜选择器**：先 `browser fields` 拿页面给的，尤其空输入框没有 `--text` 可匹配
+
+**发布（`publish`）：**
+- `hamuna browser publish --platform <id> --text "发布"` 是**唯一**允许的发布路径。它同时经过三道闸：用户在该平台开了「允许自动发布」才免审批、当前页面必须在该平台创作者后台域内、平台 id 必须有效
+- 用 `browser click` 点发布按钮是**绕过审批**的（`click` 在自动放行名单里），不要这么做
+- 发布命令报错 = 什么都没提上去，重来即可；点成功了也**不算发出去**，要回作品列表页回读确认
+- 平台规格（发布页 / 作品列表页 / 上限 / 登录墙标记）用 `hamuna platforms <id>` 查
 
 **上传文件：**
 - `upload` 把本地文件塞进页面的 `<input type=file>`。找 `--selector` 命中的元素；命中的不是 file input 时，会在它内部找
