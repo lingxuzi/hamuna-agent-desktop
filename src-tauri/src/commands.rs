@@ -2458,7 +2458,7 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // 46: adds `browser tabs` / `browser select` / `browser open --new-tab` — the
 // multi-tab browser surface. Without a bump an existing install keeps the old
 // bundle and the agent can only ever drive one tab.
-const CLI_VERSION: &str = "46";
+const CLI_VERSION: &str = "47";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2681,7 +2681,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // is the one every later browser command drives — an agent that navigates
 // without knowing which tab is in front silently reads the wrong page.
 
-const SYSTEM_SKILLS_VERSION: &str = "69";
+const SYSTEM_SKILLS_VERSION: &str = "70";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

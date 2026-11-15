@@ -1158,6 +1158,10 @@
         "topic": "挂靠选题",
         "noTopic": "不挂靠选题（手动导入）",
         "platform": "目标平台",
+        "product": "宣传的产品 / 服务",
+        "productPh": "留空 = 纯内容，不带转化",
+        "cta": "希望观众做什么",
+        "ctaPh": "进店看新款 / 领券 / 关注",
         "scheduledAt": "排期时间"
       },
       "review": {
@@ -1247,6 +1251,7 @@
         "draft": "草稿",
         "pending": "待排期",
         "scheduled": "已排期",
+        "unverified": "待核实",
         "published": "已发布"
       }
     },

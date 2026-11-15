@@ -45,10 +45,13 @@ hamuna ops add asset \
   --title "素材标题" \
   --platform douyin \
   --topic-id topic-1a2b3c4d \
+  --product "露营折叠桌" --cta "进店看新款" \
   --body-file ops/assets/script.md \
   --cover ops/assets/cover.png \
   --progress 30
 ```
+
+`--product` / `--cta` 是这条内容要对齐的转化目标。用户只说了产品没说动作时，按 `03-USER.md` 推一个（新号引流写「关注」、有店写「进店」）；**纯内容不带转化就留空**，不要编。
 
 `--body-file` 读文件内容进 `body`（正文多行、含中文标点时用这个，别塞进命令行）。图片用 `--image` 重复传，分镜用 `--shot` 传 JSON：
 
@@ -74,14 +77,14 @@ hamuna ops update asset --id asset-1a2b3c4d --status ready --progress 100
 hamuna ops update topic --id topic-1a2b3c4d --status produced
 ```
 
-`ready` 是给用户过目的检查点。**不要跳 `ready` 直接 `published`** —— 发布权在用户手上。
+`ready` 的分界是「内容本身做完了」——从这一步往后就不再动正文和素材。**不要跳 `ready` 直接 `published`／`unverified`**：那两个状态是发布那条线写的，不是制作写的。
 
 ## 交接
 
-报给用户：素材 id、标题、正文路径、还剩什么。然后问要不要进 `ops-schedule` 排期。
+报给用户：素材 id、标题、正文路径、还剩什么。然后进 `ops-schedule` 排期。
 
 ## 不要做
 
-- 不发布、不登录平台、不调付费生成服务（除非用户明确要求）
+- 不碰发布（那是心跳那条线的事）、不改 `product` / `cta` 之外的发布字段、不调付费生成服务（除非用户明确要求）
 - **不要直接编辑 `ops/state.json`**
 - 不要在一条素材跨多个平台时复制成多条——先在一条里做完，分发时再说

@@ -1148,6 +1148,26 @@ describe('hamuna CLI operations ledger', () => {
     expect(body.item.metrics).toEqual({ views: 900 });
   });
 
+  it('carries the product / cta / platform-work-id fields through to the ledger', () => {
+    // These three are the fields the publish lane writes back through; if a
+    // flag is missing from OPS_FIELDS it is silently dropped here, and the
+    // only symptom is a ledger that quietly forgets what it was promoting.
+    const body = buildRequestBody('ops', 'update', ['asset'], {
+      id: 'asset-1',
+      product: '露营折叠桌',
+      cta: '进店看新款',
+      platformWorkId: '7493...',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toMatchObject({
+      kind: 'asset',
+      id: 'asset-1',
+      product: '露营折叠桌',
+      cta: '进店看新款',
+      platformWorkId: '7493...',
+    });
+  });
+
   it('omits the workspace unless one was named', () => {
     expect(buildRequestBody('ops', 'list', [], {})).toEqual({});
     expect(buildRequestBody('ops', 'list', [], { workspace: '/tmp/ws' })).toEqual({ workspace: '/tmp/ws' });

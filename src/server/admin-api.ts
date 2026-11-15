@@ -2117,10 +2117,13 @@ Asset fields:
   --topic-id <id>              The topic this asset comes from
   --body <text>                Script / body copy
   --body-file <path>           Read the body from a local text file instead
+  --product <text>             Product / service this post promotes
+  --cta <text>                 What you want viewers to do
   --cover <path>               Cover image path in the workspace
-  --status <s>                 draft | ready | published
+  --status <s>                 draft | ready | published | unverified
   --scheduled-at <iso>         When it goes out
   --published-at <iso>         When it actually went out
+  --platform-work-id <id>      Platform-side work id (only after readback)
   --progress <0-100>           Production progress
   --image <path>               Image path in the workspace (repeatable)
   --shot <json>                One shot: {"no":1,"visual":"...","voice":"...","seconds":3} (repeatable)

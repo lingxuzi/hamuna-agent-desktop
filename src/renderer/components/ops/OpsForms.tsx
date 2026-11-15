@@ -198,6 +198,8 @@ export function AssetForm({
   const [title, setTitle] = useState(initial?.title ?? '');
   const [platform, setPlatform] = useState<SocialPlatformId>(initial?.platform ?? 'douyin');
   const [topicId, setTopicId] = useState(initial?.topicId ?? '');
+  const [product, setProduct] = useState(initial?.product ?? '');
+  const [cta, setCta] = useState(initial?.cta ?? '');
   const [scheduledAt, setScheduledAt] = useState(
     initial?.scheduledAt ? toLocalDateTimeString(new Date(initial.scheduledAt)) : '',
   );
@@ -214,6 +216,8 @@ export function AssetForm({
         ...(initial ? { id: initial.id } : {}),
         title: title.trim(),
         platform,
+        product: product.trim(),
+        cta: cta.trim(),
         // 没选挂靠选题 = 手动导入的稿件；补丁里发 null 显式解除挂靠，
         // 不发（键缺席）则保留旧值 —— 两种语义都代码里写死，不靠调用方记。
         ...(initial ? { topicId: topicId || null } : topicId ? { topicId } : {}),
@@ -242,6 +246,24 @@ export function AssetForm({
         />
       </Field>
       <PlatformSelect label={t('ops.form.asset.platform')} value={platform} onChange={setPlatform} />
+      <Field label={t('ops.form.asset.product')}>
+        <input
+          className="ops-input"
+          value={product}
+          onChange={(e) => setProduct(e.target.value)}
+          placeholder={t('ops.form.asset.productPh')}
+          maxLength={80}
+        />
+      </Field>
+      <Field label={t('ops.form.asset.cta')}>
+        <input
+          className="ops-input"
+          value={cta}
+          onChange={(e) => setCta(e.target.value)}
+          placeholder={t('ops.form.asset.ctaPh')}
+          maxLength={80}
+        />
+      </Field>
       <Field label={t('ops.form.asset.scheduledAt')}>
         <input
           type="datetime-local"

@@ -31,10 +31,21 @@ hamuna ops update review --id review-1a2b3c4d --views 12000     # 其余五个�
 | 实体 | 允许的状态 | 迁移 |
 |---|---|---|
 | 选题 | `idea` → `planned` → `produced` | `dropped` 可从任一状态进 |
-| 素材 | `draft` → `ready` → `published` | `published` 只在用户确认发布后 |
+| 素材 | `draft` → `ready` → （`published` / `unverified`） | 见下 |
 | 规则 | `proposed` → `active` | 提出来先进 `proposed`，攒到证据再 `active` |
 
-**不要跳状态**，尤其是素材别从 `draft` 直接跳 `published`——中间那次 `ready` 是用户过一次眼的检查点。
+**不要跳状态。** 素材别从 `draft` 直接跳 `published`——那次 `ready` 是「内容本身做完了、可以发了」的分界。
+
+### `unverified` ≠ `published`
+
+| 值 | 什么时候写 |
+|---|---|
+| `unverified` | 已经对平台提交过，但**没有平台侧证据** |
+| `published` | 回到创作者后台的作品列表里，**真的找到这一条**（同时回填 `--platform-work-id`） |
+
+**没有回读证据就把素材标成 `published`，等于对用户撒谎**——面板上「已发布」意味着它在线，用户会据此停止跟进。
+
+`unverified` 也**不许回退成 `ready` 重发**。提交过的东西可能已经在平台上了，退回去就是双发。要重试，先回读确认平台上没有那一条。
 
 ## 写之前先读
 

@@ -1158,6 +1158,10 @@
         "topic": "Linked topic",
         "noTopic": "No linked topic (imported)",
         "platform": "Target platform",
+        "product": "Product / service promoted",
+        "productPh": "Leave empty for content with no conversion",
+        "cta": "What viewers should do",
+        "ctaPh": "Visit the store / claim a coupon / follow",
         "scheduledAt": "Schedule"
       },
       "review": {
@@ -1247,6 +1251,7 @@
         "draft": "Draft",
         "pending": "Unscheduled",
         "scheduled": "Scheduled",
+        "unverified": "Unverified",
         "published": "Published"
       }
     },

@@ -82,6 +82,9 @@ pub enum OpsAssetStatus {
     Draft,
     Ready,
     Published,
+    /// 已提交，但**没有平台侧证据**。只有回读到作品列表里的这一条，才升为
+    /// `Published`。这个值存在的意义是不让「点过提交」冒充「发出去了」。
+    Unverified,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -152,6 +155,12 @@ pub struct OpsAsset {
     pub title: String,
     #[serde(default)]
     pub body: String,
+    /// 这条内容要宣传的产品 / 服务。空 = 纯内容，不带转化。
+    #[serde(default)]
+    pub product: String,
+    /// 期望观众做的动作。和 `product` 一起构成 CTA 的锚。
+    #[serde(default)]
+    pub cta: String,
     /// 工作区内的相对路径，如 `ops/assets/cover.png`。
     #[serde(default)]
     pub cover: Option<String>,
@@ -167,6 +176,9 @@ pub struct OpsAsset {
     pub status: OpsAssetStatus,
     #[serde(default)]
     pub published_at: Option<String>,
+    /// 平台侧作品 id。发布后回读到才填得出来，所以 `None` 是常态。
+    #[serde(default)]
+    pub platform_work_id: Option<String>,
     /// 制作完成度 0–100。Agent 每次改素材更新一次。
     #[serde(default)]
     pub progress: u32,
@@ -869,6 +881,8 @@ mod tests {
             topic_id: None,
             title: format!("素材 {}", id),
             body: String::new(),
+            product: String::new(),
+            cta: String::new(),
             cover: None,
             images: Vec::new(),
             shots: Vec::new(),
@@ -876,6 +890,7 @@ mod tests {
             scheduled_at: None,
             status: OpsAssetStatus::Draft,
             published_at: None,
+            platform_work_id: None,
             progress: 0,
             created_at: "2026-11-01T09:00:00".to_string(),
             updated_at: "2026-11-01T09:00:00".to_string(),
@@ -1284,7 +1299,7 @@ mod parity_tests {
 
     #[test]
     fn asset_status_values_exist_in_ts_contract() {
-        for value in ["draft", "ready", "published"] {
+        for value in ["draft", "ready", "published", "unverified"] {
             assert_ts_array_has(TS_OPS, "OPS_ASSET_STATUSES", value);
         }
     }

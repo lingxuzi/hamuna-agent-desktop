@@ -199,12 +199,23 @@ export type OpsView = OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewV
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** 素材在管线里的四个位置。`pending` / `scheduled` 由 `scheduledAt` 派生，不是存储状态。 */
-export type OpsAssetSlot = 'draft' | 'pending' | 'scheduled' | 'published';
+/**
+ * 素材在管线里的位置。`pending` / `scheduled` 由 `scheduledAt` 派生，不是存储
+ * 状态；`unverified` 是存储状态（`OpsAssetStatus`），单独成一档是因为它和
+ * `published` 之间差的不是流程位置，而是「有没有平台侧证据」——混在一起显示
+ * 会让「提交了」看起来像「发出去了」。
+ */
+export type OpsAssetSlot = 'draft' | 'pending' | 'scheduled' | 'unverified' | 'published';
 
 const TOPIC_SOURCE_ORDER: readonly OpsTopicSource[] = ['hotspot', 'benchmark', 'reflection', 'manual'];
 
-const ASSET_SLOT_ORDER: readonly OpsAssetSlot[] = ['draft', 'pending', 'scheduled', 'published'];
+const ASSET_SLOT_ORDER: readonly OpsAssetSlot[] = [
+  'draft',
+  'pending',
+  'scheduled',
+  'unverified',
+  'published',
+];
 
 function parseDate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -301,6 +312,7 @@ function sumEntries<T>(items: T[], keyOf: (item: T) => string, valueOf: (item: T
 /** 素材在管线里的位置。排期不是独立实体，是素材字段的投影。 */
 export function assetSlot(asset: OpsAsset): OpsAssetSlot {
   if (asset.status === 'published') return 'published';
+  if (asset.status === 'unverified') return 'unverified';
   if (asset.status === 'ready') return asset.scheduledAt ? 'scheduled' : 'pending';
   return 'draft';
 }
@@ -371,7 +383,12 @@ export function deriveAssetView(state: OpsState, now: Date): OpsAssetView {
     return isInWeek(updated, weekStart, weekEnd);
   }).length;
 
-  const notPublished = state.assets.filter((a) => a.status !== 'published');
+  // 制作中的池子只放「还在做」的。`unverified` 不是在做——内容已经提交出去了，
+  // 差的是核实，混进来会让「卡在 100% 好几天」看起来像制作停滞。
+  // ponytail: 未核实的素材目前只在状态分布条上可见；需要一个专门的角落时再加。
+  const notPublished = state.assets.filter(
+    (a) => a.status !== 'published' && a.status !== 'unverified',
+  );
   const pool: OpsAssetRow[] = [...notPublished]
     .sort((a, b) => {
       const bucket = (x: OpsAsset) => (x.status === 'draft' ? 0 : 1);

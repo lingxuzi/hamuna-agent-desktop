@@ -33,6 +33,8 @@ function asset(patch: Partial<OpsAsset> & Pick<OpsAsset, 'id'>): OpsAsset {
     topicId: 't1',
     title: patch.id,
     body: '',
+    product: '',
+    cta: '',
     cover: null,
     images: [],
     shots: [],
@@ -40,6 +42,7 @@ function asset(patch: Partial<OpsAsset> & Pick<OpsAsset, 'id'>): OpsAsset {
     scheduledAt: null,
     status: 'draft',
     publishedAt: null,
+    platformWorkId: null,
     progress: 0,
     createdAt: '2026-11-01T09:00:00',
     updatedAt: '2026-11-01T09:00:00',
@@ -172,6 +175,13 @@ const ASSETS: OpsAsset[] = [
     scheduledAt: '2026-11-17T12:00:00',
     updatedAt: '2026-11-13T08:00:00',
   }),
+  asset({
+    id: 'a8',
+    title: '提交了但回读不到',
+    status: 'unverified',
+    progress: 100,
+    updatedAt: '2026-11-13T07:00:00',
+  }),
 ];
 
 const REVIEWS: OpsReview[] = [
@@ -279,7 +289,8 @@ describe('素材域派生', () => {
   });
 
   it('本周完成按本周一为起点算，上周的不算', () => {
-    expect(view.metrics[2].value).toBe(4);
+    // 5 = a3/a4/a5/a7 + a8（unverified 也算本周做完了内容，不算的只有草稿）。
+    expect(view.metrics[2].value).toBe(5);
   });
 
   it('池子里草稿在前，同类按滞留时长倒序', () => {
@@ -301,8 +312,13 @@ describe('素材域派生', () => {
       ['draft', 2, 100],
       ['pending', 1, 50],
       ['scheduled', 2, 100],
+      ['unverified', 1, 50],
       ['published', 2, 100],
     ]);
+  });
+
+  it('unverified 不进「制作中」池子 —— 内容已经交出去了，卡点不在制作', () => {
+    expect(view.pool.map((r) => r.id)).not.toContain('a8');
   });
 });
 

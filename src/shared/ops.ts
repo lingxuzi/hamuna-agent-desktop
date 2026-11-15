@@ -57,10 +57,22 @@ export const OPS_TOPIC_SOURCES: readonly OpsTopicSource[] = [
   'reflection',
 ];
 
-/** 素材状态：草稿 → 定稿 → 已投放。 */
-export type OpsAssetStatus = 'draft' | 'ready' | 'published';
+/**
+ * 素材状态：草稿 → 定稿 → （已投放 | 未核实）。
+ *
+ * `unverified` = 已经点过提交，但**没有平台侧证据**证明它真的发出去了。
+ * 它和 `published` 的区别就是这一条证据：`published` 只由发布后的回读
+ * （到创作者后台的作品列表里找到这条）置位。界面上两者必须视觉可分——
+ * 把「提交了」显示成「发出去了」是这套自动化里唯一不可逆的谎。
+ */
+export type OpsAssetStatus = 'draft' | 'ready' | 'published' | 'unverified';
 
-export const OPS_ASSET_STATUSES: readonly OpsAssetStatus[] = ['draft', 'ready', 'published'];
+export const OPS_ASSET_STATUSES: readonly OpsAssetStatus[] = [
+  'draft',
+  'ready',
+  'published',
+  'unverified',
+];
 
 /** 规则状态：提议 → 生效。 */
 export type OpsRuleStatus = 'proposed' | 'active';
@@ -132,6 +144,16 @@ export interface OpsAsset {
   title: string;
   /** 正文 / 脚本。 */
   body: string;
+  /**
+   * 这条内容要宣传的产品 / 服务。空 = 纯内容，不带转化。
+   *
+   * **为什么挂在素材上而不是选题上**：选题的 `angle` 是「从哪个角度切」，
+   * 而产品和转化目标是这条内容最终要对齐的东西——同一条选题换个产品就是
+   * 另一条内容。两边都放等于同一个字符串有两个权威，迟早不一致。
+   */
+  product: string;
+  /** 期望观众做的动作（关注 / 进店 / 领券…）。和 `product` 一起构成 CTA 的锚。 */
+  cta: string;
   /** 工作区内的相对路径，如 `ops/assets/cover.png`。 */
   cover: string | null;
   images: string[];
@@ -141,6 +163,11 @@ export interface OpsAsset {
   scheduledAt: string | null;
   status: OpsAssetStatus;
   publishedAt: string | null;
+  /**
+   * 平台侧的作品 id。发布后回读（在创作者后台的作品列表里匹配到这一条）才
+   * 填得出来，所以 `null` 是常态：提交了但没核实，就还没有它。
+   */
+  platformWorkId: string | null;
   /** 制作完成度 0–100。Agent 每次改素材更新一次。 */
   progress: number;
   createdAt: string;

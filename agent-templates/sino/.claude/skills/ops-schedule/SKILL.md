@@ -51,7 +51,7 @@ hamuna ops update asset --id asset-1a2b3c4d --scheduled-at 2026-11-18T12:00:00+0
 
 ## 不要做
 
-- **不发布。** 到点了也不发，提醒用户发。
+- **发布不归这个 skill。** 排期只写时间字段；到点由心跳那条线去发（见 `HEARTBEAT.md`）。
 - 不在用户没同意的情况下改动已定的排期。
 - **不要直接编辑 `ops/state.json`** —— 排期就是 asset 的两个字段，走 `ops update asset`。
 - 不为了填满日历硬排没做完的素材。
