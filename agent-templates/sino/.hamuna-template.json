@@ -1,0 +1,10 @@
+{
+  "templateId": "sino",
+  "userOwned": [
+    ".gitignore",
+    ".claude/rules/03-USER.md",
+    ".claude/rules/04-MEMORY.md",
+    "memory",
+    "ops"
+  ]
+}

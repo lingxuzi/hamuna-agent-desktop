@@ -679,6 +679,17 @@ fn create_new_session_sidecar<R: Runtime>(
         manager_guard.remove_sidecar(session_id);
     }
 
+    // A workspace is a one-time copy of a template; the template evolves with
+    // the app and the copy does not. Converge BEFORE the sidecar starts, so
+    // the agent's first turn already reads the current contract (skills,
+    // ledger discipline) instead of a stale one — the ops panel names the
+    // `ops-direction` skill, and a workspace created before that skill
+    // existed makes the agent improvise instead.
+    //
+    // Fail-open: a workspace without a template, a template without a
+    // manifest, or any IO error must never keep a session from starting.
+    crate::workspace_files::template_sync::sync_workspace_template(app_handle, workspace_path);
+
     // Need to start a new Sidecar
     // First, find executables
     let node_path =

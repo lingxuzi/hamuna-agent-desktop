@@ -41,6 +41,7 @@ pub mod skill_sync;
 pub mod skills_config;
 pub mod slash;
 pub mod system_open;
+pub mod template_sync;
 #[cfg(test)]
 pub(crate) mod test_support;
 pub mod transfer;

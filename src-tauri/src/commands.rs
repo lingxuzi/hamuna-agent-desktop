@@ -38,6 +38,9 @@ use crate::sidecar::{
     SidecarStatus,
     GLOBAL_SIDECAR_ID,
 };
+use crate::workspace_files::template_sync::{
+    resolve_template_source, validate_template_id, TEMPLATE_MANIFEST_FILE,
+};
 use crate::{ulog_error, ulog_info, ulog_warn};
 
 const NETWORK_PROBE_USER_AGENT: &str = "HamunaAgent-Network-Probe/1.0";
@@ -1953,8 +1956,9 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let name = entry.file_name();
-        // Skip .git and node_modules
-        if name == ".git" || name == "node_modules" {
+        // Skip .git, node_modules and the template manifest (it describes the
+        // template — it is not part of what the template ships).
+        if name == ".git" || name == "node_modules" || name == TEMPLATE_MANIFEST_FILE {
             continue;
         }
         // Skip symlinks to avoid circular copies and unexpected data
@@ -2101,15 +2105,6 @@ fn create_workspace_from_bundled_template_blocking<R: Runtime>(
     ))
 }
 
-/// Validate a bundled template_id — rejects path separators, traversal, and empty IDs.
-/// Single source of truth so all template-using commands inherit the same rules.
-fn validate_template_id(id: &str) -> Result<(), String> {
-    if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") {
-        return Err("Invalid template ID".to_string());
-    }
-    Ok(())
-}
-
 /// Validate a workspace destination path for template apply. Reuses `validate_file_path`'s
 /// system/credential blacklist (so we can't accidentally write template files into `~/.ssh`,
 /// `/etc`, or other protected dirs) AND requires the path to exist as a real directory.
@@ -2125,88 +2120,6 @@ fn validate_workspace_dest(dest_path: &str) -> Result<PathBuf, String> {
     Ok(resolved)
 }
 
-/// Resolve a template source directory from either a bundled template_id or a user
-/// template source_path. Returns the CANONICAL path (symlinks resolved) — callers must
-/// use this exact path for any subsequent reads/copies, otherwise a TOCTOU window opens
-/// where an attacker could replace the validated source with a symlink to elsewhere
-/// between this validation and the later read.
-fn resolve_template_source<R: Runtime>(
-    app_handle: &AppHandle<R>,
-    template_id: Option<String>,
-    source_path: Option<String>,
-) -> Result<PathBuf, String> {
-    if let Some(id) = template_id.as_deref() {
-        validate_template_id(id)?;
-        let resource_dir = app_dirs::resource_dir(&app_handle)?;
-        let bundled = resource_dir.join(id);
-        if bundled.exists() && bundled.join("CLAUDE.md").exists() {
-            // Canonicalize so subsequent reads can't be redirected via symlink swap.
-            return bundled
-                .canonicalize()
-                .map_err(|e| format!("Failed to resolve bundled template path: {}", e));
-        }
-        let home_dir = dirs::home_dir().ok_or("Failed to get home dir")?;
-        let local = home_dir.join(".hamuna").join("projects").join(id);
-        if local.exists() && local.join("CLAUDE.md").exists() {
-            return local
-                .canonicalize()
-                .map_err(|e| format!("Failed to resolve local template path: {}", e));
-        }
-        return Err(format!("Bundled template '{}' not found", id));
-    }
-    if let Some(p) = source_path.as_deref() {
-        let src = PathBuf::from(p);
-        if !src.exists() {
-            return Err(format!("Template source not found: {}", p));
-        }
-        let home_dir = dirs::home_dir().ok_or("Failed to get home dir")?;
-        let templates_dir = home_dir.join(".hamuna").join("templates");
-        if !templates_dir.exists() {
-            return Err("Templates directory does not exist".to_string());
-        }
-        let canon_templates = templates_dir
-            .canonicalize()
-            .map_err(|e| format!("Failed to resolve templates dir: {}", e))?;
-        let canon_src = src
-            .canonicalize()
-            .map_err(|e| format!("Failed to resolve source path: {}", e))?;
-        if !canon_src.starts_with(&canon_templates) {
-            return Err("Source path must be inside ~/.hamuna/templates/".to_string());
-        }
-        // Return canonical path (not the original `src`) — closes the TOCTOU between
-        // validation and consumption, since the caller will read from canon_src directly.
-        return Ok(canon_src);
-    }
-    Err("Either template_id or source_path is required".to_string())
-}
-
-/// Walk a template directory and collect relative file paths (skipping .git / node_modules /
-/// symlinks). Used by the preview command to compute overwrite vs add classifications.
-fn list_template_files_rel(src: &Path) -> std::io::Result<Vec<PathBuf>> {
-    fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let name = entry.file_name();
-            if name == ".git" || name == "node_modules" {
-                continue;
-            }
-            let file_type = entry.file_type()?;
-            if file_type.is_symlink() {
-                continue;
-            }
-            let p = entry.path();
-            if file_type.is_dir() {
-                walk(root, &p, out)?;
-            } else if let Ok(rel) = p.strip_prefix(root) {
-                out.push(rel.to_path_buf());
-            }
-        }
-        Ok(())
-    }
-    let mut out = Vec::new();
-    walk(src, src, &mut out)?;
-    Ok(out)
-}
 
 #[derive(serde::Serialize)]
 pub struct TemplateApplyPreview {
@@ -2242,8 +2155,8 @@ fn template_apply_preview_blocking<R: Runtime>(
     // template apply at e.g. `~/.ssh` or `/etc`.
     let dst = validate_workspace_dest(dest_path)?;
     let src = resolve_template_source(&app_handle, template_id, source_path)?;
-    let files =
-        list_template_files_rel(&src).map_err(|e| format!("Failed to walk template: {}", e))?;
+    let files = crate::workspace_files::template_sync::list_template_files_rel(&src)
+        .map_err(|e| format!("Failed to walk template: {}", e))?;
     let mut overwrite = Vec::new();
     let mut add = Vec::new();
     for rel in files {
@@ -3152,7 +3065,7 @@ fn merge_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let name = entry.file_name();
-        if name == ".git" || name == "node_modules" {
+        if name == ".git" || name == "node_modules" || name == TEMPLATE_MANIFEST_FILE {
             continue;
         }
         let ft = entry.file_type()?;

@@ -1,0 +1,11 @@
+{
+  "templateId": "mino",
+  "userOwned": [
+    ".gitignore",
+    ".claude/rules/01-IDENTITY.md",
+    ".claude/rules/02-SOUL.md",
+    ".claude/rules/03-USER.md",
+    ".claude/rules/04-MEMORY.md",
+    "memory"
+  ]
+}
