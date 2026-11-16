@@ -389,9 +389,13 @@
 /* ── 卡片网格 ─────────────────────────────────────── */
 /* 复盘域四张卡排 2×2；非复盘域两张，显式指定位置让**主列表占宽列**——
    靠 DOM 顺序会让分布卡占掉宽列、主列表被挤进窄列，正好反过来。 */
+/* 两列都必须能缩到内容的 min-content 以下（minmax(0, …)）。卡里的标题是
+   **不换行**的一行字（nowrap + 省略号），它的 min-content 就是整句宽度；
+   轨道若按 auto 最小值撑开，方向域会横向溢出面板 —— 「定稿进度」被挤成
+   标题每个字一行的竖条，「账号方向」整张卡探出面板外还带出横向滚动条。 */
 .ops-grid {
   display: grid;
-  grid-template-columns: 1.62fr 1fr;
+  grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
@@ -500,7 +504,8 @@
 }
 .ops-bars li {
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* 名字列可缩：名字自带省略号，窄栏下该省略而不是把整卡撑宽。 */
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px 10px;
   align-items: baseline;
   padding: 9px 0;
@@ -561,7 +566,7 @@
 /* ── 主列表 ───────────────────────────────────────── */
 .ops-list-head {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   font-family: var(--font-code);
   font-size: 12px;
@@ -572,6 +577,8 @@
 .ops-list {
   list-style: none;
   display: grid;
+  /* 行的标题不换行，轨道必须能缩到 min-content 以下，否则整张卡横向溢出。 */
+  grid-template-columns: minmax(0, 1fr);
 }
 .ops-list li + li {
   border-top: 1px solid var(--line-subtle);
@@ -727,7 +734,7 @@
 .ops-dir-body {
   margin: 0 0 4px 46px;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 6px 12px;
   align-items: baseline;
 }
