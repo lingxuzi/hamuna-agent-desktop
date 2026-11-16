@@ -596,7 +596,9 @@
 }
 /* 字牌：中性底 + 深墨字。不上色相 —— 色相没有语义（同一个「早」出现两次却
    不同色），而且白字压在陶土/橄榄/蓝灰上只有 2.6–3.8:1，不过 AA。 */
-.ops-list .thumb {
+/* 字牌不止列表用（账号卡、方向卡也用），所以规则不带 `.ops-list` 前缀 ——
+   带前缀的话，账号卡里的字牌会掉回浏览器默认样式，方块和平台色点全没了。 */
+.ops-thumb {
   position: relative;
   flex: none;
   width: 34px;
@@ -611,7 +613,7 @@
 }
 /* 平台色块：右下角 6px 小方，与首字合成双编码 —— 只看首字时
    「早八人的早餐」和「早睡挑战」会撞成同一个字。 */
-.ops-list .thumb::after {
+.ops-thumb::after {
   content: '';
   position: absolute;
   right: 3px;
@@ -622,13 +624,13 @@
   box-shadow: 0 0 0 1.5px var(--paper-elevated);
   background: var(--ink-subtle);
 }
-.ops-list .thumb[data-platform='douyin']::after { background: var(--ops-data); }
-.ops-list .thumb[data-platform='xiaohongshu']::after { background: var(--accent-warm); }
-.ops-list .thumb[data-platform='weixin-channels']::after { background: var(--ink-secondary); }
-.ops-list .thumb[data-platform='bilibili']::after { background: var(--accent-sky); }
-.ops-list .thumb[data-platform='kuaishou']::after { background: var(--warning); }
-.ops-list .thumb[data-platform='zhihu']::after { background: var(--info); }
-.ops-list .thumb[data-platform='wechat-mp']::after { background: var(--success); }
+.ops-thumb[data-platform='douyin']::after { background: var(--ops-data); }
+.ops-thumb[data-platform='xiaohongshu']::after { background: var(--accent-warm); }
+.ops-thumb[data-platform='weixin-channels']::after { background: var(--ink-secondary); }
+.ops-thumb[data-platform='bilibili']::after { background: var(--accent-sky); }
+.ops-thumb[data-platform='kuaishou']::after { background: var(--warning); }
+.ops-thumb[data-platform='zhihu']::after { background: var(--info); }
+.ops-thumb[data-platform='wechat-mp']::after { background: var(--success); }
 
 /* 排期域的时间格：日期在上、星期在下，与字牌同宽同位，切域时列表左缘不跳。 */
 .ops-list .date {
@@ -1242,9 +1244,16 @@
   align-items: center;
   gap: 10px;
 }
-/* 字牌沿用列表那套（右下角平台色块），只是字号小一档：两个字放得下。 */
-.ops-acc-card-head .thumb {
+/* 字牌沿用列表那套（右下角平台色块），只是小一档：卡片比列表行紧凑。 */
+.ops-acc-card-head .ops-thumb {
+  width: 26px;
+  height: 26px;
   font-size: 12px;
+}
+/* 色点外圈要跟所在纸面同色，否则在账号卡（纸面比列表浅一档）上会露出
+   一圈白边。 */
+.ops-acc-card-head .ops-thumb::after {
+  box-shadow: 0 0 0 1.5px var(--paper);
 }
 .ops-acc-card-name {
   font-size: 14px;

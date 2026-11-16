@@ -92,7 +92,7 @@ function DirectionRow({
   return (
     <li className={row.hasProposal ? 'pending' : undefined}>
       <div className="ops-list-row">
-        <span className="thumb" data-platform={row.platform} aria-hidden="true">
+        <span className="ops-thumb" data-platform={row.platform} aria-hidden="true">
           {headline.trim().charAt(0) || '·'}
         </span>
         <span className="t">

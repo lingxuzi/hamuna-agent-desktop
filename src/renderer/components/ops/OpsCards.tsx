@@ -94,7 +94,7 @@ export function OpsDistCard({
 function Thumb({ platform, title }: { platform: string | null; title: string }) {
   const initial = title.trim().charAt(0) || '·';
   return (
-    <span className="thumb" data-platform={platform ?? undefined} aria-hidden="true">
+    <span className="ops-thumb" data-platform={platform ?? undefined} aria-hidden="true">
       {initial}
     </span>
   );

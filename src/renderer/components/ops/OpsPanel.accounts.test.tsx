@@ -115,6 +115,28 @@ describe('OpsPanel 账号视图', () => {
     expect(screen.getAllByText('未登录')).toHaveLength(5);
   });
 
+  it('账号卡的平台字牌用独立类名，不会掉回浏览器默认样式', async () => {
+    await openAccounts();
+
+    // 字牌曾经挂在 `.ops-list .thumb` 这条**后代**选择器下：列表里的字牌有样式，
+    // 账号卡不在 .ops-list 里，于是平台色点掉回浏览器默认（透明方块 + 无边框），
+    // 界面上就是一块灰底方块认不出平台。字牌因此改成独立的 `.ops-thumb`，
+    // 样式不再依赖祖先容器 —— 这条断言就是钉住这个类名。
+    const thumbs = Array.from(document.querySelectorAll('.ops-acc-card .ops-thumb'));
+    expect(thumbs).toHaveLength(7);
+    expect(thumbs.map((el) => el.getAttribute('data-platform'))).toEqual([
+      'xiaohongshu',
+      'douyin',
+      'kuaishou',
+      'weixin-channels',
+      'bilibili',
+      'zhihu',
+      'wechat-mp',
+    ]);
+    // 角标是 2–3 个字（「公众号」），塞进 26px 的方块会顶出边框 —— 只取首字。
+    expect(thumbs.map((el) => el.textContent)).toEqual(['小', '抖', '快', '视', 'B', '知', '公']);
+  });
+
   it('改账号名写回这个工作区的台账', async () => {
     const user = await openAccounts();
 

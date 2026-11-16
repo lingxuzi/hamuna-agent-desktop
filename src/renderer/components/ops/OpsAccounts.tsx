@@ -93,8 +93,10 @@ export function OpsAccounts({ workspace, accounts, onLogin }: OpsAccountsProps) 
           return (
             <article className="ops-acc-card" key={platform.id}>
               <div className="ops-acc-card-head">
-                <span className="thumb" data-platform={platform.id}>
-                  {platform.badge}
+                <span className="ops-thumb" data-platform={platform.id}>
+                  {/* 首字 + 平台色点 = 双编码。角标是 2–3 个字（「公众号」），
+                      塞进 26px 的方块会顶出来；平台名就在旁边，不靠角标认。 */}
+                  {platform.badge.charAt(0)}
                 </span>
                 <span className="ops-acc-card-name">{platformLabel(t, platform.id)}</span>
               </div>
