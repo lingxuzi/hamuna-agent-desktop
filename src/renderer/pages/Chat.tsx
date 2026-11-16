@@ -5296,10 +5296,24 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                 workspace={agentDir}
                 onClose={() => setOpsOpen(false)}
                 onSendToAgent={(text) => {
-                  // 面板关掉再把消息送进去：否则用户看到的是自己的话被面板
-                  // 盖住，不知道到底有没有发出去。
+                  // 必须走 dispatchSend，不能直接调 sendMessage。
+                  //
+                  // sendMessage 的 model / permissionMode / providerEnv 全是可选参数，
+                  // 省略不等于「保持现状」：TabProvider 会把它填成
+                  // `providerMode ?? 'auto'` 和 `providerEnv ?? 'subscription'`，
+                  // 而 'subscription' 的语义是「切回 Anthropic 官方订阅」
+                  // （agent-session.ts 的 providerEnv 三态判定）。用户在对话区选了
+                  // 第三方 provider 的模型时，这里一省略就把会话重启到订阅 provider，
+                  // 模型跟着掉回默认 —— 这正是「运营台不用当前选的模型」。
+                  //
+                  // dispatchSend 是对话区发送的唯一入口，它带上 effectiveModel /
+                  // providerRoute / providerEnv，并且顺带跑余额守卫、跨 runtime 守卫、
+                  // provider 不可用守卫和队列上限。automate: false —— 这是一次性提问，
+                  // 不该被 cron / goal 模式截走。
+                  //
+                  // 面板先关：否则用户看到的是自己的话被面板盖住，不知道发出去没有。
                   setOpsOpen(false);
-                  void sendMessage(text);
+                  void dispatchSend(text, undefined, false);
                 }}
               />
             </Suspense>
