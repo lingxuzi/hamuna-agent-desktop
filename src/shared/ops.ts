@@ -51,7 +51,9 @@ export type OpsItemKind =
   | 'rule'
   | 'style'
   | 'direction'
-  | 'account';
+  | 'account'
+  | 'clue'
+  | 'benchmark';
 
 export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'topic',
@@ -61,6 +63,8 @@ export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'style',
   'direction',
   'account',
+  'clue',
+  'benchmark',
 ];
 
 /** 选题状态：想法 → 排进制作 → 已产出。 */
@@ -129,6 +133,15 @@ export const isOpsDirectionStatus = (value: unknown): value is OpsDirectionStatu
 
 export const isOpsLoginState = (value: unknown): value is OpsLoginState =>
   isOneOf(value, OPS_LOGIN_STATES);
+
+export const isOpsClueIntent = (value: unknown): value is OpsClueIntent =>
+  isOneOf(value, OPS_CLUE_INTENTS);
+
+export const isOpsClueStatus = (value: unknown): value is OpsClueStatus =>
+  isOneOf(value, OPS_CLUE_STATUSES);
+
+export const isOpsBenchmarkSource = (value: unknown): value is OpsBenchmarkSource =>
+  isOneOf(value, OPS_BENCHMARK_SOURCES);
 
 /** 一条选题：值得做成什么，还不含成品。 */
 export interface OpsTopic {
@@ -314,6 +327,32 @@ export type OpsLoginState = 'unknown' | 'success' | 'expired';
 export const OPS_LOGIN_STATES: readonly OpsLoginState[] = ['unknown', 'success', 'expired'];
 
 /**
+ * 线索的**意图**分类：观众到底在问什么。
+ *
+ * 只分四类：分类的用处是「这批线索里有多少人在问价」，四档已经够回答那个
+ * 问题；再细分只会让写的人纠结。
+ */
+export type OpsClueIntent = 'price' | 'where' | 'howto' | 'other';
+
+export const OPS_CLUE_INTENTS: readonly OpsClueIntent[] = ['price', 'where', 'howto', 'other'];
+
+/** 线索状态：刚采到 → 值得跟进 → 处理完留档。 */
+export type OpsClueStatus = 'new' | 'qualified' | 'archived';
+
+export const OPS_CLUE_STATUSES: readonly OpsClueStatus[] = ['new', 'qualified', 'archived'];
+
+/**
+ * 对标账号的来源。
+ *
+ * `agent` = Agent 找的候选。这种**要等人点头**才落库——方向是策略，对标是
+ * 策略的参照系，Agent 自选自用等于没人复核。`user` = 人直接给的，人给的话
+ * 本身就是授权。
+ */
+export type OpsBenchmarkSource = 'user' | 'agent';
+
+export const OPS_BENCHMARK_SOURCES: readonly OpsBenchmarkSource[] = ['user', 'agent'];
+
+/**
  * 一条待确认的修订。
  *
  * **没提到的字段 = 这次不改它**（键缺失），不是「要清空」。修订常常只动一两个
@@ -360,6 +399,61 @@ export interface OpsAccount {
   updatedAt: string;
 }
 
+/**
+ * 一条**评论线索**：观众在我们自己作品下面说的话。
+ *
+ * 为什么单独存一条：复盘里只有 `metrics.comments`（评论**数**），那是结果。
+ * 观众问「多少钱 / 哪里买 / 怎么用」才是需求本身——选题最该读的东西。
+ *
+ * `commentId` 是平台侧的评论 id，天然键是 `(platform, commentId)`：同一段
+ * 评论被反复采集只会合并成一条。
+ */
+export interface OpsClue {
+  id: string;
+  platform: SocialPlatformId;
+  /** 我们自己那条素材（作品）。`null` = 还没归到具体素材。 */
+  assetId: string | null;
+  /** 平台侧评论 id。天然键的一半。 */
+  commentId: string;
+  /** 楼中楼的上级评论 id。 */
+  parentCommentId: string | null;
+  /** 评论者的平台 uid。没读到就是 `null`——昵称会改，不能当身份。 */
+  authorUid: string | null;
+  authorName: string;
+  /** 评论正文原文。截断也留着原文，不要改写。 */
+  content: string;
+  intent: OpsClueIntent;
+  status: OpsClueStatus;
+  /** 跟进备注。 */
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 一条**对标账号**：方向相近、规模更大的参照系。
+ *
+ * 只存「为什么对标它」和「核实到的证据」，**不存粉丝数快照**——存了就是个
+ * 会过期的数字，过期后它变成一句谎。规模写进 `evidence`。
+ *
+ * 天然键是 `(platform, profileUrl)`。
+ */
+export interface OpsBenchmark {
+  id: string;
+  platform: SocialPlatformId;
+  /** 账号名 / 昵称。 */
+  name: string;
+  /** 主页链接。天然键的一半。 */
+  profileUrl: string;
+  /** 为什么对标它：定位上的相似点，不是「内容好」。 */
+  why: string;
+  /** 核实到的证据（规模、受众、更新频率……）。空 = 还没核实过。 */
+  evidence: string;
+  source: OpsBenchmarkSource;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 风格卡：工作区级，单条。 */
 export interface OpsStyle {
   id: string;
@@ -386,6 +480,10 @@ export interface OpsState {
   assets: OpsAsset[];
   reviews: OpsReview[];
   rules: OpsRule[];
+  /** 评论线索（观众在我们作品下面说的话）。天然键 `(platform, commentId)`。 */
+  clues: OpsClue[];
+  /** 对标账号。天然键 `(platform, profileUrl)`。 */
+  benchmarks: OpsBenchmark[];
   style: OpsStyle | null;
 }
 
@@ -399,6 +497,8 @@ export function emptyOpsState(): OpsState {
     assets: [],
     reviews: [],
     rules: [],
+    clues: [],
+    benchmarks: [],
     style: null,
   };
 }
@@ -419,6 +519,8 @@ export interface OpsUpsertFieldMap {
   style: Partial<OpsStyle>;
   direction: Partial<OpsDirection>;
   account: Partial<OpsAccount>;
+  clue: Partial<OpsClue>;
+  benchmark: Partial<OpsBenchmark>;
 }
 
 /** 写入载荷：`kind` + 这次要动的字段。 */

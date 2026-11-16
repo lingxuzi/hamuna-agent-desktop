@@ -2506,17 +2506,34 @@ function formatObject(obj: Record<string, unknown> | undefined, indent = '  '): 
 // ---------------------------------------------------------------------------
 
 const OPS_VERBS = ['list', 'add', 'update', 'remove'] as const;
-const OPS_KINDS = ['direction', 'topic', 'asset', 'review', 'rule', 'account'] as const;
+const OPS_KINDS = [
+  'direction',
+  'topic',
+  'asset',
+  'review',
+  'rule',
+  'account',
+  'clue',
+  'benchmark',
+] as const;
 
 type OpsKind = (typeof OPS_KINDS)[number];
 
 /**
- * 按平台定位的记录类型：每平台一条，id 从平台派生。
+ * 天然键类型：id 能从别的字段推出来，所以 `update` 不要求 `--id`。
  *
- * 这类记录的 update 不要求 `--id`——调用方手上通常只有平台，让它先 list
- * 一遍把 id 抄回来是白跑一趟（Rust 侧会用平台找到同一条）。
+ * 这类记录的 update 不要求 `--id`——调用方手上通常只有天然键，让它先 list
+ * 一遍把 id 抄回来是白跑一趟（Rust 侧会用天然键找到同一条）。
+ *
+ * 方向 / 账号的天然键是平台；线索是 `(platform, commentId)`；对标账号是
+ * `(platform, profileUrl)`。天然键少一半都定位不到唯一一条。
  */
-const OPS_PLATFORM_KEYED_KINDS: readonly OpsKind[] = ['direction', 'account'];
+const OPS_NATURAL_KEY: Partial<Record<OpsKind, string[]>> = {
+  direction: ['platform'],
+  account: ['platform'],
+  clue: ['platform', 'commentId'],
+  benchmark: ['platform', 'profileUrl'],
+};
 
 interface OpsCommand {
   verb: string;
@@ -2614,6 +2631,31 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     // 界面显示「已登录」而实际没登录，然后照着这个假状态去自动发布。
     { field: 'displayName', flag: 'displayName', type: 'text' },
   ],
+  clue: [
+    { field: 'platform', flag: 'platform', type: 'text', required: true },
+    // 天然键的一半：同一段评论反复采集只合并成一条。没有它就判不了重，
+    // 重复采集会把「多少人问价」灌上假数。
+    { field: 'commentId', flag: 'commentId', type: 'text', required: true },
+    { field: 'assetId', flag: 'assetId', type: 'text' },
+    { field: 'parentCommentId', flag: 'parentCommentId', type: 'text' },
+    { field: 'authorUid', flag: 'authorUid', type: 'text' },
+    { field: 'authorName', flag: 'authorName', type: 'text' },
+    // 评论正文可能带引号和换行，inline shell 引号是灾难——照 --body-file 的
+    // 先例，长文本走文件。
+    { field: 'content', flag: 'content', type: 'text', fileFlag: 'contentFile' },
+    { field: 'intent', flag: 'intent', type: 'text' },
+    { field: 'status', flag: 'status', type: 'text' },
+    { field: 'note', flag: 'note', type: 'text' },
+  ],
+  benchmark: [
+    { field: 'platform', flag: 'platform', type: 'text', required: true },
+    // 天然键的一半：同一个主页只能有一条对标。
+    { field: 'profileUrl', flag: 'profileUrl', type: 'text', required: true },
+    { field: 'name', flag: 'name', type: 'text' },
+    { field: 'why', flag: 'why', type: 'text', fileFlag: 'whyFile' },
+    { field: 'evidence', flag: 'evidence', type: 'text', fileFlag: 'evidenceFile' },
+    { field: 'source', flag: 'source', type: 'text' },
+  ],
 };
 
 /** State keys of the ledger, per record kind. */
@@ -2624,6 +2666,8 @@ const OPS_SECTIONS: Array<{ key: string; kind: OpsKind; label: string }> = [
   { key: 'reviews', kind: 'review', label: 'Reviews' },
   { key: 'rules', kind: 'rule', label: 'Rules' },
   { key: 'accounts', kind: 'account', label: 'Accounts' },
+  { key: 'clues', kind: 'clue', label: 'Clues' },
+  { key: 'benchmarks', kind: 'benchmark', label: 'Benchmarks' },
 ];
 
 /**
@@ -2904,6 +2948,23 @@ function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
           `  ${id}  ${String(record.platform ?? '')} · ` +
           `${String(record.loginState ?? 'unknown')}${checked}${name ? `  ${name}` : ''}`,
         );
+      } else if (section.kind === 'clue') {
+        // 线索：意图 + 状态是两根轴，正文才是内容。作者名可能空（没读到昵称）。
+        const author = String(record.authorName ?? '');
+        const content = String(record.content ?? '');
+        console.log(
+          `  ${id}  ${String(record.platform ?? '')} · ${String(record.intent ?? 'other')} · ` +
+          `${String(record.status ?? 'new')}${author ? `  ${author}` : ''}`,
+        );
+        if (content) console.log(`    ${content}`);
+      } else if (section.kind === 'benchmark') {
+        // 对标账号：来源徽标（人给的 / 我找的）+ 主页链接 + 为什么。
+        console.log(
+          `  ${id}  ${String(record.platform ?? '')} · ${String(record.source ?? 'user')}  ` +
+          `${String(record.name ?? '')}`,
+        );
+        console.log(`    ${String(record.profileUrl ?? '')}`);
+        if (record.why) console.log(`    ${String(record.why)}`);
       } else {
         console.log(
           `  ${id}  ${String(record.name ?? '')}  ` +
@@ -4424,14 +4485,19 @@ export function buildRequestBody(
       const item = buildOpsItem(kind, flags, cmd.verb === 'add');
       if (cmd.verb === 'update') {
         const id = opsStringFlag(flags, 'id');
-        // 按平台定位的记录（方向、账号）：每平台一条，id 从平台派生。要求
-        // `--id` 会让调用方先去 list 一遍把 id 抄回来，而 platform 已经在
-        // 补丁里了 —— Rust 侧的 upsert 会用它找到同一条。
-        const platformKeyed = OPS_PLATFORM_KEYED_KINDS.includes(kind);
-        if (!id && !(platformKeyed && item.platform !== undefined)) {
+        // 有天然键的记录（方向、账号、线索、对标）：id 能推出来。要求
+        // `--id` 会让调用方先去 list 一遍把 id 抄回来，而天然键已经在补丁里
+        // 了 —— Rust 侧的 upsert 会用它找到同一条。
+        const naturalKey = OPS_NATURAL_KEY[kind];
+        const hasNaturalKey =
+          naturalKey !== undefined &&
+          naturalKey.every((field) => item[field] !== undefined);
+        if (!id && !hasNaturalKey) {
           console.error(
-            platformKeyed
-              ? `Error: hamuna ops update ${kind} requires --id or --platform.`
+            naturalKey
+              ? `Error: hamuna ops update ${kind} requires --id or ${naturalKey
+                  .map((field) => opsFlagLabel(field))
+                  .join(' and ')}.`
               : 'Error: hamuna ops update requires --id.',
           );
           process.exit(2);

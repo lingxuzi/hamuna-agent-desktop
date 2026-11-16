@@ -306,6 +306,21 @@ hamuna ops update direction --platform douyin --reject-proposal                 
 # 账号清单：每个平台一条，也按 platform 定位（不用 --id）
 hamuna ops list account                             # 本工作区的号 + 登录态
 hamuna ops update account --platform douyin --display-name "露营装备小王"
+
+# 对标账号：按 (platform, profileUrl) 定位（不用 --id）
+hamuna ops list benchmark                           # 当前的对标账号
+hamuna ops add benchmark --platform xiaohongshu --name "露营老张" \
+    --profile-url "https://www.xiaohongshu.com/user/profile/lzycamp" \
+    --why "同样做入门露营装备实测，受众重合在「刚买第一套」" \
+    --evidence "2026-11-16 公开页读到 38.2w 粉" --source agent
+hamuna ops update benchmark --platform xiaohongshu --profile-url "https://..." --why "..."
+
+# 评论线索：按 (platform, commentId) 定位（不用 --id）
+hamuna ops list clue                               # 观众在我们自己作品下面说的话
+hamuna ops add clue --platform xiaohongshu --comment-id "c-abc123" \
+    --asset-id asset-1a2b3c4d --author-name "露营小王" \
+    --content "这个折叠桌多少钱？" --intent price
+hamuna ops update clue --platform xiaohongshu --comment-id "c-abc123" --status qualified
 ```
 
 **方向和账号是按 `--platform` 定位、不需要 `--id` 的记录。** 每个平台至多一条，后端从
@@ -330,6 +345,19 @@ platform 派生 id（方向 `dir-<platform>`、账号 `acc-<platform>`），所�
 **账号是工作区级的。** 账号清单和它的登录态都落在**当前工作区**的台账里——每个工作区有自己的一套浏览器 profile（cookie 不互通），所以换个工作区就是另一批号、另一份登录态。`hamuna ops list account` 只列当前工作区的号；要操作别的工作区就带 `--workspace <path>`。
 
 **你能写的只有账号名（`--display-name`）。** 登录态（`loginState`）**不开放给 CLI**：它的权威是浏览器 cookie，Agent 自己说「已登录」不算数——那会让界面显示「已登录」而实际没登录，然后照着这个假状态去自动发布。登录在 App 的运营台里由人完成。
+
+**线索和对标账号也按天然键定位、不需要 `--id`。** 线索的天然键是 `(platform, commentId)`，
+对标账号是 `(platform, profileUrl)`。**少一半都定位不到唯一一条** —— 重复采集同一条评论会变成两条，
+「多少人问价」就被灌上假数。
+
+| 字段 | 取值 |
+|---|---|
+| `--intent`（线索） | `price`（问价格）/ `where`（问在哪买）/ `howto`（问怎么用）/ `other`。判不出就 `other` |
+| `--status`（线索） | `new` / `qualified` / `archived`。**「值得跟进」是人的判断**，不要自己标 `qualified` |
+| `--source`（对标） | `user`（用户给的）/ `agent`（我找的）。**`agent` 的候选要用户点头才写进台账** |
+
+**别把长文本拼进 shell 引号**：`--content` / `--why` / `--evidence` 各有对应的
+`--content-file` / `--why-file` / `--evidence-file`，内容带引号或换行时走文件。
 
 **何时用：**
 - 用户问「今天做什么」「有哪些选题」「素材到哪了」「上次那条数据怎么样」→ `ops list`（要结构化数据就加 `--json`）

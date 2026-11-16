@@ -197,6 +197,20 @@ export interface SocialPlatformSpec {
   workListUrl?: string;
   /** 数据页 —— 复盘读表现数据。缺 = 未核实。 */
   analyticsUrl?: string;
+  /**
+   * 达人榜 / 对标账号榜入口。缺 = 未核实。
+   *
+   * 冷启动找「方向相似的顶流对标账号」时要读的那页。跟 `publishUrl` 一样，
+   * **缺字段 = 还没核实**，采集线要自己从 `creatorHomeUrl` 出发现场找入口，
+   * 找到后回填到这里并记进 `memory/topics/<平台>.md`。
+   */
+  benchmarkUrl?: string;
+  /**
+   * 创作者后台的评论管理页 —— 读「观众在我们自己作品下面说了什么」。缺 = 未核实。
+   *
+   * 只读，不回。回评论 / 私信 / 加好友一律留给用户。
+   */
+  commentsUrl?: string;
   limits?: SocialPlatformLimits;
   /**
    * 未登录时页面上的文字标记。

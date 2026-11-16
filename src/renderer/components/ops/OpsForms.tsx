@@ -26,19 +26,24 @@ interface DialogProps {
   onClose: () => void;
 }
 
-type SubmitState = { phase: 'idle' | 'submitting' } | { phase: 'error'; message: string };
+export type SubmitState = { phase: 'idle' | 'submitting' } | { phase: 'error'; message: string };
 
 /** 三域共用的提交行：取消 + 主按钮 + 失败原因。成功不在这里展示 —— 对话框
- *  直接关，回执交给 toast 与刷新后的台账数字。 */
+ *  直接关，回执交给 toast 与刷新后的台账数字。
+ *
+ *  `disabled` 由调用方按「这份表单现在能不能提交」给：主键没填时按钮就该是
+ *  灰的 —— 一个点了没反应的按钮比一个明确禁用的按钮更让人怀疑是不是坏了。 */
 function SubmitRow({
   label,
   saving,
+  disabled = false,
   onCancel,
   onSubmit,
   error,
 }: {
   label: string;
   saving: boolean;
+  disabled?: boolean;
   onCancel: () => void;
   onSubmit: () => void;
   error: string | null;
@@ -51,7 +56,12 @@ function SubmitRow({
         <button type="button" className="ops-act" onClick={onCancel}>
           {t('ops.form.cancel')}
         </button>
-        <button type="button" className="ops-act solid" disabled={saving} onClick={onSubmit}>
+        <button
+          type="button"
+          className="ops-act solid"
+          disabled={saving || disabled}
+          onClick={onSubmit}
+        >
           {saving && <Loader2 className="ops-spin" aria-hidden="true" />}
           {label}
         </button>
@@ -177,6 +187,7 @@ export function TopicForm({
       <SubmitRow
         label={t('ops.form.save')}
         saving={submit.phase === 'submitting'}
+        disabled={!canSubmit}
         onCancel={onClose}
         onSubmit={handleSubmit}
         error={submit.phase === 'error' ? submit.message : null}
@@ -275,6 +286,7 @@ export function AssetForm({
       <SubmitRow
         label={t('ops.form.save')}
         saving={submit.phase === 'submitting'}
+        disabled={!canSubmit}
         onCancel={onClose}
         onSubmit={handleSubmit}
         error={submit.phase === 'error' ? submit.message : null}
@@ -367,6 +379,7 @@ export function ReviewForm({
       <SubmitRow
         label={t('ops.form.save')}
         saving={submit.phase === 'submitting'}
+        disabled={!canSubmit}
         onCancel={onClose}
         onSubmit={handleSubmit}
         error={submit.phase === 'error' ? submit.message : null}

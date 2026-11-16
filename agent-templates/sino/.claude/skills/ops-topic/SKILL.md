@@ -22,16 +22,22 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 ## 输入源
 
-三个，按可信度排：
+按可信度排：
 
 | 来源 | 怎么拿 | `source` |
 |---|---|---|
 | 平台公开热榜 | `hamuna browser open <热榜URL>` → `hamuna browser read`，读返回的 markdown；或 web 搜索「XX 平台 热榜 今天」 | `hotspot` |
-| 对标账号的公开内容 | `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进后台** | `benchmark` |
+| **台账里的对标账号** | `hamuna ops list benchmark --json` 拿到主页链接 → `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进别人后台** | `benchmark` |
+| **台账里的评论线索** | `hamuna ops list clue --json` —— 观众在我们自己作品下面问过的东西（「这个多少钱」「哪里买」「怎么用」） | `benchmark` |
 | 用户直接给的线索 | 用户粘贴的链接、截图描述、一句话 | `manual` / `benchmark` |
 | 上一轮复盘的结论 | `ops list rule` 里的 `active` 规则 | `reflection` |
 
 **采集边界**：公开热榜、公开主页、用户粘贴的内容可以读。他人账号后台、私域数据、需要登录才能看到的东西不碰。
+
+**用对标账号时必须指名**：一条 `source: benchmark` 的选题要说清是**哪个对标账号**的什么内容给了启发，
+写进 `--ref`（主页链接）和 `--note`。写「参考了对标账号」等于没说 —— 下一轮没人知道该去看谁。
+
+**用线索时必须指名**：说清是哪个问题（几个人问、问了什么）。「最近有 3 个人问价格」比「用户关心价格」有信息量得多。
 
 **用内嵌浏览器，不用系统浏览器。** `hamuna browser open` 打开的是 App 内嵌 webview（`hamuna browser read` 能把当前页读成 markdown），页面留在 App 里用户看得见，采集过程透明。打开失败（浏览器面板不可用）就退回 web 搜索，不要反复重试。
 

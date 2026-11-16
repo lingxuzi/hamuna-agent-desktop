@@ -81,6 +81,8 @@ function state(patch: Partial<OpsState> = {}): OpsState {
     assets: [],
     reviews: [],
     rules: [],
+    clues: [],
+    benchmarks: [],
     style: null,
     ...patch,
   };

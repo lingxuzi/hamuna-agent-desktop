@@ -381,6 +381,131 @@ pub enum OpsLoginState {
     Expired,
 }
 
+/// 一条**评论线索**：观众在我们自己作品下面说的话。
+///
+/// 为什么单独存一条：复盘里只有 `metrics.comments`（评论**数**），那是结果。
+/// 观众问「多少钱 / 哪里买 / 怎么用」才是需求本身——选题最该读的东西。
+///
+/// `comment_id` 是平台侧的评论 id，天然键是 `(platform, comment_id)`：同一段
+/// 评论被反复采集只会合并成一条，不会堆出几十条重复。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpsClue {
+    #[serde(default)]
+    pub id: String,
+    /// 平台 id。空 = 非法（线索必须知道是哪个平台的话）。
+    #[serde(default)]
+    pub platform: String,
+    /// 我们自己那条素材（作品）。`None` = 还没归到具体素材。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<String>,
+    /// 平台侧评论 id。**天然键的一半**，空 = 非法。
+    #[serde(default)]
+    pub comment_id: String,
+    /// 楼中楼的上级评论 id。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_comment_id: Option<String>,
+    /// 评论者的平台 uid。没读到就空着——别拿昵称当身份，昵称会改。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author_uid: Option<String>,
+    #[serde(default)]
+    pub author_name: String,
+    /// 评论正文原文。截断也留着原文，不要改写。
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub intent: OpsClueIntent,
+    #[serde(default)]
+    pub status: OpsClueStatus,
+    /// 跟进备注。状态之外人工补充的判断。
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// 线索的**意图**分类：观众到底在问什么。
+///
+/// 只分四类，不做细粒度 NLP：分类的用处是「这批线索里有多少人在问价」，
+/// 四档已经够回答那个问题；再细分只会让写的人纠结。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OpsClueIntent {
+    /// 说不清在问什么。默认档——宁可归到「其他」也别硬猜。
+    #[default]
+    Other,
+    /// 问价格 / 多少钱 / 有没有优惠。
+    Price,
+    /// 问在哪买 / 链接 / 有没有货。
+    Where,
+    /// 问怎么用 / 怎么装 / 适不适合我。
+    HowTo,
+}
+
+/// 线索的处理状态。
+///
+/// `new` → `qualified` → `archived` 是流水；`qualified` = 值得拿来做选题的
+/// 那几条。没进 `qualified` 的不是垃圾，可能只是还没看。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OpsClueStatus {
+    #[default]
+    New,
+    /// 值得跟进。
+    Qualified,
+    /// 处理完了，留档。
+    Archived,
+}
+
+/// 对标账号的来源。
+///
+/// `agent` = 我找的候选。这种**要等人点头**才落库——方向是策略，对标是
+/// 策略的参照系，我自选自用等于没人复核。`user` = 人直接给的，人给的话
+/// 本身就是授权。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OpsBenchmarkSource {
+    #[default]
+    User,
+    Agent,
+}
+
+/// 一条**对标账号**：方向相近、规模更大的参照系。
+///
+/// 只存「为什么对标它」和「核实到的证据」，**不存粉丝数快照**——存了就是个
+/// 会过期的数字，过期后它变成一句谎。规模写进 `evidence`（"2026-11-16 公开页
+/// 读到 38.2w 粉"），时间在文字里。
+///
+/// 天然键是 `(platform, profile_url)`：同一个主页反复加只合并成一条。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpsBenchmark {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub platform: String,
+    /// 账号名 / 昵称。
+    #[serde(default)]
+    pub name: String,
+    /// 主页链接。**天然键的一半**，空 = 非法。
+    #[serde(default)]
+    pub profile_url: String,
+    /// 为什么对标它：定位上的相似点，不是「内容好」。
+    #[serde(default)]
+    pub why: String,
+    /// 核实到的证据（规模、受众、更新频率……）。空 = 还没核实过。
+    #[serde(default)]
+    pub evidence: String,
+    #[serde(default)]
+    pub source: OpsBenchmarkSource,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsStyle {
@@ -426,6 +551,12 @@ pub struct OpsState {
     pub reviews: Vec<OpsReview>,
     #[serde(default)]
     pub rules: Vec<OpsRule>,
+    /// 评论线索（观众在我们作品下面说的话）。天然键 `(platform, comment_id)`。
+    #[serde(default)]
+    pub clues: Vec<OpsClue>,
+    /// 对标账号。天然键 `(platform, profile_url)`。
+    #[serde(default)]
+    pub benchmarks: Vec<OpsBenchmark>,
     #[serde(default)]
     pub style: Option<OpsStyle>,
 }
@@ -442,6 +573,8 @@ impl OpsState {
             assets: Vec::new(),
             reviews: Vec::new(),
             rules: Vec::new(),
+            clues: Vec::new(),
+            benchmarks: Vec::new(),
             style: None,
         }
     }
@@ -458,6 +591,8 @@ pub enum OpsItemKind {
     Review,
     Rule,
     Style,
+    Clue,
+    Benchmark,
 }
 
 impl OpsItemKind {
@@ -470,6 +605,8 @@ impl OpsItemKind {
             OpsItemKind::Review => "review",
             OpsItemKind::Rule => "rule",
             OpsItemKind::Style => "style",
+            OpsItemKind::Clue => "clue",
+            OpsItemKind::Benchmark => "benchmark",
         }
     }
 }
@@ -535,6 +672,8 @@ pub fn validate_state(state: &OpsState) -> Result<(), String> {
     check_ids("rule", state.rules.iter().map(|r| r.id.as_str()))?;
     check_ids("direction", state.directions.iter().map(|d| d.id.as_str()))?;
     check_ids("account", state.accounts.iter().map(|a| a.id.as_str()))?;
+    check_ids("clue", state.clues.iter().map(|c| c.id.as_str()))?;
+    check_ids("benchmark", state.benchmarks.iter().map(|b| b.id.as_str()))?;
 
     // 「一个平台一条账号」和方向同理：同平台出现两条账号时，界面按平台查会
     // 静默取到其中一条，而取到哪条决定了「发布发到哪个号」。
@@ -598,6 +737,39 @@ pub fn validate_state(state: &OpsState) -> Result<(), String> {
             }
         }
     }
+
+    // 线索的天然键是 `(platform, comment_id)`。同一段评论被采两次就得是一条，
+    // 否则「有多少人在问价」会被重复采集的次数灌水。
+    let mut seen_clues: HashSet<(&str, &str)> = HashSet::new();
+    for clue in &state.clues {
+        check_platform(&clue.platform)?;
+        if clue.comment_id.trim().is_empty() {
+            return Err(format!("Clue {} requires a commentId", clue.id));
+        }
+        if !seen_clues.insert((clue.platform.as_str(), clue.comment_id.as_str())) {
+            return Err(format!(
+                "Duplicate clue for platform {} and commentId {}",
+                clue.platform, clue.comment_id
+            ));
+        }
+    }
+
+    // 对标账号的天然键是 `(platform, profile_url)`：同一个主页只能有一条，
+    // 否则「我们有 3 个对标」可能其实是同一家记了三遍。
+    let mut seen_benchmarks: HashSet<(&str, &str)> = HashSet::new();
+    for benchmark in &state.benchmarks {
+        check_platform(&benchmark.platform)?;
+        if benchmark.profile_url.trim().is_empty() {
+            return Err(format!("Benchmark {} requires a profileUrl", benchmark.id));
+        }
+        if !seen_benchmarks.insert((benchmark.platform.as_str(), benchmark.profile_url.as_str())) {
+            return Err(format!(
+                "Duplicate benchmark for platform {} and profileUrl {}",
+                benchmark.platform, benchmark.profile_url
+            ));
+        }
+    }
+
     Ok(())
 }
 
@@ -726,6 +898,8 @@ pub fn upsert_item(
         OpsItemKind::Review => upsert_review(state, fields),
         OpsItemKind::Rule => upsert_rule(state, fields),
         OpsItemKind::Style => upsert_style(state, fields),
+        OpsItemKind::Clue => upsert_clue(state, fields),
+        OpsItemKind::Benchmark => upsert_benchmark(state, fields),
     })
 }
 
@@ -1027,6 +1201,107 @@ fn upsert_account(
     upsert_by_id(&mut state.accounts, account, |a| a.id.as_str())
 }
 
+/// 写线索。除了 id，也认 `(platform, comment_id)` 作为天然键：同一段评论被
+/// 反复采集只会**合并**成一条。
+///
+/// `comment_id` 必填——没有它就判不了重，重复采集会把「有多少人在问价」
+/// 灌上假数。`platform` 必填，理由同 `upsert_account`。
+fn upsert_clue(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let platform = patch
+        .get("platform")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let comment_id = patch
+        .get("commentId")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+
+    let existing = match id.as_deref() {
+        Some(id) => state.clues.iter().find(|clue| clue.id == id),
+        None => comment_id.and_then(|comment_id| {
+            state.clues.iter().find(|clue| {
+                clue.comment_id == comment_id
+                    && platform.map(|p| clue.platform == p).unwrap_or(true)
+            })
+        }),
+    };
+
+    let mut clue: OpsClue = merge_patch(existing, &patch)?;
+    if clue.platform.trim().is_empty() {
+        return Err("clue requires a platform".to_string());
+    }
+    if clue.comment_id.trim().is_empty() {
+        return Err("clue requires a commentId".to_string());
+    }
+    if clue.id.trim().is_empty() {
+        clue.id = generate_id("clue");
+    }
+    clue.created_at = resolve_created_at(
+        existing.map(|old| old.created_at.as_str()),
+        &clue.created_at,
+    );
+    clue.updated_at = now_iso();
+    upsert_by_id(&mut state.clues, clue, |c| c.id.as_str())
+}
+
+/// 写对标账号。除了 id，也认 `(platform, profile_url)` 作为天然键：同一个主页
+/// 反复加只合并成一条。
+///
+/// `profile_url` 必填——它是对标账号的身份，没有它就分不清「同一家」和
+/// 「两个撞名的号」。
+fn upsert_benchmark(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let platform = patch
+        .get("platform")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let profile_url = patch
+        .get("profileUrl")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+
+    let existing = match id.as_deref() {
+        Some(id) => state
+            .benchmarks
+            .iter()
+            .find(|benchmark| benchmark.id == id),
+        None => profile_url.and_then(|profile_url| {
+            state.benchmarks.iter().find(|benchmark| {
+                benchmark.profile_url == profile_url
+                    && platform.map(|p| benchmark.platform == p).unwrap_or(true)
+            })
+        }),
+    };
+
+    let mut benchmark: OpsBenchmark = merge_patch(existing, &patch)?;
+    if benchmark.platform.trim().is_empty() {
+        return Err("benchmark requires a platform".to_string());
+    }
+    if benchmark.profile_url.trim().is_empty() {
+        return Err("benchmark requires a profileUrl".to_string());
+    }
+    if benchmark.id.trim().is_empty() {
+        benchmark.id = generate_id("benchmark");
+    }
+    benchmark.created_at = resolve_created_at(
+        existing.map(|old| old.created_at.as_str()),
+        &benchmark.created_at,
+    );
+    benchmark.updated_at = now_iso();
+    upsert_by_id(&mut state.benchmarks, benchmark, |b| b.id.as_str())
+}
+
 fn upsert_style(
     state: &mut OpsState,
     patch: serde_json::Map<String, serde_json::Value>,
@@ -1060,6 +1335,10 @@ pub fn delete_item(
             OpsItemKind::Asset => remove_by_id(&mut state.assets, id, |a| a.id.as_str()),
             OpsItemKind::Review => remove_by_id(&mut state.reviews, id, |r| r.id.as_str()),
             OpsItemKind::Rule => remove_by_id(&mut state.rules, id, |r| r.id.as_str()),
+            OpsItemKind::Clue => remove_by_id(&mut state.clues, id, |c| c.id.as_str()),
+            OpsItemKind::Benchmark => {
+                remove_by_id(&mut state.benchmarks, id, |b| b.id.as_str())
+            }
             OpsItemKind::Style => {
                 let matched = state.style.as_ref().map(|s| s.id == id).unwrap_or(false);
                 if matched {
@@ -1988,6 +2267,184 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&ws);
     }
+
+    // ── 线索（评论信号）───────────────────────────────────────────────
+
+    fn clue_patch(fields: serde_json::Value) -> OpsUpsert {
+        OpsUpsert {
+            kind: OpsItemKind::Clue,
+            fields: fields.as_object().cloned().expect("object"),
+        }
+    }
+
+    fn benchmark_patch(fields: serde_json::Value) -> OpsUpsert {
+        OpsUpsert {
+            kind: OpsItemKind::Benchmark,
+            fields: fields.as_object().cloned().expect("object"),
+        }
+    }
+
+    /// 同一段评论被采两次 → 一条，且后一次的内容补上去。
+    #[test]
+    fn clue_upsert_merges_the_same_comment_id() {
+        let ws = make_test_workspace("ops-clue-key");
+        let (state, first) = upsert_item(
+            &ws,
+            clue_patch(serde_json::json!({
+                "platform": "douyin",
+                "commentId": "c-1",
+                "authorName": "小王",
+                "content": "多少钱？",
+                "intent": "price",
+            })),
+        )
+        .expect("first");
+        assert_eq!(state.clues.len(), 1);
+        assert!(first.starts_with("clue-"), "id 应当带类型前缀: {}", first);
+
+        // 第二次采集同一条评论（不同 id 都不给，只给天然键）：必须落在同一条。
+        let (state, second) = upsert_item(
+            &ws,
+            clue_patch(serde_json::json!({
+                "platform": "douyin",
+                "commentId": "c-1",
+                "content": "多少钱？有优惠吗？",
+            })),
+        )
+        .expect("second");
+
+        assert_eq!(first, second, "同一条评论必须复用同一条记录");
+        assert_eq!(state.clues.len(), 1, "重复采集不该堆出第二条");
+        assert_eq!(state.clues[0].author_name, "小王", "没传的字段要留着");
+        assert_eq!(state.clues[0].content, "多少钱？有优惠吗？", "传了的字段要更新");
+        assert_eq!(state.clues[0].intent, OpsClueIntent::Price);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn different_comment_ids_stay_separate_clues() {
+        let ws = make_test_workspace("ops-clue-distinct");
+        upsert_item(
+            &ws,
+            clue_patch(serde_json::json!({
+                "platform": "douyin", "commentId": "c-1", "content": "多少钱？"
+            })),
+        )
+        .expect("first");
+        let (state, _) = upsert_item(
+            &ws,
+            clue_patch(serde_json::json!({
+                "platform": "douyin", "commentId": "c-2", "content": "哪里买？"
+            })),
+        )
+        .expect("second");
+
+        assert_eq!(state.clues.len(), 2, "不同的评论是两条线索");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn clue_without_comment_id_is_rejected() {
+        let ws = make_test_workspace("ops-clue-no-comment-id");
+        let err = upsert_item(
+            &ws,
+            clue_patch(serde_json::json!({ "platform": "douyin", "content": "多少钱？" })),
+        )
+        .expect_err("must reject");
+        assert!(err.contains("commentId"), "错误要说清缺什么: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 手写一份 state.json：同平台同 commentId 两条线索 —— 读的时候就得拒。
+    #[test]
+    fn duplicate_clue_comment_id_in_state_file_is_rejected() {
+        let ws = make_test_workspace("ops-clue-dup");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        let raw = serde_json::json!({
+            "version": OPS_STATE_VERSION,
+            "clues": [
+                { "id": "c1", "platform": "douyin", "commentId": "x-1" },
+                { "id": "c2", "platform": "douyin", "commentId": "x-1" },
+            ],
+        })
+        .to_string();
+        fs::write(ops_dir.join("state.json"), raw).expect("write");
+
+        let err = read_state(&ws).expect_err("must reject");
+        assert!(err.contains("Duplicate clue"), "错误要说清是重复: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 对标账号：同一个主页反复加只合并成一条。
+    #[test]
+    fn benchmark_upsert_merges_the_same_profile_url() {
+        let ws = make_test_workspace("ops-benchmark-key");
+        let (state, first) = upsert_item(
+            &ws,
+            benchmark_patch(serde_json::json!({
+                "platform": "douyin",
+                "name": "露营老王",
+                "profileUrl": "https://www.douyin.com/user/abc",
+                "source": "user",
+            })),
+        )
+        .expect("first");
+        assert!(first.starts_with("benchmark-"), "id 应当带类型前缀: {}", first);
+
+        let (state, second) = upsert_item(
+            &ws,
+            benchmark_patch(serde_json::json!({
+                "platform": "douyin",
+                "profileUrl": "https://www.douyin.com/user/abc",
+                "why": "同赛道，讲解式开头",
+            })),
+        )
+        .expect("second");
+
+        assert_eq!(first, second, "同一个主页必须复用同一条对标");
+        assert_eq!(state.benchmarks.len(), 1);
+        assert_eq!(state.benchmarks[0].name, "露营老王", "没传的字段要留着");
+        assert_eq!(state.benchmarks[0].why, "同赛道，讲解式开头");
+        assert_eq!(state.benchmarks[0].source, OpsBenchmarkSource::User);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn benchmark_without_profile_url_is_rejected() {
+        let ws = make_test_workspace("ops-benchmark-no-url");
+        let err = upsert_item(
+            &ws,
+            benchmark_patch(serde_json::json!({ "platform": "douyin", "name": "露营老王" })),
+        )
+        .expect_err("must reject");
+        assert!(err.contains("profileUrl"), "错误要说清缺什么: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn duplicate_benchmark_profile_url_in_state_file_is_rejected() {
+        let ws = make_test_workspace("ops-benchmark-dup");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        let raw = serde_json::json!({
+            "version": OPS_STATE_VERSION,
+            "benchmarks": [
+                { "id": "b1", "platform": "douyin", "profileUrl": "https://x/1" },
+                { "id": "b2", "platform": "douyin", "profileUrl": "https://x/1" },
+            ],
+        })
+        .to_string();
+        fs::write(ops_dir.join("state.json"), raw).expect("write");
+
+        let err = read_state(&ws).expect_err("must reject");
+        assert!(
+            err.contains("Duplicate benchmark"),
+            "错误要说清是重复: {}",
+            err
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
 }
 
 #[cfg(test)]
@@ -2068,6 +2525,27 @@ mod parity_tests {
         }
     }
 
+    #[test]
+    fn clue_intent_values_exist_in_ts_contract() {
+        for value in ["price", "where", "howto", "other"] {
+            assert_ts_array_has(TS_OPS, "OPS_CLUE_INTENTS", value);
+        }
+    }
+
+    #[test]
+    fn clue_status_values_exist_in_ts_contract() {
+        for value in ["new", "qualified", "archived"] {
+            assert_ts_array_has(TS_OPS, "OPS_CLUE_STATUSES", value);
+        }
+    }
+
+    #[test]
+    fn benchmark_source_values_exist_in_ts_contract() {
+        for value in ["user", "agent"] {
+            assert_ts_array_has(TS_OPS, "OPS_BENCHMARK_SOURCES", value);
+        }
+    }
+
     /// 台账记录类型的枚举两侧必须一致：Rust 多一种而 TS 没有，界面就写不出
     /// 那条记录（或反过来读出一个不认识的 kind）。
     #[test]
@@ -2080,6 +2558,8 @@ mod parity_tests {
             OpsItemKind::Style,
             OpsItemKind::Direction,
             OpsItemKind::Account,
+            OpsItemKind::Clue,
+            OpsItemKind::Benchmark,
         ] {
             assert_ts_array_has(TS_OPS, "OPS_ITEM_KINDS", kind.as_str());
         }

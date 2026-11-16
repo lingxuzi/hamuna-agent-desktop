@@ -54,6 +54,9 @@ hamuna ops list rule --json         # 复盘沉淀的规律，方向要能解释
 
 **一次落齐，不要分批。** 半张方向比没有方向更糟：选题会读到一个残缺的定位。
 
+方向定完，**下一步是定对标账号**（`ops-benchmark`）—— 方向说「我们要往哪走」，
+对标说「走这条路时旁边那个人长什么样」。没有对标，选题会退化成凭空想。
+
 ```bash
 hamuna ops update direction --platform douyin \
   --positioning "夜间露营装备的实测与避坑，只讲我真用过的东西" \

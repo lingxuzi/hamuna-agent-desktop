@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   OPS_ASSET_STATUSES,
+  OPS_BENCHMARK_SOURCES,
+  OPS_CLUE_INTENTS,
+  OPS_CLUE_STATUSES,
   OPS_DIRECTION_STATUSES,
   OPS_DOMAIN_IDS,
   OPS_RULE_SOURCES,
@@ -11,6 +14,9 @@ import {
   SINO_TEMPLATE_ID,
   emptyOpsState,
   isOpsAssetStatus,
+  isOpsBenchmarkSource,
+  isOpsClueIntent,
+  isOpsClueStatus,
   isOpsDirectionStatus,
   isOpsRuleSource,
   isOpsRuleStatus,
@@ -75,6 +81,30 @@ describe('ops 枚举', () => {
     expect(isOpsDirectionStatus('active')).toBe(true);
     expect(isOpsDirectionStatus('archived')).toBe(false);
   });
+
+  it('线索意图四档，判定函数只认文档里列的值', () => {
+    expect(OPS_CLUE_INTENTS).toEqual(['price', 'where', 'howto', 'other']);
+    expect(isOpsClueIntent('price')).toBe(true);
+    expect(isOpsClueIntent('howto')).toBe(true);
+    expect(isOpsClueIntent('how_to')).toBe(false);
+    expect(isOpsClueIntent('')).toBe(false);
+    expect(isOpsClueIntent(null)).toBe(false);
+  });
+
+  it('线索状态三档', () => {
+    expect(OPS_CLUE_STATUSES).toEqual(['new', 'qualified', 'archived']);
+    expect(isOpsClueStatus('new')).toBe(true);
+    expect(isOpsClueStatus('qualified')).toBe(true);
+    expect(isOpsClueStatus('archived')).toBe(true);
+    expect(isOpsClueStatus('dropped')).toBe(false);
+  });
+
+  it('对标来源两档：人给的与 Agent 找的', () => {
+    expect(OPS_BENCHMARK_SOURCES).toEqual(['user', 'agent']);
+    expect(isOpsBenchmarkSource('user')).toBe(true);
+    expect(isOpsBenchmarkSource('agent')).toBe(true);
+    expect(isOpsBenchmarkSource('auto')).toBe(false);
+  });
 });
 
 describe('emptyOpsState', () => {
@@ -86,6 +116,8 @@ describe('emptyOpsState', () => {
     expect(state.assets).toEqual([]);
     expect(state.reviews).toEqual([]);
     expect(state.rules).toEqual([]);
+    expect(state.clues).toEqual([]);
+    expect(state.benchmarks).toEqual([]);
     expect(state.style).toBeNull();
   });
 

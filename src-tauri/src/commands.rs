@@ -2383,7 +2383,13 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // page scrolls an inner container — the publish button below the fold stays
 // unreachable. An existing install keeps the old bundle and the agent has no
 // way down the page.
-const CLI_VERSION: &str = "52";
+// 53: adds the `clue` / `benchmark` ops kinds — the comment-signal ledger and
+// the benchmark-account registry. Without a bump an existing install keeps a
+// CLI whose `ops list` silently drops both sections: the agent reads the
+// ledger, sees no clue and no benchmark, and concludes there is no signal and
+// no reference account. A filter that hides data reads exactly like data that
+// does not exist.
+const CLI_VERSION: &str = "53";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2633,7 +2639,14 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // The skill is also where the one-instruction rule gets stated, because a
 // scroll that silently drops half its arguments reads as a broken page.
 
-const SYSTEM_SKILLS_VERSION: &str = "78";
+// 79: hamuna-cli — document the two new ledger collections (`clue` /
+// `benchmark`). The skill is the CLI reference the bundled MA helper reads
+// before it touches the ledger; a section it does not know about is a section
+// it never looks at, so the comment signal and the benchmark accounts would
+// sit in the ledger unread — the same way a missing section reads as "there
+// is no data" rather than "you are not looking".
+
+const SYSTEM_SKILLS_VERSION: &str = "79";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3326,13 +3339,15 @@ mod system_skills_tests {
         // account per platform, addressed by `--platform`); 74 documents it. 75
         // documents that the persisted login is per-workspace. 52 adds
         // `browser scroll` — without it the agent cannot reach a publish button
-        // that sits below the fold; 78 documents it.
+        // that sits below the fold; 78 documents it. 53 adds the `clue` / `benchmark`
+        // ops kinds — the comment-signal ledger and the benchmark-account registry;
+        // 79 documents both.
         //
         // The anchor was left at 46/69 while the constants moved on to 48/71, so
         // this test had been red at HEAD for a reason unrelated to any behaviour
         // — do not re-derive a rule from it, just keep it in step.
-        assert_eq!(CLI_VERSION, "52");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "78");
+        assert_eq!(CLI_VERSION, "53");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "79");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));
@@ -3357,6 +3372,16 @@ mod system_skills_tests {
         // agent needs a documented way to move the viewport — and a documented
         // way to bring a specific element into view.
         assert!(bundled.contains("hamuna browser scroll"));
+        // Clue / benchmark surface: the two ledger collections are addressed by
+        // their natural keys (a comment id, a profile url), never by `--id` — an
+        // agent that only saw `--id` would go looking for an id that does not
+        // exist. The docs must keep showing the keyed form.
+        assert!(bundled.contains("hamuna ops list clue"));
+        assert!(bundled.contains("hamuna ops add clue --platform"));
+        assert!(bundled.contains("--comment-id"));
+        assert!(bundled.contains("hamuna ops list benchmark"));
+        assert!(bundled.contains("hamuna ops add benchmark --platform"));
+        assert!(bundled.contains("--profile-url"));
 
         let memory_update = include_str!("../../bundled-skills/hamuna-memory-update/SKILL.md");
         assert!(

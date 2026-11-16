@@ -1174,6 +1174,20 @@
         "likes": "赞",
         "comments": "评论",
         "completion": "完播率 %"
+      },
+      "benchmark": {
+        "new": "加对标账号",
+        "edit": "编辑对标账号",
+        "name": "账号名",
+        "namePh": "对方的昵称",
+        "platform": "平台",
+        "profileUrl": "主页链接",
+        "profileUrlPh": "https://…",
+        "why": "为什么对标它",
+        "whyPh": "定位上的相似点，不是「内容好」",
+        "evidence": "核实到的证据",
+        "evidencePh": "如：2026-11-16 公开页读到 38.2w 粉",
+        "source": "来源"
       }
     },
     "toast": {
@@ -1184,6 +1198,8 @@
       "reviewAdded": "已录入复盘数据",
       "reviewSaved": "复盘数据已更新",
       "ruleActivated": "已写进规则",
+      "benchmarkAdded": "已加入对标账号",
+      "benchmarkSaved": "对标账号已更新",
       "deleted": "已删除",
       "saveFailed": "保存失败：{{reason}}",
       "directionSaved": "方向原话已保存",
@@ -1414,6 +1430,45 @@
       "loginSuccess": "{{platform}} 登录成功",
       "loginTimeout": "登录超时（5 分钟），请重试",
       "saveFailed": "保存账号信息失败：{{message}}"
+    },
+    "clue": {
+      "open": "线索",
+      "back": "返回线索",
+      "title": "评论线索",
+      "scopeHint": "观众在我们自己作品下面说的话",
+      "summary": "{{count}} 条刚采到",
+      "empty": "还没有线索。发一条内容，读一次后台评论就会长出来。",
+      "noAuthor": "匿名观众",
+      "noContent": "（没有正文）",
+      "asset": "关联：{{name}}",
+      "delete": "删掉这条线索",
+      "statusNext": "标为{{status}}",
+      "intent": {
+        "price": "问价格",
+        "where": "问在哪买",
+        "howto": "问怎么用",
+        "other": "其他"
+      },
+      "status": {
+        "new": "刚采到",
+        "qualified": "值得跟进",
+        "archived": "已归档"
+      }
+    },
+    "benchmark": {
+      "title": "对标账号",
+      "meta": "方向相近的参照系",
+      "add": "加对标账号",
+      "empty": "还没有对标账号。方向定了，先找 2–3 个方向相近的账号当参照系。",
+      "noname": "（没名字）",
+      "noWhy": "还没写为什么对标它",
+      "evidenceLabel": "证据",
+      "edit": "编辑",
+      "delete": "删除",
+      "source": {
+        "user": "你给的",
+        "agent": "Agent 找的"
+      }
     },
     "direction": {
       "formTitle": "这个账号要成为什么",

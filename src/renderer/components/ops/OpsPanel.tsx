@@ -3,7 +3,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { Check, ChevronLeft, Pencil, Plus, X } from 'lucide-react';
 
 import { getSocialPlatform, type SocialPlatformId } from '../../../shared/socialPlatforms';
-import type { OpsAsset, OpsDomainId, OpsReview, OpsTopic } from '../../../shared/ops';
+import type { OpsAsset, OpsBenchmark, OpsDomainId, OpsReview, OpsTopic } from '../../../shared/ops';
 import { OPS_DOMAIN_IDS } from '../../../shared/ops';
 import {
   deriveOpsView,
@@ -29,6 +29,8 @@ import { OpsDistCard, OpsPoolCard } from './OpsCards';
 import { OpsDirectionCard } from './OpsDirectionCard';
 import { DirectionBriefForm } from './DirectionBriefForm';
 import { OpsAccountLogin, OpsAccounts } from './OpsAccounts';
+import { OpsBenchmarks, BenchmarkForm } from './OpsBenchmarks';
+import { OpsClues } from './OpsClues';
 import { useOpsState } from './useOpsState';
 import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
 import { opsErrorMessage, opsUpsert } from './opsWrite';
@@ -71,16 +73,20 @@ export default function OpsPanel({
     return () => cancelAnimationFrame(raf);
   }, []);
   const [domain, setDomain] = useState<OpsDomainId>('topic');
-  // 账号视图不是流水线域，不塞进 `OPS_DOMAIN_IDS`：那是「选题 / 素材 / 排期 /
-  // 复盘 / 方向」的流水线，账号是这台机器在这个工作区上的另一件东西。顶栏
-  // 一个按钮切过去，胶囊行让位给「返回」。
-  const [pane, setPane] = useState<'domains' | 'accounts'>('domains');
+  // 账号与线索不是流水线域，不塞进 `OPS_DOMAIN_IDS`：那是「选题 / 素材 / 排期 /
+  // 复盘 / 方向」的流水线，这两样是这台机器在这个工作区上的另两件东西。顶栏
+  // 各一个按钮切过去，胶囊行让位给「返回」。
+  const [pane, setPane] = useState<'domains' | 'accounts' | 'clues'>('domains');
   /** 正在登录的平台。非空 = 面板让给浏览器。 */
   const [loginPlatform, setLoginPlatform] = useState<SocialPlatformId | null>(null);
   const [form, setForm] = useState<FormRequest | null>(null);
   /** 方向动作一个在飞时冻结全部方向按钮，避免连点写出两个修订。 */
   const [directionBusy, setDirectionBusy] = useState(false);
-  const [deleting, setDeleting] = useState<{ kind: 'topic' | 'asset'; id: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState<{
+    kind: 'topic' | 'asset' | 'clue' | 'benchmark';
+    id: string;
+    title: string;
+  } | null>(null);
   const { state, loading, error, reload } = useOpsState(workspace);
   const toast = useToastOptional();
 
@@ -196,14 +202,19 @@ export default function OpsPanel({
         ) : (
           <button type="button" className="ops-ghost" onClick={goBack}>
             <ChevronLeft size={14} aria-hidden="true" />
-            {t('ops.account.back')}
+            {pane === 'accounts' ? t('ops.account.back') : t('ops.clue.back')}
           </button>
         )}
         <span className="ops-sp" />
         {pane === 'domains' && (
-          <button type="button" className="ops-ghost" onClick={() => setPane('accounts')}>
-            {t('ops.account.open')}
-          </button>
+          <>
+            <button type="button" className="ops-ghost" onClick={() => setPane('clues')}>
+              {t('ops.clue.open')}
+            </button>
+            <button type="button" className="ops-ghost" onClick={() => setPane('accounts')}>
+              {t('ops.account.open')}
+            </button>
+          </>
         )}
         <button
           type="button"
@@ -238,6 +249,23 @@ export default function OpsPanel({
               workspace={workspace}
               accounts={state.accounts}
               onLogin={(platform) => setLoginPlatform(platform)}
+            />
+          </div>
+        </div>
+      ) : pane === 'clues' ? (
+        <div className="ops-body">
+          <div className="ops-main">
+            <OpsClues
+              workspace={workspace}
+              clues={state.clues}
+              assets={state.assets}
+              onDelete={(clue) =>
+                setDeleting({
+                  kind: 'clue',
+                  id: clue.id,
+                  title: clue.content.trim() || t('ops.clue.noContent'),
+                })
+              }
             />
           </div>
         </div>
@@ -285,6 +313,24 @@ export default function OpsPanel({
                 />
               )}
               <OpsDistCard view={view} />
+              {/* 对标账号通栏贴在方向域底部：对标是方向的参照物，跟方向同屏
+                  才看得见「这两边像不像」。平台还没立方向时也能先加。 */}
+              {view.domain === 'direction' && (
+                <OpsBenchmarks
+                  benchmarks={state.benchmarks}
+                  onAdd={() => setForm({ kind: 'benchmark:new' })}
+                  onEdit={(benchmark: OpsBenchmark) =>
+                    setForm({ kind: 'benchmark:edit', benchmark })
+                  }
+                  onDelete={(benchmark: OpsBenchmark) =>
+                    setDeleting({
+                      kind: 'benchmark',
+                      id: benchmark.id,
+                      title: benchmark.name.trim() || benchmark.profileUrl,
+                    })
+                  }
+                />
+              )}
               {view.domain === 'review' && <OpsAdviceCard view={view} onActivate={activateRule} />}
             </div>
           </div>
@@ -344,6 +390,8 @@ type FormRequest =
   | { kind: 'asset:edit'; asset: OpsAsset }
   | { kind: 'review:new' }
   | { kind: 'review:edit'; review: OpsReview }
+  | { kind: 'benchmark:new' }
+  | { kind: 'benchmark:edit'; benchmark: OpsBenchmark }
   | { kind: 'direction:brief'; platform: SocialPlatformId; brief: string };
 
 function FormHost({
@@ -388,6 +436,16 @@ function FormHost({
           workspace={workspace}
           initial={request.kind === 'review:edit' ? request.review : undefined}
           assets={state.assets}
+          onClose={onClose}
+          onDone={onDone}
+        />
+      );
+    case 'benchmark:new':
+    case 'benchmark:edit':
+      return (
+        <BenchmarkForm
+          workspace={workspace}
+          initial={request.kind === 'benchmark:edit' ? request.benchmark : undefined}
           onClose={onClose}
           onDone={onDone}
         />

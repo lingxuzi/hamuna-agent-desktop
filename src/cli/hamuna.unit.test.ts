@@ -1316,6 +1316,92 @@ describe('hamuna CLI operations ledger', () => {
     }
   });
 
+  it('carries a clue through with its natural key intact', () => {
+    // commentId 是线索的天然键：少它就判不了重，重复采集会把「多少人问价」
+    // 灌上假数。载荷里必须原样带着它。
+    const body = buildRequestBody('ops', 'add', ['clue'], {
+      platform: 'douyin',
+      commentId: 'c-1',
+      authorName: '小王',
+      content: '多少钱？',
+      intent: 'price',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toEqual({
+      kind: 'clue',
+      platform: 'douyin',
+      commentId: 'c-1',
+      authorName: '小王',
+      content: '多少钱？',
+      intent: 'price',
+    });
+  });
+
+  it('refuses a clue without its natural key', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('ops', 'add', ['clue'], { platform: 'douyin', content: '多少钱？' }))
+        .toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('--comment-id'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('locates a clue by its natural key so the agent need not list first', () => {
+    // 与方向 / 账号同理：天然键能定位到唯一一条，强制 --id 就是白跑一趟。
+    const body = buildRequestBody('ops', 'update', ['clue'], {
+      platform: 'douyin',
+      commentId: 'c-1',
+      status: 'qualified',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toEqual({
+      kind: 'clue',
+      platform: 'douyin',
+      commentId: 'c-1',
+      status: 'qualified',
+    });
+  });
+
+  it('carries a benchmark through with its natural key intact', () => {
+    const body = buildRequestBody('ops', 'add', ['benchmark'], {
+      platform: 'douyin',
+      profileUrl: 'https://www.douyin.com/user/abc',
+      name: '露营老王',
+      why: '同赛道，讲解式开头',
+      source: 'user',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item).toEqual({
+      kind: 'benchmark',
+      platform: 'douyin',
+      profileUrl: 'https://www.douyin.com/user/abc',
+      name: '露营老王',
+      why: '同赛道，讲解式开头',
+      source: 'user',
+    });
+  });
+
+  it('refuses a benchmark without its natural key', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('ops', 'add', ['benchmark'], { platform: 'douyin', name: '露营老王' }))
+        .toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('--profile-url'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
   it('collects the repeatable ledger flags', () => {
     const { flags } = parseArgs([
       'ops', 'add', 'asset', '--tag', 'a', 'b', '--shot', '{"no":1}', '--shot', '{"no":2}',

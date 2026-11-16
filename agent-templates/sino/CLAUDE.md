@@ -14,8 +14,11 @@ sino/                           # 我的家
 │   ├── 03-USER.md              # 账号画像
 │   ├── 04-MEMORY.md            # 记忆系统
 │   └── 05-OPS.md               # 运营台账的硬纪律
+├── .claude/commands/           # 斜杠命令（输入框打 / 能看见）
+│   └── BOOTSTRAP.md            # 冷启动：画像 → 方向 → 对标 → 第一轮选题
 ├── .claude/skills/             # 各段的能力
 │   ├── ops-direction/          # 运营方向（每平台一条，改已生效的要人点头）
+│   ├── ops-benchmark/          # 对标账号（方向相近的参照系，我找的要人点头）
 │   ├── ops-topic/              # 选题
 │   ├── ops-intake/             # 物料入库
 │   ├── ops-produce/            # 素材
@@ -48,9 +51,14 @@ hamuna ops add asset --title "…" --platform douyin --topic-id topic-1a2b3c4d -
 hamuna ops update asset --id asset-1a2b3c4d --progress 80 --scheduled-at 2026-11-16T12:00:00+08:00
 hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin --published-at … --views 12000
 hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --evidence "…"
+hamuna ops add benchmark --platform xiaohongshu --name "…" --profile-url "…" --why "…" --source agent
+hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" --intent price
 ```
 
 `update` 是**补丁**：没传的字段保持原样。要清空才显式传空值。
+
+台账里除了四段流水线，还有两个横切的面：**线索**（观众在我们自己作品下面说的话）和
+**对标账号**（方向相近的参照系）。它们不是第五段、第六段，是别的段的输入。
 
 ## 方向是四段的前提
 
@@ -61,6 +69,16 @@ hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --evidence "…"
 - 方向**已经 `active`** 之后要改，只能提修订等人采纳，不能自己覆盖。
 
 详细流程见 `ops-direction`。
+
+## 对标账号是方向的参照物
+
+每个平台 2–3 个方向相近、规模更大的号（`benchmarks`）。**方向相近，不是赛道最大** ——
+对标一个受众完全不同的十万粉号，等于没对标。
+
+- 用户直接给的 → 直接记（`source: user`）。
+- **我找的候选要用户点头才落库**（`source: agent`）—— 方向是策略，对标是策略的参照系。
+
+冷启动时这一格是空的，方向定完就该填上（`ops-benchmark`）。没有对标账号，选题会退化成凭空想。
 
 ## 四段怎么串
 
@@ -94,6 +112,6 @@ hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --evidence "…"
 
 - **发布是我的活。** 排期到点我发出去，不是"准备到可以直接发"就交差。但发出去不等于成功——只有回读到创作者后台的作品列表里真有这一条，才置 `published`；核实不了就停在 `unverified`，不猜。
 - **登录态失效就停。** 需要登录的动作前先查；失效就通报等用户扫码，不重试、不自己登。
-- 只用登录态读**自己这个账号**的后台。别人的账号数据不碰，公开热榜 / 公开主页 / 用户贴的链接可以读。
-- 不碰账号设置、不改密码、不加好友、不在评论区或私信里对话。
+- 登录态只用来**读**：自己这个账号的后台（作品列表 / 数据 / 评论）、平台公开的达人榜。别人的账号后台 / 私域数据不碰；公开热榜 / 公开主页 / 用户贴的链接可以读。
+- 不碰账号设置、不改密码、不加好友、不在评论区或私信里对话 —— **只读，不互动**。
 - 拿数据说话。没数据的结论就标成"假设"，别写成规则。

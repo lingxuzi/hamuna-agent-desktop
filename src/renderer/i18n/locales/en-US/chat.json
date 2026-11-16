@@ -1174,6 +1174,20 @@
         "likes": "Likes",
         "comments": "Comments",
         "completion": "Completion %"
+      },
+      "benchmark": {
+        "new": "Add benchmark",
+        "edit": "Edit benchmark",
+        "name": "Account name",
+        "namePh": "Their nickname",
+        "platform": "Platform",
+        "profileUrl": "Profile link",
+        "profileUrlPh": "https://…",
+        "why": "Why benchmark them",
+        "whyPh": "Similarity in positioning, not “good content”",
+        "evidence": "Evidence you verified",
+        "evidencePh": "e.g. read 382K followers on the public page on 2026-11-16",
+        "source": "Source"
       }
     },
     "toast": {
@@ -1184,6 +1198,8 @@
       "reviewAdded": "Review data saved",
       "reviewSaved": "Review data updated",
       "ruleActivated": "Written into rules",
+      "benchmarkAdded": "Added to benchmarks",
+      "benchmarkSaved": "Benchmark updated",
       "deleted": "Deleted",
       "saveFailed": "Save failed: {{reason}}",
       "directionSaved": "Brief saved",
@@ -1414,6 +1430,45 @@
       "loginSuccess": "Signed in to {{platform}}",
       "loginTimeout": "Sign-in timed out after 5 minutes. Try again.",
       "saveFailed": "Could not save the account: {{message}}"
+    },
+    "clue": {
+      "open": "Clues",
+      "back": "Back to clues",
+      "title": "Comment clues",
+      "scopeHint": "What viewers said under our own posts",
+      "summary": "{{count}} newly collected",
+      "empty": "No clues yet. Publish something and read the comments once.",
+      "noAuthor": "Anonymous viewer",
+      "noContent": "(no text)",
+      "asset": "On: {{name}}",
+      "delete": "Delete this clue",
+      "statusNext": "Mark as {{status}}",
+      "intent": {
+        "price": "Asking price",
+        "where": "Asking where to buy",
+        "howto": "Asking how to use",
+        "other": "Other"
+      },
+      "status": {
+        "new": "New",
+        "qualified": "Worth following up",
+        "archived": "Archived"
+      }
+    },
+    "benchmark": {
+      "title": "Benchmarks",
+      "meta": "Accounts with a similar direction",
+      "add": "Add benchmark",
+      "empty": "No benchmarks yet. Once the direction is set, pick 2–3 accounts with a similar direction to measure against.",
+      "noname": "(unnamed)",
+      "noWhy": "No reason written yet",
+      "evidenceLabel": "Evidence",
+      "edit": "Edit",
+      "delete": "Delete",
+      "source": {
+        "user": "You picked it",
+        "agent": "Agent picked it"
+      }
     },
     "direction": {
       "formTitle": "What this account should be",

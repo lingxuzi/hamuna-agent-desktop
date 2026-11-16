@@ -34,6 +34,7 @@ hamuna ops update review --id review-1a2b3c4d --views 12000     # 其余五个�
 | 选题 | `idea` → `planned` → `produced` | `dropped` 可从任一状态进 |
 | 素材 | `draft` → `ready` → （`published` / `unverified`） | 见下 |
 | 规则 | `proposed` → `active` | 提出来先进 `proposed`，攒到证据再 `active` |
+| 线索 | `new` → `qualified` → `archived` | `archived` 可回到 `new`（捡回来） |
 
 **不要跳状态。** 素材别从 `draft` 直接跳 `published`——那次 `ready` 是「内容本身做完了、可以发了」的分界。
 
@@ -67,6 +68,55 @@ hamuna ops update review --id review-1a2b3c4d --views 12000     # 其余五个�
 平台规格（发布页、作品列表页、字数 / 图片上限、登录墙标记）走 `hamuna platforms <id> --json`。
 规格里缺的字段是「还没核实」，从 `creatorHomeUrl` 出发现场找，找到把实际路径记进
 `memory/topics/<平台>.md`。**不许猜 URL。**
+
+## 线索与对标账号
+
+两个横切的面，不是流水线的一环：线索是**输入信号**，对标账号是**参照系**。
+
+| 集合 | 是什么 | 天然键 |
+|---|---|---|
+| `clues` | 观众在我们**自己作品**下面说的话 | `(platform, commentId)` |
+| `benchmarks` | 方向相近、规模更大的对标号 | `(platform, profileUrl)` |
+
+天然键少一半都定位不到唯一一条。**重复采集同一条评论只合并成一条** ——
+不合并的话，「多少人问价」会被灌上假数。
+
+### 线索
+
+```bash
+hamuna ops add clue --platform xiaohongshu --comment-id "c-abc123" \
+  --asset-id asset-1a2b3c4d --author-name "露营小王" \
+  --content "这个折叠桌多少钱？" --intent price
+hamuna ops update clue --platform xiaohongshu --comment-id "c-abc123" --status qualified
+```
+
+- `--intent` 只能是 `price`（问价格）/ `where`（问在哪买）/ `howto`（问怎么用）/ `other`。
+  判不出就 `other` —— 猜一个具体的会把后面的统计带歪。
+- `--status` 只能是 `new` / `qualified` / `archived`。**「值得跟进」是人的判断，我不替人标** ——
+  连这条线索是不是需求我都还不知道。
+- `--content` 留原文，不要改写、不要翻译。改写过的评论没法拿去回看。
+- 楼中楼用 `--parent-comment-id`。
+
+### 对标账号
+
+```bash
+hamuna ops add benchmark --platform xiaohongshu --name "露营老张" \
+  --profile-url "https://…" --why "同样做入门装备实测" \
+  --evidence "2026-11-16 公开页读到 38.2w 粉" --source agent
+```
+
+- `--source` 只能是 `user`（用户给的）/ `agent`（我找的）。
+  **`agent` 的记录要用户点头才写。**
+- `--profile-url` 必填 —— 它是天然键的一半，少了它下次认不回来。
+- 不存粉丝数这种**会过期的数字**当字段。规模写进 `--evidence`，时间也写在证据里。
+
+### 采集边界（这两个集合专属）
+
+- **登录态可以读**：自己账号后台的评论页、平台公开的达人榜 / 对标榜页。
+  榜是平台给所有人看的，只是要登录才给看 —— 这跟「看别人后台」不是一回事。
+- **登录态不可以读**：别人账号的后台、私域数据。
+- **只读，不互动**：回评论、私信、加好友、点赞关注，一律留给用户。
+- 别人作品的评论区不碰 —— 那是别人的数据。我们要的是**观众对我们自己内容**的反应。
 
 ## 物料入库
 

@@ -1015,10 +1015,11 @@
   .ops-hero { order: 1; }
   .ops-next { order: 2; }
   .ops-c-top { order: 3; }
-  .ops-c-chart { order: 4; }
-  .ops-c-bars { order: 5; }
-  .ops-c-adv { order: 6; }
-  .ops-c-note { order: 7; }
+  .ops-c-bench { order: 4; }
+  .ops-c-chart { order: 5; }
+  .ops-c-bars { order: 6; }
+  .ops-c-adv { order: 7; }
+  .ops-c-note { order: 8; }
 
   .ops-hero-row {
     flex-direction: column;
@@ -1121,6 +1122,14 @@
 .ops-list-row.editable .row-edit:hover {
   border-color: var(--ink-subtle);
   color: var(--ink);
+}
+/* 删除入口：与编辑入口同一颗钮，不同色 —— 编辑是「改」，删除是「没」。 */
+.ops-list-row.editable .row-del {
+  color: var(--error);
+}
+.ops-list-row.editable .row-del:hover {
+  border-color: var(--error);
+  color: var(--error);
 }
 
 /* 表单对话框。走 OverlayBackdrop + useCloseLayer，与 ConfirmDialog 同层（z 300）。 */
@@ -1404,4 +1413,181 @@
   border: 1px solid var(--line);
   border-radius: var(--theme-radius-lg);
   background: var(--paper);
+}
+
+/* ── 线索视图 ─────────────────────────────────────────
+   线索只有两个动作：标状态、删。状态胶囊放行尾（人最常点的就是它），
+   删除收进悬停态（`.row-edit` 那套），不跟状态抢视线。 */
+
+.ops-clue-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-secondary);
+  background: var(--paper-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  padding: 6px 10px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-clue-status:hover {
+  border-color: var(--ink-subtle);
+  color: var(--ink);
+}
+/* 「值得跟进」是人的判断结果，用一道暖色边标出来；文字仍是深墨 —— 拿底色
+   换语义会把对比度拉低。 */
+.ops-clue-status.is-qualified {
+  border-color: var(--accent-warm);
+  color: var(--ink);
+}
+
+/* ── 对标账号卡 ───────────────────────────────────────
+   按平台分组，组内一张卡网格。卡里四段：身份 / 主页 / 为什么 / 证据，
+   底部两个动作。 */
+
+.ops-bm-group {
+  margin-top: 14px;
+}
+.ops-bm-group:first-child {
+  margin-top: 0;
+}
+.ops-bm-group-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+.ops-bm-grid {
+  display: grid;
+  /* `min(280px, 100%)`：窄到装不下 280px 时轨道跟着容器缩，不会把卡片顶出
+     面板。 */
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 12px;
+}
+.ops-bm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-md);
+  background: var(--paper);
+}
+.ops-bm-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* 字牌沿用列表那套（右下角平台色块），只是小一档：卡片比列表行紧凑。 */
+.ops-bm-card-head .ops-thumb {
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+}
+/* 色点外圈要跟所在纸面同色，否则在账号卡（纸面比列表浅一档）上会露出
+   一圈白边。 */
+.ops-bm-card-head .ops-thumb::after {
+  box-shadow: 0 0 0 1.5px var(--paper);
+}
+.ops-bm-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-bm-source {
+  flex: none;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-secondary);
+  background: var(--paper-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* 主页链接：一行内省略，不撑破卡。 */
+.ops-bm-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  text-align: left;
+  cursor: pointer;
+}
+.ops-bm-link svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ops-bm-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-bm-link:hover {
+  color: var(--ink);
+}
+
+.ops-bm-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+}
+.ops-bm-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+.ops-bm-sub b {
+  font-weight: 500;
+  color: var(--ink-secondary);
+  margin-right: 4px;
+}
+.ops-bm-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* 卡片高度不齐时，按钮仍贴着底边 —— 一排卡的下沿是齐的。 */
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* 删除：与编辑同形不同色。 */
+.ops-act.del {
+  color: var(--error);
+}
+.ops-act.del:hover {
+  border-color: var(--error);
+}
+
+/* 对标账号卡通栏贴在方向域底部。 */
+.ops-grid > .ops-c-bench {
+  grid-row: 2;
+  grid-column: 1 / -1;
 }
