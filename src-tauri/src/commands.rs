@@ -2709,7 +2709,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // that revision wiped the audience / pillars / goal / cadence that nobody had
 // agreed to change.
 
-const SYSTEM_SKILLS_VERSION: &str = "76";
+const SYSTEM_SKILLS_VERSION: &str = "77";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

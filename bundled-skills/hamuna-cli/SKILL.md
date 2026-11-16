@@ -541,7 +541,7 @@ hamuna im readme                                      # 拉 IM 工具完整文�
 
 ```bash
 hamuna browser search "tauri webview child"        # 搜索，返回标题/链接/摘要
-hamuna browser search "tauri webview" --engine bing  # 换引擎（默认 360）
+hamuna browser search "tauri webview" --engine 360   # 换引擎（默认 bing.cn）
 hamuna browser open https://example.com          # 打开（面板不存在时自动创建并显示）
 hamuna browser status                            # 当前页 title / url / readyState
 hamuna browser read                              # 当前页正文，输出 Markdown
@@ -587,8 +587,9 @@ hamuna browser select --tab 0                   # 把第 0 个标签页切到最
 
 **搜索：**
 - `search` 在**用户自己那个浏览器窗口**里跑：结果页由真实浏览器渲染（JS 执行、过人机校验），用户的 cookie 也生效——需要登录才看得到的内容，`search` 能搜到而普通 HTTP 请求搜不到
+- 搜索**不拼 URL**：先打开引擎首页，等页面渲染出来，再把关键词打进它的搜索框回车。直接请求 `…/search?q=…` 是冷请求，引擎会当成爬虫限流，常见结果是空结果或验证码页
 - 输出按「标题 / 链接 / 摘要」三段一组逐条罗列
-- 默认引擎 360；`--engine bing` / `--engine baidu` 可换
+- 默认引擎 bing.cn（必应中国）；`--engine 360` / `--engine baidu` 可换
 - 搜索会**占用浏览器面板**（结果页显示在用户眼前）。要细读某篇，再 `browser open <url>` 跳过去
 
 **定位目标：**

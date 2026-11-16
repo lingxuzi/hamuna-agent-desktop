@@ -45,6 +45,17 @@ const NEW_TAB_TIMEOUT: Duration = Duration::from_secs(15);
 /// before the DOM holds anything to extract.
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(25);
 
+/// Bound on waiting for the engine's search box to appear on its homepage.
+///
+/// The homepage renders the box with its own scripts, so the box can land
+/// after `readyState` says "complete".
+const SEARCH_BOX_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// Bound on waiting for the engine to act on the typed query — the URL has
+/// to change, which is the only proof from the outside that a search was
+/// actually sent.
+const SUBMIT_TIMEOUT: Duration = Duration::from_secs(4);
+
 /// Bound on waiting for a page to finish loading before its DOM is read.
 ///
 /// A page that never settles (infinite XHR, a hung third-party script) must
@@ -97,7 +108,7 @@ pub struct BrowserRequest {
     /// Search query for `search`.
     #[serde(default)]
     pub query: String,
-    /// Search engine for `search` ("360" | "bing" | "baidu").
+    /// Search engine for `search` ("bing" | "360" | "baidu"). Defaults to bing.
     #[serde(default)]
     pub engine: String,
     /// Absolute path of the file to select in a file input, for `upload`.
@@ -558,17 +569,97 @@ async fn resolve_or_open_browser(session_id: &str) -> Result<(String, String, bo
     }
 }
 
-/// `POST /api/browser/search` — run a web search in the embedded browser.
+/// One search engine the agent can drive.
 ///
-/// The browser navigates to the engine's result page and the DOM is
-/// extracted from the rendered page. That is the point: the embedded
-/// WebView is a real browser (JS runs, bot challenges are solved by the
-/// engine's own scripts), so it sees the results a user would see — while
-/// a plain HTTP fetch of the same URL gets a degraded or challenge page.
+/// The query is deliberately **not** part of the URL: the browser opens the
+/// engine's homepage and types the query into its search box. See
+/// `browser_agent::search_type_script` for why a URL is the wrong shape.
+struct SearchEngine {
+    /// Homepage to open before the query is typed.
+    home: &'static str,
+    /// Selectors for the engine's search box, most specific first.
+    inputs: &'static [&'static str],
+}
+
+/// The engines `hamuna browser search` can drive.
+///
+/// Bing China is the default: its homepage renders for every query without a
+/// challenge, and its result markup is what the extractor already knows.
+/// 360 and Baidu remain available as alternatives — they are driven the same
+/// way, through their own homepages.
+const SEARCH_ENGINES: &[(&str, SearchEngine)] = &[
+    (
+        "bing",
+        SearchEngine {
+            home: "https://cn.bing.com/",
+            inputs: &[
+                "#sb_form_q",
+                "input[name=q]",
+                "textarea[name=q]",
+                "input[type=search]",
+            ],
+        },
+    ),
+    (
+        "360",
+        SearchEngine {
+            home: "https://www.so.com/",
+            inputs: &["#kw", "input[name=q]", "input[type=search]"],
+        },
+    ),
+    (
+        "baidu",
+        SearchEngine {
+            home: "https://www.baidu.com/",
+            inputs: &["#kw", "input[name=wd]", "input[type=search]"],
+        },
+    ),
+];
+
+/// The engine to drive when the caller did not name one.
+fn resolve_engine_name(raw: &str) -> String {
+    let name = raw.trim().to_lowercase();
+    if name.is_empty() {
+        "bing".to_string()
+    } else {
+        name
+    }
+}
+
+/// Look up an engine by name.
+fn search_engine_for(name: &str) -> Option<&'static SearchEngine> {
+    SEARCH_ENGINES
+        .iter()
+        .find(|(key, _)| *key == name)
+        .map(|(_, spec)| spec)
+}
+
+/// The engine names, for error messages.
+fn search_engine_names() -> String {
+    SEARCH_ENGINES
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// `POST /api/browser/search` — run a web search in the embedded browser.
 ///
 /// The search runs in the user's own browser session, so a search that
 /// needs a login (or that the engine gates by region) behaves exactly as
 /// it does for them.
+///
+/// WHY A TYPED QUERY, NOT A URL
+/// ----------------------------
+/// The obvious implementation — navigate to `…/search?q=…` and read the DOM
+/// — is the one that gets rate-limited. That request is *cold*: no referrer,
+/// no warm session, and a shape no human browser produces, so the engine
+/// answers with a challenge page, a 429, or an empty result list.
+///
+/// So the browser opens the engine's homepage, waits for it to render, types
+/// the query into the search box and presses Enter — the way a person does
+/// it. The engine sees one of its own pages, used the way it is meant to be
+/// used, and the rendered result list is read back from the DOM.
 pub async fn browser_search_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
     let query = input.query.trim().to_string();
     if query.is_empty() {
@@ -578,22 +669,15 @@ pub async fn browser_search_handler(Json(input): Json<BrowserRequest>) -> Json<s
         );
     }
 
-    let engine = input.engine.trim().to_lowercase();
-    let engine = if engine.is_empty() {
-        "360"
-    } else {
-        engine.as_str()
-    };
-    let search_url = match search_url_for(engine, &query) {
-        Some(url) => url,
-        None => {
-            return Json(
-                serde_json::to_value(BrowserResponse::err(format!(
-                    "Unknown search engine '{engine}'. Supported: 360, bing, baidu."
-                )))
-                .unwrap_or_default(),
-            )
-        }
+    let engine = resolve_engine_name(&input.engine);
+    let Some(spec) = search_engine_for(&engine) else {
+        return Json(
+            serde_json::to_value(BrowserResponse::err(format!(
+                "Unknown search engine '{engine}'. Supported: {}.",
+                search_engine_names()
+            )))
+            .unwrap_or_default(),
+        );
     };
 
     let (tab_id, label, opened) = match resolve_or_open_browser(&input.session_id).await {
@@ -621,23 +705,79 @@ pub async fn browser_search_handler(Json(input): Json<BrowserRequest>) -> Json<s
     };
     let webview = &webview;
 
-    let parsed = match crate::browser::parse_agent_url(&search_url) {
+    // ── 1. Open the engine's homepage (no query in the URL) ─────────────
+    let parsed = match crate::browser::parse_agent_url(spec.home) {
         Ok(parsed) => parsed,
         Err(e) => {
             return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default());
         }
     };
-    // Same per-host pacing as an explicit navigate: a search is a page load
-    // at the engine's host and must not be fired faster than a human would.
-    browser_throttle::wait_for_host(parsed.host_str().unwrap_or_default()).await;
+    // Same per-host pacing as an explicit navigate: a search starts a page
+    // load at the engine's host and must not be fired faster than a human
+    // would.
+    let host = parsed.host_str().unwrap_or_default().to_string();
+    browser_throttle::wait_for_host(&host).await;
 
+    let before = current_url(&label).await;
     if let Err(e) = webview.navigate(parsed) {
         return Json(
             serde_json::to_value(BrowserResponse::err(format!("Navigation failed: {e}")))
                 .unwrap_or_default(),
         );
     }
+    wait_for_loaded(&label, before.as_deref(), spec.home, &host).await;
 
+    // ── 2. Wait for the search box, then type the query into it ────────
+    if !wait_for_search_box(&label, spec.inputs).await {
+        return Json(
+            serde_json::to_value(BrowserResponse::err(format!(
+                "The search engine's page ({}) loaded but its search box never appeared.",
+                spec.home
+            )))
+            .unwrap_or_default(),
+        );
+    }
+
+    let home_url = current_url(&label).await;
+    if let Err(e) = run_script(
+        &label,
+        &browser_agent::search_type_script(&query, spec.inputs),
+    )
+    .await
+    {
+        return Json(
+            serde_json::to_value(BrowserResponse::err(format!(
+                "Could not type the query into the search box: {e}"
+            )))
+            .unwrap_or_default(),
+        );
+    }
+
+    // ── 3. Press Enter; fall back to submitting the form ───────────────
+    // Enter is what a human presses and most engines act on it. Some ignore
+    // a synthetic key event, so the engine's own form submit stands behind
+    // it — same fields, same action, same referrer.
+    if !wait_for_url_change(&label, home_url.as_deref()).await {
+        if let Err(e) = run_script(&label, &browser_agent::search_submit_script(spec.inputs)).await
+        {
+            return Json(
+                serde_json::to_value(BrowserResponse::err(format!(
+                    "The search box accepted the query but the engine never searched: {e}"
+                )))
+                .unwrap_or_default(),
+            );
+        }
+        if !wait_for_url_change(&label, home_url.as_deref()).await {
+            return Json(
+                serde_json::to_value(BrowserResponse::err(
+                    "The search box accepted the query but the engine never searched for it.",
+                ))
+                .unwrap_or_default(),
+            );
+        }
+    }
+
+    // ── 4. Read the rendered result list ───────────────────────────────
     // The engine renders its result list after the page load event (its own
     // scripts fetch and paint the rows), so the first extraction right after
     // navigation usually sees an empty list. Poll instead of guessing a
@@ -656,7 +796,7 @@ pub async fn browser_search_handler(Json(input): Json<BrowserRequest>) -> Json<s
                                 "query": query,
                                 "engine": engine,
                                 "tabId": tab_id,
-                                "searchUrl": search_url,
+                                "pageUrl": data.get("pageUrl").cloned().unwrap_or_default(),
                                 "results": data.get("results").cloned().unwrap_or_default(),
                                 "count": count,
                             }),
@@ -696,7 +836,7 @@ pub async fn browser_search_handler(Json(input): Json<BrowserRequest>) -> Json<s
                         "query": query,
                         "engine": engine,
                         "tabId": tab_id,
-                        "searchUrl": search_url,
+                        "pageUrl": last.get("pageUrl").cloned().unwrap_or_default(),
                         "results": last.get("results").cloned().unwrap_or_default(),
                         "count": count,
                     }),
@@ -710,39 +850,46 @@ pub async fn browser_search_handler(Json(input): Json<BrowserRequest>) -> Json<s
     }
 }
 
-/// Build the result-page URL for `engine`.
+/// Wait until the engine's search box is in the DOM and can be typed into.
 ///
-/// 360 is the default because it renders results for every query without a
-/// bot challenge; Bing and Baidu are available as alternatives (they work
-/// in the embedded WebView but degrade for plain HTTP clients).
-fn search_url_for(engine: &str, query: &str) -> Option<String> {
-    let encoded = percent_encode(query);
-    match engine {
-        "360" | "so" | "so360" => Some(format!("https://www.so.com/s?q={encoded}")),
-        "bing" => Some(format!("https://cn.bing.com/search?q={encoded}")),
-        "baidu" => Some(format!("https://www.baidu.com/s?wd={encoded}")),
-        _ => None,
+/// The homepage's own scripts render the box, and they are not done when
+/// `readyState` says "complete" — so the box itself is what gets waited for.
+async fn wait_for_search_box(label: &str, inputs: &[&str]) -> bool {
+    let script = browser_agent::search_box_script(inputs);
+    let deadline = tokio::time::Instant::now() + SEARCH_BOX_TIMEOUT;
+    loop {
+        if let Ok(data) = run_script(label, &script).await {
+            if data.get("found").and_then(|v| v.as_bool()) == Some(true) {
+                return true;
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
 
-/// Percent-encode a query string for use in a URL's query component.
+/// Wait until the page navigated away from `before`.
 ///
-/// Only unreserved characters (RFC 3986) survive; everything else becomes
-/// `%XX`. A space is `+` rather than `%20` — every engine this feeds
-/// accepts the form-encoded form, and `%20` in `q=` is parsed as a literal
-/// space by all of them anyway.
-fn percent_encode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.as_bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(*byte as char);
+/// Proof that the query was actually sent: the engine either rendered its
+/// result page (the URL changed) or nothing happened (it did not).
+async fn wait_for_url_change(label: &str, before: Option<&str>) -> bool {
+    let script = browser_agent::page_state_script();
+    let deadline = tokio::time::Instant::now() + SUBMIT_TIMEOUT;
+    loop {
+        if let Ok(data) = run_script(label, &script).await {
+            let ready = data.get("readyState").and_then(|v| v.as_str()) == Some("complete");
+            let url = data.get("url").and_then(|v| v.as_str()).unwrap_or_default();
+            if ready && before != Some(url) {
+                return true;
             }
-            b' ' => out.push('+'),
-            other => out.push_str(&format!("%{other:02X}")),
         }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    out
 }
 
 /// `POST /api/browser/read` — page content.
@@ -1100,6 +1247,7 @@ pub async fn request_browser_new_tab(owner_tab_id: &str, url: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::has_landed;
+    use super::{resolve_engine_name, search_engine_for, search_engine_names, SEARCH_ENGINES};
 
     /// A write without a session id must be refused — not silently aimed at
     /// whichever browser was opened last (which may be another workspace's).
@@ -1153,5 +1301,45 @@ mod tests {
         assert!(!has_landed(None, true, ""));
         assert!(!has_landed(None, false, "https://example.com/new"));
         assert!(has_landed(None, true, "https://example.com/new"));
+    }
+
+    /// The whole point of the typed search: the query never rides in a URL.
+    ///
+    /// A cold `…/search?q=…` request is what the engine's anti-bot measures
+    /// a scraper by, and it answers with a challenge page or an empty result
+    /// list. If an engine homepage ever grows a query string, the search
+    /// silently goes back to that shape.
+    #[test]
+    fn no_engine_home_carries_a_query() {
+        for (name, spec) in SEARCH_ENGINES {
+            assert!(
+                !spec.home.contains('?'),
+                "engine '{name}' would put the query in the URL: {}",
+                spec.home
+            );
+            assert!(
+                !spec.inputs.is_empty(),
+                "engine '{name}' has no search box to type into"
+            );
+        }
+    }
+
+    #[test]
+    fn the_default_engine_is_bing_china() {
+        assert_eq!(resolve_engine_name(""), "bing");
+        assert_eq!(resolve_engine_name("  "), "bing");
+        assert_eq!(resolve_engine_name("BING"), "bing");
+        assert_eq!(resolve_engine_name("360"), "360");
+        let spec = search_engine_for(&resolve_engine_name("")).expect("bing must exist");
+        assert_eq!(spec.home, "https://cn.bing.com/");
+    }
+
+    #[test]
+    fn an_unknown_engine_is_refused_by_name() {
+        assert!(search_engine_for("bing").is_some());
+        assert!(search_engine_for("duckduckgo").is_none());
+        // The error has to name the engines that do work.
+        assert!(search_engine_names().contains("bing"));
+        assert!(search_engine_names().contains("baidu"));
     }
 }

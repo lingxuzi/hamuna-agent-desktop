@@ -497,6 +497,140 @@ pub fn submit_script(selector: &str, text: &str) -> String {
     )
 }
 
+// ──────────────────────────────────────────────────────────
+// Search-engine scripts
+// ──────────────────────────────────────────────────────────
+
+/// Installs the search-box finder on `window` exactly once.
+///
+/// The finder is shared by the three search scripts (probe → type → submit),
+/// so the engine's search box is located the same way in all of them: the
+/// engine's own selectors first, then the generic shapes the engines share.
+///
+/// It lives on `window` so one script can install it and the next reuse it —
+/// but every script installs it first anyway, because a navigation wipes
+/// `window` and the next agent command must work on a freshly loaded page.
+const INSTALL_SEARCH_HELPER: &str = r#"
+(() => {
+  if (!window.__hamunaFindSearchInput) {
+    const visible = (el) => {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      const st = window.getComputedStyle(el);
+      return st.visibility !== 'hidden' && st.display !== 'none';
+    };
+    window.__hamunaFindSearchInput = (selectors) => {
+      let fallback = null;
+      for (const sel of selectors) {
+        let hits = [];
+        try { hits = Array.from(document.querySelectorAll(sel)); } catch (e) { continue; }
+        if (!hits.length) continue;
+        const shown = hits.filter(visible)[0];
+        if (shown) return shown;
+        // A hidden box (the engine collapses it in a narrow panel) is still
+        // typeable: the events land on it and its form still submits.
+        if (!fallback) fallback = hits[0];
+      }
+      return fallback;
+    };
+  }
+  return true;
+})()
+"#;
+
+/// Probe: is the engine's search box in the DOM yet?
+///
+/// The homepage's own scripts render the box, and they are not done when
+/// `readyState` says "complete" — so the box itself is what gets waited for.
+pub fn search_box_script(input_selectors: &[&str]) -> String {
+    let sels = js_string_array(input_selectors);
+    format!(
+        "{INSTALL_SEARCH_HELPER} && (() => {{
+  const el = window.__hamunaFindSearchInput({sels});
+  return {{
+    found: !!el,
+    id: el ? (el.id || undefined) : undefined,
+    tag: el ? el.tagName.toLowerCase() : undefined
+  }};
+}})()"
+    )
+}
+
+/// Type a query into the engine's search box and press Enter.
+///
+/// WHY A TYPED QUERY AND NOT A URL
+/// ------------------------------
+/// Hitting `…/search?q=…` directly is a *cold* request: no referrer, no warm
+/// session, and a shape no human browser produces. Search engines answer that
+/// with a challenge page, a 429, or an empty result list — it is what their
+/// anti-bot measures a scraper by. Typing the query into the homepage's
+/// search box is what a person does, and it is what the engine sees as one.
+///
+/// The value is written through the native setter (like `fill_script`) so a
+/// framework-controlled box registers it, and the `input` / `change` events
+/// are dispatched for the same reason.
+///
+/// Enter is dispatched as a real `KeyboardEvent` — `keyCode` included,
+/// because that is what the engines' own handlers read. Submitting stays a
+/// separate script so the caller can check whether the key was enough
+/// before forcing a form submit.
+pub fn search_type_script(query: &str, input_selectors: &[&str]) -> String {
+    let sels = js_string_array(input_selectors);
+    let q = js_string(query);
+    format!(
+        "{INSTALL_SEARCH_HELPER} && (() => {{
+  const el = window.__hamunaFindSearchInput({sels});
+  if (!el) throw new Error('The search engine page has no search box');
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'input' || tag === 'textarea') {{
+    const proto = tag === 'input' ? window.HTMLInputElement.prototype
+      : window.HTMLTextAreaElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (setter && setter.set) setter.set.call(el, {q}); else el.value = {q};
+  }} else {{
+    el.textContent = {q};
+  }}
+  el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+  el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+  try {{ el.focus(); }} catch (e) {{ /* focusing is a nicety, not a requirement */ }}
+  for (const type of ['keydown', 'keypress', 'keyup']) {{
+    el.dispatchEvent(new KeyboardEvent(type, {{
+      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, charCode: 13,
+      bubbles: true, cancelable: true
+    }}));
+  }}
+  return {{ id: el.id || undefined, tag }};
+}})()"
+    )
+}
+
+/// Submit the search form — the fallback for engines that ignore the Enter
+/// key (or a page that swallowed it).
+///
+/// The form is the engine's own, so the request it sends is the request the
+/// engine expects: same fields, same action, same referrer.
+pub fn search_submit_script(input_selectors: &[&str]) -> String {
+    let sels = js_string_array(input_selectors);
+    format!(
+        "{INSTALL_SEARCH_HELPER} && (() => {{
+  const el = window.__hamunaFindSearchInput({sels});
+  if (!el) throw new Error('The search engine page has no search box');
+  const form = el.form || (el.closest ? el.closest('form') : null);
+  if (form) {{
+    if (typeof form.requestSubmit === 'function') form.requestSubmit();
+    else form.submit();
+    return {{ submitted: 'form' }};
+  }}
+  // No form to submit: the search button on the page is the only way left.
+  const button = document.querySelector('#sb_form_go, button[type=submit], input[type=submit]');
+  if (!button) throw new Error('The search box is not in a form and the page has no search button');
+  button.click();
+  return {{ submitted: 'button' }};
+}})()"
+    )
+}
+
 /// Extract organic search results from a search-engine result page.
 ///
 /// Returns `{ engine, results: [{ title, url, snippet }] }`. The script tries
@@ -512,6 +646,25 @@ pub fn submit_script(selector: &str, text: &str) -> String {
 pub fn search_results_script() -> String {
     r#"(function () {
   const text = (el) => el ? (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ') : '';
+  // Bing wraps every result in a click-tracking redirect
+  // (`bing.com/ck/a?...&u=a1<base64url>`); the real destination rides in
+  // `u`. Handing the agent the tracking URL would give it a link it cannot
+  // follow — the redirect only resolves inside a browser session.
+  const real = (url) => {
+    if (!/^https?:\/\//.test(url || '')) return url;
+    const m = url.match(/[?&]u=a1([A-Za-z0-9_\-%.]+)/);
+    if (!m) return url;
+    try {
+      let raw = decodeURIComponent(m[1]).replace(/-/g, '+').replace(/_/g, '/');
+      while (raw.length % 4) raw += '=';
+      const bin = atob(raw);
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      const decoded = new TextDecoder('utf-8').decode(bytes);
+      return /^https?:\/\//.test(decoded) ? decoded : url;
+    } catch (e) {
+      return url;
+    }
+  };
   const PROFILES = [
     { engine: 'so360',   container: '.res-list',                       title: 'h3.res-title a',              url: 'a[data-mdurl]',        snippet: '.res-desc, .res-comm-con, .mh-detail' },
     { engine: 'bing',    container: 'li.b_algo',                        title: 'h2 a',                        url: 'h2 a',                 snippet: '.b_caption p' },
@@ -549,7 +702,7 @@ pub fn search_results_script() -> String {
         snippet = text(node).slice(0, 400);
         if (snippet.startsWith(title)) snippet = snippet.slice(title.length).trim();
       }
-      found.push({ title: title.slice(0, 300), url: url.slice(0, 1000), snippet: snippet.slice(0, 600) });
+      found.push({ title: title.slice(0, 300), url: real(url).slice(0, 1000), snippet: snippet.slice(0, 600) });
       if (found.length >= 10) break;
     }
     if (found.length) {
@@ -572,6 +725,12 @@ pub fn search_results_script() -> String {
 /// Escape a Rust string as a JS string literal.
 fn js_string(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
+}
+
+/// Escape a list of strings as a JS array literal.
+fn js_string_array(values: &[&str]) -> String {
+    let items: Vec<String> = values.iter().map(|v| js_string(v)).collect();
+    format!("[{}]", items.join(", "))
 }
 
 #[cfg(test)]
@@ -626,6 +785,43 @@ mod tests {
         assert!(script.contains("input"), "{script}");
     }
 
+    /// The typed query is interpolated into a JS string literal, so a query
+    /// that contains a quote must not be able to terminate the literal and
+    /// run code of its own in the page.
+    #[test]
+    fn the_typed_query_cannot_break_out_of_the_js_literal() {
+        let script = search_type_script("a\"; alert(1); //", &["#sb_form_q"]);
+        // The raw payload must not appear: it would close the literal and
+        // turn the rest of the query into code.
+        assert!(!script.contains("a\"; alert(1); //"), "{script}");
+        assert!(script.contains(r#"a\"; alert(1); //"#), "{script}");
+    }
+
+    /// The three search scripts must find the box the same way, or the
+    /// probe would report "no search box" for a box the typing script can
+    /// actually type into.
+    #[test]
+    fn every_search_script_uses_the_shared_box_finder() {
+        let selectors = ["#sb_form_q", "input[name=q]"];
+        for script in [
+            search_box_script(&selectors),
+            search_type_script("q", &selectors),
+            search_submit_script(&selectors),
+        ] {
+            assert!(script.contains("__hamunaFindSearchInput"), "{script}");
+            assert!(script.contains("#sb_form_q"), "{script}");
+        }
+    }
+
+    /// The Enter key has to be a real key event: the engines' own handlers
+    /// read `keyCode`, not just `key`.
+    #[test]
+    fn the_typed_search_presses_enter() {
+        let script = search_type_script("q", &["#sb_form_q"]);
+        assert!(script.contains("KeyboardEvent"), "{script}");
+        assert!(script.contains("keyCode: 13"), "{script}");
+    }
+
     /// Text lookup finds buttons, but a textbox has no text to find — its
     /// "text" is its value, and an empty textbox has none. Without matching
     /// the placeholder / aria-label there is no way to say "the 作品描述 box".
@@ -672,6 +868,9 @@ mod tests {
             fill_script("input", "", "hello"),
             upload_script("input[type=file]", "", "a.png", "image/png", "iVBORw0KGgo="),
             submit_script("form", ""),
+            search_box_script(&["#sb_form_q"]),
+            search_type_script("tauri webview", &["#sb_form_q"]),
+            search_submit_script(&["#sb_form_q"]),
             search_results_script(),
         ] {
             assert!(

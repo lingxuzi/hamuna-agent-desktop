@@ -44,7 +44,7 @@ export interface BrowserActionPayload {
   value?: string;
   /** Search query for `search`. */
   query?: string;
-  /** Search engine for `search` ("360" | "bing" | "baidu"). */
+  /** Search engine for `search` ("bing" | "360" | "baidu"). Defaults to bing. */
   engine?: string;
   /** Absolute path of the file to put into a file input, for `upload`. */
   file?: string;
@@ -472,11 +472,13 @@ export async function handleBrowserPublish(payload: BrowserActionPayload): Promi
 /**
  * `hamuna browser search <query>` — web search through the embedded browser.
  *
- * The search happens in the user's own browser window: the engine's result
- * page is opened, rendered, and scraped. That is what makes it work where
- * a plain HTTP request does not — the engine sees a real browser (JS runs,
- * bot challenges resolve), and the user's cookies apply, so a search that
- * needs a logged-in session behaves as it does for them.
+ * The search happens in the user's own browser window: the engine's homepage
+ * is opened, the query is typed into its search box, and the rendered result
+ * page is scraped. That is what makes it work where a plain HTTP request
+ * does not — the engine sees a real browser (JS runs, bot challenges
+ * resolve), the user's cookies apply, and the request looks like the one a
+ * person makes rather than a cold `…/search?q=…` hit, which is what the
+ * engines rate-limit.
  */
 export async function handleBrowserSearch(payload: BrowserActionPayload): Promise<AdminResponse> {
   const query = (payload.query ?? '').trim();
