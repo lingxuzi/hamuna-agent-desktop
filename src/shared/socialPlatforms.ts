@@ -61,6 +61,22 @@ export interface SocialPlatformDefinition {
    * 检查（`douyin_publish.py::_logged_in`：无二维码 且 有高清发布按钮）。
    */
   loggedOutSelector?: string;
+  /**
+   * 登录态的 **cookie 判据**：这些 cookie 名里任意一个存在 = 已登录。
+   *
+   * **cookie 才是登录态的权威**，DOM 只是兜底 —— 这条字段存在的理由是抖音：
+   *
+   * 1. `creator.douyin.com` 扫码前后 URL 完全一样，URL 判定对它无意义；
+   * 2. 登录成功那一刻页面会导航（`/` → `/creator-micro/home`），正在被销毁的
+   *    JS 上下文里 `querySelectorAll` 会抛，探针读到的 `false` 与「确实没
+   *    登录」在返回值上分不开 —— 于是判定永远不成立（2026-11 实战：cookie
+   *    早就写进 jar 了，台账却还是 `accounts: []`）；
+   * 3. 抖音的 `sessionid` 是 **HttpOnly**，`document.cookie` 根本读不到它 ——
+   *    再多 DOM 探针也找不到登录证据。
+   *
+   * cookie 读的是 cookie jar，不碰页面上下文，导航吃不掉它。
+   */
+  loggedInCookieNames?: string[];
 }
 
 export const SOCIAL_PLATFORMS: readonly SocialPlatformDefinition[] = [
@@ -82,6 +98,10 @@ export const SOCIAL_PLATFORMS: readonly SocialPlatformDefinition[] = [
       'button[class*="douyin-creator-master-button"], #douyin-creator-master-side-upload-wrap button',
     loggedOutSelector:
       'img[class*="qr"], [class*="qrcode"] img, [class*="qrcode"] canvas, img[aria-label="二维码"]',
+    // 登录态的权威：cookie。抖音的 `sessionid` 是 HttpOnly 的域 cookie
+    // （`.douyin.com`），DOM 探针永远看不到它 —— 没有这条判据，扫码成功
+    // 之后面板只会一直停在创作者中心。
+    loggedInCookieNames: ['sessionid'],
   },
   {
     id: 'kuaishou',
@@ -477,15 +497,32 @@ export function needsSelectorProbe(platform: SocialPlatformDefinition): boolean 
 }
 
 /**
- * 用两条探针结果裁定登录态。纯函数，便于单测。
+ * 用探针结果裁定登录态。纯函数，便于单测。
+ *
+ * 判据按**权威性**排序：cookie → DOM → URL。
+ *
+ * cookie 命中就是登录成功，不再往下问 —— cookie 是登录态本身，DOM 只是它在
+ * 页面上的投影。抖音这条尤其要紧：登录成功那刻页面在导航，DOM 探针正在被
+ * 销毁的上下文里，读回来的 `false` 与「没登录」分不开（2026-11 实战：cookie
+ * 早就有了，判定却永远不成立）。
+ *
+ * cookie 没命中**不等于**没登录（可能还没扫码，也可能 cookie 是刚种下的），
+ * 所以继续用 DOM / URL 兜底。
  *
  * `loggedInSelector` 平台用「登录后元素可见 且 登录墙元素不可见」这对手性
  * 信号（Easel 同款）；其余平台回落到 URL 白名单。
  */
 export function resolveLoginState(
   platform: SocialPlatformDefinition,
-  probe: { url: string; loggedInVisible?: boolean; loggedOutVisible?: boolean },
+  probe: {
+    url: string;
+    loggedInVisible?: boolean;
+    loggedOutVisible?: boolean;
+    /** 平台声明的登录 cookie 里，是否有命中的（由 `cmd_browser_cookie_names` 给出）。 */
+    loggedInCookie?: boolean;
+  },
 ): boolean {
+  if (platform.loggedInCookieNames?.length && probe.loggedInCookie) return true;
   if (platform.loggedInSelector) {
     if (!probe.loggedInVisible) return false;
     if (platform.loggedOutSelector && probe.loggedOutVisible) return false;

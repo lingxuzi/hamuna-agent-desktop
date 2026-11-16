@@ -37,6 +37,14 @@ describe('isLoggedInUrl', () => {
     expect(douyin.loggedOutSelector).toContain('qrcode');
   });
 
+  it('抖音：cookie 判据是 sessionid（登录态的权威）', () => {
+    // 2026-11 实战：扫码成功了，判定却永远不成立 —— cookie 早就写进 jar
+    // （`sessionid`，HttpOnly，域 `.douyin.com`），DOM 探针在登录那刻的导航里
+    // 读不到东西。cookie 判据是补这条的。
+    const douyin = getSocialPlatform('douyin');
+    expect(douyin.loggedInCookieNames).toContain('sessionid');
+  });
+
   it('快手：passport 不算登录，创作者中心算', () => {
     // 快手未登录时 cp.kuaishou.com 停在营销落地页，URL 上与已登录分不开——
     // 所以入口直接给 passport 登录页，判定只认 cp 域。从 passport 出发的用户
@@ -106,6 +114,44 @@ describe('resolveLoginState', () => {
         url: 'https://creator.douyin.com/',
         loggedInVisible: false,
         loggedOutVisible: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('抖音：cookie 命中 = 已登录，哪怕 DOM 探针什么都读不到', () => {
+    // 这是 2026-11 那次事故的正脸：登录成功那一刻页面导航（`/` →
+    // `/creator-micro/home`），DOM 探针在正被销毁的上下文里抛 / 读回 false。
+    // cookie 命中就是登录成功 —— 它是登录态本身，不是它的投影。
+    expect(
+      resolveLoginState(douyin, {
+        url: 'https://creator.douyin.com/',
+        loggedInCookie: true,
+        loggedInVisible: false,
+        loggedOutVisible: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('抖音：cookie 没命中不直接判未登录（cookie 可能刚种下）', () => {
+    // 保守方向：cookie 是权威，但没有 cookie 不代表没登录，DOM / URL 继续兜底。
+    expect(
+      resolveLoginState(douyin, {
+        url: 'https://creator.douyin.com/',
+        loggedInCookie: false,
+        loggedInVisible: true,
+        loggedOutVisible: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('没声明 cookie 判据的平台不理会 cookie 探针', () => {
+    // 免得以后哪个平台随手传个 cookie 标记就把 URL 判定整个盖掉。
+    const zhihu = getSocialPlatform('zhihu');
+    expect(zhihu.loggedInCookieNames).toBeUndefined();
+    expect(
+      resolveLoginState(zhihu, {
+        url: 'https://www.zhihu.com/signin',
+        loggedInCookie: true,
       }),
     ).toBe(false);
   });

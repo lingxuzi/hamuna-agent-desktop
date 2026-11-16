@@ -208,9 +208,14 @@ export function OpsAccountLogin({ workspace, platform, onClose }: OpsAccountLogi
     [platform, finishLogin],
   );
 
-  // 选择器驱动的平台：抖音扫码前后 URL 一模一样，没有事件可听。改成问页面：
-  // 登录后才出现的主按钮出现 = 登录成功，配合二维码消失（Easel 的
-  // `douyin_publish.py` 判的是同一对）。
+  // 选择器驱动的平台：抖音扫码前后 URL 一模一样，没有事件可听。问两样东西：
+  //
+  // 1. **cookie**（权威）。登录态的权威是浏览器 cookie，登录成功那一刻 cookie
+  //    已经写进 jar，而页面正在导航（`/` → `/creator-micro/home`）—— DOM 探针
+  //    在被销毁的上下文里会抛，读回来的 `false` 与「没登录」分不开。抖音的
+  //    `sessionid` 还是 HttpOnly 的，`document.cookie` 根本看不到它。
+  // 2. **DOM**（兜底）。cookie 还没种下时用登录后元素 + 登录墙消失这对手性
+  //    信号（Easel 的 `douyin_publish.py` 判的是同一对）。
   useEffect(() => {
     if (!browserAlive) return;
     if (!needsSelectorProbe(platform)) return;
@@ -221,6 +226,21 @@ export function OpsAccountLogin({ workspace, platform, onClose }: OpsAccountLogi
 
     const probe = async () => {
       try {
+        // cookie 优先：命中就是登录成功，直接收工。
+        if (platform.loggedInCookieNames?.length) {
+          const found = await invoke<string[]>('cmd_browser_cookie_names', {
+            tabId,
+            url: platform.loginUrl,
+            names: platform.loggedInCookieNames,
+          });
+          if (stopped) return;
+          if (found.length > 0) {
+            stopped = true;
+            finishLogin();
+            return;
+          }
+        }
+
         const loggedInVisible = await invoke<boolean>('cmd_browser_query_visible', {
           tabId,
           selector: platform.loggedInSelector,
@@ -245,14 +265,22 @@ export function OpsAccountLogin({ workspace, platform, onClose }: OpsAccountLogi
           finishLogin();
           return;
         }
-      } catch {
+      } catch (err) {
         // webview 还在启动 / 正在导航：正在被替换的上下文里 `querySelectorAll`
         // 会抛。继续问。
+        //
+        // 但**不能把失败吞掉** —— 2026-11 那次「登录成功却一直停在创作者中心」
+        // 就是被这里的空 `catch {}` 变成完全不可见的：判定永远不成立，界面上
+        // 只表现为「用户没扫码成功」。日志走 renderer 的 console 通道，
+        // 会落进统一日志。
+        console.warn('[ops] 登录探针失败，继续重试', err);
       }
       if (!stopped) timer = window.setTimeout(probe, LOGIN_POLL_MS);
     };
 
-    timer = window.setTimeout(probe, LOGIN_POLL_MS);
+    // 立刻问一次，而不是先等一个轮询周期：用户可能本来就是已登录态（重新
+    // 接管一个已登录的平台），没必要让他对着创作者中心白等 2 秒。
+    void probe();
     return () => {
       stopped = true;
       if (timer !== undefined) window.clearTimeout(timer);

@@ -1348,6 +1348,125 @@ pub async fn cmd_browser_navigate(
         .map_err(|e| format!("Navigation failed: {e}"))
 }
 
+/// Report which of the given cookie names exist for `url` in this webview.
+///
+/// This is the login-state authority the renderer needs before it can trust a
+/// DOM probe. The cookie IS the login session — `socialPlatforms.ts` says so
+/// verbatim ("登录态的权威是浏览器 cookie"), and the 2026-11 Douyin report
+/// proved why that matters: the cookie jar already held `sessionid` /
+/// `sid_tt` while the panel still showed the login page and never recorded
+/// success.
+///
+/// Why a cookie check instead of another DOM probe, two independent reasons:
+///
+/// 1. The DOM probe has to evaluate JS in the page, and the page navigates at
+///    exactly the moment login completes (`creator.douyin.com/` →
+///    `/creator-micro/home`). An eval issued against the context being torn
+///    down fails, and the caller's poll then has to guess whether that was a
+///    transient miss or a real "not logged in" — the guess is what silently
+///    made the panel never conclude success. Cookie reads do not touch the
+///    page's JS context at all, so a navigation cannot eat them.
+/// 2. Douyin's `sessionid` is **HttpOnly**. `document.cookie` cannot see it,
+///    so no amount of DOM probing could ever find it. The cookie API is the
+///    only reader that can.
+///
+/// Returns the subset that exists, not a boolean: the caller decides which
+/// names constitute a login, and gets a diagnostic trail for free (the log
+/// line in the caller names what was actually found).
+///
+/// ## Why `cookies()` and not `cookies_for_url()`
+///
+/// `cookies_for_url` is the tempting call, and it is **wrong on macOS**:
+/// wry's macOS implementation filters with `cookie.domain() == url.domain()`
+/// — *exact* equality (`wkwebview/mod.rs::cookies_for_url`). Douyin's
+/// `sessionid` is a domain cookie stored on `.douyin.com`, so its domain
+/// never equals `creator.douyin.com` and the cookie is silently dropped.
+/// Linux and Windows do proper URI matching, which makes the bug
+/// platform-dependent — the worst kind.
+///
+/// So: read the whole jar (`cookies()`) and do the domain matching here, as a
+/// suffix match (host == domain, or host ends with `.` + domain). That is one
+/// rule on every platform.
+///
+/// The domain match is not decoration: one workspace shares one browser
+/// profile across platforms, so a `sessionid` cookie set by some unrelated
+/// site would otherwise be read as "Douyin is logged in" — and the panel
+/// would tell the user they're logged in when they are not.
+///
+/// `cookies()` on Windows deadlocks when called from a **synchronous** command
+/// (tauri's own docs, wry issue #583). This command is `async` and does the
+/// blocking read inside `spawn_blocking`, so the UI thread stays free to pump
+/// the WebView2 completion callback.
+#[tauri::command]
+pub async fn cmd_browser_cookie_names(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+    tab_id: String,
+    url: String,
+    names: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let (_, session) = state
+        .selected_tab_of_owner(&tab_id)
+        .await
+        .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
+    let label = session.webview_label.clone();
+
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "Webview not found".to_string())?;
+
+    let parsed = url
+        .parse::<Url>()
+        .map_err(|e| format!("Invalid cookie lookup URL: {e}"))?;
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "Cookie lookup URL has no host".to_string())?
+        .to_ascii_lowercase();
+
+    // `cookies()` blocks the caller until the webview thread answers. The read
+    // itself is a few hundred microseconds, but the wait crosses a thread
+    // boundary, so it must not sit on the UI thread (Windows: the WebView2
+    // completion callback is pumped by the UI thread — blocking it deadlocks).
+    // `async` + `spawn_blocking` puts the wait on a worker instead.
+    let cookies = tauri::async_runtime::spawn_blocking(move || webview.cookies())
+        .await
+        .map_err(|e| format!("Cookie read task failed: {e}"))?
+        .map_err(|e| format!("Cookie read failed: {e}"))?;
+
+    let wanted: std::collections::HashSet<&str> = names.iter().map(String::as_str).collect();
+    let mut found: Vec<String> = cookies
+        .iter()
+        .filter(|c| wanted.contains(c.name()))
+        .filter(|c| cookie_domain_matches_host(c.domain(), &host))
+        .map(|c| c.name().to_string())
+        .collect();
+    found.sort();
+    found.dedup();
+    Ok(found)
+}
+
+/// Does a cookie whose domain is `cookie_domain` belong to `host`?
+///
+/// A cookie set on `.douyin.com` applies to `creator.douyin.com`; a cookie set
+/// on `creator.douyin.com` applies to nothing else. Both sides may carry a
+/// leading dot (WebKit / WebView2 / NSHTTPCookie all store domain cookies
+/// that way), so compare on the bare domain.
+///
+/// A cookie with no domain is treated as belonging to nobody: it can only be
+/// scoped by the path, and we cannot check that from here. Erring towards
+/// "not mine" keeps unrelated cookies from being read as a login.
+fn cookie_domain_matches_host(cookie_domain: Option<&str>, host: &str) -> bool {
+    let domain = cookie_domain
+        .unwrap_or_default()
+        .trim_start_matches('.')
+        .to_ascii_lowercase();
+    if domain.is_empty() {
+        return false;
+    }
+    host == domain || host.ends_with(&format!(".{domain}"))
+}
+
 /// Report whether a CSS selector currently matches a VISIBLE element.
 ///
 /// Exists for login-completion detection. Some creator consoles (Douyin being
@@ -1356,6 +1475,11 @@ pub async fn cmd_browser_navigate(
 /// signal never fires and a URL whitelist can never conclude "logged in".
 /// The only reliable tell is a post-login element becoming visible — Easel
 /// reads the same signal (`douyin_publish.py::_logged_in`) in Playwright.
+///
+/// Still a guess: the element can be mid-mount, the eval can die with the
+/// navigation that login triggers, and both read identically as `false`.
+/// Callers MUST treat a cookie hit as authoritative and this as the fallback
+/// (see `cmd_browser_cookie_names`).
 ///
 /// Deliberately NOT a general eval bridge: the caller supplies a selector, not
 /// a script, and this returns one boolean. `querySelectorAll` + `getClientRects`
@@ -1780,12 +1904,56 @@ pub async fn close_all_browsers(state: &Arc<BrowserManager>, app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    use super::cookie_domain_matches_host;
     use super::decode_envelope;
     use super::device_px;
     use super::is_degenerate_bounds;
     use super::parse_agent_url;
     #[cfg(target_os = "windows")]
     use super::wide_null_terminated;
+
+    /// Cookie 域匹配 —— 登录态判据的地基。
+    ///
+    /// 抖音的 `sessionid` 存在 `.douyin.com` 上（域 cookie），而查的是
+    /// `creator.douyin.com`：不做后缀匹配就永远读不到那个 cookie，登录态
+    /// 判定就永远不成立。反过来，同一个工作区里所有平台共用一套浏览器
+    /// profile，别人家的 `sessionid` 也不该被当成抖音已登录。
+    #[test]
+    fn cookie_domain_matching() {
+        // 域 cookie（带前导点）适用于子域。
+        assert!(cookie_domain_matches_host(
+            Some(".douyin.com"),
+            "creator.douyin.com"
+        ));
+        // 主机 cookie 只适用于自己。
+        assert!(cookie_domain_matches_host(
+            Some("creator.douyin.com"),
+            "creator.douyin.com"
+        ));
+        assert!(!cookie_domain_matches_host(
+            Some("creator.douyin.com"),
+            "www.douyin.com"
+        ));
+        // 别人的域 cookie 不算数。
+        assert!(!cookie_domain_matches_host(
+            Some(".example.com"),
+            "creator.douyin.com"
+        ));
+        // 后缀不能裸比：`notdouyin.com` 不是 `douyin.com`。
+        assert!(!cookie_domain_matches_host(
+            Some("douyin.com"),
+            "notdouyin.com"
+        ));
+        // 大小写不敏感。
+        assert!(cookie_domain_matches_host(
+            Some(".DouYin.com"),
+            "creator.douyin.com"
+        ));
+        // 没有域的 cookie 归属不明 —— 不算命中（宁可漏判不可误判）。
+        assert!(!cookie_domain_matches_host(None, "creator.douyin.com"));
+        assert!(!cookie_domain_matches_host(Some(""), "creator.douyin.com"));
+        assert!(!cookie_domain_matches_host(Some("."), "creator.douyin.com"));
+    }
 
     // Issue #290: the renderer can hand us a 0-width container reading while
     // the split panel's width transition is mid-flight. These must be rejected

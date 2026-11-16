@@ -599,6 +599,7 @@ pub fn run() {
             browser::cmd_browser_close_tab,
             browser::cmd_browser_close_owner,
             browser::cmd_browser_query_visible,
+            browser::cmd_browser_cookie_names,
             // File utility commands
             commands::cmd_read_workspace_file,
             commands::cmd_write_workspace_file,
