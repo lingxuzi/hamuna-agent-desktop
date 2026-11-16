@@ -36,7 +36,7 @@ export interface ProviderRouteCredentialState {
   verifyStatus?: Record<string, ProviderVerifyStatus | undefined>;
 }
 
-type ProviderForRoute = Pick<Provider, 'id' | 'type' | 'models' | 'enabled'>;
+export type ProviderForRoute = Pick<Provider, 'id' | 'type' | 'models' | 'enabled'>;
 
 function nonEmpty(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -50,6 +50,62 @@ export function providerDeclaresModel(
   const modelId = nonEmpty(model);
   if (!modelId) return false;
   return provider?.models?.some(entry => entry.model === modelId) ?? false;
+}
+
+/**
+ * The minimal provider shape the route rules need. The renderer and the
+ * sidecar keep their own provider record types; this keeps "does the provider
+ * serve the model?" in one place.
+ */
+export interface ProviderRouteCatalogProvider {
+  id: string;
+  models?: ReadonlyArray<{ model?: string | null }> | null;
+}
+
+/**
+ * Does the provider's catalogue contain this model?
+ *
+ * An empty catalogue means "unknown" — we cannot disprove the pair, so it
+ * counts as serving. Some providers ship an empty list and fill it from the
+ * upstream API at runtime; treating that as "does not serve" would reject
+ * perfectly valid pairs.
+ */
+export function providerServesModel(
+  provider: ProviderRouteCatalogProvider | null | undefined,
+  model: string | null | undefined,
+): boolean {
+  const modelId = nonEmpty(model);
+  if (!modelId) return false;
+  const models = provider?.models ?? [];
+  if (models.length === 0) return true;
+  return models.some(entry => nonEmpty(entry.model) === modelId);
+}
+
+/**
+ * A provider route is an *identity*: "this session runs on provider P with
+ * model M". That only means something when P actually serves M.
+ *
+ * `isConcreteProviderRoute` only checks the shape (both ids non-empty), which
+ * is not enough: a route frozen from a mismatched turn — the Anthropic
+ * subscription provider paired with a third-party model — is a lie that pins
+ * the session to a provider which can never answer it. The renderer then
+ * refuses every send with "provider unavailable" (#300), and it is right to:
+ * the pinned identity was never real.
+ *
+ * Only a *model* mismatch invalidates the identity:
+ *   - provider deleted → keep the pin (#300 must keep refusing the send
+ *     instead of silently re-billing a different provider),
+ *   - provider disabled → keep the pin (same reason),
+ *   - empty catalogue → cannot disprove, keep the pin.
+ */
+export function isProviderRouteModelMismatch(
+  route: ProviderRoute | null | undefined,
+  providers: ReadonlyArray<ProviderRouteCatalogProvider>,
+): boolean {
+  if (!isConcreteProviderRoute(route)) return false;
+  const provider = providers.find(candidate => candidate.id === route.providerId);
+  if (!provider) return false;
+  return !providerServesModel(provider, route.model);
 }
 
 export function hasProviderRouteCredential(

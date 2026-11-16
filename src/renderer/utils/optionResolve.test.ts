@@ -124,6 +124,26 @@ describe('resolveLegacyBuiltinSnapshotProviderId', () => {
     })).toBeUndefined();
   });
 
+  it('recovers the provider from the model when the stored pair never held', () => {
+    // A snapshot frozen from a mismatched turn (subscription provider +
+    // third-party model) is not an identity. The model is the only
+    // trustworthy part, so recover the provider that actually serves it.
+    expect(resolveLegacyBuiltinSnapshotProviderId({
+      snapshotProviderId: SUBSCRIPTION_PROVIDER_ID,
+      snapshotModel: 'doubao-seed-2-0-pro-260215',
+      providers,
+      apiKeys: { 'volcengine-api': 'secret' },
+    })).toBe('volcengine-api');
+  });
+
+  it('does not guess a replacement when the model has no credentialed owner', () => {
+    expect(resolveLegacyBuiltinSnapshotProviderId({
+      snapshotProviderId: SUBSCRIPTION_PROVIDER_ID,
+      snapshotModel: 'doubao-seed-2-0-pro-260215',
+      providers,
+    })).toBeUndefined();
+  });
+
   it('keeps an explicit disabled providerId so the UI can report provider unavailable instead of guessing', () => {
     expect(resolveLegacyBuiltinSnapshotProviderId({
       snapshotProviderId: 'volcengine-api',

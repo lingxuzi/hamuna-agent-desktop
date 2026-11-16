@@ -161,11 +161,17 @@ export function resolveLegacyBuiltinSnapshotProviderId(args: {
   const model = nonEmpty(args.snapshotModel);
   if (explicitProviderId) {
     const provider = args.providers.find(candidate => candidate.id === explicitProviderId);
+    // A provider that no longer exists cannot be recovered from the model, and
+    // silently switching would re-bill another provider (#300). Keep the pin
+    // so the UI reports "provider unavailable".
     if (!provider) return undefined;
-    if (model && (provider.models?.length ?? 0) > 0 && !providerHasModel(provider, model)) {
-      return undefined;
-    }
-    return explicitProviderId;
+    const providerOwnsModel = !model
+      || (provider.models?.length ?? 0) === 0
+      || providerHasModel(provider, model);
+    if (providerOwnsModel) return explicitProviderId;
+    // The stored pair never held (e.g. the subscription provider frozen with
+    // a third-party model). It is not an identity, so recover the provider
+    // from the model below instead of leaving the session without one.
   }
 
   if (!model) return undefined;

@@ -63,10 +63,14 @@ import { coerceReasoningEffortSettingForRuntime } from '../../shared/reasoningEf
 import { ensureDirSync } from './fs-utils';
 import { withFileLock, FileBusyError } from './file-lock';
 import {
+  createConcreteProviderRoute,
   isConcreteProviderRoute,
+  isProviderRouteModelMismatch,
   resolveExplicitProviderRoute,
   resolveLegacyModelOnlyProviderRoute,
   type ProviderRoute,
+  type ProviderRouteCredentialState,
+  type ProviderForRoute,
 } from '../../shared/providerRoute';
 import { resolveSessionConfig } from './resolve-session-config';
 import { normalizeThemeConfigRecord } from '../../shared/theme';
@@ -810,7 +814,7 @@ export function isProviderDisabled(providerId: string, config?: AdminAppConfig):
   return !!provider && !isProviderEnabled(provider);
 }
 
-function providersForRouteResolution(config: AdminAppConfig): Array<{
+export function providersForRouteResolution(config: AdminAppConfig): Array<{
   id: string;
   type: 'api' | 'subscription';
   enabled?: boolean;
@@ -1016,11 +1020,52 @@ function resolveOwnedBuiltinProviderRoute(args: {
 }): ProviderRoute | undefined {
   const { sessionMeta, config } = args;
   if (!sessionMeta) return undefined;
-  if (isConcreteProviderRoute(sessionMeta.providerRoute)) {
-    return sessionMeta.providerRoute;
+  return resolveOwnedProviderRouteForCatalog({
+    sessionMeta,
+    providers: providersForRouteResolution(config),
+    credentials: {
+      apiKeys: config.providerApiKeys,
+      verifyStatus: config.providerVerifyStatus,
+    },
+  });
+}
+
+/**
+ * Resolve the provider identity an owned session snapshot claims.
+ *
+ * Pure over the provider catalogue so the rule is unit-testable without a
+ * disk-backed config.
+ *
+ * The stored (provider, model) pair is honored only when the registry says the
+ * provider serves that model. A pair that never held — the Anthropic
+ * subscription provider frozen with a third-party model — is not an identity:
+ * honoring it pins the session to a provider that can never answer it, and
+ * the renderer then refuses every send with "provider unavailable" (#300).
+ * A deleted/disabled provider keeps its pin on purpose: #300 must keep
+ * refusing the send instead of silently re-billing another provider.
+ *
+ * When the stored pair is bogus, the model is the only trustworthy part of the
+ * snapshot — recover the provider from it (unique credentialed owner only).
+ */
+export function resolveOwnedProviderRouteForCatalog(args: {
+  sessionMeta?: SessionMetadata | null;
+  providers: ReadonlyArray<ProviderForRoute>;
+  credentials: ProviderRouteCredentialState;
+}): ProviderRoute | undefined {
+  const { sessionMeta, providers, credentials } = args;
+  if (!sessionMeta) return undefined;
+
+  const storedRoute = isConcreteProviderRoute(sessionMeta.providerRoute)
+    ? sessionMeta.providerRoute
+    : undefined;
+  const storedIdRoute = sessionMeta.providerId && sessionMeta.model
+    ? createConcreteProviderRoute(sessionMeta.providerId, sessionMeta.model)
+    : undefined;
+
+  if (storedRoute && !isProviderRouteModelMismatch(storedRoute, providers)) {
+    return storedRoute;
   }
-  const providers = providersForRouteResolution(config);
-  if (sessionMeta.providerId) {
+  if (storedIdRoute && !isProviderRouteModelMismatch(storedIdRoute, providers)) {
     return resolveExplicitProviderRoute({
       providerId: sessionMeta.providerId,
       model: sessionMeta.model,
@@ -1031,10 +1076,7 @@ function resolveOwnedBuiltinProviderRoute(args: {
     return resolveLegacyModelOnlyProviderRoute({
       model: sessionMeta.model,
       providers,
-      credentials: {
-        apiKeys: config.providerApiKeys,
-        verifyStatus: config.providerVerifyStatus,
-      },
+      credentials,
     });
   }
   return undefined;

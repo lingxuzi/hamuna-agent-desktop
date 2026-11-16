@@ -96,7 +96,7 @@ import { isSupportedLocale } from '../../shared/i18n';
 import { workspacePathsEqual } from '../../shared/workspacePath';
 import { coerceReasoningEffortForRuntime, reasoningEffortChoices } from '../../shared/reasoningEffort';
 import type { ProviderHistoryEnv } from '../../shared/providerHistory';
-import { createConcreteProviderRoute, hasProviderRouteCredential, isConcreteProviderRoute } from '../../shared/providerRoute';
+import { createConcreteProviderRoute, hasProviderRouteCredential, isConcreteProviderRoute, isProviderRouteModelMismatch } from '../../shared/providerRoute';
 import type { ProviderRoute } from '../../shared/providerRoute';
 import {
   isRuntimeBackedProvider,
@@ -583,17 +583,27 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   const concreteSessionProviderRoute = isConcreteProviderRoute(sessionMeta?.providerRoute)
     ? sessionMeta.providerRoute
     : undefined;
+  // A stored (provider, model) pair is a provider identity only when the
+  // registry says the provider serves that model. A pair that never held —
+  // the Anthropic subscription provider frozen with a third-party model — is
+  // not an identity: honoring it pins the session to a provider that can never
+  // answer it, and #300 then refuses every send with "provider unavailable".
+  // Dropping it lets the model-driven recovery below pick the real provider.
+  const sessionSnapshotRouteIsReal = concreteSessionProviderRoute
+    ? !isProviderRouteModelMismatch(concreteSessionProviderRoute, providers)
+    : true;
   const sessionSnapshotProviderId = sessionSnapshotUsesProviderPicker
     ? (sessionSnapshotIsManagedProvider
       ? (sessionMeta ? managedProviderSnapshotProviderId(sessionMeta) : undefined)
-      : (concreteSessionProviderRoute?.providerId ?? resolveLegacyBuiltinSnapshotProviderId({
-        snapshotProviderId: sessionMeta?.providerId,
-        snapshotModel: sessionMeta?.model,
-        selectedProviderId,
-        providers,
-        apiKeys,
-        providerVerifyStatus,
-      })))
+      : ((sessionSnapshotRouteIsReal ? concreteSessionProviderRoute?.providerId : undefined)
+        ?? resolveLegacyBuiltinSnapshotProviderId({
+          snapshotProviderId: sessionMeta?.providerId,
+          snapshotModel: sessionMeta?.model,
+          selectedProviderId,
+          providers,
+          apiKeys,
+          providerVerifyStatus,
+        })))
     : undefined;
   const effectiveSelectedProviderId = sessionSnapshotUsesProviderPicker
     ? sessionSnapshotProviderId

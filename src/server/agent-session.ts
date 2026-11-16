@@ -130,7 +130,7 @@ import {
   type SessionMaterializationScenario,
 } from './utils/session-materialization';
 import { isManagedCodexProviderReady } from './utils/managed-codex-readiness';
-import { canonicalizeManagedProviderEnv, findAgentByWorkspacePath, getDefaultEnabledOfficialToolIdsForWorkspace, getEffectiveOfficialToolIdsForSession, isCliToolRegistryEnabled, loadConfig as loadAdminConfig } from './utils/admin-config';
+import { canonicalizeManagedProviderEnv, findAgentByWorkspacePath, getDefaultEnabledOfficialToolIdsForWorkspace, getEffectiveOfficialToolIdsForSession, isCliToolRegistryEnabled, loadConfig as loadAdminConfig, providersForRouteResolution } from './utils/admin-config';
 import type { AgentConfig } from '../shared/types/agent';
 import { broadcast as broadcastSse, broadcastLive, flushPendingLiveEvents } from './sse';
 import { participatesInLiveRestore } from '../shared/liveRevision';
@@ -199,7 +199,7 @@ import {
   SYSTEM_REMINDER_OPEN,
   stripLeadingSystemReminder,
 } from '../shared/systemReminder';
-import { createConcreteProviderRoute, isConcreteProviderRoute } from '../shared/providerRoute';
+import { createConcreteProviderRoute, isConcreteProviderRoute, isProviderRouteModelMismatch } from '../shared/providerRoute';
 import type {
   ContentBlock,
   MessageWire,
@@ -5085,9 +5085,22 @@ async function repairOwnedProviderRouteIfNeeded(
 function buildOwnedFreezeSnapshotPatch(overrides?: OwnedFreezeSnapshotPatch): OwnedFreezeSnapshotPatch & Pick<SessionMetadata, 'configSnapshotAt'> {
   const currentMcpServers = configState.currentMcpServers;
   const currentProviderEnv = configState.currentProviderEnv;
-  const currentProviderId = currentProviderEnv?.providerId ?? (configState.currentModel ? SUBSCRIPTION_PROVIDER_ID : undefined);
-  const currentProviderRoute = currentProviderId && configState.currentModel
-    ? createConcreteProviderRoute(currentProviderId, configState.currentModel)
+  const currentModel = configState.currentModel;
+  const currentProviderId = currentProviderEnv?.providerId ?? (currentModel ? SUBSCRIPTION_PROVIDER_ID : undefined);
+  // The provider identity is only real when the registry says the provider
+  // serves the model. The Anthropic subscription provider only serves the
+  // Claude model list, so claiming it for a third-party model would freeze the
+  // session onto a provider that can never answer it — the renderer then
+  // refuses every send with "provider unavailable" (#300). When the pair is
+  // bogus we freeze the model alone; the readers recover the provider from it.
+  const providerPairIsReal = !currentProviderId || !currentModel
+    || !isProviderRouteModelMismatch(
+      createConcreteProviderRoute(currentProviderId, currentModel),
+      providersForRouteResolution(loadAdminConfig()),
+    );
+  const frozenProviderId = providerPairIsReal ? currentProviderId : undefined;
+  const currentProviderRoute = frozenProviderId && currentModel
+    ? createConcreteProviderRoute(frozenProviderId, currentModel)
     : undefined;
   const patch: OwnedFreezeSnapshotPatch & Pick<SessionMetadata, 'configSnapshotAt'> = {
     runtime: getCurrentRuntimeType(),
@@ -5097,7 +5110,7 @@ function buildOwnedFreezeSnapshotPatch(overrides?: OwnedFreezeSnapshotPatch): Ow
     ...(currentMcpServers !== null ? { mcpEnabledServers: currentMcpServers.map(server => server.id) } : {}),
     ...(configState.currentEnabledPluginIds !== null ? { enabledPluginIds: [...configState.currentEnabledPluginIds] } : {}),
     ...(configState.currentEnabledOfficialToolIds !== null ? { enabledOfficialToolIds: [...configState.currentEnabledOfficialToolIds] } : {}),
-    ...(currentProviderId ? { providerId: currentProviderId } : {}),
+    ...(frozenProviderId ? { providerId: frozenProviderId } : {}),
     ...(currentProviderRoute ? { providerRoute: currentProviderRoute } : {}),
     ...overrides,
     configSnapshotAt: new Date().toISOString(),
