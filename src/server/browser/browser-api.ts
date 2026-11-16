@@ -60,6 +60,10 @@ export interface BrowserActionPayload {
   tab?: number;
   /** Open the URL in a new browser tab instead of the current one. */
   newTab?: boolean;
+  /** Scroll offset in pixels for `scroll` (positive scrolls down). */
+  delta?: number;
+  /** Scroll destination for `scroll`: "top" or "bottom". */
+  to?: string;
 }
 
 /**
@@ -142,6 +146,9 @@ async function callBrowser(
     ['value', payload.value],
     ['query', payload.query],
     ['engine', payload.engine],
+    // Scroll destination. A number would not survive the string filter
+    // below, so `delta` is added to the body separately.
+    ['to', payload.to],
     // Credentials are POST-only. A query string lands in Rust's request log
     // and in any URL a future caller prints, so they are added below, after
     // the GET branch has already built its target.
@@ -166,6 +173,7 @@ async function callBrowser(
     );
     if (typeof payload.index === 'number') body.index = payload.index;
     if (typeof payload.tab === 'number') body.tab = payload.tab;
+    if (typeof payload.delta === 'number') body.delta = payload.delta;
     if (payload.newTab) body.new_tab = true;
   }
 
@@ -293,6 +301,58 @@ export async function handleBrowserClick(payload: BrowserActionPayload): Promise
     clicked: true,
     tag: data.tag,
     label: data.label,
+  });
+}
+
+/**
+ * `hamuna browser scroll` — move the viewport.
+ *
+ * Two input devices, two flag shapes:
+ * - a **mouse wheel** is discrete → `--down N` / `--up N` count notches;
+ * - a **trackpad** is continuous → `--delta <px>` is a pixel distance.
+ *
+ * Plus the two positions that need no distance at all (`--to top|bottom`) and
+ * the one that needs no scrolling at all (`--selector` / `--text`: bring that
+ * element into view).
+ *
+ * The answer reports where the viewport ended up (`offset`, `moved`,
+ * `atTop` / `atBottom`) so the agent can tell "scrolled to the end of the
+ * feed" from "the page does not scroll".
+ */
+export async function handleBrowserScroll(payload: BrowserActionPayload): Promise<AdminResponse> {
+  const to = typeof payload.to === 'string' ? payload.to.trim().toLowerCase() : '';
+  const delta = typeof payload.delta === 'number' && Number.isFinite(payload.delta)
+    ? payload.delta
+    : 0;
+  const hasTarget = Boolean(payload.selector || payload.text);
+
+  if (delta === 0 && !to && !hasTarget) {
+    return {
+      success: false,
+      error: 'A scroll target is required: a pixel offset, top/bottom, or an element to bring into view.',
+      suggestedCommand: 'hamuna browser scroll --down 3',
+    };
+  }
+  if (to && to !== 'top' && to !== 'bottom') {
+    return {
+      success: false,
+      error: `Unknown scroll destination '${to}'. Use top or bottom.`,
+      suggestedCommand: 'hamuna browser scroll --to bottom',
+    };
+  }
+
+  const { response, error } = await callBrowser('/api/browser/scroll', 'POST', { ...payload, to });
+  if (error) return error;
+  const data = payloadOf(response);
+  return ok({
+    scrolled: true,
+    mode: data.mode,
+    target: data.target,
+    offset: data.offset,
+    moved: data.moved,
+    atTop: data.atTop,
+    atBottom: data.atBottom,
+    scrollable: data.scrollable,
   });
 }
 
@@ -603,6 +663,8 @@ export async function handleBrowserAction(
       return handleBrowserLogin(payload);
     case 'click':
       return handleBrowserClick(payload);
+    case 'scroll':
+      return handleBrowserScroll(payload);
     case 'fill':
       return handleBrowserFill(payload);
     case 'upload':
@@ -616,7 +678,7 @@ export async function handleBrowserAction(
     default:
       return {
         success: false,
-        error: `Unknown browser action: ${action}. Use state | open | tabs | select | read | search | click | fill | upload | fields | submit | publish | images | image-data | login.`,
+        error: `Unknown browser action: ${action}. Use state | open | tabs | select | read | search | click | scroll | fill | upload | fields | submit | publish | images | image-data | login.`,
       };
   }
 }

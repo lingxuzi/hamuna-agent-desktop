@@ -1013,6 +1013,73 @@ describe('hamuna CLI browser search', () => {
   });
 });
 
+describe('hamuna CLI browser scroll', () => {
+  const withExitSpy = (fn: () => void) => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      fn();
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  };
+
+  it('routes scroll to its own admin route', () => {
+    expect(buildRoute('browser', 'scroll', [])).toBe('browser/scroll');
+  });
+
+  it('turns wheel notches into pixels and keeps the direction', () => {
+    // A mouse wheel is discrete: one notch = 100px, the same figure Chrome
+    // uses. A trackpad is continuous, so it speaks in pixels directly.
+    expect(buildRequestBody('browser', 'scroll', [], { down: '3' })).toMatchObject({ delta: 300 });
+    expect(buildRequestBody('browser', 'scroll', [], { up: '2' })).toMatchObject({ delta: -200 });
+    expect(buildRequestBody('browser', 'scroll', [], { delta: '800' })).toMatchObject({ delta: 800 });
+    expect(buildRequestBody('browser', 'scroll', [], { delta: '-450' })).toMatchObject({ delta: -450 });
+  });
+
+  it('jumps to an edge and brings a target into view', () => {
+    expect(buildRequestBody('browser', 'scroll', [], { to: 'bottom' })).toMatchObject({ to: 'bottom' });
+    expect(buildRequestBody('browser', 'scroll', [], { to: 'top' })).toMatchObject({ to: 'top' });
+    expect(buildRequestBody('browser', 'scroll', [], { selector: '#feed' })).toMatchObject({ selector: '#feed' });
+    expect(buildRequestBody('browser', 'scroll', [], { text: '发布设置' })).toMatchObject({ text: '发布设置' });
+  });
+
+  it('keeps the session id when one is passed', () => {
+    expect(buildRequestBody('browser', 'scroll', [], { session: 'sess-1', down: '1' })).toMatchObject({
+      sessionId: 'sess-1',
+      delta: 100,
+    });
+  });
+
+  it('takes exactly one instruction — two would be silently ambiguous', () => {
+    withExitSpy(() => {
+      expect(() => buildRequestBody('browser', 'scroll', [], {})).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'scroll', [], { down: '3', to: 'bottom' })).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'scroll', [], { delta: '800', selector: '#x' })).toThrow('process.exit(2)');
+    });
+  });
+
+  it('rejects a scroll that could not possibly move anything', () => {
+    withExitSpy(() => {
+      expect(() => buildRequestBody('browser', 'scroll', [], { delta: '0' })).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'scroll', [], { delta: '12.5' })).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'scroll', [], { to: 'middle' })).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'scroll', [], { down: '0' })).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'scroll', [], { up: '-1' })).toThrow('process.exit(2)');
+      expect(() => buildRequestBody('browser', 'scroll', [], { down: 'abc' })).toThrow('process.exit(2)');
+    });
+  });
+
+  it('advertises the scroll command in the top help', () => {
+    expect(TOP_HELP).toContain('hamuna browser scroll --down 3');
+    expect(TOP_HELP).toContain('hamuna browser scroll --delta 800');
+    expect(TOP_HELP).toContain('hamuna browser scroll --to bottom');
+  });
+});
+
 describe('hamuna CLI browser login surface', () => {
   it('sends no credentials for images', () => {
     expect(buildRequestBody('browser', 'images', [], {})).toEqual({});

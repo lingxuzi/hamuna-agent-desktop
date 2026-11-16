@@ -722,6 +722,158 @@ pub fn search_results_script() -> String {
     .to_string()
 }
 
+// ──────────────────────────────────────────────────────────
+// Scroll
+// ──────────────────────────────────────────────────────────
+
+/// JS body of the scroll action.
+///
+/// The four placeholders are substituted instead of interpolated through
+/// `format!`: the script is long and every literal brace in it would have to
+/// be escaped — that escape noise is exactly where a script bug hides.
+///
+/// **Prose in this body must avoid apostrophes and backticks.** The CI guard
+/// that checks "is this one expression" scans the raw script text and treats
+/// every `'` and `` ` `` as a string delimiter without understanding comments
+/// or regex literals. An apostrophe in a comment ("the page's own scroller")
+/// opens a phantom literal that runs to the next quote in the file, and the
+/// guard then rejects a perfectly good script while pointing at the wrong
+/// line. Upgrade path: teach that guard about comments and regex literals,
+/// then this restriction can go away.
+const SCROLL_SCRIPT_BODY: &str = r#"
+(() => {
+  const delta = __DELTA__;
+  const mode = __MODE__;
+  const sel = __SEL__;
+  const txt = __TXT__;
+
+  const canScroll = (el) => !!el && (el.scrollHeight - el.clientHeight) > 1;
+  const isVisible = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    const st = window.getComputedStyle(el);
+    return st.visibility !== 'hidden' && st.display !== 'none';
+  };
+  const visibleArea = (el) => {
+    const r = el.getBoundingClientRect();
+    const w = Math.max(0, Math.min(r.right, window.innerWidth) - Math.max(r.left, 0));
+    const h = Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0));
+    return w * h;
+  };
+  const describe = (el) => {
+    if (!el) return '';
+    if (el === document.scrollingElement || el === document.documentElement || el === document.body) {
+      return 'document';
+    }
+    const id = el.id ? '#' + el.id : '';
+    let cls = '';
+    if (typeof el.className === 'string' && el.className.trim()) {
+      cls = '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.');
+    }
+    return (el.tagName || '?').toLowerCase() + id + cls;
+  };
+  const scrollerOf = (el) => {
+    let node = el.parentElement;
+    while (node) {
+      if (canScroll(node)) return node;
+      node = node.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+  const shape = (scroller, offset, moved, m, target) => ({
+    mode: m,
+    target: target,
+    offset: Math.round(offset),
+    moved: Math.round(moved),
+    scrollHeight: scroller ? scroller.scrollHeight : 0,
+    clientHeight: scroller ? scroller.clientHeight : 0,
+    atTop: scroller ? offset <= 1 : true,
+    atBottom: scroller ? offset >= scroller.scrollHeight - scroller.clientHeight - 1 : true,
+    scrollable: !!scroller
+  });
+
+  // An explicit target: bring that element into view.
+  if (sel || txt) {
+    const el = window.__hamunaLocate(sel, txt);
+    const scroller = scrollerOf(el);
+    const before = scroller ? scroller.scrollTop : 0;
+    el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+    const after = scroller ? scroller.scrollTop : 0;
+    const out = shape(scroller, after, after - before, 'element', window.__hamunaLabel(el));
+    out.rectTop = Math.round(el.getBoundingClientRect().top);
+    return out;
+  }
+
+  // No target: find the container that actually scrolls. A modern SPA
+  // (抖音 / 小红书 creator backends) scrolls an inner box, not the
+  // document — scrolling the document there moves nothing at all.
+  const doc = document.scrollingElement || document.documentElement;
+  let scroller = null;
+  if (canScroll(doc)) {
+    scroller = doc;
+  } else {
+    const viewport = Math.max(1, window.innerWidth * window.innerHeight);
+    const all = document.querySelectorAll('*');
+    let best = null;
+    let bestArea = 0;
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      if (!canScroll(el) || !isVisible(el)) continue;
+      const a = visibleArea(el);
+      if (a > bestArea) {
+        bestArea = a;
+        best = el;
+      }
+      // A box that fills the viewport is the scroller of the page itself —
+      // no need to keep scanning the rest of the tree.
+      if (bestArea >= viewport * 0.9) break;
+    }
+    scroller = best;
+  }
+  if (!scroller) {
+    return shape(null, 0, 0, mode, '');
+  }
+
+  const before = scroller.scrollTop;
+  let wanted = before;
+  if (mode === 'top') wanted = 0;
+  else if (mode === 'bottom') wanted = scroller.scrollHeight;
+  else wanted = before + delta;
+  // The instant behavior option overrides the CSS scroll-behavior property.
+  // A page that turns on smooth scrolling would otherwise animate the scroll
+  // and the offset read back right after would still be the old one.
+  scroller.scrollTo({ top: wanted, behavior: 'instant' });
+  const after = scroller.scrollTop;
+  return shape(scroller, after, after - before, mode, describe(scroller));
+})()
+"#;
+
+/// Scroll the page, a scrollable container inside it, or an element into view.
+///
+/// `delta` is a pixel offset (positive scrolls down). `to` jumps to an edge
+/// ("top" / "bottom"). A `selector` / `text` target scrolls that element into
+/// view instead of moving by an offset.
+///
+/// **Why the scrolling container is discovered instead of assumed**: a modern
+/// SPA scrolls an inner `<div>`, not the document. `window.scrollBy` on such a
+/// page moves nothing and the agent sees a successful call that changed
+/// nothing. So the script picks the document's scrolling element when it can
+/// scroll, and otherwise the largest visible element that actually can.
+pub fn scroll_script(delta: i64, to: &str, selector: &str, text: &str) -> String {
+    let mode = match to {
+        "top" => "\"top\"",
+        "bottom" => "\"bottom\"",
+        _ => "\"delta\"",
+    };
+    let body = SCROLL_SCRIPT_BODY
+        .replace("__DELTA__", &delta.to_string())
+        .replace("__MODE__", mode)
+        .replace("__SEL__", &js_string(selector))
+        .replace("__TXT__", &js_string(text));
+    format!("{INSTALL_HELPERS} && {body}")
+}
+
 /// Escape a Rust string as a JS string literal.
 fn js_string(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
@@ -872,6 +1024,8 @@ mod tests {
             search_type_script("tauri webview", &["#sb_form_q"]),
             search_submit_script(&["#sb_form_q"]),
             search_results_script(),
+            scroll_script(300, "", "", ""),
+            scroll_script(0, "bottom", "#feed", ""),
         ] {
             assert!(
                 script.contains("__hamunaLocate") || script.contains("document"),
@@ -932,5 +1086,50 @@ mod tests {
     fn fill_script_embeds_value_safely() {
         let script = fill_script("input", "", "he said \"hi\"");
         assert!(script.contains("he said \\\"hi\\\""));
+    }
+
+    /// The scroll action has to move the container that ACTUALLY scrolls. A
+    /// modern SPA (抖音 / 小红书 creator backends) scrolls an inner box, not
+    /// the document — scrolling the document there moves nothing while still
+    /// reporting success, which is the exact failure the agent cannot see.
+    #[test]
+    fn scroll_script_finds_the_container_that_can_scroll() {
+        let script = scroll_script(300, "", "", "");
+        assert!(
+            script.contains("scrollHeight - el.clientHeight"),
+            "{script}"
+        );
+        assert!(script.contains("document.scrollingElement"), "{script}");
+        // The document is a candidate, not an assumption: the inner boxes
+        // have to be scanned too.
+        assert!(script.contains("querySelectorAll('*')"), "{script}");
+    }
+
+    /// A page that sets `scroll-behavior: smooth` animates the scroll, so the
+    /// offset read back right afterwards is still the old one and the agent
+    /// concludes nothing moved. `behavior: 'instant'` overrides the CSS.
+    #[test]
+    fn scroll_script_forces_an_instant_scroll() {
+        let script = scroll_script(300, "", "", "");
+        assert!(script.contains("behavior: 'instant'"), "{script}");
+    }
+
+    /// A pixel offset and an edge destination are different things: one moves
+    /// by an amount, the other jumps. Mixing them up silently turns
+    /// "scroll to the bottom" into "scroll 0 pixels".
+    #[test]
+    fn scroll_script_keeps_delta_and_destination_apart() {
+        assert!(scroll_script(-200, "", "", "").contains("const delta = -200;"));
+        assert!(scroll_script(0, "bottom", "", "").contains("const mode = \"bottom\";"));
+        assert!(scroll_script(0, "", "", "").contains("const mode = \"delta\";"));
+    }
+
+    /// The selector / text target is agent-supplied, so it must not be able to
+    /// terminate the JS literal and run code of its own in the page.
+    #[test]
+    fn scroll_script_embeds_the_target_safely() {
+        let script = scroll_script(0, "", "\"; alert(1); //", "");
+        assert!(!script.contains("\"); alert(1); //"), "{script}");
+        assert!(script.contains("\\\"; alert(1); //"), "{script}");
     }
 }

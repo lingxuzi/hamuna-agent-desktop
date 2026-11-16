@@ -208,6 +208,10 @@ pub async fn start_management_api() -> Result<u16, String> {
             post(crate::browser_api::browser_click_handler),
         )
         .route(
+            "/api/browser/scroll",
+            post(crate::browser_api::browser_scroll_handler),
+        )
+        .route(
             "/api/browser/fill",
             post(crate::browser_api::browser_fill_handler),
         )

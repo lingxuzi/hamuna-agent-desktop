@@ -61,6 +61,31 @@ describe('isBrowserCommandAutoAllowed', () => {
     expect(isBrowserCommandAutoAllowed('hamuna browser click --selector "#a" --value-file x.txt')).toBe(false);
   });
 
+  it('allows a scroll in every one-instruction shape', () => {
+    // 滚动只动用户眼前这一屏，既不会往外部发东西，也随时能滚回去。要是在
+    // 「往下看看还有没有」这种常规步骤上弹审批框，agent 每次看 feed
+    // 都要打断用户，功能等于废掉。
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --down 3')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --up 1')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --delta 800')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --delta -450')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --to top')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --to bottom')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --selector "#feed"')).toBe(true);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --text "发布设置"')).toBe(true);
+  });
+
+  it('rejects a scroll shape the CLI itself would reject', () => {
+    // 放行一个 CLI 会 exit(2) 的命令 = agent 收到一个看不懂的失败。
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll')).toBe(false);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --down 3 --to bottom')).toBe(false);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --delta 800 --selector "#x"')).toBe(false);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --to middle')).toBe(false);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --delta 0')).toBe(false);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --down 0')).toBe(false);
+    expect(isBrowserCommandAutoAllowed('hamuna browser scroll --down abc')).toBe(false);
+  });
+
   it('rejects a click or fill with no target', () => {
     expect(isBrowserCommandAutoAllowed('hamuna browser click')).toBe(false);
     expect(isBrowserCommandAutoAllowed('hamuna browser fill --value "x"')).toBe(false);

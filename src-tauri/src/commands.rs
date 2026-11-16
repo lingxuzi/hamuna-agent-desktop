@@ -2465,7 +2465,12 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // agent needs to read which account a workspace publishes as (`ops list account`)
 // before it drives a publish; without the bump an existing install keeps a CLI
 // that silently filters the new section out of every ledger read.
-const CLI_VERSION: &str = "51";
+// 52: adds `browser scroll`. Without it an agent cannot move the viewport of
+// the embedded page at all, and on the creator backends it publishes to the
+// page scrolls an inner container — the publish button below the fold stays
+// unreachable. An existing install keeps the old bundle and the agent has no
+// way down the page.
+const CLI_VERSION: &str = "52";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2708,8 +2713,14 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // write empty strings for the fields they did not mean to touch, and accepting
 // that revision wiped the audience / pillars / goal / cadence that nobody had
 // agreed to change.
+//
+// 78: hamuna-cli — document `browser scroll`. The creator backends the agent
+// publishes on (抖音 / 小红书) scroll an inner container, not the document, so
+// an agent that cannot scroll never reaches the publish button below the fold.
+// The skill is also where the one-instruction rule gets stated, because a
+// scroll that silently drops half its arguments reads as a broken page.
 
-const SYSTEM_SKILLS_VERSION: &str = "77";
+const SYSTEM_SKILLS_VERSION: &str = "78";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3400,13 +3411,15 @@ mod system_skills_tests {
         // / `--reject-proposal`) and lets `ops update direction` locate the record
         // by `--platform`; 73 documents both. 51 adds the `account` ops kind (one
         // account per platform, addressed by `--platform`); 74 documents it. 75
-        // documents that the persisted login is per-workspace.
+        // documents that the persisted login is per-workspace. 52 adds
+        // `browser scroll` — without it the agent cannot reach a publish button
+        // that sits below the fold; 78 documents it.
         //
         // The anchor was left at 46/69 while the constants moved on to 48/71, so
         // this test had been red at HEAD for a reason unrelated to any behaviour
         // — do not re-derive a rule from it, just keep it in step.
-        assert_eq!(CLI_VERSION, "51");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "75");
+        assert_eq!(CLI_VERSION, "52");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "78");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));
@@ -3427,6 +3440,10 @@ mod system_skills_tests {
         // same platform-keyed shape as `direction`. The agent must be able to
         // find it in the docs, and must not be told it can set the login state.
         assert!(bundled.contains("hamuna ops update account --platform douyin --display-name"));
+        // Scroll surface: the creator backends scroll an inner container, so an
+        // agent needs a documented way to move the viewport — and a documented
+        // way to bring a specific element into view.
+        assert!(bundled.contains("hamuna browser scroll"));
 
         let memory_update = include_str!("../../bundled-skills/hamuna-memory-update/SKILL.md");
         assert!(

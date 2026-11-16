@@ -19,7 +19,7 @@ vi.mock('../utils/embedded-browser-quota', () => ({
   recordEmbeddedBrowserOutcome: vi.fn(),
 }));
 
-const { handleBrowserUpload, handleBrowserAction, handleBrowserPublish } = await import('./browser-api');
+const { handleBrowserUpload, handleBrowserAction, handleBrowserPublish, handleBrowserScroll } = await import('./browser-api');
 
 describe('browser upload', () => {
   beforeEach(() => {
@@ -70,6 +70,78 @@ describe('browser upload', () => {
     });
     expect(res.success).toBe(true);
     expect(managementApi.mock.calls[0][0]).toBe('/api/browser/upload');
+  });
+});
+
+describe('browser scroll', () => {
+  beforeEach(() => {
+    managementApi.mockReset();
+    managementApi.mockResolvedValue({
+      ok: true,
+      data: {
+        mode: 'delta',
+        target: 'div.feed',
+        offset: 1240,
+        moved: 300,
+        atTop: false,
+        atBottom: false,
+        scrollable: true,
+      },
+    });
+  });
+
+  it('没有指令就报错，不去碰浏览器', async () => {
+    // 滚动没有默认动作 —— 无参滚动要么是「滚到哪」，要么是根本没想清楚。
+    // 静默滚一屏会让 agent 以为自己看过了整页。
+    const res = await handleBrowserScroll({});
+    expect(res.success).toBe(false);
+    expect(String(res.error)).toContain('scroll target is required');
+    expect(managementApi).not.toHaveBeenCalled();
+  });
+
+  it('像素距离走 POST body，且必须是数字', async () => {
+    const res = await handleBrowserScroll({ delta: 300 });
+    expect(res.success).toBe(true);
+    const [path, method, body] = managementApi.mock.calls[0];
+    expect(path).toBe('/api/browser/scroll');
+    expect(method).toBe('POST');
+    // delta 是数字 —— 字符串会在 Rust 侧反序列化失败。
+    expect(body.delta).toBe(300);
+    expect(typeof body.delta).toBe('number');
+    expect(body.session_id).toBe('sess-1');
+  });
+
+  it('目的地是字符串，走 body 不进 query string', async () => {
+    await handleBrowserScroll({ to: 'bottom' });
+    const [path, method, body] = managementApi.mock.calls[0];
+    expect(path).toBe('/api/browser/scroll');
+    expect(method).toBe('POST');
+    expect(body.to).toBe('bottom');
+  });
+
+  it('不认识的destination 就地报错，不发请求', async () => {
+    const res = await handleBrowserScroll({ to: 'middle' });
+    expect(res.success).toBe(false);
+    expect(String(res.error)).toContain('middle');
+    expect(managementApi).not.toHaveBeenCalled();
+  });
+
+  it('把页面反馈的滚动结果带回来', async () => {
+    // agent 要靠 atBottom 分辨「已经到 feed 末尾」和「这个页面压根不能滚」。
+    const res = await handleBrowserScroll({ delta: 300 });
+    expect(res.data).toMatchObject({
+      scrolled: true,
+      moved: 300,
+      offset: 1240,
+      atBottom: false,
+      scrollable: true,
+    });
+  });
+
+  it('dispatch 认识 scroll —— CLI 的 browser/scroll 路由必须落到这里', async () => {
+    const res = await handleBrowserAction('scroll', { delta: 300 });
+    expect(res.success).toBe(true);
+    expect(managementApi.mock.calls[0][0]).toBe('/api/browser/scroll');
   });
 });
 

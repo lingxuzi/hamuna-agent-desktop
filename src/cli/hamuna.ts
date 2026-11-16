@@ -311,7 +311,7 @@ Usage: hamuna <command> [options]
 
 Commands:
   mcp       Manage MCP tool servers
-  browser   Drive the app's embedded browser (search/open/read/click/fill/upload/publish/submit)
+  browser   Drive the app's embedded browser (search/open/read/click/scroll/fill/upload/publish/submit)
   vision    Official image-understanding CLI tool
   tool      Manage registered CLI tools (Lab-gated; enable in Settings first)
   model     Manage model providers
@@ -357,6 +357,9 @@ Examples:
   hamuna browser tabs                           # list the open tabs
   hamuna browser select --tab 0                 # bring tab 0 to the front
   hamuna browser read                           # current page as markdown
+  hamuna browser scroll --down 3                # mouse wheel: 3 notches down
+  hamuna browser scroll --delta 800             # trackpad: 800 pixels
+  hamuna browser scroll --to bottom             # jump to the end of the page
   hamuna browser click --text "Sign in"
   hamuna browser fill --selector "#q" --value "hamuna"
   hamuna browser fill --selector "#desc" --value-file ops/assets/a.publish.txt  # multi-line text
@@ -2258,6 +2261,20 @@ function printBrowserResult(action: string, result: Record<string, unknown>, fla
     return;
   }
 
+  if (action === 'scroll') {
+    if (data.scrollable === false) {
+      console.log('(nothing to scroll — this page has no scrollable area)');
+      return;
+    }
+    const moved = typeof data.moved === 'number' ? data.moved : 0;
+    const offset = typeof data.offset === 'number' ? data.offset : 0;
+    const target = typeof data.target === 'string' && data.target ? data.target : '(page)';
+    console.log(`✓ scrolled ${target} by ${moved > 0 ? '+' : ''}${moved}px (now at ${offset})`);
+    if (data.atTop === true) console.log('  (at the top of the scroll area)');
+    if (data.atBottom === true) console.log('  (at the bottom of the scroll area)');
+    return;
+  }
+
   if (action === 'fill') {
     const label = typeof data.label === 'string' && data.label ? data.label : '(unlabeled)';
     console.log(`✓ filled ${label}`);
@@ -4060,6 +4077,17 @@ function resolveFillValue(flags: Record<string, unknown>): string {
   }
 }
 
+/**
+ * One mouse-wheel notch, in pixels.
+ *
+ * Chrome's default wheel delta is 100 px (the same value Playwright's
+ * `mouse.wheel` uses); Firefox's is smaller. A trackpad is a different
+ * animal entirely — it reports a continuous pixel distance, which is what
+ * `--delta` carries. So the two input devices get two flag shapes: `--down N`
+ * counts notches, `--delta <px>` counts pixels.
+ */
+const WHEEL_NOTCH_PX = 100;
+
 export function buildRequestBody(
   group: string,
   action: string,
@@ -4202,6 +4230,74 @@ export function buildRequestBody(
         ...(selector ? { selector } : {}),
         ...(text ? { text } : {}),
       };
+    }
+    if (action === 'scroll') {
+      assertStringFlag(flags.down, 'down');
+      assertStringFlag(flags.up, 'up');
+      assertStringFlag(flags.delta, 'delta');
+      assertStringFlag(flags.to, 'to');
+      // One instruction per call. Two at once would be ambiguous: the loser
+      // would be silently ignored, and a scroll that "did nothing" reads as a
+      // broken page rather than as a rejected command.
+      const instructions: string[] = [];
+      for (const key of ['down', 'up', 'delta', 'to', 'selector', 'text']) {
+        if (flags[key] !== undefined) instructions.push(key);
+      }
+      if (instructions.length === 0) {
+        console.error('Error: browser scroll needs one instruction.');
+        console.error('  Usage: hamuna browser scroll --down 3         # mouse wheel: 3 notches');
+        console.error('         hamuna browser scroll --delta 800      # trackpad: 800 pixels');
+        console.error('         hamuna browser scroll --to bottom      # jump to the end of the page');
+        console.error('         hamuna browser scroll --selector "#x"   # bring an element into view');
+        process.exit(2);
+      }
+      if (instructions.length > 1) {
+        console.error(
+          `Error: browser scroll takes one instruction, got ${instructions.map((k) => `--${k}`).join(' + ')}.`,
+        );
+        process.exit(2);
+      }
+
+      const instruction = instructions[0]!;
+
+      if (instruction === 'selector' || instruction === 'text') {
+        const selector = typeof flags.selector === 'string' ? flags.selector : undefined;
+        const text = typeof flags.text === 'string' ? flags.text : undefined;
+        return {
+          ...base,
+          ...(selector ? { selector } : {}),
+          ...(text ? { text } : {}),
+        };
+      }
+
+      if (instruction === 'to') {
+        const to = String(flags.to).trim().toLowerCase();
+        if (to !== 'top' && to !== 'bottom') {
+          console.error('Error: browser scroll --to accepts top or bottom.');
+          process.exit(2);
+        }
+        return { ...base, to };
+      }
+
+      if (instruction === 'delta') {
+        const pixels = Number(String(flags.delta).trim());
+        if (!Number.isInteger(pixels) || pixels === 0) {
+          console.error('Error: browser scroll --delta requires a non-zero pixel count (e.g. --delta 800).');
+          process.exit(2);
+        }
+        return { ...base, delta: pixels };
+      }
+
+      // `--down` / `--up`: mouse wheel notches.
+      const notches = Number(String(flags[instruction]).trim());
+      if (!Number.isInteger(notches) || notches <= 0) {
+        console.error(
+          `Error: browser scroll --${instruction} requires a positive notch count (e.g. --${instruction} 3).`,
+        );
+        process.exit(2);
+      }
+      const pixels = (instruction === 'up' ? -1 : 1) * notches * WHEEL_NOTCH_PX;
+      return { ...base, delta: pixels };
     }
     if (action === 'click' || action === 'fill' || action === 'submit') {
       const selector = typeof flags.selector === 'string' ? flags.selector : undefined;

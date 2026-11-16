@@ -53,7 +53,7 @@
  *
  * `submit` and `publish` are intentionally absent — see the module doc.
  */
-export const BROWSER_AUTO_ALLOWED_ACTIONS = ['status', 'state', 'list', 'open', 'navigate', 'read', 'search', 'click', 'fill', 'upload', 'fields'] as const;
+export const BROWSER_AUTO_ALLOWED_ACTIONS = ['status', 'state', 'list', 'open', 'navigate', 'read', 'search', 'click', 'scroll', 'fill', 'upload', 'fields'] as const;
 
 /**
  * The browser actions that need the user's explicit approval.
@@ -283,6 +283,36 @@ function parseTargetFlags(
 }
 
 /**
+ * Match the flag tail of a `scroll` command.
+ *
+ * Exactly one instruction per call — a distance, an edge, or a target. Two at
+ * once would be ambiguous: the CLI drops the loser, and a scroll that quietly
+ * did something else looks like a broken page.
+ *
+ * Returns `false` for any shape the CLI would reject, so the auto-allow check
+ * never lets through a command that then fails at the CLI.
+ */
+function isScrollShape(flags: Map<string, string | true>): boolean {
+  const keys = [...flags.keys()];
+  if (keys.length !== 1) return false;
+  const key = keys[0]!;
+  const value = flags.get(key);
+  if (typeof value !== 'string') return false; // flag arrived without a value
+
+  if (key === 'selector' || key === 'text') return value.trim().length > 0;
+  if (key === 'to') return value === 'top' || value === 'bottom';
+  if (key === 'down' || key === 'up') {
+    const notches = Number(value.trim());
+    return Number.isInteger(notches) && notches > 0;
+  }
+  if (key === 'delta') {
+    const pixels = Number(value.trim());
+    return Number.isInteger(pixels) && pixels !== 0;
+  }
+  return false;
+}
+
+/**
  * Split `hamuna browser <action> …` into its action, its remaining
  * positionals, and its flags.
  *
@@ -344,6 +374,13 @@ export function isBrowserCommandAutoAllowed(command: string): boolean {
 
     case 'click':
       return rest.length === 0 && parseTargetFlags(flags, false) !== null;
+
+    case 'scroll':
+      // Scrolling moves what the user sees but reaches nothing outside the
+      // page — same class as `click` / `fill`: cheap, reversible, no
+      // externally-visible effect. It must not burn a permission modal on
+      // every "look further down the feed" step.
+      return rest.length === 0 && isScrollShape(flags);
 
     case 'fill':
       return rest.length === 0 && parseTargetFlags(flags, true) !== null;

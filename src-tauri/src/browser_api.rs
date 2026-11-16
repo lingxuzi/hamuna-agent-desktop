@@ -134,6 +134,13 @@ pub struct BrowserRequest {
     /// Open the URL in a NEW browser tab instead of the current one.
     #[serde(default)]
     pub new_tab: bool,
+    /// Scroll offset in pixels for `scroll` (positive scrolls down, negative up).
+    #[serde(default)]
+    pub delta: i64,
+    /// Scroll destination for `scroll`: "top" or "bottom". Empty means the
+    /// offset is relative to wherever the page currently is.
+    #[serde(default)]
+    pub to: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -920,6 +927,44 @@ pub async fn browser_click_handler(Json(input): Json<BrowserRequest>) -> Json<se
     };
 
     let script = browser_agent::click_script(&input.selector, &input.text);
+    match run_script(&label, &script).await {
+        Ok(data) => {
+            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+        }
+        Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    }
+}
+
+/// `POST /api/browser/scroll` — move the viewport of the current page.
+///
+/// Scrolling is not a page-content read but it is not a no-op either: it moves
+/// what the user is looking at. It therefore goes through the **strict**
+/// session resolution, like every other verb that changes the page — an agent
+/// must not scroll a browser that belongs to another workspace.
+pub async fn browser_scroll_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
+    let (_tab_id, label) = match resolve_browser_strict(&input.session_id).await {
+        Ok(found) => found,
+        Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    let to = match input.to.trim().to_ascii_lowercase().as_str() {
+        "" => "",
+        "top" => "top",
+        "bottom" => "bottom",
+        other => {
+            let msg = format!("Unknown scroll destination '{other}'. Use top or bottom.");
+            return Json(serde_json::to_value(BrowserResponse::err(msg)).unwrap_or_default());
+        }
+    };
+
+    if to.is_empty() && input.delta == 0 && input.selector.is_empty() && input.text.is_empty() {
+        return Json(serde_json::to_value(BrowserResponse::err(
+            "Nothing to scroll: pass a pixel offset, top/bottom, or a target to bring into view.",
+        ))
+        .unwrap_or_default());
+    }
+
+    let script = browser_agent::scroll_script(input.delta, to, &input.selector, &input.text);
     match run_script(&label, &script).await {
         Ok(data) => {
             Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())

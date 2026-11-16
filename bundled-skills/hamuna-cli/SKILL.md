@@ -545,6 +545,11 @@ hamuna browser search "tauri webview" --engine 360   # 换引擎（默认 bing.c
 hamuna browser open https://example.com          # 打开（面板不存在时自动创建并显示）
 hamuna browser status                            # 当前页 title / url / readyState
 hamuna browser read                              # 当前页正文，输出 Markdown
+hamuna browser scroll --down 3                   # 鼠标滚轮：往下 3 格
+hamuna browser scroll --up 2                     # 鼠标滚轮：往上 2 格
+hamuna browser scroll --delta 800                # 触摸板：连续位移 800 像素
+hamuna browser scroll --to bottom                # 直接跳到可滚动区域的底部
+hamuna browser scroll --selector "#feed"         # 把某个元素滚进视野
 hamuna browser click --selector "#submit"        # 点 CSS 选择器命中的元素
 hamuna browser click --text "Sign in"            # 点可见文字匹配的元素
 hamuna browser fill --selector "#q" --value "hamuna"
@@ -560,6 +565,12 @@ hamuna browser open https://example.com --new-tab  # 在新标签页打开（当
 hamuna browser tabs                             # 列出当前打开的标签页
 hamuna browser select --tab 0                   # 把第 0 个标签页切到最前
 ```
+
+**滚动：**
+- 页面太长、按钮在下面看不到 → `browser scroll --down 3`（鼠标滚轮 3 格）或 `browser scroll --delta 800`（触摸板 800 像素）
+- 一次只给一个指令：`--down` / `--up` / `--delta` / `--to top|bottom` / `--selector` / `--text`，给两个会报错，不会静默挑一个
+- 抖音、小红书这类创作者后台滚的是**内层容器**不是整页。`browser scroll` 会自己找到真正能滚的那个容器，不用你猜选择器
+- 输出的 `atBottom: true` 表示已经到底了，别再往下滚
 
 **多标签：**
 - 浏览器面板最多同时开 **3** 个标签页。索引按创建顺序排，`browser tabs` 的输出就是索引号
