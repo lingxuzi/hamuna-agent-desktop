@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, Sparkles, X } from 'lucide-react';
 
 import type { OpsDirectionRow, OpsDirectionView } from '../../../shared/ops-derive';
-import { platformLabel } from './opsFormat';
+import { platformLabel, shortDate } from './opsFormat';
 
 interface DirectionActions {
   /** 正在提交（冻结按钮，避免连点写出两个修订）。 */
@@ -74,7 +74,7 @@ function DirectionRow({
   onAcceptProposal,
   onRejectProposal,
 }: DirectionActions & { row: OpsDirectionRow }) {
-  const { t } = useTranslation('chat');
+  const { t, i18n } = useTranslation('chat');
   const [expanded, setExpanded] = useState(false);
   const hasBody = row.positioning !== '' || row.pillars.length > 0;
   const headline = row.positioning || row.brief || t('ops.direction.noBrief');
@@ -143,6 +143,65 @@ function DirectionRow({
             </>
           )}
         </dl>
+      )}
+
+      {/* 采纳之前必须让人看到「改成这样」。只有一句理由就让人点头，等于让人
+          在自己看不见的地方替 Agent 拍板。修订没提到的字段不列 —— 列出来会
+          让人以为那些也要被清空。 */}
+      {row.proposal && (
+        <div className="ops-dir-proposal">
+          <div className="ops-dir-proposal-head">
+            <strong>{t('ops.direction.proposalTitle')}</strong>
+            {row.proposal.proposedAt && (
+              <span>{shortDate(row.proposal.proposedAt, i18n.language)}</span>
+            )}
+          </div>
+          <dl className="ops-dir-body">
+            {row.proposal.positioning !== undefined && (
+              <>
+                <dt>{t('ops.direction.positioning')}</dt>
+                <dd>{row.proposal.positioning || '—'}</dd>
+              </>
+            )}
+            {row.proposal.audience !== undefined && (
+              <>
+                <dt>{t('ops.direction.audience')}</dt>
+                <dd>{row.proposal.audience || '—'}</dd>
+              </>
+            )}
+            {row.proposal.pillars !== undefined && (
+              <>
+                <dt>{t('ops.direction.pillars')}</dt>
+                <dd className="ops-dir-pillars">
+                  {row.proposal.pillars.length === 0 ? (
+                    '—'
+                  ) : (
+                    row.proposal.pillars.map((pillar) => (
+                      <span key={pillar} className="ops-dir-pillar">
+                        {pillar}
+                      </span>
+                    ))
+                  )}
+                </dd>
+              </>
+            )}
+            {row.proposal.goal !== undefined && (
+              <>
+                <dt>{t('ops.direction.goal')}</dt>
+                <dd>{row.proposal.goal || '—'}</dd>
+              </>
+            )}
+            {row.proposal.cadence !== undefined && (
+              <>
+                <dt>{t('ops.direction.cadence')}</dt>
+                <dd>{row.proposal.cadence || '—'}</dd>
+              </>
+            )}
+          </dl>
+          {row.proposal.rationale && (
+            <p className="ops-dir-proposal-why">{row.proposal.rationale}</p>
+          )}
+        </div>
       )}
 
       {/* 修订在等：人此刻只需要两个动作，其余按钮先让开。 */}

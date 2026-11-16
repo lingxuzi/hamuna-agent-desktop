@@ -13,6 +13,7 @@
 
 import type {
   OpsAsset,
+  OpsDirectionProposal,
   OpsDirectionStatus,
   OpsDomainId,
   OpsReview,
@@ -238,6 +239,8 @@ export interface OpsDirectionRow {
   status: OpsDirectionStatus;
   /** 有修订在等确认。 */
   hasProposal: boolean;
+  /** 待确认的修订本身。采纳 / 驳回之前必须让人看到「改成这样」。 */
+  proposal: OpsDirectionProposal | null;
   /** 修订的理由，列表副文本优先用它 —— 人此刻要判断的正是这次改动。 */
   proposalRationale: string | null;
   /** 距上次更新的天数。没有记录时为 null。 */
@@ -265,7 +268,10 @@ const DIRECTION_STATUS_ORDER: readonly OpsDirectionStatus[] = ['active', 'draft'
 export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionView {
   const { directions } = state;
   const active = directions.filter((d) => d.status === 'active').length;
-  const pending = directions.filter((d) => d.proposal !== null).length;
+  // 真值判定而不是 `!== null`：台账里可能**根本没有** proposal 键（老文件、
+  // 手改过的文件），`undefined !== null` 为真会把每一条方向都算成「有修订」，
+  // 界面于是给每行都挂上采纳 / 驳回，点下去后端只能报「没有待确认的修订」。
+  const pending = directions.filter((d) => Boolean(d.proposal)).length;
 
   const rows: OpsDirectionRow[] = directions.map((d) => ({
     id: d.id,
@@ -277,7 +283,8 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
     goal: d.goal,
     cadence: d.cadence,
     status: d.status,
-    hasProposal: d.proposal !== null,
+    hasProposal: Boolean(d.proposal),
+    proposal: d.proposal ?? null,
     proposalRationale: d.proposal?.rationale ?? null,
     idleDays: idleDays(d.updatedAt, now),
   }));
@@ -302,6 +309,7 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
       cadence: '',
       status: 'draft',
       hasProposal: false,
+      proposal: null,
       proposalRationale: null,
       idleDays: null,
     });

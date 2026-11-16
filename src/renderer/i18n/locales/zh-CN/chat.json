@@ -1398,7 +1398,8 @@
       "open": "账号",
       "title": "账号",
       "scopeHint": "登录态只在本工作区有效",
-      "namePlaceholder": "账号名（可选，方便识别）",
+      "summary": "{{logged}} / {{total}} 已登录",
+      "namePlaceholder": "＋ 账号名",
       "status": {
         "success": "已登录",
         "expired": "已失效",
@@ -1409,7 +1410,7 @@
       "relogin": "重新登录",
       "loginTitle": "登录 {{platform}}",
       "loginHint": "在下面的窗口里完成登录，成功后自动返回",
-      "back": "返回",
+      "back": "返回账号",
       "loginSuccess": "{{platform}} 登录成功",
       "loginTimeout": "登录超时（5 分钟），请重试",
       "saveFailed": "保存账号信息失败：{{message}}"
@@ -1427,6 +1428,8 @@
       "noBrief": "还没写方向",
       "idleSub": "已 {{days}} 天没动",
       "proposalSub": "修订：{{reason}}",
+      "proposalTitle": "待确认的修订",
+      "positioning": "定位",
       "audience": "写给谁",
       "goal": "要达成什么",
       "cadence": "节奏",

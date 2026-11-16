@@ -98,18 +98,18 @@ describe('OpsPanel 账号视图', () => {
 
     expect(await screen.findByText('账号')).toBeInTheDocument();
     // 七个平台永远都在 —— 没账号不等于没这个平台。
-    // 角标与平台名都是平台名（「抖音」的角标就是「抖音」），按行里的平台名取。
-    const names = Array.from(document.querySelectorAll('.ops-acc-name')).map(
+    // 角标与平台名都是平台名（「抖音」的角标就是「抖音」），按卡里的平台名取。
+    const names = Array.from(document.querySelectorAll('.ops-acc-card-name')).map(
       (el) => el.textContent,
     );
     expect(names).toEqual(['小红书', '抖音', '快手', '微信视频号', 'B站', '知乎', '微信公众号']);
-    // 登录态徽标按台账里的记录显示，不是一律「未登录」：小红书已登录、
+    // 登录态按台账里的记录显示，不是一律「未登录」：小红书已登录、
     // 抖音已失效、其余五个还没记录过。
-    const rows = Array.from(document.querySelectorAll('.ops-acc-row'));
-    expect(rows).toHaveLength(7);
-    expect(rows[0]?.querySelector('.ops-acc-state')?.className).toContain('is-success');
-    expect(rows[1]?.querySelector('.ops-acc-state')?.className).toContain('is-expired');
-    expect(rows[2]?.querySelector('.ops-acc-state')?.className).toContain('is-unknown');
+    const cards = Array.from(document.querySelectorAll('.ops-acc-card'));
+    expect(cards).toHaveLength(7);
+    expect(cards[0]?.querySelector('.ops-acc-state')?.className).toContain('is-success');
+    expect(cards[1]?.querySelector('.ops-acc-state')?.className).toContain('is-expired');
+    expect(cards[2]?.querySelector('.ops-acc-state')?.className).toContain('is-unknown');
     expect(screen.getByText('已登录')).toBeInTheDocument();
     expect(screen.getByText('已失效')).toBeInTheDocument();
     expect(screen.getAllByText('未登录')).toHaveLength(5);
@@ -118,8 +118,8 @@ describe('OpsPanel 账号视图', () => {
   it('改账号名写回这个工作区的台账', async () => {
     const user = await openAccounts();
 
-    const inputs = screen.getAllByPlaceholderText('账号名（可选，方便识别）');
-    // 第一行是台账里已有名字的小红书，第二行是还没起名字的抖音。
+    const inputs = screen.getAllByPlaceholderText('＋ 账号名');
+    // 第一张卡是台账里已有名字的小红书，第二张是还没起名字的抖音。
     expect((inputs[0] as HTMLInputElement).value).toBe('露营装备小王');
     await user.clear(inputs[1] as HTMLElement);
     await user.type(inputs[1] as HTMLElement, '露营装备小李');
@@ -140,7 +140,7 @@ describe('OpsPanel 账号视图', () => {
   it('登录成功把登录态写回这个工作区的台账', async () => {
     const user = await openAccounts();
 
-    await user.click(await screen.findByRole('button', { name: '重新登录' }));
+    await user.click((await screen.findAllByRole('button', { name: '重新登录' }))[0] as HTMLElement);
     await waitFor(() => expect(mocks.browserProps).toBeTruthy());
 
     // 登录页导航到工作台 = 登录成功（小红书是 URL 判定的平台）。
@@ -164,7 +164,7 @@ describe('OpsPanel 账号视图', () => {
 
   it('接管浏览器用的是这个工作区的浏览器 profile，且不挂到聊天会话上', async () => {
     const user = await openAccounts();
-    await user.click(await screen.findByRole('button', { name: '重新登录' }));
+    await user.click((await screen.findAllByRole('button', { name: '重新登录' }))[0] as HTMLElement);
     await waitFor(() => expect(mocks.browserProps).toBeTruthy());
 
     expect(mocks.browserProps?.workspace).toBe(WORKSPACE);

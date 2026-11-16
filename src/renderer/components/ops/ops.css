@@ -140,6 +140,11 @@
 
 .ops-ghost {
   flex: none;
+  /* 图标 + 文字的按钮族：图标是 inline 元素，不加 flex 就会坐在基线上，
+     比文字低一截，看起来像没对齐。 */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1;
@@ -151,6 +156,11 @@
   white-space: nowrap;
   cursor: pointer;
   transition: border-color var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-ghost svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
 }
 .ops-ghost:hover {
   border-color: var(--ink-subtle);
@@ -761,6 +771,41 @@
   box-shadow: inset 2px 0 0 var(--accent-warm);
 }
 
+/* 待确认的修订：把「改成这样」摊开给人看。缩进对齐正文列（46px = 字牌 +
+   间距），边框说明「这是别人提的、还没生效」，不铺底色 —— 底色会和列表行
+   自己的纸面打架。 */
+.ops-dir-proposal {
+  margin: 0 0 8px 46px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-md);
+  background: var(--paper);
+}
+.ops-dir-proposal-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ops-dir-proposal-head strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.ops-dir-proposal-head span {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.ops-dir-proposal .ops-dir-body {
+  margin: 0;
+}
+.ops-dir-proposal-why {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
 /* 空态：整张卡只有一行字，不摆骨架、不摆假数据。 */
 .ops-empty {
   padding: 18px 0 6px;
@@ -1172,49 +1217,36 @@
    方向」这条流水线，账号是这台机器在这个工作区上的另一件东西。顶栏一个
    「账号」按钮切过去，胶囊行让位给「返回」。 */
 
-.ops-acc-list {
+/* 一个平台一张卡。宽面板铺多列，窄面板自动退回单列 —— 卡片自己撑着高度，
+   不用给行高定死。 */
+.ops-acc-grid {
+  display: grid;
+  /* `min(320px, 100%)`：窄到装不下 320px 时轨道跟着容器缩，不会把卡片顶出
+     面板。 */
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  gap: 12px;
+}
+
+.ops-acc-card {
   display: flex;
   flex-direction: column;
-}
-
-.ops-acc-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-}
-.ops-acc-row:first-child {
-  border-top: 0;
-  padding-top: 4px;
-}
-
-.ops-acc-badge {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
   border-radius: var(--theme-radius-md);
-  background: var(--paper-inset);
-  color: var(--ink-secondary);
-  font-size: 12px;
-  font-weight: 500;
+  background: var(--paper);
 }
 
-.ops-acc-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.ops-acc-title {
+.ops-acc-card-head {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
-.ops-acc-name {
+/* 字牌沿用列表那套（右下角平台色块），只是字号小一档：两个字放得下。 */
+.ops-acc-card-head .thumb {
+  font-size: 12px;
+}
+.ops-acc-card-name {
   font-size: 14px;
   font-weight: 500;
   color: var(--ink);
@@ -1223,31 +1255,19 @@
   white-space: nowrap;
 }
 
-/* 登录态徽标：已登录才上色，其余两档都安静 —— 「未确认」不是错误状态，
-   只是还没有信息。 */
-.ops-acc-state {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--theme-radius-full);
-  background: var(--paper-inset);
-  color: var(--ink-muted);
+.ops-acc-scope {
+  margin: 6px 0 14px;
   font-size: 12px;
-  line-height: 1.4;
-}
-.ops-acc-state.is-success {
-  background: var(--success-bg);
-  color: var(--success);
-}
-.ops-acc-time {
-  font-size: 12px;
+  line-height: 1.5;
   color: var(--ink-faint);
 }
 
+/* 账号名：就地可改。默认无边框（读起来是内容不是表单），悬停给一道细边当
+   「可以点」的提示。 */
 .ops-acc-input {
   display: block;
   width: 100%;
-  margin-top: 4px;
-  padding: 4px 6px;
+  padding: 5px 8px;
   border: 1px solid transparent;
   border-radius: var(--theme-radius-sm);
   background: transparent;
@@ -1260,13 +1280,63 @@
 .ops-acc-input::placeholder {
   color: var(--ink-faint);
 }
+.ops-acc-input:hover {
+  border-color: var(--line);
+}
 .ops-acc-input:focus-visible {
   outline: none;
   border-color: var(--accent);
 }
 
+.ops-acc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* 卡片高度不齐时，按钮仍贴着底边 —— 一排卡的下沿是齐的。 */
+  margin-top: auto;
+}
+.ops-acc-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 登录态：色点在文字前，文字本身保持中性色。颜色只做辅助信号，状态全靠
+   文案说清 —— 绿字压在纸面上未必够对比度，色点没有这个问题。 */
+.ops-acc-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-secondary);
+}
+.ops-acc-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-subtle);
+}
+.ops-acc-state.is-success::before {
+  background: var(--success);
+}
+.ops-acc-state.is-expired::before {
+  background: var(--warning);
+}
+.ops-acc-time {
+  font-size: 12px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
 .ops-acc-act {
   flex: none;
+  /* 同一排卡片的按钮一样宽，卡片下沿才对得齐。 */
+  min-width: 92px;
   padding: 7px 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--theme-radius-full);
@@ -1275,6 +1345,7 @@
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1;
+  text-align: center;
   white-space: nowrap;
   cursor: pointer;
   transition: border-color var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
@@ -1324,17 +1395,4 @@
   border: 1px solid var(--line);
   border-radius: var(--theme-radius-lg);
   background: var(--paper);
-}
-
-@container (max-width: 520px) {
-  .ops-acc-row {
-    flex-wrap: wrap;
-  }
-  .ops-acc-main {
-    flex-basis: 100%;
-    order: 3;
-  }
-  .ops-acc-act {
-    margin-left: auto;
-  }
 }

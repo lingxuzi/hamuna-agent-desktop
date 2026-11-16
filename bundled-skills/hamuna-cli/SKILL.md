@@ -316,14 +316,16 @@ platform 派生 id（方向 `dir-<platform>`、账号 `acc-<platform>`），所�
 `proposal` 整段替换进主字段并置 `status: active`；`--reject-proposal` 只丢掉 proposal。
 两者互斥，也都不能和 `--proposal` / `--proposal-file` 同用。
 
-**`--proposal-file` 收一个 JSON 对象**，字段是完整新值（不是差异）+ `rationale`：
+**`--proposal-file` 收一个 JSON 对象**：**只写这次要改的字段** + `rationale`。
+没提到的字段**保持原样**（不会被清空）——所以别把没想改的字段写成空串：
 
 ```json
-{ "positioning": "…", "audience": "…", "pillars": ["…"],
-  "goal": "…", "cadence": "…", "rationale": "为什么现在该改" }
+{ "positioning": "夜间露营装备测评", "rationale": "近两周晚间内容完播率高 40%" }
 ```
 
-`rationale` 会原样显示给用户，是他决定点不点的唯一依据——别写「优化定位」这种没有信息量的话。
+采纳时，后端把这次提到的字段整段替换进主字段（没提到的不动），并置 `status: active`。
+
+`rationale` 会连同「改成这样」一起原样显示给用户，是他决定点不点的依据——别写「优化定位」这种没有信息量的话。
 
 **账号是工作区级的。** 账号清单和它的登录态都落在**当前工作区**的台账里——每个工作区有自己的一套浏览器 profile（cookie 不互通），所以换个工作区就是另一批号、另一份登录态。`hamuna ops list account` 只列当前工作区的号；要操作别的工作区就带 `--workspace <path>`。
 

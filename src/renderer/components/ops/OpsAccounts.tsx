@@ -42,7 +42,7 @@ export interface OpsAccountsProps {
 /**
  * 工作区账号清单。
  *
- * **一个平台一行**，七个平台永远都在 —— 没账号不等于没这个平台，行本身就是
+ * **一个平台一张卡**，七个平台永远都在 —— 没账号不等于没这个平台，卡本身就是
  * 「这个工作区要不要管这个平台」的入口。
  *
  * 登录态是**缓存的确认**，不是实时状态：真正的权威是浏览器 cookie（每个工作区
@@ -58,6 +58,11 @@ export function OpsAccounts({ workspace, accounts, onLogin }: OpsAccountsProps) 
     for (const account of accounts) map.set(account.platform, account);
     return map;
   }, [accounts]);
+
+  const signedIn = useMemo(
+    () => accounts.filter((account) => account.loginState === 'success').length,
+    [accounts],
+  );
 
   const writeDisplayName = useCallback(
     async (platform: SocialPlatformId, displayName: string) => {
@@ -75,20 +80,38 @@ export function OpsAccounts({ workspace, accounts, onLogin }: OpsAccountsProps) 
       <div className="ops-card-head">
         <h2>{t('ops.account.title')}</h2>
         <span className="ops-sp" />
-        <span className="ops-meta">{t('ops.account.scopeHint')}</span>
+        <span className="ops-meta">
+          {t('ops.account.summary', { logged: signedIn, total: SOCIAL_PLATFORMS.length })}
+        </span>
       </div>
+      <p className="ops-acc-scope">{t('ops.account.scopeHint')}</p>
 
-      <div className="ops-acc-list">
+      <div className="ops-acc-grid">
         {SOCIAL_PLATFORMS.map((platform) => {
           const account = byPlatform.get(platform.id);
           const state: OpsLoginState = account?.loginState ?? 'unknown';
           return (
-            <div className="ops-acc-row" key={platform.id}>
-              <span className="ops-acc-badge">{platform.badge}</span>
+            <article className="ops-acc-card" key={platform.id}>
+              <div className="ops-acc-card-head">
+                <span className="thumb" data-platform={platform.id}>
+                  {platform.badge}
+                </span>
+                <span className="ops-acc-card-name">{platformLabel(t, platform.id)}</span>
+              </div>
 
-              <div className="ops-acc-main">
-                <div className="ops-acc-title">
-                  <span className="ops-acc-name">{platformLabel(t, platform.id)}</span>
+              <input
+                className="ops-acc-input"
+                placeholder={t('ops.account.namePlaceholder')}
+                defaultValue={account?.displayName ?? ''}
+                onBlur={(e) => {
+                  const next = e.target.value.trim();
+                  if (next === (account?.displayName ?? '')) return;
+                  void writeDisplayName(platform.id, next);
+                }}
+              />
+
+              <div className="ops-acc-foot">
+                <span className="ops-acc-meta">
                   <span className={`ops-acc-state is-${state}`}>
                     {t(`ops.account.status.${state}`)}
                   </span>
@@ -99,27 +122,16 @@ export function OpsAccounts({ workspace, accounts, onLogin }: OpsAccountsProps) 
                       })}
                     </span>
                   )}
-                </div>
-                <input
-                  className="ops-acc-input"
-                  placeholder={t('ops.account.namePlaceholder')}
-                  defaultValue={account?.displayName ?? ''}
-                  onBlur={(e) => {
-                    const next = e.target.value.trim();
-                    if (next === (account?.displayName ?? '')) return;
-                    void writeDisplayName(platform.id, next);
-                  }}
-                />
+                </span>
+                <button
+                  type="button"
+                  className="ops-acc-act"
+                  onClick={() => onLogin(platform.id)}
+                >
+                  {state === 'unknown' ? t('ops.account.login') : t('ops.account.relogin')}
+                </button>
               </div>
-
-              <button
-                type="button"
-                className="ops-acc-act"
-                onClick={() => onLogin(platform.id)}
-              >
-                {state === 'success' ? t('ops.account.relogin') : t('ops.account.login')}
-              </button>
-            </div>
+            </article>
           );
         })}
       </div>

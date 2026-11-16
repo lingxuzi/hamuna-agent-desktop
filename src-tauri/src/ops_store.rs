@@ -291,7 +291,13 @@ pub struct OpsDirection {
     #[serde(default)]
     pub status: OpsDirectionStatus,
     /// 待确认的修订。嵌套在记录里，所以采纳修订是一次原子写。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ///
+    /// **永远写出来**（没有就写 `null`），不能 `skip_serializing_if`：前端类型是
+    /// `proposal: OpsDirectionProposal | null` —— 键缺失在前端拿到的是
+    /// `undefined` 而不是 `null`，而 `undefined !== null` 为真，「有修订」就会
+    /// 对每一条方向都成立：界面给每行都挂上「采纳 / 驳回」，点下去后端只能
+    /// 报「没有待确认的修订」。
+    #[serde(default)]
     pub proposal: Option<OpsDirectionProposal>,
     #[serde(default)]
     pub created_at: String,
@@ -307,25 +313,31 @@ pub enum OpsDirectionStatus {
     Active,
 }
 
-/// 一条待确认的修订。字段是**完整的新值**，不是差异：人看到「改成这样」，
-/// 确认就整段替换。给差异等于让人在脑子里做合并。
+/// 一条待确认的修订。
+///
+/// **没提到的字段 = 这次不改它**（`None`），不是「要清空」。修订常常只动一两个
+/// 字段（`--proposal '{"positioning":"…","rationale":"…"}'`），拿空值覆盖会把
+/// 方向里没参与讨论的内容整段抹掉。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsDirectionProposal {
-    #[serde(default)]
-    pub positioning: String,
-    #[serde(default)]
-    pub audience: String,
-    #[serde(default)]
-    pub pillars: Vec<String>,
-    #[serde(default)]
-    pub goal: String,
-    #[serde(default)]
-    pub cadence: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positioning: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pillars: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cadence: Option<String>,
+    /// 为什么要改。
     #[serde(default)]
     pub rationale: String,
+    /// 支撑这次修订的证据。
     #[serde(default)]
     pub evidence: String,
+    /// 提议时刻。写台账时若为空由 store 补上——界面要显示「什么时候提的」。
     #[serde(default)]
     pub proposed_at: String,
 }
@@ -895,6 +907,23 @@ fn upsert_direction(
     fields.remove("acceptProposal");
     fields.remove("rejectProposal");
 
+    // `proposal` 不走通用合并：它是**一整版新值**，深合并会把上一版残留的字段
+    // （尤其 rationale）揉进新修订里，人看到的就不是 Agent 刚提的那一版。
+    // 这里单独取出来，采纳 / 驳回之后再决定怎么落。
+    let patched_proposal = match fields.remove("proposal") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::Object(map)) => Some(map),
+        Some(other) => {
+            return Err(format!("[ops-store] Invalid direction proposal: {}", other));
+        }
+    };
+    if patched_proposal.is_some() && (accept || reject) {
+        return Err(
+            "[ops-store] a new proposal cannot be combined with acceptProposal / rejectProposal"
+                .to_string(),
+        );
+    }
+
     let id = patch_id(&fields);
     let platform = fields
         .get("platform")
@@ -923,16 +952,36 @@ fn upsert_direction(
             .proposal
             .take()
             .ok_or_else(|| format!("Direction {} has no pending revision to accept", direction.id))?;
-        direction.positioning = proposal.positioning;
-        direction.audience = proposal.audience;
-        direction.pillars = proposal.pillars;
-        direction.goal = proposal.goal;
-        direction.cadence = proposal.cadence;
+        // 修订没提到的字段**保持原样**。拿空值覆盖 = 把方向里没参与讨论的
+        // 内容整段抹掉，而人点「采纳」时看到的只是被改的那几项。
+        if let Some(value) = proposal.positioning {
+            direction.positioning = value;
+        }
+        if let Some(value) = proposal.audience {
+            direction.audience = value;
+        }
+        if let Some(value) = proposal.pillars {
+            direction.pillars = value;
+        }
+        if let Some(value) = proposal.goal {
+            direction.goal = value;
+        }
+        if let Some(value) = proposal.cadence {
+            direction.cadence = value;
+        }
         // 采纳即生效：人点了头就是「定下来了」，不需要再点一次。
         direction.status = OpsDirectionStatus::Active;
     } else if reject {
         // 驳回只丢修订，其余字段保持原样——驳回的是「改成这样」，不是方向本身。
         direction.proposal = None;
+    } else if let Some(map) = patched_proposal {
+        let mut proposal: OpsDirectionProposal = serde_json::from_value(serde_json::Value::Object(map))
+            .map_err(|e| format!("[ops-store] Invalid direction proposal: {}", e))?;
+        // 提议时刻由 store 兜底：Agent 不写也得有个时间给人看。
+        if proposal.proposed_at.trim().is_empty() {
+            proposal.proposed_at = now_iso();
+        }
+        direction.proposal = Some(proposal);
     }
 
     direction.created_at =
@@ -1296,6 +1345,104 @@ mod tests {
         let err = upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: accept })
             .expect_err("should fail");
         assert!(err.contains("no pending revision"), "错误要说清原因: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_state_always_carries_the_proposal_key() {
+        // 前端类型是 `proposal: OpsDirectionProposal | null`。键缺失在前端就是
+        // `undefined`，而 `undefined !== null` 为真 —— 「有修订」会对每一条方向
+        // 都成立，界面给每行都挂上采纳 / 驳回，点下去只能报「没有待确认的修订」。
+        let ws = make_test_workspace("ops-direction-proposal-key");
+        upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+
+        let raw = fs::read_to_string(ws.join("ops/state.json")).expect("read raw");
+        assert!(raw.contains("\"proposal\": null"), "方向记录必须带 proposal 键: {}", raw);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn accepting_a_partial_proposal_keeps_the_fields_it_never_mentioned() {
+        // 修订常常只动一两个字段。拿空值覆盖 = 把方向里没参与讨论的内容抹掉，
+        // 而人点「采纳」时看到的只是被改的那几项。
+        let ws = make_test_workspace("ops-direction-partial-accept");
+        let seed = serde_json::json!({
+            "platform": "douyin",
+            "brief": "露营装备",
+            "positioning": "白天露营装备测评",
+            "audience": "入门露营者",
+            "goal": "涨粉",
+            "cadence": "每周三条",
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: seed }).expect("seed");
+
+        let propose = serde_json::json!({
+            "platform": "douyin",
+            "proposal": { "positioning": "夜间露营装备测评", "rationale": "晚间数据更好" },
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: propose }).expect("propose");
+
+        let accept = serde_json::json!({ "platform": "douyin", "acceptProposal": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: accept })
+                .expect("accept");
+
+        assert_eq!(state.directions[0].positioning, "夜间露营装备测评");
+        // 没提到的字段保持原样。
+        assert_eq!(state.directions[0].audience, "入门露营者");
+        assert_eq!(state.directions[0].goal, "涨粉");
+        assert_eq!(state.directions[0].cadence, "每周三条");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn a_second_proposal_replaces_the_first_instead_of_merging_into_it() {
+        // 深合并会把上一版的 rationale 揉进新修订：人看到的就不是 Agent 刚提的
+        // 那一版，改的到底是哪一版就说不清了。
+        let ws = make_test_workspace("ops-direction-proposal-replace");
+        upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+
+        let first = serde_json::json!({
+            "platform": "douyin",
+            "proposal": { "positioning": "第一版", "rationale": "第一版的理由" },
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: first }).expect("first");
+
+        let second = serde_json::json!({
+            "platform": "douyin",
+            "proposal": { "positioning": "第二版" },
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: second })
+                .expect("second");
+
+        let proposal = state.directions[0].proposal.as_ref().expect("proposal");
+        assert_eq!(proposal.positioning.as_deref(), Some("第二版"));
+        assert_eq!(proposal.rationale, "", "上一版的理由不能被揉进新修订");
+        assert!(!proposal.proposed_at.trim().is_empty(), "提议时刻由 store 兜底");
         let _ = fs::remove_dir_all(&ws);
     }
 

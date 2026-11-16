@@ -2700,8 +2700,16 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // login" is only true inside the workspace that logged in. An agent that reads
 // "logged out" as "the cookie expired" would ask the user to re-login for a
 // workspace that was never logged in — or the other way round.
+//
+// 76: hamuna-cli — correct the direction-revision contract. A proposal now
+// carries only the fields it actually changes ("not mentioned" = "unchanged"),
+// and the panel shows the proposed values next to the reason before the user
+// accepts. The old wording ("fields are the complete new values") made agents
+// write empty strings for the fields they did not mean to touch, and accepting
+// that revision wiped the audience / pillars / goal / cadence that nobody had
+// agreed to change.
 
-const SYSTEM_SKILLS_VERSION: &str = "75";
+const SYSTEM_SKILLS_VERSION: &str = "76";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

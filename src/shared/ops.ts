@@ -314,22 +314,27 @@ export type OpsLoginState = 'unknown' | 'success' | 'expired';
 export const OPS_LOGIN_STATES: readonly OpsLoginState[] = ['unknown', 'success', 'expired'];
 
 /**
- * 一条待确认的修订。字段是**完整的新值**，不是差异 —— 人看到的是「改成
- * 这样」，确认就整段替换。给差异等于让人在脑子里做合并。
+ * 一条待确认的修订。
+ *
+ * **没提到的字段 = 这次不改它**（键缺失），不是「要清空」。修订常常只动一两个
+ * 字段，拿空值覆盖会把方向里没参与讨论的内容整段抹掉。
+ *
+ * 采纳时**逐字段整段替换**（不是逐键深合并）：Agent 提第二版时，上一版残留的
+ * 说明不该被揉进新修订 —— 人看到的必须是 Agent 刚提的那一版。
  */
 export interface OpsDirectionProposal {
-  /** 建议的新定位 / 受众 / 支柱 / 目标 / 节奏。 */
-  positioning: string;
-  audience: string;
-  pillars: string[];
-  goal: string;
-  cadence: string;
+  /** 建议的新定位 / 受众 / 支柱 / 目标 / 节奏。没提到就不改。 */
+  positioning?: string;
+  audience?: string;
+  pillars?: string[];
+  goal?: string;
+  cadence?: string;
   /** 为什么要改。 */
-  rationale: string;
+  rationale?: string;
   /** 支撑这次修订的证据，如「近 14 天 3 条晚 9 点发布的内容完播率高 40%」。 */
-  evidence: string;
+  evidence?: string;
   /** 提议时刻。 */
-  proposedAt: string;
+  proposedAt?: string;
 }
 
 /**

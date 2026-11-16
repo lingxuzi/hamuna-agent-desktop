@@ -494,6 +494,42 @@ describe('方向域', () => {
     });
     expect(view.lead).toEqual({ active: 1, pending: 0, focusId: 'dir-douyin' });
   });
+
+  it('台账里没有 proposal 键时，不算「有修订」', () => {
+    // 老文件、手改过的文件都可能**根本没有** proposal 这个键。前端拿到的是
+    // `undefined`，而 `undefined !== null` 为真 —— 用 `!== null` 判会给每一条
+    // 方向都挂上采纳 / 驳回，点下去后端只能报「没有待确认的修订」。
+    const withoutKey = { ...direction({ id: 'dir-douyin', platform: 'douyin' }) };
+    delete (withoutKey as Partial<OpsDirection>).proposal;
+
+    const view = deriveDirectionView(state({ directions: [withoutKey] }), NOW);
+
+    expect(view.pool[0].hasProposal).toBe(false);
+    expect(view.pool[0].proposal).toBeNull();
+    expect(view.lead.pending).toBe(0);
+  });
+
+  it('有修订的行把修订本身带到界面上（采纳前要看得见「改成这样」）', () => {
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          direction({
+            id: 'dir-douyin',
+            platform: 'douyin',
+            proposal: { positioning: '夜间露营装备测评', rationale: '晚间数据更好' },
+          }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.pool[0].hasProposal).toBe(true);
+    expect(view.pool[0].proposal).toMatchObject({
+      positioning: '夜间露营装备测评',
+      rationale: '晚间数据更好',
+    });
+    expect(view.lead.pending).toBe(1);
+  });
 });
 
 describe('空数据不炸', () => {

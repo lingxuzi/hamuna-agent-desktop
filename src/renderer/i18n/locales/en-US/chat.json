@@ -1398,7 +1398,8 @@
       "open": "Accounts",
       "title": "Accounts",
       "scopeHint": "Sign-in state applies to this workspace only",
-      "namePlaceholder": "Account name (optional)",
+      "summary": "{{logged}} / {{total}} signed in",
+      "namePlaceholder": "+ Account name",
       "status": {
         "success": "Signed in",
         "expired": "Expired",
@@ -1409,7 +1410,7 @@
       "relogin": "Sign in again",
       "loginTitle": "Sign in to {{platform}}",
       "loginHint": "Finish the sign-in in the window below; you'll return automatically",
-      "back": "Back",
+      "back": "Back to accounts",
       "loginSuccess": "Signed in to {{platform}}",
       "loginTimeout": "Sign-in timed out after 5 minutes. Try again.",
       "saveFailed": "Could not save the account: {{message}}"
@@ -1427,6 +1428,8 @@
       "noBrief": "No direction yet",
       "idleSub": "Untouched for {{days}} days",
       "proposalSub": "Revision: {{reason}}",
+      "proposalTitle": "Pending revision",
+      "positioning": "Positioning",
       "audience": "Audience",
       "goal": "Goal",
       "cadence": "Cadence",
