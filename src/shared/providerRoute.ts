@@ -217,3 +217,36 @@ export function createConcreteProviderRoute(providerId: string, model: string): 
   }
   return { kind: 'provider', providerId, model };
 }
+
+/**
+ * What a session snapshot may freeze as its provider identity.
+ *
+ * A snapshot freezes the provider so later turns resume on the same one.
+ * Freezing a pair the registry rejects writes a lie into the session store:
+ * the readers pin the session to a provider that can never answer it (#300
+ * then refuses every send with "provider unavailable"), and the sidecar reads
+ * the next turn as a provider switch — which ends in a *fresh session* with a
+ * new id instead of the conversation the user is looking at.
+ *
+ * Only a model mismatch invalidates the pair. A deleted/disabled provider
+ * keeps its pin on purpose (#300 must keep refusing the send instead of
+ * silently re-billing another provider), and an empty catalogue cannot
+ * disprove anything.
+ *
+ * When the pair never held, the model is the only trustworthy part of the
+ * snapshot: freeze the model alone and let the readers recover the provider
+ * from it.
+ */
+export function resolveFrozenProviderIdentity(args: {
+  providerId: string | null | undefined;
+  model: string | null | undefined;
+  providers: ReadonlyArray<ProviderRouteCatalogProvider>;
+}): { providerId?: string; providerRoute?: ProviderRoute } {
+  const providerId = nonEmpty(args.providerId);
+  const model = nonEmpty(args.model);
+  if (!providerId) return {};
+  if (!model) return { providerId };
+  const route = createConcreteProviderRoute(providerId, model);
+  if (isProviderRouteModelMismatch(route, args.providers)) return {};
+  return { providerId, providerRoute: route };
+}

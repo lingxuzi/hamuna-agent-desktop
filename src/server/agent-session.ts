@@ -199,7 +199,7 @@ import {
   SYSTEM_REMINDER_OPEN,
   stripLeadingSystemReminder,
 } from '../shared/systemReminder';
-import { createConcreteProviderRoute, isConcreteProviderRoute, isProviderRouteModelMismatch } from '../shared/providerRoute';
+import { isConcreteProviderRoute, resolveFrozenProviderIdentity } from '../shared/providerRoute';
 import type {
   ContentBlock,
   MessageWire,
@@ -5091,17 +5091,17 @@ function buildOwnedFreezeSnapshotPatch(overrides?: OwnedFreezeSnapshotPatch): Ow
   // serves the model. The Anthropic subscription provider only serves the
   // Claude model list, so claiming it for a third-party model would freeze the
   // session onto a provider that can never answer it — the renderer then
-  // refuses every send with "provider unavailable" (#300). When the pair is
-  // bogus we freeze the model alone; the readers recover the provider from it.
-  const providerPairIsReal = !currentProviderId || !currentModel
-    || !isProviderRouteModelMismatch(
-      createConcreteProviderRoute(currentProviderId, currentModel),
-      providersForRouteResolution(loadAdminConfig()),
-    );
-  const frozenProviderId = providerPairIsReal ? currentProviderId : undefined;
-  const currentProviderRoute = frozenProviderId && currentModel
-    ? createConcreteProviderRoute(frozenProviderId, currentModel)
-    : undefined;
+  // refuses every send with "provider unavailable" (#300), and the sidecar
+  // reads the next turn as a provider switch (a fresh session). When the pair
+  // is bogus we freeze the model alone; the readers recover the provider from
+  // it.
+  const frozen = resolveFrozenProviderIdentity({
+    providerId: currentProviderId,
+    model: currentModel,
+    providers: providersForRouteResolution(loadAdminConfig()),
+  });
+  const frozenProviderId = frozen.providerId;
+  const currentProviderRoute = frozen.providerRoute;
   const patch: OwnedFreezeSnapshotPatch & Pick<SessionMetadata, 'configSnapshotAt'> = {
     runtime: getCurrentRuntimeType(),
     ...(configState.currentModel ? { model: configState.currentModel } : {}),

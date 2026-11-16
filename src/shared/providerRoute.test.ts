@@ -6,6 +6,7 @@ import {
   hasProviderRouteCredential,
   isConcreteProviderRoute,
   isProviderRouteModelMismatch,
+  resolveFrozenProviderIdentity,
   resolveLegacyModelOnlyProviderRoute,
 } from './providerRoute';
 
@@ -181,5 +182,66 @@ describe('provider route model mismatch', () => {
       { kind: 'provider', providerId: 'custom-api', model: 'agnes-3.0-flash' },
       [{ id: 'custom-api', models: [] }],
     )).toBe(false);
+  });
+});
+
+describe('frozen provider identity', () => {
+  const providers = [
+    { id: 'custom-api', models: [{ model: 'agnes-3.0-flash' }] },
+    { id: SUBSCRIPTION_PROVIDER_ID, models: [{ model: 'claude-opus-4-7' }] },
+  ];
+
+  it('refuses to freeze a pair the registry rejects', () => {
+    // The exact lie that used to be written into the session store: the
+    // subscription provider paired with a third-party model. Freezing it
+    // pinned the session to a provider that can never answer it, so the next
+    // turn read as a provider switch and the sidecar opened a *fresh session*
+    // instead of continuing the conversation.
+    expect(resolveFrozenProviderIdentity({
+      providerId: SUBSCRIPTION_PROVIDER_ID,
+      model: 'agnes-3.0-flash',
+      providers,
+    })).toEqual({});
+  });
+
+  it('freezes a pair the registry confirms', () => {
+    expect(resolveFrozenProviderIdentity({
+      providerId: 'custom-api',
+      model: 'agnes-3.0-flash',
+      providers,
+    })).toEqual({
+      providerId: 'custom-api',
+      providerRoute: { kind: 'provider', providerId: 'custom-api', model: 'agnes-3.0-flash' },
+    });
+  });
+
+  it('keeps the provider pin when the catalogue cannot disprove it', () => {
+    // Deleted provider / empty catalogue: #300 must keep refusing the send,
+    // so the pin survives and no route is invented.
+    expect(resolveFrozenProviderIdentity({
+      providerId: 'deleted-provider',
+      model: 'agnes-3.0-flash',
+      providers,
+    })).toEqual({
+      providerId: 'deleted-provider',
+      providerRoute: { kind: 'provider', providerId: 'deleted-provider', model: 'agnes-3.0-flash' },
+    });
+
+    expect(resolveFrozenProviderIdentity({
+      providerId: 'custom-api',
+      model: 'agnes-3.0-flash',
+      providers: [{ id: 'custom-api', models: [] }],
+    })).toEqual({
+      providerId: 'custom-api',
+      providerRoute: { kind: 'provider', providerId: 'custom-api', model: 'agnes-3.0-flash' },
+    });
+  });
+
+  it('freezes the provider alone when no model is known yet', () => {
+    expect(resolveFrozenProviderIdentity({
+      providerId: 'custom-api',
+      model: undefined,
+      providers,
+    })).toEqual({ providerId: 'custom-api' });
   });
 });
