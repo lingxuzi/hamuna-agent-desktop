@@ -25,15 +25,20 @@
 //!   remembered by content hash, so a file the user edited since is
 //!   recognised as theirs and left alone from then on.
 //! - **Everything else converges**: missing files are added, stale files are
-//!   refreshed, nothing is ever deleted.
+//!   refreshed.
+//! - **What the template retired is removed.** The manifest lists those
+//!   retirements explicitly, and the same rule governs all of them: we only
+//!   remove what we can *prove* we shipped. A workspace copy whose bytes
+//!   still match what the template used to ship is ours to delete; a copy the
+//!   user touched is theirs and stays.
 //!
 //! State and backups live in `~/.hamuna`, NOT in the workspace: a workspace
 //! is often a git repo the user pushes, and app bookkeeping does not belong
 //! in it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -120,6 +125,34 @@ pub struct TemplateManifest {
     /// covers `ops/state.json`.
     #[serde(default)]
     pub user_owned: Vec<String>,
+    /// What the template used to ship and no longer does.
+    #[serde(default)]
+    pub removed: Vec<TemplateRemoval>,
+}
+
+/// A retirement the template declares.
+///
+/// Two forms, one rule: **we only remove what we can prove we shipped.**
+///
+/// - A whole file (`sha256`): the workspace copy still holds the exact bytes
+///   the template used to ship. A copy the user edited no longer matches and
+///   stays.
+/// - A single line (`line`): the line in the file is byte-identical to the one
+///   the template shipped. This is the only way a *user-owned* file can be
+///   touched — a line the user reworded does not match and stays, and
+///   everything else in the file is preserved byte for byte.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateRemoval {
+    /// Template-relative path. Only plain components — no `..`, no drive
+    /// letter, no leading slash.
+    pub path: String,
+    /// sha256 (hex) of the file as the template shipped it.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// The exact line the template shipped.
+    #[serde(default)]
+    pub line: Option<String>,
 }
 
 impl TemplateManifest {
@@ -174,6 +207,10 @@ pub struct TemplateSyncReport {
     pub added: Vec<String>,
     /// Files that existed with stale content and now carry the template's.
     pub updated: Vec<String>,
+    /// Files the template retired and we removed.
+    pub removed: Vec<String>,
+    /// Files a retired line was taken out of.
+    pub lines_removed: Vec<String>,
     /// Files the user owns — never touched.
     pub user_owned: Vec<String>,
     /// Files the user edited after we wrote them — left alone.
@@ -185,7 +222,10 @@ pub struct TemplateSyncReport {
 impl TemplateSyncReport {
     /// Did this converge change anything?
     pub fn changed(&self) -> bool {
-        !self.added.is_empty() || !self.updated.is_empty()
+        !self.added.is_empty()
+            || !self.updated.is_empty()
+            || !self.removed.is_empty()
+            || !self.lines_removed.is_empty()
     }
 }
 
@@ -326,6 +366,234 @@ fn install_template_file(source: &Path, target: &Path) -> Result<(), String> {
     write_atomic(target, &bytes)
 }
 
+/// A template-relative path that can only name something inside the workspace.
+///
+/// Judged by **component**, not by string shape: `Path::join` silently drops
+/// the base when the second half is absolute — `workspace.join("C:\\x")` lands
+/// outside the workspace without an error — and `..` walks one level up. A
+/// manifest can come from the user's own template directory, so this is the
+/// boundary that keeps the removal channel inside the workspace.
+fn validate_relative_template_path(rel: &str) -> Result<PathBuf, String> {
+    let path = Path::new(rel);
+    if path.as_os_str().is_empty() {
+        return Err("Removal path is empty".to_string());
+    }
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => out.push(part),
+            Component::CurDir | Component::ParentDir => {
+                return Err(format!(
+                    "Removal path must not contain '.' or '..': {}",
+                    rel
+                ));
+            }
+            Component::Prefix(_) | Component::RootDir => {
+                return Err(format!("Removal path must be relative: {}", rel));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Retire what the template no longer ships.
+///
+/// Two forms, one rule: we only remove what we can **prove** we shipped.
+///
+/// - A whole file: the workspace copy still holds the exact bytes the
+///   template used to ship (the manifest's hash), or the state file remembers
+///   that we wrote it and the user never took over. Either witness is enough.
+/// - A single line: the line in the file is byte-identical to the one the
+///   template shipped. A line the user reworded does not match and stays.
+///
+/// Everything else stays, and says so in the report: a retired file the user
+/// had touched is listed under `user_modified`, not silently dropped.
+fn apply_removals(
+    workspace: &Path,
+    template_dir: &Path,
+    manifest: &TemplateManifest,
+    previous: &TemplateSyncState,
+    state_root: &Path,
+    shipped: &BTreeSet<String>,
+    report: &mut TemplateSyncReport,
+) {
+    for removal in &manifest.removed {
+        let rel = match validate_relative_template_path(&removal.path) {
+            Ok(rel) => rel,
+            Err(e) => {
+                ulog_warn!("[template-sync] ignoring removal entry: {}", e);
+                continue;
+            }
+        };
+        let rel_path = rel.to_string_lossy().replace('\\', "/");
+
+        match (&removal.sha256, &removal.line) {
+            (Some(_), Some(_)) | (None, None) => {
+                ulog_warn!(
+                    "[template-sync] removal entry {} needs exactly one of sha256 / line — skipped",
+                    rel_path
+                );
+                continue;
+            }
+            (Some(sha256), None) => {
+                // The template still ships this file → the entry is stale. The
+                // template wins: a file the template has is a file the
+                // workspace gets.
+                if shipped.contains(&rel_path) {
+                    ulog_warn!(
+                        "[template-sync] removal entry {} is still shipped by the template — skipped",
+                        rel_path
+                    );
+                    continue;
+                }
+                // A user-owned path is never deleted — the ledger lives there.
+                // Only the line form may touch a user-owned file, and only to
+                // take out a line that is byte-identical to the template's.
+                if manifest.is_user_owned(&rel_path) {
+                    report.user_owned.push(rel_path);
+                    continue;
+                }
+                remove_retired_file(
+                    workspace, previous, state_root, &rel, &rel_path, sha256, report,
+                );
+            }
+            (None, Some(line)) => {
+                // Same check, one level down: the template still shipping this
+                // line means the entry is stale.
+                if template_line_survives(template_dir, &rel, line) {
+                    ulog_warn!(
+                        "[template-sync] removal entry {} is still shipped by the template — skipped",
+                        rel_path
+                    );
+                    continue;
+                }
+                retire_line_in_file(workspace, state_root, &rel, &rel_path, line, report);
+            }
+        }
+    }
+}
+
+/// Does the template's current version still carry this exact line?
+fn template_line_survives(template_dir: &Path, rel: &Path, line: &str) -> bool {
+    let Ok(bytes) = fs::read(template_dir.join(rel)) else {
+        return false;
+    };
+    let Ok(content) = String::from_utf8(bytes) else {
+        return false;
+    };
+    content
+        .split_inclusive('\n')
+        .any(|piece| strip_line_ending(piece) == line)
+}
+
+/// The line's content without its terminator.
+fn strip_line_ending(piece: &str) -> &str {
+    let body = piece.strip_suffix('\n').unwrap_or(piece);
+    body.strip_suffix('\r').unwrap_or(body)
+}
+
+/// Delete a retired file — but only the one we can prove we shipped.
+fn remove_retired_file(
+    workspace: &Path,
+    previous: &TemplateSyncState,
+    state_root: &Path,
+    rel: &Path,
+    rel_path: &str,
+    sha256: &str,
+    report: &mut TemplateSyncReport,
+) {
+    let target = workspace.join(rel);
+    // `symlink_metadata` — it does NOT follow links (CLAUDE.md red line:
+    // `Path::exists()` follows links and reports false for a broken one).
+    let Ok(meta) = fs::symlink_metadata(&target) else {
+        return; // nothing there — nothing to retire
+    };
+    // A directory or a link where the template had a file: the user put
+    // something there on purpose. Not ours to remove.
+    if meta.is_dir() || meta.file_type().is_symlink() {
+        report.user_modified.push(rel_path.to_string());
+        return;
+    }
+    let Ok(current_hash) = hash_file(&target) else {
+        return;
+    };
+
+    // Ownership. The state file is the first witness: it remembers what we
+    // wrote and whether the user took over. The manifest's hash is the
+    // second: it covers a workspace whose copy is a revision we no longer
+    // ship, and a workspace created before the state file existed.
+    let ours = match previous.files.get(rel_path) {
+        Some(state) if state.user_modified => false,
+        Some(state) if state.hash == current_hash => true,
+        // We wrote it and the workspace differs: the user changed it.
+        Some(_) => false,
+        None => current_hash == sha256,
+    };
+
+    if !ours {
+        report.user_modified.push(rel_path.to_string());
+        return;
+    }
+
+    backup_existing(state_root, workspace, rel_path);
+    match fs::remove_file(&target) {
+        Ok(()) => {
+            report.removed.push(rel_path.to_string());
+            ulog_info!("[template-sync] removed retired file {}", rel_path);
+        }
+        Err(e) => ulog_warn!("[template-sync] cannot remove {}: {e}", target.display()),
+    }
+}
+
+/// Take one retired line out of a file, keeping everything else.
+///
+/// The match is byte-exact (modulo the line terminator): a line the user
+/// reworded does not match and stays. The rest of the file — including
+/// anything the user wrote — is preserved byte for byte, line endings
+/// included.
+fn retire_line_in_file(
+    workspace: &Path,
+    state_root: &Path,
+    rel: &Path,
+    rel_path: &str,
+    line: &str,
+    report: &mut TemplateSyncReport,
+) {
+    let target = workspace.join(rel);
+    let Ok(meta) = fs::symlink_metadata(&target) else {
+        return;
+    };
+    if meta.is_dir() || meta.file_type().is_symlink() {
+        return;
+    }
+    let Ok(bytes) = fs::read(&target) else {
+        return;
+    };
+    // Not UTF-8 → we do not touch what we cannot read.
+    let Ok(content) = String::from_utf8(bytes) else {
+        return;
+    };
+
+    let pieces: Vec<&str> = content.split_inclusive('\n').collect();
+    let kept: Vec<&str> = pieces
+        .iter()
+        .filter(|piece| strip_line_ending(piece) != line)
+        .copied()
+        .collect();
+    if kept.len() == pieces.len() {
+        return; // the line is not there — nothing to retire
+    }
+
+    let next = kept.concat();
+    backup_existing(state_root, workspace, rel_path);
+    if let Err(e) = write_atomic(&target, next.as_bytes()) {
+        ulog_warn!("[template-sync] cannot rewrite {}: {e}", target.display());
+        return;
+    }
+    report.lines_removed.push(rel_path.to_string());
+    ulog_info!("[template-sync] retired a line in {}", rel_path);
+}
+
 /// Converge `workspace` onto `template_dir`.
 ///
 /// Safe to call repeatedly: files already identical to the template are left
@@ -360,6 +628,12 @@ fn sync_template_files_with_state_root(
 
     let template_files = list_template_files_rel(template_dir)
         .map_err(|e| format!("Cannot walk template {}: {e}", template_dir.display()))?;
+    // What the template ships, as workspace-relative paths. The removal
+    // channel consults it: a path the template still ships is not retired.
+    let shipped: BTreeSet<String> = template_files
+        .iter()
+        .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+        .collect();
 
     for rel in template_files {
         let rel_path = rel.to_string_lossy().replace('\\', "/");
@@ -462,6 +736,18 @@ fn sync_template_files_with_state_root(
         }
     }
 
+    // Retire what the template no longer ships. Runs after the add/update
+    // loop so the removals land on the workspace as it is now.
+    apply_removals(
+        workspace,
+        template_dir,
+        &manifest,
+        &previous,
+        state_root,
+        &shipped,
+        &mut report,
+    );
+
     write_state(
         state_root,
         workspace,
@@ -473,10 +759,11 @@ fn sync_template_files_with_state_root(
 
     if report.changed() {
         ulog_info!(
-            "[template-sync] {} converged: +{} ~{} (user-owned {}, user-modified {})",
+            "[template-sync] {} converged: +{} ~{} -{} (user-owned {}, user-modified {})",
             manifest.template_id,
             report.added.len(),
             report.updated.len(),
+            report.removed.len(),
             report.user_owned.len(),
             report.user_modified.len()
         );
@@ -485,6 +772,9 @@ fn sync_template_files_with_state_root(
         }
         for path in &report.updated {
             ulog_info!("[template-sync] updated {}", path);
+        }
+        for path in &report.removed {
+            ulog_info!("[template-sync] removed {}", path);
         }
     }
 
@@ -729,6 +1019,182 @@ mod tests {
     }
 
     #[test]
+    fn removes_a_file_the_template_no_longer_ships() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state_root = tmp.path().join("state");
+        let template_dir = tmp.path().join("template");
+        let workspace = tmp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        // The template shipped this file; now it is retired.
+        write(
+            &template_dir.join(".claude/commands/BOOTSTRAP.md"),
+            "bootstrap v1",
+        );
+        let sha = hash_file(&template_dir.join(".claude/commands/BOOTSTRAP.md")).unwrap();
+        fs::remove_file(&template_dir.join(".claude/commands/BOOTSTRAP.md")).unwrap();
+        template(
+            &template_dir,
+            &format!(
+                r#"{{"templateId":"sino","removed":[{{"path":".claude/commands/BOOTSTRAP.md","sha256":"{}"}}]}}"#,
+                sha
+            ),
+        );
+        write(
+            &workspace.join(".claude/commands/BOOTSTRAP.md"),
+            "bootstrap v1",
+        );
+
+        let report =
+            sync_template_files_with_state_root(&workspace, &template_dir, &state_root).unwrap();
+
+        assert_eq!(report.removed, vec![".claude/commands/BOOTSTRAP.md"]);
+        assert!(!workspace.join(".claude/commands/BOOTSTRAP.md").exists());
+    }
+
+    #[test]
+    fn keeps_a_retired_file_the_user_edited() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state_root = tmp.path().join("state");
+        let template_dir = tmp.path().join("template");
+        let workspace = tmp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        write(
+            &template_dir.join(".claude/commands/BOOTSTRAP.md"),
+            "bootstrap v1",
+        );
+        let sha = hash_file(&template_dir.join(".claude/commands/BOOTSTRAP.md")).unwrap();
+        fs::remove_file(&template_dir.join(".claude/commands/BOOTSTRAP.md")).unwrap();
+        template(
+            &template_dir,
+            &format!(
+                r#"{{"templateId":"sino","removed":[{{"path":".claude/commands/BOOTSTRAP.md","sha256":"{}"}}]}}"#,
+                sha
+            ),
+        );
+        // The user rewrote it. It no longer matches what the template shipped,
+        // so it is theirs.
+        write(&workspace.join(".claude/commands/BOOTSTRAP.md"), "mine");
+
+        let report =
+            sync_template_files_with_state_root(&workspace, &template_dir, &state_root).unwrap();
+
+        assert!(report.removed.is_empty());
+        assert_eq!(report.user_modified, vec![".claude/commands/BOOTSTRAP.md"]);
+        assert_eq!(
+            fs::read_to_string(workspace.join(".claude/commands/BOOTSTRAP.md")).unwrap(),
+            "mine"
+        );
+    }
+
+    #[test]
+    fn never_removes_a_file_the_user_owns() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state_root = tmp.path().join("state");
+        let template_dir = tmp.path().join("template");
+        let workspace = tmp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        // The ledger is the user's. A manifest that asks for its removal is
+        // refused — the hash matches and everything else would say "delete".
+        template(
+            &template_dir,
+            r#"{"templateId":"sino","userOwned":["ops"],"removed":[{"path":"ops/state.json","sha256":"whatever"}]}"#,
+        );
+        write(&workspace.join("ops/state.json"), r#"{"topics":[]}"#);
+
+        let report =
+            sync_template_files_with_state_root(&workspace, &template_dir, &state_root).unwrap();
+
+        assert!(report.removed.is_empty());
+        assert!(workspace.join("ops/state.json").exists());
+    }
+
+    #[test]
+    fn refuses_a_removal_path_that_escapes_the_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state_root = tmp.path().join("state");
+        let template_dir = tmp.path().join("template");
+        let workspace = tmp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        let outside = tmp.path().join("outside.md");
+        fs::write(&outside, "secret").unwrap();
+        template(
+            &template_dir,
+            r#"{"templateId":"sino","removed":[{"path":"../outside.md","sha256":"whatever"}]}"#,
+        );
+
+        let report =
+            sync_template_files_with_state_root(&workspace, &template_dir, &state_root).unwrap();
+
+        assert!(report.removed.is_empty());
+        assert!(outside.exists());
+    }
+
+    #[test]
+    fn retires_a_line_the_template_no_longer_ships() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state_root = tmp.path().join("state");
+        let template_dir = tmp.path().join("template");
+        let workspace = tmp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        // The template's current copy no longer carries the line.
+        write(
+            &template_dir.join(".claude/rules/03-USER.md"),
+            "# USER.md\n\n- **账号名：**\n",
+        );
+        template(
+            &template_dir,
+            r#"{"templateId":"sino","userOwned":[".claude/rules/03-USER.md"],"removed":[{"path":".claude/rules/03-USER.md","line":"*首次使用跑 `/BOOTSTRAP`，一起填。*"}]}"#,
+        );
+        write(
+            &workspace.join(".claude/rules/03-USER.md"),
+            "# USER.md\n\n- **账号名：** 小王\n\n*首次使用跑 `/BOOTSTRAP`，一起填。*\n",
+        );
+
+        let report =
+            sync_template_files_with_state_root(&workspace, &template_dir, &state_root).unwrap();
+
+        assert_eq!(report.lines_removed, vec![".claude/rules/03-USER.md"]);
+        let content = fs::read_to_string(workspace.join(".claude/rules/03-USER.md")).unwrap();
+        assert!(!content.contains("BOOTSTRAP"));
+        // Everything else survives byte for byte.
+        assert!(content.contains("- **账号名：** 小王"));
+    }
+
+    #[test]
+    fn keeps_a_line_the_user_reworded() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state_root = tmp.path().join("state");
+        let template_dir = tmp.path().join("template");
+        let workspace = tmp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        write(
+            &template_dir.join(".claude/rules/03-USER.md"),
+            "# USER.md\n",
+        );
+        template(
+            &template_dir,
+            r#"{"templateId":"sino","userOwned":[".claude/rules/03-USER.md"],"removed":[{"path":".claude/rules/03-USER.md","line":"*首次使用跑 `/BOOTSTRAP`，一起填。*"}]}"#,
+        );
+        write(
+            &workspace.join(".claude/rules/03-USER.md"),
+            "# USER.md\n\n我自己写的一行\n",
+        );
+
+        let report =
+            sync_template_files_with_state_root(&workspace, &template_dir, &state_root).unwrap();
+
+        assert!(report.lines_removed.is_empty());
+        let content = fs::read_to_string(workspace.join(".claude/rules/03-USER.md")).unwrap();
+        assert!(content.contains("我自己写的一行"));
+    }
+
+    #[test]
     fn a_second_converge_changes_nothing() {
         let tmp = tempfile::tempdir().unwrap();
         let state_root = tmp.path().join("state");
@@ -752,6 +1218,7 @@ mod tests {
         let manifest = TemplateManifest {
             template_id: "sino".to_string(),
             user_owned: vec!["ops".to_string()],
+            removed: Vec::new(),
         };
         assert!(manifest.is_user_owned("ops"));
         assert!(manifest.is_user_owned("ops/state.json"));
@@ -825,5 +1292,37 @@ mod tests {
             fs::read_to_string(workspace.join("ops/state.json")).unwrap(),
             r#"{"stateVersion":1}"#
         );
+    }
+
+    /// The wizard is the only cold-start path — the slash command that used
+    /// to be the second one has to be gone, and gone from existing workspaces
+    /// too (which is what the manifest's removal list is for).
+    #[test]
+    fn the_sino_template_retires_the_bootstrap_command() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("agent-templates")
+            .join("sino");
+        let manifest = TemplateManifest::read(&repo).unwrap();
+
+        assert!(!repo.join(".claude/commands/BOOTSTRAP.md").exists());
+        let retired = manifest
+            .removed
+            .iter()
+            .find(|entry| entry.path == ".claude/commands/BOOTSTRAP.md")
+            .expect("the bootstrap command must be listed as retired");
+        assert!(retired.sha256.is_some(), "a file retirement needs its hash");
+
+        // Every retired line is one the template no longer ships — a stale
+        // entry would fight the template on every converge.
+        for entry in &manifest.removed {
+            if let Some(line) = &entry.line {
+                assert!(
+                    !template_line_survives(&repo, Path::new(&entry.path), line),
+                    "stale retirement in {}",
+                    entry.path
+                );
+            }
+        }
     }
 }

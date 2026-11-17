@@ -482,6 +482,16 @@ export interface Project {
   archivedAt?: string;
   /** Whether proactive Agent mode was enabled when the workspace was archived. */
   archivedAgentEnabledBeforeArchive?: boolean;
+  /**
+   * ISO timestamp: the cold-start wizard has been walked through in this
+   * workspace. Absent = never onboarded, so the next cold start opens the
+   * wizard again.
+   *
+   * **App-level UX state, not workspace content.** It belongs next to
+   * `hiddenAt` / `archivedAt`: the workspace's own files belong to the user
+   * and the Agent, they shouldn't keep the App's one-shot onboarding flag.
+   */
+  sinoOnboardedAt?: string;
 }
 
 export type ProjectPatch = Partial<Omit<Project, 'id'>>;

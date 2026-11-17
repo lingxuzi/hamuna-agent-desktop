@@ -1530,6 +1530,70 @@
       "accept": "采纳修订",
       "reject": "驳回",
       "askAgent": "【运营方向】平台：{{platform}}（id: {{platformId}}）。我的原话：「{{brief}}」。请按 ops-direction skill 整理这个账号的运营方向并写回台账。"
+    },
+    "wizard": {
+      "title": "冷启动引导",
+      "open": "冷启动引导",
+      "exit": "回到台账",
+      "back": "上一步",
+      "next": "下一步",
+      "finish": "完成",
+      "step": {
+        "login": "登录账号",
+        "direction": "说清方向",
+        "material": "投物料",
+        "profile": "账号画像",
+        "benchmark": "找对标",
+        "topic": "第一轮选题"
+      },
+      "hint": {
+        "login": "登录只有你能做。逐个平台登录，登录状态只在本工作区有效。",
+        "direction": "每个平台一句原话：你想让人记住这个号是做什么的。",
+        "material": "把宣传资料放进来：图片、视频、产品说明。投进来的东西会按批次收好。",
+        "profile": "六维画像：语气、说给谁听、不能碰的雷。改完要新开会话才生效。",
+        "benchmark": "找几个方向相近、规模更大的号当参照系。Agent 找的候选你可以直接删。",
+        "topic": "第一轮做什么。Agent 出候选，你挑一条。"
+      },
+      "direction": {
+        "saved": "方向已记下",
+        "empty": "先在上面登录一个平台，这一步才有东西可写。",
+        "placeholder": "想让人记住我们是懂露营装备的，主要讲夜间露营"
+      },
+      "material": {
+        "batch": "批次名",
+        "brief": "产品说明",
+        "briefPlaceholder": "产品名、要观众做的动作、卖点、禁用词、平台",
+        "choose": "选文件",
+        "none": "还没选文件",
+        "chosen": "已选 {{n}} 个文件",
+        "deliver": "投进收件箱",
+        "delivered": "物料已投进收件箱",
+        "copyFailed": "有文件没投进去：{{reason}}"
+      },
+      "profile": {
+        "saved": "画像已保存",
+        "missing": "没找到这个工作区的画像文件",
+        "restart": "规则在会话启动时注入，改完要新开会话才生效。",
+        "save": "保存画像"
+      },
+      "benchmark": {
+        "ask": "让 Agent 找候选",
+        "hint": "Agent 会读公开页找 2–3 个方向相近、规模更大的号，写进台账。"
+      },
+      "topic": {
+        "ask": "让 Agent 出选题",
+        "hint": "Agent 会按你的方向和画像出第一轮选题，每个都说清为什么值得做。",
+        "pick": "选它做第一条",
+        "picked": "已选进排期",
+        "empty": "还没有选题。先让 Agent 出候选。"
+      },
+      "dispatch": {
+        "action": "交给 Agent 开工",
+        "afterProfile": "账号画像已经写好。下面是各平台的方向原话，请按 ops-direction 拆成五字段写回台账。",
+        "material": "物料已经投进 {{dir}}，请按 ops-intake 入库。",
+        "findBenchmarks": "请按 ops-benchmark 找 2–3 个方向相近、规模更大的对标账号，写进台账（source=agent），每个说清为什么对标它和证据。",
+        "findTopics": "请按 ops-topic 出第一轮选题，写进台账（status=idea），每个说清为什么值得做。"
+      }
     }
   }
 }

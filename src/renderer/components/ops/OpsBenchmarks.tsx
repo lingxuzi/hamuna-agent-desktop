@@ -29,10 +29,13 @@ import { openExternal } from '@/utils/openExternal';
 export interface OpsBenchmarksProps {
   /** 台账里的全部对标账号。 */
   benchmarks: OpsBenchmark[];
-  /** 新增：开对话框。 */
-  onAdd: () => void;
-  /** 编辑：开对话框，带上这条记录。 */
-  onEdit: (benchmark: OpsBenchmark) => void;
+  /**
+   * 新增：开对话框。**不给就不画这个按钮** —— 画一个点了没反应的按钮，
+   * 比没有按钮更糟（面板自己的教训：画了没有处理函数的入口等于坏功能）。
+   */
+  onAdd?: () => void;
+  /** 编辑：开对话框，带上这条记录。不给就不画编辑按钮。 */
+  onEdit?: (benchmark: OpsBenchmark) => void;
   /** 删除：走面板的确认框。 */
   onDelete: (benchmark: OpsBenchmark) => void;
   className?: string;
@@ -64,10 +67,12 @@ export function OpsBenchmarks({
         <h2>{t('ops.benchmark.title')}</h2>
         <span className="ops-sp" />
         <span className="ops-meta">{t('ops.benchmark.meta')}</span>
-        <button type="button" className="ops-act" onClick={onAdd}>
-          <Plus aria-hidden="true" />
-          {t('ops.benchmark.add')}
-        </button>
+        {onAdd && (
+          <button type="button" className="ops-act" onClick={onAdd}>
+            <Plus aria-hidden="true" />
+            {t('ops.benchmark.add')}
+          </button>
+        )}
       </div>
 
       {benchmarks.length === 0 ? (
@@ -81,7 +86,7 @@ export function OpsBenchmarks({
                 <BenchmarkCard
                   key={benchmark.id}
                   benchmark={benchmark}
-                  onEdit={() => onEdit(benchmark)}
+                  onEdit={onEdit ? () => onEdit(benchmark) : undefined}
                   onDelete={() => onDelete(benchmark)}
                 />
               ))}
@@ -99,7 +104,8 @@ function BenchmarkCard({
   onDelete,
 }: {
   benchmark: OpsBenchmark;
-  onEdit: () => void;
+  /** 不给就不画编辑按钮（向导里只让看和删）。 */
+  onEdit?: () => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation('chat');
@@ -134,10 +140,12 @@ function BenchmarkCard({
       )}
 
       <div className="ops-bm-foot">
-        <button type="button" className="ops-act" onClick={onEdit}>
-          <Pencil aria-hidden="true" />
-          {t('ops.benchmark.edit')}
-        </button>
+        {onEdit && (
+          <button type="button" className="ops-act" onClick={onEdit}>
+            <Pencil aria-hidden="true" />
+            {t('ops.benchmark.edit')}
+          </button>
+        )}
         <button type="button" className="ops-act del" onClick={onDelete}>
           <Trash2 aria-hidden="true" />
           {t('ops.benchmark.delete')}

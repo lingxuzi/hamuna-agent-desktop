@@ -78,4 +78,16 @@ describe('Chat 的发送路径', () => {
     expect(tillEnd).toContain('dispatchSend(');
     expect(tillEnd).not.toMatch(/sendMessage\(/);
   });
+
+  it('向导里的交接不关运营面板 —— 产出就长在面板里', () => {
+    // 向导第 ⑤⑥ 步把活交给 Agent，产出是对标候选 / 选题列表，长在面板里。
+    // 关掉面板，人就得自己记走到第几步、回来从哪儿点。
+    //
+    // 普通的交接（onSendToAgent）**要**关面板：不然用户看到自己的话被面板
+    // 盖住，不知道发出去没有。两条路径必须分开，不能是同一个函数。
+    const block = source.slice(source.indexOf('const sendToAgentKeepOpsOpen'));
+    const body = block.slice(0, block.indexOf(');'));
+    expect(body).toContain('dispatchSend(');
+    expect(body).not.toContain('setOpsOpen(false)');
+  });
 });

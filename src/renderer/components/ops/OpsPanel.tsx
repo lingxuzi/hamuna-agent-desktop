@@ -33,6 +33,7 @@ import { OpsAccountLogin, OpsAccounts } from './OpsAccounts';
 import { OpsBenchmarks, BenchmarkForm } from './OpsBenchmarks';
 import { OpsClues } from './OpsClues';
 import { OpsTerminalCode } from './OpsTerminalCode';
+import OpsWizard, { OPS_WIZARD_STEPS, type OpsWizardStep } from './OpsWizard';
 import { useOpsState } from './useOpsState';
 import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
 import { opsErrorMessage, opsUpsert } from './opsWrite';
@@ -56,6 +57,10 @@ export default function OpsPanel({
   workspace,
   onClose,
   onSendToAgent,
+  onSendToAgentKeepOpen,
+  wizardStep,
+  onWizardStep,
+  onWizardDone,
 }: {
   workspace: string;
   onClose: () => void;
@@ -67,6 +72,17 @@ export default function OpsPanel({
    * 那边改一步这里就错一步。
    */
   onSendToAgent: (text: string) => void;
+  /**
+   * 同上，但**不关面板**。向导的 ⑤⑥ 用这个：产出是台账里长出来的列表，
+   * 面板关着人就得自己记走到第几步、再从哪儿点回来。
+   */
+  onSendToAgentKeepOpen?: (text: string) => void;
+  /** 向导当前步骤。`undefined` = 不在向导模式。 */
+  wizardStep?: OpsWizardStep;
+  /** 切换向导步骤。传 `undefined` = 退出向导，回到台账。 */
+  onWizardStep?: (step: OpsWizardStep | undefined) => void;
+  /** 向导走完：父组件记下「这个工作区引导过了」。 */
+  onWizardDone?: () => void;
 }) {
   const { t } = useTranslation('chat');
   // 展开动效：先挂载再翻 class，否则 transition 不会播（与知识看板同一手法）。
@@ -92,6 +108,9 @@ export default function OpsPanel({
   } | null>(null);
   const { state, loading, error, reload } = useOpsState(workspace);
   const toast = useToastOptional();
+
+  /** 向导模式：顶栏换成步骤条，主体交给 OpsWizard。 */
+  const inWizard = wizardStep !== undefined && onWizardStep !== undefined;
 
   /**
    * 顶栏那个「返回」按层退：先退出登录接管回账号清单，再从账号清单回四域台账。
@@ -207,7 +226,32 @@ export default function OpsPanel({
       }`}
     >
       <header className="ops-top">
-        {pane === 'domains' ? (
+        {inWizard ? (
+          loginPlatform ? (
+            // 接管中：面板整个让给浏览器，只留一个「返回」出口。
+            <button type="button" className="ops-ghost" onClick={goBack}>
+              <ChevronLeft size={14} aria-hidden="true" />
+              {t('ops.account.back')}
+            </button>
+          ) : (
+            <div className="ops-steps" role="tablist" aria-label={t('ops.wizard.title')}>
+              {OPS_WIZARD_STEPS.map((id, i) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={wizardStep === id}
+                  onClick={() => onWizardStep?.(id)}
+                >
+                  <span className="n" aria-hidden="true">
+                    {i + 1}
+                  </span>
+                  {t(`ops.wizard.step.${id}`)}
+                </button>
+              ))}
+            </div>
+          )
+        ) : pane === 'domains' ? (
           <div className="ops-pills" role="tablist" aria-label={t('ops.title')}>
             {OPS_DOMAIN_IDS.map((id) => (
               <button
@@ -228,15 +272,28 @@ export default function OpsPanel({
           </button>
         )}
         <span className="ops-sp" />
-        {pane === 'domains' && (
-          <>
-            <button type="button" className="ops-ghost" onClick={() => setPane('clues')}>
-              {t('ops.clue.open')}
-            </button>
-            <button type="button" className="ops-ghost" onClick={() => setPane('accounts')}>
-              {t('ops.account.open')}
-            </button>
-          </>
+        {inWizard ? (
+          <button type="button" className="ops-ghost" onClick={() => onWizardStep?.(undefined)}>
+            {t('ops.wizard.exit')}
+          </button>
+        ) : (
+          pane === 'domains' && (
+            <>
+              <button type="button" className="ops-ghost" onClick={() => setPane('clues')}>
+                {t('ops.clue.open')}
+              </button>
+              <button type="button" className="ops-ghost" onClick={() => setPane('accounts')}>
+                {t('ops.account.open')}
+              </button>
+              <button
+                type="button"
+                className="ops-ghost"
+                onClick={() => onWizardStep?.(OPS_WIZARD_STEPS[0])}
+              >
+                {t('ops.wizard.open')}
+              </button>
+            </>
+          )
         )}
         <OpsTerminalCode />
         <button
@@ -264,6 +321,36 @@ export default function OpsPanel({
           <button type="button" className="ops-ghost" onClick={reload}>
             {t('ops.status.retry')}
           </button>
+        </div>
+      ) : inWizard && wizardStep && onWizardStep ? (
+        <div className="ops-body" data-ops-pane="wizard">
+          <div className="ops-main">
+            <OpsWizard
+              workspace={workspace}
+              state={state}
+              step={wizardStep}
+              onStep={onWizardStep}
+              onLogin={(platform) => setLoginPlatform(platform)}
+              // 向导里的交接**不关面板**：⑤⑥ 的产出是台账里长出来的列表，
+              // 面板关着人就得自己记走到第几步。父组件没给「不关面板」的那个
+              // 回调时退回普通交接 —— 宁可关面板，也不能让活发不出去。
+              onSendToAgent={(text) => {
+                if (onSendToAgentKeepOpen) onSendToAgentKeepOpen(text);
+                else onSendToAgent(text);
+              }}
+              onDone={() => onWizardDone?.()}
+              onEditBenchmark={(benchmark) =>
+                setForm({ kind: 'benchmark:edit', benchmark })
+              }
+              onDeleteBenchmark={(benchmark) =>
+                setDeleting({
+                  kind: 'benchmark',
+                  id: benchmark.id,
+                  title: benchmark.name.trim() || benchmark.profileUrl,
+                })
+              }
+            />
+          </div>
         </div>
       ) : pane === 'accounts' ? (
         <div className="ops-body" data-ops-pane="accounts">

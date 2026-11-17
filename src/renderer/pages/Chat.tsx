@@ -37,6 +37,9 @@ import CronTaskSettingsModal, {
   type CronSettingsResult,
 } from '@/components/cron/CronTaskSettingsModal';
 import { transitionChannelBoundSession } from '@/pages/chatChannelSession';
+// Type-only: the wizard ships inside the lazily-loaded OpsPanel chunk, so a
+// value import here would pull the whole wizard into the initial bundle.
+import type { OpsWizardStep } from '@/components/ops/OpsWizard';
 import { useTabState, useTabActive } from '@/context/TabContext';
 import { useChatScrollController } from '@/hooks/useChatScrollController';
 import { useChatScrollModel } from '@/hooks/useChatScrollModel';
@@ -93,7 +96,7 @@ import {
   type OfficialToolId,
 } from '../../shared/official-tools';
 import { isSupportedLocale } from '../../shared/i18n';
-import { workspacePathsEqual } from '../../shared/workspacePath';
+import { workspacePathsEqual, normalizeWorkspacePathIdentity } from '../../shared/workspacePath';
 import { coerceReasoningEffortForRuntime, reasoningEffortChoices } from '../../shared/reasoningEffort';
 import type { ProviderHistoryEnv } from '../../shared/providerHistory';
 import { createConcreteProviderRoute, hasProviderRouteCredential, isConcreteProviderRoute, isProviderRouteModelMismatch } from '../../shared/providerRoute';
@@ -214,6 +217,14 @@ const LazyTerminalPanel = lazy(() => import('@/components/TerminalPanel').then(m
 // Lazy load BrowserPanel for embedded browser
 const LazyBrowserPanel = lazy(() => import('@/components/BrowserPanel'));
 const LazyOpsPanel = lazy(() => import('@/components/ops/OpsPanel'));
+
+/**
+ * 本次 App 运行里已经自动弹过冷启动向导的工作区。
+ *
+ * 模块级而不是组件级：Chat 每个 Tab 一份，组件级的集合在切 Tab 时会被重置，
+ * 于是同一个工作区的第二个 Tab 会再弹一遍。
+ */
+const SINO_WIZARD_AUTO_OPENED = new Set<string>();
 // Lazy load IntroductionOverlay for empty session welcome content
 const LazyIntroductionOverlay = lazy(() => import('@/components/IntroductionOverlay'));
 // Terminal chrome now uses CSS tokens that auto-switch with light/dark theme.
@@ -764,6 +775,12 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   // Only offered for the `sino` builtin template — the domains read
   // `ops/state.json`, which other templates never write.
   const [opsOpen, setOpsOpen] = useState(false);
+  // 冷启动向导的当前步骤。`undefined` = 不在向导模式。
+  //
+  // **故意不落盘**：向导是一次性的引导流程，它的产出（方向 / 物料 / 画像）当场
+  // 写进台账、`03-USER.md`、`ops/inbox/`，关面板不丢东西。把步骤号存下来只会让
+  // 一个走了一半的向导永远挂在面板上。
+  const [opsWizardStep, setOpsWizardStep] = useState<OpsWizardStep | undefined>(undefined);
 
   // ── Embedded browser state ──
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
@@ -967,6 +984,24 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   const handleOpenOps = useCallback(() => {
     setOpsOpen(true);
   }, []);
+
+  // 冷启动向导：第一次进入这个工作区时自动打开。
+  //
+  // **为什么必须自动弹**：窄布局下运营台根本没有入口（`onOpenOps` 被
+  // `!isNarrowLayout` 门控），向导若只挂在那个按钮后面，窄屏用户永远走不到。
+  //
+  // **「第一次」的判据** = 项目配置里没有 `sinoOnboardedAt`。这个标记是 App 级
+  // 的一次性体验状态（跟 `hiddenAt` / `archivedAt` 同类），不是工作区内容 ——
+  // 工作区里的文件属于用户和 Agent，不该替 App 记 UX 状态。
+  useEffect(() => {
+    if (!isSinoWorkspace || !currentProject) return;
+    if (currentProject.sinoOnboardedAt) return;
+    const key = normalizeWorkspacePathIdentity(currentProject.path);
+    if (SINO_WIZARD_AUTO_OPENED.has(key)) return;
+    SINO_WIZARD_AUTO_OPENED.add(key);
+    setOpsOpen(true);
+    setOpsWizardStep('login');
+  }, [isSinoWorkspace, currentProject]);
 
   const handleBrowserCreateFailed = useCallback(() => {
     setBrowserUrl(null);
@@ -4047,6 +4082,49 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     [dispatchSend],
   );
 
+  /* ── 运营台 · 冷启动向导 ────────────────────────────────
+     判据（`sinoOnboardedAt`）写项目配置；向导的产出写台账 / 工作区。 */
+
+  const markSinoOnboarded = useCallback(() => {
+    if (!currentProject?.id) return;
+    void patchProject(currentProject.id, { sinoOnboardedAt: new Date().toISOString() });
+  }, [currentProject?.id, patchProject]);
+
+  /**
+   * 向导模式下的交接：**面板保持打开**。
+   *
+   * 普通的交接要关面板 —— 不关的话用户看到自己的话被面板盖住，不知道发出去
+   * 没有。可向导里交接的产出恰恰是长在面板里的那份列表（⑤ 的对标候选、⑥ 的
+   * 选题），关了面板，人就得自己记走到第几步、回来从哪儿点。
+   */
+  const sendToAgentKeepOpsOpen = useCallback(
+    (text: string) => {
+      void dispatchSend(text, undefined, false);
+    },
+    [dispatchSend],
+  );
+
+  const handleWizardStep = useCallback(
+    (step: OpsWizardStep | undefined) => {
+      setOpsWizardStep(step);
+      // 离开向导 = 引导过了。下次冷启动不再自动弹 —— 每次都弹就是骚扰。
+      // 想重走的人有面板顶栏的「冷启动引导」入口。
+      if (step === undefined) markSinoOnboarded();
+    },
+    [markSinoOnboarded],
+  );
+
+  const handleWizardDone = useCallback(() => {
+    setOpsWizardStep(undefined);
+    markSinoOnboarded();
+  }, [markSinoOnboarded]);
+
+  const handleCloseOps = useCallback(() => {
+    setOpsOpen(false);
+    // 关闭向导也算走完这一步流程（做完、跳过、还是不想看）。
+    if (opsWizardStep !== undefined) markSinoOnboarded();
+  }, [opsWizardStep, markSinoOnboarded]);
+
   // Ref-stabilize handleSendMessage for handleRetry (avoids frequent re-creation)
   const handleSendMessageRef = useRef(handleSendMessage);
   handleSendMessageRef.current = handleSendMessage;
@@ -5304,7 +5382,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
             <Suspense fallback={null}>
               <LazyOpsPanel
                 workspace={agentDir}
-                onClose={() => setOpsOpen(false)}
+                onClose={handleCloseOps}
                 onSendToAgent={(text) => {
                   // 必须走 dispatchSend，不能直接调 sendMessage。
                   //
@@ -5325,6 +5403,11 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                   setOpsOpen(false);
                   void dispatchSend(text, undefined, false);
                 }}
+                // 向导模式：面板不关，产出就长在面板里。
+                onSendToAgentKeepOpen={sendToAgentKeepOpsOpen}
+                wizardStep={opsWizardStep}
+                onWizardStep={handleWizardStep}
+                onWizardDone={handleWizardDone}
               />
             </Suspense>
           )}

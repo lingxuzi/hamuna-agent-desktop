@@ -14,8 +14,6 @@ sino/                           # 我的家
 │   ├── 03-USER.md              # 账号画像
 │   ├── 04-MEMORY.md            # 记忆系统
 │   └── 05-OPS.md               # 运营台账的硬纪律
-├── .claude/commands/           # 斜杠命令（输入框打 / 能看见）
-│   └── BOOTSTRAP.md            # 冷启动：画像 → 方向 → 对标 → 第一轮选题
 ├── .claude/skills/             # 各段的能力
 │   ├── ops-direction/          # 运营方向（每平台一条，改已生效的要人点头）
 │   ├── ops-benchmark/          # 对标账号（方向相近的参照系，我找的要人点头）
