@@ -640,6 +640,107 @@ describe('方向域', () => {
   });
 });
 
+describe('分布条审计：每一根条都是真计数', () => {
+  // 方向域曾经有一张「每平台有多少条已生效方向」的分布条 —— 那是**假指标**：
+  // 方向是一个平台一条（store 的硬不变量），所以那个数永远是 0 或 1，条画出来
+  // 不是满的就是空的，读者却以为「这根短 = 这个号弱」。它已经换成「定稿进度」
+  // 那张表（见 `OpsFinalizeCard`）。
+  //
+  // 其余三域（选题来源 / 素材状态 / 排期平台 / 复盘平台）看着是真分布，但没逐个
+  // 量过。量法只有一个：**同一条维度上落 N 条记录，那根条的值必须是 N** ——
+  // 被压成 1 就说明有人在拿它当「有 / 没有」用，而它不是。
+
+  it('选题来源分布数的是条数，不是「有没有热点」', () => {
+    const view = deriveTopicView(
+      state({
+        topics: [
+          topic({ id: 't1', source: 'hotspot' }),
+          topic({ id: 't2', source: 'hotspot' }),
+          topic({ id: 't3', source: 'hotspot' }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => [d.key, d.value])).toEqual([['hotspot', 3]]);
+  });
+
+  it('素材状态分布数的是条数，不是「做到哪一步」', () => {
+    const view = deriveAssetView(
+      state({
+        assets: [
+          asset({ id: 'a1', status: 'draft' }),
+          asset({ id: 'a2', status: 'draft' }),
+          asset({ id: 'a3', status: 'draft' }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => [d.key, d.value])).toEqual([['draft', 3]]);
+  });
+
+  it('排期平台分布数的是本周排期条数', () => {
+    const view = deriveScheduleView(
+      state({
+        assets: [
+          asset({ id: 'a1', platform: 'douyin', scheduledAt: '2026-11-10T10:00:00' }),
+          asset({ id: 'a2', platform: 'douyin', scheduledAt: '2026-11-11T10:00:00' }),
+          asset({ id: 'a3', platform: 'douyin', scheduledAt: '2026-11-12T10:00:00' }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => [d.key, d.value])).toEqual([['douyin', 3]]);
+  });
+
+  it('复盘平台分布求的是播放量之和，不是条数', () => {
+    const view = deriveReviewView(
+      state({
+        reviews: [
+          review({ id: 'r1', platform: 'douyin', metrics: { views: 100, likes: 0, comments: 0, shares: 0, saves: 0, followers: 0, completionRate: null } }),
+          review({ id: 'r2', platform: 'douyin', metrics: { views: 200, likes: 0, comments: 0, shares: 0, saves: 0, followers: 0, completionRate: null } }),
+          review({ id: 'r3', platform: 'douyin', metrics: { views: 300, likes: 0, comments: 0, shares: 0, saves: 0, followers: 0, completionRate: null } }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => [d.key, d.value])).toEqual([['douyin', 600]]);
+  });
+
+  it('方向域不再有分布条 —— 那张表是「走到哪一步」，不是计数', () => {
+    // 假指标一旦被当成"真分布"搬回来，这条断言是唯一的拦截。
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          {
+            id: 'dir-douyin',
+            platform: 'douyin',
+            brief: '',
+            positioning: '',
+            audience: '',
+            pillars: [],
+            goal: '',
+            cadence: '',
+            status: 'active',
+            proposal: null,
+            createdAt: '2026-11-01T09:00:00',
+            updatedAt: '2026-11-01T09:00:00',
+            finalizedAt: null,
+            lastTouchedBy: null,
+          },
+        ],
+      }),
+      NOW,
+    );
+
+    expect((view as unknown as Record<string, unknown>).dist).toBeUndefined();
+    expect(view.finalize).toHaveLength(1);
+  });
+});
+
 describe('空数据不炸', () => {
   const empty = state();
 
