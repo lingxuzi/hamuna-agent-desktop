@@ -243,7 +243,7 @@ export default function OpsPanel({
           </button>
         </div>
       ) : pane === 'accounts' ? (
-        <div className="ops-body">
+        <div className="ops-body" data-ops-pane="accounts">
           <div className="ops-main">
             <OpsAccounts
               workspace={workspace}
@@ -253,7 +253,7 @@ export default function OpsPanel({
           </div>
         </div>
       ) : pane === 'clues' ? (
-        <div className="ops-body">
+        <div className="ops-body" data-ops-pane="clues">
           <div className="ops-main">
             <OpsClues
               workspace={workspace}
@@ -270,7 +270,7 @@ export default function OpsPanel({
           </div>
         </div>
       ) : (
-        <div className="ops-body">
+        <div className="ops-body" data-ops-pane="domains" data-ops-domain={domain}>
           <div className="ops-main">
             <OpsHero
               lead={<Lead view={view} />}
@@ -285,7 +285,7 @@ export default function OpsPanel({
                 />
               }
             />
-            <div className={`ops-grid ${view.domain === 'review' ? '' : 'ops-grid-2'}`}>
+            <div className="ops-grid">
               {view.domain === 'review' && <OpsChartCard view={view} />}
               {view.domain === 'direction' ? (
                 <OpsDirectionCard
@@ -313,8 +313,8 @@ export default function OpsPanel({
                 />
               )}
               <OpsDistCard view={view} />
-              {/* 对标账号通栏贴在方向域底部：对标是方向的参照物，跟方向同屏
-                  才看得见「这两边像不像」。平台还没立方向时也能先加。 */}
+              {/* 对标账号收在右栏：方向卡通栏时右栏正好是对标，两边像不像一眼看到。
+                  平台还没立方向时也能先加。 */}
               {view.domain === 'direction' && (
                 <OpsBenchmarks
                   benchmarks={state.benchmarks}

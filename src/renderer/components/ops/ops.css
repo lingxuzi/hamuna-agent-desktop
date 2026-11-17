@@ -70,7 +70,9 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: var(--paper-elevated);
+  /* 画布用 --paper，卡片用 --paper-elevated。同一层色时白卡只剩 10% 透明度的
+     发丝线，整张面板读起来就是一张白纸 —— 「砖」得先有底才立得起来。 */
+  background: var(--paper);
   background-image: radial-gradient(720px 420px at 104% -12%, var(--ops-wash) 0%, transparent 60%);
   color: var(--ink);
   font-family: var(--font-body);
@@ -167,36 +169,59 @@
   color: var(--ink);
 }
 
-/* ── 主体：内容区 + 右栏 ──────────────────────────── */
+/* ── 主体：三轨 bento 网格 ──────────────────────────
+   三轨 = 主区宽列 + 主区窄列 + 右栏。所有卡片都是这张网格的格子，
+   同一行就共享同一条上下边界，右栏也不再是「另一根柱子」——
+   之前右栏两张卡各自浮在自己的 y 上，跟主区差着几十像素对不齐。
+
+   容器摊平用 display: contents 拆掉 .ops-main / .ops-rail / .ops-grid 三层，
+   格子位置改由 grid-template-areas 决定，DOM 顺序不再决定位置。 */
 .ops-body {
   flex: 1;
   min-height: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr) 300px;
   gap: 12px;
   padding: 0 18px 18px;
-}
-
-.ops-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   overflow: auto;
-}
-/* 列内子项不许被压扁：Hero 是内容，不是可压缩的弹性盒 */
-.ops-main > * {
-  flex: none;
+  /* 行高按内容定，别把网格拉满：面板高度本来就由内容决定。 */
+  align-content: start;
 }
 
-/* 右栏只有两张卡，天然比主区短，所以两张贴着排，不吸底。
-   试过 space-between（顶卡贴顶、末卡贴底），宽屏下把两张拉开 400px，
-   中间裂出一条空带，比留白更像出错。留白统一落在内容之后。 */
-.ops-rail {
-  flex: 0 0 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.ops-main,
+.ops-rail,
+.ops-grid {
+  display: contents;
+}
+
+/* 每个域一张位置表，列边界与行边界全局共享。
+   排布的唯一依据：同排卡片的自然高度要接近，否则短的那张会被撑出一大片空白。
+   —— 复盘域把「平台分布」放进右栏、让「要点」独占右栏底格；方向域把「定稿进度」
+   摊成通栏、「对标账号」收进右栏。两处都让每张卡的自然高度 ≈ 它所在行的高度，
+   要点卡因此不再跨行拉伸（原来跨两行 → 1088px 高、四条要点悬在半空）。 */
+.ops-body[data-ops-domain='topic'],
+.ops-body[data-ops-domain='asset'],
+.ops-body[data-ops-domain='schedule'] {
+  grid-template-areas:
+    'hero hero dark'
+    'pool dist notes';
+}
+.ops-body[data-ops-domain='review'] {
+  grid-template-areas:
+    'hero hero dark'
+    'chart pool dist'
+    'adv adv notes';
+}
+.ops-body[data-ops-domain='direction'] {
+  grid-template-areas:
+    'hero hero dark'
+    'pool pool bench'
+    'dist dist notes';
+}
+/* 账号 / 线索是单栏全宽，不参与 bento。 */
+.ops-body[data-ops-pane='accounts'],
+.ops-body[data-ops-pane='clues'] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* ── 卡片 ─────────────────────────────────────────── */
@@ -213,12 +238,15 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
+  /* 右栏只有 300px：标题 + 副标 + 按钮挤不下时让按钮换行，别把标题折成两行。 */
+  flex-wrap: wrap;
 }
 .ops-card-head h2 {
   font-size: 16px;
   font-weight: 700;
   line-height: 1.3;
   color: var(--ink);
+  white-space: nowrap;
 }
 .ops-card-head .ops-sp {
   flex: 1;
@@ -234,23 +262,17 @@
 /* ── Hero ─────────────────────────────────────────── */
 .ops-hero {
   position: relative;
-  overflow: hidden;
-  background: var(--paper-elevated);
+  /* 不能用 overflow:hidden 裁那个弥散渐变：hidden 会把 grid item 的
+     automatic minimum size 归零，这一行的行高就改由旁边那张矮卡决定，
+     hero 的指标行会被裁掉一半。改成把渐变直接铺进 background ——
+     圆角自己会裁，min-content 照旧回流。 */
+  background:
+    radial-gradient(720px 360px at 92% -42%, var(--ops-wash) 0%, transparent 70%),
+    var(--paper-elevated);
   border: 1px solid var(--line);
   border-radius: var(--theme-radius-lg);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
   padding: 26px 28px 22px;
-}
-/* 右上暖色弥散：D 的主视觉，唯一"炫"的地方，其余保持安静。 */
-.ops-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(720px 360px at 92% -42%, var(--ops-wash) 0%, transparent 70%);
-  pointer-events: none;
-}
-.ops-hero > * {
-  position: relative;
 }
 
 .ops-hero-row {
@@ -386,26 +408,28 @@
   cursor: default;
 }
 
-/* ── 卡片网格 ─────────────────────────────────────── */
-/* 复盘域四张卡排 2×2；非复盘域两张，显式指定位置让**主列表占宽列**——
-   靠 DOM 顺序会让分布卡占掉宽列、主列表被挤进窄列，正好反过来。 */
+/* ── 卡片在网格里的格子 ───────────────────────────── */
 /* 两列都必须能缩到内容的 min-content 以下（minmax(0, …)）。卡里的标题是
    **不换行**的一行字（nowrap + 省略号），它的 min-content 就是整句宽度；
    轨道若按 auto 最小值撑开，方向域会横向溢出面板 —— 「定稿进度」被挤成
    标题每个字一行的竖条，「账号方向」整张卡探出面板外还带出横向滚动条。 */
-.ops-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-.ops-grid-2 > .ops-c-top {
-  grid-row: 1;
-  grid-column: 1;
-}
-.ops-grid-2 > .ops-c-bars {
-  grid-row: 1;
-  grid-column: 2;
+.ops-hero { grid-area: hero; }
+.ops-next { grid-area: dark; }
+.ops-c-top { grid-area: pool; }
+.ops-c-bars { grid-area: dist; }
+.ops-c-chart { grid-area: chart; }
+.ops-c-adv { grid-area: adv; }
+.ops-c-bench { grid-area: bench; }
+.ops-c-note { grid-area: notes; }
+
+/* ── 卡片内容撑开 ─────────────────────────────────────
+   同行等高 = 高度差落在「内容吃满」上，而不是留一段空白。
+   三个会垫高的卡：深墨主角卡（脚注沉底）、分布条（各条共用一条基线）、
+   要点（四条均分高度）。 */
+.ops-c-note,
+.ops-c-bars {
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── 折线图 ───────────────────────────────────────── */
@@ -561,6 +585,28 @@
 }
 .ops-bars.mini .track {
   height: 4px;
+}
+
+/* 分布卡被垫高时，条自己吃掉多出来的高度 —— 名字和它自己的条始终相邻。
+   （原来把条推到格子底部，名字与条之间裂开一道上百像素的空档。） */
+.ops-c-bars > .ops-bars {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+}
+.ops-c-bars > .ops-bars li {
+  flex: 1 0 auto;
+  grid-template-rows: auto 1fr;
+}
+.ops-c-bars > .ops-bars .track {
+  /* 盖掉 .ops-bars .track 的固定 6px：条随格子长高 —— 名字和它自己的条始终
+     相邻，不再隔一道空档。但封顶 24px：830px 宽的卡里，长条会摊成一块绿板。
+     超出封顶的高度退回行底，变成条与条之间的空档。
+     min-height 不能省：卡片没被垫高时行高就是内容高，height:auto 会让条塌成 0。 */
+  height: auto;
+  min-height: 6px;
+  max-height: 24px;
+  align-self: stretch;
 }
 
 /* ── 主列表 ───────────────────────────────────────── */
@@ -886,7 +932,9 @@
 
 /* ── 右栏：深墨主角卡 + 要点 ──────────────────────── */
 .ops-next {
-  display: block;
+  /* 列向弹性盒：卡片被同行垫高时，脚注靠 margin-top:auto 沉底。 */
+  display: flex;
+  flex-direction: column;
   width: 100%;
   text-align: left;
   border: 0;
@@ -929,7 +977,9 @@
   line-height: 1.45;
 }
 .ops-next .foot {
-  margin-top: 8px;
+  /* 卡片被垫高时脚注沉底，主数字仍贴着上方 —— 深墨卡里一大段空白最难看。 */
+  margin-top: auto;
+  padding-top: 8px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--ops-dark-dim);
@@ -940,12 +990,19 @@
 
 .ops-notes {
   list-style: none;
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  /* 卡片被垫高时，多出来的高度摊在要点之间，不是摊在每一条里 ——
+     摊在每一条里会让单行要点悬在半空，像被遗弃在半张卡上。 */
+  justify-content: space-between;
 }
 .ops-notes li {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 9px;
+  /* 圆点跟第一行对齐（.dot 自带 margin-top:7px 压到首行视觉中线）。
+     center 会让两行要点的圆点掉到第二行，像属于那一行。 */
   align-items: start;
   padding: 9px 0;
   border-top: 1px solid var(--line-subtle);
@@ -1010,6 +1067,8 @@
    Hero 跑到网格后面。 */
 @container (max-width: 760px) {
   .ops-body {
+    /* 窄栏回到单列流：三轨网格在 760 以下会把卡片压成竖条。 */
+    display: flex;
     flex-direction: column;
     overflow: auto;
     padding: 0 14px 14px;
@@ -1591,10 +1650,4 @@
 }
 .ops-act.del:hover {
   border-color: var(--error);
-}
-
-/* 对标账号卡通栏贴在方向域底部。 */
-.ops-grid > .ops-c-bench {
-  grid-row: 2;
-  grid-column: 1 / -1;
 }
