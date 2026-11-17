@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n';
 import { ToastProvider } from '@/components/Toast';
 import { emptyOpsState } from '../../../shared/ops';
+import type { OpsState } from '../../../shared/ops';
 import OpsPanel from './OpsPanel';
 
 const mocks = vi.hoisted(() => ({
@@ -67,6 +68,157 @@ function cellsOf(rows: string[][], name: string): [number, number][] {
       number,
     ][],
   );
+}
+
+/**
+ * 一份**有内容**的台账。
+ *
+ * 空台账下每张卡都走空态分支，测不出「有数据却渲染成空白」这种故障 —— 那种
+ * 故障只在有内容时出现（某个域忘了渲染列表 / 某个过滤条件把所有条目滤光）。
+ */
+function populatedState(): OpsState {
+  const base = emptyOpsState();
+  return {
+    ...base,
+    directions: [
+      {
+        id: 'dir-douyin',
+        platform: 'douyin',
+        brief: '想让人记住我们懂露营装备',
+        positioning: '白天露营装备实测',
+        audience: '入门露营的人',
+        pillars: ['装备实测'],
+        goal: '涨粉',
+        cadence: '每周 3 条',
+        status: 'active',
+        proposal: null,
+        createdAt: '2026-11-01T09:00:00.000Z',
+        updatedAt: '2026-11-10T09:00:00.000Z',
+        finalizedAt: '2026-11-10T09:00:00.000Z',
+        lastTouchedBy: 'user',
+      },
+      {
+        id: 'dir-xhs',
+        platform: 'xiaohongshu',
+        brief: '出租屋改造',
+        positioning: '',
+        audience: '',
+        pillars: [],
+        goal: '',
+        cadence: '',
+        status: 'draft',
+        proposal: null,
+        createdAt: '2026-11-05T09:00:00.000Z',
+        updatedAt: '2026-11-12T09:00:00.000Z',
+        finalizedAt: null,
+        lastTouchedBy: 'agent',
+      },
+    ],
+    topics: [
+      {
+        id: 't1',
+        title: '出租屋灯光改造',
+        note: '',
+        angle: '预算 300 块',
+        platform: 'xiaohongshu',
+        tags: [],
+        status: 'idea',
+        source: 'hotspot',
+        sourceRefs: [],
+        hotness: 86000,
+        createdAt: '2026-11-01T09:00:00.000Z',
+        updatedAt: '2026-11-12T09:00:00.000Z',
+      },
+      {
+        id: 't2',
+        title: '早八人的早餐',
+        note: '',
+        angle: '',
+        platform: 'douyin',
+        tags: [],
+        status: 'idea',
+        source: 'manual',
+        sourceRefs: [],
+        hotness: null,
+        createdAt: '2026-11-02T09:00:00.000Z',
+        updatedAt: '2026-11-11T09:00:00.000Z',
+      },
+    ],
+    assets: [
+      {
+        id: 'a1',
+        topicId: 't1',
+        title: '出租屋灯光改造',
+        body: '',
+        product: '',
+        cta: '',
+        sourceRef: null,
+        cover: null,
+        images: [],
+        shots: [],
+        platform: 'xiaohongshu',
+        scheduledAt: null,
+        status: 'draft',
+        publishedAt: null,
+        platformWorkId: null,
+        progress: 80,
+        createdAt: '2026-11-03T09:00:00.000Z',
+        updatedAt: '2026-11-11T10:00:00.000Z',
+      },
+      {
+        id: 'a2',
+        topicId: 't2',
+        title: '早八人的早餐',
+        body: '',
+        product: '',
+        cta: '',
+        sourceRef: null,
+        cover: null,
+        images: [],
+        shots: [],
+        platform: 'douyin',
+        scheduledAt: '2026-11-14T08:00:00.000Z',
+        status: 'ready',
+        publishedAt: null,
+        platformWorkId: null,
+        progress: 100,
+        createdAt: '2026-11-04T09:00:00.000Z',
+        updatedAt: '2026-11-12T10:00:00.000Z',
+      },
+    ],
+    reviews: [
+      {
+        id: 'rv1',
+        assetId: 'a1',
+        platform: 'douyin',
+        publishedAt: '2026-11-10T10:00:00.000Z',
+        metrics: {
+          views: 12847,
+          likes: 800,
+          comments: 120,
+          shares: 90,
+          saves: 60,
+          followers: 62,
+          completionRate: 0.41,
+        },
+        note: '',
+        createdAt: '2026-11-10T10:00:00.000Z',
+      },
+    ],
+    rules: [
+      {
+        id: 'r1',
+        name: '标题带具体数字',
+        rule: '带数字的标题点击率高 18%',
+        source: 'reflection',
+        status: 'active',
+        confidence: 0.62,
+        basis: 'verified',
+        evidence: '近 10 条内容里有数字的 4 条完播更高',
+        createdAt: '2026-11-09T09:00:00.000Z',
+      },
+    ],
+  };
 }
 
 describe('运营面板 bento 位置表', () => {
@@ -146,4 +298,52 @@ describe('运营面板 bento 位置表', () => {
       }
     }
   });
+
+  it('每张卡都有内容：不允许只剩标题和一片留白', async () => {
+    // 故障模式：一张卡渲染出来只有一个标题，body 是空的。界面上看就是一大块
+    // 留白，读者以为数据没了 —— 其实是这个域没渲染出任何东西。跟「假指标」
+    // 是同一类故障：版面在占位，内容没到。
+    //
+    // 契约：去掉标题壳之后，卡里必须还有字。空态必须是**明说的一句**
+    // （「还没有平台记录。」），不能是空白 —— 空白分不清「没数据」和「渲染坏了」。
+    //
+    // 两种台账都测：空的（有内容就是空态句）与满的（有内容就是数据行）。
+    // 只测空台账的话，「有数据却渲染成空白」这类故障根本不会暴露。
+    for (const [label, state] of [
+      ['空台账', emptyOpsState()],
+      ['有内容的台账', populatedState()],
+    ] as const) {
+      await expectEveryCardHasContent(state, label);
+    }
+  });
 });
+
+/** 逐域逐卡检查：标题壳之外必须有字。 */
+async function expectEveryCardHasContent(state: OpsState, label: string) {
+  mocks.invoke.mockResolvedValue(state);
+  const view = render(
+    <ToastProvider>
+      <OpsPanel workspace="/ws/sino" onClose={vi.fn()} onSendToAgent={vi.fn()} />
+    </ToastProvider>,
+  );
+  await waitFor(() => {
+    expect(document.querySelector('.ops-body')).toBeTruthy();
+  });
+
+  const user = userEvent.setup();
+  for (const tab of ['方向', '选题', '素材', '排期', '复盘']) {
+    await user.click(await screen.findByRole('tab', { name: tab }));
+    const body = document.querySelector('.ops-body') as HTMLElement;
+    const cards = [...body.querySelectorAll('.ops-card, .ops-hero, .ops-next')];
+    expect(cards.length, `${label} 的 ${tab} 域没有渲染任何卡`).toBeGreaterThan(0);
+
+    for (const card of cards) {
+      const clone = card.cloneNode(true) as HTMLElement;
+      clone.querySelector('.ops-card-head')?.remove();
+      const text = (clone.textContent ?? '').trim();
+      const name = card.querySelector('h2')?.textContent?.trim() || card.className;
+      expect(text.length, `${label} 的 ${tab} 域：「${name}」只剩标题和留白`).toBeGreaterThan(0);
+    }
+  }
+  view.unmount();
+}
