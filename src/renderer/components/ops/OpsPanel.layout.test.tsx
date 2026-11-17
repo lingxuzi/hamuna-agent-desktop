@@ -31,6 +31,9 @@ vi.mock('@/utils/tauriListen', () => ({ listenWithCleanup: mocks.listenWithClean
 // 同 Markdown.typography.test.tsx：jsdom 下 import.meta.url 会被改写成 http URL。
 const css = readFileSync(join(process.cwd(), 'src/renderer/components/ops/ops.css'), 'utf8');
 
+/** 位置表里的空格 = 那一格没有卡。 */
+const EMPTY = '.';
+
 /** 卡片 class → 网格区域名。位置表里的名字必须跟 CSS 里声明的一致。 */
 function areaByClass(): Map<string, string> {
   const map = new Map<string, string>();
@@ -54,6 +57,16 @@ function areaTables(): Map<string, string[][]> {
     for (const domain of domains) tables.set(domain, rows);
   }
   return tables;
+}
+
+/** 位置表里区域名占的格子：[行, 列][]。 */
+function cellsOf(rows: string[][], name: string): [number, number][] {
+  return rows.flatMap((row, r) =>
+    row.map((cell, c) => (cell === name ? ([r, c] as [number, number]) : null)).filter(Boolean) as [
+      number,
+      number,
+    ][],
+  );
 }
 
 describe('运营面板 bento 位置表', () => {
@@ -90,11 +103,10 @@ describe('运营面板 bento 位置表', () => {
       // 位置表本身：矩形网格 + 一个区域名只占一个连续矩形。
       const width = rows[0].length;
       expect(rows.every((row) => row.length === width), `${domain} 位置表行长不齐`).toBe(true);
-      const cells = rows.flat();
+      // '.' = 那一格没有卡（留给「要点」腾出的空位），不算区域名。
+      const cells = rows.flat().filter((cell) => cell !== EMPTY);
       for (const name of new Set(cells)) {
-        const hit = rows
-          .map((row, r) => row.map((cell, c) => (cell === name ? [r, c] : null)).filter(Boolean))
-          .flat() as [number, number][];
+        const hit = cellsOf(rows, name);
         const rs = hit.map(([r]) => r);
         const cs = hit.map(([, c]) => c);
         const box = (Math.max(...rs) - Math.min(...rs) + 1) * (Math.max(...cs) - Math.min(...cs) + 1);
@@ -112,12 +124,26 @@ describe('运营面板 bento 位置表', () => {
     }
   });
 
-  it('右栏两张卡落在同一列，主区与右栏才对得齐', () => {
+  it('「要点」横跨全部列且独占一行，深墨卡留在右栏', () => {
+    // 要点卡跟数据卡同行时，行高由最高的那张决定 —— 要点只有四条短句，
+    // 会把同行的「定稿进度」之属垫高几十到上百像素（空白留在卡内）。
+    // 它必须独占面板底部的通栏行：横跨全部列 + 同行没有别的卡。
     const tables = areaTables();
     for (const [domain, rows] of tables) {
-      const columnOf = (name: string) => rows.findIndex((row) => row.includes(name));
-      const columnIndex = (name: string) => rows[columnOf(name)].indexOf(name);
-      expect(columnIndex('dark'), `${domain} 的深墨卡不在右栏`).toBe(columnIndex('notes'));
+      const width = rows[0].length;
+      const notes = cellsOf(rows, 'notes');
+      expect(notes.length, `${domain} 的要点没有排进位置表`).toBeGreaterThan(0);
+      expect(new Set(notes.map(([, c]) => c)).size, `${domain} 的要点没有横跨全部列`).toBe(width);
+      for (const [r] of notes) {
+        const others = rows[r].filter((cell) => cell !== EMPTY && cell !== 'notes');
+        expect(others, `${domain} 的要点跟别的卡同行`).toEqual([]);
+      }
+
+      // 深墨卡在最后一列（右栏）。它在第一行，横跨它会把整条右栏撑成一张
+      // 几百像素高的深色空卡。
+      for (const [, c] of cellsOf(rows, 'dark')) {
+        expect(c, `${domain} 的深墨卡不在右栏`).toBe(width - 1);
+      }
     }
   });
 });

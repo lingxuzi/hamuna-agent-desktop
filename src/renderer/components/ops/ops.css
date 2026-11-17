@@ -198,35 +198,47 @@
 
 /* 每个域一张位置表，列边界与行边界全局共享。
    排布的唯一依据：同排卡片的自然高度要接近，否则短的那张会被撑出一大片空白。
-   —— 复盘域把「平台分布」放进右栏、让「要点」独占右栏底格；方向域把「定稿进度」
-   摊成通栏、「对标账号」收进右栏。两处都让每张卡的自然高度 ≈ 它所在行的高度，
-   要点卡因此不再跨行拉伸（原来跨两行 → 1088px 高、四条要点悬在半空）。 */
+   —— 复盘域把「平台分布」放进右栏；方向域把「定稿进度」摊成通栏、「对标账号」
+   收进右栏。两处都让每张卡的自然高度 ≈ 它所在行的高度。
+
+   「要点」是唯一的例外：它占最后一行、横跨三列（面板底部的通栏说明条），
+   不跟任何一张数据卡同行。
+   为什么：网格行高由**同行最高的卡**决定。要点卡只有四条短句，比它同列的
+   邻居矮一截，留在右栏底格就会把「定稿进度」「来源分布」一起垫高几十到
+   上百像素（空白留在卡内）；挪到通栏行之后，右栏那一格留空（空白移到卡外），
+   数据卡的行高才回到内容本身。
+   等高契约因此只作用于同一行内，不跨行、不跨列 —— 空格子（'.'）就是那份
+   留在卡外的空白，不是漏排的卡。 */
 .ops-body[data-ops-domain='topic'],
 .ops-body[data-ops-domain='asset'] {
   grid-template-areas:
     'hero hero dark'
-    'pool dist notes';
+    'pool dist .'
+    'notes notes notes';
 }
-/* 排期域：排期列表天然比「平台配额」「要点」高得多。三张卡挤在同一行时，
+/* 排期域：排期列表天然比「平台配额」高得多。三张卡挤在同一行时，
    后两张被垫到 500px 高，条目之间裂出上百像素的空档。让排期列表跨两行，
-   右栏两张卡各自按内容高排 —— 谁都不再被垫高。 */
+   谁都不再被垫高。 */
 .ops-body[data-ops-domain='schedule'] {
   grid-template-areas:
     'hero hero dark'
     'pool pool dist'
-    'pool pool notes';
+    'pool pool .'
+    'notes notes notes';
 }
 .ops-body[data-ops-domain='review'] {
   grid-template-areas:
     'hero hero dark'
     'chart pool dist'
-    'adv adv notes';
+    'adv adv .'
+    'notes notes notes';
 }
 .ops-body[data-ops-domain='direction'] {
   grid-template-areas:
     'hero hero dark'
     'pool pool bench'
-    'dist dist notes';
+    'dist dist .'
+    'notes notes notes';
 }
 /* 账号 / 线索是单栏全宽，不参与 bento。 */
 .ops-body[data-ops-pane='accounts'],
@@ -452,8 +464,8 @@
 
 /* ── 卡片内容撑开 ─────────────────────────────────────
    同行等高 = 高度差落在「内容吃满」上，而不是留一段空白。
-   三个会垫高的卡：深墨主角卡（脚注沉底）、分布条（各条共用一条基线）、
-   要点（四条均分高度）。 */
+   两个会垫高的卡：深墨主角卡（脚注沉底）、分布条（各条共用一条基线）。
+   「要点」不再跟数据卡同行，所以它自己那行不需要撑开。 */
 .ops-c-note,
 .ops-c-bars {
   display: flex;
@@ -1122,15 +1134,22 @@
   white-space: nowrap;
 }
 
+/* 「要点」是面板底部的通栏条：四条要点按栏排开，不再是右栏里的竖排。
+   栏数固定 4 / 2 / 1（跟随容器断点），不用 auto-fit ——
+   auto-fit 在 3 栏时会变成「3 + 1 条落单」，落单那条看着像被挤出去的。 */
 .ops-notes {
   list-style: none;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 28px;
+  row-gap: 12px;
   flex: 1 0 auto;
-  /* 卡片被垫高时，多出来的高度堆在列表末尾，不摊在要点之间 ——
-     摊开会让单行要点悬在半空，像被遗弃在半张卡上（每条之间裂出上百像素）。
-     条与条之间保持固定间距。 */
-  justify-content: flex-start;
+  align-content: start;
+}
+/* 通栏宽 1200px，标题在左、条数在右会隔着一整屏，读起来像两条不相干的信息。
+   计数收回标题旁边。 */
+.ops-c-note .ops-card-head .ops-sp {
+  flex: none;
 }
 .ops-notes li {
   display: grid;
@@ -1139,14 +1158,12 @@
   /* 圆点跟第一行对齐（.dot 自带 margin-top:7px 压到首行视觉中线）。
      center 会让两行要点的圆点掉到第二行，像属于那一行。 */
   align-items: start;
-  padding: 9px 0;
-  border-top: 1px solid var(--line-subtle);
+  /* 竖排时代的分隔线撤掉：横排之后每条自己一格，分隔线只会把每栏
+     顶部切一刀，还跟圆点打架。栏与栏靠 column-gap 隔开。 */
+  padding: 0;
   font-size: 14px;
   line-height: 1.45;
   color: var(--ink-secondary);
-}
-.ops-notes li:first-child {
-  border-top: 0;
 }
 .ops-notes .dot {
   width: 6px;
@@ -1221,6 +1238,10 @@
   .ops-c-bars { order: 6; }
   .ops-c-adv { order: 7; }
   .ops-c-note { order: 8; }
+  /* 通栏条在窄栏退成两栏：四栏会把每条要点挤成竖条。 */
+  .ops-notes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   .ops-hero-row {
     flex-direction: column;
@@ -1280,6 +1301,9 @@
   }
   .ops-card {
     padding: 14px 16px;
+  }
+  .ops-notes {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
