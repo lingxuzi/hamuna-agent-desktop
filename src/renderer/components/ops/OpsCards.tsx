@@ -172,10 +172,14 @@ function renderRows(
             <span className="t">
               <strong>{row.title}</strong>
               <small>
-                {t('ops.row.platformSub', {
-                  platform: platformLabel(t, row.platform),
-                  detail: row.sub,
-                })}
+                {/* angle / note 都可能为空。空着时只印平台，不留一个悬空的「·」——
+                    模板是 "{{platform}} · {{detail}}"，没有 detail 就拼出「B站 · 」。 */}
+                {row.sub
+                  ? t('ops.row.platformSub', {
+                      platform: platformLabel(t, row.platform),
+                      detail: row.sub,
+                    })
+                  : platformLabel(t, row.platform)}
               </small>
             </span>
             <span className="n">{formatHotness(row.hotness, locale)}</span>

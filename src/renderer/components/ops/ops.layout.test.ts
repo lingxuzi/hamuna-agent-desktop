@@ -56,7 +56,10 @@ function splitTracks(value: string): string[] {
  * 轨道下限必须是 0，否则卡片的 min-content 会把整张网格顶出面板。
  */
 const SHRINKABLE_TRACKS: { selector: string; why: string }[] = [
-  { selector: '.ops-grid', why: '两列各装一张卡，宽度由另一列的卡片内容决定' },
+  // 网格的唯一持有者是 .ops-body：.ops-main / .ops-rail / .ops-grid 都是
+  // display:contents，把三轨摊平到同一张位置表上。护栏盯着旧的 .ops-grid
+  // 就等于盯着一块不再定义列的元素。
+  { selector: '.ops-body', why: '三轨各装一张卡，宽度由另一列的卡片内容决定' },
   { selector: '.ops-list', why: '台账行标题不换行，整句就是它的 min-content' },
   {
     selector: '.ops-list-head',

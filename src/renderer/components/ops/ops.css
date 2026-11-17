@@ -29,9 +29,11 @@
   /* 相对所在内容区的宽度，不是视口：工作区侧栏开着时聊天列会更窄，
      用 vw 会溢出被祖先的 overflow:hidden 切掉。 */
   width: min(calc(100% - 20px), 1180px);
-  /* 高度由内容决定，只封顶：空台账不该撑出 820 高的空纸。 */
+  /* 高度由内容决定，只封顶：空台账不该撑出 820 高的空纸。
+     封顶跟着可用高度走，不写死 860 —— 写死会把方向域第三行、复盘域的建议
+     按钮推到折叠线以下。.ops-body 能滚，但用户看到的是「被切了」。 */
   height: auto;
-  max-height: min(calc(100% - 12px), 860px);
+  max-height: calc(100% - 12px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -200,11 +202,19 @@
    摊成通栏、「对标账号」收进右栏。两处都让每张卡的自然高度 ≈ 它所在行的高度，
    要点卡因此不再跨行拉伸（原来跨两行 → 1088px 高、四条要点悬在半空）。 */
 .ops-body[data-ops-domain='topic'],
-.ops-body[data-ops-domain='asset'],
-.ops-body[data-ops-domain='schedule'] {
+.ops-body[data-ops-domain='asset'] {
   grid-template-areas:
     'hero hero dark'
     'pool dist notes';
+}
+/* 排期域：排期列表天然比「平台配额」「要点」高得多。三张卡挤在同一行时，
+   后两张被垫到 500px 高，条目之间裂出上百像素的空档。让排期列表跨两行，
+   右栏两张卡各自按内容高排 —— 谁都不再被垫高。 */
+.ops-body[data-ops-domain='schedule'] {
+  grid-template-areas:
+    'hero hero dark'
+    'pool pool dist'
+    'pool pool notes';
 }
 .ops-body[data-ops-domain='review'] {
   grid-template-areas:
@@ -587,29 +597,24 @@
   height: 4px;
 }
 
-/* 分布卡被垫高时，条自己吃掉多出来的高度 —— 名字和它自己的条始终相邻。
-   （原来把条推到格子底部，名字与条之间裂开一道上百像素的空档。） */
-.ops-c-bars > .ops-bars {
-  display: flex;
-  flex-direction: column;
-  flex: 1 0 auto;
-}
-.ops-c-bars > .ops-bars li {
-  flex: 1 0 auto;
-  grid-template-rows: auto 1fr;
-}
+/* 分布卡被垫高时，条不再跟着长 —— 条固定 24px，多出来的高度堆在列表末尾。
+   （原来条随格子长高、封顶 24px，超出的那截退回行底，条目之间就裂出一道
+   上百像素的空档：数字悬在半空，条掉在格子底。） */
 .ops-c-bars > .ops-bars .track {
-  /* 盖掉 .ops-bars .track 的固定 6px：条随格子长高 —— 名字和它自己的条始终
-     相邻，不再隔一道空档。但封顶 24px：830px 宽的卡里，长条会摊成一块绿板。
-     超出封顶的高度退回行底，变成条与条之间的空档。
-     min-height 不能省：卡片没被垫高时行高就是内容高，height:auto 会让条塌成 0。 */
-  height: auto;
-  min-height: 6px;
-  max-height: 24px;
-  align-self: stretch;
+  height: 24px;
 }
 
 /* ── 主列表 ───────────────────────────────────────── */
+/* 列表的固定列宽只有一处出处：行和表头都用它。
+   表头按固定列错开，列头才落在它管的那一列上 —— 表头右端比数值列右端多出
+   一个编辑钮的宽度（26+12=38px）时，肉眼能看出「热度」飘在数值右边。 */
+.ops-c-top {
+  --ops-col-gap: 12px;
+  --ops-col-rank: 16px;
+  --ops-col-thumb: 34px;
+  --ops-col-date: 40px;
+  --ops-col-action: 26px;
+}
 .ops-list-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -619,6 +624,17 @@
   line-height: 1;
   color: var(--ink-muted);
   padding-bottom: 6px;
+}
+/* 表头按行里的固定列错开：列头压在它管的那一列上。 */
+.ops-body[data-ops-domain='topic'] .ops-list-head,
+.ops-body[data-ops-domain='asset'] .ops-list-head {
+  padding-left: calc(var(--ops-col-thumb) + var(--ops-col-gap));
+  padding-right: calc(var(--ops-col-action) + var(--ops-col-gap));
+}
+.ops-body[data-ops-domain='review'] .ops-list-head {
+  padding-left: calc(
+    var(--ops-col-rank) + var(--ops-col-gap) + var(--ops-col-thumb) + var(--ops-col-gap)
+  );
 }
 .ops-list {
   list-style: none;
@@ -633,7 +649,7 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--ops-col-gap, 12px);
   padding: 10px 0;
   background: none;
   border: 0;
@@ -642,7 +658,7 @@
 }
 .ops-list .rank {
   flex: none;
-  width: 16px;
+  width: var(--ops-col-rank, 16px);
   font-family: var(--ops-serif);
   font-size: 16px;
   color: var(--ink-muted);
@@ -654,7 +670,7 @@
 .ops-thumb {
   position: relative;
   flex: none;
-  width: 34px;
+  width: var(--ops-col-thumb, 34px);
   height: 34px;
   border-radius: var(--theme-radius-md);
   display: grid;
@@ -688,7 +704,7 @@
 /* 排期域的时间格：日期在上、星期在下，与字牌同宽同位，切域时列表左缘不跳。 */
 .ops-list .date {
   flex: none;
-  width: 40px;
+  width: var(--ops-col-date, 40px);
   text-align: center;
 }
 .ops-list .date b {
@@ -849,7 +865,9 @@
 }
 .ops-dir-proposal-head span {
   font-size: 12px;
-  color: var(--ink-faint);
+  /* --ink-faint 在浅色纸面上只有 1.9:1，对比度不够。徽标压到 --ink-muted
+     （5.7:1）—— 12px 小字本来就是最吃对比度的一档。 */
+  color: var(--ink-muted);
 }
 .ops-dir-proposal .ops-dir-body {
   margin: 0;
@@ -993,9 +1011,10 @@
   display: flex;
   flex-direction: column;
   flex: 1 0 auto;
-  /* 卡片被垫高时，多出来的高度摊在要点之间，不是摊在每一条里 ——
-     摊在每一条里会让单行要点悬在半空，像被遗弃在半张卡上。 */
-  justify-content: space-between;
+  /* 卡片被垫高时，多出来的高度堆在列表末尾，不摊在要点之间 ——
+     摊开会让单行要点悬在半空，像被遗弃在半张卡上（每条之间裂出上百像素）。
+     条与条之间保持固定间距。 */
+  justify-content: flex-start;
 }
 .ops-notes li {
   display: grid;
@@ -1170,7 +1189,7 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 26px;
+  width: var(--ops-col-action, 26px);
   height: 26px;
   border: 1px solid var(--line);
   border-radius: var(--theme-radius-full);
