@@ -1254,19 +1254,19 @@
       "empty": "还没有可统计的数据。",
       "topic": {
         "title": "来源分布",
-        "meta": "按条数"
+        "meta": "按条数 · 共 {{n}} 条"
       },
       "asset": {
         "title": "状态分布",
-        "meta": "按条数"
+        "meta": "按条数 · 共 {{n}} 条"
       },
       "schedule": {
         "title": "平台配额",
-        "meta": "本周"
+        "meta": "本周 · 共 {{n}} 条"
       },
       "review": {
         "title": "平台分布",
-        "meta": "按播放"
+        "meta": "按播放 · 共 {{n}}"
       },
       "topicSource": {
         "hotspot": "热点",

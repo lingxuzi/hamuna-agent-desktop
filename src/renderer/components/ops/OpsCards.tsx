@@ -9,6 +9,7 @@ import type {
   OpsScheduleView,
   OpsTopicView,
 } from '../../../shared/ops-derive';
+import { distTotal } from '../../../shared/ops-derive';
 import {
   clockTime,
   formatCompact,
@@ -62,10 +63,21 @@ export function OpsDistCard({
   className?: string;
 }) {
   const { t, i18n } = useTranslation('chat');
+  // 分母写在卡头：条长是份额，光有份额是悬空的百分比 —— 「58%」的 58% 是
+  // 相对于什么，得有个数在旁。这个数也让「一根条代表 1 条还是 100 条」
+  // 有答案：份额 × 总数 = 这一项的绝对量。
+  //
+  // 没有数就不写：空态那一句「还没有可统计的数据」已经说完了，再补一句
+  // 「共 0 条」是同一件事说两遍。
+  const total = distTotal(view.dist);
   return (
     <OpsCard
       title={t(`ops.dist.${view.domain}.title`)}
-      meta={t(`ops.dist.${view.domain}.meta`)}
+      meta={
+        total > 0
+          ? t(`ops.dist.${view.domain}.meta`, { n: formatCompact(total, i18n.language) })
+          : undefined
+      }
       className={`ops-c-bars ${className ?? ''}`}
     >
       {view.dist.length === 0 ? (

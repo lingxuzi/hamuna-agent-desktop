@@ -7,6 +7,7 @@ import {
   deriveReviewView,
   deriveScheduleView,
   deriveTopicView,
+  distTotal,
 } from './ops-derive';
 
 /** 2026-11-13 周五 10:00（本地）。所有时间用本地分量构造，测试不依赖机器时区。 */
@@ -282,7 +283,11 @@ describe('选题域派生', () => {
       'reflection',
       'manual',
     ]);
-    expect(view.dist.every((d) => d.value === 1 && d.pct === 100)).toBe(true);
+    // 四个来源各 1 条 = 池子里的 4 条，各占四分之一。
+    //
+    // 这条断言原来写的是 100 —— 相对最大值编码下四个来源都是满条，界面上读起来
+    // 像「四个来源都是大头」，实际每个只占四分之一。那是排名，不是分布。
+    expect(view.dist.every((d) => d.value === 1 && d.pct === 25)).toBe(true);
   });
 
   it('主角卡是热度最高的那条', () => {
@@ -321,13 +326,15 @@ describe('素材域派生', () => {
     expect(view.lead.dueToday).toBe(2);
   });
 
-  it('状态分布按流程顺序，值相对最大值', () => {
+  it('状态分布按流程顺序，条长是占总数的份额', () => {
+    // 8 条素材里草稿 2 条 = 25%。不是 100% —— 100% 是「它是最多的那项」，
+    // 那不是份额，是排名：卡上写着 2，条却是满的，读者会当成「全在这儿」。
     expect(view.dist.map((d) => [d.key, d.value, d.pct])).toEqual([
-      ['draft', 2, 100],
-      ['pending', 1, 50],
-      ['scheduled', 2, 100],
-      ['unverified', 1, 50],
-      ['published', 2, 100],
+      ['draft', 2, 25],
+      ['pending', 1, 13],
+      ['scheduled', 2, 25],
+      ['unverified', 1, 13],
+      ['published', 2, 25],
     ]);
   });
 
@@ -805,6 +812,120 @@ describe('分布条审计：每一根条都是真计数', () => {
 
     expect((view as unknown as Record<string, unknown>).dist).toBeUndefined();
     expect(view.finalize).toHaveLength(1);
+  });
+});
+
+describe('分布条的长度口径：占全部的份额', () => {
+  // 条长是「这一项占全部的百分之多少」，不是「它是最多的百分之多少」。
+  //
+  // 相对最大值编码的问题是它编码的是**排名**，却长在叫「分布」的卡上：四个
+  // 来源各 1 条时四根全满，读者读成「四个来源都是大头」；两个总量差 4 倍的
+  // 域，最长的那根在两张卡上一样长，量级差在条上完全看不出来。
+  //
+  // 份额编码把这两件事都还原成真话：各条加起来是全部，满条只在真的占满时
+  // 出现（一个来源独占时）。分母是榜上各条之和 —— 份额的分母必须等于被分的
+  // 那堆条，否则各条加起来不到 100%，百分比就是悬空的。
+
+  it('条长是占总数的份额', () => {
+    const view = deriveAssetView(
+      state({
+        assets: [
+          asset({ id: 'a1', status: 'draft' }),
+          asset({ id: 'a2', status: 'draft' }),
+          asset({ id: 'a3', status: 'draft' }),
+          asset({ id: 'a4', status: 'published' }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => [d.key, d.value, d.pct])).toEqual([
+      ['draft', 3, 75],
+      ['published', 1, 25],
+    ]);
+  });
+
+  it('榜上各条加起来是全部 —— 分母就是榜上这些条', () => {
+    const view = deriveAssetView(
+      state({
+        assets: [
+          asset({ id: 'a1', status: 'draft' }),
+          asset({ id: 'a2', status: 'draft' }),
+          asset({ id: 'a3', status: 'ready' }),
+          asset({ id: 'a4', status: 'published' }),
+          asset({ id: 'a5', status: 'published' }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(distTotal(view.dist)).toBe(5);
+    // 四舍五入会让百分比之和在 99–101 之间抖，所以断言的是「约等于 100」。
+    const pctSum = view.dist.reduce((sum, d) => sum + d.pct, 0);
+    expect(pctSum).toBeGreaterThanOrEqual(99);
+    expect(pctSum).toBeLessThanOrEqual(101);
+  });
+
+  it('只有一个来源时那根是满条 —— 满条只在真的占满时出现', () => {
+    const view = deriveTopicView(
+      state({ topics: [topic({ id: 't1', source: 'hotspot' })] }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => [d.key, d.pct])).toEqual([['hotspot', 100]]);
+  });
+
+  it('总量差几倍，条长照样可比 —— 份额是绝对可比的量', () => {
+    // 两个域，同一个比例，条长必须一样；不同的比例，条长必须不一样。
+    // 相对最大值编码下这两张卡的最长条都是 100%，量级差 4 倍在条上看不出来。
+    const small = deriveAssetView(
+      state({
+        assets: [
+          asset({ id: 'a1', status: 'draft' }),
+          asset({ id: 'a2', status: 'draft' }),
+          asset({ id: 'a3', status: 'draft' }),
+          asset({ id: 'a4', status: 'published' }),
+        ],
+      }),
+      NOW,
+    );
+    const big = deriveAssetView(
+      state({
+        assets: [
+          asset({ id: 'b1', status: 'draft' }),
+          asset({ id: 'b2', status: 'draft' }),
+          asset({ id: 'b3', status: 'draft' }),
+          asset({ id: 'b4', status: 'draft' }),
+          asset({ id: 'b5', status: 'draft' }),
+          asset({ id: 'b6', status: 'draft' }),
+          asset({ id: 'b7', status: 'draft' }),
+          asset({ id: 'b8', status: 'draft' }),
+          asset({ id: 'b9', status: 'draft' }),
+          asset({ id: 'b10', status: 'draft' }),
+          asset({ id: 'b11', status: 'draft' }),
+          asset({ id: 'b12', status: 'draft' }),
+          asset({ id: 'b13', status: 'published' }),
+          asset({ id: 'b14', status: 'published' }),
+          asset({ id: 'b15', status: 'published' }),
+          asset({ id: 'b16', status: 'published' }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(distTotal(small.dist)).toBe(4);
+    expect(distTotal(big.dist)).toBe(16);
+    // 3/4 和 12/16 是同一个比例 → 同样长
+    expect(small.dist[0].pct).toBe(big.dist[0].pct);
+    // 3/4 和 4/16 不是同一个比例 → 不一样长
+    expect(small.dist[0].pct).not.toBe(big.dist[1].pct);
+  });
+
+  it('一个数都没有时条长是 0，不是 NaN', () => {
+    const view = deriveAssetView(state({ assets: [] }), NOW);
+
+    expect(view.dist).toEqual([]);
+    expect(distTotal(view.dist)).toBe(0);
   });
 });
 

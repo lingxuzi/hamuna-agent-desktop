@@ -44,7 +44,7 @@ export interface OpsDistBar {
   /** 稳定键：平台 id / 来源 id / 状态 id。 */
   key: string;
   value: number;
-  /** 0–100，相对最大值。 */
+  /** 0–100，占**全部**的份额。 */
   pct: number;
 }
 
@@ -553,7 +553,15 @@ interface DistEntry {
 }
 
 /**
- * 分布条。`pct` 相对最大值——最大值那根永远是满的。
+ * 分布条。`pct` 是**占总数的份额**，不是相对最大值。
+ *
+ * 为什么不是相对最大值：那张卡叫「分布」，分布的定义是各部分加起来是全部。
+ * 相对最大值编码的是**排名**（谁最多），它冒充分布 —— 四个来源各 1 条时，
+ * 相对最大值给出四根满条，界面上读起来像「四个来源都是大头」，实际每个都
+ * 只占四分之一。份额编码下同一组数据是四根 25%，加上就是 100%。
+ *
+ * 份额的分母是**榜上这些条的总和**（`distTotal`），不是整个台账 —— 分母必须
+ * 等于被分的那堆东西，否则各条加起来不到 100%，份额就成了悬空的百分比。
  *
  * **收到的条目一条不落全进榜**，包括值为 0 的。留不留 0 值行由调用方定：
  * `countEntries` 先把没数到的维度滤掉（来源、状态这类「没发生就不该占行」）；
@@ -561,14 +569,24 @@ interface DistEntry {
  * 就是要看见的一件事，滤掉就等于把没定义过的平台藏起来。
  */
 function buildBars(kind: OpsDistKind, entries: DistEntry[]): OpsDistBar[] {
-  let max = 0;
-  for (const e of entries) if (e.value > max) max = e.value;
+  const total = entries.reduce((sum, e) => sum + e.value, 0);
   return entries.map((e) => ({
     kind,
     key: e.key,
     value: e.value,
-    pct: max > 0 ? Math.round((e.value / max) * 100) : 0,
+    pct: total > 0 ? Math.round((e.value / total) * 100) : 0,
   }));
+}
+
+/**
+ * 一张分布卡的总 —— 份额的分母。
+ *
+ * 就是榜上各条之和：份额编码的诚实前提是「这些条加起来是全部」，所以分母
+ * 必须是**被分的那堆条**。台账里被滤掉的条目（还没发生的来源、还没排的素材）
+ * 不在这张卡的口径里，进了分母就成了另一个口径。
+ */
+export function distTotal(bars: OpsDistBar[]): number {
+  return bars.reduce((sum, b) => sum + b.value, 0);
 }
 
 /** 按固定顺序数条数（来源、状态这类有流程含义的维度）。 */

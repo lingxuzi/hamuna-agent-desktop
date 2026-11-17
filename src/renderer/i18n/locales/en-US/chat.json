@@ -1254,19 +1254,19 @@
       "empty": "Nothing to count yet.",
       "topic": {
         "title": "By source",
-        "meta": "By count"
+        "meta": "By count · {{n}} items"
       },
       "asset": {
         "title": "By status",
-        "meta": "By count"
+        "meta": "By count · {{n}} items"
       },
       "schedule": {
         "title": "Platform quota",
-        "meta": "This week"
+        "meta": "This week · {{n}} items"
       },
       "review": {
         "title": "By platform",
-        "meta": "By views"
+        "meta": "By views · {{n}}"
       },
       "topicSource": {
         "hotspot": "Trends",
