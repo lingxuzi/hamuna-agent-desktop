@@ -353,7 +353,29 @@ export interface OpsDirection {
    * 那时定过稿、但没人记下是几号，界面这时只能说「N 天前更新」。
    */
   finalizedAt: string | null;
+  /**
+   * 最后一次写这条方向的是谁。
+   *
+   * **不是调用方自称的** —— 由 store 按「进来的门」记：界面上的操作走 Tauri
+   * 命令记 `user`，CLI / Agent 工具走管理 API 记 `agent`。老记录没有这个值
+   * （`null`），那时没人记下是谁动的。
+   *
+   * 它记的是**最后一次写**，不是「定稿那一刻是谁点的」：定稿之后谁又改了别的
+   * 字段，这两件事就分开了。
+   */
+  lastTouchedBy: OpsActor | null;
 }
+
+/**
+ * 谁动了这条记录。
+ *
+ * `user` = 人（界面上的操作）；`agent` = Agent 或 CLI。人手动跑 CLI 也记成
+ * `agent` —— 两个方向搞错的代价不一样，把人的操作记成 Agent 只是让人多看一眼，
+ * 把 Agent 的操作记成人会让人以为这事已经有人拍过板。
+ */
+export type OpsActor = 'user' | 'agent';
+
+export const OPS_ACTORS: readonly OpsActor[] = ['user', 'agent'];
 
 /** 方向状态：草稿 → 生效。 */
 export type OpsDirectionStatus = 'draft' | 'active';

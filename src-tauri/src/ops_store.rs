@@ -340,6 +340,36 @@ pub struct OpsDirection {
     /// `active` 的那一刻，之后再写也不刷新。
     #[serde(default)]
     pub finalized_at: Option<String>,
+    /// 最后一次写这条方向的是谁。
+    ///
+    /// **由 store 记，调用方写不了**（`upsert_direction` 开头就把补丁里的同名键
+    /// 摘掉）—— 否则 Agent 能给自己造一个「人定的稿」的假事实，而界面上显示的
+    /// 就是它。
+    ///
+    /// 它记的是**最后一次写**，不是「定稿那一刻是谁点的」：定稿之后谁又改了
+    /// 别的字段，这两件事就分开了。「谁定的稿」是 `finalized_at` 那一刻的事，
+    /// 「谁在改」是此刻的事 —— 界面要问的是后者。
+    ///
+    /// **永远写出来**（没有就写 `null`），理由同 `proposal` / `finalized_at`。
+    #[serde(default)]
+    pub last_touched_by: Option<OpsActor>,
+}
+
+/// 谁动了这条记录。
+///
+/// **不是调用方自称的**：actor 由**进来的门**决定 —— 界面上的操作走 Tauri 命令
+/// （`cmd_ops_upsert`），CLI 与 Agent 工具走管理 API（`ops_upsert_handler`）。
+/// 载荷里没有这个键，Agent 想自称「用户」也没有地方自称。
+///
+/// 人手动跑 CLI 也记成 `Agent`：两个方向搞错的代价不一样 —— 把人的操作记成
+/// Agent 只是让人多看一眼，把 Agent 的操作记成人会让人以为这事已经有人拍过
+/// 板。宁可记错成 Agent。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OpsActor {
+    User,
+    #[default]
+    Agent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -922,13 +952,29 @@ where
 /// 载荷是**补丁**：只有出现的键会覆盖已有值（嵌套对象深合并）。同 id 覆盖，
 /// 新 id 新建。id 留空时由 store 生成——三个写者各自造 id 迟早撞车，撞了就
 /// 是覆盖别人的记录。
+///
+/// **按 Agent 记**：这是管理 API（CLI / Agent 工具）那条门用的入口。界面上
+/// 的操作走 [`upsert_item_by`] 并显式传 `OpsActor::User`。
 pub fn upsert_item(
     workspace_root: &Path,
     item: OpsUpsert,
 ) -> Result<(OpsState, String), String> {
+    upsert_item_by(workspace_root, item, OpsActor::Agent)
+}
+
+/// 同 [`upsert_item`]，但显式说明这次写是谁做的。
+///
+/// actor **由门决定，不由载荷自称**：载荷里没有这个键，调用方想冒充也没有
+/// 地方冒充。界面那扇门（Tauri 命令 `cmd_ops_upsert`）记 `User`，管理 API
+/// 那扇门（CLI / Agent 工具）记 `Agent`。
+pub fn upsert_item_by(
+    workspace_root: &Path,
+    item: OpsUpsert,
+    actor: OpsActor,
+) -> Result<(OpsState, String), String> {
     let OpsUpsert { kind, fields } = item;
     mutate_state(workspace_root, |state| match kind {
-        OpsItemKind::Direction => upsert_direction(state, fields),
+        OpsItemKind::Direction => upsert_direction(state, fields, actor),
         OpsItemKind::Account => upsert_account(state, fields),
         OpsItemKind::Topic => upsert_topic(state, fields),
         OpsItemKind::Asset => upsert_asset(state, fields),
@@ -1103,6 +1149,7 @@ fn upsert_rule(
 fn upsert_direction(
     state: &mut OpsState,
     patch: serde_json::Map<String, serde_json::Value>,
+    actor: OpsActor,
 ) -> Result<String, String> {
     // 采纳 / 驳回修订是**动作**，不是字段：这两个键不进补丁合并，先取出来。
     // 让调用方自己把 proposal 的每个字段抄一遍等于把字段清单复制到每个写者里。
@@ -1120,6 +1167,8 @@ fn upsert_direction(
     // 定稿时刻由 store 记，调用方写不了。否则 Agent 能给自己造一个
     // 「三天前定稿」的假事实，而这张卡显示的就是它。
     fields.remove("finalizedAt");
+    // 「谁在改」同理：由 store 按进来的门记，调用方写不了。
+    fields.remove("lastTouchedBy");
 
     // `proposal` 不走通用合并：它是**一整版新值**，深合并会把上一版残留的字段
     // （尤其 rationale）揉进新修订里，人看到的就不是 Agent 刚提的那一版。
@@ -1225,6 +1274,10 @@ fn upsert_direction(
     direction.created_at =
         resolve_created_at(existing.map(|old| old.created_at.as_str()), &direction.created_at);
     direction.updated_at = now_iso();
+    // 「谁在改」记的是**这一次写**，不是「定稿那一刻是谁点的」：定稿之后谁又
+    // 改了别的字段，这两件事就分开了。「谁定的稿」是 `finalized_at` 那一刻的事，
+    // 「谁在改」是此刻的事 —— 界面要问的是后者。
+    direction.last_touched_by = Some(actor);
     upsert_by_id(&mut state.directions, direction, |d| d.id.as_str())
 }
 
@@ -1482,12 +1535,18 @@ pub struct OpsUpsertOutcome {
     pub id: String,
 }
 
+/// 界面上的写入。**这是「人」那扇门** —— 只有 WebView 能调 Tauri 命令，
+/// 管理 API（CLI / Agent 工具）走 `upsert_item`，记成 Agent。
+///
+/// actor 按门记、不按动作推断：CLI 也能 `--accept-proposal`，所以「采纳 ⇒ 人」
+/// 这个推断不成立，只有门才算数。
 #[tauri::command]
 pub async fn cmd_ops_upsert(workspace: String, item: OpsUpsert) -> Result<OpsUpsertOutcome, String> {
     let root = validate_workspace_root(&workspace)?;
-    let (state, id) = tauri::async_runtime::spawn_blocking(move || upsert_item(&root, item))
-        .await
-        .map_err(|e| format!("[ops-store] upsert task failed: {}", e))??;
+    let (state, id) =
+        tauri::async_runtime::spawn_blocking(move || upsert_item_by(&root, item, OpsActor::User))
+            .await
+            .map_err(|e| format!("[ops-store] upsert task failed: {}", e))??;
     emit_changed(&workspace);
     Ok(OpsUpsertOutcome { state, id })
 }
@@ -1700,6 +1759,62 @@ mod tests {
             state.directions[0].finalized_at.as_deref(),
             Some("2020-01-01T00:00:00.000Z"),
             "定稿时刻必须由 store 记，不能由调用方写"
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_records_who_touched_it_by_the_door_it_came_in_through() {
+        let ws = make_test_workspace("ops-direction-actor");
+        // 管理 API（CLI / Agent 工具）那扇门：记 Agent。
+        let (state, _) = upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+        assert_eq!(
+            state.directions[0].last_touched_by,
+            Some(OpsActor::Agent),
+            "管理 API 那扇门必须记 Agent"
+        );
+
+        // 界面（Tauri 命令）那扇门：记 User。
+        let (state, _) = upsert_item_by(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "城市露营") },
+            OpsActor::User,
+        )
+        .expect("from the UI");
+        assert_eq!(
+            state.directions[0].last_touched_by,
+            Some(OpsActor::User),
+            "界面那扇门必须记 User"
+        );
+
+        // 落盘再读回来还是它 —— 不能只在内存里对。
+        let reread = read_state(&ws).expect("reread");
+        assert_eq!(reread.directions[0].last_touched_by, Some(OpsActor::User));
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_last_touched_by_is_not_writable_by_the_caller() {
+        let ws = make_test_workspace("ops-direction-actor-owned");
+        // 调用方（Agent）不能自己宣称「这是人定的」：卡片显示的就是它。
+        let forge = serde_json::json!({
+            "platform": "douyin",
+            "lastTouchedBy": "user",
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: forge }).expect("forge");
+
+        assert_eq!(
+            state.directions[0].last_touched_by,
+            Some(OpsActor::Agent),
+            "「谁在改」必须由 store 按门记，不能由调用方写"
         );
         let _ = fs::remove_dir_all(&ws);
     }

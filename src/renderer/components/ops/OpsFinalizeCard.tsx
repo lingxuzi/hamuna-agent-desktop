@@ -30,9 +30,24 @@ export function OpsFinalizeCard({ view }: { view: OpsDirectionView }) {
             <li key={row.platform} data-stage={row.stage} data-pending={row.pending || undefined}>
               <span className="name">{platformLabel(t, row.platform)}</span>
               <span className="stage">
-                <span className="stage-label">{t(`ops.finalize.stage.${row.stage}`)}</span>
+                {/* 色相放圆点，文字放墨色：12px 的绿字（--success 4.18:1）和橙字
+                    （--accent 3.70:1）都过不了 AA 的 4.5:1。 */}
+                <span className="stage-label">
+                  <i className="dot" />
+                  {t(`ops.finalize.stage.${row.stage}`)}
+                </span>
                 {/* 有修订在等：这是唯一一件「现在轮到你」的事，单独标出来。 */}
-                {row.pending && <span className="pending">{t('ops.finalize.pending')}</span>}
+                {row.pending && (
+                  <span className="pending">
+                    <i className="dot" />
+                    {t('ops.finalize.pending')}
+                  </span>
+                )}
+              </span>
+              {/* 谁在改。老记录没有这个事实（null）时留空 —— 空格子比「不知道是谁」
+                  更诚实。空 span 也要在：它保住这一列的列数，右边的时间才始终对齐。 */}
+              <span className="actor" data-actor={row.touchedBy ?? 'unknown'}>
+                {row.touchedBy ? t(`ops.finalize.actor.${row.touchedBy}`) : ''}
               </span>
               <span className="when">{whenLabel(row, t)}</span>
             </li>

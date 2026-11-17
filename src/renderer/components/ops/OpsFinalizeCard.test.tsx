@@ -33,6 +33,7 @@ function direction(patch: Partial<OpsDirection> & Pick<OpsDirection, 'id' | 'pla
     createdAt: '2026-11-01T09:00:00',
     updatedAt: '2026-11-01T09:00:00',
     finalizedAt: null,
+    lastTouchedBy: null,
     ...patch,
   };
 }
@@ -137,5 +138,43 @@ describe('定稿进度卡', () => {
 
     expect(screen.getByText('还没有平台记录。')).toBeInTheDocument();
     expect(document.querySelector('.ops-final-rows')).toBeNull();
+  });
+
+  it('标出「谁在改」：人动的写你，Agent 动的写 Agent', () => {
+    renderCard([
+      direction({
+        id: 'dir-douyin',
+        platform: 'douyin',
+        status: 'active',
+        finalizedAt: '2026-11-10T09:00:00',
+        lastTouchedBy: 'user',
+      }),
+      direction({
+        id: 'dir-xhs',
+        platform: 'xiaohongshu',
+        status: 'draft',
+        lastTouchedBy: 'agent',
+      }),
+    ]);
+
+    expect(rowOf('抖音').querySelector('.actor')?.textContent).toBe('最后动的是你');
+    expect(rowOf('小红书').querySelector('.actor')?.textContent).toBe('最后动的是 Agent');
+  });
+
+  it('没记下是谁动的老记录不猜 —— 那一格留空', () => {
+    renderCard([
+      direction({
+        id: 'dir-douyin',
+        platform: 'douyin',
+        status: 'active',
+        finalizedAt: '2026-11-10T09:00:00',
+        lastTouchedBy: null,
+      }),
+    ]);
+
+    const actor = rowOf('抖音').querySelector('.actor');
+    expect(actor?.textContent).toBe('');
+    // 空格子也要在：它保住这一列的列数，右边的时间才始终对齐成一条竖线。
+    expect(actor).not.toBeNull();
   });
 });

@@ -12,6 +12,7 @@
  */
 
 import type {
+  OpsActor,
   OpsAsset,
   OpsDirectionProposal,
   OpsDirectionStatus,
@@ -295,6 +296,12 @@ export interface OpsFinalizeRow {
   updatedDays: number | null;
   /** 距修订提议几天。 */
   proposedDays: number | null;
+  /**
+   * 最后一次写这条方向的是谁。`null` = 没记下（老记录）。
+   *
+   * 它跟 `updatedDays` 说的是同一件事的两面：那是「多久没动」，这是「谁动的」。
+   */
+  touchedBy: OpsActor | null;
 }
 
 export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionView {
@@ -386,6 +393,7 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
         finalizedDays: null,
         updatedDays: null,
         proposedDays: null,
+        touchedBy: null,
       };
     }
     const stage: OpsFinalizeStage =
@@ -397,6 +405,10 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
       finalizedDays: daysSince(d.finalizedAt, now),
       updatedDays: daysSince(d.updatedAt, now),
       proposedDays: daysSince(d.proposal?.proposedAt, now),
+      // `?? null` 而不是直接取值：老台账里可能**根本没有**这个键，前端拿到的是
+      // `undefined` 而不是 `null`，而 `undefined !== null` 为真 —— 「没人动过」
+      // 会被读成「有人动过」。
+      touchedBy: d.lastTouchedBy ?? null,
     };
   });
 

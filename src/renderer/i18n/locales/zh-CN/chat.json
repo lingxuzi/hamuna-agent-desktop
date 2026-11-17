@@ -1293,6 +1293,10 @@
         "final": "已定稿"
       },
       "pending": "待你确认",
+      "actor": {
+        "user": "最后动的是你",
+        "agent": "最后动的是 Agent"
+      },
       "finalized": "{{days}} 天前定稿",
       "finalizedToday": "今天定稿",
       "updated": "{{days}} 天前更新",

@@ -1293,6 +1293,10 @@
         "final": "Final"
       },
       "pending": "Needs your nod",
+      "actor": {
+        "user": "last touched by you",
+        "agent": "last touched by the Agent"
+      },
       "finalized": "Finalized {{days}} days ago",
       "finalizedToday": "Finalized today",
       "updated": "Updated {{days}} days ago",

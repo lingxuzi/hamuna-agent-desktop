@@ -638,8 +638,8 @@
 }
 .ops-final-rows li {
   display: grid;
-  /* 平台名可缩（省略号留给窄栏），状态与时间各自定宽，右对齐成一条竖线。 */
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  /* 平台名可缩（省略号留给窄栏），状态、谁、时间各自定宽，右对齐成一条竖线。 */
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 10px 16px;
   align-items: baseline;
   padding: 9px 0;
@@ -662,19 +662,48 @@
   gap: 8px;
   white-space: nowrap;
 }
+/* 状态点：色相在点子上，文字留在墨色里。12px 的绿字（--success 对
+   --paper-elevated 是 4.18:1）和橙字（--accent 3.70:1）都过不了 AA 的 4.5:1；
+   点的对比度要求是 3:1，上面的色都过，「还没动」那个空心圈用 --ink-muted
+   （5.83:1）描边，也过。 */
+.ops-final-rows .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: var(--theme-radius-full);
+  /* 还没立方向 / 等 Agent 结构 = 还没动：空心圈，形状也带信息。 */
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--ink-muted);
+  vertical-align: middle;
+}
 .ops-final-rows .stage-label {
+  display: inline-block;
   font-size: 12px;
   color: var(--ink-secondary);
 }
-.ops-final-rows li[data-stage='final'] .stage-label {
-  color: var(--success);
-  font-weight: 600;
+.ops-final-rows li[data-stage='structured'] .stage-label .dot {
+  background: var(--ops-data);
+  box-shadow: none;
+}
+.ops-final-rows li[data-stage='final'] .stage-label .dot {
+  background: var(--success);
+  box-shadow: none;
 }
 /* 待确认：唯一一件「现在轮到你」的事，用主题暖色挑出来。 */
 .ops-final-rows .pending {
   font-size: 12px;
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 600;
+}
+.ops-final-rows .pending .dot {
+  background: var(--accent);
+}
+/* 谁在改。跟「多久没动」是同一件事的两面，放在时间左边。 */
+.ops-final-rows .actor {
+  font-size: 12px;
+  color: var(--ink-muted);
+  white-space: nowrap;
 }
 .ops-final-rows .when {
   font-family: var(--font-code);
@@ -683,6 +712,14 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: right;
+}
+
+/* 窄栏：这一行的四段（平台 / 状态 / 谁 / 时间）放不下了，先让「谁」让位 ——
+   它是补语，「走到哪一步」和「多久没动」才是这行要说的两件事。 */
+@container (max-width: 460px) {
+  .ops-final-rows .actor {
+    display: none;
+  }
 }
 
 /* 分布卡被垫高时，条保持自己的 6px，不跟着格子长 —— 多出来的高度堆在列表
