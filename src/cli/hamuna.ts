@@ -108,7 +108,11 @@ export function parseArgs(args: string[]): { positional: string[]; flags: Record
         key === 'include-archived' ||
         key === 'clear-goal' ||
         key === 'create-attached' ||
-        key === 'rollback'
+        key === 'rollback' ||
+        // `--as-user` 是 presence-only：凭据走 stdin，不走 argv。加进这里
+        // 是因为通用分支会把紧跟其后的位置参数当成它的值（`--as-user foo`
+        // → asUser='foo'），那就不是 true 了，整条断言被静默忽略。
+        key === 'as-user'
       ) {
         flags[camelCase(key)] = key === 'create-attached'
           ? parseInlineBooleanFlag(key, inlineValue)
@@ -2811,6 +2815,70 @@ function readOpsField(spec: OpsFieldSpec, flags: Record<string, unknown>): unkno
 }
 
 /**
+ * 终端口令 —— `--as-user` 的凭据。
+ *
+ * **只从 stdin 读**：
+ *
+ * - 不走命令行参数 —— argv 会进 shell history，`ps` 也看得见（和
+ *   `--password-stdin` 同一个理由）。
+ * - 不走环境变量 —— app 派生的子进程会继承它，Agent 就拿到了。
+ *
+ * 交互式终端：提示一句，读一行。管道 / 重定向：按 `--password-stdin` 的
+ * 先例读 fd 0 到底，脚本可以 `printf %s "$CODE" | hamuna ... --as-user`。
+ */
+async function readTerminalCode(): Promise<string> {
+  const fs = require('fs') as typeof import('fs');
+  if (process.stdin.isTTY) {
+    const readline = require('readline') as typeof import('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+    const answer = await new Promise<string>((resolve) => {
+      rl.question('Terminal code (generate one in the operations panel): ', resolve);
+    });
+    rl.close();
+    return answer.trim();
+  }
+  let raw = '';
+  try {
+    raw = fs.readFileSync(0, 'utf-8');
+  } catch {
+    raw = '';
+  }
+  return (raw.split('\n')[0] ?? '').trim();
+}
+
+/**
+ * `--as-user` 带出来的口令。
+ *
+ * 读 stdin 是异步的，所以 `main()` 先把口令读进 `flags.userCode`，这里只是
+ * 取出来。取不到就是「没给」——`--as-user` 是一次断言，不是开关：没有凭据
+ * 就该报错，而不是安静地记成 Agent（人以为记成自己了，实际没有）。
+ */
+function opsUserCode(flags: Record<string, unknown>): string | undefined {
+  if (flags.asUser !== true) return undefined;
+  const code = typeof flags.userCode === 'string' ? flags.userCode.trim() : '';
+  if (!code) {
+    console.error('Error: --as-user needs a terminal code on stdin.');
+    console.error('  Generate one in the operations panel, then run the command again');
+    console.error('  and paste the code when prompted.');
+    process.exit(2);
+  }
+  return code;
+}
+
+/**
+ * `--as-user` 只对「写」有意义：读不记人，删也不记人（台账不留删除者）。
+ *
+ * 两处都要查：`main()` 在**读口令之前**查（别让人贴完口令才告诉他这条命令
+ * 不支持），`buildRequestBody` 再查一次（它是被直接调用的，不经过 `main()`）。
+ * 文案只有这一份 —— 两处各写一遍，早晚漂成两句不一样的报错。
+ */
+function assertUserCodeVerb(verb: string): void {
+  if (verb === 'add' || verb === 'update') return;
+  console.error('Error: --as-user only applies to `hamuna ops add` / `hamuna ops update`.');
+  process.exit(2);
+}
+
+/**
  * Translate the flags into the fields this call changes. Fields that were
  * not passed stay out of the payload: the Rust store merges the patch onto
  * the existing record, so an absent field means "leave it alone", not
@@ -3061,6 +3129,20 @@ async function main(): Promise<void> {
   } else {
     // Build request body based on group/action
     const restArgs = positional.slice(2);
+
+    // `--as-user` 说「这次记成我」—— 台账里 actor 由门决定，CLI 这扇门默认
+    // 记 Agent，所以人要自己带凭据。口令从 stdin 读：argv 会进 shell
+    // history，环境变量会被 app 的子进程继承（Agent 就拿到了）。
+    if (flags.asUser === true) {
+      const opsCmd = group === 'ops' ? parseOpsCommand(action, restArgs) : null;
+      if (!opsCmd) {
+        console.error('Error: --as-user only applies to `hamuna ops add` / `hamuna ops update`.');
+        process.exit(2);
+      }
+      assertUserCodeVerb(opsCmd.verb);
+      flags.userCode = await readTerminalCode();
+    }
+
     const body = buildRequestBody(group, action, restArgs, flags);
     const route = buildRoute(group, action, restArgs);
 
@@ -4484,6 +4566,10 @@ export function buildRequestBody(
     const cmd = parseOpsCommand(action, rest);
     const workspace = opsWorkspaceFlag(flags);
     const scope = workspace ? { workspace } : {};
+    // 口令只对「写」有意义：读不记人，删也不记人（台账不留删除者）。
+    // 放在动词分发之前 —— `ops list --as-user` 应该是用法错误，不是静默忽略。
+    if (flags.asUser === true) assertUserCodeVerb(cmd.verb);
+    const userCode = opsUserCode(flags);
     if (cmd.verb === 'list') {
       return scope;
     }
@@ -4511,7 +4597,7 @@ export function buildRequestBody(
         }
         if (id) item.id = id;
       }
-      return { ...scope, item: { kind, ...item } };
+      return { ...scope, item: { kind, ...item }, ...(userCode ? { userCode } : {}) };
     }
     if (cmd.verb === 'remove') {
       const kind = opsRequireKind(cmd.kind);

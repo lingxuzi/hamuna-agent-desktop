@@ -37,6 +37,7 @@ pub mod memory_evolution;
 pub mod notification;
 pub mod notification_badge;
 pub mod ops_store;
+pub mod ops_user_code;
 pub mod perf_trace;
 pub mod process_cleanup;
 pub mod process_cmd;
@@ -660,6 +661,8 @@ pub fn run() {
             ops_store::cmd_ops_read,
             ops_store::cmd_ops_upsert,
             ops_store::cmd_ops_delete,
+            // 终端口令：人手动跑 CLI 时用它把自己记成「人」而不是「Agent」
+            ops_user_code::cmd_ops_user_code,
             // Full-text search commands
             search::cmd_search_sessions,
             search::cmd_search_workspace_files,

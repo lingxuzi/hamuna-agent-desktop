@@ -2802,6 +2802,12 @@ struct OpsReadRequest {
 struct OpsUpsertRequest {
     workspace: String,
     item: crate::ops_store::OpsUpsert,
+    /// 终端口令：人手动跑 CLI 时带上，服务端校验通过才记成 user。
+    ///
+    /// **不是调用方自称的** —— 口令由界面铸造、只活在 GUI 进程内存里，Agent
+    /// 拿不到。带上但无效 = 直接报错，不静默降级成 agent：人明确说了
+    /// 「记成我」，静默记成别人只会让人以为记上了。
+    user_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2844,9 +2850,31 @@ async fn ops_upsert_handler(Json(req): Json<OpsUpsertRequest>) -> Json<serde_jso
         Ok(root) => root,
         Err(error) => return Json(serde_json::json!({ "ok": false, "error": error })),
     };
+    // actor 由门决定：管理 API 这扇门默认记 Agent（fail-safe），只有带上
+    // **有效的**终端口令才记人。口令由界面铸造，Agent 拿不到。
+    let actor = match req
+        .user_code
+        .as_deref()
+        .map(str::trim)
+        .filter(|c| !c.is_empty())
+    {
+        Some(code) => {
+            if !crate::ops_user_code::verify(code) {
+                return Json(serde_json::json!({
+                    "ok": false,
+                    "error": "[ops-store] the terminal code is invalid or expired",
+                    "code": "OPS_USER_CODE_INVALID",
+                    "suggestion": "Generate a new terminal code in the operations panel, then retry.",
+                }));
+            }
+            crate::ops_store::OpsActor::User
+        }
+        None => crate::ops_store::OpsActor::Agent,
+    };
     let item = req.item;
     let result =
-        tokio::task::spawn_blocking(move || crate::ops_store::upsert_item(&root, item)).await;
+        tokio::task::spawn_blocking(move || crate::ops_store::upsert_item_by(&root, item, actor))
+            .await;
     match result {
         Ok(Ok((state, id))) => {
             crate::ops_store::emit_changed(&req.workspace);
@@ -4177,5 +4205,87 @@ mod tests {
             .iter()
             .any(|comment| comment.get("body").and_then(Value::as_str)
                 == Some("management api comment")));
+    }
+
+    /// 管理 API 那扇门：actor 由**门**决定，不由载荷自称。
+    ///
+    /// 三条契约，少一条就漏一个洞：
+    /// - 不带口令 → 记 Agent（fail-safe：这扇门是 CLI / Agent 工具走的门）
+    /// - 带**无效**口令 → 直接报错，**不**静默降级成 Agent（人说了「记成我」，
+    ///   静默记成别人只会让人以为记上了）
+    /// - 带**有效**口令 → 记 User（人手动跑 CLI）
+    ///
+    /// 直接调 handler，不启 HTTP 服务器：`MANAGEMENT_PORT` 是 `OnceLock`，
+    /// 同进程只能启一次管理 API（`management_api_registers_goal_list_and_
+    /// issue_update_routes` 已经启了）。这里再启一次会把那个测试顶掉 —— 它
+    /// panic 时手里还攥着 `space_cloud_mock` 的锁，锁中毒会连带十几条
+    /// space_cloud 用例一起红。
+    ///
+    /// 请求体仍走 JSON 反序列化（`serde_json::from_value`），所以 camelCase 的
+    /// `userCode` → `user_code` 这层映射照样被覆盖。
+    #[tokio::test]
+    async fn ops_upsert_records_the_actor_by_the_door_not_by_the_payload() {
+        let workspace = std::env::current_dir().expect("current workspace");
+        let user_workspace =
+            tempfile::tempdir_in(workspace).expect("User workspace inside project");
+        let ws = user_workspace.path().to_string_lossy().to_string();
+
+        async fn upsert(body: Value) -> Value {
+            let request: OpsUpsertRequest =
+                serde_json::from_value(body).expect("ops upsert request body");
+            let Json(response) = ops_upsert_handler(Json(request)).await;
+            response
+        }
+
+        let direction = serde_json::json!({
+            "kind": "direction",
+            "platform": "douyin",
+            "positioning": "夜间露营装备实测",
+        });
+
+        // 1) 不带口令 → Agent。
+        let as_agent = upsert(serde_json::json!({
+            "workspace": ws,
+            "item": direction,
+        }))
+        .await;
+        assert_eq!(as_agent.get("ok").and_then(Value::as_bool), Some(true));
+        assert_eq!(
+            as_agent
+                .pointer("/state/directions/0/lastTouchedBy")
+                .and_then(Value::as_str),
+            Some("agent"),
+            "管理 API 那扇门默认必须记 Agent"
+        );
+
+        // 2) 带无效口令 → 报错，不静默降级。
+        let bad_code = upsert(serde_json::json!({
+            "workspace": ws,
+            "item": direction,
+            "userCode": "NOT-A-REAL-CODE",
+        }))
+        .await;
+        assert_eq!(bad_code.get("ok").and_then(Value::as_bool), Some(false));
+        assert_eq!(
+            bad_code.get("code").and_then(Value::as_str),
+            Some("OPS_USER_CODE_INVALID")
+        );
+
+        // 3) 带有效口令 → User。
+        let good_code = crate::ops_user_code::mint();
+        let as_user = upsert(serde_json::json!({
+            "workspace": ws,
+            "item": direction,
+            "userCode": good_code,
+        }))
+        .await;
+        assert_eq!(as_user.get("ok").and_then(Value::as_bool), Some(true));
+        assert_eq!(
+            as_user
+                .pointer("/state/directions/0/lastTouchedBy")
+                .and_then(Value::as_str),
+            Some("user"),
+            "带有效终端口令的写入必须记成 User"
+        );
     }
 }

@@ -1482,6 +1482,17 @@
         "archived": "已归档"
       }
     },
+    "code": {
+      "open": "终端口令",
+      "title": "终端口令",
+      "expires": "{{time}} 前有效",
+      "copy": "复制",
+      "copied": "已复制",
+      "regenerate": "换一个",
+      "hint": "在终端跑 ops 命令时加上 --as-user，再把这个口令贴进去 —— 这次改动就记成你，不是 Agent。",
+      "failed": "生成终端口令失败：{{reason}}",
+      "copyFailed": "复制失败，请手动选中口令复制"
+    },
     "benchmark": {
       "title": "对标账号",
       "meta": "方向相近的参照系",

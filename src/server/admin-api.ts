@@ -2191,6 +2191,10 @@ Rule fields:
 Options:
   --workspace <path>           Target another workspace (default: this session's)
   --json                       Machine-readable output
+  --as-user                    Record this write as you, not as the Agent.
+                               Needs a terminal code: mint one in the app's
+                               operations panel, then paste it when prompted.
+                               The code is read from stdin, never from argv.
 
 Rules:
   - 'update' is a patch: only the fields you pass change. Everything else on
@@ -2199,6 +2203,11 @@ Rules:
     'update' / 'remove'.
   - Never edit ops/state.json directly — the ledger has one writer, and a
     hand-edit can race with a write and lose data.
+  - '--as-user' belongs to the human at the keyboard. A write you make is
+    recorded as the Agent on purpose: a ledger entry that looks like a person
+    approved it is worse than one that plainly looks automated. Do not pass
+    --as-user yourself — you have no terminal code, and asking for one is not
+    a thing you can do.
 
 Examples:
   hamuna ops list
@@ -3356,10 +3365,13 @@ export async function handleOpsRead(payload: { workspace?: string }): Promise<Ad
 export async function handleOpsUpsert(payload: {
   workspace?: string;
   item: OpsUpsertPayload;
+  /** 终端口令：人手动跑 CLI 时带上，Rust 侧校验通过才把这次写记成 user。 */
+  userCode?: string;
 }): Promise<AdminResponse> {
   const resp = await managementApi('/api/ops/upsert', 'POST', {
     workspace: opsWorkspacePath(payload),
     item: payload.item,
+    ...(payload.userCode ? { userCode: payload.userCode } : {}),
   });
   return wrapMgmtResponse(resp);
 }

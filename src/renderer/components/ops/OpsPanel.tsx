@@ -32,6 +32,7 @@ import { DirectionBriefForm } from './DirectionBriefForm';
 import { OpsAccountLogin, OpsAccounts } from './OpsAccounts';
 import { OpsBenchmarks, BenchmarkForm } from './OpsBenchmarks';
 import { OpsClues } from './OpsClues';
+import { OpsTerminalCode } from './OpsTerminalCode';
 import { useOpsState } from './useOpsState';
 import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
 import { opsErrorMessage, opsUpsert } from './opsWrite';
@@ -237,6 +238,7 @@ export default function OpsPanel({
             </button>
           </>
         )}
+        <OpsTerminalCode />
         <button
           type="button"
           className="ops-ghost"

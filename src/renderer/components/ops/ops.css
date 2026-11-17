@@ -1916,3 +1916,72 @@
 .ops-act.del:hover {
   border-color: var(--error);
 }
+
+/* ── 终端口令 ─────────────────────────────────────── */
+/* 人手动跑 CLI 时用它把自己记成「人」。口令由界面铸造、只活在 GUI 进程
+   内存里（Rust: src-tauri/src/ops_user_code.rs）—— 落盘的话 Agent 直接
+   读得到，那门就形同虚设。 */
+.ops-code {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: max-content;
+  max-width: 320px;
+  padding: 14px 16px 12px;
+}
+
+.ops-code-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.ops-code-head strong {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.ops-code-head .ops-meta {
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+.ops-code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 口令本体：等宽、大写字母数字，人照着抄不会认错。 */
+.ops-code-value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-code);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  padding: 9px 12px;
+  background: var(--paper-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-md);
+  white-space: nowrap;
+  user-select: text;
+}
+
+.ops-code-btn {
+  flex: none;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.ops-code-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}

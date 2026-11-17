@@ -2389,7 +2389,7 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // ledger, sees no clue and no benchmark, and concludes there is no signal and
 // no reference account. A filter that hides data reads exactly like data that
 // does not exist.
-const CLI_VERSION: &str = "54";
+const CLI_VERSION: &str = "55";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2646,7 +2646,7 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // sit in the ledger unread — the same way a missing section reads as "there
 // is no data" rather than "you are not looking".
 
-const SYSTEM_SKILLS_VERSION: &str = "80";
+const SYSTEM_SKILLS_VERSION: &str = "81";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3341,13 +3341,15 @@ mod system_skills_tests {
         // `browser scroll` — without it the agent cannot reach a publish button
         // that sits below the fold; 78 documents it. 53 adds the `clue` / `benchmark`
         // ops kinds — the comment-signal ledger and the benchmark-account registry;
-        // 79 documents both.
+        // 79 documents both. 54 adds the `--as-user` credential gate — a human
+        // driving the CLI by hand was recorded in the ledger as an Agent; 55
+        // documents it (and 81 re-documents the system-skill surface alongside it).
         //
         // The anchor was left at 46/69 while the constants moved on to 48/71, so
         // this test had been red at HEAD for a reason unrelated to any behaviour
         // — do not re-derive a rule from it, just keep it in step.
-        assert_eq!(CLI_VERSION, "53");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "79");
+        assert_eq!(CLI_VERSION, "55");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "81");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));

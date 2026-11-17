@@ -1438,6 +1438,68 @@ describe('hamuna CLI operations ledger', () => {
     expect(flags.shot).toEqual(['{"no":1}', '{"no":2}']);
   });
 
+  it('carries the terminal code when the human claims the write', () => {
+    // `--as-user` 是一条断言：人明确说了「记成我」。凭据走 stdin —— argv 会进
+    // shell history，环境变量会被 app 派生的子进程继承（Agent 就拿到了）。
+    const body = buildRequestBody('ops', 'update', ['topic'], {
+      asUser: true,
+      userCode: 'K3M9XQ2P',
+      id: 'topic-1',
+      status: 'planned',
+    }) as { item: Record<string, unknown>; userCode?: string };
+
+    expect(body.userCode).toBe('K3M9XQ2P');
+    expect(body.item).toMatchObject({ kind: 'topic', status: 'planned' });
+  });
+
+  it('leaves the write to the agent when the human makes no claim', () => {
+    const body = buildRequestBody('ops', 'update', ['topic'], {
+      id: 'topic-1',
+      status: 'planned',
+    }) as { userCode?: string };
+
+    expect(body.userCode).toBeUndefined();
+  });
+
+  it('refuses --as-user without a code instead of quietly recording an agent', () => {
+    // 静默降级是最坏的一种：人以为记成自己了，台账里其实记的是 Agent。
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('ops', 'update', ['topic'], { asUser: true, id: 'topic-1' }))
+        .toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('terminal code'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('refuses --as-user on a read', () => {
+    // 读不记人，口令对读没有意义 —— 当成用法错误，而不是收下再忽略。
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('ops', 'list', [], { asUser: true, userCode: 'K3M9XQ2P' }))
+        .toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('--as-user'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('keeps --as-user from eating the flag that follows it', () => {
+    // 通用 key-value 分支会把紧跟的位置参数吞成值（asUser='topic'），断言就
+    // 不是 true 了，整条声明被静默忽略。
+    const { flags } = parseArgs(['ops', 'update', 'topic', '--as-user']);
+    expect(flags.asUser).toBe(true);
+  });
+
   it('narrows a JSON read to the requested kind', () => {
     // The store always answers with the whole ledger. A skill asking for
     // "the rules" must not have to filter the JSON itself.

@@ -1482,6 +1482,17 @@
         "archived": "Archived"
       }
     },
+    "code": {
+      "open": "Terminal code",
+      "title": "Terminal code",
+      "expires": "Valid until {{time}}",
+      "copy": "Copy",
+      "copied": "Copied",
+      "regenerate": "New code",
+      "hint": "Add --as-user when you run an ops command in the terminal and paste this code — the write is recorded as you, not as the Agent.",
+      "failed": "Could not create a terminal code: {{reason}}",
+      "copyFailed": "Copy failed — select the code and copy it by hand"
+    },
     "benchmark": {
       "title": "Benchmarks",
       "meta": "Accounts with a similar direction",
