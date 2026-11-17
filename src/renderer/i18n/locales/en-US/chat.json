@@ -1280,11 +1280,25 @@
         "scheduled": "Scheduled",
         "unverified": "Unverified",
         "published": "Published"
-      },
-      "direction": {
-        "title": "Readiness",
-        "meta": "By platform"
       }
+    },
+    "finalize": {
+      "title": "Readiness",
+      "meta": "By platform",
+      "empty": "No platforms yet.",
+      "stage": {
+        "none": "No direction yet",
+        "brief": "Waiting for the Agent",
+        "structured": "Not finalized",
+        "final": "Final"
+      },
+      "pending": "Needs your nod",
+      "finalized": "Finalized {{days}} days ago",
+      "finalizedToday": "Finalized today",
+      "updated": "Updated {{days}} days ago",
+      "updatedToday": "Updated today",
+      "proposed": "Agent proposed {{days}} days ago",
+      "proposedToday": "Agent proposed today"
     },
     "pool": {
       "topic": {

@@ -261,8 +261,40 @@ export interface OpsDirectionView {
     focusId: string | null;
   };
   pool: OpsDirectionRow[];
-  dist: OpsDistBar[];
+  finalize: OpsFinalizeRow[];
   dark: OpsDarkCard;
+}
+
+/**
+ * 一个平台的定稿进度。
+ *
+ * 之前这张卡画的是「每平台有多少条已生效的方向」的分布条 —— 但方向是**一个
+ * 平台一条**（store 的硬不变量），所以那个数永远是 0 或 1，条画出来是满的或
+ * 空的，没有信息。真正要看的是「这个号走到哪一步了、卡在谁那儿、多久没动」。
+ */
+export type OpsFinalizeStage = 'none' | 'brief' | 'structured' | 'final';
+
+export interface OpsFinalizeRow {
+  platform: SocialPlatformId;
+  /**
+   * 走到哪一步：
+   * - `none` —— 平台上还没有方向记录
+   * - `brief` —— 有原话，Agent 还没结构化
+   * - `structured` —— 有结构化产物，但还没定稿（status 不是 active）
+   * - `final` —— 已定稿
+   */
+  stage: OpsFinalizeStage;
+  /**
+   * 有修订等确认。压在 stage 之上：一条已定稿的方向被 Agent 提了修订，它同时
+   * 是「已定稿」和「有人在等你点头」。
+   */
+  pending: boolean;
+  /** 距上次定稿几天。`null` = 没定过稿，或定过但没记下时刻（老记录）。 */
+  finalizedDays: number | null;
+  /** 距最后一次写几天。 */
+  updatedDays: number | null;
+  /** 距修订提议几天。 */
+  proposedDays: number | null;
 }
 
 export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionView {
@@ -332,19 +364,41 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
 
   // 定稿进度按**平台**列行，而且没定稿的平台也要占一行（空值行）。
   //
-  // 之前这里数的是方向状态，卡上却写着「按平台」——标签与数据对不上；而且只有
-  // 一条方向时整张卡只剩一行，余量全堆在卡底。空值行不是凑数：它就是
-  // 「这个号还没立方向」这件事本身，跟上面的方向列表逐行对得上。
-  const finalized = new Map<string, number>();
-  for (const d of directions) {
-    if (d.status !== 'active') continue;
-    finalized.set(d.platform, (finalized.get(d.platform) ?? 0) + 1);
-  }
+  // 之前这里数的是「每平台有多少条已生效的方向」，可方向是**一个平台一条**
+  // （store 的硬不变量），那个数永远是 0 或 1 —— 条画出来不是满的就是空的，
+  // 没有信息。真正能看的是「这个号走到哪一步、卡在谁那儿、多久没动」。
+  //
+  // 空值行不是凑数：它就是「这个号还没立方向」这件事本身，跟上面的方向列表
+  // 逐行对得上。
   const usedPlatforms = new Set<SocialPlatformId>([
     ...directions.map((d) => d.platform),
     ...platformsInUse,
   ]);
   const platformRows = SOCIAL_PLATFORMS.map((p) => p.id).filter((id) => usedPlatforms.has(id));
+
+  const finalize: OpsFinalizeRow[] = platformRows.map((platform) => {
+    const d = directions.find((x) => x.platform === platform);
+    if (!d) {
+      return {
+        platform,
+        stage: 'none',
+        pending: false,
+        finalizedDays: null,
+        updatedDays: null,
+        proposedDays: null,
+      };
+    }
+    const stage: OpsFinalizeStage =
+      d.status === 'active' ? 'final' : d.positioning.trim() !== '' ? 'structured' : 'brief';
+    return {
+      platform,
+      stage,
+      pending: Boolean(d.proposal),
+      finalizedDays: daysSince(d.finalizedAt, now),
+      updatedDays: daysSince(d.updatedAt, now),
+      proposedDays: daysSince(d.proposal?.proposedAt, now),
+    };
+  });
 
   return {
     domain: 'direction',
@@ -355,10 +409,7 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
     ],
     lead: { active, pending, focusId: focus?.id ?? null },
     pool,
-    dist: buildBars(
-      'platform',
-      platformRows.map((platform) => ({ key: platform, value: finalized.get(platform) ?? 0 })),
-    ),
+    finalize,
     dark: {
       kind: 'direction',
       directionId: focus?.id ?? null,
@@ -435,6 +486,19 @@ export function idleDays(since: string, now: Date): number {
   const diff = now.getTime() - from.getTime();
   if (diff <= 0) return 0;
   return Math.floor(diff / DAY_MS);
+}
+
+/**
+ * 距某个时刻过去了多少天。**没有这个时刻就是 `null`**，不是 0。
+ *
+ * `idleDays` 把「没有 / 解析不了」都算成 0 天（它只回答「多久没动」，0 天就是
+ * 今天动过）。这里不行：「上次定稿」没有这个时刻，界面要能说出「不知道」，
+ * 0 天会被读成「今天定的稿」。
+ */
+function daysSince(since: string | null | undefined, now: Date): number | null {
+  if (!since) return null;
+  if (!parseDate(since)) return null;
+  return idleDays(since, now);
 }
 
 interface DistEntry {

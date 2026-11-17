@@ -425,6 +425,7 @@ describe('方向域', () => {
       proposal: null,
       createdAt: '2026-11-01T09:00:00',
       updatedAt: '2026-11-01T09:00:00',
+      finalizedAt: null,
       ...patch,
     };
   }
@@ -536,7 +537,7 @@ describe('方向域', () => {
   it('定稿进度按平台列行，没定稿的平台也占一行（空值行）', () => {
     // 空值行不是凑数：它就是「这个号还没立方向」这件事本身。少了它，
     // 只立了一条方向时整张卡只剩一行，剩下的空间全堆在卡底，看着像
-    // 渲染坏了。而且卡上写的是「按平台」，数出来的也必须是平台数。
+    // 渲染坏了。而且卡上写的是「按平台」，列出来的也必须是平台。
     const view = deriveDirectionView(
       state({
         directions: [
@@ -548,13 +549,13 @@ describe('方向域', () => {
       NOW,
     );
 
-    expect(view.dist.map((d) => [d.key, d.value])).toEqual([
-      ['xiaohongshu', 0],
-      ['douyin', 1],
-      ['bilibili', 0],
+    expect(view.finalize.map((d) => [d.platform, d.stage])).toEqual([
+      ['xiaohongshu', 'brief'],
+      ['douyin', 'final'],
+      ['bilibili', 'none'],
     ]);
     // 只有一条方向时也要有行（不是空数组）。
-    expect(view.dist.length).toBeGreaterThan(0);
+    expect(view.finalize.length).toBeGreaterThan(0);
   });
 
   it('台账里完全没碰过的平台不占行', () => {
@@ -564,7 +565,77 @@ describe('方向域', () => {
       NOW,
     );
 
-    expect(view.dist.map((d) => d.key)).toEqual(['douyin']);
+    expect(view.finalize.map((d) => d.platform)).toEqual(['douyin']);
+  });
+
+  it('定稿进度读的是「定稿那一刻」，不是最后一次写', () => {
+    // `updatedAt` 是最后一次写：Agent 提一次修订就会刷新它。拿它当「定稿于」
+    // 是在撒谎 —— 方向可能三个月前就定了，昨天只是有人提了个修订。
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          direction({
+            id: 'dir-douyin',
+            platform: 'douyin',
+            status: 'active',
+            createdAt: '2026-11-01T09:00:00',
+            updatedAt: '2026-11-12T09:00:00',
+            finalizedAt: '2026-11-10T09:00:00',
+          }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.finalize[0]).toMatchObject({
+      stage: 'final',
+      finalizedDays: 3,
+      updatedDays: 1,
+    });
+  });
+
+  it('定过稿但没记下时刻的老记录，finalizedDays 是 null 而不是 0', () => {
+    // 0 会被读成「今天定的稿」。不知道就该说不知道。
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          direction({
+            id: 'dir-douyin',
+            platform: 'douyin',
+            status: 'active',
+            updatedAt: '2026-11-01T09:00:00',
+            finalizedAt: null,
+          }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.finalize[0]).toMatchObject({ stage: 'final', finalizedDays: null, updatedDays: 12 });
+  });
+
+  it('有修订在等时，pending 压在 stage 之上', () => {
+    // 一条已定稿的方向被 Agent 提了修订，它同时是「已定稿」和「有人在等你
+    // 点头」—— 卡片上要能同时说清这两件事。
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          direction({
+            id: 'dir-douyin',
+            platform: 'douyin',
+            status: 'active',
+            proposal: { positioning: '夜间露营装备测评', proposedAt: '2026-11-12T09:00:00' },
+          }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.finalize[0]).toMatchObject({
+      stage: 'final',
+      pending: true,
+      proposedDays: 1,
+    });
   });
 });
 

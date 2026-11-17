@@ -26,6 +26,7 @@ import {
 } from './opsFormat';
 import OpsHero from './OpsHero';
 import { OpsDistCard, OpsPoolCard } from './OpsCards';
+import { OpsFinalizeCard } from './OpsFinalizeCard';
 import { OpsDirectionCard } from './OpsDirectionCard';
 import { DirectionBriefForm } from './DirectionBriefForm';
 import { OpsAccountLogin, OpsAccounts } from './OpsAccounts';
@@ -313,7 +314,10 @@ export default function OpsPanel({
                   }}
                 />
               )}
-              <OpsDistCard view={view} />
+              {/* 方向域不用分布条：一个平台一条方向，「每平台几条已生效」永远是
+                  0 或 1。换成按平台的定稿状态（走到哪一步 / 卡在谁那儿）。 */}
+              {view.domain !== 'direction' && <OpsDistCard view={view} />}
+              {view.domain === 'direction' && <OpsFinalizeCard view={view} />}
               {/* 对标账号收在右栏：方向卡通栏时右栏正好是对标，两边像不像一眼看到。
                   平台还没立方向时也能先加。 */}
               {view.domain === 'direction' && (

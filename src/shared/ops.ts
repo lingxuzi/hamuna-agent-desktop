@@ -345,6 +345,14 @@ export interface OpsDirection {
   proposal: OpsDirectionProposal | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 最近一次「定稿（生效）」的时刻。
+   *
+   * 与 `updatedAt` 不是一回事：`updatedAt` 是最后一次写（Agent 提一次修订就会
+   * 刷新它），`finalizedAt` 是定下来的那一刻。老记录没有这个值（`null`）——
+   * 那时定过稿、但没人记下是几号，界面这时只能说「N 天前更新」。
+   */
+  finalizedAt: string | null;
 }
 
 /** 方向状态：草稿 → 生效。 */

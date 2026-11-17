@@ -329,6 +329,17 @@ pub struct OpsDirection {
     pub created_at: String,
     #[serde(default)]
     pub updated_at: String,
+    /// 最近一次「定稿（生效）」的时刻。
+    ///
+    /// **永远写出来**（没有就写 `null`），理由同 `proposal`：前端类型是
+    /// `finalizedAt: string | null`，键缺失在前端拿到 `undefined` 而不是
+    /// `null`，而 `undefined !== null` 为真，「已定稿」就会对每一条方向都成立。
+    ///
+    /// 它跟 `updated_at` 不是一回事：`updated_at` 是「最后一次写」，Agent 提一次
+    /// 修订就会刷新它 —— 拿它当「定稿于」是在撒谎。这个字段只记状态变成
+    /// `active` 的那一刻，之后再写也不刷新。
+    #[serde(default)]
+    pub finalized_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -1106,6 +1117,9 @@ fn upsert_direction(
     let mut fields = patch;
     fields.remove("acceptProposal");
     fields.remove("rejectProposal");
+    // 定稿时刻由 store 记，调用方写不了。否则 Agent 能给自己造一个
+    // 「三天前定稿」的假事实，而这张卡显示的就是它。
+    fields.remove("finalizedAt");
 
     // `proposal` 不走通用合并：它是**一整版新值**，深合并会把上一版残留的字段
     // （尤其 rationale）揉进新修订里，人看到的就不是 Agent 刚提的那一版。
@@ -1147,6 +1161,10 @@ fn upsert_direction(
         };
     }
 
+    // 本次写有没有产生「新的定稿」：采纳修订（把新值定下来），或者方向第一次
+    // 变成 active。
+    let mut finalized_now = false;
+
     if accept {
         let proposal = direction
             .proposal
@@ -1171,6 +1189,7 @@ fn upsert_direction(
         }
         // 采纳即生效：人点了头就是「定下来了」，不需要再点一次。
         direction.status = OpsDirectionStatus::Active;
+        finalized_now = true;
     } else if reject {
         // 驳回只丢修订，其余字段保持原样——驳回的是「改成这样」，不是方向本身。
         direction.proposal = None;
@@ -1182,6 +1201,25 @@ fn upsert_direction(
             proposal.proposed_at = now_iso();
         }
         direction.proposal = Some(proposal);
+    }
+
+    // 定稿时刻：状态变成 active 的那一刻。已经有定稿时刻的方向被再次写
+    // （Agent 提修订、人改字段）**不刷新** —— 「上次定稿」问的是定下来的
+    // 那一刻，不是最后一次写。唯一的例外是采纳修订：那正是把新值定下来。
+    //
+    // 老记录没有这个值：它们定稿在这条规则之前。这种方向再次被写时补上当前
+    // 时刻是错的（定稿可能发生在几个月前），所以只在「这一次写让它变成
+    // active」时补。
+    if direction.status == OpsDirectionStatus::Active {
+        let was_active = existing
+            .map(|old| old.status == OpsDirectionStatus::Active)
+            .unwrap_or(false);
+        if !was_active {
+            finalized_now = true;
+        }
+    }
+    if finalized_now {
+        direction.finalized_at = Some(now_iso());
     }
 
     direction.created_at =
@@ -1599,6 +1637,113 @@ mod tests {
         assert!(state.directions[0].proposal.is_none(), "采纳后修订必须清掉");
         assert_eq!(state.directions[0].positioning, "夜间露营装备测评");
         assert!(matches!(state.directions[0].status, OpsDirectionStatus::Active));
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_records_the_moment_it_was_finalized() {
+        let ws = make_test_workspace("ops-direction-finalized-at");
+        let (state, _) = upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+        assert!(state.directions[0].finalized_at.is_none(), "还没定稿就没有定稿时刻");
+
+        // Agent 结构化并定稿。
+        let finalize = serde_json::json!({
+            "platform": "douyin",
+            "positioning": "白天露营装备实测",
+            "status": "active",
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: finalize })
+                .expect("finalize");
+        let finalized_at = state.directions[0].finalized_at.clone().expect("定稿时刻");
+        assert!(!finalized_at.trim().is_empty(), "定稿时刻不能是空串");
+
+        // 再写一次（人改字段 / Agent 提修订）：**不刷新**定稿时刻 ——
+        // 「上次定稿」问的是定下来的那一刻，不是最后一次写。
+        let touch = serde_json::json!({ "platform": "douyin", "goal": "涨粉" })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: touch }).expect("touch");
+        assert_eq!(
+            state.directions[0].finalized_at.as_deref(),
+            Some(finalized_at.as_str()),
+            "再写一次不该刷新定稿时刻"
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_finalized_at_is_not_writable_by_the_caller() {
+        let ws = make_test_workspace("ops-direction-finalized-at-owned");
+        // 调用方（Agent）不能自己编一个「三天前定稿」：这张卡显示的就是它。
+        let forge = serde_json::json!({
+            "platform": "douyin",
+            "status": "active",
+            "finalizedAt": "2020-01-01T00:00:00.000Z",
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: forge }).expect("forge");
+
+        assert_ne!(
+            state.directions[0].finalized_at.as_deref(),
+            Some("2020-01-01T00:00:00.000Z"),
+            "定稿时刻必须由 store 记，不能由调用方写"
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_accepting_a_revision_finalizes_again() {
+        let ws = make_test_workspace("ops-direction-finalized-accept");
+        let finalize = serde_json::json!({
+            "platform": "douyin",
+            "positioning": "白天露营装备实测",
+            "status": "active",
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: finalize })
+                .expect("finalize");
+        let first = state.directions[0].finalized_at.clone().expect("定稿时刻");
+
+        // 时刻只到毫秒，两次写挨得太近会撞成同一个串。
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        // Agent 提修订 → 人采纳：采纳就是把新值定下来，定稿时刻刷新。
+        let propose = serde_json::json!({
+            "platform": "douyin",
+            "proposal": { "positioning": "夜间露营装备测评" },
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: propose }).expect("propose");
+        let accept = serde_json::json!({ "platform": "douyin", "acceptProposal": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let (state, _) =
+            upsert_item(&ws, OpsUpsert { kind: OpsItemKind::Direction, fields: accept }).expect("accept");
+
+        assert_ne!(
+            state.directions[0].finalized_at.as_deref(),
+            Some(first.as_str()),
+            "采纳修订是一次新的定稿，时刻要刷新"
+        );
         let _ = fs::remove_dir_all(&ws);
     }
 

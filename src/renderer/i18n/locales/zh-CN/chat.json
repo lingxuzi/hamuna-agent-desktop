@@ -1280,11 +1280,25 @@
         "scheduled": "已排期",
         "unverified": "待核实",
         "published": "已发布"
-      },
-      "direction": {
-        "title": "定稿进度",
-        "meta": "按平台"
       }
+    },
+    "finalize": {
+      "title": "定稿进度",
+      "meta": "按平台",
+      "empty": "还没有平台记录。",
+      "stage": {
+        "none": "还没立方向",
+        "brief": "等 Agent 结构",
+        "structured": "还没定稿",
+        "final": "已定稿"
+      },
+      "pending": "待你确认",
+      "finalized": "{{days}} 天前定稿",
+      "finalizedToday": "今天定稿",
+      "updated": "{{days}} 天前更新",
+      "updatedToday": "今天更新",
+      "proposed": "{{days}} 天前 Agent 提议",
+      "proposedToday": "今天 Agent 提议"
     },
     "pool": {
       "topic": {

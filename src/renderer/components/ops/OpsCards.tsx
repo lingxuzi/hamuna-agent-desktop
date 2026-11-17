@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 
 import type {
   OpsAssetView,
-  OpsDirectionView,
   OpsDistBar,
   OpsReviewRow,
   OpsReviewView,
@@ -59,7 +58,7 @@ export function OpsDistCard({
   view,
   className,
 }: {
-  view: OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewView | OpsDirectionView;
+  view: OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewView;
   className?: string;
 }) {
   const { t, i18n } = useTranslation('chat');
