@@ -1288,11 +1288,10 @@
       "empty": "No platforms yet.",
       "stage": {
         "none": "No direction yet",
-        "brief": "Waiting for the Agent",
+        "brief": "Only a brief",
         "structured": "Not finalized",
         "final": "Final"
       },
-      "pending": "Needs your nod",
       "actor": {
         "user": "last touched by you",
         "agent": "last touched by the Agent"
@@ -1302,7 +1301,12 @@
       "updated": "Updated {{days}} days ago",
       "updatedToday": "Updated today",
       "proposed": "Agent proposed {{days}} days ago",
-      "proposedToday": "Agent proposed today"
+      "proposedToday": "Agent proposed today",
+      "waiting": {
+        "dispatch": "Waiting on you",
+        "agent": "Waiting on the Agent",
+        "nod": "Needs your nod"
+      }
     },
     "pool": {
       "topic": {

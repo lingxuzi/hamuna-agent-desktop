@@ -144,7 +144,26 @@ export default function OpsPanel({
    * 会话里可能有多个账号，Agent 从对话里推不出用户在说哪一个。
    */
   const askAgentAboutDirection = useCallback(
-    (row: OpsDirectionRow) => {
+    async (row: OpsDirectionRow) => {
+      setDirectionBusy(true);
+      try {
+        // 先在台账里记下「派过工」，再把活派出去。
+        //
+        // 顺序反过来就留下一个说不清的状态：Agent 已经在整了，台账却没记下派过
+        // 那一行只能显示「等 Agent」——可派工那一刻到底有没有发生，没人知道。
+        // 记下它，这一行才能说清「现在等谁」。
+        await opsUpsert(workspace, {
+          kind: 'direction',
+          platform: row.platform,
+          dispatch: true,
+        });
+      } catch (err) {
+        // 没记上派工就不派活：台账与实际脱节比晚一步更糟。
+        fail(err);
+        return;
+      } finally {
+        setDirectionBusy(false);
+      }
       onSendToAgent(
         t('ops.direction.askAgent', {
           platform: t(`settings:accounts.platform.${row.platform}`),
@@ -153,7 +172,7 @@ export default function OpsPanel({
         }),
       );
     },
-    [onSendToAgent, t],
+    [fail, onSendToAgent, t, workspace],
   );
 
   /** 采纳 / 驳回修订。两种都是 store 侧一个动作键，不再发字段值。 */
@@ -297,7 +316,7 @@ export default function OpsPanel({
                     const row = view.pool.find((r) => r.platform === platform);
                     setForm({ kind: 'direction:brief', platform, brief: row?.brief ?? '' });
                   }}
-                  onAskAgent={askAgentAboutDirection}
+                  onAskAgent={(row) => void askAgentAboutDirection(row)}
                   onAcceptProposal={(row) => void resolveProposal(row, 'accept')}
                   onRejectProposal={(row) => void resolveProposal(row, 'reject')}
                 />

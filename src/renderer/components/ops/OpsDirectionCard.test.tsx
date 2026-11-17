@@ -33,6 +33,7 @@ function direction(patch: Partial<OpsDirection> & Pick<OpsDirection, 'id' | 'pla
     updatedAt: '2026-11-01T09:00:00',
     finalizedAt: null,
     lastTouchedBy: null,
+    dispatchedAt: null,
     ...patch,
   };
 }

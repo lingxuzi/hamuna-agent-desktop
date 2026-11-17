@@ -427,6 +427,7 @@ describe('方向域', () => {
       updatedAt: '2026-11-01T09:00:00',
       finalizedAt: null,
       lastTouchedBy: null,
+      dispatchedAt: null,
       ...patch,
     };
   }
@@ -638,6 +639,71 @@ describe('方向域', () => {
       proposedDays: 1,
     });
   });
+
+  it('只有原话、还没派过工时，等的是人不是 Agent', () => {
+    // Agent 不知道有人让它干这个活。写成「等 Agent」就是在骗人：人以为不用管，
+    // 方向就永远停在那儿 —— 静默停滞是最坏的一种坏。
+    const view = deriveDirectionView(
+      state({
+        directions: [direction({ id: 'dir-douyin', platform: 'douyin', brief: '想让人记住我们' })],
+      }),
+      NOW,
+    );
+
+    expect(view.finalize[0]).toMatchObject({ stage: 'brief', waitingOn: 'user' });
+  });
+
+  it('派过工就改口等 Agent —— 派工这件事必须有事实记着', () => {
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          direction({
+            id: 'dir-douyin',
+            platform: 'douyin',
+            brief: '想让人记住我们',
+            dispatchedAt: '2026-11-12T09:00:00',
+          }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(view.finalize[0]).toMatchObject({ stage: 'brief', waitingOn: 'agent' });
+  });
+
+  it('等谁看的是「该谁动」，不是「上次谁动过」', () => {
+    // 四种状态各说各的：采纳 / 驳回是人的动作，结构化是 Agent 的活。
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          // 已定稿，没人提修订：没人等。
+          direction({ id: 'dir-a', platform: 'douyin', status: 'active' }),
+          // 已定稿，有修订在等：等**人**点头。
+          direction({
+            id: 'dir-b',
+            platform: 'xiaohongshu',
+            status: 'active',
+            proposal: { positioning: '夜间露营装备测评', proposedAt: '2026-11-12T09:00:00' },
+          }),
+          // 结构化了但没定稿：Agent 的活没干完。
+          direction({ id: 'dir-c', platform: 'bilibili', positioning: '装备实测' }),
+          // 完全没碰过：不占「等谁」，它不是卡住，是还没开始。
+          direction({ id: 'dir-d', platform: 'zhihu', brief: '先放着' }),
+        ],
+        topics: [topic({ id: 't1', platform: 'kuaishou' })],
+      }),
+      NOW,
+    );
+
+    const waiting = Object.fromEntries(view.finalize.map((d) => [d.platform, d.waitingOn]));
+    expect(waiting).toEqual({
+      douyin: null,
+      xiaohongshu: 'user',
+      bilibili: 'agent',
+      zhihu: 'user',
+      kuaishou: null,
+    });
+  });
 });
 
 describe('分布条审计：每一根条都是真计数', () => {
@@ -730,6 +796,7 @@ describe('分布条审计：每一根条都是真计数', () => {
             updatedAt: '2026-11-01T09:00:00',
             finalizedAt: null,
             lastTouchedBy: null,
+            dispatchedAt: null,
           },
         ],
       }),

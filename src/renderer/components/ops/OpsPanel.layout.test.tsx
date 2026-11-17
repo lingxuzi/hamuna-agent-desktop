@@ -96,6 +96,7 @@ function populatedState(): OpsState {
         updatedAt: '2026-11-10T09:00:00.000Z',
         finalizedAt: '2026-11-10T09:00:00.000Z',
         lastTouchedBy: 'user',
+        dispatchedAt: null,
       },
       {
         id: 'dir-xhs',
@@ -112,6 +113,7 @@ function populatedState(): OpsState {
         updatedAt: '2026-11-12T09:00:00.000Z',
         finalizedAt: null,
         lastTouchedBy: 'agent',
+        dispatchedAt: null,
       },
     ],
     topics: [

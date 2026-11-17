@@ -353,6 +353,21 @@ pub struct OpsDirection {
     /// **永远写出来**（没有就写 `null`），理由同 `proposal` / `finalized_at`。
     #[serde(default)]
     pub last_touched_by: Option<OpsActor>,
+    /// 最近一次「这条方向被交给 Agent 整理」的时刻。
+    ///
+    /// **由 store 记，调用方写不了**（`upsert_direction` 开头就把补丁里的同名键
+    /// 摘掉）；派工本身是一个**动作**（补丁里的 `dispatch` 键），不是字段。
+    ///
+    /// 它回答的是「这条方向卡在谁那儿」：台账里没有派工这个事实时，一句原话
+    /// 摆在那里既可能等人派给 Agent，也可能 Agent 正在整 —— 界面只能瞎猜，
+    /// 猜成「等 Agent」的话人以为不用管，方向就永远停在那儿。
+    ///
+    /// 它记的是「至少派过一次」，不是「派的是哪一版原话」：人后来改了原话而
+    /// 还没重新派，Agent 读到的是台账里的当前版本，语义不会错。
+    ///
+    /// **永远写出来**（没有就写 `null`），理由同 `proposal` / `finalized_at`。
+    #[serde(default)]
+    pub dispatched_at: Option<String>,
 }
 
 /// 谁动了这条记录。
@@ -1161,14 +1176,23 @@ fn upsert_direction(
         .get("rejectProposal")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    // 派工同样是**动作**：补丁里说「这条交给 Agent」，store 记下那一刻。
+    let dispatch = patch
+        .get("dispatch")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let mut fields = patch;
     fields.remove("acceptProposal");
     fields.remove("rejectProposal");
+    fields.remove("dispatch");
     // 定稿时刻由 store 记，调用方写不了。否则 Agent 能给自己造一个
     // 「三天前定稿」的假事实，而这张卡显示的就是它。
     fields.remove("finalizedAt");
     // 「谁在改」同理：由 store 按进来的门记，调用方写不了。
     fields.remove("lastTouchedBy");
+    // 派工时刻同理：调用方能自称「我派过了」，但那是**人**的动作，写的是
+    // 「已经派给 Agent 了」这个事实，Agent 自己不该往这个字段里填。
+    fields.remove("dispatchedAt");
 
     // `proposal` 不走通用合并：它是**一整版新值**，深合并会把上一版残留的字段
     // （尤其 rationale）揉进新修订里，人看到的就不是 Agent 刚提的那一版。
@@ -1273,6 +1297,26 @@ fn upsert_direction(
 
     direction.created_at =
         resolve_created_at(existing.map(|old| old.created_at.as_str()), &direction.created_at);
+    // 派工时刻：人把这条方向交给 Agent 的那一刻。没有原话就没什么可派 ——
+    // 让人先去写原话，而不是让 Agent 去猜这个号要做什么。
+    //
+    // **只有人那扇门能派工。** Agent 自己宣称「派过了」就能让这一行从「等你派」
+    // 变成「等 Agent」—— 人于是以为不用管，方向就永远停在那儿。派工是人的
+    // 动作，跟采纳修订一样。
+    if dispatch {
+        if actor != OpsActor::User {
+            return Err(
+                "[ops-store] only the user can hand a direction to the Agent".to_string()
+            );
+        }
+        if direction.brief.trim().is_empty() {
+            return Err(format!(
+                "Direction {} has no brief to hand to the Agent",
+                direction.id
+            ));
+        }
+        direction.dispatched_at = Some(now_iso());
+    }
     direction.updated_at = now_iso();
     // 「谁在改」记的是**这一次写**，不是「定稿那一刻是谁点的」：定稿之后谁又
     // 改了别的字段，这两件事就分开了。「谁定的稿」是 `finalized_at` 那一刻的事，
@@ -1815,6 +1859,117 @@ mod tests {
             state.directions[0].last_touched_by,
             Some(OpsActor::Agent),
             "「谁在改」必须由 store 按门记，不能由调用方写"
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_dispatch_records_the_moment_it_was_handed_to_the_agent() {
+        let ws = make_test_workspace("ops-direction-dispatch");
+        let (state, _) = upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+        assert!(
+            state.directions[0].dispatched_at.is_none(),
+            "还没派过工时不能有派工时刻"
+        );
+
+        // 人点「交给 Agent 整理」：这是一个动作，不是字段。
+        let dispatch = serde_json::json!({ "platform": "douyin", "dispatch": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let (state, _) = upsert_item_by(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: dispatch },
+            OpsActor::User,
+        )
+        .expect("dispatch");
+        assert!(
+            state.directions[0].dispatched_at.is_some(),
+            "派工那一刻必须记下来：否则界面分不清「还没派」和「Agent 正在整」"
+        );
+
+        // 落盘再读回来还是它 —— 不能只在内存里对。
+        let reread = read_state(&ws).expect("reread");
+        assert!(reread.directions[0].dispatched_at.is_some());
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_dispatched_at_is_not_writable_by_the_caller() {
+        let ws = make_test_workspace("ops-direction-dispatch-owned");
+        let forge = serde_json::json!({
+            "platform": "douyin",
+            "brief": "露营装备",
+            "dispatchedAt": "2020-01-01T00:00:00.000Z",
+        })
+        .as_object()
+        .cloned()
+        .expect("object");
+        let (state, _) = upsert_item_by(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: forge },
+            OpsActor::User,
+        )
+        .expect("forge");
+
+        assert!(
+            state.directions[0].dispatched_at.is_none(),
+            "派工时刻必须由 store 按动作记，不能由调用方写"
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_dispatch_without_a_brief_is_refused() {
+        let ws = make_test_workspace("ops-direction-dispatch-empty");
+        let dispatch = serde_json::json!({ "platform": "douyin", "dispatch": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let err = upsert_item_by(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: dispatch },
+            OpsActor::User,
+        )
+        .expect_err("没有原话就不该派得出去");
+
+        assert!(
+            err.contains("brief"),
+            "报错要说出缺的是原话：{err}"
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn direction_cannot_be_dispatched_by_the_agent() {
+        let ws = make_test_workspace("ops-direction-dispatch-agent");
+        let (_, _) = upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: direction("douyin", "露营装备") },
+        )
+        .expect("seed");
+
+        // Agent 自称「派过了」→ 这一行会从「等你派」变成「等 Agent」，人于是以为
+        // 不用管，方向就永远停在那儿。派工是人的动作。
+        let dispatch = serde_json::json!({ "platform": "douyin", "dispatch": true })
+            .as_object()
+            .cloned()
+            .expect("object");
+        let err = upsert_item(
+            &ws,
+            OpsUpsert { kind: OpsItemKind::Direction, fields: dispatch },
+        )
+        .expect_err("Agent 不能自己派工");
+        assert!(err.contains("only the user"), "报错要说清是人的动作：{err}");
+
+        let state = read_state(&ws).expect("reread");
+        assert!(
+            state.directions[0].dispatched_at.is_none(),
+            "被拒的派工不能留下痕迹"
         );
         let _ = fs::remove_dir_all(&ws);
     }

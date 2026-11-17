@@ -302,6 +302,36 @@ export interface OpsFinalizeRow {
    * 它跟 `updatedDays` 说的是同一件事的两面：那是「多久没动」，这是「谁动的」。
    */
   touchedBy: OpsActor | null;
+  /**
+   * 这一行**现在等谁**。`null` = 没人等（还没开始，或已经定稿且没人提修订）。
+   *
+   * 它跟 `touchedBy` 不是一回事：`touchedBy` 是历史（上次谁动的），这是当下
+   * （该谁动）。两件事各说各的，混在一列里就变成「Agent 动过所以等 Agent」——
+   * Agent 动过恰恰说明它已经干完了。
+   */
+  waitingOn: OpsActor | null;
+}
+
+/**
+ * 这一行现在等谁。
+ *
+ * 判据是**台账里已有的事实**，不猜：
+ * - 有修订在等 → 等**人**点头：采纳 / 驳回是人的动作，Agent 不能自己点头。
+ * - 有原话、还没派过工 → 等**人**派：Agent 不知道有人让它干这个活，说「等
+ *   Agent」就是在骗人（人以为不用管，方向就永远停在那儿）。
+ * - 有原话、派过工 → 等**Agent** 整理。
+ * - 半张方向（结构化了但没定稿）→ 等**Agent** 补齐。
+ * - 已定稿且没人提修订 → 没人等。
+ */
+function waitingOnOf(
+  stage: OpsFinalizeStage,
+  hasProposal: boolean,
+  dispatchedAt: string | null,
+): OpsActor | null {
+  if (stage === 'final') return hasProposal ? 'user' : null;
+  if (stage === 'structured') return 'agent';
+  if (stage === 'brief') return dispatchedAt ? 'agent' : 'user';
+  return null;
 }
 
 export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionView {
@@ -394,14 +424,16 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
         updatedDays: null,
         proposedDays: null,
         touchedBy: null,
+        waitingOn: null,
       };
     }
     const stage: OpsFinalizeStage =
       d.status === 'active' ? 'final' : d.positioning.trim() !== '' ? 'structured' : 'brief';
+    const hasProposal = Boolean(d.proposal);
     return {
       platform,
       stage,
-      pending: Boolean(d.proposal),
+      pending: hasProposal,
       finalizedDays: daysSince(d.finalizedAt, now),
       updatedDays: daysSince(d.updatedAt, now),
       proposedDays: daysSince(d.proposal?.proposedAt, now),
@@ -409,6 +441,8 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
       // `undefined` 而不是 `null`，而 `undefined !== null` 为真 —— 「没人动过」
       // 会被读成「有人动过」。
       touchedBy: d.lastTouchedBy ?? null,
+      // 派工时刻同理：老台账里没这个键 = 还没派过。
+      waitingOn: waitingOnOf(stage, hasProposal, d.dispatchedAt ?? null),
     };
   });
 

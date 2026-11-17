@@ -47,6 +47,7 @@ function directionRecord(platform: 'douyin' | 'xiaohongshu') {
     updatedAt: '2026-11-10T00:00:00.000Z',
     finalizedAt: '2026-11-10T00:00:00.000Z',
     lastTouchedBy: null,
+    dispatchedAt: null,
   };
 }
 

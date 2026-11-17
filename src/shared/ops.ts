@@ -364,6 +364,15 @@ export interface OpsDirection {
    * 字段，这两件事就分开了。
    */
   lastTouchedBy: OpsActor | null;
+  /**
+   * 最近一次「这条方向被交给 Agent 整理」的时刻。
+   *
+   * `null` = 还没派过工。老记录没有这个值。
+   *
+   * 它是「这条卡在谁那儿」的依据：只有原话的方向，可能是等人派给 Agent，也
+   * 可能是 Agent 正在整 —— 没有这个事实就只能猜，猜错的方向是「静默停滞」。
+   */
+  dispatchedAt: string | null;
 }
 
 /**
@@ -583,7 +592,7 @@ export interface OpsUpsertFieldMap {
   review: Partial<Omit<OpsReview, 'metrics'>> & { metrics?: Partial<OpsReviewMetrics> };
   rule: Partial<OpsRule>;
   style: Partial<OpsStyle>;
-  direction: Partial<OpsDirection>;
+  direction: Partial<OpsDirection> & { dispatch?: boolean };
   account: Partial<OpsAccount>;
   clue: Partial<OpsClue>;
   benchmark: Partial<OpsBenchmark>;

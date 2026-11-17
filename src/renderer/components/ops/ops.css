@@ -628,9 +628,10 @@
 }
 
 /* ── 定稿进度（方向域）─────────────────────────────────
-   平台 / 状态 / 时间三列。状态文字带色：已定稿是绿的、等人点头是暖橙的、其余
-   走中性色 —— 一眼扫过去先看到「哪个号卡住了」，而不是先读时间。
-   时间用等宽数字（tabular-nums），多行对齐。 */
+   平台 / 状态 / 谁 / 时间四列。状态文字带色：已定稿是绿的、其余走中性色 ——
+   一眼扫过去先看到「哪个号卡住了」，而不是先读时间。
+   「现在该谁动」是独立的一段（`.waiting`），色相在点子上：等你暖橙、等 Agent
+   冷蓝。时间用等宽数字（tabular-nums），多行对齐。 */
 .ops-final-rows {
   list-style: none;
   display: grid;
@@ -690,14 +691,18 @@
   background: var(--success);
   box-shadow: none;
 }
-/* 待确认：唯一一件「现在轮到你」的事，用主题暖色挑出来。 */
-.ops-final-rows .pending {
+/* 现在该谁动。色相在点子上、文字留墨色：等你用主题暖色（--accent），等 Agent
+   用数据色（--ops-data）—— 两件事一眼分得开，文字本身都过 AA。 */
+.ops-final-rows .waiting {
   font-size: 12px;
   color: var(--ink);
   font-weight: 600;
 }
-.ops-final-rows .pending .dot {
+.ops-final-rows .waiting .dot {
   background: var(--accent);
+}
+.ops-final-rows .waiting[data-owner='agent'] .dot {
+  background: var(--ops-data);
 }
 /* 谁在改。跟「多久没动」是同一件事的两面，放在时间左边。 */
 .ops-final-rows .actor {
@@ -715,10 +720,17 @@
 }
 
 /* 窄栏：这一行的四段（平台 / 状态 / 谁 / 时间）放不下了，先让「谁」让位 ——
-   它是补语，「走到哪一步」和「多久没动」才是这行要说的两件事。 */
+   它是补语，「走到哪一步」和「多久没动」才是这行要说的两件事。
+   状态段再竖排成两行：「只有原话」一行、「等你交给 Agent」一行。并排要 163px，
+   平台名就被挤成只剩省略号 —— 而平台名是这张卡的主键，缩了就读不出来。 */
 @container (max-width: 460px) {
   .ops-final-rows .actor {
     display: none;
+  }
+  .ops-final-rows .stage {
+    display: grid;
+    justify-items: start;
+    gap: 2px;
   }
 }
 

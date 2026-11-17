@@ -34,6 +34,7 @@ function direction(patch: Partial<OpsDirection> & Pick<OpsDirection, 'id' | 'pla
     updatedAt: '2026-11-01T09:00:00',
     finalizedAt: null,
     lastTouchedBy: null,
+    dispatchedAt: null,
     ...patch,
   };
 }
@@ -78,7 +79,7 @@ describe('定稿进度卡', () => {
     expect(screen.queryByText('1 天前定稿')).toBeNull();
   });
 
-  it('有修订在等时标出「待你确认」，时间说的是提议那一刻', () => {
+  it('有修订在等时标出「等你点头」，时间说的是提议那一刻', () => {
     renderCard([
       direction({
         id: 'dir-douyin',
@@ -100,7 +101,7 @@ describe('定稿进度卡', () => {
     ]);
 
     const row = rowOf('抖音');
-    expect(row.querySelector('.pending')?.textContent).toBe('待你确认');
+    expect(row.querySelector('.waiting')?.textContent).toBe('等你点头');
     // 同时是「已定稿」和「有人在等点头」—— 两个标签都要在。
     expect(row.querySelector('.stage-label')?.textContent).toBe('已定稿');
     // 现在轮到你处理的是提议（1 天前），不是 12 天前那次定稿。
@@ -148,12 +149,14 @@ describe('定稿进度卡', () => {
         status: 'active',
         finalizedAt: '2026-11-10T09:00:00',
         lastTouchedBy: 'user',
+        dispatchedAt: null,
       }),
       direction({
         id: 'dir-xhs',
         platform: 'xiaohongshu',
         status: 'draft',
         lastTouchedBy: 'agent',
+        dispatchedAt: null,
       }),
     ]);
 
@@ -169,6 +172,7 @@ describe('定稿进度卡', () => {
         status: 'active',
         finalizedAt: '2026-11-10T09:00:00',
         lastTouchedBy: null,
+        dispatchedAt: null,
       }),
     ]);
 
@@ -176,5 +180,63 @@ describe('定稿进度卡', () => {
     expect(actor?.textContent).toBe('');
     // 空格子也要在：它保住这一列的列数，右边的时间才始终对齐成一条竖线。
     expect(actor).not.toBeNull();
+  });
+
+  it('说清这一行现在等谁：等人派 / 等 Agent / 没人等', () => {
+    renderCard([
+      // 只有原话，还没派过工 → 等人派。写成「等 Agent」就是骗人。
+      direction({
+        id: 'dir-douyin',
+        platform: 'douyin',
+        brief: '想让人记住我们懂露营装备',
+        dispatchedAt: null,
+      }),
+      // 派过工 → 等 Agent 整。
+      direction({
+        id: 'dir-xhs',
+        platform: 'xiaohongshu',
+        brief: '出租屋改造',
+        dispatchedAt: '2026-11-12T09:00:00',
+      }),
+      // 已定稿，没人提修订 → 没人等，这一行就没有「等谁」。
+      direction({
+        id: 'dir-bili',
+        platform: 'bilibili',
+        status: 'active',
+        positioning: '装备实测',
+        finalizedAt: '2026-11-10T09:00:00',
+        dispatchedAt: '2026-11-02T09:00:00',
+      }),
+    ]);
+
+    const douyin = rowOf('抖音');
+    expect(douyin.querySelector('.stage-label')?.textContent).toBe('只有原话');
+    expect(douyin.querySelector('.waiting')?.textContent).toBe('等你交给 Agent');
+    // 归属挂在元素上：色点据此取色（等你暖橙 / 等 Agent 冷蓝）。
+    expect(douyin.querySelector('.waiting')?.getAttribute('data-owner')).toBe('user');
+
+    const xhs = rowOf('小红书');
+    expect(xhs.querySelector('.waiting')?.textContent).toBe('等 Agent');
+    expect(xhs.querySelector('.waiting')?.getAttribute('data-owner')).toBe('agent');
+
+    expect(rowOf('B站').querySelector('.waiting')).toBeNull();
+  });
+
+  it('「等谁」跟「谁在改」是两件事，各说各的', () => {
+    // Agent 动过 ≠ 等 Agent：Agent 动过恰恰说明它干完了。
+    renderCard([
+      direction({
+        id: 'dir-douyin',
+        platform: 'douyin',
+        status: 'draft',
+        positioning: '装备实测',
+        lastTouchedBy: 'agent',
+        dispatchedAt: '2026-11-12T09:00:00',
+      }),
+    ]);
+
+    const row = rowOf('抖音');
+    expect(row.querySelector('.actor')?.textContent).toBe('最后动的是 Agent');
+    expect(row.querySelector('.waiting')?.textContent).toBe('等 Agent');
   });
 });

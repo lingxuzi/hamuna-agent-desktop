@@ -27,7 +27,7 @@ export function OpsFinalizeCard({ view }: { view: OpsDirectionView }) {
       ) : (
         <ul className="ops-final-rows">
           {view.finalize.map((row) => (
-            <li key={row.platform} data-stage={row.stage} data-pending={row.pending || undefined}>
+            <li key={row.platform} data-stage={row.stage} data-waiting={row.waitingOn ?? undefined}>
               <span className="name">{platformLabel(t, row.platform)}</span>
               <span className="stage">
                 {/* 色相放圆点，文字放墨色：12px 的绿字（--success 4.18:1）和橙字
@@ -36,11 +36,12 @@ export function OpsFinalizeCard({ view }: { view: OpsDirectionView }) {
                   <i className="dot" />
                   {t(`ops.finalize.stage.${row.stage}`)}
                 </span>
-                {/* 有修订在等：这是唯一一件「现在轮到你」的事，单独标出来。 */}
-                {row.pending && (
-                  <span className="pending">
+                {/* 现在该谁动。跟「走到哪一步」分开：阶段是事实，谁该动是行动
+                    指向 —— 「Agent 动过」不等于「等 Agent」。 */}
+                {row.waitingOn && (
+                  <span className="waiting" data-owner={row.waitingOn}>
                     <i className="dot" />
-                    {t('ops.finalize.pending')}
+                    {t(`ops.finalize.waiting.${waitingKey(row)}`)}
                   </span>
                 )}
               </span>
@@ -59,6 +60,17 @@ export function OpsFinalizeCard({ view }: { view: OpsDirectionView }) {
 }
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+/**
+ * 「等谁」的三种说法。
+ *
+ * 「等 Agent」只有一种；「等你」有两种，缺了动作就说不清：等人点头确认，跟
+ * 等人把它派给 Agent，是两件不同的事 —— 后者不做，方向就永远停在那儿。
+ */
+function waitingKey(row: OpsFinalizeRow): 'dispatch' | 'agent' | 'nod' {
+  if (row.waitingOn === 'agent') return 'agent';
+  return row.stage === 'brief' ? 'dispatch' : 'nod';
+}
 
 function whenLabel(row: OpsFinalizeRow, t: Translate): string {
   // 等确认时，时间说的是**提议**的那一刻 —— 那才是人现在要处理的东西。

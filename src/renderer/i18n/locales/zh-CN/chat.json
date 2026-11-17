@@ -1288,11 +1288,10 @@
       "empty": "还没有平台记录。",
       "stage": {
         "none": "还没立方向",
-        "brief": "等 Agent 结构",
+        "brief": "只有原话",
         "structured": "还没定稿",
         "final": "已定稿"
       },
-      "pending": "待你确认",
       "actor": {
         "user": "最后动的是你",
         "agent": "最后动的是 Agent"
@@ -1302,7 +1301,12 @@
       "updated": "{{days}} 天前更新",
       "updatedToday": "今天更新",
       "proposed": "{{days}} 天前 Agent 提议",
-      "proposedToday": "今天 Agent 提议"
+      "proposedToday": "今天 Agent 提议",
+      "waiting": {
+        "dispatch": "等你交给 Agent",
+        "agent": "等 Agent",
+        "nod": "等你点头"
+      }
     },
     "pool": {
       "topic": {
