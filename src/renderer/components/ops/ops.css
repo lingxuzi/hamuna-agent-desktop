@@ -295,13 +295,24 @@
   min-width: 0;
 }
 .ops-hero h1 {
-  font-size: 28px;
+  /* 22 而不是 28：结论句的 who 槽位在方向域装的是用户自己写的整段定位
+     （实测两百字，七行 28px 把 hero 撑成半个屏幕）。一句结论是短句，
+     这里降一档。 */
+  font-size: 22px;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.4;
   letter-spacing: -0.01em;
   color: var(--ink);
   max-width: 640px;
   text-wrap: balance;
+  /* 整句最多两行：一句结论本该是两行内说完的。超出的部分由 who 承担截断，
+     在 h1 上做而不是在 who 上 —— who 单独 line-clamp 会变成块级，句末的
+     「。」被挤到下一行独占一行；who 单独 inline ellipsis 又得预留标点宽度，
+     预少了照样掉行（实测差 2.8px）。截断整句就没有这种标点接缝。 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .ops-hero h1 b {
   font-weight: 700;
@@ -310,9 +321,16 @@
 .ops-hero h1 .ops-num {
   font-family: var(--ops-serif);
   font-weight: 600;
-  font-size: 28px;
+  font-size: 22px;
   letter-spacing: 0;
   white-space: nowrap;
+}
+/* who 是内容槽不是标题：装的是台账原文（方向定位、选题标题、素材名），长短
+   由用户数据决定。字号降一档与结论句区分，截断交给 h1 的整句两行。 */
+.ops-hero .ops-who {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 .ops-hero h1 .ops-num small {
   font-family: var(--font-body);
@@ -597,12 +615,10 @@
   height: 4px;
 }
 
-/* 分布卡被垫高时，条不再跟着长 —— 条固定 24px，多出来的高度堆在列表末尾。
-   （原来条随格子长高、封顶 24px，超出的那截退回行底，条目之间就裂出一道
-   上百像素的空档：数字悬在半空，条掉在格子底。） */
-.ops-c-bars > .ops-bars .track {
-  height: 24px;
-}
+/* 分布卡被垫高时，条保持自己的 6px，不跟着格子长 —— 多出来的高度堆在列表
+   末尾。（曾经让条随格子长高再封顶 24px，超出的那截退回行底，条目之间裂出
+   上百像素的空档：数字在格子顶、条在格子底。后来改成固定 24px，循环是断了，
+   但 24px 是「封顶值」不是设计值 —— 四条并排时每条都是一道粗绿杠。） */
 
 /* ── 主列表 ───────────────────────────────────────── */
 /* 列表的固定列宽只有一处出处：行和表头都用它。
@@ -990,6 +1006,13 @@
 }
 .ops-next .name {
   margin-top: 6px;
+  /* 深墨卡跟 Hero 同排，它的高度会顶高整行。name 在方向域装的是定位原文，
+     200 字能占八行（162px），把首屏顶到半屏高。限三行 —— 这张卡的职责是
+     「先看哪个」，全文在下面的方向卡里。 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.45;
@@ -1149,13 +1172,12 @@
   .ops-hero h1 {
     font-size: 22px;
     line-height: 1.45;
+    /* 窄栏放宽到三行：两句前缀就吃掉两行，两行的话 who 会被整段切掉，
+       句子变成「最该先做的是 …」—— 结论句没有结论。 */
+    -webkit-line-clamp: 3;
   }
   .ops-hero h1 .ops-num {
     font-size: 22px;
-  }
-  /* 产品名整体换行，不许从中间劈开 */
-  .ops-hero h1 .ops-who {
-    white-space: nowrap;
   }
   .ops-metrics dd {
     font-size: 22px;
