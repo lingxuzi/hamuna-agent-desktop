@@ -290,9 +290,10 @@ hamuna ops add asset --title "标题" --platform douyin --body-file script.md --
     --product "露营折叠桌" --cta "进店看新款" \
     --source-ref ops/assets/imported/2026-11-15/折叠桌批次
 hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \
-    --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300
+    --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300 \
+    --comment-sample "这个折叠桌多少钱？"
 hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数字" --confidence 0.7 \
-    --evidence-bar '{"name":"有数字","val":"1.8x","pct":100}'
+    --basis inference --evidence-bar '{"name":"有数字","val":"1.8x","pct":100}'
 
 # 运营方向：每个平台一条，按 platform 定位（不用 --id）
 hamuna ops update direction --platform douyin --brief "想让人记住我们懂露营装备"
@@ -355,9 +356,17 @@ platform 派生 id（方向 `dir-<platform>`、账号 `acc-<platform>`），所�
 | `--intent`（线索） | `price`（问价格）/ `where`（问在哪买）/ `howto`（问怎么用）/ `other`。判不出就 `other` |
 | `--status`（线索） | `new` / `qualified` / `archived`。**「值得跟进」是人的判断**，不要自己标 `qualified` |
 | `--source`（对标） | `user`（用户给的）/ `agent`（我找的）。**`agent` 的候选要用户点头才写进台账** |
+| `--basis`（规则） | `verified`（核实过）/ `author_report`（人自己说的）/ `inference`（推出来的）/ `unresolved`（还没结论）。**判不出来就写 `unresolved`** |
+| `--comment-sample`（复盘） | 一条观众评论的**原文**。留原话不改写 |
 
-**别把长文本拼进 shell 引号**：`--content` / `--why` / `--evidence` 各有对应的
-`--content-file` / `--why-file` / `--evidence-file`，内容带引号或换行时走文件。
+**`--basis` 和 `--confidence` 说的是两件事。** `--confidence` 是强度（这条多可信），
+`--basis` 是种类（它凭的是什么）——一个 0.9 的推断仍然是推断。光给强度，
+面板上分不出「核实过的 0.5」和「推出来的 0.9」哪个更该当依据。把推断标成
+`verified` 比标错更坏：面板上写着「已核实」，人会当既定事实照着做。
+
+**别把长文本拼进 shell 引号**：`--content` / `--why` / `--evidence` / `--comment-sample`
+各有对应的 `--content-file` / `--why-file` / `--evidence-file` / `--comment-sample-file`，
+内容带引号或换行时走文件。
 
 **何时用：**
 - 用户问「今天做什么」「有哪些选题」「素材到哪了」「上次那条数据怎么样」→ `ops list`（要结构化数据就加 `--json`）

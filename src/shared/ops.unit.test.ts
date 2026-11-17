@@ -6,6 +6,7 @@ import {
   OPS_CLUE_STATUSES,
   OPS_DIRECTION_STATUSES,
   OPS_DOMAIN_IDS,
+  OPS_RULE_BASES,
   OPS_RULE_SOURCES,
   OPS_RULE_STATUSES,
   OPS_STATE_VERSION,
@@ -18,6 +19,7 @@ import {
   isOpsClueIntent,
   isOpsClueStatus,
   isOpsDirectionStatus,
+  isOpsRuleBasis,
   isOpsRuleSource,
   isOpsRuleStatus,
   isOpsTopicSource,
@@ -67,6 +69,24 @@ describe('ops 枚举', () => {
     for (const status of OPS_RULE_STATUSES) expect(isOpsRuleStatus(status)).toBe(true);
     for (const source of OPS_RULE_SOURCES) expect(isOpsRuleSource(source)).toBe(true);
     for (const source of OPS_TOPIC_SOURCES) expect(isOpsTopicSource(source)).toBe(true);
+    for (const basis of OPS_RULE_BASES) expect(isOpsRuleBasis(basis)).toBe(true);
+  });
+
+  it('证据性质四档，判定函数只认文档里列的值', () => {
+    // 强度（confidence）说「多可信」，性质（basis）说「凭的是什么」。两者不能
+    // 互相替代：一个 0.9 的推断仍然是推断。所以判定函数必须是白名单——
+    // 拼错的 `author-report` 落不进去，否则界面上会渲染一个空徽标。
+    expect(OPS_RULE_BASES).toEqual(['verified', 'author_report', 'inference', 'unresolved']);
+    expect(isOpsRuleBasis('verified')).toBe(true);
+    expect(isOpsRuleBasis('author_report')).toBe(true);
+    expect(isOpsRuleBasis('inference')).toBe(true);
+    expect(isOpsRuleBasis('unresolved')).toBe(true);
+    expect(isOpsRuleBasis('author-report')).toBe(false);
+    expect(isOpsRuleBasis('reported')).toBe(false);
+    expect(isOpsRuleBasis('')).toBe(false);
+    expect(isOpsRuleBasis(null)).toBe(false);
+    expect(isOpsRuleBasis(undefined)).toBe(false);
+    expect(isOpsRuleBasis(3)).toBe(false);
   });
 
   it('五个域与模板 id 是稳定契约', () => {

@@ -104,6 +104,25 @@ pub enum OpsRuleSource {
     Dialog,
 }
 
+/// 规则的证据性质：这条结论**凭什么**这么说。
+///
+/// `confidence` 是强度（0–1 浮点），回答「多可信」；这个回答「凭的是什么」。
+/// 两者不能互相替代：一个 0.9 的推断仍然是推断——只给强度，界面上分不出
+/// 「核实过的 0.5」和「推出来的 0.9」哪个更该当依据。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpsRuleBasis {
+    /// 平台侧数据或回读核实过。
+    Verified,
+    /// 人（或作者）自己说的，没有独立核实。
+    AuthorReport,
+    /// 从已有数据推断出来的，没有直接对照。
+    Inference,
+    /// 还没有结论。旧记录没有这个键时落这里——不替旧结论补证据。
+    #[default]
+    Unresolved,
+}
+
 // ── 实体 ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,6 +245,10 @@ pub struct OpsReview {
     pub metrics: OpsReviewMetrics,
     #[serde(default)]
     pub note: String,
+    /// 一条观众原话。复盘结论的证据常常就是这一句——「多少人问价」要有原话
+    /// 才算证据。留**原文**，不改写。空 = 没留样。
+    #[serde(default)]
+    pub comment_sample: String,
     #[serde(default)]
     pub created_at: String,
 }
@@ -256,6 +279,9 @@ pub struct OpsRule {
     pub status: OpsRuleStatus,
     #[serde(default)]
     pub confidence: f64,
+    /// 证据性质。强度之外的另一半：这条结论凭什么这么说。
+    #[serde(default)]
+    pub basis: OpsRuleBasis,
     #[serde(default)]
     pub evidence: String,
     /// 对照条。由反思侧算好存下，前端只渲染。
@@ -2146,6 +2172,7 @@ mod tests {
                 completion_rate: Some(0.4),
             },
             note: String::new(),
+            comment_sample: String::new(),
             created_at: "2026-11-01T09:00:00".to_string(),
         };
         upsert_item(&ws, upsert(OpsItemKind::Review, &review)).expect("seed");
@@ -2445,6 +2472,77 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&ws);
     }
+
+    /// 老台账里没有 `basis` / `commentSample` 这两个键 —— 加字段不能把老
+    /// 工作区读成坏掉。
+    #[test]
+    fn records_written_before_the_evidence_fields_still_load() {
+        let ws = make_test_workspace("ops-evidence-legacy");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        let raw = serde_json::json!({
+            "version": OPS_STATE_VERSION,
+            "rules": [
+                {
+                    "id": "rule-1",
+                    "name": "标题里写清数字",
+                    "rule": "封面写清数字的笔记点击率更高",
+                    "source": "reflection",
+                    "status": "active",
+                    "confidence": 0.6,
+                    "createdAt": "2026-11-12T00:00:00.000Z",
+                    "updatedAt": "2026-11-12T00:00:00.000Z",
+                },
+            ],
+            "reviews": [
+                {
+                    "id": "review-1",
+                    "assetId": "asset-1",
+                    "platform": "douyin",
+                    "publishedAt": "2026-11-12T00:00:00.000Z",
+                    "metrics": { "views": 1200 },
+                    "createdAt": "2026-11-12T00:00:00.000Z",
+                    "updatedAt": "2026-11-12T00:00:00.000Z",
+                },
+            ],
+        })
+        .to_string();
+        fs::write(ops_dir.join("state.json"), raw).expect("write");
+
+        let state = read_state(&ws).expect("老台账必须读得出来");
+
+        // 旧规则不该被补上证据 —— 补上就是把「没查过」显示成「核实过」。
+        assert_eq!(state.rules[0].basis, OpsRuleBasis::Unresolved);
+        // 旧复盘没有留样，就是没有，不能凭空造一句。
+        assert_eq!(state.reviews[0].comment_sample, "");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 拼错的性质必须报错，不能静默落成默认值 —— 默认值是「未定」，
+    /// 而 Agent 拼错时以为自己标的是「已核实」。
+    #[test]
+    fn an_unknown_evidence_kind_is_rejected() {
+        let ws = make_test_workspace("ops-evidence-bad-basis");
+        let err = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Rule,
+                fields: serde_json::json!({
+                    "name": "标题里写清数字",
+                    "rule": "封面写清数字的笔记点击率更高",
+                    "basis": "verifiedd",
+                })
+                .as_object()
+                .cloned()
+                .expect("object"),
+            },
+        )
+        .expect_err("must reject");
+        // serde 的报错要说清：写错了什么，以及该写什么。
+        assert!(err.contains("verifiedd"), "错误要点名写错的值: {}", err);
+        assert!(err.contains("author_report"), "错误要列出可选值: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
 }
 
 #[cfg(test)]
@@ -2508,6 +2606,13 @@ mod parity_tests {
         }
         for value in ["reflection", "manual", "dialog"] {
             assert_ts_array_has(TS_OPS, "OPS_RULE_SOURCES", value);
+        }
+    }
+
+    #[test]
+    fn rule_basis_values_exist_in_ts_contract() {
+        for value in ["verified", "author_report", "inference", "unresolved"] {
+            assert_ts_array_has(TS_OPS, "OPS_RULE_BASES", value);
         }
     }
 

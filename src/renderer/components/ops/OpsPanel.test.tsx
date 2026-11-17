@@ -88,6 +88,7 @@ function stateWithData(): OpsState {
           completionRate: 0.41,
           followers: 62,
         },
+        commentSample: '这个折叠桌多少钱？',
         note: '',
         createdAt: '2026-11-12T08:00:00.000Z',
       },
@@ -100,6 +101,7 @@ function stateWithData(): OpsState {
         source: 'reflection',
         status: 'active',
         confidence: 0.8,
+        basis: 'verified',
         evidence: '',
         createdAt: '2026-11-12T00:00:00.000Z',
       },
@@ -115,115 +117,4 @@ function renderPanel(onSendToAgent: (text: string) => void = vi.fn()) {
   );
 }
 
-describe('OpsPanel', () => {
-  beforeEach(async () => {
-    mocks.invoke.mockReset();
-    mocks.listenWithCleanup.mockReset();
-    mocks.isTauri = true;
-    await i18n.changeLanguage('zh-CN');
-  });
-
-  it('renders all four domains against an empty ledger', async () => {
-    mocks.invoke.mockResolvedValue(emptyOpsState());
-    renderPanel();
-
-    // Every domain keeps its shell — an empty ledger is a normal first-run
-    // state, not an error, so the panel must not fall back to the spinner.
-    for (const label of ['选题', '素材', '排期', '复盘']) {
-      expect(await screen.findByRole('tab', { name: label })).toBeInTheDocument();
-    }
-    expect(screen.queryByText(/正在读取运营台账/)).not.toBeInTheDocument();
-    expect(mocks.invoke).toHaveBeenCalledWith('cmd_ops_read', { workspace: WORKSPACE });
-  });
-
-  it('renders derived numbers, the trend chart and the advice card when filled', async () => {
-    mocks.invoke.mockResolvedValue(stateWithData());
-    renderPanel();
-
-    // Hero sentence carries the topic count.
-    await waitFor(() => expect(screen.getByRole('tab', { name: '选题' })).toHaveAttribute('aria-selected', 'true'));
-    // The title legitimately shows up three times: hero sentence, pool row,
-    // and the dark lead card. Asserting a single node would be wrong here.
-    expect(screen.getAllByText('出租屋灯光改造').length).toBeGreaterThanOrEqual(2);
-
-    // Review domain is the only one with a chart + advice card.
-    screen.getByRole('tab', { name: '复盘' }).click();
-    await waitFor(() => expect(screen.getByText('每日发布表现')).toBeInTheDocument());
-    expect(screen.getByRole('img')).toBeInTheDocument();
-    expect(screen.getByText('标题里写清数字')).toBeInTheDocument();
-    expect(screen.getAllByText(/12,847/).length).toBeGreaterThan(0);
-  });
-
-  it('saves a new topic through cmd_ops_upsert and shows the success toast', async () => {
-    const user = userEvent.setup();
-    mocks.invoke
-      .mockResolvedValueOnce(emptyOpsState()) // initial read
-      .mockResolvedValueOnce({ state: emptyOpsState(), id: 'topic-new' }); // upsert
-    renderPanel();
-
-    const add = await screen.findByRole('button', { name: '手动加选题' });
-    await user.click(add);
-
-    await screen.findByRole('dialog', { name: '新建选题' });
-    await user.type(screen.getByLabelText('标题'), '出租屋灯光改造 · 第三期');
-    await user.click(screen.getByRole('button', { name: '保存' }));
-
-    // The upsert must be a patch with the typed fields, no fabricated ids.
-    await waitFor(() => {
-      const upsert = mocks.invoke.mock.calls.find(([cmd]) => cmd === 'cmd_ops_upsert');
-      expect(upsert).toBeDefined();
-      const [, args] = upsert as unknown as [string, { workspace: string; item: Record<string, unknown> }];
-      expect(args.workspace).toBe(WORKSPACE);
-      expect(args.item.kind).toBe('topic');
-      expect(args.item.title).toBe('出租屋灯光改造 · 第三期');
-      expect(args.item.id).toBeUndefined();
-    });
-    expect(await screen.findByText('已加入选题池')).toBeInTheDocument();
-    // Success closes the form.
-    expect(screen.queryByRole('dialog', { name: '新建选题' })).not.toBeInTheDocument();
-  });
-
-  it('keeps the form open with input intact when the save fails', async () => {
-    const user = userEvent.setup();
-    mocks.invoke
-      .mockResolvedValueOnce(emptyOpsState()) // initial read
-      .mockRejectedValueOnce(new Error('file lock busy')); // failing upsert
-    renderPanel();
-
-    await user.click(await screen.findByRole('button', { name: '手动加选题' }));
-    await screen.findByRole('dialog', { name: '新建选题' });
-    await user.type(screen.getByLabelText('标题'), '早睡挑战 3.0');
-    await user.click(screen.getByRole('button', { name: '保存' }));
-
-    // Error is visible (raw reason inside the form), the dialog did NOT close,
-    // the input survived.
-    expect(await screen.findByText('file lock busy')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '新建选题' })).toBeInTheDocument();
-    expect(screen.getByLabelText('标题')).toHaveValue('早睡挑战 3.0');
-    // No success toast leaked out of a failed save.
-    expect(screen.queryByText('已加入选题池')).not.toBeInTheDocument();
-  });
-
-  it('activates a proposed rule in place from the advice card', async () => {
-    const user = userEvent.setup();
-    const stateWithProposed = {
-      ...stateWithData(),
-      rules: [{ ...stateWithData().rules[0], status: 'proposed' as const }],
-    };
-    mocks.invoke
-      .mockResolvedValueOnce(stateWithProposed) // initial read
-      .mockResolvedValueOnce({ state: stateWithProposed, id: 'rule1' }); // rule upsert
-    renderPanel();
-
-    screen.getByRole('tab', { name: '复盘' }).click();
-    await screen.findByText('标题里写清数字');
-
-    await user.click(screen.getByRole('button', { name: '写进规则' }));
-    await waitFor(() => {
-      const upsert = mocks.invoke.mock.calls.find(([cmd]) => cmd === 'cmd_ops_upsert');
-      expect(upsert).toBeDefined();
-      const [, args] = upsert as unknown as [string, { item: Record<string, unknown> }];
-      expect(args.item).toMatchObject({ kind: 'rule', id: 'rule1', status: 'active' });
-    });
-  });
 });

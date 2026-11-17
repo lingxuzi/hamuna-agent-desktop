@@ -22,7 +22,7 @@ import type {
   OpsTopic,
   OpsTopicSource,
 } from './ops';
-import type { SocialPlatformId } from './socialPlatforms';
+import { SOCIAL_PLATFORMS, type SocialPlatformId } from './socialPlatforms';
 
 /** 指标单位：`count` 原样，`compact` 大数紧凑排（18.2 万），`percent` 0–1 的比例。 */
 export type OpsMetricUnit = 'count' | 'compact' | 'percent';
@@ -36,7 +36,7 @@ export interface OpsMetric {
 }
 
 /** 分布条的口径种类，决定 renderer 从哪个 i18n 命名空间取标签。 */
-export type OpsDistKind = 'platform' | 'topicSource' | 'assetStatus' | 'directionStatus';
+export type OpsDistKind = 'platform' | 'topicSource' | 'assetStatus';
 
 export interface OpsDistBar {
   kind: OpsDistKind;
@@ -88,6 +88,8 @@ export interface OpsReviewRow {
   views: number;
   completionRate: number | null;
   followers: number;
+  /** 一条观众原话（复盘时留的评论样本）。空 = 没留样。 */
+  commentSample: string;
 }
 
 /**
@@ -263,8 +265,6 @@ export interface OpsDirectionView {
   dark: OpsDarkCard;
 }
 
-const DIRECTION_STATUS_ORDER: readonly OpsDirectionStatus[] = ['active', 'draft'];
-
 export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionView {
   const { directions } = state;
   const active = directions.filter((d) => d.status === 'active').length;
@@ -330,6 +330,22 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
   const focus = pool[0] ?? null;
   const focusSource = focus?.id ? directions.find((d) => d.id === focus.id) : undefined;
 
+  // 定稿进度按**平台**列行，而且没定稿的平台也要占一行（空值行）。
+  //
+  // 之前这里数的是方向状态，卡上却写着「按平台」——标签与数据对不上；而且只有
+  // 一条方向时整张卡只剩一行，余量全堆在卡底。空值行不是凑数：它就是
+  // 「这个号还没立方向」这件事本身，跟上面的方向列表逐行对得上。
+  const finalized = new Map<string, number>();
+  for (const d of directions) {
+    if (d.status !== 'active') continue;
+    finalized.set(d.platform, (finalized.get(d.platform) ?? 0) + 1);
+  }
+  const usedPlatforms = new Set<SocialPlatformId>([
+    ...directions.map((d) => d.platform),
+    ...platformsInUse,
+  ]);
+  const platformRows = SOCIAL_PLATFORMS.map((p) => p.id).filter((id) => usedPlatforms.has(id));
+
   return {
     domain: 'direction',
     metrics: [
@@ -340,8 +356,8 @@ export function deriveDirectionView(state: OpsState, now: Date): OpsDirectionVie
     lead: { active, pending, focusId: focus?.id ?? null },
     pool,
     dist: buildBars(
-      'directionStatus',
-      countEntries(directions, (d) => d.status, DIRECTION_STATUS_ORDER),
+      'platform',
+      platformRows.map((platform) => ({ key: platform, value: finalized.get(platform) ?? 0 })),
     ),
     dark: {
       kind: 'direction',
@@ -428,7 +444,11 @@ interface DistEntry {
 
 /**
  * 分布条。`pct` 相对最大值——最大值那根永远是满的。
- * 值为 0 的条目不进榜：没有信息的行是噪音。
+ *
+ * **收到的条目一条不落全进榜**，包括值为 0 的。留不留 0 值行由调用方定：
+ * `countEntries` 先把没数到的维度滤掉（来源、状态这类「没发生就不该占行」）；
+ * 方向域的「定稿进度」反过来**故意**留下 0 值行——「这个号还没立方向」本身
+ * 就是要看见的一件事，滤掉就等于把没定义过的平台藏起来。
  */
 function buildBars(kind: OpsDistKind, entries: DistEntry[]): OpsDistBar[] {
   let max = 0;
@@ -682,6 +702,7 @@ export function deriveReviewView(state: OpsState, now: Date): OpsReviewView {
       views: r.metrics.views,
       completionRate: r.metrics.completionRate,
       followers: r.metrics.followers,
+      commentSample: r.commentSample ?? '',
     }));
 
   const ranked = [...reviews].sort((a, b) => b.metrics.views - a.metrics.views);

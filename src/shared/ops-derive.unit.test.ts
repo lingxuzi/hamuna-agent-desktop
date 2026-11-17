@@ -532,6 +532,40 @@ describe('方向域', () => {
     });
     expect(view.lead.pending).toBe(1);
   });
+
+  it('定稿进度按平台列行，没定稿的平台也占一行（空值行）', () => {
+    // 空值行不是凑数：它就是「这个号还没立方向」这件事本身。少了它，
+    // 只立了一条方向时整张卡只剩一行，剩下的空间全堆在卡底，看着像
+    // 渲染坏了。而且卡上写的是「按平台」，数出来的也必须是平台数。
+    const view = deriveDirectionView(
+      state({
+        directions: [
+          direction({ id: 'dir-douyin', platform: 'douyin', status: 'active' }),
+          direction({ id: 'dir-xhs', platform: 'xiaohongshu', status: 'draft' }),
+        ],
+        topics: [topic({ id: 't1', platform: 'bilibili' })],
+      }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => [d.key, d.value])).toEqual([
+      ['xiaohongshu', 0],
+      ['douyin', 1],
+      ['bilibili', 0],
+    ]);
+    // 只有一条方向时也要有行（不是空数组）。
+    expect(view.dist.length).toBeGreaterThan(0);
+  });
+
+  it('台账里完全没碰过的平台不占行', () => {
+    // 空值行只针对「这个号在用但还没立方向」；没用过的平台不该挤进来。
+    const view = deriveDirectionView(
+      state({ directions: [direction({ id: 'dir-douyin', platform: 'douyin', status: 'active' })] }),
+      NOW,
+    );
+
+    expect(view.dist.map((d) => d.key)).toEqual(['douyin']);
+  });
 });
 
 describe('空数据不炸', () => {

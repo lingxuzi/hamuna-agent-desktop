@@ -2607,6 +2607,8 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'platform', flag: 'platform', type: 'text', required: true },
     { field: 'publishedAt', flag: 'publishedAt', type: 'text', required: true },
     { field: 'note', flag: 'note', type: 'text' },
+    // 一条观众原话：复盘结论的证据常常就是这一句。留原文，长文本走文件。
+    { field: 'commentSample', flag: 'commentSample', type: 'text', fileFlag: 'commentSampleFile' },
     { field: 'views', flag: 'views', type: 'number', group: 'metrics' },
     { field: 'likes', flag: 'likes', type: 'number', group: 'metrics' },
     { field: 'comments', flag: 'comments', type: 'number', group: 'metrics' },
@@ -2621,6 +2623,9 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'source', flag: 'source', type: 'text' },
     { field: 'status', flag: 'status', type: 'text' },
     { field: 'confidence', flag: 'confidence', type: 'number' },
+    // 证据性质：verified / author_report / inference / unresolved。
+    // 与 --confidence 互补——强度说「多可信」，这个说「凭的是什么」。
+    { field: 'basis', flag: 'basis', type: 'text' },
     { field: 'evidence', flag: 'evidence', type: 'text' },
     { field: 'evidenceBars', flag: 'evidenceBar', type: 'jsonList' },
   ],
@@ -2966,9 +2971,11 @@ function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
         console.log(`    ${String(record.profileUrl ?? '')}`);
         if (record.why) console.log(`    ${String(record.why)}`);
       } else {
+        // 规则：强度之外还要看种类——「核实过的 0.5」和「推出来的 0.9」不是一回事。
         console.log(
           `  ${id}  ${String(record.name ?? '')}  ` +
-          `${String(record.status ?? '')} · confidence ${String(record.confidence ?? 0)}`,
+          `${String(record.status ?? '')} · confidence ${String(record.confidence ?? 0)} · ` +
+          `basis ${String(record.basis ?? 'unresolved')}`,
         );
       }
     }

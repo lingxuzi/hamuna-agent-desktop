@@ -109,6 +109,29 @@ export type OpsRuleSource = 'reflection' | 'manual' | 'dialog';
 
 export const OPS_RULE_SOURCES: readonly OpsRuleSource[] = ['reflection', 'manual', 'dialog'];
 
+/**
+ * 规则的证据性质：这条结论**凭什么**这么说。
+ *
+ * `confidence` 是强度（0–1 的浮点），回答「多可信」；这个回答「凭的是什么」。
+ * 两者不能互相替代：一个 0.9 的推断仍然是推断——只给强度，界面上分不出
+ * 「核实过的 0.5」和「推出来的 0.9」哪个更该当依据。
+ *
+ * - `verified` — 平台侧数据或回读核实过。
+ * - `author_report` — 人（或作者）自己说的，没有独立核实。
+ * - `inference` — 从已有数据推断出来的，合理但没有直接对照。
+ * - `unresolved` — 还没有结论。
+ *
+ * 旧记录没有这个键时落 `unresolved`：不替旧结论补证据。
+ */
+export type OpsRuleBasis = 'verified' | 'author_report' | 'inference' | 'unresolved';
+
+export const OPS_RULE_BASES: readonly OpsRuleBasis[] = [
+  'verified',
+  'author_report',
+  'inference',
+  'unresolved',
+];
+
 function isOneOf<T extends string>(value: unknown, allowed: readonly T[]): value is T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value);
 }
@@ -127,6 +150,9 @@ export const isOpsRuleStatus = (value: unknown): value is OpsRuleStatus =>
 
 export const isOpsRuleSource = (value: unknown): value is OpsRuleSource =>
   isOneOf(value, OPS_RULE_SOURCES);
+
+export const isOpsRuleBasis = (value: unknown): value is OpsRuleBasis =>
+  isOneOf(value, OPS_RULE_BASES);
 
 export const isOpsDirectionStatus = (value: unknown): value is OpsDirectionStatus =>
   isOneOf(value, OPS_DIRECTION_STATUSES);
@@ -242,6 +268,14 @@ export interface OpsReview {
   publishedAt: string;
   metrics: OpsReviewMetrics;
   note: string;
+  /**
+   * 一条观众原话。
+   *
+   * 复盘结论的证据常常就是这一句：「多少人问价」要有原话才算证据，光有
+   * 一个数字下次谁也复核不了。留**原文**，不改写——改写过的评论没法拿去回看。
+   * 空 = 这次没留样。
+   */
+  commentSample?: string;
   createdAt: string;
 }
 
@@ -264,6 +298,8 @@ export interface OpsRule {
   source: OpsRuleSource;
   status: OpsRuleStatus;
   confidence: number;
+  /** 证据性质。强度之外的另一半：这条结论凭什么这么说。 */
+  basis: OpsRuleBasis;
   evidence: string;
   /**
    * 对照条。**由反思侧算好存下**，前端只渲染——按属性分组跨内容求均值是

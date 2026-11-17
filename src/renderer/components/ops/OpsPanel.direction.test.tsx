@@ -121,8 +121,13 @@ describe('OpsPanel 方向域', () => {
     });
     expect(screen.getByText('想让人记住我们懂露营装备')).toBeInTheDocument();
     // 没立方向的平台也要出现，否则「这个号没定义过」在界面上根本不可见。
-    expect(screen.getByText('小红书')).toBeInTheDocument();
-    expect(screen.getByText('B站')).toBeInTheDocument();
+    // 「定稿进度」卡现在也按平台列行（没定稿的平台占一行空值行），平台名在
+    // 整页里不止出现一次，所以断言必须落在方向列表上，不能全文唯一匹配。
+    const poolPlatforms = Array.from(document.querySelectorAll('.ops-dirs > li .n')).map(
+      (el) => el.textContent,
+    );
+    expect(poolPlatforms).toContain('小红书');
+    expect(poolPlatforms).toContain('B站');
   });
 
   it('列表里的行 key 唯一：没立方向的平台不能共用同一个 null key', async () => {

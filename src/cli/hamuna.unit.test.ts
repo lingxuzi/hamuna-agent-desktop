@@ -1215,6 +1215,34 @@ describe('hamuna CLI operations ledger', () => {
     expect(body.item.metrics).toEqual({ views: 900 });
   });
 
+  it('carries the audience quote through so a review keeps the evidence in words', () => {
+    // 评论原话不进 metrics —— 它是文本，不是计数器。只光有「28 条评论」
+    // 这个数字，谁也没法复核「有多少人问价」，得留一句原话在。
+    const body = buildRequestBody('ops', 'add', ['review'], {
+      assetId: 'asset-1',
+      platform: 'douyin',
+      publishedAt: '2026-11-10T20:00:00+08:00',
+      commentSample: '这个折叠桌多少钱？',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item.commentSample).toBe('这个折叠桌多少钱？');
+    expect(body.item.metrics).toBeUndefined();
+  });
+
+  it('carries the evidence kind through so strength and kind stay separate', () => {
+    // --confidence 说「多可信」，--basis 说「凭的是什么」。两个都要能传：
+    // 少了 basis，0.9 的推断和 0.9 的核实过在界面上长得一模一样。
+    const body = buildRequestBody('ops', 'add', ['rule'], {
+      name: '开头 3 秒给数字',
+      rule: '前 3 秒抛出具体数字比抽象描述起量明显',
+      confidence: 0.4,
+      basis: 'inference',
+    }) as { item: Record<string, unknown> };
+
+    expect(body.item.basis).toBe('inference');
+    expect(body.item.confidence).toBe(0.4);
+  });
+
   it('lets the agent rename an account but never declare it logged in', () => {
     // 登录态的权威是浏览器 cookie。CLI 的字段白名单里没有 loginState →
     // 调用方传了也进不了载荷。Agent 自己说「已登录」会让界面显示「已登录」

@@ -43,6 +43,7 @@ description: >-
 | 收藏 | `--saves` | 整数 |
 | 涨粉 | `--followers` | 这条内容带来的**净增** |
 | 完播率 | `--completionRate` | **0–1 的小数**（41% 写 `0.41`）。平台不给就**不传**——传 0 会被当成完播率为零 |
+| 观众原话 | `--commentSample` | 这条内容下面**一条**评论的**原文**。留原话不改写 |
 
 ## 录数据
 
@@ -53,7 +54,8 @@ hamuna ops add review \
   --asset-id asset-1a2b3c4d \
   --platform douyin \
   --published-at 2026-11-10T20:00:00+08:00 \
-  --views 12000 --likes 340 --comments 28 --completionRate 0.41
+  --views 12000 --likes 340 --comments 28 --completionRate 0.41 \
+  --commentSample "这个折叠桌多少钱？"
 ```
 
 数据会变（发布后 24h / 72h / 一周各不同）。补数据用 `update`，只传变化的字段：
@@ -65,6 +67,11 @@ hamuna ops update review --id review-1a2b3c4d --views 45000 --likes 1200
 其余指标由后端合并保留，不会被清空。
 
 用户描述补充结论写 `--note`。
+
+**`--commentSample` 只留一条**，挑最能代表这条内容的那句（问价的那句、被夸的那句、
+吐槽的那句都行）。留它的理由：复盘结论的证据常常就是这一句话。下次要复核
+「有多少人问价」，光有一个数字谁也复核不了，得有原话。**原文照抄**，不改写、
+不翻译——改写过的评论没法拿去回看。评论长的时候用 `--comment-sample-file <路径>`。
 
 ## 读评论 → 记线索
 
@@ -106,6 +113,7 @@ hamuna ops add rule \
   --rule "标题 / 前 3 秒抛出具体数字，比抽象描述起量明显" \
   --source reflection \
   --status proposed \
+  --basis inference \
   --confidence 0.4 \
   --evidence "11/03 那条 12 万播放 vs 同题材平均 2 万；11/09 复现一次" \
   --evidence-bar '{"name":"有数字","val":"1.8×","pct":100}' \
@@ -116,6 +124,19 @@ hamuna ops add rule \
 
 - `--rule` 要**能直接指导下一次制作**。"要更用心"不是规则。"前 3 秒给数字"是规则。
 - `--confidence` 按样本量给：1 条样本 ≤ 0.3，2–3 条 0.5 左右，多次复现才给 0.7 以上。别硬写 0.9。
+- `--basis` 标这条结论**凭什么这么说**。`--confidence` 是强度（多可信），
+  `--basis` 是种类（凭的是什么）——一个 0.9 的推断仍然是推断，光给强度，
+  面板上分不出「核实过的 0.5」和「推出来的 0.9」哪个更该当依据。四个值：
+
+  | 值 | 什么时候用 |
+  |---|---|
+  | `verified` | 平台侧数据对得上，或我回读核实过 |
+  | `author_report` | 人（或作者）自己说的，我没独立核实 |
+  | `inference` | 从已有数据推出来的，合理但没有直接对照 |
+  | `unresolved` | 还没有结论，先占个位 |
+
+  **判不出来就写 `unresolved`。** 把推断标成核实过，比标错更坏——面板上
+  「已核实」会让人当既定事实照着做。
 - `--evidence` 写**具体对照**（哪个 vs 哪个、差多少），不写"感觉更好"。
 - `--evidence-bar` 是**对照条**：`val` 是展示值，`pct` 是条长 0–100（不是原始数值）。只有有对照组的规则才给，对照组那条加 `"mut": true`。
 - 新规则一律 `--status proposed`。攒够证据后由用户升 `active`，或你提议、用户点头：
