@@ -1284,10 +1284,6 @@
       "direction": {
         "title": "Readiness",
         "meta": "By platform"
-      },
-      "directionStatus": {
-        "active": "Active",
-        "draft": "Draft"
       }
     },
     "pool": {
@@ -1335,6 +1331,7 @@
       "scheduleAt": "{{time}} · {{platform}}",
       "completion": "{{rate}}% completion",
       "followers": "+{{n}} followers",
+      "quote": "Audience",
       "edit": "Edit this record",
       "directionPending": "Revision: {{reason}}"
     },
@@ -1351,10 +1348,18 @@
       "empty": "No rules distilled yet. Run a review and they will appear.",
       "activate": "Write into rules"
     },
+    "basis": {
+      "verified": "Verified",
+      "author_report": "Reported",
+      "inference": "Inferred",
+      "unresolved": "Unresolved"
+    },
     "dark": {
       "emptyWhen": "—",
       "emptyName": "Nothing to show in this domain yet",
       "idleDays": "idle {{days}}d",
+      "expand": "Show full text",
+      "collapse": "Show less",
       "topic": {
         "top": "Top priority"
       },

@@ -921,6 +921,70 @@
   line-height: 1.4;
   color: var(--ink);
 }
+/* 规则卡头部：证据徽标 + 规则名并排。徽标在左边，名字占剩下的宽度。 */
+.ops-tip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ops-tip-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 证据性质徽标：色点 + 文字。文字统一走墨色，色相只落在圆点上 ——
+   `--accent-warm` 当文字色对白底只有 3.4:1，过不了 AA。 */
+.ops-basis {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+.ops-basis i {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--theme-radius-full);
+  background: var(--ink-muted);
+}
+.ops-basis[data-basis='verified'] i { background: var(--success); }
+.ops-basis[data-basis='author_report'] i { background: var(--accent-warm); }
+.ops-basis[data-basis='inference'] i { background: var(--ops-data); }
+/* 没结论 = 空心点：形状也带信息，不只靠色相。 */
+.ops-basis[data-basis='unresolved'] i {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--ink-muted);
+}
+/* 观众原话：复盘时留的评论样本。缩进 + 竖线，读起来是注解不是指标。 */
+.ops-quote {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+  min-width: 0;
+}
+.ops-quote-label {
+  flex: none;
+  font-weight: 500;
+  color: var(--ink-secondary);
+}
+/* 观众原话是**证据**，不是装饰。列表行只有 ~160px 宽，单行省略号会把
+   「有多少人问价」这句话砍掉一半——证还在，读不全 = 白记。
+   允许折到两行，够放大多数原话；再长就截断，但截的是超长的那句，不是
+   整条。 */
+.ops-quote > span:last-child {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .ops-tip p {
   font-size: 14px;
   line-height: 1.5;
@@ -1008,7 +1072,7 @@
   margin-top: 6px;
   /* 深墨卡跟 Hero 同排，它的高度会顶高整行。name 在方向域装的是定位原文，
      200 字能占八行（162px），把首屏顶到半屏高。限三行 —— 这张卡的职责是
-     「先看哪个」，全文在下面的方向卡里。 */
+     「先看哪个」，全文按「展开全文」交还给用户。 */
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -1016,6 +1080,35 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 1.45;
+}
+/* 展开：摘掉行数限制，定位原文整段摊开。 */
+.ops-next .name.open {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+/* 「展开全文」：深墨底上的文字按钮。 */
+.ops-next .ops-more {
+  align-self: flex-start;
+  /* 点击热区 24px 高（12px 字号 + 上下各 6px padding）。padding 撑开热区，
+     margin 同步收 6px，文字的视觉位置一点没动。 */
+  margin-top: 2px;
+  padding: 6px 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ops-dark-dim);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color var(--ops-dur) var(--ops-ease);
+}
+.ops-next .ops-more:hover {
+  color: var(--ops-dark-text);
+}
+.ops-next .ops-more:focus-visible {
+  outline: 2px solid var(--ops-dark-text);
+  outline-offset: 3px;
 }
 .ops-next .foot {
   /* 卡片被垫高时脚注沉底，主数字仍贴着上方 —— 深墨卡里一大段空白最难看。 */

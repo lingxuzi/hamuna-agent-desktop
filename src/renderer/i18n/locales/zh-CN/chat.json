@@ -1284,10 +1284,6 @@
       "direction": {
         "title": "定稿进度",
         "meta": "按平台"
-      },
-      "directionStatus": {
-        "active": "已生效",
-        "draft": "草稿"
       }
     },
     "pool": {
@@ -1335,6 +1331,7 @@
       "scheduleAt": "{{time}} · {{platform}}",
       "completion": "完播 {{rate}}%",
       "followers": "涨粉 {{n}}",
+      "quote": "观众说",
       "edit": "编辑这条记录",
       "directionPending": "修订：{{reason}}"
     },
@@ -1351,10 +1348,18 @@
       "empty": "还没有沉淀下来的规则，做一轮复盘就会长出来。",
       "activate": "写进规则"
     },
+    "basis": {
+      "verified": "已核实",
+      "author_report": "自述",
+      "inference": "推断",
+      "unresolved": "未定"
+    },
     "dark": {
       "emptyWhen": "暂无",
       "emptyName": "这一域还没有可看的内容",
       "idleDays": "已滞留 {{days}} 天",
+      "expand": "展开全文",
+      "collapse": "收起",
       "topic": {
         "top": "最优先"
       },

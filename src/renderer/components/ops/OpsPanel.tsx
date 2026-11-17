@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Check, ChevronLeft, Pencil, Plus, X } from 'lucide-react';
 
@@ -36,6 +36,7 @@ import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
 import { opsErrorMessage, opsUpsert } from './opsWrite';
 import { useToastOptional } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { useCloseLayer } from '@/hooks/useCloseLayer';
 import './ops.css';
 
 /**
@@ -719,7 +720,15 @@ function OpsAdviceCard({ view, onActivate }: { view: OpsReviewView; onActivate: 
         <div className="ops-advice">
           {view.advice.map((rule) => (
             <div className="ops-tip" key={rule.id}>
-              <strong>{rule.name}</strong>
+              <div className="ops-tip-head">
+                {/* 证据性质：这条结论凭什么这么说。强度（confidence）在数字上，
+                    种类得看得见——「核实过的 0.5」和「推出来的 0.9」不是一回事。 */}
+                <span className="ops-basis" data-basis={rule.basis}>
+                  <i aria-hidden="true" />
+                  {t(`ops.basis.${rule.basis}`)}
+                </span>
+                <strong>{rule.name}</strong>
+              </div>
               <p>{rule.rule}</p>
               {rule.evidenceBars && rule.evidenceBars.length > 0 && (
                 <ul className="ops-bars mini">
@@ -763,6 +772,30 @@ function DarkCard({ dark }: { dark: OpsDarkCardData }) {
   const { t, i18n } = useTranslation('chat');
   const locale = i18n.language;
   const parts = darkParts(dark, t, locale);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const nameRef = useRef<HTMLDivElement>(null);
+
+  // 「展开全文」只在真的被截断时才出现 —— 没得展开还摆个按钮，就是个坏掉的
+  // 功能。判定靠实测（scrollHeight > clientHeight），不靠字数猜：卡片宽度
+  // 会变（面板拉宽、窄栏摊平），同一段文字在不同宽度下截断与否不一样。
+  useLayoutEffect(() => {
+    const el = nameRef.current;
+    if (!el || expanded) return;
+    const measure = () => setOverflowing(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [parts.name, expanded]);
+
+  // Cmd+W 收起展开的全文。没展开时返回 false —— 这一层不吃掉关闭键，
+  // 面板该关还得关。
+  useCloseLayer(() => {
+    if (!expanded) return false;
+    setExpanded(false);
+    return true;
+  }, 300);
 
   return (
     <section className="ops-next">
@@ -773,7 +806,14 @@ function DarkCard({ dark }: { dark: OpsDarkCardData }) {
         </span>
       </span>
       <div className="big">{parts.big}</div>
-      <div className="name">{parts.name}</div>
+      <div className={`name ${expanded ? 'open' : ''}`} ref={nameRef}>
+        {parts.name}
+      </div>
+      {overflowing && (
+        <button type="button" className="ops-more" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? t('ops.dark.collapse') : t('ops.dark.expand')}
+        </button>
+      )}
       {parts.foot && <div className="foot">{parts.foot}</div>}
     </section>
   );

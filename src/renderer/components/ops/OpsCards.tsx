@@ -252,6 +252,14 @@ function renderRows(
             <span className="t">
               <strong>{row.title}</strong>
               <small>{reviewSub(row, t, locale)}</small>
+              {/* 观众原话：复盘的证据常常就是这一句。有就显示，没有就不占位 ——
+                  空行会把整列往下推，读起来像漏了东西。 */}
+              {row.commentSample && (
+                <span className="ops-quote">
+                  <span className="ops-quote-label">{t('ops.row.quote')}</span>
+                  <span>「{row.commentSample}」</span>
+                </span>
+              )}
             </span>
             <span className="n">{formatInteger(row.views, locale)}</span>
           </div>
