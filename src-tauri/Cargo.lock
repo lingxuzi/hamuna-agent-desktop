@@ -2599,6 +2599,7 @@ dependencies = [
  "uuid",
  "which 8.0.2",
  "windows-sys 0.59.0",
+ "wry",
  "zip 2.4.2",
 ]
 

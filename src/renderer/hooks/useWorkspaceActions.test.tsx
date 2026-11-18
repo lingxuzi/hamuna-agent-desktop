@@ -172,6 +172,29 @@ describe('useWorkspaceActions.remove', () => {
     });
   });
 
+  it('says so when the saved logins could not be deleted', async () => {
+    // macOS 的浏览器存储被活着的 webview 占着时删不掉。那份登录态还在本机，
+    // 而且在同一路径重建工作区会被继承 —— 混在「N 项未清理」里等于没报告。
+    mocks.deleteWorkspaceCascade.mockImplementation(async () => ({
+      ...emptyReport(),
+      profileDeleted: false,
+      errors: ['failed to delete browser profile store abc: data store is in use'],
+    }));
+
+    const { result } = renderHook(() => useWorkspaceActions());
+
+    await act(async () => {
+      await result.current.remove(PROJECT);
+    });
+
+    expect(mocks.translations).toContainEqual({
+      key: 'toasts.workspaceDeletedLoginKept',
+      params: { name: 'Sino', sessions: 0 },
+    });
+    // 登录态没删掉 = 不算删干净，不能报成功。
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+
   it('tells the user the path is refused instead of asking them to retry', async () => {
     mocks.deleteWorkspaceCascade.mockImplementation(async () => {
       throw new Error('workspace_guarded: /Users/me contains ~/.hamuna');

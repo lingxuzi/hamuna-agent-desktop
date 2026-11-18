@@ -431,20 +431,27 @@ pub async fn cmd_delete_workspace(
     // ── 5. 浏览器 profile（登录态） ────────────────────────────────────────
     // profile 故意放在工作区外面（工作区可能被 git 同步），所以删工作区不会顺
     // 手带走它 —— 必须显式删，否则登录态留在一堆孤儿 cookie 里。
-    match crate::browser_profile::profile_for_workspace(&workspace_path) {
-        Ok(profile) => {
-            let profile_dir = profile.data_directory.clone();
-            match std::fs::remove_dir_all(&profile_dir) {
-                Ok(()) => report.profile_deleted = true,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    report.profile_deleted = true;
-                }
-                Err(e) => report
-                    .errors
-                    .push(format!("failed to delete browser profile: {}", e)),
-            }
-        }
-        Err(e) => report.errors.push(e),
+    //
+    // 删除 = 「关掉占用它的标签页」+「删掉存储本身」。两件事都在 Rust 侧做：
+    // 三个平台的存储形态不一样（macOS 是具名 WKWebsiteDataStore，Windows /
+    // Linux 是独立目录），而且存储还被活着的 webview 占着时 WebKit / WebView2
+    // 都会拒绝删除 —— renderer 那个「关掉这个工作区的标签页」事件是 fire-and-
+    // forget，不等 teardown，靠它把关就会撞上「仍在使用中」。
+    match app_handle.try_state::<Arc<crate::browser::BrowserManager>>() {
+        Some(manager) => match crate::browser::delete_workspace_profile(
+            &app_handle,
+            manager.inner(),
+            &workspace_path,
+        )
+        .await
+        {
+            Ok(()) => report.profile_deleted = true,
+            Err(e) => report.errors.push(e),
+        },
+        None => report.errors.push(
+            "browser manager unavailable: the saved logins of this workspace were not deleted"
+                .to_string(),
+        ),
     }
 
     // ── 6. 搜索索引 ───────────────────────────────────────────────────────

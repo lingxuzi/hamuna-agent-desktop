@@ -143,6 +143,16 @@ export function useWorkspaceActions() {
       // 5) Report honestly: what was left behind is named, not swallowed.
       const leftovers =
         report.skippedSessions.length + report.skippedTasks.length + report.errors.length;
+      if (!report.profileDeleted) {
+        // 登录状态单独说一句：它是「工作区没了、东西还在」里唯一带凭据性质的，
+        // 混进「N 项未清理」等于没报告。而且它在同一路径重建工作区时会被继承
+        // —— 那是上一个工作区的号，不是新的。
+        console.warn('[useWorkspaceActions] workspace logins not deleted:', report.errors);
+        toast.warning(t('toasts.workspaceDeletedLoginKept', {
+          name,
+          sessions: report.deletedSessions.length,
+        }));
+      }
       if (leftovers > 0) {
         console.warn('[useWorkspaceActions] workspace delete left items behind:', report);
         toast.warning(t('toasts.workspaceDeletedPartial', {
@@ -150,7 +160,7 @@ export function useWorkspaceActions() {
           sessions: report.deletedSessions.length,
           leftovers,
         }));
-      } else {
+      } else if (report.profileDeleted) {
         toast.success(t('toasts.workspaceDeleted', {
           name,
           sessions: report.deletedSessions.length,

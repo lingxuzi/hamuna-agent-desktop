@@ -22,6 +22,7 @@
     "unarchiveFailed": "Unarchive failed. Please try again.",
     "workspaceDeleted": "Deleted \"{{name}}\". {{sessions}} conversations cleared; the folder went to the Trash.",
     "workspaceDeletedPartial": "Deleted \"{{name}}\". {{sessions}} conversations cleared; {{leftovers}} items could not be cleaned up (see the log).",
+    "workspaceDeletedLoginKept": "Deleted \"{{name}}\", but its saved logins were not deleted and are still on this machine — a workspace recreated at the same path will inherit them.",
     "workspaceDeleteFailed": "Failed to delete the workspace: {{message}}",
     "workspaceDeleteGuarded": "This path belongs to the App's data directory (or contains it) and cannot be deleted.",
     "openFolderFailed": "Failed to open containing folder.",

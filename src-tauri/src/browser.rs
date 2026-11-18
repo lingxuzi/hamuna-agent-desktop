@@ -309,6 +309,16 @@ pub struct BrowserSession {
     /// the browser to the new id (see `cmd_browser_set_session`), so this field
     /// always holds the id the agent will actually use.
     session_id: Option<String>,
+    /// Hex key of the workspace browser profile this tab lives in, when the
+    /// tab was created with a `workspace`.
+    ///
+    /// The tab itself never needs it — but *deleting a workspace* does: the
+    /// cascade has to shut down the webviews that hold that profile before
+    /// WebKit will release its data store. Without this, the cascade would
+    /// have to guess which of the open tabs belong to the workspace being
+    /// deleted, and `removeDataStoreForIdentifier` would fail with
+    /// `DataStoreInUse` whenever the user still had a browser panel open.
+    profile_key: Option<String>,
     /// Monotonic creation stamp. It doubles as the display order of a
     /// owner's tabs (oldest first) and as the agent-facing tab index.
     created_at: u64,
@@ -407,6 +417,60 @@ impl BrowserManager {
         if let Ok(mut urls) = self.urls.lock() {
             urls.remove(browser_tab_id);
         }
+    }
+
+    /// Take the browser tabs that live in one workspace profile out of the
+    /// registry, returning `(tab id, webview label)` pairs.
+    ///
+    /// Split from the closing itself so the *selection* can be tested without
+    /// an `AppHandle`: "which tabs die with this workspace" is the decision
+    /// that keeps the data store deletable, and it must never reach into
+    /// another workspace's tabs.
+    async fn take_profile_sessions(&self, profile_key: &str) -> Vec<(String, String)> {
+        let mut sessions = self.sessions.lock().await;
+        let ids: Vec<String> = sessions
+            .iter()
+            .filter(|(_, session)| session.profile_key.as_deref() == Some(profile_key))
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| {
+                sessions
+                    .remove(&id)
+                    .map(|session| (id, session.webview_label))
+            })
+            .collect()
+    }
+
+    /// Close every browser tab living in one workspace profile.
+    ///
+    /// Deleting a workspace has to do this **before** deleting the profile: a
+    /// live WKWebView holds its data store, and WebKit refuses to remove a
+    /// store that is still in use (WebView2 / WebKitGTK keep files open the
+    /// same way). The cascade cannot rely on the renderer's "close these tabs"
+    /// event — that is fire-and-forget and a browser panel may be open in a
+    /// tab the user never closed.
+    ///
+    /// Returns how many tabs were closed. The webviews are *asked* to close;
+    /// the caller still has to tolerate a short delay before the store is
+    /// actually released.
+    pub async fn close_browsers_for_profile(&self, app: &AppHandle, profile_key: &str) -> usize {
+        let closed = self.take_profile_sessions(profile_key).await;
+        let count = closed.len();
+        for (id, label) in closed {
+            if let Some(webview) = app.get_webview(&label) {
+                let _ = webview.close();
+            }
+            self.forget_url(&id);
+        }
+        if count > 0 {
+            ulog_info!(
+                "[browser] Closed {} tab(s) holding profile {}",
+                count,
+                profile_key
+            );
+        }
+        count
     }
 
     /// The owner tab id of the browser that serves `session_id`.
@@ -1117,6 +1181,7 @@ pub async fn cmd_browser_create(
                 webview_label: label.clone(),
                 owner_tab_id: tab_id.clone(),
                 session_id,
+                profile_key: profile.as_ref().map(|p| p.key.clone()),
                 created_at: seq,
                 selected: true,
                 // The renderer only creates a tab while the panel is on
@@ -2001,6 +2066,142 @@ pub async fn close_all_browsers(state: &Arc<BrowserManager>, app: &AppHandle) {
     }
 }
 
+/// Delete a workspace's browser profile — i.e. its saved logins.
+///
+/// **Why this cannot be "just remove the directory"**: see `browser_profile.rs`.
+/// On macOS the profile *is* a named `WKWebsiteDataStore`; `data_directory` is
+/// never even created there (the `ensure_data_directory` call is cfg'd out).
+/// Deleting that path removed nothing, reported `NotFound` as success, and left
+/// every cookie in place — so re-creating a workspace at the same path silently
+/// inherited the previous workspace's logins. Windows / Linux do use the
+/// directory, and get the old behaviour.
+///
+/// The caller must not have to know which tabs hold this profile: closing them
+/// is part of deleting it, because both WebKit and WebView2 refuse to release
+/// storage that a live webview is still using.
+pub async fn delete_workspace_profile(
+    app: &AppHandle,
+    state: &Arc<BrowserManager>,
+    workspace: &str,
+) -> Result<(), String> {
+    let profile = browser_profile::profile_for_workspace(workspace)?;
+    state.close_browsers_for_profile(app, &profile.key).await;
+
+    #[cfg(target_os = "macos")]
+    let outcome = delete_macos_profile_store(app, &profile).await;
+    #[cfg(not(target_os = "macos"))]
+    let outcome = match std::fs::remove_dir_all(&profile.data_directory) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!(
+            "failed to delete browser profile {}: {e}",
+            profile.data_directory.display()
+        )),
+    };
+
+    match outcome {
+        Ok(()) => {
+            ulog_info!(
+                "[browser] Deleted profile {} (the saved logins of {})",
+                profile.key,
+                workspace
+            );
+            Ok(())
+        }
+        Err(e) => Err(format!(
+            "failed to delete the saved logins of {workspace} (profile {}): {e}",
+            profile.key
+        )),
+    }
+}
+
+#[cfg(target_os = "macos")]
+async fn delete_macos_profile_store(
+    app: &AppHandle,
+    profile: &browser_profile::WorkspaceProfile,
+) -> Result<(), String> {
+    // Ask first: `removeDataStoreForIdentifier` also errors for an identifier
+    // that was never created, and "there was nothing to delete" is a *success*
+    // for a workspace the user never logged into. Without this probe, deleting
+    // a fresh workspace would be reported as a failure.
+    if !macos_profile_store_exists(app, profile.data_store_identifier).await? {
+        return Ok(());
+    }
+
+    // The webviews were asked to close a moment ago; WKWebView's own release
+    // can still be sitting in an autorelease pool. Retry a few times rather
+    // than surfacing a spurious "could not delete" — but stop and report if it
+    // really is still in use.
+    const ATTEMPTS: u32 = 5;
+    let mut last_error = String::new();
+    for attempt in 0..ATTEMPTS {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        match macos_remove_profile_store(app, profile.data_store_identifier).await {
+            Ok(()) => return Ok(()),
+            Err(e) => last_error = e,
+        }
+    }
+    Err(format!(
+        "failed to delete browser profile store {}: {last_error}",
+        profile.key
+    ))
+}
+
+#[cfg(target_os = "macos")]
+async fn macos_profile_store_exists(app: &AppHandle, identifier: [u8; 16]) -> Result<bool, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Result<Vec<[u8; 16]>, String>>();
+    // Send-once: the callback and the error path both want the sender.
+    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+    let tx_for_cb = tx.clone();
+    app.run_on_main_thread(move || {
+        use wry::WebViewExtDarwin;
+        // `fetch_data_store_identifiers` needs the main thread and a running
+        // event loop — both hold here, we were dispatched onto it.
+        let cb = move |ids: Vec<[u8; 16]>| {
+            if let Some(tx) = tx_for_cb.lock().ok().and_then(|mut guard| guard.take()) {
+                let _ = tx.send(Ok(ids));
+            }
+        };
+        if wry::WebView::fetch_data_store_identifiers(cb).is_err() {
+            if let Some(tx) = tx.lock().ok().and_then(|mut guard| guard.take()) {
+                let _ = tx.send(Err("cannot query WebKit data stores".to_string()));
+            }
+        }
+    })
+    .map_err(|e| format!("cannot query WebKit data stores: {e}"))?;
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(ids)) => Ok(ids.iter().any(|id| *id == identifier)),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err("WebKit data store query timed out".to_string()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+async fn macos_remove_profile_store(app: &AppHandle, identifier: [u8; 16]) -> Result<(), String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
+    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+    let tx_for_cb = tx.clone();
+    app.run_on_main_thread(move || {
+        use wry::WebViewExtDarwin;
+        let cb = move |result: wry::Result<()>| {
+            if let Some(tx) = tx_for_cb.lock().ok().and_then(|mut guard| guard.take()) {
+                let _ = tx.send(result.map_err(|e| e.to_string()));
+            }
+        };
+        wry::WebView::remove_data_store(&identifier, cb);
+    })
+    .map_err(|e| format!("cannot schedule profile deletion: {e}"))?;
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err("profile deletion timed out".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::cookie_domain_matches_host;
@@ -2090,6 +2291,7 @@ mod tests {
             webview_label: format!("browser-{created_at}"),
             owner_tab_id: owner.to_string(),
             session_id: Some(session_id.to_string()),
+            profile_key: None,
             created_at,
             selected,
             panel_visible: true,
@@ -2098,6 +2300,18 @@ mod tests {
             last_width: 100.0,
             last_height: 100.0,
         }
+    }
+
+    /// A session that lives in a workspace browser profile.
+    fn session_in_profile(
+        owner: &str,
+        session_id: &str,
+        created_at: u64,
+        profile_key: &str,
+    ) -> super::BrowserSession {
+        let mut session = test_session(owner, session_id, created_at, true);
+        session.profile_key = Some(profile_key.to_string());
+        session
     }
 
     async fn manager_with(
@@ -2384,6 +2598,68 @@ mod tests {
             blocks.push(body);
         }
         blocks
+    }
+
+    /// Deleting a workspace takes exactly the tabs that hold its profile.
+    ///
+    /// 这是「删掉工作区 = 删掉登录态」在 macOS 上能成立的前提：WKWebsiteDataStore
+    /// 被活着的 webview 占着时 WebKit 拒绝删除它。所以两条边界都得钉住 ——
+    /// 关少了删不掉（登录态留下），关多了把别人工作区的浏览器也关了。
+    #[tokio::test]
+    async fn only_the_tabs_of_the_deleted_profile_are_taken() {
+        let manager = manager_with(vec![
+            session_in_profile("chat-1", "s1", 10, "profile-a"),
+            session_in_profile("chat-1", "s1", 20, "profile-b"),
+            // 没有 profile 的标签（不带工作区创建的浏览器）不该被牵连。
+            test_session("chat-2", "s2", 30, true),
+        ])
+        .await;
+
+        let taken = manager.take_profile_sessions("profile-a").await;
+
+        assert_eq!(
+            taken.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+            vec!["bt-1"],
+            "只有 profile-a 的标签该被取走"
+        );
+        let remaining = manager.sessions.lock().await;
+        assert!(remaining.contains_key("bt-2"), "profile-b 的标签必须留着");
+        assert!(
+            remaining.contains_key("bt-3"),
+            "没有 profile 的标签必须留着"
+        );
+    }
+
+    /// The macOS profile must be removed as a **named data store**, not as a
+    /// directory.
+    ///
+    /// macOS 的 profile 是一个具名的 `WKWebsiteDataStore`；`data_directory` 在
+    /// macOS 上从来不会被创建（`ensure_data_directory` 被 cfg 掉了）。所以旧代码
+    /// 删的那个目录根本不存在 → NotFound → 被当成成功 → cookie 原封不动 → 在
+    /// 同一路径重建工作区就继承了上一个工作区的登录态。
+    ///
+    /// macOS 分支在 Linux CI 上跑不到，所以这里用源码断言把它钉住：少一行，
+    /// 测试就红。
+    #[test]
+    fn the_profile_is_removed_as_a_data_store_on_macos() {
+        let production = include_str!("browser.rs")
+            .split_once("#[cfg(test)]\nmod tests {")
+            .map(|(prod, _)| prod)
+            .expect("test module marker moved; update this split");
+        assert!(
+            production.contains("WebView::remove_data_store"),
+            "macOS 的 profile 是具名 WKWebsiteDataStore，只能用 remove_data_store 删"
+        );
+
+        let cascade = include_str!("workspace_delete.rs");
+        assert!(
+            cascade.contains("delete_workspace_profile"),
+            "级联删除必须走 delete_workspace_profile —— 只有它知道每个平台的存储长什么样"
+        );
+        assert!(
+            !cascade.contains("data_directory"),
+            "级联删除不许自己删 profile 目录：macOS 上那个目录根本不存在，删了等于没删"
+        );
     }
 
     /// Regression guard for the Linux "browser renders in the wrong place"

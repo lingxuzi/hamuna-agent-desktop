@@ -132,6 +132,12 @@ get-selected-text = "0.1"
 macos-accessibility-client = "0.0.1"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3.2", features = ["NSString"] }
+# `WebViewExtDarwin::remove_data_store` — the only way to delete a named
+# `WKWebsiteDataStore`. Tauri doesn't re-export wry on desktop, and hand-rolling
+# the objc2 call would mean re-implementing wry's main-thread + block handling
+# for no gain. Version pinned to the one tauri-runtime-wry already locks
+# (0.55.1), so this adds no new compile unit.
+wry = { version = "0.55", default-features = false }
 objc2-web-kit = { version = "0.3.2", features = ["WKWebView", "block2"] }
 # `macos_traffic_light::apply_inset` — replicates wry/tao internal
 # `inset_traffic_lights` against the post-build NSWindow because Tauri 2.10.x
