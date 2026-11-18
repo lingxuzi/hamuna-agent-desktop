@@ -42,6 +42,8 @@ export interface UseConfigResult {
     removePresetCustomModel: (providerId: string, modelId: string) => Promise<void>;
     // Provider primary model override
     savePrimaryModel: (providerId: string, modelId: string) => Promise<void>;
+    /** 全局默认模型：一次原子写 defaultProviderId + providerPrimaryModels。 */
+    saveDefaultModel: (providerId: string, modelId: string) => Promise<void>;
     // Provider model aliases (SDK sub-agent model mapping)
     saveProviderModelAliases: (providerId: string, aliases: ModelAliases) => Promise<void>;
 

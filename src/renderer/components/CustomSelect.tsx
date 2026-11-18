@@ -30,6 +30,10 @@ interface CustomSelectProps {
     placeholder?: string;
     triggerIcon?: ReactNode;
     className?: string;
+    /** Accessible name for the trigger. Needed when the select has no visible
+     *  `<label>` and sits next to another select — otherwise both are announced
+     *  as "button" with only their current value, indistinguishable. */
+    ariaLabel?: string;
     /**
      * Trigger size — controls the closed-state padding + font size:
      *   'compact' (default when `compact={true}`): 12px / px-2 py-1
@@ -60,6 +64,7 @@ export default function CustomSelect({
     placeholder,
     triggerIcon,
     className,
+    ariaLabel,
     size = 'sm',
     compact,
     disabled = false,
@@ -84,6 +89,7 @@ export default function CustomSelect({
                 ref={triggerRef}
                 type="button"
                 disabled={disabled}
+                aria-label={ariaLabel}
                 onClick={() => setIsOpen(!isOpen)}
                 className={`flex w-full items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] text-left transition-colors hover:border-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-border)] disabled:cursor-not-allowed disabled:opacity-60 ${
                     compact

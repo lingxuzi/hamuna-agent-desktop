@@ -241,8 +241,14 @@
     "enableAndSort": "启用和排序",
     "addProvider": "添加供应商",
     "official": "官方",
-    "defaultModel": "默认模型",
-    "defaultModelHint": "Agent 第一次启动时用它",
+    "defaultModel": {
+      "title": "默认模型",
+      "description": "新 Agent 第一次启动时用的模型。没在 Agent 或工作区里单独指定过模型的，都从这里开始。",
+      "autoProvider": "未设置",
+      "modelPlaceholder": "选择模型",
+      "providerAria": "默认供应商",
+      "modelAria": "默认模型"
+    },
     "openaiProtocol": "OpenAI 协议",
     "noModels": "暂无模型",
     "website": "去官网",

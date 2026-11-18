@@ -214,6 +214,8 @@ export interface ConfigActionsValue {
     removePresetCustomModel: (providerId: string, modelId: string) => Promise<void>;
     // Provider primary model override
     savePrimaryModel: (providerId: string, modelId: string) => Promise<void>;
+    /** 全局默认模型：一次原子写 defaultProviderId + providerPrimaryModels。 */
+    saveDefaultModel: (providerId: string, modelId: string) => Promise<void>;
     // Provider model aliases (SDK sub-agent model mapping)
     saveProviderModelAliases: (providerId: string, aliases: ModelAliases) => Promise<void>;
     // API Keys
@@ -1043,6 +1045,19 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         await rebuildAndPersistAvailableProviders();
     }, []);
 
+    // 全局默认模型 = (defaultProviderId, providerPrimaryModels[providerId]) 二元组。
+    // 一次原子写：分两次调用会给 sidecar/其他 Tab 一个中间态（供应商已换、模型还是
+    // 上家的），也会多跑一次 rebuildAndPersistAvailableProviders。
+    const saveDefaultModel = useCallback(async (providerId: string, modelId: string) => {
+        const newConfig = await atomicModifyConfig(c => ({
+            ...c,
+            defaultProviderId: providerId,
+            providerPrimaryModels: { ...c.providerPrimaryModels, [providerId]: modelId },
+        }));
+        setConfig(newConfig);
+        await rebuildAndPersistAvailableProviders();
+    }, []);
+
     const saveProviderModelAliases = useCallback(async (providerId: string, aliases: ModelAliases) => {
         // Strip empty strings — prevent sending model: "" upstream
         const cleaned: ModelAliases = {};
@@ -1084,7 +1099,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         updateConfig, patchProxySettings, refreshConfig, reload: load, refreshProviderData,
         addProject, updateProject, patchProject, removeProject, touchProject,
         addCustomProvider, updateCustomProvider, deleteCustomProvider, refreshProviders,
-        savePresetCustomModels, removePresetCustomModel, savePrimaryModel, saveProviderModelAliases,
+        savePresetCustomModels, removePresetCustomModel, savePrimaryModel, saveDefaultModel, saveProviderModelAliases,
         saveApiKey, deleteApiKey,
         saveProviderVerifyStatus,
         requestManagedCodexRuntimeUpdate,
@@ -1092,7 +1107,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         updateConfig, patchProxySettings, refreshConfig, load, refreshProviderData,
         addProject, updateProject, patchProject, removeProject, touchProject,
         addCustomProvider, updateCustomProvider, deleteCustomProvider, refreshProviders,
-        savePresetCustomModels, removePresetCustomModel, savePrimaryModel, saveProviderModelAliases,
+        savePresetCustomModels, removePresetCustomModel, savePrimaryModel, saveDefaultModel, saveProviderModelAliases,
         saveApiKey, deleteApiKey,
         saveProviderVerifyStatus,
         requestManagedCodexRuntimeUpdate,

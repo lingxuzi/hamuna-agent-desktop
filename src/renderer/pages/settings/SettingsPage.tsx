@@ -24,7 +24,7 @@ import ProxyScopeDialog from '@/components/ProxyScopeDialog';
 import WorkspaceConfigPanel from '@/components/WorkspaceConfigPanel';
 import ModelManagementPanel from '@/components/ModelManagementPanel';
 import { MiniAppModelSetting } from './components/MiniAppModelSetting';
-import { ProviderDefaultModelSetting } from './components/ProviderDefaultModelSetting';
+import { GlobalDefaultModelSetting } from './components/GlobalDefaultModelSetting';
 import GrokSubscriptionProvider from '@/components/GrokSubscriptionProvider';
 import NxgdSubscriptionProvider from '@/components/NxgdSubscriptionProvider';
 import SubscriptionProviderCardContent from '@/components/SubscriptionProviderCardContent';
@@ -265,6 +265,7 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
   savePresetCustomModels,
   removePresetCustomModel: _removePresetCustomModel,
   savePrimaryModel,
+  saveDefaultModel,
   saveProviderModelAliases,
   refreshConfig,
   managedCodexRuntimeUpdateInFlight,
@@ -4003,6 +4004,16 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
        }}
       />
 
+      {/* 全局默认模型 —— 一个 (供应商, 模型) 二元组。放在供应商列表上方：
+          它决定的是「Agent 从哪家、用哪个模型起步」，读法上高于逐家配置。 */}
+      <GlobalDefaultModelSetting
+       providers={providers}
+       apiKeys={apiKeys}
+       verifyStatus={providerVerifyStatus}
+       config={config}
+       onChange={(providerId, modelId) => { void saveDefaultModel(providerId, modelId); }}
+      />
+
       {/* Provider list */}
       <div className="grid grid-cols-2 gap-4">
        {visibleProviders.map((provider) => (
@@ -4086,11 +4097,6 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
             : renderSubscriptionProviderContent()
           )}
 
-          {/* 默认模型 —— agent 第一次启动时用的就是这个模型。 */}
-          <ProviderDefaultModelSetting
-           provider={provider}
-           onChange={(providerId, modelId) => { void savePrimaryModel(providerId, modelId); }}
-          />
          </div>
        ))}
        {visibleProviders.length === 0 && (

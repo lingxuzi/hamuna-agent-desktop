@@ -241,8 +241,14 @@
     "enableAndSort": "Enable & Sort",
     "addProvider": "Add Provider",
     "official": "Official",
-    "defaultModel": "Default model",
-    "defaultModelHint": "Used when an agent starts for the first time",
+    "defaultModel": {
+      "title": "Default model",
+      "description": "The model a new agent uses the first time it starts. Any agent or workspace that hasn't picked its own model starts here.",
+      "autoProvider": "Not set",
+      "modelPlaceholder": "Choose a model",
+      "providerAria": "Default provider",
+      "modelAria": "Default model"
+    },
     "openaiProtocol": "OpenAI protocol",
     "noModels": "No models",
     "website": "Website",
