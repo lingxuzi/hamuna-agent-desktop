@@ -10,10 +10,9 @@ import OpsPanel from './OpsPanel';
 
 // 运营台「向导模式」的护栏。
 //
-// 最要紧的一条：**向导里的交接不能关面板**。⑤⑥ 的产出是台账里长出来的列表
-// （对标候选 / 选题），面板一关，人就得自己记走到第几步、再从哪儿点回来。
-// 面板的普通交接是关面板的（不关的话用户看不到自己的话发出去没有），所以
-// 向导必须走另一个回调 —— 这条断言钉的就是「向导模式挑的是不关面板的那个」。
+// 最要紧的一条：**向导派工后面板要关**。Agent 的提问卡在对话区，而面板浮在
+// 对话区上面 —— 留着它，人就看不见提问、答不了，而那正是派工之后唯一要做
+// 的事。所以向导的交接走的就是普通交接，没有第二条路径。
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -29,15 +28,53 @@ vi.mock('@/hooks/useWorkspaceFileService', () => ({
 }));
 
 const WORKSPACE = '/ws/sino';
+const NOW = '2026-11-17T08:00:00.000Z';
 
+/**
+ * 一个「已经登录 + 写过方向」的台账。
+ *
+ * 三步走完会自动派工，而派工的前提是有方向 —— 没有方向，向导会退回第 ② 步，
+ * 派工那条路根本走不到。
+ */
 function stateFixture(): OpsState {
-  return { ...emptyOpsState(), accounts: [] };
+  return {
+    ...emptyOpsState(),
+    accounts: [
+      {
+        id: 'acc-xhs',
+        platform: 'xiaohongshu',
+        displayName: '露营装备小王',
+        loginState: 'success',
+        lastCheckedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ],
+    directions: [
+      {
+        id: 'dir-xiaohongshu',
+        platform: 'xiaohongshu',
+        brief: '想让人记住我们是懂露营装备的',
+        positioning: '',
+        audience: '',
+        pillars: [],
+        goal: '',
+        cadence: '',
+        status: 'draft',
+        proposal: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+        finalizedAt: null,
+        lastTouchedBy: null,
+        dispatchedAt: null,
+      },
+    ],
+  };
 }
 
 function renderPanel(props: Partial<React.ComponentProps<typeof OpsPanel>> = {}) {
   const onClose = vi.fn();
   const onSendToAgent = vi.fn();
-  const onSendToAgentKeepOpen = vi.fn();
   const onWizardStep = vi.fn();
   const onWizardDone = vi.fn();
   render(
@@ -46,14 +83,13 @@ function renderPanel(props: Partial<React.ComponentProps<typeof OpsPanel>> = {})
         workspace={WORKSPACE}
         onClose={onClose}
         onSendToAgent={onSendToAgent}
-        onSendToAgentKeepOpen={onSendToAgentKeepOpen}
         onWizardStep={onWizardStep}
         onWizardDone={onWizardDone}
         {...props}
       />
     </ToastProvider>,
   );
-  return { onClose, onSendToAgent, onSendToAgentKeepOpen, onWizardStep, onWizardDone };
+  return { onClose, onSendToAgent, onWizardStep, onWizardDone };
 }
 
 describe('运营台向导模式', () => {
@@ -73,27 +109,27 @@ describe('运营台向导模式', () => {
     expect(document.querySelector('.ops-steps')).toBeNull();
   });
 
-  it('向导模式的顶栏是六步的步骤条', async () => {
+  it('向导模式的顶栏是三步的步骤条', async () => {
     renderPanel({ wizardStep: 'login' });
 
     const steps = document.querySelectorAll('.ops-steps button');
-    expect(steps).toHaveLength(6);
+    expect(steps).toHaveLength(3);
     expect(screen.getByRole('tab', { name: /登录账号/ })).toHaveAttribute(
       'aria-selected',
       'true',
     );
   });
 
-  it('向导里的交接走不关面板的那个回调', async () => {
+  it('向导派工走普通交接 —— 面板先关，Agent 的提问卡才看得见', async () => {
     const user = userEvent.setup();
-    const { onSendToAgent, onSendToAgentKeepOpen } = renderPanel({
-      wizardStep: 'benchmark',
-    });
+    const { onSendToAgent } = renderPanel({ wizardStep: 'material' });
 
-    await user.click(await screen.findByRole('button', { name: '让 Agent 找候选' }));
+    // 走完第 ③ 步 = 自动派工，人不再点一次「开工」。
+    await user.click(await screen.findByRole('button', { name: '完成，交给 Sino' }));
 
-    await waitFor(() => expect(onSendToAgentKeepOpen).toHaveBeenCalled());
-    expect(onSendToAgent).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSendToAgent).toHaveBeenCalled());
+    // 只有一条交接路径：向导不另开一个「不关面板」的分支。
+    expect(String(onSendToAgent.mock.calls[0]?.[0])).toContain('03-USER.md');
   });
 
   it('顶栏的「回到台账」退出向导模式', async () => {

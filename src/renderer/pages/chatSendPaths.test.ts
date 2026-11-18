@@ -79,15 +79,16 @@ describe('Chat 的发送路径', () => {
     expect(tillEnd).not.toMatch(/sendMessage\(/);
   });
 
-  it('向导里的交接不关运营面板 —— 产出就长在面板里', () => {
-    // 向导第 ⑤⑥ 步把活交给 Agent，产出是对标候选 / 选题列表，长在面板里。
-    // 关掉面板，人就得自己记走到第几步、回来从哪儿点。
+  it('向导的交接也走普通交接 —— 面板先关，Agent 的提问卡才看得见', () => {
+    // 三步走完，Agent 的提问卡在对话区，而运营台浮在对话区上面。面板留着，
+    // 人就看不见那张卡 —— 而提问正是派工之后唯一要做的事。
     //
-    // 普通的交接（onSendToAgent）**要**关面板：不然用户看到自己的话被面板
-    // 盖住，不知道发出去没有。两条路径必须分开，不能是同一个函数。
-    const block = source.slice(source.indexOf('const sendToAgentKeepOpsOpen'));
-    const body = block.slice(0, block.indexOf(');'));
-    expect(body).toContain('dispatchSend(');
-    expect(body).not.toContain('setOpsOpen(false)');
+    // 所以向导**没有**第二条交接路径：它用的就是普通交接（先关面板再发）。
+    // 多一条路径就多一处「派出去了但用户不知道」的沉默失败。
+    const opsBlock = source.slice(source.indexOf('onSendToAgent={(text) => {'));
+    const tillEnd = opsBlock.slice(0, opsBlock.indexOf('}}'));
+    expect(tillEnd).toContain('setOpsOpen(false)');
+    // 只有一条交接路径：向导不另开一个「不关面板」的分支。
+    expect(source).not.toContain('onSendToAgentKeepOpen');
   });
 });

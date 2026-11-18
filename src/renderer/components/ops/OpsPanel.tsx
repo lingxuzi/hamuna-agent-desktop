@@ -61,7 +61,6 @@ export default function OpsPanel({
   workspace,
   onClose,
   onSendToAgent,
-  onSendToAgentKeepOpen,
   wizardStep,
   onWizardStep,
   onWizardDone,
@@ -77,11 +76,6 @@ export default function OpsPanel({
    * 那边改一步这里就错一步。
    */
   onSendToAgent: (text: string) => void;
-  /**
-   * 同上，但**不关面板**。向导的 ⑤⑥ 用这个：产出是台账里长出来的列表，
-   * 面板关着人就得自己记走到第几步、再从哪儿点回来。
-   */
-  onSendToAgentKeepOpen?: (text: string) => void;
   /** 向导当前步骤。`undefined` = 不在向导模式。 */
   wizardStep?: OpsWizardStep;
   /** 切换向导步骤。传 `undefined` = 退出向导，回到台账。 */
@@ -431,25 +425,12 @@ export default function OpsPanel({
               step={wizardStep}
               onStep={onWizardStep}
               onLogin={startLogin}
-              // 向导里的交接**不关面板**：⑤⑥ 的产出是台账里长出来的列表，
-              // 面板关着人就得自己记走到第几步。父组件没给「不关面板」的那个
-              // 回调时退回普通交接 —— 宁可关面板，也不能让活发不出去。
-              onSendToAgent={(text) => {
-                if (onSendToAgentKeepOpen) onSendToAgentKeepOpen(text);
-                else onSendToAgent(text);
-              }}
+              // 向导的交接走**同一条**普通交接：面板先关，Agent 的提问卡才看得见。
+              // 面板浮在对话区上方，留着它 = 提问卡被盖住，人答不了 —— 那正是
+              // 派工之后唯一要做的事。
+              onSendToAgent={onSendToAgent}
               onDone={() => onWizardDone?.()}
               onDefer={() => (onWizardDefer ? onWizardDefer() : onWizardDone?.())}
-              onEditBenchmark={(benchmark) =>
-                setForm({ kind: 'benchmark:edit', benchmark })
-              }
-              onDeleteBenchmark={(benchmark) =>
-                setDeleting({
-                  kind: 'benchmark',
-                  id: benchmark.id,
-                  title: benchmark.name.trim() || benchmark.profileUrl,
-                })
-              }
             />
           </div>
         </div>

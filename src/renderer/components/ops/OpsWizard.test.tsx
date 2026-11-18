@@ -1,27 +1,25 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
-import type { OpsState, OpsTopic } from '../../../shared/ops';
+import type { OpsState } from '../../../shared/ops';
 import { emptyOpsState } from '../../../shared/ops';
 import OpsWizard, { type OpsWizardStep } from './OpsWizard';
 
 // 冷启动向导的回归护栏。
 //
-// 三条不变量：
+// 四条不变量：
 //  1. **登录在向导里** —— 人唯一必须亲自做的事不该藏在别处。
 //  2. **只有已登录的平台才有方向** —— 平台都没登录就谈不上「这个号说什么」。
 //  3. **物料落点是 skill 定的那个** —— `ops/inbox/<批次>/` + `brief.md`；
 //     brief.md 是 O_EXCL 写的，撞名会变成 brief_1.md，而入库的 skill 只读
 //     brief.md，所以批次目录必须唯一。
+//  4. **三步走完自动派工** —— 活不许再让人点一次「开工」；没方向就不派，
+//     因为没有方向，Agent 找的对标会跑偏。
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
-  readPreview: vi.fn(),
-  saveFile: vi.fn(),
   copyPaths: vi.fn(),
   importBase64Files: vi.fn(),
   checkPaths: vi.fn(),
@@ -31,8 +29,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }));
 vi.mock('@/hooks/useWorkspaceFileService', () => ({
   useWorkspaceFileService: () => ({
-    readPreview: mocks.readPreview,
-    saveFile: mocks.saveFile,
     copyPaths: mocks.copyPaths,
     importBase64Files: mocks.importBase64Files,
     checkPaths: mocks.checkPaths,
@@ -42,12 +38,6 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mocks.dialogOpen }));
 
 const WORKSPACE = '/ws/sino';
 const NOW = '2026-11-17T08:00:00.000Z';
-
-/** 模板里那份真实的画像文件 —— 向导要解析的正是它。 */
-const PROFILE_TEMPLATE = readFileSync(
-  join(process.cwd(), 'agent-templates/sino/.claude/rules/03-USER.md'),
-  'utf8',
-);
 
 function baseState(): OpsState {
   const base = emptyOpsState();
@@ -95,23 +85,6 @@ function baseState(): OpsState {
   };
 }
 
-function topicFixture(): OpsTopic {
-  return {
-    id: 'topic-1',
-    title: '新手第一次露营，最该先买哪一件装备',
-    note: '装备焦虑最集中的时候',
-    angle: '从「预算 2000 块」切入',
-    platform: 'xiaohongshu',
-    tags: [],
-    status: 'idea',
-    source: 'hotspot',
-    sourceRefs: [],
-    hotness: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-  };
-}
-
 function renderWizard(step: OpsWizardStep, state: OpsState = baseState()) {
   const onSendToAgent = vi.fn();
   const onStep = vi.fn();
@@ -130,8 +103,6 @@ function renderWizard(step: OpsWizardStep, state: OpsState = baseState()) {
       onSendToAgent={onSendToAgent}
       onDone={onDone}
       onDefer={onDefer}
-      onEditBenchmark={vi.fn()}
-      onDeleteBenchmark={vi.fn()}
     />,
   );
   return { ...view, onSendToAgent, onStep, onDone, onDefer };
@@ -145,19 +116,11 @@ function upsertCalls() {
 describe('冷启动向导', () => {
   beforeEach(async () => {
     mocks.invoke.mockReset();
-    mocks.readPreview.mockReset();
-    mocks.saveFile.mockReset();
     mocks.copyPaths.mockReset();
     mocks.importBase64Files.mockReset();
     mocks.checkPaths.mockReset();
     mocks.dialogOpen.mockReset();
     mocks.invoke.mockResolvedValue(baseState());
-    mocks.readPreview.mockResolvedValue({
-      content: PROFILE_TEMPLATE,
-      name: '03-USER.md',
-      size: PROFILE_TEMPLATE.length,
-    });
-    mocks.saveFile.mockResolvedValue(undefined);
     mocks.copyPaths.mockResolvedValue({ copied: [], errors: [] });
     mocks.importBase64Files.mockResolvedValue({ imported: [] });
     mocks.checkPaths.mockResolvedValue({ results: {} });
@@ -258,37 +221,11 @@ describe('冷启动向导', () => {
     expect(mocks.importBase64Files.mock.calls[0]?.[0]?.targetDir).toBe('ops/inbox/batch-1-2');
   });
 
-  it('④ 保存画像把改过的标签写回 03-USER.md，其余行一个不动', async () => {
+  it('③ 走完最后一步就把活交给 Sino —— 不用人再点一次「开工」', async () => {
     const user = userEvent.setup();
-    renderWizard('profile');
+    const { onSendToAgent, onDone } = renderWizard('material');
 
-    // 二十二个字段全渲染出来 —— 少一个就是模板与向导脱节了。
-    await waitFor(() => expect(screen.getAllByRole('textbox')).toHaveLength(22));
-
-    const inputs = screen.getAllByRole('textbox');
-    await user.type(inputs[0] as HTMLElement, '露营装备小王');
-    await user.click(screen.getByRole('button', { name: '保存画像' }));
-
-    await waitFor(() => expect(mocks.saveFile).toHaveBeenCalled());
-    const arg = mocks.saveFile.mock.calls[0]?.[0];
-    expect(arg?.path).toBe('.claude/rules/03-USER.md');
-    // 带乐观锁：别人刚改过就写失败，而不是覆盖掉。
-    expect(arg?.expectedContent).toBe(PROFILE_TEMPLATE);
-    expect(arg?.content).toContain('- **账号名：** 露营装备小王');
-    const before = PROFILE_TEMPLATE.split('\n');
-    const after = (arg?.content as string).split('\n');
-    expect(after).toHaveLength(before.length);
-    expect(after.filter((line, i) => line !== before[i])).toEqual([
-      '- **账号名：** 露营装备小王',
-    ]);
-  });
-
-  it('④ 交给 Agent 开工：先把派工记进台账，再把方向原话交出去', async () => {
-    const user = userEvent.setup();
-    const { onSendToAgent } = renderWizard('profile');
-
-    await waitFor(() => expect(screen.getAllByRole('textbox')).toHaveLength(22));
-    await user.click(screen.getByRole('button', { name: '交给 Agent 开工' }));
+    await user.click(screen.getByRole('button', { name: '完成，交给 Sino' }));
 
     await waitFor(() => expect(onSendToAgent).toHaveBeenCalled());
     // 派工必须先落到台账 —— 反过来就留下一个说不清的状态：Agent 已经在整了，
@@ -305,25 +242,30 @@ describe('冷启动向导', () => {
     expect(upsertCalls()[0]?.[1]?.item).toMatchObject({
       brief: '想让人记住我们是懂露营装备的',
     });
-    expect(String(onSendToAgent.mock.calls[0]?.[0])).toContain('想让人记住我们是懂露营装备的');
+
+    const message = String(onSendToAgent.mock.calls[0]?.[0]);
+    expect(message).toContain('想让人记住我们是懂露营装备的');
+    // 画像那几项只有人知道 —— 消息必须点名那个文件，并让 Agent 逐条来问，
+    // 而不是替人编一张 22 字段的表。
+    expect(message).toContain('03-USER.md');
+    expect(message).toContain('语气');
+    // 派出去就算走完了，不需要人再点一次「开工」。
+    expect(onDone).toHaveBeenCalled();
   });
 
-  it('⑥ 挑一条选题就把它排进计划', async () => {
+  it('没写方向就不派工 —— 没有方向，Agent 找的对标会跑偏', async () => {
     const user = userEvent.setup();
-    const state = { ...baseState(), topics: [topicFixture()] };
-    renderWizard('topic', state);
-
-    await user.click(await screen.findByRole('button', { name: '选它做第一条' }));
-
-    await waitFor(() => {
-      const call = upsertCalls()[0];
-      expect(call).toBeTruthy();
-      expect(call?.[1]?.item).toMatchObject({
-        kind: 'topic',
-        id: 'topic-1',
-        status: 'planned',
-      });
+    const { onSendToAgent, onStep, onDone } = renderWizard('material', {
+      ...baseState(),
+      directions: [],
     });
+
+    await user.click(screen.getByRole('button', { name: '完成，交给 Sino' }));
+
+    await waitFor(() => expect(onStep).toHaveBeenCalledWith('direction'));
+    // 派给 Agent 的是「往哪儿开工」—— 没有方向就派 = 让它空转一圈。
+    expect(onSendToAgent).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
   });
 
   it('「以后再说」是向导的逃生阀：它只交出「以后别弹」，不写任何台账', async () => {

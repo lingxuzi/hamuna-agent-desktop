@@ -1,14 +1,17 @@
-// 账号画像（`.claude/rules/03-USER.md`）的解析与回写。
+// 账号画像（`.claude/rules/03-USER.md`）的解析。
+//
+// **写回去的活交给 Agent**：向导不再替人填这张 22 字段的表 —— Sino 逐条问，
+// 答完自己写进那个文件。前端只留「读」：冷启动判据要知道画像填过没有。
 //
 // **这个文件归用户**：模板 manifest 把它列进 `userOwned`，模板收敛永远不写它
-// （`template_sync.rs` 遇到 userOwned 直接 `continue`）。所以这里只做「按标签行
+// （`template_sync.rs` 遇到 userOwned 直接 `continue`）。谁写都只能「按标签行
 // 替换值」，绝不重写整个文件 —— 用户手改的段落（`## Context`、斜体提示、
 // 任何别的行）必须原样留着。
 //
 // 格式契约（来自 `agent-templates/sino/.claude/rules/03-USER.md`）：
 // 六维 = 六个 `### N. <key> — <标题>` 小节，每节下面是若干 `- **标签：**` 行，
-// 值写在冒号后面（模板里是空的）。向导按这个形状解析；模板改了形状，这里解析
-// 不出那一节 → 界面上是空的，而不是把文件搞坏。
+// 值写在冒号后面（模板里是空的）。这里按这个形状解析；模板改了形状，这里解析
+// 不出那一节 → 判据读到空，而不是把文件搞坏。
 
 /** 账号画像在工作区里的位置。模板 manifest 把它列进 `userOwned`。 */
 export const USER_PROFILE_PATH = '.claude/rules/03-USER.md';
@@ -96,27 +99,4 @@ export function isProfileFilled(content: string): boolean {
   return parseUserProfile(content).some((section) =>
     section.fields.some((field) => field.value.trim().length > 0),
   );
-}
-
-/**
- * 按标签行替换值。
- *
- * **只改 `values` 里有的标签**，其余行原样保留 —— 包括用户手写在同一行后面的
- * 说明（`- **账号名：** 露营小王（主号）` 在这一项被改过时会整段换掉，
- * 所以向导只写用户动过的那几项）。
- *
- * 标签在文件里找不到 → 这一项**跳过**，不追加新行。文件长什么样由模板定，
- * 向导不该往用户的文件里插行。
- */
-export function patchUserProfile(content: string, values: Record<string, string>): string {
-  const { lines, eol } = splitLines(content);
-  const patched = lines.map((line) => {
-    const tag = TAG_LINE.exec(line);
-    if (!tag) return line;
-    const value = values[tag[2]];
-    if (value === undefined) return line;
-    const trimmed = value.trim();
-    return trimmed ? `${tag[1]} ${trimmed}` : tag[1];
-  });
-  return patched.join(eol);
 }

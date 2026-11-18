@@ -1543,26 +1543,22 @@
       "defer": "Not now",
       "back": "Back",
       "next": "Next",
-      "finish": "Done",
+      "finish": "Done — hand it to Sino",
+      "dispatched": "Handed to Sino. Sino will ask you a few questions in the chat, then go looking for benchmark accounts and a first round of topics.",
       "step": {
         "login": "Sign in",
         "direction": "Your direction",
-        "material": "Materials",
-        "profile": "Account profile",
-        "benchmark": "Benchmarks",
-        "topic": "First topics"
+        "material": "Materials"
       },
       "hint": {
         "login": "Only you can sign in. Sign in per platform; the session stays in this workspace.",
         "direction": "One sentence per platform: what you want people to remember this account for.",
-        "material": "Drop in your promo assets: images, video, product notes. They get filed by batch.",
-        "profile": "Six dimensions: voice, audience, lines you must not cross. Changes apply to new sessions.",
-        "benchmark": "Pick a few accounts with a similar direction but a bigger reach. You can delete whatever the Agent finds.",
-        "topic": "What to make first. The Agent proposes, you pick one."
+        "material": "Drop in your promo assets: images, video, product notes. They get filed by batch."
       },
       "direction": {
         "saved": "Direction saved",
         "empty": "Sign in to a platform above first — then there is something to write here.",
+        "missing": "Write one sentence of direction first — otherwise Sino has no idea where to start.",
         "placeholder": "People should remember us as the people who know camping gear, mostly night camping"
       },
       "material": {
@@ -1576,29 +1572,9 @@
         "delivered": "Materials sent to the inbox",
         "copyFailed": "Some files did not make it in: {{reason}}"
       },
-      "profile": {
-        "saved": "Profile saved",
-        "missing": "No profile file found in this workspace",
-        "restart": "Rules load when a session starts — open a new session for the changes to apply.",
-        "save": "Save profile"
-      },
-      "benchmark": {
-        "ask": "Ask the Agent for candidates",
-        "hint": "The Agent reads public pages to find 2–3 accounts with a similar direction but a bigger reach, and writes them into the ledger."
-      },
-      "topic": {
-        "ask": "Ask the Agent for topics",
-        "hint": "The Agent proposes a first round of topics from your direction and profile, each with a reason it is worth doing.",
-        "pick": "Make this the first one",
-        "picked": "Scheduled",
-        "empty": "No topics yet. Ask the Agent for candidates first."
-      },
       "dispatch": {
-        "action": "Hand it to the Agent",
-        "afterProfile": "The account profile is written. Below are the direction notes per platform — break them into the five fields and write them back to the ledger following ops-direction.",
-        "material": "Materials were sent to {{dir}} — file them following ops-intake.",
-        "findBenchmarks": "Following ops-benchmark, find 2–3 benchmark accounts with a similar direction but a bigger reach. Write them into the ledger (source=agent) with why each one is a reference and the evidence.",
-        "findTopics": "Following ops-topic, propose a first round of topics. Write them into the ledger (status=idea), each with a reason it is worth doing."
+        "afterMaterial": "Cold start is done — the rest is yours.\n\nDirection notes:\n{{briefs}}\n{{material}}\nWork through this in order:\n1. Read `.claude/rules/03-USER.md` first. A few entries there are only I can know — tone, words to never use, format requirements, how many posts a week, when to post — so ask me about them one by one. Once I answer, write each answer back on the matching `- **…:**` line and leave everything else alone.\n2. Following ops-direction, split the notes above into its five fields and write them back to the ledger.\n3. Following ops-benchmark, find 2–3 accounts with a similar direction but a bigger reach.\n4. Following ops-topic, propose a first round of topics.\n5. Produce the assets with ops-produce and schedule them with ops-schedule. **Do not publish** — publishing waits for my authorization.",
+        "material": "Materials were sent to {{dir}} — file them following ops-intake."
       }
     }
   }

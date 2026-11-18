@@ -19,6 +19,14 @@
     {
       "path": ".claude/rules/03-USER.md",
       "line": "*首次使用跑 `/BOOTSTRAP`，一起填。*"
+    },
+    {
+      "path": ".claude/rules/03-USER.md",
+      "line": "运营台的冷启动引导里一起填，或直接手改。rules 在 session 启动时注入，手改要重启会话生效。"
+    },
+    {
+      "path": ".claude/rules/03-USER.md",
+      "line": "*首次使用请用户在运营台的「冷启动引导」里一起填。*"
     }
   ]
 }

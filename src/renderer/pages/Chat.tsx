@@ -1000,7 +1000,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   //
   // **判据看实际状态**（登录 / 原话 / 画像三件一件没做），而不只看项目配置里
   // 的 `sinoOnboardedAt`：那个标记只说明「用户点过以后再说」。用户也可能没点过
-  // 向导，却自己在运营台登录了账号 —— 那时候照样弹一次六步向导就是纯粹的骚扰。
+  // 向导，却自己在运营台登录了账号 —— 那时候照样弹一次三步向导就是纯粹的骚扰。
   // 标记本身是 App 级的一次性体验状态（跟 `hiddenAt` / `archivedAt` 同类），
   // 不是工作区内容 —— 工作区里的文件属于用户和 Agent，不该替 App 记 UX 状态。
   useEffect(() => {
@@ -4137,23 +4137,13 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
   }, [currentProject?.id, patchProject]);
 
   /**
-   * 向导模式下的交接：**面板保持打开**。
+   * 切向导步骤。传 `undefined` = 退出向导，回到台账。
    *
-   * 普通的交接要关面板 —— 不关的话用户看到自己的话被面板盖住，不知道发出去
-   * 没有。可向导里交接的产出恰恰是长在面板里的那份列表（⑤ 的对标候选、⑥ 的
-   * 选题），关了面板，人就得自己记走到第几步、回来从哪儿点。
+   * 退出向导 ≠ 引导过了。顶栏的「回到台账」只是把面板换成台账视图，用户
+   * 可能只是先看一眼账。只有明确点了「以后再说」或走完三步才记标记 —— 把
+   * 「关掉面板」也算成「以后再说」，那个按钮就没有意义了。
    */
-  const sendToAgentKeepOpsOpen = useCallback(
-    (text: string) => {
-      void dispatchSend(text, undefined, false);
-    },
-    [dispatchSend],
-  );
-
   const handleWizardStep = useCallback((step: OpsWizardStep | undefined) => {
-    // 退出向导 ≠ 引导过了。顶栏的「回到台账」只是把面板换成台账视图，用户
-    // 可能只是先看一眼账。只有明确点了「以后再说」或走完六步才记标记 —— 把
-    // 「关掉面板」也算成「以后再说」，那个按钮就没有意义了。
     setOpsWizardStep(step);
   }, []);
 
@@ -4166,7 +4156,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
    * 「以后再说」：记下引导标记（下次冷启动不再自动弹），关掉面板。
    *
    * 这是冷启动向导唯一的逃生阀。没有它，一个还没开始经营的工作区会在每次
-   * 进对话时都弹一次六步向导 —— 弹得越勤，越没人愿意点开。
+   * 进对话时都弹一次三步向导 —— 弹得越勤，越没人愿意点开。
    */
   const handleWizardDefer = useCallback(() => {
     setOpsWizardStep(undefined);
@@ -5456,8 +5446,6 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                   setOpsOpen(false);
                   void dispatchSend(text, undefined, false);
                 }}
-                // 向导模式：面板不关，产出就长在面板里。
-                onSendToAgentKeepOpen={sendToAgentKeepOpsOpen}
                 wizardStep={opsWizardStep}
                 onWizardStep={handleWizardStep}
                 onWizardDone={handleWizardDone}

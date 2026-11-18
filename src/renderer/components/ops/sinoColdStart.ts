@@ -18,12 +18,12 @@ export interface SinoColdStartSnapshot {
  * 冷启动 = 三件只有人能做的事，一件都没做。
  *
  * **为什么是「一件都没做」而不是「缺哪件都算」**：缺一件的账号已经在经营了
- * （登录过 / 说过方向 / 填过画像），这时候再弹一个从①开始的六步向导是在
+ * （登录过 / 说过方向 / 填过画像），这时候再弹一个从①开始的三步向导是在
  * 打断人，不是在帮忙。真正需要被拉进向导的，是一次都没开始过的工作区。
  *
  * **为什么看实际状态，而不只看 `sinoOnboardedAt`**：那个标记只说明「用户点过
  * 以后再说」。用户也可能没点过向导，却自己在运营台登录了账号、写了方向 ——
- * 那时候照样弹一次六步向导就是纯粹的骚扰。
+ * 那时候照样弹一次三步向导就是纯粹的骚扰。
  */
 export function isSinoColdStart(snapshot: SinoColdStartSnapshot): boolean {
   const loggedIn = snapshot.accounts.some((account) => account.loginState === 'success');
