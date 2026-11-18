@@ -25,22 +25,24 @@ export function ProviderDefaultModelSetting({ provider, onChange }: ProviderDefa
   if (provider.models.length === 0) return null;
 
   return (
-    <div className="mt-4 flex items-center justify-between gap-4 border-t border-[var(--line)] pt-4">
-      <div className="min-w-0 flex-1 pr-2">
+    <div className="mt-4 border-t border-[var(--line)] pt-4">
+      <div className="flex items-center justify-between gap-4">
         <p className="text-sm font-medium text-[var(--ink)]">
           {t('providers.defaultModel')}
         </p>
-        <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
-          {t('providers.defaultModelHint')}
-        </p>
+        <CustomSelect
+          value={provider.primaryModel}
+          options={provider.models.map(m => ({ value: m.model, label: m.modelName || m.model }))}
+          onChange={(value) => { onChange(provider.id, value); }}
+          className="w-[180px] shrink-0"
+          size="sm"
+        />
       </div>
-      <CustomSelect
-        value={provider.primaryModel}
-        options={provider.models.map(m => ({ value: m.model, label: m.modelName || m.model }))}
-        onChange={(value) => { onChange(provider.id, value); }}
-        className="w-[180px] shrink-0"
-        size="sm"
-      />
+      {/* 说明独占一行：挤在标签旁边会被下拉框压窄到换行，中文断出一个孤字、
+          英文断成三行；放到整卡宽度上，两种语言都只占一行。 */}
+      <p className="mt-1.5 text-xs leading-5 text-[var(--ink-muted)]">
+        {t('providers.defaultModelHint')}
+      </p>
     </div>
   );
 }
