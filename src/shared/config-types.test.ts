@@ -11,6 +11,7 @@ import {
   SUBSCRIPTION_PROVIDER_ID,
   XAI_SUBSCRIPTION_PROVIDER_ID,
   applyManagedCodexProviderReadiness,
+  applyPrimaryModelOverrides,
   applyProviderEnablementAndOrder,
   getEffectiveModelAliases,
   getManagedCodexProviderReadiness,
@@ -109,6 +110,44 @@ describe('Grok subscription preset', () => {
       'grok-4.5',
       'grok-composer-2.5-fast',
     ]);
+  });
+});
+
+describe('applyPrimaryModelOverrides', () => {
+  const providers = [
+    {
+      id: 'deepseek',
+      primaryModel: 'deepseek-v4-pro',
+      models: [
+        { model: 'deepseek-v4-pro', modelName: 'Pro', modelSeries: 'deepseek' },
+        { model: 'deepseek-v4-flash', modelName: 'Flash', modelSeries: 'deepseek' },
+      ],
+    },
+    { id: 'moonshot', primaryModel: 'kimi-k2.6', models: [] },
+  ];
+
+  it('applies the user override as the provider default model', () => {
+    const result = applyPrimaryModelOverrides(providers, { deepseek: 'deepseek-v4-flash' });
+
+    expect(result[0].primaryModel).toBe('deepseek-v4-flash');
+    expect(result[1].primaryModel).toBe('kimi-k2.6');
+  });
+
+  it('ignores an override whose model is no longer in the provider model list', () => {
+    const result = applyPrimaryModelOverrides(providers, { deepseek: 'deleted-model' });
+
+    expect(result[0].primaryModel).toBe('deepseek-v4-pro');
+  });
+
+  it('returns the original list untouched when there is no override', () => {
+    expect(applyPrimaryModelOverrides(providers)).toBe(providers);
+    expect(applyPrimaryModelOverrides(providers, {})).toBe(providers);
+  });
+
+  it('does not mutate the input providers', () => {
+    applyPrimaryModelOverrides(providers, { deepseek: 'deepseek-v4-flash' });
+
+    expect(providers[0].primaryModel).toBe('deepseek-v4-pro');
   });
 });
 

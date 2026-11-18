@@ -241,6 +241,8 @@
     "enableAndSort": "启用和排序",
     "addProvider": "添加供应商",
     "official": "官方",
+    "defaultModel": "默认模型",
+    "defaultModelHint": "Agent 第一次启动时用它",
     "openaiProtocol": "OpenAI 协议",
     "noModels": "暂无模型",
     "website": "去官网",

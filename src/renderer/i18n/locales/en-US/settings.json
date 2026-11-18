@@ -241,6 +241,8 @@
     "enableAndSort": "Enable & Sort",
     "addProvider": "Add Provider",
     "official": "Official",
+    "defaultModel": "Default model",
+    "defaultModelHint": "Used when an agent starts for the first time",
     "openaiProtocol": "OpenAI protocol",
     "noModels": "No models",
     "website": "Website",

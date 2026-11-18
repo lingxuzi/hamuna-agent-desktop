@@ -225,6 +225,52 @@ describe('resolveWorkspaceConfig permissionMode (#295)', () => {
   });
 });
 
+describe('resolveWorkspaceConfig default model from provider settings', () => {
+  it('uses the user-picked default model when the agent has no model of its own', async () => {
+    const workspacePath = join(scratch, 'workspace');
+    writeConfig({
+      defaultPermissionMode: 'auto',
+      providerApiKeys: { deepseek: 'sk-test-deepseek' },
+      // 用户在「模型供应商设置」里把 DeepSeek 的默认模型改成了 flash
+      providerPrimaryModels: { deepseek: 'deepseek-v4-flash' },
+      agents: [{
+        id: 'agent-1',
+        name: 'Fresh Agent',
+        enabled: true,
+        workspacePath,
+        providerId: 'deepseek',
+      }],
+    });
+    writeProjects([]);
+
+    const { resolveWorkspaceConfig } = await import('../utils/admin-config');
+    const resolved = resolveWorkspaceConfig(workspacePath, null, { includeMcp: false });
+
+    expect(resolved.model).toBe('deepseek-v4-flash');
+  });
+
+  it('falls back to the preset default model when no override is set', async () => {
+    const workspacePath = join(scratch, 'workspace');
+    writeConfig({
+      defaultPermissionMode: 'auto',
+      providerApiKeys: { deepseek: 'sk-test-deepseek' },
+      agents: [{
+        id: 'agent-1',
+        name: 'Fresh Agent',
+        enabled: true,
+        workspacePath,
+        providerId: 'deepseek',
+      }],
+    });
+    writeProjects([]);
+
+    const { resolveWorkspaceConfig } = await import('../utils/admin-config');
+    const resolved = resolveWorkspaceConfig(workspacePath, null, { includeMcp: false });
+
+    expect(resolved.model).toBe('deepseek-v4-pro');
+  });
+});
+
 describe('resolveWorkspaceConfig runtime-aware model snapshots', () => {
   it('drops obviously foreign external-runtime session models', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);

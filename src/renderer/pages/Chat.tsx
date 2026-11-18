@@ -138,7 +138,7 @@ import {
   resolveLegacyBuiltinSnapshotProviderId,
   isPinnedProviderUnavailable,
   shouldBlockSendForLabsDisabledExternalRuntime,
-  shouldResetModelOnProviderChange,
+  resolveModelOnProviderChange,
   shouldSkipSnapshotWrite,
 } from '@/utils/optionResolve';
 import { buildProviderSwitchSessionBirth } from '@/utils/providerSwitchSessionBirth';
@@ -2988,13 +2988,20 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     // provider. Resetting unconditionally on every `currentProvider.id` change
     // stomped a still-valid pinned model on the apiKeys-load availability flip
     // (unavailable→available), discarding the user's per-session model choice.
-    if (!shouldResetModelOnProviderChange({
+    //
+    // 还没选过模型 = 这个 agent 的第一次启动：这时没有"用户的选择"要保护，
+    // 直接补上 provider 设置里的「默认模型」（currentProvider.primaryModel 已经
+    // 是用户设过的那一个）。不补的话首个会话只能由 sidecar 自己猜模型，
+    // 用户在设置里挑的默认模型等于白设。
+    const nextModel = resolveModelOnProviderChange({
       providerType: currentProvider?.type,
       providerModels: currentProvider?.models?.map(m => m.model),
       selectedModel,
-    })) return;
-    if (currentProvider?.primaryModel) {
-      setSelectedModel(currentProvider.primaryModel);
+      primaryModel: currentProvider?.primaryModel,
+    });
+    if (nextModel === undefined) return;
+    if (nextModel !== selectedModel) {
+      setSelectedModel(nextModel);
     }
   }, [currentProvider?.id, currentProvider?.primaryModel, currentProvider?.models, currentProvider?.type, selectedModel, pinnedProviderUnavailable, sessionSnapshotOwnsConfig]);
 
@@ -3023,17 +3030,22 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     // doing so reintroduces the cross-runtime leak (e.g. Codex's 'no-restrictions' bleeding into
     // a Gemini session, confirmed in ~/Downloads/hamuna-logs-2026-04-14T17-28-53.txt:174).
     // Sync provider (useState initializer runs when currentProject is still undefined).
-    // Re-arm providerInitRef to suppress the deferred provider-change effect (fires next render)
-    // that would otherwise override the project-stored model with provider's primaryModel.
     const effectiveProvider = currentAgent?.providerId ?? currentProject.providerId;
     if (effectiveProvider) {
       setSelectedProviderId(effectiveProvider);
-      providerInitRef.current = true;
     }
     // Skip model override when joining existing sidecar — adoption effect will set the correct model
     const effectiveModel = currentAgent?.model ?? currentProject.model;
-    if (effectiveModel && configDispositionRef.current === 'push') {
+    const modelApplied = !!effectiveModel && configDispositionRef.current === 'push';
+    if (modelApplied) {
       setSelectedModel(effectiveModel);
+    }
+    // Re-arm providerInitRef to suppress the deferred provider-change effect (fires next render)
+    // that would otherwise override the project-stored model with provider's primaryModel.
+    // 只在真的写入了模型时才压制：没写模型（agent 的第一次启动）时那个 effect 要
+    // 负责把「默认模型」补上，压制了就等于把默认模型又吞回去。
+    if (modelApplied) {
+      providerInitRef.current = true;
     }
     // #324 — same gating as model: builtin effort seeds from the agent default.
     // (External runtime seeding lives in the runtime-transition effect above.)

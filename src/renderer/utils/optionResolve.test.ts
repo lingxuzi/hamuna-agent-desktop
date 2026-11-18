@@ -9,6 +9,7 @@ import {
   resolveCurrentProviderForSession,
   resolveLegacyBuiltinSnapshotProviderId,
   resolveLauncherProvider,
+  resolveModelOnProviderChange,
   shouldBlockSendForLabsDisabledExternalRuntime,
   shouldDegradedLoad,
   shouldResetModelOnProviderChange,
@@ -344,6 +345,71 @@ describe('shouldResetModelOnProviderChange (#300)', () => {
         selectedModel: undefined,
       }),
     ).toBe(false);
+  });
+});
+
+describe('resolveModelOnProviderChange', () => {
+  it('seeds the provider default model when nothing has been picked yet (first agent start)', () => {
+    expect(
+      resolveModelOnProviderChange({
+        providerType: 'api',
+        providerModels: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+        selectedModel: undefined,
+        primaryModel: 'deepseek-v4-flash',
+      }),
+    ).toBe('deepseek-v4-flash');
+  });
+
+  it('keeps a still-valid selected model', () => {
+    expect(
+      resolveModelOnProviderChange({
+        providerType: 'api',
+        providerModels: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+        selectedModel: 'deepseek-v4-pro',
+        primaryModel: 'deepseek-v4-flash',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('falls back to the provider default when the selected model no longer exists', () => {
+    expect(
+      resolveModelOnProviderChange({
+        providerType: 'api',
+        providerModels: ['deepseek-v4-pro'],
+        selectedModel: 'deleted-model',
+        primaryModel: 'deepseek-v4-pro',
+      }),
+    ).toBe('deepseek-v4-pro');
+  });
+
+  it('never touches subscription providers or providers without a known model list', () => {
+    expect(
+      resolveModelOnProviderChange({
+        providerType: 'subscription',
+        providerModels: ['claude-sonnet-5'],
+        selectedModel: undefined,
+        primaryModel: 'claude-sonnet-5',
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveModelOnProviderChange({
+        providerType: 'api',
+        providerModels: [],
+        selectedModel: undefined,
+        primaryModel: 'kimi-for-coding',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('does not seed a default model that is not part of the provider model list', () => {
+    expect(
+      resolveModelOnProviderChange({
+        providerType: 'api',
+        providerModels: ['deepseek-v4-flash'],
+        selectedModel: undefined,
+        primaryModel: 'deepseek-v4-pro',
+      }),
+    ).toBeUndefined();
   });
 });
 

@@ -24,6 +24,7 @@ import ProxyScopeDialog from '@/components/ProxyScopeDialog';
 import WorkspaceConfigPanel from '@/components/WorkspaceConfigPanel';
 import ModelManagementPanel from '@/components/ModelManagementPanel';
 import { MiniAppModelSetting } from './components/MiniAppModelSetting';
+import { ProviderDefaultModelSetting } from './components/ProviderDefaultModelSetting';
 import GrokSubscriptionProvider from '@/components/GrokSubscriptionProvider';
 import NxgdSubscriptionProvider from '@/components/NxgdSubscriptionProvider';
 import SubscriptionProviderCardContent from '@/components/SubscriptionProviderCardContent';
@@ -4084,6 +4085,12 @@ export default function Settings({ initialSection, initialMcpId, initialOfficial
             />
             : renderSubscriptionProviderContent()
           )}
+
+          {/* 默认模型 —— agent 第一次启动时用的就是这个模型。 */}
+          <ProviderDefaultModelSetting
+           provider={provider}
+           onChange={(providerId, modelId) => { void savePrimaryModel(providerId, modelId); }}
+          />
          </div>
        ))}
        {visibleProviders.length === 0 && (

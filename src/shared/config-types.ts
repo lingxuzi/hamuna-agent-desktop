@@ -311,6 +311,31 @@ export function getEffectivePrimaryModel(
 }
 
 /**
+ * Apply the user's per-provider default-model overrides to a provider list.
+ *
+ * One implementation of "这个供应商的默认模型是哪个": the renderer
+ * (ConfigProvider) and the sidecar (getAllEffectiveProviders) both need the
+ * same answer. Without this, `provider.primaryModel` means the preset default
+ * on one side and the model the user picked in Settings on the other — the
+ * sidecar then starts an agent on a model the user never chose.
+ *
+ * An override that is no longer in the provider's model list is ignored: the
+ * model may have been deleted since it was picked.
+ */
+export function applyPrimaryModelOverrides<T extends { id: string; primaryModel?: string; models?: ModelEntity[] }>(
+  providers: T[],
+  providerPrimaryModels?: Record<string, string>,
+): T[] {
+  if (!providerPrimaryModels || Object.keys(providerPrimaryModels).length === 0) return providers;
+  return providers.map(provider => {
+    const override = providerPrimaryModels[provider.id];
+    if (!override || !provider.models?.some(m => m.model === override)) return provider;
+    if (provider.primaryModel === override) return provider;
+    return { ...provider, primaryModel: override };
+  });
+}
+
+/**
  * Get display string for provider models (for compact UI display)
  * @param maxLength Maximum length before truncation (default 35)
  */

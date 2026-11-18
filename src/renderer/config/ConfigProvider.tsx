@@ -19,6 +19,7 @@ import {
     PROXY_DEFAULTS,
     MANAGED_CODEX_REQUIRED_RUNTIME,
     applyManagedCodexProviderReadiness,
+    applyPrimaryModelOverrides,
     applyProviderEnablementAndOrder,
     getManagedCodexProviderReadiness,
     shouldAutoUpdateManagedCodexRuntime,
@@ -264,19 +265,12 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
             disabledProviderIds: config.disabledProviderIds,
         };
         const overrides = config.providerPrimaryModels;
-        if (!overrides || Object.keys(overrides).length === 0) {
-            return applyManagedCodexProviderReadiness(
-                applyProviderEnablementAndOrder(merged, providerOrderSettings),
-                config,
-            );
-        }
         // Apply user's primaryModel override directly on the Provider object
-        // so ALL consumers see the correct value without needing getEffectivePrimaryModel()
-        const withPrimaryOverrides = merged.map(p => {
-            const userPrimary = overrides[p.id];
-            if (!userPrimary || !p.models?.some(m => m.model === userPrimary)) return p;
-            return { ...p, primaryModel: userPrimary };
-        });
+        // so ALL consumers see the correct value without needing getEffectivePrimaryModel().
+        // Same helper the sidecar uses — the two sides must answer "这个供应商
+        // 的默认模型是哪个" identically, or the sidecar starts an agent on a
+        // model the user never picked.
+        const withPrimaryOverrides = applyPrimaryModelOverrides(merged, overrides);
         return applyManagedCodexProviderReadiness(
             applyProviderEnablementAndOrder(withPrimaryOverrides, providerOrderSettings),
             config,

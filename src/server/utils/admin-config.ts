@@ -27,6 +27,7 @@ import { loadExtendedBuiltinMcpServers } from './extended-builtin-mcp';
 import type { AppConfig, ManagedProviderCredential, McpServerDefinition, PermissionMode, Provider, ProviderVerifyStatus, SubscriptionAuthPolicy } from '../../shared/config-types';
 import {
   applyManagedCodexProviderReadiness,
+  applyPrimaryModelOverrides,
   applyProviderEnablementAndOrder,
   CODEX_SUBSCRIPTION_PROVIDER_ID,
   completeModelAliases,
@@ -774,8 +775,16 @@ export function getAllEffectiveProviders(config?: AdminAppConfig): ProviderRecor
     providerConfig.presetCustomModels,
     providerConfig.presetRemovedModels,
   );
+  // The user's per-provider default model wins over the preset default here
+  // too — the sidecar resolves an agent's starting model from this list, and
+  // reading the raw `primaryModel` would start the agent on a model the user
+  // never picked in Settings.
+  const providersWithPrimaryOverrides = applyPrimaryModelOverrides(
+    providersWithUserModels,
+    providerConfig.providerPrimaryModels,
+  );
   return applyManagedCodexProviderReadiness(
-    applyProviderEnablementAndOrder(providersWithUserModels, providerConfig),
+    applyProviderEnablementAndOrder(providersWithPrimaryOverrides, providerConfig),
     providerConfig,
   ) as unknown as ProviderRecord[];
 }

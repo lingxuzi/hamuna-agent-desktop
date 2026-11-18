@@ -343,6 +343,39 @@ export function shouldResetModelOnProviderChange(args: {
 }
 
 /**
+ * Provider 变了以后 `selectedModel` 应该变成什么？返回 undefined = 不动。
+ *
+ * 两种情况，共用同一套"模型是否仍然合法"的判断：
+ *
+ *   1. **还没选过模型**（agent 的第一次启动）→ 用 provider 设置里的「默认模型」。
+ *      这时没有"用户的选择"要保护；而 `selectedModel` 为空意味着首个会话只能
+ *      让 sidecar 自己去猜模型，用户在设置里挑的默认模型等于白设。
+ *      `useState` 初始化器本来就有这条回退（`?? currentProvider?.primaryModel`），
+ *      但它跑在 `useConfig()` 还在加载的时候 —— `currentProvider` 那时是
+ *      undefined，回退链永远走不到模型这一格。
+ *
+ *   2. **选过，但这个模型已经不在新 provider 的模型列表里**（模型被删 /
+ *      换了 provider）→ 同样回退到默认模型。
+ *
+ * 订阅型 provider 与"模型列表未知"的 provider 一律不动：无法校验模型是否合法
+ * 就不能替用户改模型（`shouldResetModelOnProviderChange` 一直守着的边界）。
+ */
+export function resolveModelOnProviderChange(args: {
+  providerType: string | undefined;
+  providerModels: string[] | undefined;
+  selectedModel: string | undefined;
+  primaryModel: string | undefined;
+}): string | undefined {
+  if (args.providerType === 'subscription') return undefined;
+  if (!args.providerModels || args.providerModels.length === 0) return undefined;
+  if (!args.primaryModel || !args.providerModels.includes(args.primaryModel)) return undefined;
+  // 还没选过 → 补上默认模型（provider 设置里的那一个）。
+  if (!args.selectedModel) return args.primaryModel;
+  if (!shouldResetModelOnProviderChange(args)) return undefined;
+  return args.primaryModel;
+}
+
+/**
  * True only for the backend-minted session that belongs to an explicit "new
  * chat" reset/adoption. This remains true even after sendMessage clears
  * `isNewSessionRef` before the backend emits system-init, so the first live

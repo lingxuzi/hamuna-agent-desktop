@@ -60,8 +60,11 @@ export default function AgentCardList({ onSelectAgent }: AgentCardListProps) {
         const proj = projectByAgentId.get(agent.id);
         const displayName = proj?.displayName || proj?.name || agent.name;
         const iconId = proj?.icon || agent.icon || DEFAULT_WORKSPACE_ICON;
-        const providerName = providers.find(p => p.id === (proj?.providerId ?? agent.providerId))?.name;
-        const modelDisplay = proj?.model || agent.model || t('agentSettings.agentList.defaultModel');
+        const provider = providers.find(p => p.id === (proj?.providerId ?? agent.providerId));
+        const providerName = provider?.name;
+        // agent 自己没选过模型 = 显示它在供应商设置里的「默认模型」，
+        // 而不是一句「默认模型」——后者看不出到底会跑哪个模型。
+        const modelDisplay = proj?.model || agent.model || provider?.primaryModel || t('agentSettings.agentList.defaultModel');
 
         return (
           <button
