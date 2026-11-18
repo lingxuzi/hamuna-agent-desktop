@@ -300,7 +300,19 @@ export interface OpsRule {
   confidence: number;
   /** 证据性质。强度之外的另一半：这条结论凭什么这么说。 */
   basis: OpsRuleBasis;
+  /**
+   * 样本量。这条结论基于多少个样本 —— `confidence` 的分母。
+   *
+   * 没有它，`confidence` 是自说自话：谁也不知道这条 0.7 是看了 3 条还是 30 条。
+   */
+  sampledCount?: number;
   evidence: string;
+  /**
+   * 这条结论还缺什么。空 = 什么都不缺。
+   *
+   * 「我没看到什么」原来只在上下文里，下一轮就蒸发了。写进台账，它才是一等公民。
+   */
+  gaps?: string[];
   /**
    * 对照条。**由反思侧算好存下**，前端只渲染——按属性分组跨内容求均值是
    * 一台分析引擎，放在渲染层算等于把业务逻辑塞进组件里。

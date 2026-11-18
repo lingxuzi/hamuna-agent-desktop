@@ -892,6 +892,27 @@ describe('hamuna CLI parseArgs', () => {
       },
     });
   });
+
+  it('collects a rule’s gap list and keeps the sample count as one value', () => {
+    // 规则的两个新字段：缺口是可重复的（一条结论能缺好几样），
+    // 样本量是单值（confidence 的分母）。两个都漏了只能靠 --confidence 自说自话。
+    expect(parseArgs([
+      'ops',
+      'add',
+      'rule',
+      '--sampled-count',
+      '12',
+      '--gap',
+      '评论只读到前 20 条',
+      '--gap',
+      '没有同题材对照组',
+    ])).toMatchObject({
+      flags: {
+        sampledCount: '12',
+        gap: ['评论只读到前 20 条', '没有同题材对照组'],
+      },
+    });
+  });
 });
 
 describe('hamuna CLI cron time handling', () => {

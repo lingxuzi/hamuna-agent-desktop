@@ -934,8 +934,24 @@ function OpsAdviceCard({ view, onActivate }: { view: OpsReviewView; onActivate: 
                   {t(`ops.basis.${rule.basis}`)}
                 </span>
                 <strong>{rule.name}</strong>
+                {/* 样本量：confidence 的分母。光看 0.7 不知道是看了 3 条还是 30 条。 */}
+                {rule.sampledCount !== undefined && (
+                  <span className="ops-sample">{t('ops.rule.sample', { n: rule.sampledCount })}</span>
+                )}
               </div>
               <p>{rule.rule}</p>
+              {/* 还缺什么：结论的欠账。样本量和置信度都在上面，没有这一行，
+                  「我没看到什么」就只剩下一轮上下文里那份会蒸发的记忆。 */}
+              {rule.gaps && rule.gaps.length > 0 && (
+                <div className="ops-gaps">
+                  <span className="ops-gaps-label">{t('ops.rule.gaps')}</span>
+                  <ul>
+                    {rule.gaps.map((gap) => (
+                      <li key={gap}>{gap}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {rule.evidenceBars && rule.evidenceBars.length > 0 && (
                 <ul className="ops-bars mini">
                   {rule.evidenceBars.map((bar) => (

@@ -1376,6 +1376,10 @@
       "inference": "Inferred",
       "unresolved": "Unresolved"
     },
+    "rule": {
+      "sample": "Sample {{n}}",
+      "gaps": "Missing"
+    },
     "dark": {
       "emptyWhen": "—",
       "emptyName": "Nothing to show in this domain yet",

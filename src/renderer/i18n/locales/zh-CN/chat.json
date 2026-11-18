@@ -1376,6 +1376,10 @@
       "inference": "推断",
       "unresolved": "未定"
     },
+    "rule": {
+      "sample": "样本 {{n}}",
+      "gaps": "还缺"
+    },
     "dark": {
       "emptyWhen": "暂无",
       "emptyName": "这一域还没有可看的内容",

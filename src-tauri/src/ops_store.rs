@@ -282,8 +282,19 @@ pub struct OpsRule {
     /// 证据性质。强度之外的另一半：这条结论凭什么这么说。
     #[serde(default)]
     pub basis: OpsRuleBasis,
+    /// 样本量。这条结论基于多少个样本 —— `confidence` 的分母。
+    ///
+    /// 没有它，`confidence` 是自说自话：谁也不知道这条 0.7 是看了 3 条还是 30 条。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampled_count: Option<u64>,
     #[serde(default)]
     pub evidence: String,
+    /// 这条结论还缺什么。
+    ///
+    /// 「我没看到什么」原来只在上下文里，下一轮就蒸发了。写进台账，它才是一等公民：
+    /// 下一轮读规则时，缺的那块是看得见的欠账。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gaps: Vec<String>,
     /// 对照条。由反思侧算好存下，前端只渲染。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_bars: Option<Vec<OpsEvidenceBar>>,
@@ -2930,6 +2941,88 @@ mod tests {
         assert_eq!(state.rules[0].basis, OpsRuleBasis::Unresolved);
         // 旧复盘没有留样，就是没有，不能凭空造一句。
         assert_eq!(state.reviews[0].comment_sample, "");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 规则的样本量与缺口要能整条存下来。
+    ///
+    /// 样本量是 `confidence` 的分母；缺口是下一轮要补的欠账 —— 只留一两条
+    /// 「还缺什么」就变成半句话，欠账还是欠账，只是没人知道欠的是哪一块。
+    #[test]
+    fn rule_sample_count_and_gaps_round_trip() {
+        let ws = make_test_workspace("ops-rule-sample");
+        let (state, id) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Rule,
+                fields: serde_json::json!({
+                    "name": "开头 3 秒给数字",
+                    "rule": "标题 / 前 3 秒抛出具体数字，比抽象描述起量明显",
+                    "confidence": 0.4,
+                    "sampledCount": 3,
+                    "gaps": ["只有 3 条样本，没有跨平台对照", "评论只读到前 20 条"]
+                })
+                .as_object()
+                .cloned()
+                .expect("object"),
+            },
+        )
+        .expect("upsert");
+
+        assert_eq!(state.rules[0].sampled_count, Some(3));
+        assert_eq!(state.rules[0].gaps.len(), 2);
+        assert_eq!(state.rules[0].gaps[0], "只有 3 条样本，没有跨平台对照");
+
+        // 补缺口是**替换**整份列表，不是追加：补丁说的是「我看到的就是全部」。
+        let (state, _) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Rule,
+                fields: serde_json::json!({ "id": id, "gaps": ["只欠同题材对照组"] })
+                    .as_object()
+                    .cloned()
+                    .expect("object"),
+            },
+        )
+        .expect("update");
+
+        assert_eq!(state.rules[0].gaps, vec!["只欠同题材对照组".to_string()]);
+        assert_eq!(
+            state.rules[0].sampled_count,
+            Some(3),
+            "只改缺口不该动样本量"
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 老台账的规则没有样本量与缺口 —— 升级不能让它解析失败，
+    /// 也不能凭空补出「样本量 0」或「什么都不缺」。
+    #[test]
+    fn rules_written_before_the_sample_fields_still_load() {
+        let ws = make_test_workspace("ops-rule-legacy");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        let raw = serde_json::json!({
+            "version": OPS_STATE_VERSION,
+            "rules": [
+                {
+                    "id": "rule-1",
+                    "name": "标题里写清数字",
+                    "rule": "封面写清数字的笔记点击率更高",
+                    "source": "reflection",
+                    "status": "active",
+                    "confidence": 0.6,
+                    "createdAt": "2026-11-12T00:00:00.000Z",
+                },
+            ],
+            "reviews": [],
+        })
+        .to_string();
+        fs::write(ops_dir.join("state.json"), raw).expect("write");
+
+        let state = read_state(&ws).expect("老台账必须读得出来");
+        assert_eq!(state.rules[0].sampled_count, None);
+        assert!(state.rules[0].gaps.is_empty());
         let _ = fs::remove_dir_all(&ws);
     }
 

@@ -102,6 +102,8 @@ function stateWithData(): OpsState {
         status: 'active',
         confidence: 0.8,
         basis: 'verified',
+        sampledCount: 12,
+        gaps: ['评论只读到前 20 条，共 87 条'],
         evidence: '',
         createdAt: '2026-11-12T00:00:00.000Z',
       },
@@ -263,6 +265,20 @@ describe('OpsPanel', () => {
     // 不是一回事，只给强度的话人分不出哪条更该当依据。
     const badge = screen.getByText('已核实');
     expect(badge).toHaveAttribute('data-basis', 'verified');
+  });
+
+  it('shows how many samples a rule rests on and what it is still missing', async () => {
+    mocks.invoke.mockResolvedValue(stateWithData());
+    renderPanel();
+
+    screen.getByRole('tab', { name: '复盘' }).click();
+    await screen.findByText('标题里写清数字');
+
+    // 0.8 本身说不出这条结论看了多少东西 —— 分母得看得见。
+    expect(screen.getByText('样本 12')).toBeInTheDocument();
+    // 缺口是「我没看到什么」的落盘位置：下一轮才知道还欠什么。
+    expect(screen.getByText('还缺')).toBeInTheDocument();
+    expect(screen.getByText('评论只读到前 20 条，共 87 条')).toBeInTheDocument();
   });
 
   it('shows the audience quote that the review rests on', async () => {

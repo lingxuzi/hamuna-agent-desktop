@@ -42,7 +42,7 @@ export function parseArgs(args: string[]): { positional: string[]; flags: Record
   const repeatable = new Set([
     'args', 'env', 'headers', 'models', 'model-names', 'image', 'file', 'attachment',
     // ops ledger: repeatable fields of a topic / asset / rule
-    'tag', 'ref', 'shot', 'evidence-bar',
+    'tag', 'ref', 'shot', 'evidence-bar', 'gap',
   ]);
 
   // PRD 0.2.18 cross-review fix (Codex): added short-flag → long-flag mapping
@@ -2630,7 +2630,11 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     // 证据性质：verified / author_report / inference / unresolved。
     // 与 --confidence 互补——强度说「多可信」，这个说「凭的是什么」。
     { field: 'basis', flag: 'basis', type: 'text' },
+    // 样本量：confidence 的分母。没它，0.7 是自说自话——是看了 3 条还是 30 条？
+    { field: 'sampledCount', flag: 'sampledCount', type: 'number' },
     { field: 'evidence', flag: 'evidence', type: 'text' },
+    // 这条结论还缺什么。重复传多个。
+    { field: 'gaps', flag: 'gap', type: 'list' },
     { field: 'evidenceBars', flag: 'evidenceBar', type: 'jsonList' },
   ],
   account: [

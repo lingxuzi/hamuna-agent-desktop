@@ -1077,6 +1077,42 @@
   background: none;
   box-shadow: inset 0 0 0 1px var(--ink-muted);
 }
+/* 样本量：confidence 的分母。和证据徽标同字号同色，靠位置区分（贴着规则名
+   的右端），不另造一种颜色 —— 徽标是「这是什么」，样本量是「看了多少」。 */
+.ops-sample {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+/* 还缺什么：结论的欠账。虚线竖边 —— .ops-quote 那条实线是「证据在这儿」，
+   这条是「这一块还空着」，两种注解不该长得一样。 */
+.ops-gaps {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding-left: 8px;
+  border-left: 2px dashed var(--line);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+  min-width: 0;
+}
+.ops-gaps-label {
+  flex: none;
+  font-weight: 500;
+  color: var(--ink-secondary);
+}
+.ops-gaps ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.ops-gaps li + li {
+  margin-top: 2px;
+}
 /* 观众原话：复盘时留的评论样本。缩进 + 竖线，读起来是注解不是指标。 */
 .ops-quote {
   display: flex;
