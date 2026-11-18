@@ -12,6 +12,8 @@ import {
   isPlatformPublishHost,
   isSocialPlatformId,
   listSocialPlatformPublishProfiles,
+  loginCookieDomains,
+  loginCookieGroup,
   needsSelectorProbe,
   resolveLoginState,
   withSocialAccount,
@@ -326,5 +328,42 @@ describe('平台 id 校验', () => {
     expect(isSocialPlatformId('douyin')).toBe(true);
     expect(isSocialPlatformId('Douyin')).toBe(false);
     expect(isSocialPlatformId('tiktok')).toBe(false);
+  });
+});
+
+describe('退出登录要清的 cookie 域', () => {
+  it('带一级父域：抖音的 sessionid 挂在 .douyin.com 上', () => {
+    // 只清 creator.douyin.com 会留下那条 sessionid，「重新登录」立刻秒判成功。
+    expect(loginCookieDomains(getSocialPlatform('douyin'))).toEqual([
+      'creator.douyin.com',
+      'douyin.com',
+    ]);
+  });
+
+  it('只上探一级，不当公共后缀的锤子', () => {
+    // 再往上就是 com —— 清抖音顺手把人 QQ 登录也清了。
+    for (const platform of SOCIAL_PLATFORMS) {
+      for (const domain of loginCookieDomains(platform)) {
+        expect(domain.includes('.')).toBe(true);
+      }
+    }
+  });
+
+  it('视频号与公众号共用 weixin.qq.com，互为兄弟', () => {
+    const channels = loginCookieGroup(getSocialPlatform('weixin-channels'));
+    expect(channels.siblings).toEqual(['wechat-mp']);
+    // 合集里两个平台的域都在：公众号的会话 cookie 挂在它自己的 host 上，
+    // 只清那条共享父域不足以让它真的掉线。
+    expect(channels.domains).toEqual(
+      expect.arrayContaining(['channels.weixin.qq.com', 'mp.weixin.qq.com', 'weixin.qq.com']),
+    );
+
+    expect(loginCookieGroup(getSocialPlatform('wechat-mp')).siblings).toEqual(['weixin-channels']);
+  });
+
+  it('没有共用域的平台上没有兄弟，也不多清别的域', () => {
+    const group = loginCookieGroup(getSocialPlatform('douyin'));
+    expect(group.siblings).toEqual([]);
+    expect(group.domains).toEqual(['creator.douyin.com', 'douyin.com']);
   });
 });

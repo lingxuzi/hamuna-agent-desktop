@@ -146,6 +146,22 @@ export function OpsAccounts({ workspace, accounts, onLogin }: OpsAccountsProps) 
 export interface OpsAccountLoginProps {
   workspace: string;
   platform: SocialPlatformDefinition;
+  /**
+   * 重新登录：要清空的 cookie 域。给了 = 这是「重新登录」，接管后先清登录态、
+   * 再重新打开登录页；不给 = 第一次登录，页面原样打开。
+   *
+   * **为什么必须清**：cookie 还在 jar 里时，登录探针一个 tick 内就判成功 ——
+   * 用户点了「重新登录」，面板立刻自己关掉，还把 `loginState: 'success'`
+   * 写回台账。台账从此记录着一场没发生的登录，比什么都不做更坏。
+   */
+  reloginDomains?: string[];
+  /**
+   * cookie 清完了。父组件据此改台账：本人 + 受牵连的兄弟平台都变成「已失效」。
+   *
+   * 返回 Promise 时会被等待 —— 台账必须先落定，探测才能开始，否则「已退出」
+   * 可能盖在「登录成功」上面。
+   */
+  onReloginCleared?: () => void | Promise<void>;
   /** 退出接管：回账号清单。 */
   onClose: () => void;
 }
@@ -163,14 +179,50 @@ export interface OpsAccountLoginProps {
  * 过这里也是登录态）；不带 sessionId 意味着这个浏览器**不归任何聊天会话**，
  * Agent 的 `hamuna browser` 摸不到它 —— 登录页不该被 Agent 拿去打字。
  */
-export function OpsAccountLogin({ workspace, platform, onClose }: OpsAccountLoginProps) {
+export function OpsAccountLogin({
+  workspace,
+  platform,
+  reloginDomains,
+  onReloginCleared,
+  onClose,
+}: OpsAccountLoginProps) {
   const { t } = useTranslation('chat');
   const toast = useToastOptional();
   const [browserAlive, setBrowserAlive] = useState(false);
+  /**
+   * 「可以开始判登录了」没？
+   *
+   * 重新登录时它要等 cookie 清完、登录页重开之后才为真。在那之前到达的
+   * URL / DOM 读数都还带着**旧会话**的痕迹 —— 判出来的「已登录」是上一场
+   * 会话的残留，正是「重新登录点了等于没点」的根因。
+   *
+   * 由 props 派生而不是 effect 里 set：第一次登录（没有 `reloginDomains`）
+   * 从第一帧就该是就绪的，多绕一圈 effect 只会多一帧「未就绪」。
+   */
+  const needsRelogin = Boolean(reloginDomains?.length);
+  const [reloginCleared, setReloginCleared] = useState(false);
+  const ready = !needsRelogin || reloginCleared;
+  const readyRef = useRef(ready);
+  useEffect(() => {
+    readyRef.current = ready;
+  }, [ready]);
+  /** 清 cookie 只做一次：依赖里混着 `t` 之类的会变的值，靠它挡住重复执行。 */
+  const reloginStartedRef = useRef(false);
 
   // 页面当前 URL。只给选择器判定的平台用（免得探针在非 http 页面上报成功），
   // 也不能进 state —— 每次导航都重渲染整个接管视图没必要。
   const currentUrlRef = useRef('');
+
+  // 回调与入参放进 ref：父组件每次渲染都给出新函数，而下面的「清 cookie」
+  // effect 只该跑一次。ref 让 effect 的依赖保持稳定。
+  const reloginDomainsRef = useRef(reloginDomains);
+  const onReloginClearedRef = useRef(onReloginCleared);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    reloginDomainsRef.current = reloginDomains;
+    onReloginClearedRef.current = onReloginCleared;
+    onCloseRef.current = onClose;
+  });
 
   const writeLoginState = useCallback(
     async (loginState: OpsLoginState) => {
@@ -201,12 +253,61 @@ export function OpsAccountLogin({ workspace, platform, onClose }: OpsAccountLogi
   const handleUrlChange = useCallback(
     (url: string) => {
       currentUrlRef.current = url;
+      // 重新登录时，cookie 清完之前到达的 URL 一律不看：那时的页面还带着
+      // 旧会话，判出来的「已登录」不是这一场登录的结果。
+      if (!readyRef.current) return;
       if (needsSelectorProbe(platform)) return;
       if (!resolveLoginState(platform, { url })) return;
       finishLogin();
     },
     [platform, finishLogin],
   );
+
+  /**
+   * 重新登录：先清登录态，再重新打开登录页。
+   *
+   * **顺序不能反**。清 cookie 必须等 webview 建起来（jar 在那儿），探测必须
+   * 等清完 —— 中间这段就是 `ready` 的职责。
+   *
+   * 清完还要**再导航一次登录页**：光清 cookie 不够，当前页面还是上一场会话
+   * 渲染出来的创作者后台，用户看到的是「已经登录的后台」，没有二维码可扫。
+   */
+  useEffect(() => {
+    if (!browserAlive || !needsRelogin || reloginCleared) return;
+    if (reloginStartedRef.current) return;
+    reloginStartedRef.current = true;
+
+    const domains = reloginDomainsRef.current ?? [];
+    const tabId = `ops-login-${platform.id}`;
+    // 清掉之前记下的 URL：那是上一场会话的页面，拿它判登录就是判错。
+    currentUrlRef.current = '';
+    void (async () => {
+      try {
+        await invoke('cmd_browser_clear_login_cookies', { tabId, domains });
+        await invoke('cmd_browser_navigate', { tabId, url: platform.loginUrl });
+        // 台账先落定（「已退出」），探测才开始 —— 反过来的话，「已退出」可能
+        // 盖在「登录成功」上面，台账最后记的是没发生过的那一场。
+        await onReloginClearedRef.current?.();
+        setReloginCleared(true);
+      } catch (err) {
+        // 清不掉就别让人白扫一次码：会话还在，退回账号清单，台账原样不动
+        // （说「已退出」而其实没退出，比不说更糟）。
+        console.error('[ops] 重新登录：清理登录态失败', err);
+        toast?.error(t('ops.account.reloginFailed', { message: opsErrorMessage(err) }));
+        onCloseRef.current();
+      }
+    })();
+  }, [browserAlive, needsRelogin, reloginCleared, platform.id, platform.loginUrl, toast, t]);
+
+  // 补一下 ready 之前被丢掉的那个 URL。清 cookie + 重开登录页 + 写台账这段
+  // 里页面可能已经跳到了工作台，那条 `browser:url-changed` 被上面的门挡掉了；
+  // 不回头看一次，这次登录就会永远等不到下一个事件。
+  useEffect(() => {
+    if (!ready) return;
+    if (needsSelectorProbe(platform)) return;
+    if (!currentUrlRef.current) return;
+    if (resolveLoginState(platform, { url: currentUrlRef.current })) finishLogin();
+  }, [ready, platform, finishLogin]);
 
   // 选择器驱动的平台：抖音扫码前后 URL 一模一样，没有事件可听。问两样东西：
   //
@@ -217,7 +318,9 @@ export function OpsAccountLogin({ workspace, platform, onClose }: OpsAccountLogi
   // 2. **DOM**（兜底）。cookie 还没种下时用登录后元素 + 登录墙消失这对手性
   //    信号（Easel 的 `douyin_publish.py` 判的是同一对）。
   useEffect(() => {
-    if (!browserAlive) return;
+    // `ready` 之前不开探针：重新登录时那会儿 jar 里还留着旧会话，
+    // 探针会立刻读到上一场登录的 cookie。
+    if (!ready) return;
     if (!needsSelectorProbe(platform)) return;
 
     const tabId = `ops-login-${platform.id}`;
@@ -285,7 +388,7 @@ export function OpsAccountLogin({ workspace, platform, onClose }: OpsAccountLogi
       stopped = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [browserAlive, platform, finishLogin]);
+  }, [ready, platform, finishLogin]);
 
   // 超时作废：写「已失效」而不是留着「已登录」。留着的后果是 Agent 拿着一份
   // 过期的确认去发布，发布到一半才发现要重新登录。

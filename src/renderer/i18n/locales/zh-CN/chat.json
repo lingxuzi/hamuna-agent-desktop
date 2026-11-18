@@ -1456,7 +1456,12 @@
       "back": "返回账号",
       "loginSuccess": "{{platform}} 登录成功",
       "loginTimeout": "登录超时（5 分钟），请重试",
-      "saveFailed": "保存账号信息失败：{{message}}"
+      "saveFailed": "保存账号信息失败：{{message}}",
+      "reloginTitle": "退出 {{platform}} 并重新登录",
+      "reloginRisk": "这会清除 {{platform}} 已保存的登录状态，浏览器里的登录会话立即失效，需要重新扫码或输密码。进行中的发布或采集会被打断。",
+      "reloginRiskShared": "这会清除 {{platform}} 已保存的登录状态，浏览器里的登录会话立即失效，需要重新扫码或输密码。进行中的发布或采集会被打断。{{platform}} 与 {{others}} 共用同一组登录凭据，所以 {{others}} 也会一并退出。",
+      "reloginConfirm": "退出并重新登录",
+      "reloginFailed": "清除登录状态失败：{{message}}"
     },
     "clue": {
       "open": "线索",

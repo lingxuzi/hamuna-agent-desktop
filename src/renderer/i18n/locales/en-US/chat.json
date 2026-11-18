@@ -1456,7 +1456,12 @@
       "back": "Back to accounts",
       "loginSuccess": "Signed in to {{platform}}",
       "loginTimeout": "Sign-in timed out after 5 minutes. Try again.",
-      "saveFailed": "Could not save the account: {{message}}"
+      "saveFailed": "Could not save the account: {{message}}",
+      "reloginTitle": "Sign out of {{platform}} and sign in again",
+      "reloginRisk": "This clears the saved sign-in state for {{platform}}. The session in the browser ends immediately and you'll need to scan the code or enter your password again. Any publish or capture in progress will be interrupted.",
+      "reloginRiskShared": "This clears the saved sign-in state for {{platform}}. The session in the browser ends immediately and you'll need to scan the code or enter your password again. Any publish or capture in progress will be interrupted. {{platform}} and {{others}} share the same sign-in credentials, so {{others}} will be signed out too.",
+      "reloginConfirm": "Sign out and sign in again",
+      "reloginFailed": "Could not clear the sign-in state: {{message}}"
     },
     "clue": {
       "open": "Clues",

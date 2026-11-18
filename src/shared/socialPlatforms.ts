@@ -390,6 +390,74 @@ export function listSocialPlatformPublishProfiles(): SocialPlatformPublishProfil
   return SOCIAL_PLATFORMS.map((def) => getSocialPlatformPublishProfile(def.id));
 }
 
+/**
+ * 清登录态时要扫的 cookie 域（含父域），越宽越靠后。
+ *
+ * 「重新登录」不是「再打开一次登录页」：cookie 还在 jar 里，探针一命中就把
+ * 人弹回面板 —— 用户以为自己在重登，实际什么都没发生。真正重登必须先清掉这
+ * 个平台写下的 cookie。
+ *
+ * **为什么要带父域**：抖音的 `sessionid` 挂在 `.douyin.com` 上、登录页在
+ * `creator.douyin.com`；只清精确 host 会留下那条 cookie，「重登」立刻秒判成功。
+ *
+ * 返回的是**域后缀**，调用方按 `cookie.domain` 做后缀匹配（与
+ * `cmd_browser_cookie_names` 同一套 `cookie_domain_matches_host` 口径）。
+ */
+export function loginCookieDomains(platform: SocialPlatformDefinition): string[] {
+  const host = hostOf(platform.loginUrl);
+  if (!host) return [];
+  const parts = host.split('.');
+  // **只上探一级**：creator.douyin.com → douyin.com；channels.weixin.qq.com →
+  // weixin.qq.com。再往上就是公共后缀（com / qq.com），清抖音顺手把人 QQ 登录
+  // 也清了。`ponytail:` 不引公共后缀表 —— 七个平台的登录页都只有一级子域，
+  // 真需要时再换 `tldts`。
+  if (parts.length <= 2) return [host];
+  return [host, parts.slice(1).join('.')];
+}
+
+/**
+ * 清掉 `platform` 的登录态会连带退出的**其它平台**。
+ *
+ * 视频号和微信公众号都用 `weixin.qq.com` 的 cookie 域：清视频号时那条父域
+ * cookie 一删，公众号也掉线。台账必须跟着改 —— 否则界面写着「已登录」，发布
+ * 时却撞登录墙，那种不一致比多登一次号糟得多。
+ *
+ * 判定是**双向包含**：谁的扫域集合与谁相交，谁就受牵连。
+ */
+function platformsSharingLoginCookies(platform: SocialPlatformDefinition): SocialPlatformId[] {
+  const mine = new Set(loginCookieDomains(platform));
+  return SOCIAL_PLATFORMS.filter((other) => {
+    if (other.id === platform.id) return false;
+    return loginCookieDomains(other).some((domain) => mine.has(domain));
+  }).map((other) => other.id);
+}
+
+/**
+ * 「退出并重新登录」要动的那一组。
+ *
+ * `domains` 是要清空的 cookie 域 —— **自平台与受牵连平台域的合集**。合集不是
+ * 多余：公众号的会话 cookie 挂在 host-only 的 `mp.weixin.qq.com` 上，只清
+ * `weixin.qq.com` 那条共享 cookie 并不足以让它真的掉线；台账说它退出了、
+ * 实际上还能用，又是另一种不一致。
+ *
+ * `siblings` 是受牵连的平台 id：它们的登录态一起没了，台账要跟着改。
+ */
+export interface LoginCookieGroup {
+  /** 要清空的 cookie 域（含父域）。 */
+  domains: string[];
+  /** 受牵连的其它平台。 */
+  siblings: SocialPlatformId[];
+}
+
+export function loginCookieGroup(platform: SocialPlatformDefinition): LoginCookieGroup {
+  const siblings = platformsSharingLoginCookies(platform);
+  const domains = new Set(loginCookieDomains(platform));
+  for (const id of siblings) {
+    for (const domain of loginCookieDomains(getSocialPlatform(id))) domains.add(domain);
+  }
+  return { domains: [...domains], siblings };
+}
+
 /** 从 URL 里取 host（小写，去掉协议、用户信息、端口、路径）。 */
 function hostOf(url: string): string {
   const match = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(url.trim());

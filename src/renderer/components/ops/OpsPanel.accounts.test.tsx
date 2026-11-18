@@ -76,11 +76,41 @@ function upsertCall() {
   return mocks.invoke.mock.calls.find((call) => call[0] === 'cmd_ops_upsert');
 }
 
+/** 把某次写台账的调用按平台取出来（重新登录会连写两条）。 */
+function upsertCallsFor(platform: string) {
+  return mocks.invoke.mock.calls
+    .filter((call) => call[0] === 'cmd_ops_upsert')
+    .map((call) => call[1]?.item as Record<string, unknown>)
+    .filter((item) => item?.kind === 'account' && item?.platform === platform);
+}
+
+function invokeCall(command: string) {
+  return mocks.invoke.mock.calls.find((call) => call[0] === command);
+}
+
 async function openAccounts() {
   const user = userEvent.setup();
   renderPanel();
   await user.click(await screen.findByRole('button', { name: '账号' }));
   return user;
+}
+
+/**
+ * 点「重新登录」，走过确认框，等接管视图挂上。
+ *
+ * 重新登录必须确认 —— 那一步会真的把人登出，且视频号 / 公众号共用的
+ * cookie 会让兄弟平台一起掉线。
+ */
+async function relogin(user: ReturnType<typeof userEvent.setup>, index = 0) {
+  await user.click((await screen.findAllByRole('button', { name: '重新登录' }))[index] as HTMLElement);
+  await user.click(await screen.findByRole('button', { name: '退出并重新登录' }));
+  await waitFor(() => expect(mocks.browserProps).toBeTruthy());
+  // 接管视图要等原生 webview 建起来才开始清 cookie —— 真实面板在这一刻回调。
+  // 清完还会重开登录页，那之后探针才允许判登录。
+  await waitFor(() => {
+    act(() => (mocks.browserProps?.onBrowserCreated as () => void)());
+    expect(invokeCall('cmd_browser_navigate')).toBeTruthy();
+  });
 }
 
 describe('OpsPanel 账号视图', () => {
@@ -161,9 +191,7 @@ describe('OpsPanel 账号视图', () => {
 
   it('登录成功把登录态写回这个工作区的台账', async () => {
     const user = await openAccounts();
-
-    await user.click((await screen.findAllByRole('button', { name: '重新登录' }))[0] as HTMLElement);
-    await waitFor(() => expect(mocks.browserProps).toBeTruthy());
+    await relogin(user);
 
     // 登录页导航到工作台 = 登录成功（小红书是 URL 判定的平台）。
     act(() => {
@@ -173,25 +201,112 @@ describe('OpsPanel 账号视图', () => {
     });
 
     await waitFor(() => {
-      const call = upsertCall();
-      expect(call).toBeTruthy();
-      expect(call?.[1]?.workspace).toBe(WORKSPACE);
-      expect(call?.[1]?.item).toMatchObject({
-        kind: 'account',
-        platform: 'xiaohongshu',
-        loginState: 'success',
-      });
+      expect(
+        upsertCallsFor('xiaohongshu').some((item) => item.loginState === 'success'),
+      ).toBe(true);
     });
+    const call = upsertCallsFor('xiaohongshu').find((item) => item.loginState === 'success');
+    // 工作区级：写进的是当前工作区的台账。
+    expect(mocks.invoke.mock.calls.some((c) => c[0] === 'cmd_ops_upsert' && c[1]?.workspace === WORKSPACE)).toBe(true);
+    expect(call).toMatchObject({ kind: 'account', platform: 'xiaohongshu', loginState: 'success' });
   });
 
   it('接管浏览器用的是这个工作区的浏览器 profile，且不挂到聊天会话上', async () => {
     const user = await openAccounts();
-    await user.click((await screen.findAllByRole('button', { name: '重新登录' }))[0] as HTMLElement);
-    await waitFor(() => expect(mocks.browserProps).toBeTruthy());
+    await relogin(user);
 
     expect(mocks.browserProps?.workspace).toBe(WORKSPACE);
     // 不带 sessionId：这个浏览器不归任何聊天会话，Agent 的 hamuna browser
     // 摸不到它 —— 登录页不该被 Agent 拿去打字。
     expect(mocks.browserProps?.sessionId).toBeUndefined();
+  });
+
+  it('重新登录先确认，不点确认就不清 cookie', async () => {
+    const user = await openAccounts();
+
+    await user.click((await screen.findAllByRole('button', { name: '重新登录' }))[0] as HTMLElement);
+    // 风险要说在前头：两个平台共用 cookie 时还要点名受牵连的那个。
+    expect(await screen.findByText(/已保存的登录状态/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '取消' }));
+
+    // 取消 = 什么都没发生：不接管、不清 cookie。
+    expect(mocks.browserProps).toBeNull();
+    expect(invokeCall('cmd_browser_clear_login_cookies')).toBeUndefined();
+  });
+
+  it('确认后清掉该平台的 cookie，再重新打开登录页', async () => {
+    const user = await openAccounts();
+    await relogin(user);
+
+    const clear = invokeCall('cmd_browser_clear_login_cookies');
+    expect(clear).toBeTruthy();
+    expect(clear?.[1]?.tabId).toBe('ops-login-xiaohongshu');
+    // 带父域：小红书的会话 cookie 挂在 `.xiaohongshu.com` 上，只清精确 host
+    // 会留下它，重登立刻秒判成功 = 空操作。
+    expect(clear?.[1]?.domains).toEqual(
+      expect.arrayContaining(['creator.xiaohongshu.com', 'xiaohongshu.com']),
+    );
+
+    // 清完还要重开登录页：光清 cookie 不够，页面还停在上一场会话的后台。
+    const nav = invokeCall('cmd_browser_navigate');
+    expect(nav?.[1]?.url).toBe('https://creator.xiaohongshu.com/login');
+  });
+
+  it('清 cookie 之前到达的 URL 不算登录成功', async () => {
+    const user = await openAccounts();
+    await relogin(user);
+
+    // 页面上还挂着旧会话的后台地址。清 cookie 还没跑完，这条读数不作数。
+    act(() => {
+      (mocks.browserProps?.onUrlChange as (url: string) => void)(
+        'https://creator.xiaohongshu.com/new/home',
+      );
+    });
+
+    expect(
+      upsertCallsFor('xiaohongshu').some((item) => item.loginState === 'success'),
+    ).toBe(false);
+  });
+
+  it('清掉共用 cookie 时，兄弟平台的台账一并标成已失效', async () => {
+    // 视频号与公众号都在 weixin.qq.com 下，清一个另一个必然掉线。
+    mocks.invoke.mockImplementation(async (command: string) => {
+      if (command === 'cmd_ops_upsert') return { state: stateWithAccounts(), id: 'x' };
+      return {
+        ...stateWithAccounts(),
+        accounts: [
+          ...stateWithAccounts().accounts,
+          {
+            id: 'acc-channels',
+            platform: 'weixin-channels',
+            displayName: '',
+            loginState: 'success',
+            lastCheckedAt: null,
+            createdAt: '2026-11-10T08:00:00.000Z',
+            updatedAt: '2026-11-10T08:00:00.000Z',
+          },
+          {
+            id: 'acc-mp',
+            platform: 'wechat-mp',
+            displayName: '',
+            loginState: 'success',
+            lastCheckedAt: null,
+            createdAt: '2026-11-10T08:00:00.000Z',
+            updatedAt: '2026-11-10T08:00:00.000Z',
+          },
+        ],
+      };
+    });
+
+    const user = await openAccounts();
+    // 第 4 张卡是视频号。
+    await relogin(user, 3);
+
+    await waitFor(() => {
+      expect(upsertCallsFor('wechat-mp').some((item) => item.loginState === 'expired')).toBe(true);
+    });
+    expect(upsertCallsFor('weixin-channels').some((item) => item.loginState === 'expired')).toBe(true);
+    // 不相干的平台不该被牵连。
+    expect(upsertCallsFor('xiaohongshu')).toHaveLength(0);
   });
 });

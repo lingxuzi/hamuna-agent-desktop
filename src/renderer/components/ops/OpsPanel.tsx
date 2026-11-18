@@ -2,7 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Trans, useTranslation } from 'react-i18next';
 import { Check, ChevronLeft, Pencil, Plus, X } from 'lucide-react';
 
-import { getSocialPlatform, type SocialPlatformId } from '../../../shared/socialPlatforms';
+import {
+  getSocialPlatform,
+  loginCookieGroup,
+  type SocialPlatformId,
+} from '../../../shared/socialPlatforms';
 import type { OpsAsset, OpsBenchmark, OpsDomainId, OpsReview, OpsTopic } from '../../../shared/ops';
 import { OPS_DOMAIN_IDS } from '../../../shared/ops';
 import {
@@ -91,7 +95,7 @@ export default function OpsPanel({
    */
   onWizardDefer?: () => void;
 }) {
-  const { t } = useTranslation('chat');
+  const { t, i18n } = useTranslation('chat');
   // 展开动效：先挂载再翻 class，否则 transition 不会播（与知识看板同一手法）。
   const [unfolded, setUnfolded] = useState(false);
   useEffect(() => {
@@ -105,6 +109,19 @@ export default function OpsPanel({
   const [pane, setPane] = useState<'domains' | 'accounts' | 'clues'>('domains');
   /** 正在登录的平台。非空 = 面板让给浏览器。 */
   const [loginPlatform, setLoginPlatform] = useState<SocialPlatformId | null>(null);
+  /**
+   * 点了「重新登录」但还没确认的平台。确认框开着 = 面板还留在台账里。
+   */
+  const [reloginTarget, setReloginTarget] = useState<SocialPlatformId | null>(null);
+  /**
+   * 这一次是「重新登录」：接管时要先清掉这些 cookie 域。
+   *
+   * 与 `loginPlatform` 分开存，是因为「登录哪个平台」和「这次要不要先退出」
+   * 是两件事 —— 第一次登录没有可退出的会话，没什么可清的。
+   */
+  const [relogin, setRelogin] = useState<{ platform: SocialPlatformId; domains: string[] } | null>(
+    null,
+  );
   const [form, setForm] = useState<FormRequest | null>(null);
   /** 方向动作一个在飞时冻结全部方向按钮，避免连点写出两个修订。 */
   const [directionBusy, setDirectionBusy] = useState(false);
@@ -145,6 +162,80 @@ export default function OpsPanel({
     },
     [toast, t],
   );
+
+  /**
+   * 点「去登录 / 重新登录」。
+   *
+   * 台账里没有登录记录 = 第一次登录，没有可退出的会话，直接接管。
+   * 有记录 = 有一场会话要退出 → 先把风险说清楚，用户点了才清。
+   */
+  const startLogin = useCallback(
+    (platform: SocialPlatformId) => {
+      const account = state.accounts.find((a) => a.platform === platform);
+      const loginState = account?.loginState ?? 'unknown';
+      if (loginState === 'unknown') {
+        setRelogin(null);
+        setLoginPlatform(platform);
+        return;
+      }
+      setReloginTarget(platform);
+    },
+    [state.accounts],
+  );
+
+  /** 确认「退出并重新登录」：记住要清哪些域，然后进接管。 */
+  const confirmRelogin = useCallback(() => {
+    const target = reloginTarget;
+    setReloginTarget(null);
+    if (!target) return;
+    setRelogin({ platform: target, domains: loginCookieGroup(getSocialPlatform(target)).domains });
+    setLoginPlatform(target);
+  }, [reloginTarget]);
+
+  /**
+   * cookie 清完了：台账改成「已失效」。
+   *
+   * 受牵连的兄弟平台一起改 —— 它们的会话是同一条 cookie，清掉就是真掉线了。
+   * 台账还写着「已登录」而发布时撞登录墙，比多登一次号糟得多。
+   */
+  const onReloginCleared = useCallback(async () => {
+    if (!relogin) return;
+    const platform = getSocialPlatform(relogin.platform);
+    const siblings = loginCookieGroup(platform).siblings;
+    const now = new Date().toISOString();
+    try {
+      for (const id of [platform.id, ...siblings]) {
+        // 兄弟平台里只有「本来记着已登录」的那些要改：没记录过的平台本来
+        // 就是未登录，凭空给它记一条「已失效」是造了个没发生过的状态。
+        const account = state.accounts.find((a) => a.platform === id);
+        if (id !== platform.id && account?.loginState !== 'success') continue;
+        await opsUpsert(workspace, {
+          kind: 'account',
+          platform: id,
+          loginState: 'expired',
+          lastCheckedAt: now,
+        });
+      }
+    } catch (err) {
+      // 台账写失败不牵连已经完成的退出：cookie 真的没了，账本没跟上而已。
+      fail(err);
+    }
+  }, [relogin, state.accounts, workspace, fail]);
+
+  /** 确认框里那段风险说明。 */
+  const reloginMessage = useMemo(() => {
+    if (!reloginTarget) return '';
+    const platform = platformLabel(t, reloginTarget);
+    const siblings = loginCookieGroup(getSocialPlatform(reloginTarget)).siblings;
+    if (siblings.length === 0) {
+      return t('ops.account.reloginRisk', { platform });
+    }
+    const others = new Intl.ListFormat(i18n.language, {
+      style: 'short',
+      type: 'conjunction',
+    }).format(siblings.map((id) => platformLabel(t, id)));
+    return t('ops.account.reloginRiskShared', { platform, others });
+  }, [reloginTarget, t, i18n.language]);
 
   // `now` 只在数据或域变化时重算：每次 render 都 new Date() 会让派生结果不稳，
   // 且 useMemo 依赖里塞 Date 等于每帧失效。
@@ -318,6 +409,8 @@ export default function OpsPanel({
         <OpsAccountLogin
           workspace={workspace}
           platform={getSocialPlatform(loginPlatform)}
+          reloginDomains={relogin?.platform === loginPlatform ? relogin.domains : undefined}
+          onReloginCleared={onReloginCleared}
           onClose={() => setLoginPlatform(null)}
         />
       ) : loading ? (
@@ -337,7 +430,7 @@ export default function OpsPanel({
               state={state}
               step={wizardStep}
               onStep={onWizardStep}
-              onLogin={(platform) => setLoginPlatform(platform)}
+              onLogin={startLogin}
               // 向导里的交接**不关面板**：⑤⑥ 的产出是台账里长出来的列表，
               // 面板关着人就得自己记走到第几步。父组件没给「不关面板」的那个
               // 回调时退回普通交接 —— 宁可关面板，也不能让活发不出去。
@@ -366,7 +459,7 @@ export default function OpsPanel({
             <OpsAccounts
               workspace={workspace}
               accounts={state.accounts}
-              onLogin={(platform) => setLoginPlatform(platform)}
+              onLogin={startLogin}
             />
           </div>
         </div>
@@ -472,6 +565,18 @@ export default function OpsPanel({
             setForm(null);
             notify(message);
           }}
+        />
+      )}
+
+      {reloginTarget && (
+        <ConfirmDialog
+          title={t('ops.account.reloginTitle', { platform: platformLabel(t, reloginTarget) })}
+          message={reloginMessage}
+          confirmText={t('ops.account.reloginConfirm')}
+          cancelText={t('ops.form.cancel')}
+          confirmVariant="danger"
+          onConfirm={confirmRelogin}
+          onCancel={() => setReloginTarget(null)}
         />
       )}
 

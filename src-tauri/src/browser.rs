@@ -1467,6 +1467,105 @@ fn cookie_domain_matches_host(cookie_domain: Option<&str>, host: &str) -> bool {
     host == domain || host.ends_with(&format!(".{domain}"))
 }
 
+/// Delete every cookie whose domain belongs to one of `domains`, returning how
+/// many were removed.
+///
+/// This is the "sign out for real" half of the re-login flow. Merely opening the
+/// login page again does nothing for a platform whose cookie jar still holds a
+/// valid session: the login probe fires on the first tick and the panel closes
+/// as "login succeeded" — the user asked to re-login and got a no-op. Worse, the
+/// panel writes `loginState: 'success'` back to the ledger, so the ledger now
+/// asserts a session nobody re-established.
+///
+/// **Why the caller passes domains, not a platform id**: the Rust side has no
+/// business knowing the platform registry (that lives in `shared/socialPlatforms.ts`
+/// and feeds both renderer and CLI). The renderer expands the platform to its
+/// domain set, and this command just deletes what matches.
+///
+/// **Why suffix match, not equality**: Douyin's `sessionid` lives on
+/// `.douyin.com` while the login page is `creator.douyin.com`; deleting only the
+/// exact host leaves the session cookie behind and the "re-login" is a no-op
+/// again. Parent-domain cookies are the whole point.
+///
+/// **What this deliberately does NOT clear**: localStorage / IndexedDB / service
+/// workers. The cookie IS the login session on all seven platforms
+/// (`socialPlatforms.ts`: "登录态的权威是浏览器 cookie"), and a full
+/// `clear_all_browsing_data` would also wipe the workspace's cached drafts and
+/// reading history — a much bigger hammer than "sign this account out".
+///
+/// Same threading constraint as `cmd_browser_cookie_names`: `cookies()` blocks
+/// until the webview thread answers, which deadlocks WebView2 if it runs on the
+/// UI thread. `async` + `spawn_blocking`.
+#[tauri::command]
+pub async fn cmd_browser_clear_login_cookies(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+    tab_id: String,
+    domains: Vec<String>,
+) -> Result<usize, String> {
+    let (_, session) = state
+        .selected_tab_of_owner(&tab_id)
+        .await
+        .ok_or_else(|| format!("No browser for tab {}", tab_id))?;
+    let label = session.webview_label.clone();
+
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "Webview not found".to_string())?;
+
+    let wanted: Vec<String> = domains
+        .iter()
+        .map(|d| d.trim().trim_start_matches('.').to_ascii_lowercase())
+        .filter(|d| !d.is_empty())
+        .collect();
+    if wanted.is_empty() {
+        return Ok(0);
+    }
+
+    // A cookie matches when its OWN domain (bare, or its parents up to the
+    // listed suffix) equals a wanted domain. `.douyin.com` matches wanted
+    // `douyin.com`; `creator.douyin.com` matches it too.
+    let matches = move |cookie_domain: Option<&str>| -> bool {
+        let domain = cookie_domain
+            .unwrap_or_default()
+            .trim_start_matches('.')
+            .to_ascii_lowercase();
+        !domain.is_empty()
+            && wanted
+                .iter()
+                .any(|w| cookie_domain_matches_host(Some(&domain), w))
+    };
+
+    // Read + delete in ONE blocking task: both calls cross the same thread
+    // boundary, and splitting them would mean shipping the webview handle back
+    // and forth for no gain.
+    let removed = tauri::async_runtime::spawn_blocking(move || {
+        let cookies = webview.cookies().map_err(|e| e.to_string())?;
+        let mut removed = 0usize;
+        for cookie in cookies.into_iter().filter(|c| matches(c.domain())) {
+            let name = cookie.name().to_string();
+            if let Err(error) = webview.delete_cookie(cookie) {
+                // A single cookie refusing to die must not abort the rest — the
+                // user is standing at a dialog they already accepted.
+                ulog_warn!("[browser] clear-login-cookies: failed to delete {name}: {error}");
+                continue;
+            }
+            removed += 1;
+        }
+        Ok::<usize, String>(removed)
+    })
+    .await
+    .map_err(|e| format!("Cookie clear task failed: {e}"))??;
+
+    ulog_info!(
+        "[browser] clear-login-cookies: owner={} domains={:?} removed={}",
+        tab_id,
+        domains,
+        removed
+    );
+    Ok(removed)
+}
+
 /// Report whether a CSS selector currently matches a VISIBLE element.
 ///
 /// Exists for login-completion detection. Some creator consoles (Douyin being
