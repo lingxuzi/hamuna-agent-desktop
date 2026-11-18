@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { OpsAsset, OpsDirection, OpsReview, OpsState, OpsTopic } from './ops';
+import type { OpsAsset, OpsDirection, OpsReview, OpsRule, OpsState, OpsTopic } from './ops';
 import {
   deriveAssetView,
   deriveDirectionView,
@@ -69,6 +69,20 @@ function review(patch: Partial<OpsReview> & Pick<OpsReview, 'id'>): OpsReview {
     },
     note: '',
     createdAt: '2026-11-10T10:00:00',
+    ...patch,
+  };
+}
+
+function rule(patch: Partial<OpsRule> & Pick<OpsRule, 'id'>): OpsRule {
+  return {
+    name: patch.id,
+    rule: '',
+    source: 'reflection',
+    status: 'active',
+    confidence: 0.6,
+    basis: 'verified',
+    evidence: '',
+    createdAt: '2026-11-01T09:00:00',
     ...patch,
   };
 }
@@ -416,6 +430,35 @@ describe('复盘域派生', () => {
   it('给出有数据的日期区间与最近一次复盘距今天数', () => {
     expect(view.range.from).not.toBeNull();
     expect(view.lastReviewDaysAgo).toBe(2);
+  });
+});
+
+describe('规则的新鲜度', () => {
+  it('依据过期的规则不再进建议，但要说清有几条过期了', () => {
+    // 过期不等于「没有」。一条靠三个月前的数据说出来的结论，被当成今天的观察
+    // 去选题，比没有这条结论更糟 —— 所以它要退出建议；同时不能静默消失。
+    const view = deriveReviewView(
+      state({
+        rules: [
+          rule({ id: 'r-fresh', confidence: 0.9, sampledAt: '2026-11-12T09:00:00' }),
+          rule({ id: 'r-stale', confidence: 0.8, sampledAt: '2026-08-01T09:00:00' }),
+        ],
+      }),
+      NOW,
+    );
+    expect(view.advice.map((r) => r.id)).toEqual(['r-fresh']);
+    expect(view.staleRules).toBe(1);
+  });
+
+  it('没记采样时刻的规则照旧进建议', () => {
+    // 老台账的规则没有采样时刻。它们不知道多久了，但也不能因此一刀切空 ——
+    // 那等于升级就把所有人的规则判死刑。要修的是「从下一轮开始记时刻」。
+    const view = deriveReviewView(
+      state({ rules: [rule({ id: 'r-undated', confidence: 0.7 })] }),
+      NOW,
+    );
+    expect(view.advice.map((r) => r.id)).toEqual(['r-undated']);
+    expect(view.staleRules).toBe(0);
   });
 });
 

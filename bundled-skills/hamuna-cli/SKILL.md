@@ -293,7 +293,9 @@ hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \
     --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300 \
     --comment-sample "这个折叠桌多少钱？"
 hamuna ops add rule --name "开头要有数字" --rule "标题前 3 秒给出数字" --confidence 0.7 \
-    --basis inference --evidence-bar '{"name":"有数字","val":"1.8x","pct":100}'
+    --basis inference --sampledCount 3 --sampledAt "2026-11-18T09:30:00+08:00" \
+    --gap "只有 3 条样本，没有跨平台对照" \
+    --evidence-bar '{"name":"有数字","val":"1.8x","pct":100}'
 
 # 运营方向：每个平台一条，按 platform 定位（不用 --id）
 hamuna ops update direction --platform douyin --brief "想让人记住我们懂露营装备"
@@ -357,12 +359,29 @@ platform 派生 id（方向 `dir-<platform>`、账号 `acc-<platform>`），所�
 | `--status`（线索） | `new` / `qualified` / `archived`。**「值得跟进」是人的判断**，不要自己标 `qualified` |
 | `--source`（对标） | `user`（用户给的）/ `agent`（我找的）。**`agent` 的候选要用户点头才写进台账** |
 | `--basis`（规则） | `verified`（核实过）/ `author_report`（人自己说的）/ `inference`（推出来的）/ `unresolved`（还没结论）。**判不出来就写 `unresolved`** |
+| `--sampledCount`（规则） | 这条结论基于**多少个样本**（整数）。`confidence` 的分母——不写就等于没有分母 |
+| `--sampledAt`（规则） | 依据采到的时刻（ISO 8601）。**少了它结论永远不会过期**，见下 |
+| `--gap`（规则） | 这条结论**还缺什么**，一条一句，可重复传。例：`"没有同题材对照组"` |
 | `--comment-sample`（复盘） | 一条观众评论的**原文**。留原话不改写 |
 
 **`--basis` 和 `--confidence` 说的是两件事。** `--confidence` 是强度（这条多可信），
 `--basis` 是种类（它凭的是什么）——一个 0.9 的推断仍然是推断。光给强度，
 面板上分不出「核实过的 0.5」和「推出来的 0.9」哪个更该当依据。把推断标成
 `verified` 比标错更坏：面板上写着「已核实」，人会当既定事实照着做。
+
+**规则会过期。** `--sampledCount` 说「看了多少条」，`--sampledAt` 说「什么时候看的」——
+少了采样时刻，这条结论就永远不会过期，三周前那批数据说的话会被当成今天的观察。
+`hamuna ops list rule --json` 里每条规则因此多带两个字段：
+
+| 字段 | 取值 |
+|---|---|
+| `freshness` | `fresh`（30 天内）/ `stale`（过期）/ `unknown`（没记采样时刻的老规则） |
+| `sampledAgeDays` | 依据是几天前采的；没记时刻时是 `null` |
+
+`stale` 的规则**不当依据**——它说的是那批数据，不是现在这批。下一轮要么用新数据重新验证
+（通过就 `update --sampledAt` 换新时刻，保鲜期重新开始），要么降级（`update --status proposed`）
+并把「这轮没复现」写进 `--gap`。别新开一条规则：台账里会躺着两份说法相反的结论。
+`unknown` 只能参考——不知道多久了，别当铁律。
 
 **别把长文本拼进 shell 引号**：`--content` / `--why` / `--evidence` / `--comment-sample`
 各有对应的 `--content-file` / `--why-file` / `--evidence-file` / `--comment-sample-file`，

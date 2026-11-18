@@ -24,6 +24,7 @@ import type {
   OpsTopicSource,
 } from './ops';
 import { SOCIAL_PLATFORMS, type SocialPlatformId } from './socialPlatforms';
+import { ruleFreshness } from './ops-freshness';
 
 /** 指标单位：`count` 原样，`compact` 大数紧凑排（18.2 万），`percent` 0–1 的比例。 */
 export type OpsMetricUnit = 'count' | 'compact' | 'percent';
@@ -204,6 +205,14 @@ export interface OpsReviewView {
    * 结论。没有规则就是空卡，不编。
    */
   advice: OpsRule[];
+  /**
+   * 依据已过期的规则数。
+   *
+   * 过期的规则**不再进建议** —— 一条靠三周前的数据说出来的结论，被当成今天的
+   * 观察去选题，比没有这条结论更糟。但也不能静默消失：界面得说出「有 N 条过期
+   * 了，去复盘重新验证」，否则人以为规则都用上了。
+   */
+  staleRules: number;
   /** 有数据的日期区间，给列表副标题用。 */
   range: { from: string | null; to: string | null };
   /** 距最近一次复盘的天数；null = 一条复盘都没有。 */
@@ -876,13 +885,16 @@ export function deriveReviewView(state: OpsState, now: Date): OpsReviewView {
     ),
     series,
     // 生效的规则优先：`proposed` 还没被用户点头，压在后面。
+    // 依据过期的规则先出局：它说的是那批数据，不是现在这批。
     advice: [...state.rules]
+      .filter((r) => ruleFreshness(r, now).freshness !== 'stale')
       .sort((a, b) => {
         const rank = (r: OpsRule) => (r.status === 'active' ? 0 : 1);
         if (rank(a) !== rank(b)) return rank(a) - rank(b);
         return b.confidence - a.confidence;
       })
       .slice(0, 3),
+    staleRules: state.rules.filter((r) => ruleFreshness(r, now).freshness === 'stale').length,
     range: {
       from: publishedDates[0] ? publishedDates[0].toISOString() : null,
       to: latest ? latest.toISOString() : null,

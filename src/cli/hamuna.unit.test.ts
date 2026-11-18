@@ -913,6 +913,27 @@ describe('hamuna CLI parseArgs', () => {
       },
     });
   });
+
+  it('carries the sampling moment of a rule so its conclusion can expire', () => {
+    // 样本量说「看了多少」，采样时刻说「什么时候看的」。少了时刻，结论
+    // 永远不会过期 —— 三周前那批数据说的话会被当成今天的观察。
+    expect(parseArgs([
+      'ops',
+      'add',
+      'rule',
+      '--sampled-at',
+      '2026-11-12T09:30:00Z',
+    ])).toMatchObject({
+      flags: { sampledAt: '2026-11-12T09:30:00Z' },
+    });
+
+    const body = buildRequestBody('ops', 'add', ['rule'], {
+      name: '开头 3 秒给数字',
+      rule: '前 3 秒抛出具体数字比抽象描述起量明显',
+      sampledAt: '2026-11-12T09:30:00Z',
+    }) as { item: Record<string, unknown> };
+    expect(body.item.sampledAt).toBe('2026-11-12T09:30:00Z');
+  });
 });
 
 describe('hamuna CLI cron time handling', () => {
@@ -1544,6 +1565,37 @@ describe('hamuna CLI operations ledger', () => {
       expect(printed.data.state.topics).toEqual([]);
       expect(printed.data.state.assets).toEqual([]);
       expect(printed.data.state.reviews).toEqual([]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('marks rule freshness in the JSON a skill reads to inherit conclusions', () => {
+    // 继承式回流的热路径：Agent 靠 `hamuna ops list rule --json` 拿上一轮的
+    // 结论去选题。过期信号只出现在人读的界面里 = 等于没有 —— Agent 读到的是
+    // 一条没写采样时刻的旧结论，它以为那就是现在的观察。
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const staleAt = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+      printResult('ops', 'list', {
+        success: true,
+        data: {
+          state: {
+            rules: [
+              { id: 'rule-old', name: '旧结论', sampledAt: staleAt },
+              { id: 'rule-new', name: '新结论', sampledAt: new Date().toISOString() },
+              { id: 'rule-undated', name: '没记时刻' },
+            ],
+          },
+        },
+      }, true, {}, ['rule']);
+      const printed = JSON.parse(log.mock.calls.flat().join('\n')) as {
+        data: { state: { rules: Array<Record<string, unknown>> } };
+      };
+      const rules = printed.data.state.rules;
+      expect(rules.map((r) => r.freshness)).toEqual(['stale', 'fresh', 'unknown']);
+      expect(rules[0].sampledAgeDays).toBe(60);
+      expect(rules[2].sampledAgeDays).toBeNull();
     } finally {
       log.mockRestore();
     }

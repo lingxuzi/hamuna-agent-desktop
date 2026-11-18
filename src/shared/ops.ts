@@ -306,6 +306,13 @@ export interface OpsRule {
    * 没有它，`confidence` 是自说自话：谁也不知道这条 0.7 是看了 3 条还是 30 条。
    */
   sampledCount?: number;
+  /**
+   * 这条结论的依据是在什么时刻采到的（ISO）。
+   *
+   * 样本量说「看了多少」，这个说「什么时候看的」。少了它，结论会一直是结论
+   * —— 半个月前那批数据说的话，被当成今天的观察继续继承下去。
+   */
+  sampledAt?: string;
   evidence: string;
   /**
    * 这条结论还缺什么。空 = 什么都不缺。

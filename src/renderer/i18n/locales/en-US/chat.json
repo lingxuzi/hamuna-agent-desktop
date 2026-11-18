@@ -1368,6 +1368,8 @@
       "title": "Suggestions",
       "meta": "Rules from the last review",
       "empty": "No rules distilled yet. Run a review and they will appear.",
+      "emptyStale": "No conclusion holds up anymore — run a review to re-verify them.",
+      "staleNote": "{{n}} conclusions rest on expired evidence and no longer count.",
       "activate": "Write into rules"
     },
     "basis": {

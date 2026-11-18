@@ -20,6 +20,17 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 读 `.claude/rules/05-OPS.md` 里的数字口径，尤其 `hotness`。
 
+**规律会过期。** `ops list rule --json` 里每条规则带 `freshness`：
+
+| `freshness` | 能不能当筛选条件 |
+|---|---|
+| `fresh` | 能 —— 但它是**上一轮**的结论，这轮的数据还没对过 |
+| `stale` | **不能**。依据过期了，面板也不会再推荐它 |
+| `unknown` | 只能参考。没记采样时刻的老规则，不知道多久了 |
+
+过期的规则能给你「当时好像是这样」的线索，不能当铁律。按一条过期规则做的选题，
+不是「按规律做的」，是「赌那条规律还成立」—— 真要赌，就在 `--note` 里写清赌的是什么。
+
 ## 输入源
 
 按可信度排：
@@ -30,7 +41,7 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 | **台账里的对标账号** | `hamuna ops list benchmark --json` 拿到主页链接 → `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进别人后台** | `benchmark` |
 | **台账里的评论线索** | `hamuna ops list clue --json` —— 观众在我们自己作品下面问过的东西（「这个多少钱」「哪里买」「怎么用」） | `benchmark` |
 | 用户直接给的线索 | 用户粘贴的链接、截图描述、一句话 | `manual` / `benchmark` |
-| 上一轮复盘的结论 | `ops list rule` 里的 `active` 规则 | `reflection` |
+| 上一轮复盘的结论 | `ops list rule` 里的 `active` 规则（`freshness` 不是 `stale` 的） | `reflection` |
 
 **采集边界**：公开热榜、公开主页、用户粘贴的内容可以读。他人账号后台、私域数据、需要登录才能看到的东西不碰。
 

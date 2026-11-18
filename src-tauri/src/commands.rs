@@ -2389,7 +2389,13 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // ledger, sees no clue and no benchmark, and concludes there is no signal and
 // no reference account. A filter that hides data reads exactly like data that
 // does not exist.
-const CLI_VERSION: &str = "55";
+// 56: adds `--sampled-count` / `--sampled-at` / `--gap` on rules, and stamps
+// every rule read with `freshness` + `sampledAgeDays`. The age of a rule's
+// evidence decides whether it may still drive the next round; an install that
+// keeps the old CLI reads rules with no age at all and treats a three-week-old
+// observation as today's — the same "silent gap reads like no gap" failure as
+// 53, one level down.
+const CLI_VERSION: &str = "56";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2646,7 +2652,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // sit in the ledger unread — the same way a missing section reads as "there
 // is no data" rather than "you are not looking".
 
-const SYSTEM_SKILLS_VERSION: &str = "81";
+// 82: hamuna-cli — document the rule's freshness (`freshness` /
+// `sampledAgeDays` on every rule read) and the three flags that feed it
+// (`--sampled-count` / `--sampled-at` / `--gap`). The skill is the CLI
+// reference the bundled MA helper reads before it touches the ledger; a flag
+// it does not know about is a flag it never passes, so the evidence age
+// stays unrecorded and the rule can never expire.
+const SYSTEM_SKILLS_VERSION: &str = "82";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

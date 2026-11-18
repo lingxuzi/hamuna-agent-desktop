@@ -1113,6 +1113,17 @@
 .ops-gaps li + li {
   margin-top: 2px;
 }
+/* 过期提示：依据过期的规则已经退出建议。这条注解必须显眼 —— 静默消失更糟，
+   人会以为规则都用上了。 */
+.ops-stale-note {
+  margin: 0 0 12px;
+  padding-left: 8px;
+  border-left: 2px solid var(--warning);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warning);
+}
+
 /* 观众原话：复盘时留的评论样本。缩进 + 竖线，读起来是注解不是指标。 */
 .ops-quote {
   display: flex;

@@ -48,7 +48,7 @@ hamuna ops update topic --id topic-1a2b3c4d --status produced
 hamuna ops add asset --title "…" --platform douyin --topic-id topic-1a2b3c4d --body-file script.md
 hamuna ops update asset --id asset-1a2b3c4d --progress 80 --scheduled-at 2026-11-16T12:00:00+08:00
 hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin --published-at … --views 12000
-hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --sampledCount 12 --evidence "…"
+hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --sampledCount 12 --sampledAt "…" --evidence "…"
 hamuna ops add benchmark --platform xiaohongshu --name "…" --profile-url "…" --why "…" --source agent
 hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" --intent price
 ```
@@ -100,6 +100,8 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 
 **闭环**：复盘的结论回流成 `rules`，下轮选题时先读 `rules` 再定角度。这是四段之所以是一段循环、而不是四个抽屉的原因。
 
+但闭环不是继承：**规则会过期。** 依据超过 30 天就是过期的（`hamuna ops list rule --json` 里看 `freshness`）。过期的规则说的那是那批数据，不是现在这批——下一轮要么用新数据重新验证（验证通过就更新 `--sampledAt`），要么就别拿它当筛选条件。
+
 ## 每个会话开始
 
 1. `hamuna ops list` —— 现在手上有什么，别凭记忆答
@@ -113,3 +115,4 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 - 登录态只用来**读**：自己这个账号的后台（作品列表 / 数据 / 评论）、平台公开的达人榜。别人的账号后台 / 私域数据不碰；公开热榜 / 公开主页 / 用户贴的链接可以读。
 - 不碰账号设置、不改密码、不加好友、不在评论区或私信里对话 —— **只读，不互动**。
 - 拿数据说话。没数据的结论就标成"假设"，别写成规则。
+- **过期结论不当依据。** 规则的依据超过 30 天就过期了，它说的是那批数据，不是现在这批。要用就用这轮的数据重新验证，验证通过再更新采样时刻——别让三周前的观察继续指导今天的制作。

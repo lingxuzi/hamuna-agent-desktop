@@ -16,6 +16,8 @@
  * is then read as JS and rejected as a syntax error. Same outcome under node.
  */
 
+import { ruleFreshness } from '../shared/ops-freshness';
+
 // ---------------------------------------------------------------------------
 // Port discovery
 // ---------------------------------------------------------------------------
@@ -525,10 +527,11 @@ export function printResult(
       // read side. Without it, a skill that asks for "the rules" gets every
       // record and has to filter the JSON itself.
       const cmd = parseOpsCommand(action, rest);
-      if (cmd.kind) {
-        console.log(JSON.stringify(filterOpsStateByKind(result, cmd.kind), null, 2));
-        return;
-      }
+      const scoped = cmd.kind ? filterOpsStateByKind(result, cmd.kind) : result;
+      // 规则的新鲜度一起带上：Agent 靠这份 JSON 继承上一轮的结论，
+      // 过期信号只出现在人读的界面里 = 等于没有。
+      console.log(JSON.stringify(markOpsRuleFreshness(scoped, new Date()), null, 2));
+      return;
     }
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -2632,6 +2635,8 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'basis', flag: 'basis', type: 'text' },
     // 样本量：confidence 的分母。没它，0.7 是自说自话——是看了 3 条还是 30 条？
     { field: 'sampledCount', flag: 'sampledCount', type: 'number' },
+    // 依据的采样时刻。结论会过期：采样时刻是「保鲜期起点」。
+    { field: 'sampledAt', flag: 'sampledAt', type: 'text' },
     { field: 'evidence', flag: 'evidence', type: 'text' },
     // 这条结论还缺什么。重复传多个。
     { field: 'gaps', flag: 'gap', type: 'list' },
@@ -2974,8 +2979,49 @@ function filterOpsStateByKind(result: Record<string, unknown>, kind: string): Re
   return { ...result, data: { ...data, state: narrowed } };
 }
 
+/**
+ * 给规则记录挂上新鲜度读数。
+ *
+ * 继承式回流的热路径是 `hamuna ops list rule --json`：Agent 靠它拿「上一轮的
+ * 结论」去选题。过期信号只出现在人读的界面里等于没有 —— Agent 读到的是一条
+ * 没写采样时刻的旧结论，它以为那就是现在的观察。
+ *
+ * 派生值标在记录上（`freshness` / `sampledAgeDays`），不写回台账：台账是唯一的
+ * 事实来源，派生值存进去就得定时器去维护它。
+ */
+function markOpsRuleFreshness(
+  result: Record<string, unknown>,
+  now: Date,
+): Record<string, unknown> {
+  const data = result.data as Record<string, unknown> | undefined;
+  const state = data?.state as Record<string, unknown> | undefined;
+  if (!data || !state || !Array.isArray(state.rules)) return result;
+  const rules = state.rules.map((rule) => {
+    const record = (rule ?? {}) as Record<string, unknown>;
+    const sampledAt = typeof record.sampledAt === 'string' ? record.sampledAt : undefined;
+    const { freshness, ageDays } = ruleFreshness({ sampledAt }, now);
+    return { ...record, freshness, sampledAgeDays: ageDays };
+  });
+  return { ...result, data: { ...data, state: { ...state, rules } } };
+}
+
+/**
+ * 规则的新鲜度：人和 Agent 都要看得见「这条结论是多久前的观察」。
+ *
+ * `unknown`（没记采样时刻）单独一档 —— 老台账里的规则都是这一档，它不等于
+ * 「刚采的」，也不等于「过期的」。
+ */
+function opsRuleFreshnessNote(record: Record<string, unknown>, now: Date): string {
+  const sampledAt = typeof record.sampledAt === 'string' ? record.sampledAt : undefined;
+  const { freshness, ageDays } = ruleFreshness({ sampledAt }, now);
+  if (freshness === 'unknown') return ' · sampled time unknown';
+  if (freshness === 'stale') return ` · STALE · sampled ${ageDays}d ago`;
+  return ` · sampled ${ageDays}d ago`;
+}
+
 /** Human-readable ledger view. `--json` carries the full state. */
 function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
+  const now = new Date();
   const sections = onlyKind
     ? OPS_SECTIONS.filter((section) => section.kind === onlyKind)
     : OPS_SECTIONS;
@@ -3047,7 +3093,8 @@ function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
         console.log(
           `  ${id}  ${String(record.name ?? '')}  ` +
           `${String(record.status ?? '')} · confidence ${String(record.confidence ?? 0)} · ` +
-          `basis ${String(record.basis ?? 'unresolved')}`,
+          `basis ${String(record.basis ?? 'unresolved')}` +
+          opsRuleFreshnessNote(record, now),
         );
       }
     }

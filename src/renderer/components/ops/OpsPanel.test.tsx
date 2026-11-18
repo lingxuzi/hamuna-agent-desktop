@@ -281,6 +281,27 @@ describe('OpsPanel', () => {
     expect(screen.getByText('评论只读到前 20 条，共 87 条')).toBeInTheDocument();
   });
 
+  it('drops a rule whose evidence has expired and says how many are stale', async () => {
+    const staleAt = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const base = stateWithData().rules[0];
+    mocks.invoke.mockResolvedValue({
+      ...stateWithData(),
+      rules: [
+        { ...base, id: 'rule-old', name: '两个月前的结论', sampledAt: staleAt },
+        { ...base, id: 'rule-new', name: '这周的结论', sampledAt: new Date().toISOString() },
+      ],
+    });
+    renderPanel();
+
+    screen.getByRole('tab', { name: '复盘' }).click();
+    await screen.findByText('这周的结论');
+
+    // 依据过期的结论不能继续当建议：它说的是那批数据，不是现在这批。
+    expect(screen.queryByText('两个月前的结论')).not.toBeInTheDocument();
+    // 但也不能静默消失 —— 人得知道有结论过期了，该去复盘重新验证。
+    expect(screen.getByText('1 条结论的依据已过期，不再作为依据。')).toBeInTheDocument();
+  });
+
   it('shows the audience quote that the review rests on', async () => {
     mocks.invoke.mockResolvedValue(stateWithData());
     renderPanel();

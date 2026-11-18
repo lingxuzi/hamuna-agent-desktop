@@ -287,6 +287,12 @@ pub struct OpsRule {
     /// 没有它，`confidence` 是自说自话：谁也不知道这条 0.7 是看了 3 条还是 30 条。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampled_count: Option<u64>,
+    /// 这条结论的依据是在什么时刻采到的（ISO）。
+    ///
+    /// 样本量说「看了多少」，这个说「什么时候看的」。少了它，结论会一直是
+    /// 结论 —— 半个月前那批数据说的话，被当成今天的观察继续继承下去。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampled_at: Option<String>,
     #[serde(default)]
     pub evidence: String,
     /// 这条结论还缺什么。
@@ -3022,7 +3028,61 @@ mod tests {
 
         let state = read_state(&ws).expect("老台账必须读得出来");
         assert_eq!(state.rules[0].sampled_count, None);
+        assert_eq!(
+            state.rules[0].sampled_at, None,
+            "老台账没有采样时刻，不能凭空补一个"
+        );
         assert!(state.rules[0].gaps.is_empty());
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 采样时刻要能整条存下来，并且**只改别的字段时不能被冲掉**。
+    ///
+    /// 时刻是结论的「保鲜期起点」：下一轮重新采样会更新它，中途改个置信度
+    /// 不该把它抹掉——抹掉等于把这条结论变成「不知道多久前的观察」。
+    #[test]
+    fn rule_sampled_at_round_trip() {
+        let ws = make_test_workspace("ops-rule-sampled-at");
+        let (state, id) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Rule,
+                fields: serde_json::json!({
+                    "name": "开头 3 秒给数字",
+                    "rule": "前 3 秒抛出具体数字，比抽象描述起量明显",
+                    "confidence": 0.4,
+                    "sampledCount": 3,
+                    "sampledAt": "2026-11-12T09:30:00.000Z"
+                })
+                .as_object()
+                .cloned()
+                .expect("object"),
+            },
+        )
+        .expect("upsert");
+
+        assert_eq!(
+            state.rules[0].sampled_at.as_deref(),
+            Some("2026-11-12T09:30:00.000Z")
+        );
+
+        let (state, _) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Rule,
+                fields: serde_json::json!({ "id": id, "confidence": 0.6 })
+                    .as_object()
+                    .cloned()
+                    .expect("object"),
+            },
+        )
+        .expect("update");
+
+        assert_eq!(
+            state.rules[0].sampled_at.as_deref(),
+            Some("2026-11-12T09:30:00.000Z"),
+            "只改置信度不该动采样时刻"
+        );
         let _ = fs::remove_dir_all(&ws);
     }
 

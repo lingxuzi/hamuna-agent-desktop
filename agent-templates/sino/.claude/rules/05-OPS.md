@@ -141,6 +141,7 @@ hamuna ops add benchmark --platform xiaohongshu --name "露营老张" \
 | `completionRate` | 0–1 的小数（41% 写 `0.41`，不是 `41`）。平台不给就**不传**。 |
 | `confidence` | 0–1。凭一条样本写的规则给 0.3 以下，别硬写 0.9。 |
 | `sampledCount` | 这条结论基于**多少个样本**（整数）。`confidence` 的分母——不写就等于没有分母。 |
+| `sampledAt` | 这条结论的依据是**什么时刻**采到的（ISO）。写这一轮读数据的时刻。 |
 | `evidenceBars.pct` | 0–100 的条长，不是原始数值。原始值放 `val`。 |
 
 ## 规则的缺口
@@ -153,6 +154,30 @@ hamuna ops add benchmark --platform xiaohongshu --name "露营老张" \
 
 **看不到的东西写进缺口，别猜数字填。** 缺口只留在这一轮的上下文里，下一轮就蒸发了；
 写进台账，下一轮才知道还欠什么。缺口和样本量一起，结论才复核得动。
+
+## 结论会过期
+
+`--sampledCount` 说「看了多少条」，`--sampledAt` 说「什么时候看的」。少了采样时刻，
+结论永远不会过期——三周前那批数据说的话被当成今天的观察继续继承下去。
+
+面板按采样时刻算新鲜度（有效期 **30 天**），`hamuna ops list rule --json` 里每条规则带 `freshness`：
+
+| `freshness` | 含义 | 能不能当依据 |
+|---|---|---|
+| `fresh` | 依据在有效期内 | 能，但它是上一轮的结论，这轮数据还没对过 |
+| `stale` | 依据过期 | **不能**。面板不再推荐它 |
+| `unknown` | 没记采样时刻（老规则） | 只能参考 |
+
+**过期不等于删除。** 规则记着一条曾经成立、现在待验证的结论。验证结果写回同一条：
+
+```bash
+# 这轮数据又复现了 → 保鲜期重新开始
+hamuna ops update rule --id rule-1a2b3c4d --sampledAt "2026-12-01T10:00:00+08:00"
+# 这轮没复现 → 降级，把欠账记上
+hamuna ops update rule --id rule-1a2b3c4d --status proposed --gap "12 月这批 8 条没复现"
+```
+
+新开一条规则比更新旧的更坏：台账里会躺着两份说法相反的结论，下一轮不知道听谁的。
 
 ## 平台 id
 

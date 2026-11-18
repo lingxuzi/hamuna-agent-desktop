@@ -920,8 +920,14 @@ function OpsAdviceCard({ view, onActivate }: { view: OpsReviewView; onActivate: 
         <span className="ops-sp" />
         <span className="ops-meta">{t('ops.advice.meta')}</span>
       </div>
+      {/* 依据过期的规则已经退出建议。静默消失更糟 —— 人会以为规则都用上了。 */}
+      {view.staleRules > 0 && (
+        <p className="ops-stale-note">{t('ops.advice.staleNote', { n: view.staleRules })}</p>
+      )}
       {view.advice.length === 0 ? (
-        <p className="ops-empty">{t('ops.advice.empty')}</p>
+        <p className="ops-empty">
+          {t(view.staleRules > 0 ? 'ops.advice.emptyStale' : 'ops.advice.empty')}
+        </p>
       ) : (
         <div className="ops-advice">
           {view.advice.map((rule) => (
