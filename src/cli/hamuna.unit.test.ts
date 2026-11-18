@@ -1601,6 +1601,31 @@ describe('hamuna CLI operations ledger', () => {
     }
   });
 
+  it('marks rule freshness on the human-readable ledger line', () => {
+    // 人读的那条线也得说得出依据多久了。过期信号只标在 JSON 里 = 只有 Agent
+    // 看得到过期，人看到的是一条跟平时一模一样的结论。
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const staleAt = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+      printResult('ops', 'list', {
+        success: true,
+        data: {
+          state: {
+            rules: [
+              { id: 'rule-old', name: '旧结论', sampledAt: staleAt },
+              { id: 'rule-undated', name: '没记时刻' },
+            ],
+          },
+        },
+      }, false, {}, ['rule']);
+      const out = log.mock.calls.flat().join('\n');
+      expect(out).toContain('STALE · sampled 60d ago');
+      expect(out).toContain('sampled time unknown');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('prints the ledger and the written record id', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
