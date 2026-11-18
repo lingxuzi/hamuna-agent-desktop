@@ -116,6 +116,7 @@ function renderWizard(step: OpsWizardStep, state: OpsState = baseState()) {
   const onSendToAgent = vi.fn();
   const onStep = vi.fn();
   const onDone = vi.fn();
+  const onDefer = vi.fn();
   // 不套 ToastProvider：运营台这一族组件一律用 `useToastOptional`，本来就能
   // 脱离 provider 渲染。套上反而会让 toast 的自动消失定时器活过测试环境，
   // 变成一条「window is not defined」的未捕获异常。
@@ -128,11 +129,12 @@ function renderWizard(step: OpsWizardStep, state: OpsState = baseState()) {
       onLogin={vi.fn()}
       onSendToAgent={onSendToAgent}
       onDone={onDone}
+      onDefer={onDefer}
       onEditBenchmark={vi.fn()}
       onDeleteBenchmark={vi.fn()}
     />,
   );
-  return { ...view, onSendToAgent, onStep, onDone };
+  return { ...view, onSendToAgent, onStep, onDone, onDefer };
 }
 
 /** 找到写台账的那次 invoke。 */
@@ -322,5 +324,18 @@ describe('冷启动向导', () => {
         status: 'planned',
       });
     });
+  });
+
+  it('「以后再说」是向导的逃生阀：它只交出「以后别弹」，不写任何台账', async () => {
+    const user = userEvent.setup();
+    const { onDefer, onDone } = renderWizard('login');
+
+    await user.click(await screen.findByRole('button', { name: '以后再说' }));
+
+    expect(onDefer).toHaveBeenCalled();
+    // 逃生阀不是「走完了」—— 两者的区别在父组件那边（记不记引导标记），
+    // 这里要保证它们不是同一个回调。
+    expect(onDone).not.toHaveBeenCalled();
+    expect(upsertCalls()).toHaveLength(0);
   });
 });

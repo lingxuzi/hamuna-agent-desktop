@@ -63,6 +63,13 @@ export interface OpsWizardProps {
   onSendToAgent: (text: string) => void;
   /** 走完最后一步：父组件记下「这个工作区引导过了」，下次冷启动不再自动弹。 */
   onDone: () => void;
+  /**
+   * 「以后再说」：父组件记下标记并关掉面板。
+   *
+   * 这是冷启动向导唯一的逃生阀 —— 一个还没开始经营的工作区不该在每次进
+   * 对话时都弹一次六步向导。
+   */
+  onDefer: () => void;
   /** 新增 / 编辑对标：父组件开它自己的对话框（与台账域共用一套表单）。 */
   onEditBenchmark: (benchmark: OpsBenchmark) => void;
   /** 删除对标：父组件走它自己的确认框。 */
@@ -77,6 +84,7 @@ export default function OpsWizard({
   onLogin,
   onSendToAgent,
   onDone,
+  onDefer,
   onEditBenchmark,
   onDeleteBenchmark,
 }: OpsWizardProps) {
@@ -490,6 +498,10 @@ export default function OpsWizard({
       )}
 
       <div className="ops-wiz-foot">
+        {/* 逃生阀放在最左边：它不是导航的一步，是「我现在不想走这条路」。 */}
+        <button type="button" className="ops-act" onClick={onDefer}>
+          {t('ops.wizard.defer')}
+        </button>
         <span className="ops-sp" />
         <button
           type="button"

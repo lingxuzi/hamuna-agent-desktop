@@ -10,6 +10,9 @@
 // 值写在冒号后面（模板里是空的）。向导按这个形状解析；模板改了形状，这里解析
 // 不出那一节 → 界面上是空的，而不是把文件搞坏。
 
+/** 账号画像在工作区里的位置。模板 manifest 把它列进 `userOwned`。 */
+export const USER_PROFILE_PATH = '.claude/rules/03-USER.md';
+
 export interface UserProfileField {
   /** 标签原文（文件里的字面量）。写回时按它定位，不是按界面上的文案。 */
   tag: string;
@@ -81,6 +84,18 @@ export function parseUserProfile(content: string): UserProfileSection[] {
   }
 
   return sections;
+}
+
+/**
+ * 画像里有没有填过东西。
+ *
+ * 模板里六维 22 个标签全是空的 —— 全空 = 画像还是模板默认值 = 这个人还没被
+ * 描述过。冷启动判据用它区分「没人填过」和「填了一点」。
+ */
+export function isProfileFilled(content: string): boolean {
+  return parseUserProfile(content).some((section) =>
+    section.fields.some((field) => field.value.trim().length > 0),
+  );
 }
 
 /**

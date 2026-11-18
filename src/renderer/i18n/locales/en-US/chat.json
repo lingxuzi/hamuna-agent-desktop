@@ -1535,6 +1535,7 @@
       "title": "Getting started",
       "open": "Getting started",
       "exit": "Back to ledger",
+      "defer": "Not now",
       "back": "Back",
       "next": "Next",
       "finish": "Done",

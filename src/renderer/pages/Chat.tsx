@@ -40,6 +40,10 @@ import { transitionChannelBoundSession } from '@/pages/chatChannelSession';
 // Type-only: the wizard ships inside the lazily-loaded OpsPanel chunk, so a
 // value import here would pull the whole wizard into the initial bundle.
 import type { OpsWizardStep } from '@/components/ops/OpsWizard';
+// 冷启动判据：这两个模块不碰 UI，也不 import 面板 —— 拉进来的是几行纯逻辑。
+import { isSinoColdStart, shouldAutoOpenSinoWizard } from '@/components/ops/sinoColdStart';
+import { isProfileFilled, USER_PROFILE_PATH } from '@/components/ops/userProfile';
+import { readOpsState } from '@/components/ops/useOpsState';
 import { useTabState, useTabActive } from '@/context/TabContext';
 import { useChatScrollController } from '@/hooks/useChatScrollController';
 import { useChatScrollModel } from '@/hooks/useChatScrollModel';
@@ -985,23 +989,65 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     setOpsOpen(true);
   }, []);
 
-  // 冷启动向导：第一次进入这个工作区时自动打开。
+  // 冷启动向导：进入这个工作区的对话、且它还是冷启动 → 自动打开。
   //
   // **为什么必须自动弹**：窄布局下运营台根本没有入口（`onOpenOps` 被
   // `!isNarrowLayout` 门控），向导若只挂在那个按钮后面，窄屏用户永远走不到。
   //
-  // **「第一次」的判据** = 项目配置里没有 `sinoOnboardedAt`。这个标记是 App 级
-  // 的一次性体验状态（跟 `hiddenAt` / `archivedAt` 同类），不是工作区内容 ——
-  // 工作区里的文件属于用户和 Agent，不该替 App 记 UX 状态。
+  // **只在 Tab 可见时判**：后台 Tab 挂载就把面板打开，等于替用户按下一个他
+  // 看不见的按钮；面板随即被「切走就关」关掉，一次性守卫却已经被消费掉 ——
+  // 切回来就再也弹不出来了。
+  //
+  // **判据看实际状态**（登录 / 原话 / 画像三件一件没做），而不只看项目配置里
+  // 的 `sinoOnboardedAt`：那个标记只说明「用户点过以后再说」。用户也可能没点过
+  // 向导，却自己在运营台登录了账号 —— 那时候照样弹一次六步向导就是纯粹的骚扰。
+  // 标记本身是 App 级的一次性体验状态（跟 `hiddenAt` / `archivedAt` 同类），
+  // 不是工作区内容 —— 工作区里的文件属于用户和 Agent，不该替 App 记 UX 状态。
   useEffect(() => {
-    if (!isSinoWorkspace || !currentProject) return;
+    if (!isActive || !isSinoWorkspace || !currentProject) return;
     if (currentProject.sinoOnboardedAt) return;
     const key = normalizeWorkspacePathIdentity(currentProject.path);
+    // 本次运行已经弹过了 → 不读盘。守卫在真正要开的时候才消费。
     if (SINO_WIZARD_AUTO_OPENED.has(key)) return;
-    SINO_WIZARD_AUTO_OPENED.add(key);
-    setOpsOpen(true);
-    setOpsWizardStep('login');
-  }, [isSinoWorkspace, currentProject]);
+
+    let cancelled = false;
+    void (async () => {
+      let coldStart: boolean | null = null;
+      try {
+        const [state, profile] = await Promise.all([
+          readOpsState(agentDir),
+          // 画像读不到 = 这个工作区没有画像文件 = 一个字段都没填过。
+          fileService
+            .readPreview({ path: USER_PROFILE_PATH })
+            .then((preview) => preview.content)
+            .catch(() => ''),
+        ]);
+        coldStart = isSinoColdStart({
+          accounts: state.accounts,
+          directions: state.directions,
+          profileFilled: isProfileFilled(profile),
+        });
+      } catch {
+        // 台账读不出来 = 判不了冷启动。不猜：不弹。
+        coldStart = null;
+      }
+      if (cancelled) return;
+      const shouldOpen = shouldAutoOpenSinoWizard({
+        isActive,
+        isSinoWorkspace,
+        onboarded: Boolean(currentProject.sinoOnboardedAt),
+        coldStart,
+        alreadyOpened: SINO_WIZARD_AUTO_OPENED.has(key),
+      });
+      if (!shouldOpen) return;
+      SINO_WIZARD_AUTO_OPENED.add(key);
+      setOpsOpen(true);
+      setOpsWizardStep('login');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, isSinoWorkspace, currentProject, agentDir, fileService]);
 
   const handleBrowserCreateFailed = useCallback(() => {
     setBrowserUrl(null);
@@ -4104,26 +4150,33 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
     [dispatchSend],
   );
 
-  const handleWizardStep = useCallback(
-    (step: OpsWizardStep | undefined) => {
-      setOpsWizardStep(step);
-      // 离开向导 = 引导过了。下次冷启动不再自动弹 —— 每次都弹就是骚扰。
-      // 想重走的人有面板顶栏的「冷启动引导」入口。
-      if (step === undefined) markSinoOnboarded();
-    },
-    [markSinoOnboarded],
-  );
+  const handleWizardStep = useCallback((step: OpsWizardStep | undefined) => {
+    // 退出向导 ≠ 引导过了。顶栏的「回到台账」只是把面板换成台账视图，用户
+    // 可能只是先看一眼账。只有明确点了「以后再说」或走完六步才记标记 —— 把
+    // 「关掉面板」也算成「以后再说」，那个按钮就没有意义了。
+    setOpsWizardStep(step);
+  }, []);
 
   const handleWizardDone = useCallback(() => {
     setOpsWizardStep(undefined);
     markSinoOnboarded();
   }, [markSinoOnboarded]);
 
+  /**
+   * 「以后再说」：记下引导标记（下次冷启动不再自动弹），关掉面板。
+   *
+   * 这是冷启动向导唯一的逃生阀。没有它，一个还没开始经营的工作区会在每次
+   * 进对话时都弹一次六步向导 —— 弹得越勤，越没人愿意点开。
+   */
+  const handleWizardDefer = useCallback(() => {
+    setOpsWizardStep(undefined);
+    setOpsOpen(false);
+    markSinoOnboarded();
+  }, [markSinoOnboarded]);
+
   const handleCloseOps = useCallback(() => {
     setOpsOpen(false);
-    // 关闭向导也算走完这一步流程（做完、跳过、还是不想看）。
-    if (opsWizardStep !== undefined) markSinoOnboarded();
-  }, [opsWizardStep, markSinoOnboarded]);
+  }, []);
 
   // Ref-stabilize handleSendMessage for handleRetry (avoids frequent re-creation)
   const handleSendMessageRef = useRef(handleSendMessage);
@@ -5408,6 +5461,7 @@ export default function Chat({ onBack, onNewSession, onSwitchSession, onOpenSess
                 wizardStep={opsWizardStep}
                 onWizardStep={handleWizardStep}
                 onWizardDone={handleWizardDone}
+                onWizardDefer={handleWizardDefer}
               />
             </Suspense>
           )}

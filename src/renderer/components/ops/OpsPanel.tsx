@@ -61,6 +61,7 @@ export default function OpsPanel({
   wizardStep,
   onWizardStep,
   onWizardDone,
+  onWizardDefer,
 }: {
   workspace: string;
   onClose: () => void;
@@ -83,6 +84,12 @@ export default function OpsPanel({
   onWizardStep?: (step: OpsWizardStep | undefined) => void;
   /** 向导走完：父组件记下「这个工作区引导过了」。 */
   onWizardDone?: () => void;
+  /**
+   * 向导里的「以后再说」：父组件记下标记并关掉面板。
+   *
+   * 没给这个回调时退回「走完」—— 点下去不能什么也不发生。
+   */
+  onWizardDefer?: () => void;
 }) {
   const { t } = useTranslation('chat');
   // 展开动效：先挂载再翻 class，否则 transition 不会播（与知识看板同一手法）。
@@ -339,6 +346,7 @@ export default function OpsPanel({
                 else onSendToAgent(text);
               }}
               onDone={() => onWizardDone?.()}
+              onDefer={() => (onWizardDefer ? onWizardDefer() : onWizardDone?.())}
               onEditBenchmark={(benchmark) =>
                 setForm({ kind: 'benchmark:edit', benchmark })
               }

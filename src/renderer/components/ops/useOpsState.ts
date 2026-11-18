@@ -18,6 +18,20 @@ import { isTauriEnvironment } from '@/utils/browserMock';
 import { listenWithCleanup } from '@/utils/tauriListen';
 import { workspacePathsEqual } from '../../../shared/workspacePath';
 
+/**
+ * 读一次台账。
+ *
+ * 独立于 hook：冷启动判据要在**面板还没打开**的时候就知道台账里有没有已登录
+ * 账号 / 方向原话，那时候还没有 `useOpsState` 的实例可用。
+ *
+ * 不做 Tauri 环境判断 —— 浏览器开发模式下调用方会拿到异常，自己决定怎么办
+ * （`useOpsState` 给空态，冷启动判据给「判不了」）。
+ */
+export async function readOpsState(workspace: string): Promise<OpsState> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<OpsState>('cmd_ops_read', { workspace });
+}
+
 export interface OpsStateResult {
   state: OpsState;
   /** 首次读取还没回来。空态与「还没读到」必须分开：混在一起会先闪一下空态。 */
@@ -53,8 +67,7 @@ export function useOpsState(workspace: string | null): OpsStateResult {
     setLoading(true);
     void (async () => {
       try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const next = await invoke<OpsState>('cmd_ops_read', { workspace });
+        const next = await readOpsState(workspace);
         if (cancelled) return;
         setState(next);
         setError(null);
