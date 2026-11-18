@@ -20,17 +20,21 @@
     "workspaceUnarchived": "Workspace unarchived.",
     "archiveFailed": "Archive failed. Please try again.",
     "unarchiveFailed": "Unarchive failed. Please try again.",
+    "workspaceDeleted": "Deleted \"{{name}}\". {{sessions}} conversations cleared; the folder went to the Trash.",
+    "workspaceDeletedPartial": "Deleted \"{{name}}\". {{sessions}} conversations cleared; {{leftovers}} items could not be cleaned up (see the log).",
+    "workspaceDeleteFailed": "Failed to delete the workspace: {{message}}",
+    "workspaceDeleteGuarded": "This path belongs to the App's data directory (or contains it) and cannot be deleted.",
     "openFolderFailed": "Failed to open containing folder.",
     "noProvider": "No available provider. Configure one in Settings first."
   },
   "dialogs": {
     "pickProjectFolder": "Choose project folder",
     "hideDefaultWorkspace": "Hide default workspace",
-    "removeWorkspace": "Remove workspace",
+    "removeWorkspace": "Delete workspace",
     "hideWorkspaceMessage": "Hide \"{{name}}\"? Local files will not be deleted, and you can restore it later.",
-    "removeWorkspaceMessage": "Remove \"{{name}}\" from the list? Project files will not be deleted.",
+    "removeWorkspaceMessage": "Delete \"{{name}}\"? Every conversation in it is deleted too, and the folder \"{{path}}\" goes to the Trash (recoverable). Conversations cannot be recovered.",
     "hide": "Hide",
-    "remove": "Remove"
+    "remove": "Delete"
   },
   "rightRail": {
     "workspaceTitle": "Agent Workspaces",
@@ -74,7 +78,7 @@
     "showArchived": "Show archived Agent workspaces",
     "agentSettings": "Agent settings",
     "openFolder": "Open containing folder",
-    "remove": "Remove"
+    "remove": "Delete"
   },
   "recentThoughts": {
     "openTaskCenterTitle": "Open Task Center to view all thoughts",

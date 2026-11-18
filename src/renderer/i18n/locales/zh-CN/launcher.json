@@ -20,17 +20,21 @@
     "workspaceUnarchived": "已取消归档",
     "archiveFailed": "归档失败，请重试",
     "unarchiveFailed": "取消归档失败，请重试",
+    "workspaceDeleted": "已删除「{{name}}」，{{sessions}} 条对话已清除，文件夹已移到回收站",
+    "workspaceDeletedPartial": "已删除「{{name}}」，{{sessions}} 条对话已清除，{{leftovers}} 项未清理（详见日志）",
+    "workspaceDeleteFailed": "删除工作区失败：{{message}}",
+    "workspaceDeleteGuarded": "这个路径属于 App 的数据目录（或包含它），不能删除",
     "openFolderFailed": "打开所在文件夹失败",
     "noProvider": "没有可用的 Provider，请先在设置中配置"
   },
   "dialogs": {
     "pickProjectFolder": "选择项目文件夹",
     "hideDefaultWorkspace": "隐藏默认工作区",
-    "removeWorkspace": "移除工作区",
+    "removeWorkspace": "删除工作区",
     "hideWorkspaceMessage": "确定要隐藏「{{name}}」吗？此操作不会删除本地文件，后续可通过恢复入口重新显示。",
-    "removeWorkspaceMessage": "确定要从列表中移除「{{name}}」吗？此操作不会删除项目文件。",
+    "removeWorkspaceMessage": "确定要删除「{{name}}」吗？该工作区的全部对话会一并删除，文件夹「{{path}}」会移到回收站（可恢复）。对话无法恢复。",
     "hide": "隐藏",
-    "remove": "移除"
+    "remove": "删除"
   },
   "rightRail": {
     "workspaceTitle": "Agent 工作区",
@@ -74,7 +78,7 @@
     "showArchived": "展示归档 Agent 工作区",
     "agentSettings": "Agent 设置",
     "openFolder": "打开所在文件夹",
-    "remove": "移除"
+    "remove": "删除"
   },
   "recentThoughts": {
     "openTaskCenterTitle": "打开任务中心查看全部想法",

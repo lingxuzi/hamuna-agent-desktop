@@ -1608,6 +1608,33 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks stabilized via tabsRef
  }, [setActiveTabId, t]);
 
+ // A workspace is being deleted together with its conversations — every tab
+ // pointing at that workspace has to go. The Rust cascade force-releases the
+ // leftover session owners, so this only has to take the UI down; it does NOT
+ // wait for the sidecar teardown to finish.
+ useEffect(() => {
+  const handleCloseTabsForWorkspace = (event: CustomEvent<{ workspacePath?: string }>) => {
+   const workspacePath = event.detail?.workspacePath;
+   if (!workspacePath) return;
+   const targets = tabsRef.current.filter(
+    tab => tab.agentDir && workspacePathsEqual(tab.agentDir, workspacePath),
+   );
+   for (const tab of targets) {
+    performCloseTab(tab.id);
+   }
+  };
+  window.addEventListener(
+   CUSTOM_EVENTS.CLOSE_TABS_FOR_WORKSPACE,
+   handleCloseTabsForWorkspace as EventListener,
+  );
+  return () => {
+   window.removeEventListener(
+    CUSTOM_EVENTS.CLOSE_TABS_FOR_WORKSPACE,
+    handleCloseTabsForWorkspace as EventListener,
+   );
+  };
+ }, [performCloseTab]);
+
  // Close current active tab (for Cmd+W)
  const closeCurrentTab = useCallback(() => {
   const currentActiveTabId = activeTabIdRef.current;

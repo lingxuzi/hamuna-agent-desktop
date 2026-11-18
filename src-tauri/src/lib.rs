@@ -60,6 +60,7 @@ mod tray;
 mod updater;
 pub mod utils;
 pub mod wake_lock;
+pub mod workspace_delete;
 pub mod workspace_files;
 mod workspace_path;
 
@@ -632,6 +633,7 @@ pub fn run() {
             workspace_files::memory_rules::cmd_ensure_update_memory_file,
             workspace_files::search::cmd_workspace_search_files_fuzzy,
             workspace_files::delete::cmd_workspace_delete,
+            workspace_delete::cmd_delete_workspace,
             workspace_files::slash::cmd_list_slash_commands,
             workspace_files::tree::cmd_workspace_dir_tree,
             workspace_files::tree::cmd_workspace_dir_expand,

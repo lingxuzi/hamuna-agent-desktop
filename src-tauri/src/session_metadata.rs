@@ -73,6 +73,54 @@ fn read_session_metadata(agent_dir: Option<String>) -> Result<Vec<Value>, String
     Ok(out)
 }
 
+/// 列出 `agentDir` 命中给定工作区的**全部**会话 id。
+///
+/// 与 `read_session_metadata` 的区别：**不过滤可见性**。工作区清除必须够到
+/// prepared / system-maintenance 这类会话 —— 它们恰恰是「只删看得见的会话」
+/// 会漏掉的残留，留在索引里就变成下一次打开工作区时的幽灵对话。
+///
+/// 解析失败时**报错**而不是返回空列表：调用方（工作区清除）拿不到会话清单就
+/// 没法保证「对话都清掉了」，宁可让它失败重来，也不要假装清干净了。
+pub(crate) fn read_session_ids_for_agent_dir(agent_dir: &str) -> Result<Vec<String>, String> {
+    let path = sessions_path()?;
+    let content = match std::fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(format!(
+                "读取 sessions.json 失败：{} ({})",
+                path.display(),
+                e
+            ))
+        }
+    };
+    let sessions: Vec<Value> = serde_json::from_str(crate::utils::bom::strip_bom(&content))
+        .map_err(|e| format!("解析 sessions.json 失败：{} ({})", path.display(), e))?;
+
+    let expected = crate::cron_task::normalize_path(agent_dir.trim());
+    if expected.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    Ok(sessions
+        .iter()
+        .filter(|session| {
+            session
+                .get("agentDir")
+                .and_then(Value::as_str)
+                .map(crate::cron_task::normalize_path)
+                .as_deref()
+                == Some(expected.as_str())
+        })
+        .filter_map(|session| {
+            session
+                .get("id")
+                .and_then(Value::as_str)
+                .map(|id| id.to_string())
+        })
+        .collect())
+}
+
 /// Lightweight launcher/history metadata read. This intentionally avoids the
 /// global Node sidecar so the Launcher can show recent conversations before the
 /// AI runtime finishes cold-starting.

@@ -286,7 +286,10 @@ export const SidebarWorkspaceTree = memo(function SidebarWorkspaceTree({
           title={isSystemPresetProject(pendingRemove) ? t('dialogs.hideDefaultWorkspace') : t('dialogs.removeWorkspace')}
           message={isSystemPresetProject(pendingRemove)
             ? t('dialogs.hideWorkspaceMessage', { name: pendingRemove.displayName || pendingRemove.name })
-            : t('dialogs.removeWorkspaceMessage', { name: pendingRemove.name })}
+            : t('dialogs.removeWorkspaceMessage', {
+              name: pendingRemove.displayName || pendingRemove.name,
+              path: pendingRemove.path,
+            })}
           confirmText={isSystemPresetProject(pendingRemove) ? t('dialogs.hide') : t('dialogs.remove')}
           confirmVariant="danger"
           onConfirm={handleConfirmRemove}

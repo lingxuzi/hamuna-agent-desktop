@@ -124,5 +124,14 @@ export const CUSTOM_EVENTS = {
      * `openExternal()` (system browser) when no Chat tab handled it.
      */
     OPEN_IN_BROWSER_PANEL: 'open-in-browser-panel',
+    /**
+     * Fired to close every Chat tab that belongs to a workspace that is being
+     * deleted. Payload: `{ workspacePath: string }`.
+     *
+     * The workspace's conversations are about to be deleted together with its
+     * files, so the tabs pointing at them have to go — otherwise they sit
+     * there on a workspace that no longer exists.
+     */
+    CLOSE_TABS_FOR_WORKSPACE: 'close-tabs-for-workspace',
     // CONFIG_CHANGED removed — ConfigProvider shares state via Context, no DOM event bridge needed
 } as const;
