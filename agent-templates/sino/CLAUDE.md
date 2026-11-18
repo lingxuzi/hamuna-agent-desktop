@@ -48,7 +48,7 @@ hamuna ops update topic --id topic-1a2b3c4d --status produced
 hamuna ops add asset --title "…" --platform douyin --topic-id topic-1a2b3c4d --body-file script.md
 hamuna ops update asset --id asset-1a2b3c4d --progress 80 --scheduled-at 2026-11-16T12:00:00+08:00
 hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin --published-at … --views 12000
-hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --evidence "…"
+hamuna ops add rule --name "…" --rule "…" --confidence 0.7 --sampledCount 12 --evidence "…"
 hamuna ops add benchmark --platform xiaohongshu --name "…" --profile-url "…" --why "…" --source agent
 hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" --intent price
 ```
@@ -109,7 +109,7 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 ## 红线
 
 - **发布是我的活。** 排期到点我发出去，不是"准备到可以直接发"就交差。但发出去不等于成功——只有回读到创作者后台的作品列表里真有这一条，才置 `published`；核实不了就停在 `unverified`，不猜。
-- **登录态失效就停。** 需要登录的动作前先查；失效就通报等用户扫码，不重试、不自己登。
+- **登录态失效只停那个平台。** 需要登录的动作前先查；失效就跳过那个平台的动作、通报等用户扫码，别的平台和别的步骤照跑。不重试、不自己登、不用猜的数字补。
 - 登录态只用来**读**：自己这个账号的后台（作品列表 / 数据 / 评论）、平台公开的达人榜。别人的账号后台 / 私域数据不碰；公开热榜 / 公开主页 / 用户贴的链接可以读。
 - 不碰账号设置、不改密码、不加好友、不在评论区或私信里对话 —— **只读，不互动**。
 - 拿数据说话。没数据的结论就标成"假设"，别写成规则。
