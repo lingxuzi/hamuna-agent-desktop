@@ -1,5 +1,15 @@
-/** Version shared with Rust's SYSTEM_SKILLS_VERSION contract. */
-export const SYSTEM_SKILLS_VERSION = '81';
+/**
+ * Version shared with Rust's SYSTEM_SKILLS_VERSION contract.
+ *
+ * **两边必须逐字相等。** Rust 把它写进 `~/.hamuna/.system-skills-version`，
+ * 这里拿同一个串去比对（`assertOfficialSystemSkillExposed`）。只一边 bump
+ * 的结果不是"旧 skill 还在用"，而是**所有 managed workflow 的派发被整批拒掉**
+ * —— 82 / 83 两次只改了 Rust，这份常量停在 81，症状就是这样。
+ *
+ * 防线是 `src-tauri/src/commands.rs::system_skills_tests` 里那条
+ * `typescript_and_rust_versions_match`。
+ */
+export const SYSTEM_SKILLS_VERSION = '83';
 
 /**
  * Re-export the generated SYSTEM_SKILLS list. The list itself is derived

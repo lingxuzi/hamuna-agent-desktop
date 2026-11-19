@@ -3377,6 +3377,25 @@ mod system_skills_tests {
         // upload ceiling (video rides the chunked path, 256 MiB).
         assert_eq!(CLI_VERSION, "57");
         assert_eq!(SYSTEM_SKILLS_VERSION, "83");
+
+        // The TS constant is the one `assertOfficialSystemSkillExposed` compares
+        // against the stamp this file writes. Bumping only one side does not
+        // "leave old skills working" — it rejects *every* managed-workflow
+        // dispatch as `required_system_skill_unavailable`. It happened at 82
+        // and 83, so pin the pair here rather than in a comment.
+        let shared = include_str!("../../src/shared/systemSkills.ts");
+        let ts_version = shared
+            .split_once("export const SYSTEM_SKILLS_VERSION = '")
+            .expect("TypeScript SYSTEM_SKILLS_VERSION declaration")
+            .1
+            .split_once('\'')
+            .expect("TypeScript SYSTEM_SKILLS_VERSION terminator")
+            .0;
+        assert_eq!(
+            ts_version, SYSTEM_SKILLS_VERSION,
+            "src/shared/systemSkills.ts and src-tauri/src/commands.rs must carry the same SYSTEM_SKILLS_VERSION"
+        );
+
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));
