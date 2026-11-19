@@ -2264,7 +2264,50 @@ function printBrowserResult(action: string, result: Record<string, unknown>, fla
 
   if (action === 'click') {
     const label = typeof data.label === 'string' && data.label ? data.label : '(unlabeled)';
-    console.log(`✓ clicked ${label}`);
+    const changed = typeof data.changed === 'boolean' ? data.changed : null;
+    // "clicked" alone was the whole answer, and it was true for a click that
+    // hit a dead overlay too — so the agent retried until it wore the page
+    // out. The verdict now comes from comparing the page before and after.
+    const mark = changed === true ? '✓' : changed === false ? '✗' : '·';
+    const verdict = changed === true
+      ? ''
+      : changed === false
+        ? ' (delivered, but the page did not change — re-read it before retrying)'
+        : ' (click delivered; the page could not be read back)';
+    console.log(`${mark} clicked ${label}${verdict}`);
+    const page = data.page && typeof data.page === 'object' ? data.page as Record<string, unknown> : undefined;
+    if (page && typeof page.url === 'string' && page.url) {
+      const from = typeof data.fromUrl === 'string' && data.fromUrl !== page.url ? ` (was ${data.fromUrl})` : '';
+      console.log(`  ${page.url}${from}`);
+    }
+    // When the text query matched several controls, say which one won and
+    // what the others were. Without it the agent has no way to tell that
+    // "发布" resolved to the toolbar instead of the button.
+    const matches = Array.isArray(data.matches) ? data.matches : [];
+    if (matches.length > 1) {
+      const clickedSelector = typeof data.selector === 'string' ? data.selector : '';
+      console.log('  several elements matched that text:');
+      for (const item of matches.slice(0, 5)) {
+        if (!item || typeof item !== 'object') continue;
+        const row = item as Record<string, unknown>;
+        const mLabel = typeof row.label === 'string' ? row.label : '(unlabeled)';
+        const mTag = typeof row.tag === 'string' ? row.tag : '?';
+        const mSel = typeof row.selector === 'string' ? row.selector : '';
+        // The first entry is the one that got clicked (the list is ranked
+        // best-first); marking it is what tells the agent whether the
+        // resolution was the one it meant.
+        const hit = clickedSelector && mSel === clickedSelector ? '  ← clicked' : '';
+        console.log(`    <${mTag}> ${mLabel}${mSel ? `  ${mSel}` : ''}${hit}`);
+      }
+      const others = matches
+        .slice(1, 5)
+        .map((item) => item as Record<string, unknown>)
+        .map((row) => (typeof row.selector === 'string' ? row.selector : ''))
+        .filter(Boolean);
+      if (others.length) {
+        console.log(`  to target another one: --selector "${others[0]}"`);
+      }
+    }
     return;
   }
 
@@ -2309,12 +2352,21 @@ function printBrowserResult(action: string, result: Record<string, unknown>, fla
   if (action === 'publish') {
     const platform = typeof data.platform === 'string' ? data.platform : '(unknown platform)';
     const label = typeof data.label === 'string' && data.label ? data.label : '(unlabeled)';
-    console.log(`✓ published to ${platform}: ${label}`);
+    const accepted = data.published === true;
+    console.log(
+      accepted
+        ? `✓ publish clicked on ${platform}: ${label}`
+        : `✗ publish click on ${platform} did not change the page: ${label}`,
+    );
     if (typeof data.url === 'string' && data.url) console.log(`  ${data.url}`);
     // Clicking the button is only half the job — the platform's work list
     // decides whether it really went out. Say so, so the agent does not
     // mark the item published on the strength of a click.
-    console.log('  Now read it back on the work list page to confirm it posted.');
+    console.log(
+      accepted
+        ? '  Now read it back on the work list page to confirm it posted.'
+        : '  Nothing was submitted. Re-read the page before clicking again — do not retry blindly.',
+    );
     return;
   }
 

@@ -285,7 +285,15 @@ export async function handleBrowserRead(payload: BrowserActionPayload): Promise<
   });
 }
 
-/** `hamuna browser click --selector <css> | --text <label>` */
+/**
+ * `hamuna browser click --selector <css> | --text <label>`
+ *
+ * The response carries an **effect verdict**, not just an acknowledgement.
+ * `changed` is whether any visible interactive element (or the URL) differed
+ * after the click; `matches` lists the other elements the text query could
+ * have meant. Both exist because "clicked" was previously indistinguishable
+ * from "the click did nothing", which is what made the agent keep clicking.
+ */
 export async function handleBrowserClick(payload: BrowserActionPayload): Promise<AdminResponse> {
   if (!payload.selector && !payload.text) {
     return {
@@ -301,6 +309,19 @@ export async function handleBrowserClick(payload: BrowserActionPayload): Promise
     clicked: true,
     tag: data.tag,
     label: data.label,
+    // Selector of what actually got clicked, so a follow-up can target the
+    // same element even when the text query was ambiguous.
+    selector: data.selector,
+    // `null` = the page could not be measured; `false` = measured, nothing
+    // moved. Collapsing those would tell the agent to give up on a click we
+    // never observed.
+    changed: data.changed ?? null,
+    urlChanged: data.urlChanged ?? null,
+    page: data.page,
+    fromUrl: data.fromUrl,
+    // Other candidates the text query matched, best first. Present only when
+    // the click was made by text and more than one element matched.
+    matches: Array.isArray(data.matches) && data.matches.length > 1 ? data.matches : undefined,
   });
 }
 
@@ -521,12 +542,22 @@ export async function handleBrowserPublish(payload: BrowserActionPayload): Promi
   const { response, error } = await callBrowser('/api/browser/click', 'POST', payload);
   if (error) return error;
   const data = payloadOf(response);
+  const page = data.page as Record<string, unknown> | undefined;
+  // `published` used to be unconditional, so a click that hit a dead overlay
+  // reported a publish. It now follows the same effect verdict as `click`:
+  // `false` here means "the click was delivered but the page did not react",
+  // which the agent must treat as "not published" and re-read the page. It is
+  // still NOT proof of publication — 台账 requires a read-back from the
+  // platform's own work list, and this flag must not be used to skip it.
   return ok({
-    published: true,
+    published: data.changed === true,
     platform,
-    url: currentUrl,
+    url: typeof page?.url === 'string' ? page.url : currentUrl,
     tag: data.tag,
     label: data.label,
+    changed: data.changed ?? null,
+    urlChanged: data.urlChanged ?? null,
+    matches: Array.isArray(data.matches) && data.matches.length > 1 ? data.matches : undefined,
   });
 }
 

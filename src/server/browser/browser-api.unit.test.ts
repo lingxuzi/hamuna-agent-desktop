@@ -19,7 +19,13 @@ vi.mock('../utils/embedded-browser-quota', () => ({
   recordEmbeddedBrowserOutcome: vi.fn(),
 }));
 
-const { handleBrowserUpload, handleBrowserAction, handleBrowserPublish, handleBrowserScroll } = await import('./browser-api');
+const {
+  handleBrowserUpload,
+  handleBrowserAction,
+  handleBrowserClick,
+  handleBrowserPublish,
+  handleBrowserScroll,
+} = await import('./browser-api');
 
 describe('browser upload', () => {
   beforeEach(() => {
@@ -145,19 +151,88 @@ describe('browser scroll', () => {
   });
 });
 
+describe('browser click', () => {
+  beforeEach(() => {
+    managementApi.mockReset();
+  });
+
+  it('把「点完有没有变化」带回来 —— 这是 agent 停止乱点的唯一依据', async () => {
+    // 以前 click 只回 {clicked:true,tag,label}，点中一个盖在遮罩下面的按钮
+    // 和点中真按钮长得一模一样，agent 只能一直重试。
+    managementApi.mockResolvedValue({
+      ok: true,
+      data: {
+        tag: 'button',
+        label: '发布',
+        selector: 'div.editor > button:nth-of-type(2)',
+        changed: false,
+        urlChanged: false,
+        fromUrl: 'https://creator.douyin.com/creator-micro/publish/image',
+        page: { url: 'https://creator.douyin.com/creator-micro/publish/image', title: '发布图文' },
+      },
+    });
+    const res = await handleBrowserClick({ text: '发布' });
+    expect(res.data).toMatchObject({
+      clicked: true,
+      changed: false,
+      urlChanged: false,
+      selector: 'div.editor > button:nth-of-type(2)',
+    });
+  });
+
+  it('测不到就说 null，不能塌成 false —— 那会让 agent 放弃一次没观测过的点击', async () => {
+    managementApi.mockResolvedValue({
+      ok: true,
+      data: { tag: 'button', label: '发布', changed: null },
+    });
+    const res = await handleBrowserClick({ text: '发布' });
+    expect((res.data as Record<string, unknown>)?.changed).toBeNull();
+  });
+
+  it('文本命中多个控件时把候选带回来，单个命中时不带', async () => {
+    managementApi.mockResolvedValue({
+      ok: true,
+      data: {
+        tag: 'button',
+        label: '发布',
+        changed: true,
+        matches: [
+          { tag: 'button', label: '发布', selector: 'button.publish', score: 1120 },
+          { tag: 'div', label: '发布图文 支持常用', selector: 'div.toolbar', score: 460 },
+        ],
+      },
+    });
+    const many = await handleBrowserClick({ text: '发布' });
+    expect((many.data as Record<string, unknown>)?.matches).toHaveLength(2);
+
+    managementApi.mockResolvedValue({
+      ok: true,
+      data: { tag: 'button', label: '发布', changed: true, matches: [{ tag: 'button', label: '发布' }] },
+    });
+    const one = await handleBrowserClick({ text: '发布' });
+    expect((one.data as Record<string, unknown>)?.matches).toBeUndefined();
+  });
+});
+
 describe('browser publish', () => {
   beforeEach(() => {
     managementApi.mockReset();
   });
 
-  const onCreatorBackend = () => {
+  const onCreatorBackend = (changed = true) => {
     managementApi.mockResolvedValueOnce({
       ok: true,
       data: { title: '抖音创作者中心', url: 'https://creator.douyin.com/creator-micro/content/upload', readyState: 'complete' },
     });
     managementApi.mockResolvedValueOnce({
       ok: true,
-      data: { tag: 'button', label: '发布' },
+      data: {
+        tag: 'button',
+        label: '发布',
+        changed,
+        urlChanged: false,
+        page: { url: 'https://creator.douyin.com/creator-micro/content/upload' },
+      },
     });
   };
 
@@ -214,5 +289,13 @@ describe('browser publish', () => {
     const res = await handleBrowserAction('publish', { platform: 'douyin', text: '发布' });
     expect(res.success).toBe(true);
     expect(managementApi.mock.calls[1][0]).toBe('/api/browser/click');
+  });
+
+  it('点击没让页面变化时不许报 published —— 那是把死点击说成发帖', async () => {
+    onCreatorBackend(false);
+    const res = await handleBrowserPublish({ platform: 'douyin', text: '发布' });
+    // 请求本身成功（点击确实发出去了），但效果判定是「没变化」。
+    expect(res.success).toBe(true);
+    expect((res.data as Record<string, unknown>)?.published).toBe(false);
   });
 });

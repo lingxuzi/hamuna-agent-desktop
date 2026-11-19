@@ -9,7 +9,7 @@
  * 防线是 `src-tauri/src/commands.rs::system_skills_tests` 里那条
  * `typescript_and_rust_versions_match`。
  */
-export const SYSTEM_SKILLS_VERSION = '83';
+export const SYSTEM_SKILLS_VERSION = '84';
 
 /**
  * Re-export the generated SYSTEM_SKILLS list. The list itself is derived

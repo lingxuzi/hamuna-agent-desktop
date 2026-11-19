@@ -2401,7 +2401,12 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // old CLI cannot read it, so the agent has no way to know which shape to
 // produce and falls back to guessing — and a guessed shape is either the wrong
 // deliverable or an unauthorized paid call.
-const CLI_VERSION: &str = "57";
+// 58: `browser click` / `browser publish` print the effect verdict instead of
+// a flat `✓ clicked <label>`. The old line was identical for "the button
+// worked" and "the click hit a dead overlay", and that ambiguity is what drove
+// the eight-reload click loop. An install that keeps the old CLI hides the
+// verdict, so the agent goes back to retrying blind.
+const CLI_VERSION: &str = "58";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2670,7 +2675,15 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // chunked path (256 MiB), not the 12 MiB image-only inline one. A skill that
 // still says "video does not fit" teaches the agent to give up on a delivery
 // the channel now supports.
-const SYSTEM_SKILLS_VERSION: &str = "83";
+//
+// 84: hamuna-cli — document the three click semantics that changed together:
+// `changed` on every click response (`false` means "delivered but the page did
+// not react", which is a cue to re-read rather than retry), the candidate list
+// shown when a text query matched several controls, and the `>>>` selector
+// that reaches into a shadow root. Without the `changed` sentence the agent
+// reads `false` as a transient failure and clicks again — the exact loop the
+// verdict was added to break.
+const SYSTEM_SKILLS_VERSION: &str = "84";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3374,9 +3387,11 @@ mod system_skills_tests {
         // — do not re-derive a rule from it, just keep it in step. 57 adds the
         // topic content form (`--form` / `--form-aspect`) plus the asset's
         // `--video` / `--downgrade-note`; 83 documents them and corrects the
-        // upload ceiling (video rides the chunked path, 256 MiB).
-        assert_eq!(CLI_VERSION, "57");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "83");
+        // upload ceiling (video rides the chunked path, 256 MiB). 84 documents
+        // the click verdict (`changed`), the ambiguous-match candidate list and
+        // the `>>>` shadow-root selector the click path now returns.
+        assert_eq!(CLI_VERSION, "58");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "84");
 
         // The TS constant is the one `assertOfficialSystemSkillExposed` compares
         // against the stamp this file writes. Bumping only one side does not

@@ -29,6 +29,11 @@ const INSTALL_HELPERS: &str = r#"
 (() => {
   if (!window.__hamunaAgentHelpers) {
     window.__hamunaAgentHelpers = true;
+
+    // Everything the agent can act on. `locate` and `fields` share this list
+    // so a target the agent discovered is always a target it can click.
+    const __hamunaInteractiveSel = 'a,button,input,textarea,select,[role=button],[role=link],[role=tab],[contenteditable],[onclick]';
+
     const __hamunaVisible = (el) => {
       if (!el) return false;
       const r = el.getBoundingClientRect();
@@ -40,24 +45,51 @@ const INSTALL_HELPERS: &str = r#"
       const t = (el.innerText || el.textContent || el.value || '').trim().replace(/\s+/g, ' ');
       return t.length > 80 ? t.slice(0, 80) + '…' : t;
     };
-    const __hamunaCandidates = () => {
-      const sel = 'a,button,input,textarea,select,[role=button],[role=link],[onclick]';
-      return Array.from(document.querySelectorAll(sel)).filter(__hamunaVisible).slice(0, 60).map((el) => ({
-        tag: el.tagName.toLowerCase(),
-        label: __hamunaLabel(el),
-        id: el.id || undefined,
-        name: el.getAttribute('name') || undefined,
-        type: el.getAttribute('type') || undefined,
-      }));
+    const __hamunaAttr = (el, name) => {
+      try { return el.getAttribute(name); } catch (e) { return null; }
     };
+
+    // ── The deep tree ─────────────────────────────────────────
+    // `document.querySelectorAll` stops at a shadow boundary and at an
+    // iframe. A growing share of component libraries — the Douyin creator
+    // backend included — render their real controls inside a shadow root,
+    // so a shallow query only ever sees the host element, whose innerText
+    // is the entire toolbar. That is exactly how `click --text 发布`
+    // ended up clicking a container labelled "发布图文 支持常用……".
+    const __hamunaRoots = () => {
+      const roots = [document];
+      const seen = new Set();
+      const visit = (root) => {
+        let all;
+        try { all = root.querySelectorAll('*'); } catch (e) { return; }
+        for (const el of all) {
+          const sr = el.shadowRoot;
+          if (sr && !seen.has(sr)) { seen.add(sr); roots.push(sr); visit(sr); }
+        }
+      };
+      visit(document);
+      let frames = [];
+      try { frames = Array.from(document.querySelectorAll('iframe')); } catch (e) { frames = []; }
+      for (const frame of frames) {
+        let doc = null;
+        // Cross-origin is unreachable from here by design; skip it silently.
+        try { doc = frame.contentDocument; } catch (e) { doc = null; }
+        if (doc && !seen.has(doc)) { seen.add(doc); roots.push(doc); visit(doc); }
+      }
+      return roots;
+    };
+
     const __hamunaCssPath = (el) => {
-      // A CSS selector that resolves to exactly this element. `#id` when the
-      // id is unique; otherwise a structural path up to the nearest id'd
-      // ancestor, with `:nth-of-type` disambiguating siblings.
+      // A CSS selector that resolves to exactly this element WITHIN ITS ROOT.
+      // `#id` when the id is unique there; otherwise a structural path up to
+      // the nearest ancestor with an id, with `:nth-of-type` disambiguating
+      // siblings. The root scope matters: an id lookup scoped to `document`
+      // never sees an element living inside a shadow root.
+      const root = el.getRootNode ? el.getRootNode() : document;
       if (el.id) {
         const byId = '#' + CSS.escape(el.id);
         try {
-          if (document.querySelectorAll(byId).length === 1) return byId;
+          if (root.querySelectorAll(byId).length === 1) return byId;
         } catch (e) { /* fall through to the structural path */ }
       }
       const parts = [];
@@ -78,39 +110,182 @@ const INSTALL_HELPERS: &str = r#"
       }
       return parts.join(' > ');
     };
+
+    // A selector that resolves from `document` even when the target lives
+    // inside a shadow root: each boundary becomes a `>>>` hop — the host
+    // selector, then the selector to use inside that host shadow root.
+    //
+    // Returns `''` for anything inside an iframe. There is no document-level
+    // selector for those, and emitting a plausible-looking one would send the
+    // agent to the wrong element — worse than admitting we cannot address it.
+    const __hamunaCssPathDeep = (el) => {
+      const segs = [];
+      let node = el;
+      let guard = 0;
+      while (node && node.nodeType === 1 && guard < 12) {
+        guard += 1;
+        const root = node.getRootNode ? node.getRootNode() : document;
+        if (root === document) { segs.unshift(__hamunaCssPath(node)); return segs.join(' >>> '); }
+        if (!root.host) return '';
+        segs.unshift(__hamunaCssPath(node));
+        node = root.host;
+      }
+      return segs.join(' >>> ');
+    };
+
+    const __hamunaFindBySelector = (selector) => {
+      const raw = String(selector);
+      if (raw.indexOf('>>>') === -1) {
+        try { return document.querySelector(raw); } catch (e) { return null; }
+      }
+      const segs = raw.split('>>>').map((s) => s.trim()).filter(Boolean);
+      let root = document;
+      let el = null;
+      for (let i = 0; i < segs.length; i += 1) {
+        let found = null;
+        try { found = root.querySelector(segs[i]); } catch (e) { found = null; }
+        if (!found) return null;
+        el = found;
+        if (i < segs.length - 1) {
+          root = el.shadowRoot;
+          if (!root) return null;
+        }
+      }
+      return el;
+    };
+
+    // Would a real mouse actually land on this element? A control inside a
+    // modal that is covered by a mask still reports a non-zero rect, so
+    // visibility alone says "clickable" when the click would hit the overlay.
+    const __hamunaHitTest = (el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      const x = Math.min(Math.max(r.left + r.width / 2, 0), Math.max(window.innerWidth - 1, 0));
+      const y = Math.min(Math.max(r.top + r.height / 2, 0), Math.max(window.innerHeight - 1, 0));
+      let top = null;
+      try { top = document.elementFromPoint(x, y); } catch (e) { return true; }
+      if (!top) return false;
+      // `elementFromPoint` never descends into a shadow root — it answers with
+      // the host — so walk our own host chain and accept the moment the two
+      // meet. Both directions matter:
+      //   - the point landed on the element itself, or on one of its own
+      //     children (`node.contains(top)`) — a real hit that bubbles up;
+      //   - the point landed on a shadow host we live inside.
+      // Deliberately NOT accepted: `top.contains(node)`. That means top is an
+      // ancestor of us and the point is on a *sibling* — the element is
+      // covered, which is exactly the dead-overlay case this check exists to
+      // catch.
+      let node = el;
+      let guard = 0;
+      while (node && guard < 12) {
+        guard += 1;
+        if (node === top) return true;
+        if (node.contains && node.contains(top)) return true;
+        const root = node.getRootNode ? node.getRootNode() : document;
+        if (!root || root === document || !root.host) break;
+        node = root.host;
+      }
+      return false;
+    };
+
+    // Rank a candidate for a text query. The job is to pick the button, not
+    // the toolbar that happens to contain the word.
+    const __hamunaScore = (el, needle) => {
+      const label = __hamunaLabel(el).toLowerCase();
+      if (!label) return 0;
+      let score = 0;
+      if (label === needle) score += 1000;
+      else if (label.indexOf(needle) !== -1) score += 400;
+      else return 0;
+      const tag = String(el.tagName || '').toLowerCase();
+      const role = String(__hamunaAttr(el, 'role') || '').toLowerCase();
+      if (tag === 'button' || tag === 'a') score += 120;
+      else if (role === 'button' || role === 'link' || role === 'tab') score += 100;
+      else if (tag === 'input' || tag === 'textarea' || tag === 'select') score += 80;
+      // A container that merely CONTAINS the text must lose to a leaf that
+      // carries it. Without this the toolbar wrapper — whose innerText is all
+      // of the editor chrome — outranks the actual 发布 button.
+      score += Math.max(0, 60 - label.length);
+      if (el.disabled === true || __hamunaAttr(el, 'aria-disabled') === 'true') score -= 600;
+      if (__hamunaAttr(el, 'aria-hidden') === 'true') score -= 600;
+      try {
+        if (window.getComputedStyle(el).pointerEvents === 'none') score -= 300;
+      } catch (e) { /* ignore */ }
+      return score;
+    };
+
     const __hamunaFieldAttrs = (el) => [
-      el.getAttribute('placeholder'),
-      el.getAttribute('aria-label'),
-      el.getAttribute('data-placeholder'),
-      el.getAttribute('name'),
-      el.getAttribute('title'),
+      __hamunaAttr(el, 'placeholder'),
+      __hamunaAttr(el, 'aria-label'),
+      __hamunaAttr(el, 'data-placeholder'),
+      __hamunaAttr(el, 'name'),
+      __hamunaAttr(el, 'title'),
     ].filter(Boolean).join(' ').toLowerCase();
-    const __hamunaLocate = (selector, text) => {
+
+    const __hamunaLocateDetailed = (selector, text) => {
       if (selector) {
-        const el = document.querySelector(selector);
+        const el = __hamunaFindBySelector(selector);
         if (!el) throw new Error('No element matches CSS selector: ' + selector);
-        return el;
+        return { el, label: __hamunaLabel(el), matches: [] };
       }
       if (!text) throw new Error('Either a CSS selector or a text query is required');
-      const needle = text.trim().toLowerCase();
-      const pool = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role=button],[role=link],[role=tab],[contenteditable]'));
-      const visible = pool.filter(__hamunaVisible);
-      const texts = visible.map((el) => __hamunaLabel(el).toLowerCase());
-      let idx = texts.findIndex((t) => t === needle);
-      if (idx === -1) idx = texts.findIndex((t) => t.includes(needle));
-      if (idx !== -1) return visible[idx];
+
+      const needle = String(text).trim().toLowerCase();
+      const roots = __hamunaRoots();
+      const pool = (sel) => {
+        const out = [];
+        for (const root of roots) {
+          let found;
+          try { found = root.querySelectorAll(sel); } catch (e) { continue; }
+          for (const el of found) out.push(el);
+        }
+        return out;
+      };
+
+      const visible = pool(__hamunaInteractiveSel).filter(__hamunaVisible);
+      const scored = [];
+      for (const el of visible) {
+        const score = __hamunaScore(el, needle);
+        if (score > 0) scored.push({ el, score });
+      }
+      if (scored.length) {
+        // Sort before hit-testing: elementFromPoint forces layout, so only the
+        // leading group is worth paying for.
+        scored.sort((a, b) => b.score - a.score);
+        const lead = scored.slice(0, 8);
+        for (const m of lead) {
+          if (!__hamunaHitTest(m.el)) m.score -= 400;
+        }
+        lead.sort((a, b) => b.score - a.score);
+        return {
+          el: lead[0].el,
+          label: __hamunaLabel(lead[0].el),
+          matches: lead.slice(0, 5).map((m) => ({
+            tag: String(m.el.tagName || '').toLowerCase(),
+            label: __hamunaLabel(m.el),
+            selector: __hamunaCssPathDeep(m.el) || undefined,
+            score: m.score,
+          })),
+        };
+      }
+
       // Second pass: a form field identified by its placeholder / aria-label.
-      // The label pass cannot see it — a textbox's "text" is its value, and an
-      // empty textbox has no text at all. Without this pass there is no way
+      // The label pass cannot see it — the "text" of a textbox is its value, and
+      // an empty textbox has no text at all. Without this pass there is no way
       // to say "the 作品描述 box" and no way to publish anything.
-      const fields = Array.from(document.querySelectorAll('input,textarea,select,[contenteditable]')).filter(__hamunaVisible);
-      const byField = fields.find((el) => __hamunaFieldAttrs(el).includes(needle));
-      if (byField) return byField;
-      const cands = __hamunaCandidates().map((c) => c.label).filter(Boolean);
+      const fields = pool('input,textarea,select,[contenteditable]').filter(__hamunaVisible);
+      const byField = fields.find((el) => __hamunaFieldAttrs(el).indexOf(needle) !== -1);
+      if (byField) return { el: byField, label: __hamunaLabel(byField), matches: [] };
+
+      const cands = visible.map((el) => __hamunaLabel(el)).filter(Boolean);
       throw new Error('No visible element matches text: ' + text + '. Candidates: ' + (cands.slice(0, 20).join(' | ') || '(none)'));
     };
-    window.__hamunaLocate = __hamunaLocate;
-    window.__hamunaCandidates = __hamunaCandidates;
+
+    window.__hamunaLocate = (selector, text) => __hamunaLocateDetailed(selector, text).el;
+    window.__hamunaLocateDetailed = __hamunaLocateDetailed;
+    window.__hamunaRoots = __hamunaRoots;
+    window.__hamunaCssPathDeep = __hamunaCssPathDeep;
+    window.__hamunaVisible = __hamunaVisible;
     window.__hamunaLabel = __hamunaLabel;
   }
   return true;
@@ -158,28 +333,37 @@ pub fn fields_script() -> String {
     format!(
         "{INSTALL_HELPERS} && (() => {{
   const sel = 'input,textarea,select,[contenteditable],button,a,[role=button],[role=tab]';
-  const visible = (el) => {{
-    const r = el.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return false;
-    const st = window.getComputedStyle(el);
-    return st.visibility !== 'hidden' && st.display !== 'none' && st.opacity !== '0';
-  }};
   const attr = (el, name) => el.getAttribute(name) || undefined;
-  const fields = Array.from(document.querySelectorAll(sel)).filter(visible).slice(0, 150).map((el) => {{
-    const tag = el.tagName.toLowerCase();
-    const editable = tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
-    return {{
-      kind: editable ? 'field' : (tag === 'a' ? 'link' : 'button'),
-      tag,
-      type: attr(el, 'type'),
-      placeholder: attr(el, 'placeholder') || attr(el, 'data-placeholder'),
-      ariaLabel: attr(el, 'aria-label'),
-      name: attr(el, 'name'),
-      accept: attr(el, 'accept'),
-      text: (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 60),
-      selector: window.__hamunaCssPath(el),
-    }};
-  }});
+  const fields = [];
+  // Walk the deep tree, for the same reason `locate` does: a control inside a
+  // shadow root is invisible to `document.querySelectorAll`, and a selector
+  // handed back from here has to be one `click --selector` can resolve.
+  for (const root of window.__hamunaRoots()) {{
+    let found;
+    try {{ found = root.querySelectorAll(sel); }} catch (e) {{ continue; }}
+    for (const el of found) {{
+      if (fields.length >= 150) break;
+      if (!window.__hamunaVisible(el)) continue;
+      const tag = el.tagName.toLowerCase();
+      const editable = tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+      const selector = window.__hamunaCssPathDeep(el);
+      // No document-level selector exists for an element inside an iframe.
+      // Listing it with a selector that resolves elsewhere would send the
+      // agent to the wrong control, which is worse than not listing it.
+      if (!selector) continue;
+      fields.push({{
+        kind: editable ? 'field' : (tag === 'a' ? 'link' : 'button'),
+        tag,
+        type: attr(el, 'type'),
+        placeholder: attr(el, 'placeholder') || attr(el, 'data-placeholder'),
+        ariaLabel: attr(el, 'aria-label'),
+        name: attr(el, 'name'),
+        accept: attr(el, 'accept'),
+        text: (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 60),
+        selector,
+      }});
+    }}
+  }}
   return {{ count: fields.length, fields }};
 }})()"
     )
@@ -276,20 +460,93 @@ pub fn image_data_script(index: u32, max_edge: u32) -> String {
 
 /// Click an element located by CSS selector or visible text.
 ///
-/// Returns a description of what was clicked so the agent can confirm it hit
-/// the intended target. Form submits are NOT performed here — a separate
-/// `submit` script exists so the CLI can gate that action behind approval.
+/// Returns what was clicked PLUS the runner-up candidates, so that a text
+/// query matching several controls is visible to the agent instead of being
+/// silently resolved to whichever one happened to come first.
+///
+/// WHY THE EVENT SEQUENCE
+/// ----------------------
+/// `el.click()` alone fires only `click`. Component libraries built on
+/// pointer events — Ant Design, and the byte-dance creator backend in
+/// particular — never enter their pressed state and never run the handler,
+/// so the call "succeeds" while the page does nothing. The sequence below is
+/// the one a real mouse produces: `pointerdown` → `mousedown` → `pointerup` →
+/// `mouseup` → `click`, all `composed: true` so they cross shadow boundaries.
+/// `el.click()` is used for the final step rather than a synthetic MouseEvent
+/// because only it also runs the element's default action.
+///
+/// Form submits are NOT performed here — a separate `submit` script exists so
+/// the CLI can gate that action behind approval.
 pub fn click_script(selector: &str, text: &str) -> String {
     let sel = js_string(selector);
     let txt = js_string(text);
     format!(
         "{INSTALL_HELPERS} && (() => {{
-  const el = window.__hamunaLocate({sel}, {txt});
-  const label = window.__hamunaLabel(el);
+  const hit = window.__hamunaLocateDetailed({sel}, {txt});
+  const el = hit.el;
   const tag = el.tagName.toLowerCase();
   el.scrollIntoView({{ block: 'center', inline: 'center' }});
+  const r = el.getBoundingClientRect();
+  const x = r.left + r.width / 2;
+  const y = r.top + r.height / 2;
+  const fire = (type, Ctor, buttons) => {{
+    let ev;
+    try {{
+      ev = new Ctor(type, {{ bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0, buttons }});
+    }} catch (e) {{
+      ev = new MouseEvent(type, {{ bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0 }});
+    }}
+    el.dispatchEvent(ev);
+  }};
+  const P = window.PointerEvent || window.MouseEvent;
+  fire('pointerdown', P, 1);
+  fire('mousedown', window.MouseEvent, 1);
+  if (typeof el.focus === 'function') {{ try {{ el.focus(); }} catch (e) {{}} }}
+  fire('pointerup', P, 0);
+  fire('mouseup', window.MouseEvent, 0);
   el.click();
-  return {{ tag, label, id: el.id || undefined }};
+  return {{
+    tag,
+    label: hit.label,
+    id: el.id || undefined,
+    selector: window.__hamunaCssPathDeep(el) || undefined,
+    matches: hit.matches,
+  }};
+}})()"
+    )
+}
+
+/// Cheap fingerprint of "what the agent could act on right now".
+///
+/// Used to answer the question the click response could not: **did anything
+/// actually happen?** Without it the agent gets `clicked` for a click that hit
+/// a dead overlay and has no way to tell that from a click that worked, so it
+/// keeps clicking — which is how "点发布" turned into eight page reloads.
+///
+/// Only visible interactive elements are counted: a change confined to a
+/// hidden DOM fragment (analytics beacons, preloaded menus) is not an effect
+/// the user would see, and counting it would report success for a no-op.
+pub fn page_snapshot_script() -> String {
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const roots = window.__hamunaRoots();
+  let count = 0;
+  let digest = 0;
+  for (const root of roots) {{
+    let found;
+    try {{ found = root.querySelectorAll('a,button,input,textarea,select,[role=button],[role=link],[role=tab],[contenteditable],[onclick]'); }} catch (e) {{ continue; }}
+    for (const el of found) {{
+      if (!window.__hamunaVisible(el)) continue;
+      count += 1;
+      const label = window.__hamunaLabel(el);
+      // djb2 — cheap, stable, and only needs to notice that something moved.
+      for (let i = 0; i < label.length; i += 1) {{
+        digest = ((digest * 33) ^ label.charCodeAt(i)) | 0;
+      }}
+      digest = ((digest * 33) ^ 31) | 0;
+    }}
+  }}
+  return {{ url: location.href, title: document.title || '', count, digest }};
 }})()"
     )
 }
@@ -362,7 +619,13 @@ pub fn fill_script(selector: &str, text: &str, value: &str) -> String {
 /// from `input.accept`: `accept` is frequently written as `.png,.jpg` or left
 /// empty, and copying that verbatim into `File.type` hands the site an
 /// extension where it expects a MIME type — some uploaders reject that.
-pub fn upload_script(selector: &str, text: &str, file_name: &str, mime: &str, base64: &str) -> String {
+pub fn upload_script(
+    selector: &str,
+    text: &str,
+    file_name: &str,
+    mime: &str,
+    base64: &str,
+) -> String {
     let sel = js_string(selector);
     let txt = js_string(text);
     let name = js_string(file_name);
@@ -1118,7 +1381,9 @@ mod tests {
         // error instead of a value.
         for script in [
             page_state_script(),
+            page_snapshot_script(),
             document_html_script(),
+            fields_script(),
             click_script("button", ""),
             fill_script("input", "", "hello"),
             upload_script("input[type=file]", "", "a.png", "image/png", "iVBORw0KGgo="),

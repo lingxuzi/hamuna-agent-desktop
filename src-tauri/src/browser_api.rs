@@ -71,6 +71,22 @@ const LOAD_TIMEOUT: Duration = Duration::from_secs(10);
 /// `LOAD_TIMEOUT`. See `wait_for_loaded` for the ceiling this leaves.
 const SAME_URL_SETTLE: Duration = Duration::from_millis(700);
 
+/// How long a click is given to produce a visible effect.
+///
+/// The click handler snapshots the page, clicks, waits this long, and
+/// snapshots again. Too short and a modal that animates in reads as "nothing
+/// happened" — the agent retries a click that already worked. Too long and
+/// every stray click costs the turn. 600 ms covers a React state commit plus
+/// a CSS transition on every creator backend we drive.
+const CLICK_SETTLE: Duration = Duration::from_millis(600);
+
+/// Extra settle allowed only when the click started a navigation.
+///
+/// A navigating page answers evals with an error or an empty document while
+/// the new one loads, so the "after" snapshot is retried once here rather
+/// than being reported as `unknown` on a click that plainly worked.
+const CLICK_NAV_RETRY: Duration = Duration::from_millis(1200);
+
 /// Ceiling on an uploaded file's raw size, **for the single-shot inline path**.
 ///
 /// The file has to travel inside a JS string literal (`upload_script`), so it
@@ -950,20 +966,105 @@ pub async fn browser_read_handler(Json(input): Json<BrowserRequest>) -> Json<ser
     }
 }
 
-/// `POST /api/browser/click` — click an element.
+/// `POST /api/browser/click` — click an element, and report whether it worked.
+///
+/// WHY THIS IS THREE EVALS, NOT ONE
+/// --------------------------------
+/// The scripts this module runs must each be a single synchronous expression
+/// (see `browser_agent`'s `scripts_are_self_contained_expressions`), so
+/// "snapshot → click → wait → snapshot" cannot live in one script: there is no
+/// `await` and no top-level `;` available to sequence it. The wait moves out
+/// to Rust, and the two snapshots become separate evals.
+///
+/// WHY IT MATTERS
+/// --------------
+/// `click` used to answer `{tag, label}` no matter what happened. An agent
+/// clicking 发布 into a dead overlay got the same answer as one that
+/// succeeded, so it kept clicking — eight page reloads in one logged session.
+/// The comparison below is what lets it stop: `changed: false` on a click that
+/// reports as delivered is a real signal to re-read the page, not retry.
+///
+/// Deliberately absent: any retry of the click itself. Retrying inside the
+/// verb would hide the failure the response is meant to surface.
 pub async fn browser_click_handler(Json(input): Json<BrowserRequest>) -> Json<serde_json::Value> {
     let (_tab_id, label) = match resolve_browser_strict(&input.session_id).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
 
+    let snapshot = browser_agent::page_snapshot_script();
+    let before = run_script(&label, &snapshot).await.ok();
+
     let script = browser_agent::click_script(&input.selector, &input.text);
-    match run_script(&label, &script).await {
-        Ok(data) => {
-            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+    let clicked = match run_script(&label, &script).await {
+        Ok(data) => data,
+        Err(e) => {
+            return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default())
         }
-        Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+    };
+
+    tokio::time::sleep(CLICK_SETTLE).await;
+    let mut after = run_script(&label, &snapshot).await.ok();
+    // A click that navigated leaves the old document mid-teardown, where the
+    // snapshot can fail outright. One retry beats reporting `unknown` for a
+    // click whose effect is a page load.
+    if after.is_none() {
+        tokio::time::sleep(CLICK_NAV_RETRY).await;
+        after = run_script(&label, &snapshot).await.ok();
     }
+
+    let mut data = clicked;
+    attach_click_effect(&mut data, before.as_ref(), after.as_ref());
+    Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+}
+
+/// Add `changed` / `urlChanged` / `page` to a click response.
+///
+/// `changed` is `null` on the wire when either snapshot is missing: "we could
+/// not measure" and "nothing changed" are different answers, and collapsing
+/// them into `false` would tell an agent to stop retrying a click we never
+/// actually observed. That includes the `before` side — without it there is
+/// nothing to compare against, and guessing `changed: true` would be just as
+/// false as guessing `false`.
+fn attach_click_effect(
+    data: &mut serde_json::Value,
+    before: Option<&serde_json::Value>,
+    after: Option<&serde_json::Value>,
+) {
+    let Some(obj) = data.as_object_mut() else {
+        return;
+    };
+    let (Some(before), Some(after)) = (before, after) else {
+        obj.insert("changed".into(), serde_json::Value::Null);
+        return;
+    };
+
+    let field = |v: &serde_json::Value, key: &str| {
+        v.get(key).cloned().unwrap_or(serde_json::Value::Null)
+    };
+    let url_changed = field(before, "url") != field(after, "url");
+
+    // The digest covers the labels of every visible interactive element, so a
+    // menu opening, a modal appearing, or a button swapping 发布 → 发布中 all
+    // register. Count is compared separately: a page can swap one control for
+    // another with a matching total.
+    obj.insert(
+        "changed".into(),
+        serde_json::Value::Bool(
+            url_changed
+                || field(before, "digest") != field(after, "digest")
+                || field(before, "count") != field(after, "count"),
+        ),
+    );
+    obj.insert("urlChanged".into(), serde_json::Value::Bool(url_changed));
+    obj.insert(
+        "page".into(),
+        serde_json::json!({
+            "url": field(after, "url"),
+            "title": field(after, "title"),
+        }),
+    );
+    obj.insert("fromUrl".into(), field(before, "url"));
 }
 
 /// `POST /api/browser/scroll` — move the viewport of the current page.
@@ -1377,6 +1478,52 @@ mod tests {
         resolve_engine_name, search_engine_for, search_engine_names, MAX_UPLOAD_BYTES,
         MAX_VIDEO_UPLOAD_BYTES, SEARCH_ENGINES,
     };
+
+    /// The click verdict must distinguish "nothing changed" from "could not
+    /// measure". A missing snapshot reported as `false` tells the agent to
+    /// stop retrying a click nobody observed; reported as `true` it tells the
+    /// agent a dead click worked. Both are wrong, so both are `null`.
+    #[test]
+    fn a_click_we_could_not_measure_reports_null_not_false() {
+        let mut data = serde_json::json!({ "tag": "button", "label": "发布" });
+        super::attach_click_effect(&mut data, None, None);
+        assert!(data["changed"].is_null(), "{data}");
+
+        let mut data = serde_json::json!({ "tag": "button", "label": "发布" });
+        let after = serde_json::json!({ "url": "u", "title": "t", "count": 3, "digest": 7 });
+        super::attach_click_effect(&mut data, None, Some(&after));
+        assert!(data["changed"].is_null(), "{data}");
+    }
+
+    /// The verdict itself: URL, element count, or label digest moving is an
+    /// effect; identical snapshots are not.
+    #[test]
+    fn a_click_that_moved_nothing_reports_false() {
+        let before = serde_json::json!({ "url": "u", "title": "t", "count": 3, "digest": 7 });
+        let cases = [
+            (before.clone(), before.clone(), false),
+            (
+                before.clone(),
+                serde_json::json!({ "url": "u2", "title": "t", "count": 3, "digest": 7 }),
+                true,
+            ),
+            (
+                before.clone(),
+                serde_json::json!({ "url": "u", "title": "t", "count": 4, "digest": 7 }),
+                true,
+            ),
+            (
+                before.clone(),
+                serde_json::json!({ "url": "u", "title": "t", "count": 3, "digest": 8 }),
+                true,
+            ),
+        ];
+        for (b, a, expected) in cases {
+            let mut data = serde_json::json!({ "tag": "button" });
+            super::attach_click_effect(&mut data, Some(&b), Some(&a));
+            assert_eq!(data["changed"], expected, "before={b} after={a}");
+        }
+    }
 
     /// A write without a session id must be refused — not silently aimed at
     /// whichever browser was opened last (which may be another workspace's).
