@@ -34,11 +34,36 @@ const INSTALL_HELPERS: &str = r#"
     // so a target the agent discovered is always a target it can click.
     const __hamunaInteractiveSel = 'a,button,input,textarea,select,[role=button],[role=link],[role=tab],[contenteditable],[onclick]';
 
+    // ── Frames ────────────────────────────────────────────────
+    // The document of a same-origin frame is another tree that a shallow
+    // query cannot see into. The contentDocument of a cross-origin frame is
+    // null, and of a detached frame it throws; both are unreachable by
+    // design rather than errors.
+    const __hamunaIsFrame = (el) => {
+      const tag = String((el && el.tagName) || '').toLowerCase();
+      return tag === 'iframe' || tag === 'frame';
+    };
+    const __hamunaFrameDoc = (el) => {
+      try { return el.contentDocument || null; } catch (e) { return null; }
+    };
+    // The window that owns a document. Style and hit-testing questions must
+    // be asked of the window the element actually lives in, not the top one:
+    // coordinates inside a frame are relative to that frame viewport, and an
+    // event built by the wrong realm is a stranger to the page code that
+    // receives it.
+    const __hamunaOwnerWindow = (el) => {
+      try {
+        const doc = el && el.ownerDocument;
+        return (doc && doc.defaultView) || window;
+      } catch (e) { return window; }
+    };
+
     const __hamunaVisible = (el) => {
       if (!el) return false;
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return false;
-      const st = window.getComputedStyle(el);
+      // The style of an element inside a frame comes from the frame document.
+      const st = __hamunaOwnerWindow(el).getComputedStyle(el);
       return st.visibility !== 'hidden' && st.display !== 'none' && st.opacity !== '0';
     };
     const __hamunaLabel = (el) => {
@@ -58,25 +83,39 @@ const INSTALL_HELPERS: &str = r#"
     // ended up clicking a container labelled "发布图文 支持常用……".
     const __hamunaRoots = () => {
       const roots = [document];
-      const seen = new Set();
+      const seen = new Set([document]);
+      // One recursion covers both boundary kinds, at any nesting depth: a
+      // shadow root and a same-origin iframe document are both "another tree
+      // that a shallow query cannot see into". Cross-origin frames yield null
+      // or throw on `contentDocument` and are skipped silently by design.
       const visit = (root) => {
         let all;
         try { all = root.querySelectorAll('*'); } catch (e) { return; }
         for (const el of all) {
           const sr = el.shadowRoot;
           if (sr && !seen.has(sr)) { seen.add(sr); roots.push(sr); visit(sr); }
+          if (__hamunaIsFrame(el)) {
+            const doc = __hamunaFrameDoc(el);
+            if (doc && !seen.has(doc)) { seen.add(doc); roots.push(doc); visit(doc); }
+          }
         }
       };
       visit(document);
-      let frames = [];
-      try { frames = Array.from(document.querySelectorAll('iframe')); } catch (e) { frames = []; }
-      for (const frame of frames) {
-        let doc = null;
-        // Cross-origin is unreachable from here by design; skip it silently.
-        try { doc = frame.contentDocument; } catch (e) { doc = null; }
-        if (doc && !seen.has(doc)) { seen.add(doc); roots.push(doc); visit(doc); }
-      }
       return roots;
+    };
+
+    // How many file inputs the page offers, counted across every tree it
+    // hides one in. A count taken from the top document alone says "one"
+    // while the publish form carries a second one inside a frame, and the
+    // agent then uploads into the wrong control without being warned.
+    const __hamunaFileInputCount = () => {
+      let count = 0;
+      for (const root of __hamunaRoots()) {
+        let found;
+        try { found = root.querySelectorAll('input[type=file]'); } catch (e) { continue; }
+        count += found.length;
+      }
+      return count;
     };
 
     const __hamunaCssPath = (el) => {
@@ -111,13 +150,16 @@ const INSTALL_HELPERS: &str = r#"
       return parts.join(' > ');
     };
 
-    // A selector that resolves from `document` even when the target lives
-    // inside a shadow root: each boundary becomes a `>>>` hop — the host
-    // selector, then the selector to use inside that host shadow root.
+    // A selector that resolves from the top document even when the target
+    // lives inside a shadow root or a same-origin iframe. Each boundary
+    // becomes one hop, joined by the boundary marker: the frame is addressed
+    // by the selector of the frame ELEMENT, then the selector continues
+    // inside the document of that frame.
     //
-    // Returns `''` for anything inside an iframe. There is no document-level
-    // selector for those, and emitting a plausible-looking one would send the
-    // agent to the wrong element — worse than admitting we cannot address it.
+    // Returns the empty string for anything we cannot address (a cross-origin
+    // frame, a detached node). Emitting a plausible-looking selector would
+    // send the agent to the wrong element, which is worse than admitting it
+    // cannot.
     const __hamunaCssPathDeep = (el) => {
       const segs = [];
       let node = el;
@@ -126,9 +168,13 @@ const INSTALL_HELPERS: &str = r#"
         guard += 1;
         const root = node.getRootNode ? node.getRootNode() : document;
         if (root === document) { segs.unshift(__hamunaCssPath(node)); return segs.join(' >>> '); }
-        if (!root.host) return '';
+        if (root.host) { segs.unshift(__hamunaCssPath(node)); node = root.host; continue; }
+        // An iframe document: address the frame element, then continue inside.
+        let frame = null;
+        try { frame = root.defaultView && root.defaultView.frameElement; } catch (e) { frame = null; }
+        if (!frame) return '';
         segs.unshift(__hamunaCssPath(node));
-        node = root.host;
+        node = frame;
       }
       return segs.join(' >>> ');
     };
@@ -147,8 +193,16 @@ const INSTALL_HELPERS: &str = r#"
         if (!found) return null;
         el = found;
         if (i < segs.length - 1) {
-          root = el.shadowRoot;
-          if (!root) return null;
+          // One hop down a boundary: a shadow root, or the document of a
+          // same-origin frame. A frame element never has a shadow root, so
+          // the two cases do not collide.
+          root = el.shadowRoot || (__hamunaIsFrame(el) ? __hamunaFrameDoc(el) : null);
+          if (!root) {
+            if (__hamunaIsFrame(el)) {
+              throw new Error('The selector crosses an iframe whose document this page cannot reach (cross-origin). Match the control by visible text instead.');
+            }
+            throw new Error('The selector crosses a shadow host with no open shadow root: ' + String(el.tagName || '').toLowerCase());
+          }
         }
       }
       return el;
@@ -160,10 +214,16 @@ const INSTALL_HELPERS: &str = r#"
     const __hamunaHitTest = (el) => {
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return false;
-      const x = Math.min(Math.max(r.left + r.width / 2, 0), Math.max(window.innerWidth - 1, 0));
-      const y = Math.min(Math.max(r.top + r.height / 2, 0), Math.max(window.innerHeight - 1, 0));
+      // The hit-test surface belongs to the document the element lives in. An
+      // element inside a frame is positioned relative to the frame viewport,
+      // so the top document would answer with whatever sits at those numbers
+      // over there — a wrong hit, read as an overlay covering the target.
+      const doc = el.ownerDocument || document;
+      const win = __hamunaOwnerWindow(el);
+      const x = Math.min(Math.max(r.left + r.width / 2, 0), Math.max(win.innerWidth - 1, 0));
+      const y = Math.min(Math.max(r.top + r.height / 2, 0), Math.max(win.innerHeight - 1, 0));
       let top = null;
-      try { top = document.elementFromPoint(x, y); } catch (e) { return true; }
+      try { top = doc.elementFromPoint(x, y); } catch (e) { return true; }
       if (!top) return false;
       // `elementFromPoint` never descends into a shadow root — it answers with
       // the host — so walk our own host chain and accept the moment the two
@@ -209,7 +269,7 @@ const INSTALL_HELPERS: &str = r#"
       if (el.disabled === true || __hamunaAttr(el, 'aria-disabled') === 'true') score -= 600;
       if (__hamunaAttr(el, 'aria-hidden') === 'true') score -= 600;
       try {
-        if (window.getComputedStyle(el).pointerEvents === 'none') score -= 300;
+        if (__hamunaOwnerWindow(el).getComputedStyle(el).pointerEvents === 'none') score -= 300;
       } catch (e) { /* ignore */ }
       return score;
     };
@@ -287,6 +347,8 @@ const INSTALL_HELPERS: &str = r#"
     window.__hamunaCssPathDeep = __hamunaCssPathDeep;
     window.__hamunaVisible = __hamunaVisible;
     window.__hamunaLabel = __hamunaLabel;
+    window.__hamunaOwnerWindow = __hamunaOwnerWindow;
+    window.__hamunaFileInputCount = __hamunaFileInputCount;
   }
   return true;
 })()
@@ -347,9 +409,12 @@ pub fn fields_script() -> String {
       const tag = el.tagName.toLowerCase();
       const editable = tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
       const selector = window.__hamunaCssPathDeep(el);
-      // No document-level selector exists for an element inside an iframe.
-      // Listing it with a selector that resolves elsewhere would send the
-      // agent to the wrong control, which is worse than not listing it.
+      // A control inside a same-origin frame does have a selector now: the
+      // frame element, then the selector inside the frame, joined by the
+      // boundary marker. Only a node that cannot be addressed at all (a
+      // detached one) has none, and listing it with a selector that resolves
+      // somewhere else would send the agent to the wrong control — worse
+      // than not listing it.
       if (!selector) continue;
       fields.push({{
         kind: editable ? 'field' : (tag === 'a' ? 'link' : 'button'),
@@ -489,21 +554,27 @@ pub fn click_script(selector: &str, text: &str) -> String {
   const r = el.getBoundingClientRect();
   const x = r.left + r.width / 2;
   const y = r.top + r.height / 2;
+  // The realm the element lives in, not the top one: a control inside a
+  // frame must be clicked with events built by that frame, or page code that
+  // checks the event against its own constructor sees a stranger. The
+  // coordinates stay in the frame viewport, which is the space the frame
+  // event reports.
+  const view = window.__hamunaOwnerWindow(el);
   const fire = (type, Ctor, buttons) => {{
     let ev;
     try {{
-      ev = new Ctor(type, {{ bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0, buttons }});
+      ev = new Ctor(type, {{ bubbles: true, cancelable: true, composed: true, view: view, clientX: x, clientY: y, button: 0, buttons }});
     }} catch (e) {{
-      ev = new MouseEvent(type, {{ bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0 }});
+      ev = new view.MouseEvent(type, {{ bubbles: true, cancelable: true, composed: true, view: view, clientX: x, clientY: y, button: 0 }});
     }}
     el.dispatchEvent(ev);
   }};
-  const P = window.PointerEvent || window.MouseEvent;
+  const P = view.PointerEvent || view.MouseEvent;
   fire('pointerdown', P, 1);
-  fire('mousedown', window.MouseEvent, 1);
+  fire('mousedown', view.MouseEvent, 1);
   if (typeof el.focus === 'function') {{ try {{ el.focus(); }} catch (e) {{}} }}
   fire('pointerup', P, 0);
-  fire('mouseup', window.MouseEvent, 0);
+  fire('mouseup', view.MouseEvent, 0);
   el.click();
   return {{
     tag,
@@ -571,16 +642,19 @@ pub fn fill_script(selector: &str, text: &str, value: &str) -> String {
   const tag = el.tagName.toLowerCase();
   const isEditable = tag === 'input' || tag === 'textarea' || el.isContentEditable;
   if (!isEditable) throw new Error('Element is not fillable (tag=' + tag + ')');
+  // The realm the element lives in: a control inside a frame has its value
+  // setter and its Event constructor in that frame, not in the top one.
+  const view = window.__hamunaOwnerWindow(el);
   if (tag === 'input' || tag === 'textarea') {{
-    const proto = tag === 'input' ? window.HTMLInputElement.prototype
-      : window.HTMLTextAreaElement.prototype;
+    const proto = tag === 'input' ? view.HTMLInputElement.prototype
+      : view.HTMLTextAreaElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, 'value');
     if (setter && setter.set) setter.set.call(el, {val}); else el.value = {val};
   }} else {{
     el.textContent = {val};
   }}
-  el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-  el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+  el.dispatchEvent(new view.Event('input', {{ bubbles: true }}));
+  el.dispatchEvent(new view.Event('change', {{ bubbles: true }}));
   return {{ tag, label: window.__hamunaLabel(el) }};
 }})()"
     )
@@ -643,22 +717,25 @@ pub fn upload_script(
   const bin = atob({b64});
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const file = new File([bytes], {name}, {{ type: {mime} }});
+  // The realm the input lives in: a file input inside a frame needs its File
+  // and DataTransfer built there, or the page never sees the selection.
+  const view = window.__hamunaOwnerWindow(input);
+  const file = new view.File([bytes], {name}, {{ type: {mime} }});
 
-  const dt = new DataTransfer();
+  const dt = new view.DataTransfer();
   // Append: keep the files that were already in the input. A fresh
   // DataTransfer would replace the FileList and drop earlier images.
   if (input.files) Array.from(input.files).forEach((f) => dt.items.add(f));
   dt.items.add(file);
   input.files = dt.files;
-  input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-  input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+  input.dispatchEvent(new view.Event('input', {{ bubbles: true }}));
+  input.dispatchEvent(new view.Event('change', {{ bubbles: true }}));
 
   return {{
     selector: {sel} || {txt},
     name: file.name,
     size: file.size,
-    inputCount: document.querySelectorAll('input[type=file]').length
+    inputCount: window.__hamunaFileInputCount()
   }};
 }})()"
     )
@@ -746,22 +823,24 @@ pub fn upload_finalize_script(selector: &str, text: &str) -> String {
   const all = new Uint8Array(total);
   let off = 0;
   for (const c of st.chunks) {{ all.set(c, off); off += c.length; }}
-  const file = new File([all], st.name, {{ type: st.mime }});
+  // The realm the input lives in, same reason as the inline upload path.
+  const view = window.__hamunaOwnerWindow(input);
+  const file = new view.File([all], st.name, {{ type: st.mime }});
   // 分片已经拼进 file 了，累加器留着只是白占一份内存。
   window.__hamunaUpload = null;
 
-  const dt = new DataTransfer();
+  const dt = new view.DataTransfer();
   if (input.files) Array.from(input.files).forEach((f) => dt.items.add(f));
   dt.items.add(file);
   input.files = dt.files;
-  input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-  input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+  input.dispatchEvent(new view.Event('input', {{ bubbles: true }}));
+  input.dispatchEvent(new view.Event('change', {{ bubbles: true }}));
 
   return {{
     selector: {sel} || {txt},
     name: file.name,
     size: file.size,
-    inputCount: document.querySelectorAll('input[type=file]').length
+    inputCount: window.__hamunaFileInputCount()
   }};
 }})()"
     )
@@ -796,17 +875,26 @@ pub fn login_script(user: &str, password: &str) -> String {
     if (!el) return false;
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return false;
-    const st = window.getComputedStyle(el);
+    const st = window.__hamunaOwnerWindow(el).getComputedStyle(el);
     return st.visibility !== 'hidden' && st.display !== 'none' && st.opacity !== '0';
   }};
   const setValue = (el, value) => {{
-    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    const view = window.__hamunaOwnerWindow(el);
+    const proto = el.tagName === 'TEXTAREA' ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, 'value');
     if (setter && setter.set) setter.set.call(el, value); else el.value = value;
-    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    el.dispatchEvent(new view.Event('input', {{ bubbles: true }}));
+    el.dispatchEvent(new view.Event('change', {{ bubbles: true }}));
   }};
-  const all = Array.from(document.querySelectorAll('input, textarea'));
+  // A login form inside a same-origin frame is a real thing (an embedded
+  // account form on some creator backends). Collect the inputs from every
+  // tree the page hides one in, not just from the top document.
+  const all = [];
+  for (const root of window.__hamunaRoots()) {{
+    let found;
+    try {{ found = root.querySelectorAll('input, textarea'); }} catch (e) {{ continue; }}
+    for (const el of found) all.push(el);
+  }};
   const passwordEl = all.find((el) => visible(el) && el.type === 'password');
   if (!passwordEl) throw new Error('No visible password field found on this page. Navigate to the login page first.');
 
@@ -826,7 +914,13 @@ pub fn login_script(user: &str, password: &str) -> String {
   // a visible input named like one. Reported, not solved — the caller decides.
   const CAPTCHA_HINT = /captcha|verify|vcode|checkcode|验证码|認証/i;
   const captchaInput = all.find((el) => visible(el) && CAPTCHA_HINT.test(described(el)));
-  const captchaImage = Array.from(document.images || []).find((img) => visible(img) && CAPTCHA_HINT.test((img.alt || '') + ' ' + (img.id || '') + ' ' + (img.className || '') + ' ' + (img.src || '')));
+  const images = [];
+  for (const root of window.__hamunaRoots()) {{
+    let found;
+    try {{ found = root.querySelectorAll('img'); }} catch (e) {{ continue; }}
+    for (const el of found) images.push(el);
+  }}
+  const captchaImage = images.find((img) => visible(img) && CAPTCHA_HINT.test((img.alt || '') + ' ' + (img.id || '') + ' ' + (img.className || '') + ' ' + (img.src || '')));
 
   return {{
     usernameFilled: {{ tag: usernameEl.tagName.toLowerCase(), type: usernameEl.type || 'text' }},
@@ -1118,18 +1212,23 @@ const SCROLL_SCRIPT_BODY: &str = r#"
     if (!el) return false;
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return false;
-    const st = window.getComputedStyle(el);
+    const st = window.__hamunaOwnerWindow(el).getComputedStyle(el);
     return st.visibility !== 'hidden' && st.display !== 'none';
   };
   const visibleArea = (el) => {
     const r = el.getBoundingClientRect();
-    const w = Math.max(0, Math.min(r.right, window.innerWidth) - Math.max(r.left, 0));
-    const h = Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0));
+    // The viewport the element is positioned in: inside a frame that is the
+    // frame viewport, and comparing against the top one would score the
+    // element as fully visible (or fully clipped) for the wrong reason.
+    const win = window.__hamunaOwnerWindow(el);
+    const w = Math.max(0, Math.min(r.right, win.innerWidth) - Math.max(r.left, 0));
+    const h = Math.max(0, Math.min(r.bottom, win.innerHeight) - Math.max(r.top, 0));
     return w * h;
   };
   const describe = (el) => {
     if (!el) return '';
-    if (el === document.scrollingElement || el === document.documentElement || el === document.body) {
+    const doc = el.ownerDocument || document;
+    if (el === doc.scrollingElement || el === doc.documentElement || el === doc.body) {
       return 'document';
     }
     const id = el.id ? '#' + el.id : '';
@@ -1145,7 +1244,10 @@ const SCROLL_SCRIPT_BODY: &str = r#"
       if (canScroll(node)) return node;
       node = node.parentElement;
     }
-    return document.scrollingElement || document.documentElement;
+    // The scroller that actually holds the target: inside a frame that is
+    // the frame document, not the page around it.
+    const doc = el.ownerDocument || document;
+    return doc.scrollingElement || doc.documentElement;
   };
   const shape = (scroller, offset, moved, m, target) => ({
     mode: m,
@@ -1173,27 +1275,34 @@ const SCROLL_SCRIPT_BODY: &str = r#"
 
   // No target: find the container that actually scrolls. A modern SPA
   // (抖音 / 小红书 creator backends) scrolls an inner box, not the
-  // document — scrolling the document there moves nothing at all.
-  const doc = document.scrollingElement || document.documentElement;
+  // document — scrolling the document there moves nothing at all. The same
+  // holds for a page whose content lives inside a frame: the scroller is in
+  // the frame document, and the page around it does not move.
+  const roots = window.__hamunaRoots();
   let scroller = null;
-  if (canScroll(doc)) {
-    scroller = doc;
-  } else {
-    const viewport = Math.max(1, window.innerWidth * window.innerHeight);
-    const all = document.querySelectorAll('*');
+  for (const root of roots) {
+    const rdoc = root.scrollingElement || root.documentElement;
+    if (rdoc && canScroll(rdoc)) { scroller = rdoc; break; }
+  }
+  if (!scroller) {
     let best = null;
     let bestArea = 0;
-    for (let i = 0; i < all.length; i++) {
-      const el = all[i];
-      if (!canScroll(el) || !isVisible(el)) continue;
-      const a = visibleArea(el);
-      if (a > bestArea) {
-        bestArea = a;
-        best = el;
+    for (const root of roots) {
+      let all;
+      try { all = root.querySelectorAll('*'); } catch (e) { continue; }
+      for (let i = 0; i < all.length; i++) {
+        const el = all[i];
+        if (!canScroll(el) || !isVisible(el)) continue;
+        const a = visibleArea(el);
+        if (a > bestArea) {
+          bestArea = a;
+          best = el;
+        }
+        // A box that fills the viewport is the scroller of the page itself —
+        // no need to keep scanning the rest of the tree.
+        const win = window.__hamunaOwnerWindow(el);
+        if (bestArea >= Math.max(1, win.innerWidth * win.innerHeight) * 0.9) break;
       }
-      // A box that fills the viewport is the scroller of the page itself —
-      // no need to keep scanning the rest of the tree.
-      if (bestArea >= viewport * 0.9) break;
     }
     scroller = best;
   }
@@ -1467,9 +1576,11 @@ mod tests {
             script.contains("scrollHeight - el.clientHeight"),
             "{script}"
         );
-        assert!(script.contains("document.scrollingElement"), "{script}");
         // The document is a candidate, not an assumption: the inner boxes
-        // have to be scanned too.
+        // have to be scanned too — and a page whose content lives inside a
+        // frame scrolls in the frame document, so every root is a candidate.
+        assert!(script.contains("window.__hamunaRoots()"), "{script}");
+        assert!(script.contains("scrollingElement"), "{script}");
         assert!(script.contains("querySelectorAll('*')"), "{script}");
     }
 

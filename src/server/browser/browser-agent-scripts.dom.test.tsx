@@ -60,7 +60,7 @@ const CLOSE = '\uE001';
 function expand(
   body: string,
   helpers: string,
-  args: { sel?: string; txt?: string } = {},
+  args: { sel?: string; txt?: string; u?: string; p?: string } = {},
 ): string {
   // Sentinel the escaped braces first, so the placeholder pass cannot eat
   // them — and so a `}}` inside the helper source cannot be mistaken for an
@@ -74,6 +74,8 @@ function expand(
     .split('{INSTALL_HELPERS}').join(helpers)
     .split('{sel}').join(JSON.stringify(args.sel ?? ''))
     .split('{txt}').join(JSON.stringify(args.txt ?? ''))
+    .split('{u}').join(JSON.stringify(args.u ?? ''))
+    .split('{p}').join(JSON.stringify(args.p ?? ''))
     .split(OPEN).join('{').split(CLOSE).join('}');
   const leftover = out.match(/\{\w+\}/);
   if (leftover) throw new Error(`unexpanded format placeholder ${leftover[0]} in script`);
@@ -82,7 +84,10 @@ function expand(
 
 const HELPERS = rawString('INSTALL_HELPERS');
 
-function script(fnName: string, args: { sel?: string; txt?: string } = {}): string {
+function script(
+  fnName: string,
+  args: { sel?: string; txt?: string; u?: string; p?: string } = {},
+): string {
   return expand(formatBody(fnName), HELPERS, args);
 }
 
@@ -126,6 +131,46 @@ function withLayout<T>(opts: { coveredBy?: string }, body: () => T): T {
 function mount(html: string, shadow?: (doc: Document) => void): void {
   document.body.innerHTML = html;
   shadow?.(document);
+}
+
+/**
+ * A same-origin frame with its own document.
+ *
+ * The frame is a second realm: its elements are not instances of the top
+ * realm `Element`, and the prototype they inherit from is a different one.
+ * Anything the scripts do across that boundary has to ask the frame realm.
+ */
+function mountFrame(
+  html: string,
+  attrs: Record<string, string> = {},
+): { frame: HTMLIFrameElement; doc: Document; win: Window } {
+  const frame = document.createElement('iframe');
+  for (const [k, v] of Object.entries(attrs)) frame.setAttribute(k, v);
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument!;
+  doc.body.innerHTML = html;
+  return { frame, doc, win: doc.defaultView! };
+}
+
+/**
+ * The frame realm needs its own layout stub: the top realm prototype is not
+ * on the prototype chain of an element that lives inside a frame, so the
+ * top realm stub never reaches it.
+ */
+function withFrameLayout<T>(win: Window, body: () => T): T {
+  const proto = (win as unknown as { Element: { prototype: Element } }).Element.prototype;
+  const originalRect = proto.getBoundingClientRect;
+  const originalScroll = proto.scrollIntoView;
+  proto.getBoundingClientRect = function rect() {
+    return { left: 10, top: 10, width: 100, height: 30, right: 110, bottom: 40, x: 10, y: 10, toJSON() { return this; } } as DOMRect;
+  };
+  proto.scrollIntoView = function scrollIntoView() {};
+  try {
+    return body();
+  } finally {
+    proto.getBoundingClientRect = originalRect;
+    proto.scrollIntoView = originalScroll;
+  }
 }
 
 beforeEach(() => {
@@ -304,6 +349,82 @@ describe('fields 列出的选择器，click 必须能用', () => {
       expect(shadowBtn?.selector).toContain('>>>');
       const out = run(script('click_script', { sel: shadowBtn!.selector }));
       expect(out.tag).toBe('button');
+    });
+  });
+});
+
+describe('同源 iframe：选择器要能穿进去', () => {
+  it('frame 里的按钮能被文字命中，并给出能穿回去的选择器', () => {
+    // iframe 里的按钮是另一个 document：浅查询看不见它，坐标也是相对那个
+    // frame 视口的。寻址语法必须能把 agent 带进去，否则文字命中得到元素
+    // 却给不出选择器，agent 下一步就点空了。
+    const { win } = mountFrame('<button class="go">发布</button>', { name: 'pay' });
+    withLayout({}, () => {
+      withFrameLayout(win, () => {
+        const out = run(script('click_script', { txt: '发布' }));
+        expect(out.label).toBe('发布');
+        expect(String(out.selector)).toContain('>>>');
+      });
+    });
+  });
+
+  it('穿 frame 的选择器能解析回同一个元素', () => {
+    const { win } = mountFrame('<button class="go">发布</button>', { name: 'pay' });
+    withLayout({}, () => {
+      withFrameLayout(win, () => {
+        const first = run(script('click_script', { txt: '发布' }));
+        const again = run(script('click_script', { sel: String(first.selector) }));
+        expect(again.label).toBe('发布');
+        expect(String(again.selector)).toBe(String(first.selector));
+      });
+    });
+  });
+
+  it('fields 列出 frame 里的控件，且那个选择器点得中', () => {
+    const { win } = mountFrame('<input placeholder="标题"><button>发布</button>', { name: 'pay' });
+    withLayout({}, () => {
+      withFrameLayout(win, () => {
+        const listed = run(script('fields_script')) as {
+          fields: Array<{ tag: string; selector: string }>;
+        };
+        const frameInput = listed.fields.find((f) => f.tag === 'input');
+        expect(frameInput?.selector).toContain('>>>');
+        const out = run(script('click_script', { sel: frameInput!.selector }));
+        expect(out.tag).toBe('input');
+      });
+    });
+  });
+
+  it('跨源 frame 跳过并说清楚原因，而不是指一个错的控件', () => {
+    // 跨源 frame 的 contentDocument 拿不到：字段列不出来是应该的，但报错
+    // 必须告诉 agent「用文字匹配」，否则它只会反复换选择器。
+    const { frame } = mountFrame('<button>发布</button>', { name: 'pay' });
+    Object.defineProperty(frame, 'contentDocument', { get: () => null });
+    withLayout({}, () => {
+      const listed = run(script('fields_script')) as { fields: Array<{ tag: string }> };
+      expect(listed.fields.find((f) => f.tag === 'button')).toBeUndefined();
+      expect(() => run(script('click_script', { sel: 'iframe >>> button' }))).toThrow(/cross-origin/);
+    });
+  });
+});
+
+describe('登录：表单在同源 frame 里', () => {
+  it('frame 里的账号密码字段被填上', () => {
+    // 登录表单嵌在 frame 里时，旧脚本只看顶层文档，报「No visible password
+    // field found」——agent 看不到错在哪，只能以为是自己没导航对。填值还要
+    // 用 frame 那个 realm 的 value setter，填了等于没填是最坏的一种失败。
+    const { doc, win } = mountFrame(
+      '<input type="email" name="email"><input type="password">',
+    );
+    withLayout({}, () => {
+      withFrameLayout(win, () => {
+        const out = run(script('login_script', { u: 'me@example.com', p: 'hunter2' }));
+        expect(out.usernameFilled).toEqual({ tag: 'input', type: 'email' });
+        expect(out.passwordFilled).toBe(true);
+        const inputs = doc.querySelectorAll('input');
+        expect((inputs[0] as HTMLInputElement).value).toBe('me@example.com');
+        expect((inputs[1] as HTMLInputElement).value).toBe('hunter2');
+      });
     });
   });
 });

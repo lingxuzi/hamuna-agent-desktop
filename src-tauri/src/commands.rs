@@ -2683,7 +2683,14 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // that reaches into a shadow root. Without the `changed` sentence the agent
 // reads `false` as a transient failure and clicks again — the exact loop the
 // verdict was added to break.
-const SYSTEM_SKILLS_VERSION: &str = "84";
+//
+// 85: hamuna-cli — document the `>>>` hop into a same-origin iframe (the frame
+// element, then the selector inside the frame) and the cross-origin case. The
+// old note said selectors cannot cross an iframe at all, which was true when
+// it was written and stopped being true the moment the selector path learned
+// frames — an agent reading it would have given up on `--selector` inside a
+// frame and reached for `--text` first, or worse, kept retrying selectors.
+const SYSTEM_SKILLS_VERSION: &str = "85";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3389,9 +3396,13 @@ mod system_skills_tests {
         // `--video` / `--downgrade-note`; 83 documents them and corrects the
         // upload ceiling (video rides the chunked path, 256 MiB). 84 documents
         // the click verdict (`changed`), the ambiguous-match candidate list and
-        // the `>>>` shadow-root selector the click path now returns.
+        // the `>>>` shadow-root selector the click path now returns. 85 extends
+        // that same `>>>` hop to a same-origin iframe (the frame element, then
+        // the selector inside the frame) and says what happens at a cross-origin
+        // one — the skill is the only place an agent learns it must fall back to
+        // `--text` there instead of trying more selectors.
         assert_eq!(CLI_VERSION, "58");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "84");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "85");
 
         // The TS constant is the one `assertOfficialSystemSkillExposed` compares
         // against the stamp this file writes. Bumping only one side does not

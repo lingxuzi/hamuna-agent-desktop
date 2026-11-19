@@ -634,7 +634,8 @@ hamuna browser select --tab 0                   # 把第 0 个标签页切到最
 - `click` 的返回里带 `changed`：`true` 页面变了，`false` 点到了但页面没反应，`null` 读不回来。**`false` 不是失败重试的信号** —— 是"先 `browser read` 看一眼，别原地再点一次"
 - 文字命中多个控件时，输出会列出「other elements matching that text」以及各自的 `--selector`。默认选中的是分数最高的那个（按钮 > 容器，短标签 > 长标签，被遮住的降权）；要精确指定就用列出来的 selector
 - 选择器支持 `>>>` 穿过 shadow root：`hamuna browser click --selector "my-card >>> button"`。`browser fields` 输出里的 selector 已经是这个形态，直接拿来用
-- 文字匹配能穿同源 iframe（`--text` 能找到里面的按钮），但**选择器穿不过去** —— iframe 里的元素无法用 `--selector` 指定，所以 `browser fields` 也不会列出它们
+- 同一个 `>>>` 也能穿**同源 iframe**：`hamuna browser click --selector "iframe[name=pay] >>> button"` —— 先用 CSS 选择器找到 iframe 元素，再往它的文档里找。`browser fields` 会把 frame 里的控件一起列出来，选择器就是这种形态
+- 跨源 iframe 进不去（浏览器不让读它的文档）。这时选择器会直接报错说"cross-origin"，改用 `--text` 按可见文字匹配
 
 **滚动：**
 - 页面太长、按钮在下面看不到 → `browser scroll --down 3`（鼠标滚轮 3 格）或 `browser scroll --delta 800`（触摸板 800 像素）
