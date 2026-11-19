@@ -43,8 +43,8 @@ export function parseArgs(args: string[]): { positional: string[]; flags: Record
   const flags: Record<string, unknown> = {};
   const repeatable = new Set([
     'args', 'env', 'headers', 'models', 'model-names', 'image', 'file', 'attachment',
-    // ops ledger: repeatable fields of a topic / asset / rule
-    'tag', 'ref', 'shot', 'evidence-bar', 'gap',
+    // ops ledger: repeatable fields of a topic / asset / direction / rule
+    'tag', 'ref', 'shot', 'evidence-bar', 'pillar', 'gap',
   ]);
 
   // PRD 0.2.18 cross-review fix (Codex): added short-flag → long-flag mapping
@@ -2591,6 +2591,11 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'hotness', flag: 'hotness', type: 'number' },
     { field: 'tags', flag: 'tag', type: 'list' },
     { field: 'sourceRefs', flag: 'ref', type: 'list' },
+    // 形态与画幅：**人**在面板上确认开工时写下，Agent 只读不改。
+    // 可选值 image_text / text_only / image_only / video_clip / video_aigc；
+    // 画幅 9:16 / 1:1 / 16:9。写错会被 Rust 拒（枚举反序列化）。
+    { field: 'form', flag: 'form', type: 'text' },
+    { field: 'formAspect', flag: 'formAspect', type: 'text' },
   ],
   asset: [
     { field: 'title', flag: 'title', type: 'text', required: true },
@@ -2608,6 +2613,11 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'progress', flag: 'progress', type: 'number' },
     { field: 'images', flag: 'image', type: 'list' },
     { field: 'shots', flag: 'shot', type: 'jsonList' },
+    // 视频产物单独一个字段，不塞进 --image：两者是不同产物，混在一列里
+    // 「有几张图」这种计数会在有视频时失去意义。
+    { field: 'video', flag: 'video', type: 'text' },
+    // 没按要求的形态做出来时写清原因（降级）。空 = 按要求做出来了。
+    { field: 'downgradeNote', flag: 'downgradeNote', type: 'text' },
   ],
   review: [
     { field: 'assetId', flag: 'assetId', type: 'text', required: true },

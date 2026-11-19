@@ -1188,6 +1188,43 @@
         "evidence": "Evidence you verified",
         "evidencePh": "e.g. read 382K followers on the public page on 2026-11-16",
         "source": "Source"
+      },
+      "start": {
+        "title": "Start production: pick the format",
+        "hint": "“{{title}}” starts generating as soon as you confirm — no interruptions after that.",
+        "form": "Format",
+        "aspect": "Aspect ratio",
+        "submit": "Start generating",
+        "brief": "Topic “{{title}}” is confirmed for production. Platform: {{platform}}. Format: {{form}}{{aspect}}. Start generating in this format and record the finished piece in the ops ledger."
+      },
+      "kind": {
+        "image_text": "Text + images",
+        "text_only": "Text only",
+        "image_only": "Images only",
+        "video_clip": "Video · edited",
+        "video_aigc": "Video · generated"
+      },
+      "pick": {
+        "image_text": {
+          "title": "Text + images",
+          "desc": "Body copy with illustrations"
+        },
+        "text_only": {
+          "title": "Text only",
+          "desc": "Body copy, no images"
+        },
+        "image_only": {
+          "title": "Images only",
+          "desc": "Images, no body copy"
+        },
+        "video_clip": {
+          "title": "Video · edit existing footage",
+          "desc": "Cut existing footage into shots, voice it over"
+        },
+        "video_aigc": {
+          "title": "Video · generate from product",
+          "desc": "Generate visuals from the product, voice it over"
+        }
       }
     },
     "toast": {
@@ -1204,7 +1241,8 @@
       "saveFailed": "Save failed: {{reason}}",
       "directionSaved": "Brief saved",
       "proposalAccepted": "Revision accepted — direction updated",
-      "proposalRejected": "Revision rejected"
+      "proposalRejected": "Revision rejected",
+      "topicStarted": "Generation started"
     },
     "delete": {
       "title": "Delete this record",
@@ -1355,6 +1393,7 @@
       "followers": "+{{n}} followers",
       "quote": "Audience",
       "edit": "Edit this record",
+      "start": "Start",
       "directionPending": "Revision: {{reason}}"
     },
     "chart": {

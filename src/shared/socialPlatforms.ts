@@ -184,9 +184,12 @@ export interface SocialPlatformSpec {
   /**
    * 这条素材能投的形态。
    *
-   * 口径 = **平台接受 ∩ 我们现在能传**。不是平台能力表：抖音能收视频，但我们的
-   * 浏览器通道一次只能内联 12 MiB（`browser_api.rs::MAX_UPLOAD_BYTES`），视频
-   * 走不过去，所以现在抖音只有 `image-text`。通道打通后这里加 `'video'`。
+   * 口径 = **平台接受 ∩ 我们现在能传**。不是平台能力表：平台能收视频不代表我们
+   * 的通道传得过去。传不过去就不列 —— 列了就是让 agent 排一条注定发不出去的
+   * 素材，等排期阶段再发现，白排一次。
+   *
+   * 抖音的视频通道是分片上传（`browser_api.rs` 的 chunked upload path）：文件
+   * 按 8 MiB 切片，逐片内联进页面，页面自己拼成 `File`。上限 256 MiB。
    */
   mediaKinds: readonly SocialMediaKind[];
   /** 创作者后台首页（登录后的落点，也是发布入口所在页）。 */
@@ -257,7 +260,7 @@ export const COMMON_LOGIN_WALL_MARKERS: readonly string[] = [
 export const SOCIAL_PLATFORM_SPECS: readonly SocialPlatformSpec[] = [
   {
     id: 'douyin',
-    mediaKinds: ['image-text'],
+    mediaKinds: ['image-text', 'video'],
     creatorHomeUrl: 'https://creator.douyin.com/',
     publishUrl: 'https://creator.douyin.com/creator-micro/content/upload',
     workListUrl: 'https://creator.douyin.com/creator-micro/content/manage',

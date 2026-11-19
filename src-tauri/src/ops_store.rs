@@ -123,6 +123,82 @@ pub enum OpsRuleBasis {
     Unresolved,
 }
 
+/// 成品形态：人确认选题后要做出来的东西长什么样。
+///
+/// 跟发布侧的媒体种类（`SocialMediaKind`）**分开**：那边回答「这个平台收
+/// 哪种媒体」，这边回答「我们要做什么」。纯图片没有正文，不是图文；纯文字
+/// 在多数平台也不是长文。合成一个字段，发布限制就会污染制作意图。
+///
+/// 两个视频形态分列而不是「video + 一个来源字段」：分列没有非法组合，
+/// 读它的地方也不用各自补一次默认值判断。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpsContentForm {
+    /// 图文：正文 + 配图。
+    ImageText,
+    /// 纯文字：只有正文。
+    TextOnly,
+    /// 纯图片：只有图，没有正文。
+    ImageOnly,
+    /// 视频：剪辑已有素材 + 配音。
+    VideoClip,
+    /// 视频：按产品 AIGC 生成画面 + 配音。
+    VideoAigc,
+}
+
+impl OpsContentForm {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OpsContentForm::ImageText => "image_text",
+            OpsContentForm::TextOnly => "text_only",
+            OpsContentForm::ImageOnly => "image_only",
+            OpsContentForm::VideoClip => "video_clip",
+            OpsContentForm::VideoAigc => "video_aigc",
+        }
+    }
+}
+
+/// 画幅。
+///
+/// 存在的理由是**画幅硬门**：付费生成前必须由人定死横竖，不能从平台默认值
+/// 默默推断——猜错一次就是白花的钱、废掉一轮素材。人面板上点一次，
+/// Agent 就不用中途停下来问。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpsAspect {
+    #[serde(rename = "9:16")]
+    Vertical,
+    #[serde(rename = "1:1")]
+    Square,
+    #[serde(rename = "16:9")]
+    Horizontal,
+}
+
+impl OpsAspect {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OpsAspect::Vertical => "9:16",
+            OpsAspect::Square => "1:1",
+            OpsAspect::Horizontal => "16:9",
+        }
+    }
+}
+
+/// 形态 / 画幅的全集。parity 测试拿它跟 TS 契约对账——加了一档却忘了同步
+/// TS，测试会红，而不是等到界面读不出那个值才坏。
+pub const OPS_CONTENT_FORMS: &[OpsContentForm] = &[
+    OpsContentForm::ImageText,
+    OpsContentForm::TextOnly,
+    OpsContentForm::ImageOnly,
+    OpsContentForm::VideoClip,
+    OpsContentForm::VideoAigc,
+];
+
+pub const OPS_ASPECTS: &[OpsAspect] = &[
+    OpsAspect::Vertical,
+    OpsAspect::Square,
+    OpsAspect::Horizontal,
+];
+
 // ── 实体 ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,6 +224,16 @@ pub struct OpsTopic {
     /// 参考内容的播放量。`None` = 没有可比的参考内容，界面显示「—」而不是 0。
     #[serde(default)]
     pub hotness: Option<u64>,
+    /// 人确认的成品形态。`None` = 还没开工。
+    ///
+    /// 这个字段同时是**付费生成的授权凭据**：它在「人点了开工」那一刻写下，
+    /// 写它的是人不是 Agent。没有它，Agent 分不清「人要求出视频」和
+    /// 「我自己觉得出视频更好」——这两者的钱不是一回事。
+    #[serde(default)]
+    pub form: Option<OpsContentForm>,
+    /// 人确认的画幅。`None` = 纯文字（没有画面）或还没开工。
+    #[serde(default)]
+    pub form_aspect: Option<OpsAspect>,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
@@ -188,8 +274,21 @@ pub struct OpsAsset {
     pub cover: Option<String>,
     #[serde(default)]
     pub images: Vec<String>,
+    /// 视频文件在工作区内的相对路径，如 `ops/assets/clip.mp4`。
+    ///
+    /// `None` = 这条素材不是视频形态。视频和图片是**两种产物**，塞进同一个
+    /// `images` 列表会让「有几张图」这种计数在有视频时失去意义。
+    #[serde(default)]
+    pub video: Option<String>,
     #[serde(default)]
     pub shots: Vec<OpsShot>,
+    /// 降级说明：这条素材**没有**按选题要求的形态做出来时，写清原因。
+    ///
+    /// 例：「视频生成返回余额不足，已降级为图文」。空 = 按要求做出来了。
+    /// 降级本身必须看得见：素材卡上摆着一条图文，而选题要的是视频，
+    /// 中间那次降级不写下来就等于没发生过。
+    #[serde(default)]
+    pub downgrade_note: Option<String>,
     pub platform: String,
     /// 排期时间。`None` = 未排期。
     #[serde(default)]
@@ -1008,7 +1107,7 @@ pub fn upsert_item_by(
     mutate_state(workspace_root, |state| match kind {
         OpsItemKind::Direction => upsert_direction(state, fields, actor),
         OpsItemKind::Account => upsert_account(state, fields),
-        OpsItemKind::Topic => upsert_topic(state, fields),
+        OpsItemKind::Topic => upsert_topic(state, fields, actor),
         OpsItemKind::Asset => upsert_asset(state, fields),
         OpsItemKind::Review => upsert_review(state, fields),
         OpsItemKind::Rule => upsert_rule(state, fields),
@@ -1100,12 +1199,34 @@ fn resolve_created_at(existing_created_at: Option<&str>, patched: &str) -> Strin
 fn upsert_topic(
     state: &mut OpsState,
     patch: serde_json::Map<String, serde_json::Value>,
+    actor: OpsActor,
 ) -> Result<String, String> {
+    // **形态与画幅是授权凭据。** `form` 决定这一轮要不要调付费生成（图 / 视频），
+    // 所以它必须由**人**写：只有人那扇门能定这一轮花不花钱。
+    //
+    // Agent 自己宣称「这题要花钱」就能给自己开一条付费通道 —— 于是「不花钱」
+    // 这条红线就只剩提示词一句话撑着。这里按门拦，跟派工（`dispatch`）同一
+    // 形状：Agent 读 `form`，写不了。
     let id = patch_id(&patch);
     let existing = id
         .as_deref()
         .and_then(|id| state.topics.iter().find(|topic| topic.id == id));
     let mut topic: OpsTopic = merge_patch(existing, &patch)?;
+    if actor != OpsActor::User {
+        // 判的是「**值真的变了**」，不是「补丁里有没有这个键」：
+        // 把整条选题读出来、改一个字段再写回去是常见写法，那种写回里会带着
+        // 人已经定好的 `form`。值没变就不算一次授权动作；变了（哪怕是清空）
+        // 就是 —— 那一栏只能由人那扇门动。
+        let form_changed = topic.form != existing.and_then(|old| old.form);
+        let aspect_changed = topic.form_aspect != existing.and_then(|old| old.form_aspect);
+        if form_changed || aspect_changed {
+            return Err(
+                "[ops-store] only the user can set the topic content form (form / formAspect) \
+                 — the Agent reads it, it does not write it"
+                    .to_string(),
+            );
+        }
+    }
     if topic.id.trim().is_empty() {
         topic.id = generate_id("topic");
     }
@@ -1645,6 +1766,8 @@ mod tests {
             source: OpsTopicSource::Manual,
             source_refs: Vec::new(),
             hotness: None,
+            form: None,
+            form_aspect: None,
             created_at: "2026-11-01T09:00:00".to_string(),
             updated_at: "2026-11-01T09:00:00".to_string(),
         }
@@ -1661,6 +1784,7 @@ mod tests {
             source_ref: None,
             cover: None,
             images: Vec::new(),
+            video: None,
             shots: Vec::new(),
             platform: "xiaohongshu".to_string(),
             scheduled_at: None,
@@ -1668,6 +1792,7 @@ mod tests {
             published_at: None,
             platform_work_id: None,
             progress: 0,
+            downgrade_note: None,
             created_at: "2026-11-01T09:00:00".to_string(),
             updated_at: "2026-11-01T09:00:00".to_string(),
         }
@@ -2353,6 +2478,102 @@ mod tests {
 
         assert_eq!(state.topics.len(), 1);
         assert_eq!(state.topics[0].title, "改过的标题");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 形态 + 画幅：这两格是人点的开工凭据，写进去就得原样读回来。
+    #[test]
+    fn topic_form_and_aspect_survive_a_roundtrip() {
+        let ws = make_test_workspace("ops-form");
+        let mut item = topic("t1");
+        item.form = Some(OpsContentForm::VideoAigc);
+        item.form_aspect = Some(OpsAspect::Vertical);
+        upsert_item_by(&ws, topic_upsert(&item), OpsActor::User).expect("upsert");
+
+        let reread = read_state(&ws).expect("read");
+        assert_eq!(reread.topics[0].form, Some(OpsContentForm::VideoAigc));
+        assert_eq!(reread.topics[0].form_aspect, Some(OpsAspect::Vertical));
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 形态是**枚举**，不是自由字符串：写进一个不存在的值必须被挡下，
+    /// 而不是塞进台账等界面去显示一个看不懂的标签。
+    #[test]
+    fn topic_form_rejects_an_unknown_value() {
+        let ws = make_test_workspace("ops-form-bad");
+        let err = upsert_item_by(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Topic,
+                fields: serde_json::json!({
+                    "id": "t1",
+                    "title": "选题",
+                    "platform": "douyin",
+                    "form": "video",
+                })
+                .as_object()
+                .cloned()
+                .expect("object"),
+            },
+            OpsActor::User,
+        )
+        .expect_err("不存在的形态必须被挡下");
+        assert!(
+            err.contains("expected one of"),
+            "错误要说清有哪些合法值: {}",
+            err
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 形态是**付费生成的授权凭据**，所以只有人那扇门能写。
+    ///
+    /// Agent 自己写 `form` 就等于自己给自己开了一条花钱的通道 —— 「不花钱」
+    /// 那条红线会退化成提示词里的一句话。这里按门拦，跟派工同一形状。
+    #[test]
+    fn topic_form_cannot_be_set_by_the_agent() {
+        let ws = make_test_workspace("ops-form-agent-door");
+        let err = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Topic,
+                fields: serde_json::json!({
+                    "id": "t1",
+                    "title": "选题",
+                    "platform": "douyin",
+                    "form": "video_aigc",
+                })
+                .as_object()
+                .cloned()
+                .expect("object"),
+            },
+        )
+        .expect_err("Agent 不能自己定形态");
+
+        assert!(err.contains("only the user"), "报错要说清是人的动作：{err}");
+        let state = read_state(&ws).expect("reread");
+        assert!(
+            state.topics.is_empty(),
+            "被拒的形态不能留下痕迹：{:?}",
+            state.topics
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// Agent 把整条选题读出来、改一个字段再写回去 —— 那种写回里会带着人已经
+    /// 定好的 `form`。**值没变就不算一次授权动作**，不该被拦。
+    #[test]
+    fn topic_form_survives_a_whole_record_write_back_by_the_agent() {
+        let ws = make_test_workspace("ops-form-writeback");
+        let mut item = topic("t1");
+        item.form = Some(OpsContentForm::VideoAigc);
+        upsert_item_by(&ws, topic_upsert(&item), OpsActor::User).expect("人定形态");
+
+        let mut again = item.clone();
+        again.status = OpsTopicStatus::Produced;
+        let (state, _) = upsert_item(&ws, topic_upsert(&again)).expect("写回");
+        assert_eq!(state.topics[0].form, Some(OpsContentForm::VideoAigc));
+        assert_eq!(state.topics[0].status, OpsTopicStatus::Produced);
         let _ = fs::remove_dir_all(&ws);
     }
 
@@ -3157,6 +3378,22 @@ mod parity_tests {
     fn topic_source_values_exist_in_ts_contract() {
         for value in ["hotspot", "benchmark", "manual", "reflection"] {
             assert_ts_array_has(TS_OPS, "OPS_TOPIC_SOURCES", value);
+        }
+    }
+
+    /// 形态 / 画幅：拿 Rust 的全集去对账 TS 的数组，而不是抄一份字符串再对——
+    /// 抄的那份会跟 Rust 一起漂移，两边都"对"但对的是不同的东西。
+    #[test]
+    fn content_form_values_exist_in_ts_contract() {
+        for form in OPS_CONTENT_FORMS {
+            assert_ts_array_has(TS_OPS, "OPS_CONTENT_FORMS", form.as_str());
+        }
+    }
+
+    #[test]
+    fn aspect_values_exist_in_ts_contract() {
+        for aspect in OPS_ASPECTS {
+            assert_ts_array_has(TS_OPS, "OPS_ASPECTS", aspect.as_str());
         }
     }
 

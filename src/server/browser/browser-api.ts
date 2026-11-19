@@ -406,8 +406,9 @@ export async function handleBrowserFields(payload: BrowserActionPayload): Promis
  * publish page — the Rust side reads the bytes and inlines them as base64.
  *
  * **The Rust side owns the path rules** (`validate_file_path`: absolute, not
- * blacklisted) and the size ceiling (`MAX_UPLOAD_BYTES`, 12 MiB, image-only
- * in practice). This layer only forwards the path; it deliberately does not
+ * blacklisted) and the size ceilings (`MAX_UPLOAD_BYTES`, 12 MiB for the
+ * inline path, `MAX_VIDEO_UPLOAD_BYTES`, 256 MiB for the chunked one that
+ * carries video). This layer only forwards the path; it deliberately does not
  * re-implement either check, because two implementations of the same rule
  * drift.
  */

@@ -288,7 +288,9 @@ hamuna ops update topic --id topic-1a2b3c4d --status produced
 hamuna ops remove topic --id topic-1a2b3c4d
 hamuna ops add asset --title "标题" --platform douyin --body-file script.md --progress 60 \
     --product "露营折叠桌" --cta "进店看新款" \
-    --source-ref ops/assets/imported/2026-11-15/折叠桌批次
+    --source-ref ops/assets/imported/2026-11-15/折叠桌批次 \
+    --video ops/assets/asset-1a2b3c4d.mp4 \
+    --downgrade-note "视频生成返回余额不足，已降级为图文"
 hamuna ops add review --asset-id asset-1a2b3c4d --platform douyin \
     --published-at 2026-11-10T09:00:00+00:00 --views 12000 --likes 300 \
     --comment-sample "这个折叠桌多少钱？"
@@ -329,6 +331,11 @@ hamuna ops update clue --platform xiaohongshu --comment-id "c-abc123" --status q
 **方向和账号是按 `--platform` 定位、不需要 `--id` 的记录。** 每个平台至多一条，后端从
 platform 派生 id（方向 `dir-<platform>`、账号 `acc-<platform>`），所以重复
 `update --platform X` 永远落在同一条上。平台重复会直接报错——那是数据损坏，不是正常状态。
+
+**选题的 `form` / `formAspect` 只有人能写。** `--form image_text|text_only|image_only|video_clip|video_aigc`
+是「这一条要做成什么」，`--form-aspect 9:16|1:1|16:9` 是画幅 —— 它们决定这一轮要不要调
+付费生成，所以是**授权凭据**。面板上的「开工」那扇门记人；Agent 这扇门写会被后端挡回来
+（`only the user can set the topic content form`），这是故意的。要改就在面板上改。
 
 **采纳 / 驳回修订是动作，不是字段。** `--accept-proposal` 让后端把挂在这条记录上的
 `proposal` 整段替换进主字段并置 `status: active`；`--reject-proposal` 只丢掉 proposal。
@@ -429,7 +436,7 @@ hamuna platforms douyin --json      # 单平台全貌：形态、发布页、作
 
 **缺字段 = 还没核实**，不是「没有」。缺 URL 就从 `creatorHomeUrl` 进后台现场找入口，找到的真实路径记进工作区记忆，下次直接用。**不要猜一个地址去撞。**
 
-`mediaKinds` 是「平台接受 ∩ 我们传得过去」：抖音能收视频，但浏览器通道一次只能内联 12 MiB，所以现在只有 `image-text`。
+`mediaKinds` 是「平台接受 ∩ 我们传得过去」：抖音图文和视频都能投，视频走分片上传通道（8 MiB 一片，256 MiB 上限）。
 
 ### 任务中心（task / thought）
 
@@ -611,7 +618,7 @@ hamuna browser click --selector "#submit"        # 点 CSS 选择器命中的元
 hamuna browser click --text "Sign in"            # 点可见文字匹配的元素
 hamuna browser fill --selector "#q" --value "hamuna"
 hamuna browser fill --selector "#desc" --value-file ops/assets/a.publish.txt  # 多行文本走文件
-hamuna browser upload --selector "input[type=file]" --file ./cover.png  # 选文件（≤12 MiB）
+hamuna browser upload --selector "input[type=file]" --file ./cover.png  # 选文件（≤12 MiB 直传，更大走分片，上限 256 MiB）
 hamuna browser fields                            # 列出可见表单控件 / 按钮 + 每个的可用选择器
 hamuna browser publish --platform douyin --text "发布"  # 发布（受审批闸控制，见下）
 hamuna browser submit --selector "#form"         # 提交表单（会弹审批）
@@ -674,7 +681,7 @@ hamuna browser select --tab 0                   # 把第 0 个标签页切到最
 
 **上传文件：**
 - `upload` 把本地文件塞进页面的 `<input type=file>`。找 `--selector` 命中的元素；命中的不是 file input 时，会在它内部找
-- **上限 12 MiB，且只适合图片**。文件是 base64 内联进页面脚本的，视频（动辄 50 MB+）超限直接报错，不会静默失败
+- **上限 256 MiB**。12 MiB 以内的文件 base64 内联进页面脚本；更大的按 8 MiB 分片、逐片内联，页面自己拼成一个文件——视频（动辄 50 MB+）走的就是分片那条路。超上限直接报错，不会静默失败
 - 页面没有 file input 就会报错 —— 有些站点的「选择文件」按钮直接弹系统面板，脚本拦不住。这时告诉用户手动选，不要假装上传成功
 - 同一页有多个 file input 时，输出会提示数量，需要第二轮指定另一个
 

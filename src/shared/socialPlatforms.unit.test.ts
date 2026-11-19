@@ -190,11 +190,11 @@ describe('发布规格层', () => {
     }
   });
 
-  it('抖音：图文可投，视频不可投（浏览器通道一次只能内联 12 MiB）', () => {
+  it('抖音：图文和视频都可投（视频走分片上传通道）', () => {
     const douyin = getSocialPlatformSpec('douyin');
     expect(canPublishTo(douyin, 'image-text')).toBe(true);
-    // 抖音本身能收视频 —— 但走不过我们的传输通道，所以规格里不列。
-    expect(canPublishTo(douyin, 'video')).toBe(false);
+    // 视频走 chunked upload：文件切片内联进页面，页面自己拼成 File。
+    expect(canPublishTo(douyin, 'video')).toBe(true);
   });
 
   it('抖音的限制值是平台侧的硬限制，不受传输通道影响', () => {

@@ -83,6 +83,44 @@ export const OPS_TOPIC_SOURCES: readonly OpsTopicSource[] = [
 ];
 
 /**
+ * 内容形态：人确认选题后，要做出来的成品长什么样。
+ *
+ * **为什么不是 `SocialMediaKind`**：那是**发布侧**口径（「这个平台收哪种
+ * 媒体」，七个平台清一色 `image-text`）；这里是**制作侧**口径（「我们要做
+ * 什么」）。纯图片没有正文，不是 image-text；纯文字在多数平台也不是
+ * article。把两个口径混成一个字段，「平台能不能发」就会污染「我们要做什么」，
+ * 反过来也一样。
+ *
+ * 两个视频形态分列而不是「video + 一个来源字段」：分列没有非法组合
+ * （video 不带来源），也不用在每个读它的地方补一次默认值判断。
+ */
+export type OpsContentForm =
+  | 'image_text'
+  | 'text_only'
+  | 'image_only'
+  | 'video_clip'
+  | 'video_aigc';
+
+export const OPS_CONTENT_FORMS: readonly OpsContentForm[] = [
+  'image_text',
+  'text_only',
+  'image_only',
+  'video_clip',
+  'video_aigc',
+];
+
+/**
+ * 画幅。
+ *
+ * 存在的理由是**画幅硬门**：付费生成前必须由人定死横竖，不能从平台默认值
+ * 默默推断——猜错一次就是白花的钱、废掉一轮素材。人面板上点一次，
+ * Agent 就不用中途停下来问，生成过程全程无人值守。
+ */
+export type OpsAspect = '9:16' | '1:1' | '16:9';
+
+export const OPS_ASPECTS: readonly OpsAspect[] = ['9:16', '1:1', '16:9'];
+
+/**
  * 素材状态：草稿 → 定稿 → （已投放 | 未核实）。
  *
  * `unverified` = 已经点过提交，但**没有平台侧证据**证明它真的发出去了。
@@ -142,6 +180,12 @@ export const isOpsTopicStatus = (value: unknown): value is OpsTopicStatus =>
 export const isOpsTopicSource = (value: unknown): value is OpsTopicSource =>
   isOneOf(value, OPS_TOPIC_SOURCES);
 
+export const isOpsContentForm = (value: unknown): value is OpsContentForm =>
+  isOneOf(value, OPS_CONTENT_FORMS);
+
+export const isOpsAspect = (value: unknown): value is OpsAspect =>
+  isOneOf(value, OPS_ASPECTS);
+
 export const isOpsAssetStatus = (value: unknown): value is OpsAssetStatus =>
   isOneOf(value, OPS_ASSET_STATUSES);
 
@@ -187,6 +231,20 @@ export interface OpsTopic {
    * 参考内容的播放量。`null` = 没有可比的参考内容，界面显示「—」而不是 0。
    */
   hotness: number | null;
+  /**
+   * 人确认的成品形态。`null` = 还没开工。
+   *
+   * 这个字段同时是**付费生成的授权凭据**：它在「人点了开工」那一刻写下，
+   * 写它的是人不是 Agent。没有它，Agent 无法区分「人要求出视频」和
+   * 「我自己觉得出视频更好」——而这两者的钱不是一回事。
+   *
+   * 可选：旧记录里没有这个键（Rust 侧 `#[serde(default)]`）。
+   */
+  form?: OpsContentForm | null;
+  /**
+   * 人确认的画幅。`null` = 纯文字（没有画面）或还没开工。
+   */
+  formAspect?: OpsAspect | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -231,7 +289,26 @@ export interface OpsAsset {
   /** 工作区内的相对路径，如 `ops/assets/cover.png`。 */
   cover: string | null;
   images: string[];
+  /**
+   * 视频文件在工作区内的相对路径，如 `ops/assets/clip.mp4`。
+   *
+   * `null` = 这条素材不是视频形态。视频和图片是**两种产物**，塞进同一个
+   * `images` 列表会让「有几张图」这种计数在有视频时失去意义。
+   *
+   * 可选：旧记录里没有这个键（Rust 侧 `#[serde(default)]`）。
+   */
+  video?: string | null;
   shots: OpsShot[];
+  /**
+   * 降级说明：这条素材**没有**按选题要求的形态做出来时，写清原因。
+   *
+   * 例：「视频生成返回余额不足，已降级为图文」。空 = 按要求做出来了。
+   * 有这个字段的理由是——降级本身必须看得见：素材卡上摆着一条图文，
+   * 而选题要的是视频，中间那次降级不写下来就等于没发生过。
+   *
+   * 可选：旧记录里没有这个键（Rust 侧 `#[serde(default)]`）。
+   */
+  downgradeNote?: string | null;
   platform: SocialPlatformId;
   /** 排期时间。`null` = 未排期。 */
   scheduledAt: string | null;

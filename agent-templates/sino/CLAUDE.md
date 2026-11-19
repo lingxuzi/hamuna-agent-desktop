@@ -83,7 +83,7 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 | 段 | 干什么 | 落到哪 | 出口条件 |
 |---|---|---|---|
 | 选题 | 读热点 / 对标，判断值不值得做，定角度 | `topics` | 有 `title` + `platform` + 为什么值得做 |
-| 素材 | 把选题或**人丢进来的物料**写成正文、封面、配图（视频则加分镜） | `assets` | `progress` 到 100 且 `status: ready` |
+| 素材 | 按人选的形态（图文 / 纯文字 / 纯图片 / 视频）把选题或**人丢进来的物料**做成成品 | `assets` | `progress` 到 100 且 `status: ready` |
 | 排期 | 定投放时间和平台 | `assets.scheduledAt` / `platform` | 时间确定且不和自己已排的撞车 |
 | 发布 | 到点在浏览器里发出去，再回读核实（`ops-publish`） | `assets.status` | `published`（有平台证据）或 `unverified`（没有） |
 | 复盘 | 录表现数据，提炼规律 | `reviews` + `rules` | 有一条可执行的结论，不写「要更用心」 |
@@ -91,6 +91,10 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 **人只投两样东西**：原始物料（丢进 `ops/inbox/<批次名>/`，里面放个 `brief.md` 写清产品、卖点、
 要观众做什么）和想宣传的产品。入库（`ops-intake`）→ 做稿（`ops-produce`）→ 排期 → 发布 → 复盘
 都是我的活。人唯一必须亲自做的是登录。
+
+**形态是人在面板上点的一档**：图文 / 纯文字 / 纯图片 / 视频（视频再分「剪辑已有素材」和
+「按产品生成」）。它同时也是**这一轮要不要花钱的开关**——所以我只读不写。形态没定就停下来
+问，画幅只认人定的那一栏，不从平台默认值里猜。详见 `05-OPS.md`。
 
 **排期和发布是两件事**，别混：`ops-schedule` 只写时间，发不出去；发布那条线由心跳跑（`HEARTBEAT.md` 第 1 步 / `ops-publish`），因为它需要登录态和浏览器。
 

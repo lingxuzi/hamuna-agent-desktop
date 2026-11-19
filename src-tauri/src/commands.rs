@@ -2395,7 +2395,13 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // keeps the old CLI reads rules with no age at all and treats a three-week-old
 // observation as today's — the same "silent gap reads like no gap" failure as
 // 53, one level down.
-const CLI_VERSION: &str = "56";
+// 57: adds the topic's content form (`--form` / `--form-aspect`) and the
+// asset's video + downgrade note (`--video` / `--downgrade-note`). The form is
+// the credential that says "this round may spend"; an install that keeps the
+// old CLI cannot read it, so the agent has no way to know which shape to
+// produce and falls back to guessing — and a guessed shape is either the wrong
+// deliverable or an unauthorized paid call.
+const CLI_VERSION: &str = "57";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2658,7 +2664,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // reference the bundled MA helper reads before it touches the ledger; a flag
 // it does not know about is a flag it never passes, so the evidence age
 // stays unrecorded and the rule can never expire.
-const SYSTEM_SKILLS_VERSION: &str = "82";
+// 83: hamuna-cli — document the content form (`--form` / `--form-aspect`),
+// the video artifact (`--video`) and the downgrade note
+// (`--downgrade-note`), and correct the upload ceiling: video now rides the
+// chunked path (256 MiB), not the 12 MiB image-only inline one. A skill that
+// still says "video does not fit" teaches the agent to give up on a delivery
+// the channel now supports.
+const SYSTEM_SKILLS_VERSION: &str = "83";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at
@@ -3359,9 +3371,12 @@ mod system_skills_tests {
         //
         // The anchor was left at 46/69 while the constants moved on to 48/71, so
         // this test had been red at HEAD for a reason unrelated to any behaviour
-        // — do not re-derive a rule from it, just keep it in step.
-        assert_eq!(CLI_VERSION, "55");
-        assert_eq!(SYSTEM_SKILLS_VERSION, "81");
+        // — do not re-derive a rule from it, just keep it in step. 57 adds the
+        // topic content form (`--form` / `--form-aspect`) plus the asset's
+        // `--video` / `--downgrade-note`; 83 documents them and corrects the
+        // upload ceiling (video rides the chunked path, 256 MiB).
+        assert_eq!(CLI_VERSION, "57");
+        assert_eq!(SYSTEM_SKILLS_VERSION, "83");
         let bundled = include_str!("../../bundled-skills/hamuna-cli/SKILL.md");
         assert!(bundled.contains("hamuna space list --json"));
         assert!(bundled.contains("hamuna space whoami --space <slug> --json"));
@@ -3396,6 +3411,18 @@ mod system_skills_tests {
         assert!(bundled.contains("hamuna ops list benchmark"));
         assert!(bundled.contains("hamuna ops add benchmark --platform"));
         assert!(bundled.contains("--profile-url"));
+        // Content-form surface: the form is the credential that says "this round
+        // may spend", so the docs must name the flags AND say who may write
+        // them — an agent that never heard of `--form` cannot read the form, and
+        // one that does not know the write is refused will keep retrying it.
+        assert!(bundled.contains("--form image_text"));
+        assert!(bundled.contains("--form-aspect"));
+        assert!(bundled.contains("--video ops/assets/"));
+        assert!(bundled.contains("--downgrade-note"));
+        // Upload ceiling: video rides the chunked path now, so a doc that still
+        // says "12 MiB, images only" teaches the agent to give up on a delivery
+        // the channel supports.
+        assert!(bundled.contains("256 MiB"));
 
         let memory_update = include_str!("../../bundled-skills/hamuna-memory-update/SKILL.md");
         assert!(

@@ -1188,6 +1188,43 @@
         "evidence": "核实到的证据",
         "evidencePh": "如：2026-11-16 公开页读到 38.2w 粉",
         "source": "来源"
+      },
+      "start": {
+        "title": "开工：选成品形态",
+        "hint": "《{{title}}》确认后立刻开始生成，中途不再打断你。",
+        "form": "成品形态",
+        "aspect": "画幅",
+        "submit": "开始生成",
+        "brief": "选题《{{title}}》已确认开工。平台：{{platform}}。成品形态：{{form}}{{aspect}}。请按这个形态开始生成内容，做完把成品记进运营台账。"
+      },
+      "kind": {
+        "image_text": "图文",
+        "text_only": "纯文字",
+        "image_only": "纯图片",
+        "video_clip": "视频·剪辑",
+        "video_aigc": "视频·生成"
+      },
+      "pick": {
+        "image_text": {
+          "title": "图文",
+          "desc": "正文加配图"
+        },
+        "text_only": {
+          "title": "纯文字",
+          "desc": "只有正文，不配图"
+        },
+        "image_only": {
+          "title": "纯图片",
+          "desc": "只有配图，不写正文"
+        },
+        "video_clip": {
+          "title": "视频 · 剪辑已有素材",
+          "desc": "把已有素材剪成分镜，配音成片"
+        },
+        "video_aigc": {
+          "title": "视频 · 按产品生成",
+          "desc": "按产品信息生成画面，配音成片"
+        }
       }
     },
     "toast": {
@@ -1204,7 +1241,8 @@
       "saveFailed": "保存失败：{{reason}}",
       "directionSaved": "方向原话已保存",
       "proposalAccepted": "已采纳修订，方向已更新",
-      "proposalRejected": "已驳回修订"
+      "proposalRejected": "已驳回修订",
+      "topicStarted": "已开始生成"
     },
     "delete": {
       "title": "删除这条记录",
@@ -1355,6 +1393,7 @@
       "followers": "涨粉 {{n}}",
       "quote": "观众说",
       "edit": "编辑这条记录",
+      "start": "开工",
       "directionPending": "修订：{{reason}}"
     },
     "chart": {

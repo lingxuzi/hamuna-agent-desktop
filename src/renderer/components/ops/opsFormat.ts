@@ -4,6 +4,7 @@
 // 所有函数收 `locale`，不读全局状态 —— 语言切换后不必重挂整个面板。
 
 import type { SocialPlatformId } from '../../../shared/socialPlatforms';
+import type { OpsContentForm } from '../../../shared/ops';
 import type { OpsMetric } from '../../../shared/ops-derive';
 
 /** 一个指标拆成「数值 + 单位」两段：Hero 里数值走衬线大字，单位小一号跟在后面。 */
@@ -78,6 +79,18 @@ export function platformLabel(
 ): string {
   if (!platform) return '';
   return t(`accounts.platform.${platform}`, { ns: 'settings' });
+}
+
+/**
+ * 成品形态的短标签。列表行上的徽章用——要能一眼认出「这轮做的是什么」，
+ * 但不能长到把标题挤没。
+ */
+export function formLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  form: OpsContentForm | null | undefined,
+): string {
+  if (!form) return '';
+  return t(`ops.form.kind.${form}`);
 }
 
 /** `2026-11-14` 或 ISO → `11/14`。 */

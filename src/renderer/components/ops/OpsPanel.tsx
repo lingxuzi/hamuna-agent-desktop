@@ -7,7 +7,15 @@ import {
   loginCookieGroup,
   type SocialPlatformId,
 } from '../../../shared/socialPlatforms';
-import type { OpsAsset, OpsBenchmark, OpsDomainId, OpsReview, OpsTopic } from '../../../shared/ops';
+import type {
+  OpsAspect,
+  OpsAsset,
+  OpsBenchmark,
+  OpsContentForm,
+  OpsDomainId,
+  OpsReview,
+  OpsTopic,
+} from '../../../shared/ops';
 import { OPS_DOMAIN_IDS } from '../../../shared/ops';
 import {
   deriveOpsView,
@@ -39,7 +47,7 @@ import { OpsClues } from './OpsClues';
 import { OpsTerminalCode } from './OpsTerminalCode';
 import OpsWizard, { OPS_WIZARD_STEPS, type OpsWizardStep } from './OpsWizard';
 import { useOpsState } from './useOpsState';
-import { AssetForm, ReviewForm, TopicForm } from './OpsForms';
+import { AssetForm, ReviewForm, TopicForm, TopicStartForm } from './OpsForms';
 import { opsErrorMessage, opsUpsert } from './opsWrite';
 import { useToastOptional } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -311,6 +319,29 @@ export default function OpsPanel({
     [workspace, notify, fail, t],
   );
 
+  /**
+   * 开工派工：把一条选题交给 Agent 生成内容。
+   *
+   * 台账先写、活后派 —— 顺序反过来就留下一条说不清的状态：Agent 已经在做
+   * 了，台账里却没有形态，那条记录既不能再开工，Agent 也不知道这份形态是
+   * **人要的**还是它自己想的（这两者的钱不是一回事）。没写上就不派工：
+   * 台账与实际脱节比晚一步更糟。
+   */
+  const startTopic = useCallback(
+    (topic: OpsTopic, form: OpsContentForm, aspect: OpsAspect | null) => {
+      onSendToAgent(
+        t('ops.form.start.brief', {
+          title: topic.title,
+          platform: t(`settings:accounts.platform.${topic.platform}`),
+          form: t(`ops.form.kind.${form}`),
+          aspect: aspect ? `（${aspect}）` : '',
+        }),
+      );
+      notify(t('ops.toast.topicStarted'));
+    },
+    [notify, onSendToAgent, t],
+  );
+
   return (
     <div
       className={`ops ops-pop ${unfolded ? 'ops-pop-open' : ''} ${
@@ -498,6 +529,10 @@ export default function OpsPanel({
                     const topic = state.topics.find((tp) => tp.id === topicId);
                     if (topic) setForm({ kind: 'topic:edit', topic });
                   }}
+                  onStartTopic={(topicId) => {
+                    const topic = state.topics.find((tp) => tp.id === topicId);
+                    if (topic) setForm({ kind: 'topic:start', topic });
+                  }}
                   onEditAsset={(assetId) => {
                     const asset = state.assets.find((a) => a.id === assetId);
                     if (asset) setForm({ kind: 'asset:edit', asset });
@@ -542,6 +577,7 @@ export default function OpsPanel({
           request={form}
           state={state}
           onClose={() => setForm(null)}
+          onStartTopic={startTopic}
           onDone={(message) => {
             setForm(null);
             notify(message);
@@ -593,6 +629,7 @@ export default function OpsPanel({
 type FormRequest =
   | { kind: 'topic:new' }
   | { kind: 'topic:edit'; topic: OpsTopic }
+  | { kind: 'topic:start'; topic: OpsTopic }
   | { kind: 'asset:new' }
   | { kind: 'asset:edit'; asset: OpsAsset }
   | { kind: 'review:new' }
@@ -606,12 +643,15 @@ function FormHost({
   request,
   state,
   onClose,
+  onStartTopic,
   onDone,
 }: {
   workspace: string;
   request: FormRequest;
   state: ReturnType<typeof useOpsState>['state'];
   onClose: () => void;
+  /** 「开工」台账写成功后派工。 */
+  onStartTopic: (topic: OpsTopic, form: OpsContentForm, aspect: OpsAspect | null) => void;
   onDone: (message: string) => void;
 }) {
   switch (request.kind) {
@@ -623,6 +663,15 @@ function FormHost({
           initial={request.kind === 'topic:edit' ? request.topic : undefined}
           onClose={onClose}
           onDone={onDone}
+        />
+      );
+    case 'topic:start':
+      return (
+        <TopicStartForm
+          workspace={workspace}
+          topic={request.topic}
+          onClose={onClose}
+          onStart={(form, aspect) => onStartTopic(request.topic, form, aspect)}
         />
       );
     case 'asset:new':

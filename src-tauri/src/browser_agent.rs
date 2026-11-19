@@ -401,6 +401,109 @@ pub fn upload_script(selector: &str, text: &str, file_name: &str, mime: &str, ba
     )
 }
 
+/// Open a chunked upload: find the file input and reset the accumulator.
+///
+/// WHY A SECOND PATH
+/// -----------------
+/// [`upload_script`] puts the whole file into one JS string literal. That is
+/// fine for stills (≤ 12 MiB) and impossible for video: a one-minute clip is
+/// 50–200 MB, and one eval carrying that would blow the IPC payload and the
+/// webview heap long before the page ever saw it.
+///
+/// Chunking keeps every eval at the scale the inline path already proves
+/// works, and the bytes never leave the machine: the page assembles a `File`
+/// from the chunks exactly like the inline path builds one from a single
+/// base64 blob.
+///
+/// The accumulator lives on `window` so the chunks can arrive in separate
+/// evals. A navigation wipes it — that is what [`upload_chunk_script`]'s
+/// "session was not opened" error is for.
+pub fn upload_begin_script(selector: &str, text: &str, file_name: &str, mime: &str) -> String {
+    let sel = js_string(selector);
+    let txt = js_string(text);
+    let name = js_string(file_name);
+    let mime = js_string(mime);
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const el = window.__hamunaLocate({sel}, {txt});
+  const tag = el.tagName.toLowerCase();
+  const input = tag === 'input' && el.type === 'file'
+    ? el
+    : el.querySelector && el.querySelector('input[type=file]');
+  if (!input) throw new Error('Target is not a file input and contains none (tag=' + tag + ')');
+  window.__hamunaUpload = {{ chunks: [], name: {name}, mime: {mime} }};
+  return {{ selector: {sel} || {txt}, chunks: 0 }};
+}})()"
+    )
+}
+
+/// Append one base64 chunk to the accumulator.
+///
+/// The chunk is decoded to bytes **immediately**: keeping the base64 string
+/// around would make the page hold the file twice (base64 is 4/3 the size of
+/// the bytes, and the bytes are what the `File` ends up holding).
+pub fn upload_chunk_script(base64: &str) -> String {
+    let b64 = js_string(base64);
+    format!(
+        "(() => {{
+  const st = window.__hamunaUpload;
+  if (!st) throw new Error('Upload session was not opened (the page navigated?)');
+  const bin = atob({b64});
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  st.chunks.push(bytes);
+  let size = 0;
+  for (const c of st.chunks) size += c.length;
+  return {{ chunks: st.chunks.length, size }};
+}})()"
+    )
+}
+
+/// Assemble the chunks into one `File` and attach it to the input.
+///
+/// Same contract as [`upload_script`]: the new file is **appended** to the
+/// existing `FileList`, and `input` / `change` are dispatched so the page's
+/// own uploader notices.
+pub fn upload_finalize_script(selector: &str, text: &str) -> String {
+    let sel = js_string(selector);
+    let txt = js_string(text);
+    format!(
+        "{INSTALL_HELPERS} && (() => {{
+  const st = window.__hamunaUpload;
+  if (!st) throw new Error('Upload session was not opened (the page navigated?)');
+  const el = window.__hamunaLocate({sel}, {txt});
+  const tag = el.tagName.toLowerCase();
+  const input = tag === 'input' && el.type === 'file'
+    ? el
+    : el.querySelector && el.querySelector('input[type=file]');
+  if (!input) throw new Error('Target is not a file input and contains none (tag=' + tag + ')');
+
+  let total = 0;
+  for (const c of st.chunks) total += c.length;
+  const all = new Uint8Array(total);
+  let off = 0;
+  for (const c of st.chunks) {{ all.set(c, off); off += c.length; }}
+  const file = new File([all], st.name, {{ type: st.mime }});
+  // 分片已经拼进 file 了，累加器留着只是白占一份内存。
+  window.__hamunaUpload = null;
+
+  const dt = new DataTransfer();
+  if (input.files) Array.from(input.files).forEach((f) => dt.items.add(f));
+  dt.items.add(file);
+  input.files = dt.files;
+  input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+  input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+
+  return {{
+    selector: {sel} || {txt},
+    name: file.name,
+    size: file.size,
+    inputCount: document.querySelectorAll('input[type=file]').length
+  }};
+}})()"
+    )
+}
+
 /// Fill a username/password pair and submit the login form.
 ///
 /// WHY THIS IS ONE SCRIPT AND NOT `fill` + `fill` + `submit`
@@ -1131,5 +1234,53 @@ mod tests {
         let script = scroll_script(0, "", "\"; alert(1); //", "");
         assert!(!script.contains("\"); alert(1); //"), "{script}");
         assert!(script.contains("\\\"; alert(1); //"), "{script}");
+    }
+
+    /// The chunk payload travels inside a JS string literal, so it must not be
+    /// able to terminate the literal and inject code.
+    #[test]
+    fn upload_chunk_script_embeds_payload_safely() {
+        let script = upload_chunk_script("a\"+alert(1)+\"");
+        assert!(!script.contains("a\"+alert(1)"), "{script}");
+        assert!(script.contains(r#"a\"+alert(1)+\""#), "{script}");
+    }
+
+    /// The chunk scripts only work as a sequence: open → chunks → finalize.
+    ///
+    /// A chunk arriving without an open session (the page navigated between
+    /// them) must fail **loudly**. Silently dropping the chunk would produce
+    /// a video that is short by exactly the dropped part — and it posts fine.
+    #[test]
+    fn a_chunk_without_an_open_session_fails_loudly() {
+        let chunk = upload_chunk_script("AAAA");
+        assert!(chunk.contains("Upload session was not opened"), "{chunk}");
+        let finalize = upload_finalize_script("input[type=file]", "");
+        assert!(
+            finalize.contains("Upload session was not opened"),
+            "{finalize}"
+        );
+    }
+
+    /// The finalize step must APPEND to the existing file list.
+    ///
+    /// A fresh `DataTransfer` replaces the whole `FileList`, so a
+    /// multi-image publish (Douyin 图文 wants up to 12) would silently end up
+    /// with only the last file.
+    #[test]
+    fn upload_finalize_appends_to_the_existing_file_list() {
+        let script = upload_finalize_script("input[type=file]", "");
+        assert!(script.contains("Array.from(input.files).forEach"), "{script}");
+        assert!(script.contains("dt.items.add(file)"), "{script}");
+    }
+
+    /// The begin step must open the accumulator **and** find the input.
+    ///
+    /// Opening on a page with no file input would let every chunk succeed and
+    /// the finalize step fail — three round trips wasted before the error.
+    #[test]
+    fn upload_begin_requires_a_file_input() {
+        let script = upload_begin_script("input[type=file]", "", "a.mp4", "video/mp4");
+        assert!(script.contains("Target is not a file input"), "{script}");
+        assert!(script.contains("window.__hamunaUpload"), "{script}");
     }
 }

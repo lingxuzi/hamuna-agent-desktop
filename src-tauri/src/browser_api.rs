@@ -71,16 +71,47 @@ const LOAD_TIMEOUT: Duration = Duration::from_secs(10);
 /// `LOAD_TIMEOUT`. See `wait_for_loaded` for the ceiling this leaves.
 const SAME_URL_SETTLE: Duration = Duration::from_millis(700);
 
-/// Ceiling on an uploaded file's raw size.
+/// Ceiling on an uploaded file's raw size, **for the single-shot inline path**.
 ///
 /// The file has to travel inside a JS string literal (`upload_script`), so it
 /// is base64-inflated 4/3 and then held in memory twice (agent payload +
 /// webview heap). 12 MiB covers the real image case — every publish target
 /// caps stills at 10 MB or less — and lands well under the 50 MB management
-/// API body limit. Video is deliberately out of reach: a 1-minute upload is
-/// 50–200 MB, so it would blow the body limit, the eval string, and the
-/// agent's context. Video posts must go through a headless runtime instead.
+/// API body limit.
+///
+/// Bigger files go through the chunked path below; this constant is the
+/// line where the handler switches.
 const MAX_UPLOAD_BYTES: usize = 12 * 1024 * 1024;
+
+/// Ceiling on a chunked upload (video).
+///
+/// A one-minute 1080p clip is 50–200 MB. The ceiling is 256 MiB: past that
+/// the page's own uploader would reject it anyway, and the file has to fit in
+/// the webview heap twice (bytes + the `File` the page builds from them).
+const MAX_VIDEO_UPLOAD_BYTES: usize = 256 * 1024 * 1024;
+
+/// Raw bytes per chunk in the chunked upload path.
+///
+/// The chunk's base64 travels inside one eval, so the eval carries 4/3 of
+/// this. 8 MiB raw → ~10.7 MiB of base64, which is below the 12 MiB / 16 MiB
+/// the single-shot inline path already proves every day.
+const UPLOAD_CHUNK_BYTES: usize = 8 * 1024 * 1024;
+
+/// Split a file of `len` bytes into the ranges the chunked path sends.
+///
+/// Split on **raw byte** boundaries, not on base64 character boundaries: each
+/// chunk is encoded on its own (the page's `atob` needs a self-contained
+/// string) and the page concatenates the decoded pieces, so the file
+/// reassembles byte-for-byte even though every chunk carries its own padding.
+fn chunk_ranges(len: usize) -> Vec<std::ops::Range<usize>> {
+    if len == 0 {
+        return Vec::new();
+    }
+    (0..len)
+        .step_by(UPLOAD_CHUNK_BYTES)
+        .map(|start| start..(start + UPLOAD_CHUNK_BYTES).min(len))
+        .collect()
+}
 
 // ──────────────────────────────────────────────────────────
 // Request / response shapes
@@ -991,10 +1022,19 @@ pub async fn browser_fill_handler(Json(input): Json<BrowserRequest>) -> Json<ser
 
 /// `POST /api/browser/upload` — select a local file in a file input.
 ///
-/// Reads the file, base64-encodes it, and hands it to `upload_script`. See
-/// `MAX_UPLOAD_BYTES` for why this is bounded and image-only, and
-/// `browser_agent::upload_script` for why the bytes have to be inline rather
-/// than fetched from a URL.
+/// Reads the file and hands it to the page two ways, picked by size:
+///
+/// - **≤ `MAX_UPLOAD_BYTES`** — base64-inline, one eval. The proven path for
+///   stills.
+/// - **bigger** — chunked (`upload_begin` / `upload_chunk` / `upload_finalize`).
+///   This is the video path: a clip no longer has to fit in a single JS
+///   string literal. See `browser_agent::upload_begin_script`.
+///
+/// The bytes always travel **inline**, never fetched from a URL: the page is
+/// a third-party site (creator.douyin.com), and handing it a URL to pull
+/// bytes from would be both a CORS gamble and a way to point a logged-in
+/// session at an address of our choosing. The chunks arrive as script text
+/// and are decoded in place.
 ///
 /// Fails loudly instead of silently doing nothing when the page has no file
 /// input: a publish flow that "succeeded" without the media attached is worse
@@ -1031,21 +1071,17 @@ pub async fn browser_upload_handler(Json(input): Json<BrowserRequest>) -> Json<s
             )
         }
     };
-    if bytes.len() > MAX_UPLOAD_BYTES {
+    if bytes.len() > MAX_VIDEO_UPLOAD_BYTES {
         return Json(
             serde_json::to_value(BrowserResponse::err(format!(
-                "File is {} MiB, over the {} MiB limit for in-page uploads. \
-                 Large files (video, long audio) cannot be injected through the \
-                 embedded browser — use a headless browser runtime instead.",
+                "File is {} MiB, over the {} MiB ceiling for in-page uploads.",
                 bytes.len() / (1024 * 1024),
-                MAX_UPLOAD_BYTES / (1024 * 1024)
+                MAX_VIDEO_UPLOAD_BYTES / (1024 * 1024)
             )))
             .unwrap_or_default(),
         );
     }
 
-    use base64::Engine;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     let file_name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -1054,13 +1090,58 @@ pub async fn browser_upload_handler(Json(input): Json<BrowserRequest>) -> Json<s
     // and a preview of the same file agree on its type.
     let mime = crate::attachment_protocol::mime_from_ext(&path);
 
-    let script = browser_agent::upload_script(&input.selector, &input.text, &file_name, mime, &b64);
-    match run_script(&label, &script).await {
-        Ok(data) => {
-            Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
-        }
+    if bytes.len() <= MAX_UPLOAD_BYTES {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        let script =
+            browser_agent::upload_script(&input.selector, &input.text, &file_name, mime, &b64);
+        return match run_script(&label, &script).await {
+            Ok(data) => {
+                Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
+            }
+            Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
+        };
+    }
+
+    match upload_chunked(&label, &input.selector, &input.text, &file_name, mime, &bytes).await {
+        Ok(data) => Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default()),
         Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     }
+}
+
+/// Push a file into the page in chunks and assemble it there.
+///
+/// The single-shot path puts the whole file into one JS string literal, which
+/// caps it at `MAX_UPLOAD_BYTES`. Video does not fit in that, so the bytes
+/// travel as several evals and the page builds the `File` from them.
+///
+/// The bytes are split on **raw** byte boundaries and each piece is base64'd
+/// on its own: `atob` needs a self-contained string, and the page concatenates
+/// the decoded pieces, so the file reassembles byte-for-byte.
+async fn upload_chunked(
+    label: &str,
+    selector: &str,
+    text: &str,
+    file_name: &str,
+    mime: &str,
+    bytes: &[u8],
+) -> Result<serde_json::Value, String> {
+    use base64::Engine;
+
+    let begin = browser_agent::upload_begin_script(selector, text, file_name, mime);
+    run_script(label, &begin).await?;
+
+    let ranges = chunk_ranges(bytes.len());
+    for (i, range) in ranges.iter().enumerate() {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes[range.clone()]);
+        let script = browser_agent::upload_chunk_script(&b64);
+        run_script(label, &script)
+            .await
+            .map_err(|e| format!("Upload chunk {}/{} failed: {e}", i + 1, ranges.len()))?;
+    }
+
+    let finalize = browser_agent::upload_finalize_script(selector, text);
+    run_script(label, &finalize).await
 }
 
 /// `POST /api/browser/submit` — submit a form.
@@ -1292,7 +1373,10 @@ pub async fn request_browser_new_tab(owner_tab_id: &str, url: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::has_landed;
-    use super::{resolve_engine_name, search_engine_for, search_engine_names, SEARCH_ENGINES};
+    use super::{
+        resolve_engine_name, search_engine_for, search_engine_names, MAX_UPLOAD_BYTES,
+        MAX_VIDEO_UPLOAD_BYTES, SEARCH_ENGINES,
+    };
 
     /// A write without a session id must be refused — not silently aimed at
     /// whichever browser was opened last (which may be another workspace's).
@@ -1386,5 +1470,41 @@ mod tests {
         // The error has to name the engines that do work.
         assert!(search_engine_names().contains("bing"));
         assert!(search_engine_names().contains("baidu"));
+    }
+
+    /// The chunk split has to cover the file exactly — no gap, no overlap.
+    ///
+    /// A dropped byte range means the page assembles a **truncated** file, and
+    /// the uploader accepts it: the video posts, but it is short. Silent
+    /// truncation is the failure mode this guards.
+    #[test]
+    fn chunk_ranges_cover_the_file_exactly() {
+        for len in [0usize, 1, 1024, MAX_UPLOAD_BYTES, MAX_UPLOAD_BYTES + 1] {
+            let ranges = super::chunk_ranges(len);
+            let covered: usize = ranges.iter().map(|r| r.len()).sum();
+            assert_eq!(covered, len, "len={len} lost or duplicated bytes");
+            // The ranges must be contiguous and in order.
+            let mut cursor = 0usize;
+            for r in &ranges {
+                assert_eq!(r.start, cursor, "len={len} has a gap");
+                assert!(r.end <= len);
+                cursor = r.end;
+            }
+        }
+    }
+
+    /// A file over the inline ceiling must still be uploadable.
+    ///
+    /// The old handler refused anything over 12 MiB, which made video
+    /// unpublishable. The chunked path is the whole point of the ceiling
+    /// split, so the split point has to actually route big files to it.
+    #[test]
+    fn a_file_over_the_inline_ceiling_still_fits_under_the_video_ceiling() {
+        assert!(MAX_UPLOAD_BYTES < MAX_VIDEO_UPLOAD_BYTES);
+        let big = MAX_UPLOAD_BYTES + 1;
+        assert!(big <= MAX_VIDEO_UPLOAD_BYTES);
+        // And it takes more than one chunk, so the chunked path is the one
+        // that has to be exercised.
+        assert!(super::chunk_ranges(big).len() > 1);
     }
 }

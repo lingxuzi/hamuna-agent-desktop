@@ -14,7 +14,14 @@ import { Loader2 } from 'lucide-react';
 
 import { SOCIAL_PLATFORMS } from '../../../shared/socialPlatforms';
 import type { SocialPlatformId } from '../../../shared/socialPlatforms';
-import type { OpsAsset, OpsReview, OpsTopic } from '../../../shared/ops';
+import type {
+  OpsAspect,
+  OpsAsset,
+  OpsContentForm,
+  OpsReview,
+  OpsTopic,
+} from '../../../shared/ops';
+import { OPS_ASPECTS } from '../../../shared/ops';
 import { useCloseLayer } from '@/hooks/useCloseLayer';
 import OverlayBackdrop from '@/components/OverlayBackdrop';
 import CustomSelect from '@/components/CustomSelect';
@@ -108,6 +115,24 @@ function Field({
   );
 }
 
+/** 一组控件的标题 + 控件。跟 `Field` 的区别只在于外面不是 `<label>`——
+ *  里面装的是按钮组时，`<label>` 会把组里第一个按钮认成自己的 control，
+ *  点标题就等于点了那个按钮。 */
+function Group({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="ops-field">
+      <span>{label}</span>
+      {children}
+    </div>
+  );
+}
+
 /** 表单壳：遮罩、Esc / Cmd+W 关闭、宽窄自适应都在这一层。 */
 function FormShell({
   title,
@@ -186,6 +211,125 @@ export function TopicForm({
       </Field>
       <SubmitRow
         label={t('ops.form.save')}
+        saving={submit.phase === 'submitting'}
+        disabled={!canSubmit}
+        onCancel={onClose}
+        onSubmit={handleSubmit}
+        error={submit.phase === 'error' ? submit.message : null}
+      />
+    </FormShell>
+  );
+}
+
+/* ── 开工：选成品形态 ──────────────────────────────── */
+
+/** 形态选项。顺序按「做出来的东西从重到轻」排：带画面的在前，纯文字在最后。 */
+const FORM_OPTIONS: readonly OpsContentForm[] = [
+  'image_text',
+  'image_only',
+  'video_clip',
+  'video_aigc',
+  'text_only',
+];
+
+/**
+ * 哪些形态要问画幅。
+ *
+ * 纯文字没有画面，问画幅就是废动作——多一个必答项就多一次无意义的选择。
+ */
+const FORM_NEEDS_ASPECT: readonly OpsContentForm[] = [
+  'image_text',
+  'image_only',
+  'video_clip',
+  'video_aigc',
+];
+
+/**
+ * 「开工」对话框：确认形态 → 写台账 → 派工。
+ *
+ * **画幅在这里问，不在生成中途问**：付费生成前必须由人定死横竖，猜错一次
+ * 就是白花的钱、废掉一轮素材。人面板上点一次，之后生成全程无人值守。
+ */
+export function TopicStartForm({
+  workspace,
+  topic,
+  onClose,
+  onStart,
+}: DialogProps & {
+  topic: OpsTopic;
+  /** 台账写成功后调用：派工生成。写失败不会走到这里。 */
+  onStart: (form: OpsContentForm, aspect: OpsAspect | null) => void;
+}) {
+  const { t } = useTranslation('chat');
+  const [form, setForm] = useState<OpsContentForm>('image_text');
+  const [aspect, setAspect] = useState<OpsAspect | null>(null);
+  const [submit, setSubmit] = useState<SubmitState>({ phase: 'idle' });
+
+  const needsAspect = FORM_NEEDS_ASPECT.includes(form);
+  const canSubmit = submit.phase !== 'submitting' && (!needsAspect || aspect !== null);
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmit({ phase: 'submitting' });
+    try {
+      // 状态 + 形态 + 画幅**一次写入**：分成两次写，中间崩掉会留下
+      // 「已开工但没形态」的记录——那种记录既不能再开工，也不能做稿。
+      await opsUpsert(workspace, {
+        kind: 'topic',
+        id: topic.id,
+        status: 'planned',
+        form,
+        formAspect: needsAspect ? aspect : null,
+      });
+      onStart(form, needsAspect ? aspect : null);
+      onClose();
+    } catch (err) {
+      setSubmit({ phase: 'error', message: opsErrorMessage(err) });
+    }
+  };
+
+  return (
+    <FormShell title={t('ops.form.start.title')} onClose={onClose}>
+      <p className="ops-form-hint">{t('ops.form.start.hint', { title: topic.title })}</p>
+      <Group label={t('ops.form.start.form')}>
+        <div className="ops-choice" role="radiogroup" aria-label={t('ops.form.start.form')}>
+          {FORM_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              role="radio"
+              aria-checked={form === opt}
+              className="ops-choice-item"
+              data-active={form === opt ? '' : undefined}
+              onClick={() => setForm(opt)}
+            >
+              <strong>{t(`ops.form.pick.${opt}.title`)}</strong>
+              <small>{t(`ops.form.pick.${opt}.desc`)}</small>
+            </button>
+          ))}
+        </div>
+      </Group>
+      {needsAspect && (
+        <Group label={t('ops.form.start.aspect')}>
+          <div className="ops-choice-inline" role="radiogroup" aria-label={t('ops.form.start.aspect')}>
+            {OPS_ASPECTS.map((a) => (
+              <button
+                key={a}
+                type="button"
+                role="radio"
+                aria-checked={aspect === a}
+                className="ops-choice-pill"
+                data-active={aspect === a ? '' : undefined}
+                onClick={() => setAspect(a)}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        </Group>
+      )}
+      <SubmitRow
+        label={t('ops.form.start.submit')}
         saving={submit.phase === 'submitting'}
         disabled={!canSubmit}
         onCancel={onClose}

@@ -15,6 +15,7 @@ import {
   formatCompact,
   formatHotness,
   formatInteger,
+  formLabel,
   platformLabel,
   shortDate,
   weekdayShort,
@@ -112,21 +113,29 @@ function Thumb({ platform, title }: { platform: string | null; title: string }) 
 }
 
 /** 可编辑行的壳：给标题旁一个铅笔入口。排期 / 复盘行不传 onEdit，原样渲染。 */
-function RowShell({ onEdit, children }: { onEdit?: () => void; children: React.ReactNode }) {
+function RowShell({
+  onEdit,
+  children,
+}: {
+  onEdit?: () => void;
+  children: React.ReactNode;
+}) {
   const { t } = useTranslation('chat');
   if (!onEdit) return <div className="ops-list-row">{children}</div>;
   return (
     <div className="ops-list-row editable">
       {children}
-      <button
-        type="button"
-        className="row-edit"
-        onClick={onEdit}
-        aria-label={t('ops.row.edit')}
-        title={t('ops.row.edit')}
-      >
-        <Pencil size={13} aria-hidden="true" />
-      </button>
+      {onEdit && (
+        <button
+          type="button"
+          className="row-edit"
+          onClick={onEdit}
+          aria-label={t('ops.row.edit')}
+          title={t('ops.row.edit')}
+        >
+          <Pencil size={13} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
@@ -136,12 +145,15 @@ export function OpsPoolCard({
   className,
   onEditTopic,
   onEditAsset,
+  onStartTopic,
 }: {
   view: OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewView;
   className?: string;
   /** 选题 / 素材行的编辑入口。排期与复盘行的编辑入口在素材 / 复盘域。 */
   onEditTopic?: (topicId: string) => void;
   onEditAsset?: (assetId: string) => void;
+  /** 选题行的「开工」入口：确认形态后直接派工生成。 */
+  onStartTopic?: (topicId: string) => void;
 }) {
   const { t, i18n } = useTranslation('chat');
   const head = `ops.pool.${view.domain}`;
@@ -160,7 +172,7 @@ export function OpsPoolCard({
             <span>{t(`${head}.col2`)}</span>
           </div>
           <ol className="ops-list">
-            {renderRows(view, t, i18n.language, { onEditTopic, onEditAsset })}
+            {renderRows(view, t, i18n.language, { onEditTopic, onEditAsset, onStartTopic })}
           </ol>
         </>
       )}
@@ -172,7 +184,11 @@ function renderRows(
   view: OpsTopicView | OpsAssetView | OpsScheduleView | OpsReviewView,
   t: (key: string, options?: Record<string, unknown>) => string,
   locale: string,
-  handlers: { onEditTopic?: (topicId: string) => void; onEditAsset?: (assetId: string) => void },
+  handlers: {
+    onEditTopic?: (topicId: string) => void;
+    onEditAsset?: (assetId: string) => void;
+    onStartTopic?: (topicId: string) => void;
+  },
 ): React.ReactNode[] {
   switch (view.domain) {
     case 'topic':
@@ -181,7 +197,27 @@ function renderRows(
           <RowShell onEdit={handlers.onEditTopic ? () => handlers.onEditTopic?.(row.id) : undefined}>
             <Thumb platform={row.platform} title={row.title} />
             <span className="t">
-              <strong>{row.title}</strong>
+              <span className="ttl">
+                <strong>{row.title}</strong>
+                {row.form && (
+                  <span className="ops-form-chip">
+                    {formLabel(t, row.form)}
+                    {row.formAspect && ` ${row.formAspect}`}
+                  </span>
+                )}
+                {/* 开工入口放在标题列里，不放行尾 —— 行尾位置一动，
+                    右侧热度列就跟着每行飘。开工之后台账里已经有形态，
+                    再给一个「开工」就是让人对着同一条点两次。 */}
+                {row.status === 'idea' && handlers.onStartTopic && (
+                  <button
+                    type="button"
+                    className="ops-row-start"
+                    onClick={() => handlers.onStartTopic?.(row.id)}
+                  >
+                    {t('ops.row.start')}
+                  </button>
+                )}
+              </span>
               <small>
                 {/* angle / note 都可能为空。空着时只印平台，不留一个悬空的「·」——
                     模板是 "{{platform}} · {{detail}}"，没有 detail 就拼出「B站 · 」。 */}

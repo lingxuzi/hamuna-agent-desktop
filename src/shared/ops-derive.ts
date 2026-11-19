@@ -13,7 +13,9 @@
 
 import type {
   OpsActor,
+  OpsAspect,
   OpsAsset,
+  OpsContentForm,
   OpsDirectionProposal,
   OpsDirectionStatus,
   OpsDomainId,
@@ -22,6 +24,7 @@ import type {
   OpsState,
   OpsTopic,
   OpsTopicSource,
+  OpsTopicStatus,
 } from './ops';
 import { SOCIAL_PLATFORMS, type SocialPlatformId } from './socialPlatforms';
 import { ruleFreshness } from './ops-freshness';
@@ -56,6 +59,12 @@ export interface OpsTopicRow {
   /** 副文本：切入角度，没有角度就用「为什么值得做」。 */
   sub: string;
   hotness: number | null;
+  /** 人确认的成品形态。`null` = 还没开工。 */
+  form: OpsContentForm | null;
+  /** 人确认的画幅。`null` = 纯文字或还没开工。 */
+  formAspect: OpsAspect | null;
+  /** 选题状态。`idea` = 还没开工 —— 只有这一档给「开工」入口。 */
+  status: OpsTopicStatus;
 }
 
 export interface OpsAssetRow {
@@ -652,6 +661,9 @@ export function deriveTopicView(state: OpsState, now: Date): OpsTopicView {
     platform: t.platform,
     sub: t.angle || t.note,
     hotness: t.hotness,
+    form: t.form ?? null,
+    formAspect: t.formAspect ?? null,
+    status: t.status,
   }));
 
   const top = sorted[0] ?? null;

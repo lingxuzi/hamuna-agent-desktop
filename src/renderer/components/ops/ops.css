@@ -882,6 +882,60 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 选题行的标题行：标题 + 形态徽章 + 开工入口排成一行。
+   徽章和按钮都在**标题列里**，不放进行尾 —— 放行尾会把右侧热度列往后推，
+   列表里每行宽度不同，热度就跟着飘；表头那一列反而是死的。 */
+.ops-list .t .ttl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ops-list .t .ttl strong {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* 形态徽章：这轮做的是什么。不参与截断（截断的是标题）。 */
+.ops-form-chip {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-secondary);
+  background: var(--paper-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+/* 开工入口：选题行里的次级动作。描边浅底，悬停转深墨 —— 让它一眼可点，
+   又不跟右侧的热度数字抢那一列。 */
+.ops-row-start {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  background: var(--paper-elevated);
+  color: var(--ink-secondary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease),
+    background var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-row-start:hover {
+  border-color: var(--ink-subtle);
+  color: var(--ink);
+}
+.ops-row-start:focus-visible {
+  outline: 2px solid var(--focus-border);
+  outline-offset: 2px;
+}
 .ops-list .n {
   flex: none;
   font-family: var(--ops-serif);
@@ -1576,6 +1630,88 @@
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink-muted);
+}
+/* 形态选择：卡片式单选组。选中的那张压深墨底白字 —— 高对比，不靠相近色区分。
+   每张卡自己带标题和一句说明：四个形态的区别就写在那儿，不用人先猜。 */
+.ops-choice {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 8px;
+}
+.ops-choice-item {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  text-align: left;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-md);
+  background: var(--paper);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease),
+    background var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-choice-item strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.ops-choice-item small {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+.ops-choice-item:hover {
+  border-color: var(--ink-subtle);
+}
+.ops-choice-item[data-active] {
+  background: var(--ops-dark);
+  border-color: var(--ops-dark);
+}
+.ops-choice-item[data-active] strong {
+  color: var(--ops-dark-text);
+}
+.ops-choice-item[data-active] small {
+  color: var(--ops-dark-dim);
+}
+.ops-choice-item:focus-visible {
+  outline: 2px solid var(--focus-border);
+  outline-offset: 2px;
+}
+/* 画幅：一排药丸。单选用同一套激活态，不另造一套颜色。 */
+.ops-choice-inline {
+  display: flex;
+  gap: 8px;
+}
+.ops-choice-pill {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-full);
+  background: var(--paper-elevated);
+  color: var(--ink-secondary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--ops-dur) var(--ops-ease),
+    background var(--ops-dur) var(--ops-ease), color var(--ops-dur) var(--ops-ease);
+}
+.ops-choice-pill:hover {
+  border-color: var(--ink-subtle);
+  color: var(--ink);
+}
+.ops-choice-pill[data-active] {
+  background: var(--ops-dark);
+  border-color: var(--ops-dark);
+  color: var(--ops-dark-text);
+}
+.ops-choice-pill:focus-visible {
+  outline: 2px solid var(--focus-border);
+  outline-offset: 2px;
 }
 .ops-form-error {
   font-size: 12px;
