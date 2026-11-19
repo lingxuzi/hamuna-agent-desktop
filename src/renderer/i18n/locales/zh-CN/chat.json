@@ -1195,6 +1195,7 @@
         "form": "成品形态",
         "aspect": "画幅",
         "submit": "开始生成",
+        "unsupported": "{{platform}}发不了这种形态",
         "brief": "选题《{{title}}》已确认开工。平台：{{platform}}。成品形态：{{form}}{{aspect}}。请按这个形态开始生成内容，做完把成品记进运营台账。"
       },
       "kind": {

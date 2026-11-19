@@ -12,7 +12,12 @@
  * 落盘形态见 `docs/OPS-VIEW.md`，界面见 `docs/OPS-VIEW-UI.md`。
  */
 
-import type { SocialPlatformId } from './socialPlatforms';
+import { canPublishTo } from './socialPlatforms';
+import type {
+  SocialMediaKind,
+  SocialPlatformId,
+  SocialPlatformSpec,
+} from './socialPlatforms';
 
 /** Sino（运营 Agent 模板）的模板 id。运营视图只对它创建的工作区可见。 */
 export const SINO_TEMPLATE_ID = 'sino';
@@ -119,6 +124,46 @@ export const OPS_CONTENT_FORMS: readonly OpsContentForm[] = [
 export type OpsAspect = '9:16' | '1:1' | '16:9';
 
 export const OPS_ASPECTS: readonly OpsAspect[] = ['9:16', '1:1', '16:9'];
+
+/**
+ * 一种成品形态能走哪几条发布通道。
+ *
+ * 两个轴本来就说两件事：`OpsContentForm` 是「做什么」，`SocialMediaKind` 是
+ * 「平台收什么」。不映射的后果是**做完才发现发不出去**——纯文字排到知乎
+ * （只收 `article`）看起来天经地义，但它的 `scheduledAt` 写了、文案写完了，
+ * 发布时才卡在形态上。
+ *
+ * 是**一组**而不是一个值，因为纯文字本来就有两条路：抖音 / 小红书的正文框
+ * 走 `image-text`（不配图也发得出去），知乎 / 公众号走 `article`。映射成一
+ * 个值就会把其中一半的平台错拦。
+ *
+ * 有损的地方（故意有损）：
+ * - `image_only` → `image-text`：图文本来就允许不写字，平台没有单独的纯图通道。
+ * - 两个视频形态都 → `video`：剪辑和 AIGC 只差画面从哪来，平台侧是同一种媒体。
+ * - `image_text` **不**走 `article`：带封面配图的图文在只收文章的平台上是另一种
+ *   产物，不能为了「都能发」把它放宽。
+ */
+export function mediaKindsForForm(form: OpsContentForm): readonly SocialMediaKind[] {
+  switch (form) {
+    case 'image_text':
+    case 'image_only':
+      return ['image-text'];
+    case 'text_only':
+      return ['image-text', 'article'];
+    case 'video_clip':
+    case 'video_aigc':
+      return ['video'];
+  }
+}
+
+/**
+ * 做出来的这条，这个平台收不收。
+ *
+ * 排期阶段就该问这一句：形态和平台对不上时，白做一轮比晚一天发更贵。
+ */
+export function canPublishFormTo(spec: SocialPlatformSpec, form: OpsContentForm): boolean {
+  return mediaKindsForForm(form).some((kind) => canPublishTo(spec, kind));
+}
 
 /**
  * 素材状态：草稿 → 定稿 → （已投放 | 未核实）。

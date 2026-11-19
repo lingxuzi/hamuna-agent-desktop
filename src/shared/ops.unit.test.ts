@@ -13,6 +13,7 @@ import {
   OPS_TOPIC_SOURCES,
   OPS_TOPIC_STATUSES,
   SINO_TEMPLATE_ID,
+  canPublishFormTo,
   emptyOpsState,
   isOpsAssetStatus,
   isOpsBenchmarkSource,
@@ -24,7 +25,9 @@ import {
   isOpsRuleStatus,
   isOpsTopicSource,
   isOpsTopicStatus,
+  mediaKindsForForm,
 } from './ops';
+import { getSocialPlatformSpec } from './socialPlatforms';
 
 describe('ops 枚举', () => {
   it('只接受文档里列出的状态值', () => {
@@ -146,5 +149,31 @@ describe('emptyOpsState', () => {
     const b = emptyOpsState();
     a.topics.push({} as never);
     expect(b.topics).toHaveLength(0);
+  });
+});
+
+describe('形态能不能投这个平台', () => {
+  const spec = (id: 'douyin' | 'zhihu') => getSocialPlatformSpec(id);
+
+  it('纯文字两条路都走：抖音的图文框能发，知乎的文章也能发', () => {
+    // 映射成一个值就会错拦其中一半 —— 这条测试盯的就是它。
+    expect(canPublishFormTo(spec('douyin'), 'text_only')).toBe(true);
+    expect(canPublishFormTo(spec('zhihu'), 'text_only')).toBe(true);
+  });
+
+  it('图文投不了只收文章的知乎', () => {
+    // 带封面配图的图文在知乎是另一种产物，不能为了"都能发"放宽。
+    expect(canPublishFormTo(spec('douyin'), 'image_text')).toBe(true);
+    expect(canPublishFormTo(spec('zhihu'), 'image_text')).toBe(false);
+  });
+
+  it('视频两档只看平台收不收 video，与画面从哪来无关', () => {
+    expect(canPublishFormTo(spec('douyin'), 'video_clip')).toBe(true);
+    expect(canPublishFormTo(spec('douyin'), 'video_aigc')).toBe(true);
+    expect(canPublishFormTo(spec('zhihu'), 'video_clip')).toBe(false);
+  });
+
+  it('纯图片走图文的通道 —— 平台没有单独的纯图类型', () => {
+    expect(mediaKindsForForm('image_only')).toEqual(['image-text']);
   });
 });

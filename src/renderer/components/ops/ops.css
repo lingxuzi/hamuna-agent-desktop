@@ -1680,6 +1680,19 @@
   outline: 2px solid var(--focus-border);
   outline-offset: 2px;
 }
+/* 平台收不了的形态：留在列表里但明显不可选。删掉它会让「为什么没有视频」
+   无从回答——人需要看见"有这一档，但这个平台不收"。 */
+.ops-choice-item[data-unsupported] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ops-choice-item[data-unsupported]:hover {
+  border-color: var(--line);
+}
+.ops-choice-item[data-unsupported] strong,
+.ops-choice-item[data-unsupported] small {
+  color: var(--ink-muted);
+}
 /* 画幅：一排药丸。单选用同一套激活态，不另造一套颜色。 */
 .ops-choice-inline {
   display: flex;

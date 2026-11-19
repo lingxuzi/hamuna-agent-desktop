@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 
-import { SOCIAL_PLATFORMS } from '../../../shared/socialPlatforms';
+import { SOCIAL_PLATFORMS, getSocialPlatformSpec } from '../../../shared/socialPlatforms';
 import type { SocialPlatformId } from '../../../shared/socialPlatforms';
 import type {
   OpsAspect,
@@ -21,7 +21,7 @@ import type {
   OpsReview,
   OpsTopic,
 } from '../../../shared/ops';
-import { OPS_ASPECTS } from '../../../shared/ops';
+import { OPS_ASPECTS, canPublishFormTo } from '../../../shared/ops';
 import { useCloseLayer } from '@/hooks/useCloseLayer';
 import OverlayBackdrop from '@/components/OverlayBackdrop';
 import CustomSelect from '@/components/CustomSelect';
@@ -261,12 +261,20 @@ export function TopicStartForm({
   onStart: (form: OpsContentForm, aspect: OpsAspect | null) => void;
 }) {
   const { t } = useTranslation('chat');
-  const [form, setForm] = useState<OpsContentForm>('image_text');
+  const spec = getSocialPlatformSpec(topic.platform);
+  const [form, setForm] = useState<OpsContentForm>(
+    () => FORM_OPTIONS.find((opt) => canPublishFormTo(spec, opt)) ?? 'image_text',
+  );
   const [aspect, setAspect] = useState<OpsAspect | null>(null);
   const [submit, setSubmit] = useState<SubmitState>({ phase: 'idle' });
 
   const needsAspect = FORM_NEEDS_ASPECT.includes(form);
-  const canSubmit = submit.phase !== 'submitting' && (!needsAspect || aspect !== null);
+  /** 这个平台收不收这种形态。收不了就不让开工 —— 生成完才发现发不出去等于白花钱。 */
+  const platformTakesForm = canPublishFormTo(spec, form);
+  const canSubmit =
+    submit.phase !== 'submitting' &&
+    platformTakesForm &&
+    (!needsAspect || aspect !== null);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -293,20 +301,31 @@ export function TopicStartForm({
       <p className="ops-form-hint">{t('ops.form.start.hint', { title: topic.title })}</p>
       <Group label={t('ops.form.start.form')}>
         <div className="ops-choice" role="radiogroup" aria-label={t('ops.form.start.form')}>
-          {FORM_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              role="radio"
-              aria-checked={form === opt}
-              className="ops-choice-item"
-              data-active={form === opt ? '' : undefined}
-              onClick={() => setForm(opt)}
-            >
-              <strong>{t(`ops.form.pick.${opt}.title`)}</strong>
-              <small>{t(`ops.form.pick.${opt}.desc`)}</small>
-            </button>
-          ))}
+          {FORM_OPTIONS.map((opt) => {
+            const unsupported = !canPublishFormTo(spec, opt);
+            return (
+              <button
+                key={opt}
+                type="button"
+                role="radio"
+                aria-checked={form === opt}
+                aria-disabled={unsupported}
+                className="ops-choice-item"
+                data-active={form === opt && !unsupported ? '' : undefined}
+                data-unsupported={unsupported ? '' : undefined}
+                onClick={() => setForm(opt)}
+              >
+                <strong>{t(`ops.form.pick.${opt}.title`)}</strong>
+                <small>
+                  {unsupported
+                    ? t('ops.form.start.unsupported', {
+                        platform: t(`settings:accounts.platform.${topic.platform}`),
+                      })
+                    : t(`ops.form.pick.${opt}.desc`)}
+                </small>
+              </button>
+            );
+          })}
         </div>
       </Group>
       {needsAspect && (

@@ -31,7 +31,7 @@ vi.mock('@/utils/tauriListen', () => ({ listenWithCleanup: mocks.listenWithClean
 
 const WORKSPACE = '/ws/sino';
 
-function stateWithIdeaTopic(): OpsState {
+function stateWithIdeaTopic(platform: 'xiaohongshu' | 'douyin' = 'xiaohongshu'): OpsState {
   return {
     ...emptyOpsState(),
     topics: [
@@ -40,7 +40,7 @@ function stateWithIdeaTopic(): OpsState {
         title: '出租屋灯光改造',
         note: '',
         angle: '同角度上一篇跑到 8,412',
-        platform: 'xiaohongshu',
+        platform,
         tags: [],
         status: 'idea',
         source: 'hotspot',
@@ -79,7 +79,8 @@ describe('选题开工', () => {
   it('一次写全状态 / 形态 / 画幅，然后才派工', async () => {
     const user = userEvent.setup();
     const onSendToAgent = vi.fn();
-    mocks.invoke.mockResolvedValue(stateWithIdeaTopic());
+    // 抖音：视频是它独有的通道，xiaohongshu 收不了 video。
+    mocks.invoke.mockResolvedValue(stateWithIdeaTopic('douyin'));
     renderPanel(onSendToAgent);
 
     await user.click(await screen.findByRole('button', { name: '开工' }));
@@ -123,10 +124,36 @@ describe('选题开工', () => {
     expect(call.item.formAspect).toBeNull();
   });
 
+  it('平台收不了的形态标成不可用，也不让开工', async () => {
+    const user = userEvent.setup();
+    const onSendToAgent = vi.fn();
+    // 小红书只收图文。选视频等于做一批发不出去的素材。
+    mocks.invoke.mockResolvedValue(stateWithIdeaTopic('xiaohongshu'));
+    renderPanel(onSendToAgent);
+
+    await user.click(await screen.findByRole('button', { name: '开工' }));
+    await screen.findByRole('dialog');
+
+    const video = screen.getByRole('radio', { name: /视频 · 按产品生成/ });
+    expect(video).toHaveAttribute('aria-disabled', 'true');
+    // 两个视频形态都不支持 —— 各占一条提示。
+    expect(screen.getAllByText('小红书发不了这种形态')).toHaveLength(2);
+    expect(
+      screen.getByRole('radio', { name: /图文/ }),
+    ).toHaveAttribute('aria-disabled', 'false');
+
+    await user.click(video);
+    await user.click(screen.getByRole('button', { name: '开始生成' }));
+
+    // 点了也不派工：这条形态在这个平台上没有发布通道。
+    expect(upsertCalls()).toHaveLength(0);
+    expect(onSendToAgent).not.toHaveBeenCalled();
+  });
+
   it('写失败就不派工，对话框留着输入', async () => {
     const user = userEvent.setup();
     const onSendToAgent = vi.fn();
-    mocks.invoke.mockResolvedValueOnce(stateWithIdeaTopic()).mockRejectedValueOnce(
+    mocks.invoke.mockResolvedValueOnce(stateWithIdeaTopic('douyin')).mockRejectedValueOnce(
       new Error('file lock busy'),
     );
     renderPanel(onSendToAgent);
