@@ -147,4 +147,14 @@ describe('OpsPanel 对标账号卡', () => {
     const save = screen.getByRole('button', { name: '保存' });
     expect(save).toBeDisabled();
   });
+
+  it('对标账号横着排成一条，不竖着叠', async () => {
+    // 布局不变量：竖着叠（右栏 300px 一列）会把左栏「账号方向」撑出一大片
+    // 空白。jsdom 排不了版，守不住「并排」这件事本身，只能守住「卡在横排的
+    // 容器里」这条结构 —— 有人把它改回竖列，不会有任何测试变红。
+    await openDirection();
+
+    const card = await screen.findByText('露营老张');
+    expect(card.closest('.ops-bm-strip')).not.toBeNull();
+  });
 });

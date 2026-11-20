@@ -301,6 +301,26 @@ describe('运营面板 bento 位置表', () => {
     }
   });
 
+  it('方向域：「对标账号」通栏独占一行，不在右栏里竖着叠', () => {
+    // 竖着叠（右栏 300px 一列）时，列表有多高整行就有多高 —— 左栏「账号方向」
+    // 被拉到同样高，卡内留出一大片空白。横排之后它自己占一行，左栏的高度才
+    // 回到内容本身。
+    const tables = areaTables();
+    const rows = tables.get('direction');
+    expect(rows, '方向域缺位置表').toBeTruthy();
+    if (!rows) return;
+    const width = rows[0].length;
+    const bench = cellsOf(rows, 'bench');
+    expect(bench.length, '方向域的位置表里没有对标账号').toBeGreaterThan(0);
+    // 通栏：每一列都被占住。
+    expect(new Set(bench.map(([, c]) => c)).size, '对标账号没有横跨全部列').toBe(width);
+    // 独占一行：同一行里没有别的卡。
+    for (const [r] of bench) {
+      const others = rows[r].filter((cell) => cell !== EMPTY && cell !== 'bench');
+      expect(others, '对标账号跟别的卡同行').toEqual([]);
+    }
+  });
+
   it('每张卡都有内容：不允许只剩标题和一片留白', async () => {
     // 故障模式：一张卡渲染出来只有一个标题，body 是空的。界面上看就是一大块
     // 留白，读者以为数据没了 —— 其实是这个域没渲染出任何东西。跟「假指标」

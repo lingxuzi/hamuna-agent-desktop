@@ -233,10 +233,17 @@
     'adv adv .'
     'notes notes notes';
 }
+/* 方向域：「对标账号」通栏横排，独占一行。
+   它原来在右栏（300px）里竖着排，列表有多高整行就有多高 —— 「账号方向」
+   被拉到同样高，卡内留出一大片空白。横排之后它自己一行，左栏的高度回到
+   内容本身；右栏第二格空着（空白在卡外，不在卡里）。
+   「定稿进度」留在两列宽：它每行要摆平台名 / 状态 / 谁 / 时间四栏，
+   压进 300px 右栏会把平台名挤成一个字。 */
 .ops-body[data-ops-domain='direction'] {
   grid-template-areas:
     'hero hero dark'
-    'pool pool bench'
+    'pool pool .'
+    'bench bench bench'
     'dist dist .'
     'notes notes notes';
 }
@@ -1976,16 +1983,36 @@
 
 /* ── 对标账号卡 ───────────────────────────────────────
    按平台分组，组内一张卡网格。卡里四段：身份 / 主页 / 为什么 / 证据，
-   底部两个动作。 */
+   底部两个动作。
 
-.ops-bm-group {
-  margin-top: 14px;
+   横向一条：卡挨着卡往右排，占满整行的宽度，多的换行。
+   原来的排法是右栏 300px 里竖着排，列表有多高整行就有多高 —— 左栏
+   「账号方向」被拉到同样高，卡内留出一大片空白（空白留在卡里比留在卡外更
+   刺眼）。改成通栏横排后这张卡独占一行，空白自然落到卡外。
+
+   卡高由内容定：长的那段（为什么 / 证据）把这一行撑高，同排的卡跟着等高，
+   不裁切、不留固定高度。 */
+
+.ops-bm-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  /* 兜底：卡片里的主页链接是不换行的一行字，窄栏下它可能把这一行顶宽。
+     收进自己的滚动区，面板本身不会横向溢出。 */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
-.ops-bm-group:first-child {
-  margin-top: 0;
+.ops-bm-group {
+  /* 组之间平分整行；`min-width: 0` 允许组缩到内容以下（窄栏里链接那行的
+     min-content 很长，不给这个下限整行会被顶宽）。 */
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .ops-bm-group-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
@@ -1994,8 +2021,9 @@
 .ops-bm-grid {
   display: grid;
   /* `min(280px, 100%)`：窄到装不下 280px 时轨道跟着容器缩，不会把卡片顶出
-     面板。 */
-  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+     面板。`auto-fit`（不是 auto-fill）：多出来的空轨道收掉，卡片把整行宽度
+     分完 —— 留一截空轨道就是新的大片留白。 */
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 12px;
 }
 .ops-bm-card {

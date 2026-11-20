@@ -78,21 +78,25 @@ export function OpsBenchmarks({
       {benchmarks.length === 0 ? (
         <p className="ops-empty">{t('ops.benchmark.empty')}</p>
       ) : (
-        groups.map(([platform, list]) => (
-          <div className="ops-bm-group" key={platform}>
-            <h3 className="ops-bm-group-title">{platformLabel(t, platform)}</h3>
-            <div className="ops-bm-grid">
-              {list.map((benchmark) => (
-                <BenchmarkCard
-                  key={benchmark.id}
-                  benchmark={benchmark}
-                  onEdit={onEdit ? () => onEdit(benchmark) : undefined}
-                  onDelete={() => onDelete(benchmark)}
-                />
-              ))}
+        /* 横着排：卡挨着卡往右，占满整行。竖排会把左栏「账号方向」撑出一大片
+           空白。样式在 ops.css「对标账号卡」一节。 */
+        <div className="ops-bm-strip">
+          {groups.map(([platform, list]) => (
+            <div className="ops-bm-group" key={platform}>
+              <h3 className="ops-bm-group-title">{platformLabel(t, platform)}</h3>
+              <div className="ops-bm-grid">
+                {list.map((benchmark) => (
+                  <BenchmarkCard
+                    key={benchmark.id}
+                    benchmark={benchmark}
+                    onEdit={onEdit ? () => onEdit(benchmark) : undefined}
+                    onDelete={() => onDelete(benchmark)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </section>
   );
