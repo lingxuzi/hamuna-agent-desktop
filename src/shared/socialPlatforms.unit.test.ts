@@ -217,6 +217,15 @@ describe('发布规格层', () => {
   it('未知平台 id 直接炸，不静默返回空规格', () => {
     expect(() => getSocialPlatformSpec('not-a-platform' as never)).toThrow();
   });
+
+  it('抖音的对标入口是实测的搜索页筛选面板，不是猜出来的地址', () => {
+    // 抖音没有独立的达人榜页 —— 「对标账号」是搜索页筛选面板里的一个维度
+    // （实测 2026-09-15）。这一格以前是空的，冷启动的采集线每次都要现场摸索。
+    const entry = getSocialPlatformSpec('douyin').benchmarkEntry;
+    expect(entry).toBeDefined();
+    expect(entry).toContain('douyin.com/search/');
+    expect(entry).toContain('对标账号');
+  });
 });
 
 describe('发布侧平台全貌（登录表 + 规格表合并）', () => {

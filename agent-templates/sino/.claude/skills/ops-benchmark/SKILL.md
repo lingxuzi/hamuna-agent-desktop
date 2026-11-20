@@ -41,14 +41,20 @@ hamuna ops list direction --json   # 方向在哪（对标必须方向相近）
 
 1. **拆方向** —— 从 `03-USER.md` + 方向记录里读出：品类、人群、内容支柱、语气。
 2. **找候选**（两条路，先走第一条）——
-   - 平台达人榜 / 对标榜页：`hamuna platforms <id> --json` 里的 `benchmarkUrl`。
-     **这个字段现在是空的（没核实过）** —— 那就从 `creatorHomeUrl` 出发，用
-     `hamuna browser open <URL>` + `hamuna browser read` 找榜的入口，找到把实际路径记进
-     `memory/topics/<平台>.md`，下次直接用。
+   - 平台对标榜入口：`hamuna platforms <id> --json` 里的 `benchmarkEntry`。
+     **它不一定是个 URL** —— 有的平台没有独立的榜页，这一格填的是「打开哪 + 点哪里」。
+     这一格有值 = 已核实，照着走，别再从 `creatorHomeUrl` 重新摸索；
+     **没值**（缺 = 未核实）才从 `creatorHomeUrl` 出发，用 `hamuna browser open <URL>`
+     + `hamuna browser read` 现场找入口，找到把实际路径记进 `memory/topics/<平台>.md`，
+     下次直接用。
+     抖音那一格是「搜索页 →「筛选」面板 →「对标账号」」这种形状（榜单要登录态才给看）；
+     **具体地址以 `benchmarkEntry` 里写的为准** —— 抖音换壳频繁，skill 里抄的地址会过期。
    - 公开搜索：「<品类> + <人群> 攻略 小红书」「<支柱关键词> 博主」这类。
      搜到的是**主页链接**，不是内容。
 3. **读主页，只读公开页** —— `hamuna browser open <主页URL>` → `hamuna browser read`。
    看三样：这个人做什么品类、人群像不像、更新频率。这三样对得上才算候选。
+   抖音看**作者主页的作品流**（`/aweme/post/`，本机实测）—— 它严格按发布时间倒序；
+   搜索结果页的「最新」可能隔几周，拿它当对方的近期节奏会算错。
 4. **给理由** —— 每个候选一句话说清「跟我们在哪一点上像」。说不清就是不对标。
 
 一次给 **2–3 个**，多了等于没对标。附上主页链接让人能自己去看。
