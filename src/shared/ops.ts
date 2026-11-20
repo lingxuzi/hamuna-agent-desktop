@@ -187,10 +187,21 @@ export type OpsRuleStatus = 'proposed' | 'active';
 
 export const OPS_RULE_STATUSES: readonly OpsRuleStatus[] = ['proposed', 'active'];
 
-/** 规则来源：反思 / 手动 / 对话。 */
-export type OpsRuleSource = 'reflection' | 'manual' | 'dialog';
+/**
+ * 规则来源：反思 / 手动 / 对话 / 对标拆解。
+ *
+ * `benchmark` 单独一档，因为它在台账里的**权重**不同：它描述的是**对手**
+ * 在做什么，不是我们该照抄的。选题读规则时不能把它当筛选条件用 ——
+ * 复盘验证过（`status` 转 `active`）之后才是我们的规律。
+ */
+export type OpsRuleSource = 'reflection' | 'manual' | 'dialog' | 'benchmark';
 
-export const OPS_RULE_SOURCES: readonly OpsRuleSource[] = ['reflection', 'manual', 'dialog'];
+export const OPS_RULE_SOURCES: readonly OpsRuleSource[] = [
+  'reflection',
+  'manual',
+  'dialog',
+  'benchmark',
+];
 
 /**
  * 规则的证据性质：这条结论**凭什么**这么说。

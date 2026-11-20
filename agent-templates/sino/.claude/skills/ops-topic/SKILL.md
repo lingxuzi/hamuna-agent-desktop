@@ -39,11 +39,17 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 |---|---|---|
 | 平台公开热榜 | `hamuna browser open <热榜URL>` → `hamuna browser read`，读返回的 markdown；或 web 搜索「XX 平台 热榜 今天」 | `hotspot` |
 | **台账里的对标账号** | `hamuna ops list benchmark --json` 拿到主页链接 → `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进别人后台** | `benchmark` |
+| **拆过的对标账号** | `hamuna ops list rule --json` 里 `source: benchmark` 的规则 —— 拆解产出的结论（爆款选题类型、封面模板、互动结构）。台账里没拆过就读主页 | `benchmark` |
 | **台账里的评论线索** | `hamuna ops list clue --json` —— 观众在我们自己作品下面问过的东西（「这个多少钱」「哪里买」「怎么用」） | `benchmark` |
 | 用户直接给的线索 | 用户粘贴的链接、截图描述、一句话 | `manual` / `benchmark` |
 | 上一轮复盘的结论 | `ops list rule` 里的 `active` 规则（`freshness` 不是 `stale` 的） | `reflection` |
 
 **采集边界**：公开热榜、公开主页、用户粘贴的内容可以读。他人账号后台、私域数据、需要登录才能看到的东西不碰。
+
+**`source: benchmark` 的规则只能当线索，不能当筛选条件。** 它描述的是**对手**在做什么，
+不是我们该照抄的 —— 抄之前先分清「他这么做有效」和「他这么做是因为他这么做」。
+想不清楚就当这条规则不存在。我们自己的复盘验证过、那条 rule 的 `status` 转 `active` 之后，
+才配当筛选条件。
 
 **用对标账号时必须指名**：一条 `source: benchmark` 的选题要说清是**哪个对标账号**的什么内容给了启发，
 写进 `--ref`（主页链接）和 `--note`。写「参考了对标账号」等于没说 —— 下一轮没人知道该去看谁。

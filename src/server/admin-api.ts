@@ -2182,7 +2182,7 @@ Review fields:
 Rule fields:
   --name <text>                Required on create
   --rule <text>                Required on create
-  --source <s>                 reflection | manual | dialog
+  --source <s>                 reflection | manual | dialog | benchmark
   --status <s>                 proposed | active
   --confidence <0-1>           How sure you are
   --evidence <text>            Why you believe it

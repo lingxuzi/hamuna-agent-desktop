@@ -102,6 +102,11 @@ pub enum OpsRuleSource {
     #[default]
     Manual,
     Dialog,
+    /// 竞品拆解得来的规律 —— 拆的是**别人**的号，结论是关于他的打法。
+    ///
+    /// 单独一档，因为这条规律在台账里的权重不同：它描述的是对手在做什么，
+    /// 不是我们该照抄的。复盘验证过、`status` 转 `active` 之后才是我们的规律。
+    Benchmark,
 }
 
 /// 规则的证据性质：这条结论**凭什么**这么说。
@@ -3222,6 +3227,47 @@ mod tests {
         let _ = fs::remove_dir_all(&ws);
     }
 
+    /// 竞品拆解得来的规则走 `source: "benchmark"`。
+    ///
+    /// 这一档存在的理由是**权重不同**：它描述的是对手在做什么，不是我们该照抄的。
+    /// 枚举加了一档，但写路径也必须认它 —— 枚举认了、写路径不认的话，Agent 拆完
+    /// 对标想落库时会被 store 挡回来，而台账里那条结论就没了。
+    #[test]
+    fn rule_source_benchmark_round_trips() {
+        let ws = make_test_workspace("ops-rule-benchmark-source");
+        let (state, _id) = upsert_item(
+            &ws,
+            OpsUpsert {
+                kind: OpsItemKind::Rule,
+                fields: serde_json::json!({
+                    "name": "对标@露营老张 爆款集中在装备对比",
+                    "rule": "他的 4 篇爆款里 3 篇是两款装备的对比实测",
+                    "source": "benchmark",
+                    "confidence": 0.6,
+                    "sampledCount": 12
+                })
+                .as_object()
+                .cloned()
+                .expect("object"),
+            },
+        )
+        .expect("upsert");
+
+        assert_eq!(state.rules[0].source, OpsRuleSource::Benchmark);
+
+        // 落盘形态是小写字符串 —— 前端读的就是这个形态。
+        let reread = read_state(&ws).expect("read");
+        assert_eq!(
+            reread.rules[0].source,
+            OpsRuleSource::Benchmark,
+            "写进去再读出来得还是 benchmark"
+        );
+        let raw = serde_json::to_value(&reread.rules[0].source).expect("serialize");
+        assert_eq!(raw, serde_json::json!("benchmark"));
+
+        let _ = fs::remove_dir_all(&ws);
+    }
+
     /// 老台账的规则没有样本量与缺口 —— 升级不能让它解析失败，
     /// 也不能凭空补出「样本量 0」或「什么都不缺」。
     #[test]
@@ -3409,7 +3455,7 @@ mod parity_tests {
         for value in ["proposed", "active"] {
             assert_ts_array_has(TS_OPS, "OPS_RULE_STATUSES", value);
         }
-        for value in ["reflection", "manual", "dialog"] {
+        for value in ["reflection", "manual", "dialog", "benchmark"] {
             assert_ts_array_has(TS_OPS, "OPS_RULE_SOURCES", value);
         }
     }
