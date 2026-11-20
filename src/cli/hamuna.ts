@@ -4485,17 +4485,25 @@ export function buildRequestBody(
         console.error('  Usage: hamuna browser upload --selector "input[type=file]" --file ./cover.png');
         process.exit(2);
       }
-      const file = (firstFlagValue(flags.file) ?? rest[0] ?? '').trim();
+      const rawFile = (firstFlagValue(flags.file) ?? rest[0] ?? '').trim();
       if (!selector && !text) {
         console.error('Error: browser upload requires --selector <css> or --text <visible label>.');
         console.error('  Usage: hamuna browser upload --selector "input[type=file]" --file ./cover.png');
         process.exit(2);
       }
-      if (!file) {
+      if (!rawFile) {
         console.error('Error: browser upload requires --file <path>.');
         console.error('  Usage: hamuna browser upload --selector "input[type=file]" --file ./cover.png');
         process.exit(2);
       }
+      // Rust's `validate_file_path` only accepts absolute paths, and the
+      // usage text above shows a relative one — resolve it here, against the
+      // directory the command was typed in. Same rule as the captcha-save
+      // path: the CLI normalises, Rust validates.
+      const pathMod = require('path') as typeof import('path');
+      const file = pathMod.isAbsolute(rawFile)
+        ? rawFile
+        : pathMod.resolve(process.cwd(), rawFile);
       return {
         ...base,
         ...(selector ? { selector } : {}),

@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -1068,15 +1068,24 @@ describe('hamuna CLI browser upload', () => {
     expect(positional).toEqual(['browser', 'upload']);
     expect(flags.file).toEqual(['./cover.png']);
 
-    expect(buildRequestBody('browser', 'upload', positional.slice(2), flags)).toMatchObject({
+    const body = buildRequestBody('browser', 'upload', positional.slice(2), flags);
+    expect(body).toMatchObject({ selector: 'input[type=file]' });
+    // Rust's `validate_file_path` rejects relative paths, so the CLI
+    // resolves against the cwd it was invoked from.
+    expect(body.file).toBe(resolve(process.cwd(), './cover.png'));
+  });
+
+  it('keeps an absolute file path untouched', () => {
+    const absolute = resolve(process.cwd(), 'hamuna_files/cover.png');
+    expect(buildRequestBody('browser', 'upload', [], {
       selector: 'input[type=file]',
-      file: './cover.png',
-    });
+      file: [absolute],
+    })).toMatchObject({ selector: 'input[type=file]', file: absolute });
   });
 
   it('still accepts the file path positionally', () => {
     expect(buildRequestBody('browser', 'upload', ['./cover.png'], { selector: 'input[type=file]' }))
-      .toMatchObject({ selector: 'input[type=file]', file: './cover.png' });
+      .toMatchObject({ selector: 'input[type=file]', file: resolve(process.cwd(), './cover.png') });
   });
 
   it('rejects an upload with no file', () => {

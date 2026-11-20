@@ -160,10 +160,11 @@ pub struct BrowserRequest {
     pub engine: String,
     /// Absolute path of the file to select in a file input, for `upload`.
     ///
-    /// Must already be inside the workspace or an allowed attachment prefix —
-    /// this endpoint does no path validation of its own, because every caller
-    /// (the CLI) is the agent's own process and the browser is sandboxed. A
-    /// future HTTP-facing caller would need `path_safety` first.
+    /// `browser_upload_handler` runs this through `validate_file_path`:
+    /// absolute, and not inside a forbidden system / credential directory.
+    /// It is NOT scoped to the workspace — the file only has to be readable
+    /// and not blacklisted, because the page it lands on is the sandboxed
+    /// browser and every caller is the agent's own process.
     #[serde(default)]
     pub file: String,
     /// Username for `login`. Never logged; see `browser_agent::login_script`.
