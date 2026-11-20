@@ -89,11 +89,18 @@ hamuna ops update direction --platform douyin \
 
 ### 先看我们在哪一档
 
+档位看**账号的粉丝数** —— 平台上的数，不是台账里的数：
+
 ```bash
-hamuna ops list review --json    # 最近一条的 metrics.followers = 当前量级
+hamuna platforms <id> --json       # 拿 creatorHomeUrl（自己号的创作者后台）
+hamuna browser open <creatorHomeUrl>
+hamuna browser read                # 粉丝数在后台首页的概况栏
 ```
 
-一条复盘都没有 = 0 档（冷启动）。阶段不同，处方完全不同：
+读不到就问用户一个数，别自己估。**别拿复盘里的 `metrics.followers` 当总数** ——
+那是单条内容带来的净增（口径见 `ops-review`）。
+
+还没发过任何内容 = 0 档（冷启动）。阶段不同，处方完全不同：
 
 | 阶段 | 这一档该做的 |
 |---|---|
@@ -152,8 +159,8 @@ hamuna ops list rule --json     # 找 source: benchmark 的规则
 - 同一支柱连做 5 条都起不来，另一支柱偶然发一条就爆了
 - **跨档了** —— 粉丝量级过了 `launch-stages.md` 的档位线，那一档的处方换了
   （0-500 的「统一方向发 10 条测试」到 500-5k 的「固化成模板 + 固定节奏」），
-  `goal` / `cadence` 得跟着换。跨档的依据是最近一条复盘的 `metrics.followers`，
-  把它写进 `rationale`。
+  `goal` / `cadence` 得跟着换。跨档的依据是**读到的当前粉丝数**，
+  把它和读数时刻一起写进 `rationale`。
 - 用户自己要宣传的产品变了（`opts` / `03-USER.md` 的 Context 变了）
 
 **没有数据支撑的修订不许提。** 「我觉得定位可以更清晰」不是修订理由，是没话找话。
