@@ -202,6 +202,28 @@ function assertStringFlag(value: unknown, flagName: string): asserts value is st
   }
 }
 
+/**
+ * Read a single value out of a flag the parser collected as repeatable.
+ *
+ * `--file` / `--tag` live in the parser's repeatable set because *some*
+ * command takes them many times (`space attachment add --file a --file b`).
+ * The parser can't know which command it is serving, so it always hands
+ * back `string[]`. A scalar consumer that reads `flags.file` as a string
+ * either drops the value (the array isn't a string) or ships the array
+ * itself into a JSON body, where Rust expects a plain string.
+ *
+ * Multi-value consumers use the whole array; scalar consumers take the
+ * first entry.
+ */
+function firstFlagValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return typeof first === 'string' ? first : undefined;
+  }
+  return undefined;
+}
+
 function parseGoalDeadlineFlag(raw: unknown): string | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== 'string' || !raw.trim()) {
@@ -4367,7 +4389,7 @@ export function buildRequestBody(
     assertStringFlag(flags.session, 'session');
     assertStringFlag(flags.query, 'query');
     assertStringFlag(flags.engine, 'engine');
-    assertStringFlag(flags.file, 'file');
+    // `--file` is repeatable → the parser never yields a boolean for it.
     assertStringFlag(flags.user, 'user');
     assertStringFlag(flags.platform, 'platform');
     const sessionId = typeof flags.session === 'string' ? flags.session : undefined;
@@ -4455,7 +4477,15 @@ export function buildRequestBody(
     if (action === 'upload') {
       const selector = typeof flags.selector === 'string' ? flags.selector : undefined;
       const text = typeof flags.text === 'string' ? flags.text : undefined;
-      const file = (typeof flags.file === 'string' ? flags.file : rest[0] ?? '').trim();
+      // `--file` is a repeatable flag (Space attachments take many), so the
+      // parser hands it back as an array — read the first entry.
+      const files = Array.isArray(flags.file) ? flags.file : [];
+      if (files.length > 1) {
+        console.error('Error: browser upload accepts a single --file.');
+        console.error('  Usage: hamuna browser upload --selector "input[type=file]" --file ./cover.png');
+        process.exit(2);
+      }
+      const file = (firstFlagValue(flags.file) ?? rest[0] ?? '').trim();
       if (!selector && !text) {
         console.error('Error: browser upload requires --selector <css> or --text <visible label>.');
         console.error('  Usage: hamuna browser upload --selector "input[type=file]" --file ./cover.png');
@@ -5424,7 +5454,7 @@ export function buildRequestBody(
   if (group === 'im') {
     if (action === 'send-media') {
       return {
-        filePath: (flags.file as string) || rest[0],
+        filePath: firstFlagValue(flags.file) ?? rest[0],
         caption: flags.caption,
       };
     }
@@ -5529,7 +5559,7 @@ export function buildRequestBody(
       return {
         workspaceId: flags.workspaceId,
         status: flags.status,
-        tag: flags.tag,
+        tag: firstFlagValue(flags.tag),
         includeDeleted: flags.includeDeleted,
       };
     }
@@ -5738,7 +5768,7 @@ export function buildRequestBody(
   if (group === 'thought') {
     if (action === 'list') {
       return {
-        tag: flags.tag,
+        tag: firstFlagValue(flags.tag),
         query: flags.query,
         limit: flags.limit ? Number(flags.limit) : undefined,
       };

@@ -1055,6 +1055,71 @@ describe('hamuna CLI browser search', () => {
   });
 });
 
+describe('hamuna CLI browser upload', () => {
+  it('takes the file path out of the repeatable --file flag', () => {
+    // `--file` is repeatable (Space attachments take many), so the parser
+    // collects an array. Reading it as a string dropped the value and the
+    // command always answered "requires --file".
+    const { positional, flags } = parseArgs([
+      'browser', 'upload',
+      '--selector', 'input[type=file]',
+      '--file', './cover.png',
+    ]);
+    expect(positional).toEqual(['browser', 'upload']);
+    expect(flags.file).toEqual(['./cover.png']);
+
+    expect(buildRequestBody('browser', 'upload', positional.slice(2), flags)).toMatchObject({
+      selector: 'input[type=file]',
+      file: './cover.png',
+    });
+  });
+
+  it('still accepts the file path positionally', () => {
+    expect(buildRequestBody('browser', 'upload', ['./cover.png'], { selector: 'input[type=file]' }))
+      .toMatchObject({ selector: 'input[type=file]', file: './cover.png' });
+  });
+
+  it('rejects an upload with no file', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'upload', [], { selector: 'input[type=file]' }))
+        .toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('browser upload requires --file'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('rejects an upload with more than one file', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => buildRequestBody('browser', 'upload', [], {
+        selector: 'input[type=file]',
+        file: ['./a.png', './b.png'],
+      })).toThrow('process.exit(2)');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('single --file'));
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('sends a scalar tag for task list and thought list', () => {
+    // `--tag` is repeatable for the ops ledger; the list filters take one.
+    const { flags } = parseArgs(['task', 'list', '--tag', 'ops']);
+    expect(flags.tag).toEqual(['ops']);
+    expect(buildRequestBody('task', 'list', [], flags)).toMatchObject({ tag: 'ops' });
+    expect(buildRequestBody('thought', 'list', [], flags)).toMatchObject({ tag: 'ops' });
+  });
+});
+
 describe('hamuna CLI browser scroll', () => {
   const withExitSpy = (fn: () => void) => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
