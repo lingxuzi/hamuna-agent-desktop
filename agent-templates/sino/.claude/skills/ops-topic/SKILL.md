@@ -40,6 +40,7 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 | 平台公开热榜 | `hamuna browser open <热榜URL>` → `hamuna browser read`，读返回的 markdown；或 web 搜索「XX 平台 热榜 今天」 | `hotspot` |
 | **台账里的对标账号** | `hamuna ops list benchmark --json` 拿到主页链接 → `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进别人后台** | `benchmark` |
 | **拆过的对标账号** | `hamuna ops list rule --json` 里 `source: benchmark` 的规则 —— 拆解产出的结论（爆款选题类型、封面模板、互动结构）。台账里没拆过就读主页 | `benchmark` |
+| **起号期指定的测试方向** | `hamuna ops list direction --json` 里这个平台的 `goal` / `pillars` —— 0-500 档定了一个方向要发 10 条测试时，选题就围着它转 | `manual` |
 | **台账里的评论线索** | `hamuna ops list clue --json` —— 观众在我们自己作品下面问过的东西（「这个多少钱」「哪里买」「怎么用」） | `benchmark` |
 | 用户直接给的线索 | 用户粘贴的链接、截图描述、一句话 | `manual` / `benchmark` |
 | 上一轮复盘的结论 | `ops list rule` 里的 `active` 规则（`freshness` 不是 `stale` 的） | `reflection` |
@@ -53,6 +54,10 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 **用对标账号时必须指名**：一条 `source: benchmark` 的选题要说清是**哪个对标账号**的什么内容给了启发，
 写进 `--ref`（主页链接）和 `--note`。写「参考了对标账号」等于没说 —— 下一轮没人知道该去看谁。
+
+**起号期不撒网。** 0-500 档要发的是「统一一个方向的 10 条测试」（见 `ops-direction`）。
+那 10 条围着同一个方向转 —— 一次最多提 3 条，所以这一档是分几轮提完 10 条，
+**不是一轮提 10 条不同类型的**。混着发，哪一类进了小流量池都读不出来。
 
 **用线索时必须指名**：说清是哪个问题（几个人问、问了什么）。「最近有 3 个人问价格」比「用户关心价格」有信息量得多。
 

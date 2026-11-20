@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -64,6 +64,29 @@ describe('sino 方法论文件的出处', () => {
   it('新搬进来的对标拆解方法论也在这个网里', () => {
     // 钉住具体文件：glob 写错（比如 skill 目录改名）时，上面两条会一起空跑。
     const files = referenceFiles();
-    expect(files.filter((file) => file.includes('ops-benchmark-analysis'))).toHaveLength(3);
+    expect(
+      files.some((file) => file.endsWith('ops-benchmark-analysis/references/viral-patterns.md')),
+    ).toBe(true);
+  });
+
+  it('SKILL.md 里提到的 references 都真的存在', () => {
+    // skill 正文里写着「见 references/xxx.md」，那个文件要是没了，
+    // Agent 读到的是一个断掉的指针 —— 它不会报错，只会照着没有的内容往下编。
+    const missing: string[] = [];
+    for (const skill of readdirSync(SKILLS_ROOT, { withFileTypes: true })) {
+      if (!skill.isDirectory()) continue;
+      const skillMd = join(SKILLS_ROOT, skill.name, 'SKILL.md');
+      let body: string;
+      try {
+        body = readFileSync(skillMd, 'utf8');
+      } catch {
+        continue; // 这个 skill 没有 SKILL.md
+      }
+      for (const match of body.matchAll(/references\/[\w.-]+\.md/g)) {
+        const target = join(SKILLS_ROOT, skill.name, match[0]);
+        if (!existsSync(target)) missing.push(`${skill.name}/${match[0]}`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });
