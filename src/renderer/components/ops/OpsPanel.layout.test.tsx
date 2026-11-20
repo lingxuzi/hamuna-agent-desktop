@@ -321,6 +321,28 @@ describe('运营面板 bento 位置表', () => {
     }
   });
 
+  it('列表卡与小卡同行时，列表卡必须跨行 —— 否则小卡被垫高', () => {
+    // 网格行高 = 同行最高的那张卡。一张会变高的列表卡（选题池 / 制作中 /
+    // 本周 / 表现最好的内容）和一张定高小卡（来源分布 / 状态分布 / 平台配额）
+    // 挤在同一行，小卡就被撑到列表的高度，卡内留出一大片空白
+    // （实测：来源分布被垫高 91px、状态分布 141px、平台分布 206px）。
+    //
+    // 唯一解：列表卡跨两行、小卡独占右栏一格 —— 行高回到小卡自己的高度，
+    // 多出来的那一格留空（空白在卡外，不在卡里）。
+    //
+    // jsdom 排不了版，守不住"小卡没被垫高"这件事本身，只能守住这条结构
+    // 前提：同处一行时，列表卡必须跨多行。
+    const tables = areaTables();
+    for (const [domain, rows] of tables) {
+      const poolRows = new Set(cellsOf(rows, 'pool').map(([r]) => r));
+      const distRows = new Set(cellsOf(rows, 'dist').map(([r]) => r));
+      if (poolRows.size === 0 || distRows.size === 0) continue;
+      const shared = [...poolRows].filter((r) => distRows.has(r));
+      if (shared.length === 0) continue; // 不同行：互不影响
+      expect(poolRows.size, `${domain} 的列表卡跟小卡同行，却只占一行 —— 小卡会被垫高`).toBeGreaterThan(1);
+    }
+  });
+
   it('每张卡都有内容：不允许只剩标题和一片留白', async () => {
     // 故障模式：一张卡渲染出来只有一个标题，body 是空的。界面上看就是一大块
     // 留白，读者以为数据没了 —— 其实是这个域没渲染出任何东西。跟「假指标」

@@ -209,16 +209,15 @@
    数据卡的行高才回到内容本身。
    等高契约因此只作用于同一行内，不跨行、不跨列 —— 空格子（'.'）就是那份
    留在卡外的空白，不是漏排的卡。 */
+/* 选题 / 素材 / 排期三个域：列表卡跨两行，小卡进右栏。
+   三张卡挤在同一行时，行高由列表卡决定 —— 右边那张只有两三条的小卡
+   （来源分布 / 状态分布 / 平台配额）被垫到跟列表一样高，卡内留出上百像素
+   的空白。让列表卡跨两行，小卡独占右栏一格，谁都不再被垫高；
+   右栏第二格空着（空白在卡外，不在卡里）。
+   「排期列表天然比『平台配额』高得多」只是最明显的一个：选题、素材的
+   列表卡同样比旁边的小卡高。 */
 .ops-body[data-ops-domain='topic'],
-.ops-body[data-ops-domain='asset'] {
-  grid-template-areas:
-    'hero hero dark'
-    'pool dist .'
-    'notes notes notes';
-}
-/* 排期域：排期列表天然比「平台配额」高得多。三张卡挤在同一行时，
-   后两张被垫到 500px 高，条目之间裂出上百像素的空档。让排期列表跨两行，
-   谁都不再被垫高。 */
+.ops-body[data-ops-domain='asset'],
 .ops-body[data-ops-domain='schedule'] {
   grid-template-areas:
     'hero hero dark'
@@ -226,10 +225,15 @@
     'pool pool .'
     'notes notes notes';
 }
+/* 复盘域：图表、列表、小卡三张挤在一行时，行高由列表卡决定 —— 图表卡里
+   画布上下留出上百像素，平台分布卡整张都在留白。列表卡跨两行、平台分布
+   独占右栏一格、图表卡自己一行，谁都不再被垫高。 */
 .ops-body[data-ops-domain='review'] {
   grid-template-areas:
     'hero hero dark'
-    'chart pool dist'
+    'chart chart .'
+    'pool pool dist'
+    'pool pool .'
     'adv adv .'
     'notes notes notes';
 }
