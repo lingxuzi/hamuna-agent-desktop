@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { PRESET_TEMPLATES } from './config-types';
 import {
   OPS_ASSET_STATUSES,
   OPS_BENCHMARK_SOURCES,
@@ -96,6 +97,16 @@ describe('ops 枚举', () => {
     // 方向排在第一位：它是其余四域共用的前提，面板默认落地就在这一域。
     expect(OPS_DOMAIN_IDS).toEqual(['direction', 'topic', 'asset', 'schedule', 'review']);
     expect(SINO_TEMPLATE_ID).toBe('sino');
+  });
+
+  it('Sino 模板的心跳间隔够得着热点的爆发期', () => {
+    // 热点有半衰期：爆发期 0-4 小时。间隔一旦超过 60 分钟，心跳扫到的热点
+    // 必然已经过了能抢的窗口 —— 蹭热点就只剩「复述发生了什么」这一种打法，
+    // 那还不如不做。Mino 没有扫热榜这步，间隔保持 240，不受这条约束。
+    const sino = PRESET_TEMPLATES.find(t => t.id === SINO_TEMPLATE_ID);
+    const interval = sino?.agentDefaults?.heartbeat?.intervalMinutes;
+    expect(interval).toBeDefined();
+    expect(interval!).toBeLessThanOrEqual(60);
   });
 
   it('方向状态两态：草案（可被 Agent 直接写）与已生效（只能提修订）', () => {

@@ -655,7 +655,10 @@ export const PRESET_TEMPLATES: WorkspaceTemplate[] = [
       enabled: true,
       heartbeat: {
         enabled: true,
-        intervalMinutes: 240,
+        // 60 分钟：热点有半衰期（爆发期 0-4 小时），4 小时一轮的间隔
+        // 扫到的热点必然已经过了能抢的窗口。Mino 保持 240 —— 通用助理
+        // 没有「扫热榜」这步，醒得勤只是噪声。
+        intervalMinutes: 60,
         ackMaxChars: 300,
         activeHours: {
           start: '09:00',
