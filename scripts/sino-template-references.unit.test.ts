@@ -116,6 +116,37 @@ describe('sino 方法论文件的出处', () => {
     expect(body).toMatch(/不(给|返回).{0,8}热度值/);
   });
 
+  it('没有人假装「到点会自动发」', () => {
+    // 没有任何东西在轮询 `scheduledAt`：没有定时器、没有订阅、面板只在 `ops:changed`
+    // 刷新。发布还必须落在一个**有浏览器面板的 Chat 会话**里（`browser_api.rs`
+    // 按 session id 找面板，找不到就报错，不回退），定时任务的 session 永远认领不到。
+    //
+    // 这两条任何一条被写反，Agent 就会排完期说「到点自动发」然后什么都不做 ——
+    // 用户以为发出去了而停止跟进，等到几天后才发现一条都没发。这是最贵的那种错。
+    const root = join(process.cwd(), 'agent-templates/sino');
+    const publish = readFileSync(join(SKILLS_ROOT, 'ops-publish/SKILL.md'), 'utf8');
+    expect(publish).toContain('scheduledAt');
+    expect(publish).toMatch(/不会自己触发/);
+    // 定时任务拿不到面板这件事必须写在文件里，否则下一个改 prompt 的人会重新
+    // 把发布派给 cron。
+    expect(publish).toMatch(/定时任务.{0,40}(不能|拿不到)/);
+
+    const schedule = readFileSync(join(SKILLS_ROOT, 'ops-schedule/SKILL.md'), 'utf8');
+    expect(schedule).toMatch(/不会自己发/);
+    // 「说成有个人会去发」= 承诺自动发布。这种句子只能出现在否定句里。
+    for (const [name, body] of [
+      ['HEARTBEAT.md', readFileSync(join(root, 'HEARTBEAT.md'), 'utf8')],
+      ['CLAUDE.md', readFileSync(join(root, 'CLAUDE.md'), 'utf8')],
+      ['ops-schedule', schedule],
+    ] as const) {
+      expect(body, name).not.toMatch(/(会|将|自动)在?到点自动发/);
+    }
+    // 心跳第 1 步必须先探面板，再决定发不发。
+    const heartbeat = readFileSync(join(root, 'HEARTBEAT.md'), 'utf8');
+    expect(heartbeat).toMatch(/hamuna browser list/);
+    expect(heartbeat).toMatch(/没有面板.{0,20}不发布/);
+  });
+
   it('SKILL.md 里提到的 references 都真的存在', () => {
     // skill 正文里写着「见 references/xxx.md」，那个文件要是没了，
     // Agent 读到的是一个断掉的指针 —— 它不会报错，只会照着没有的内容往下编。

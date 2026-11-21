@@ -1196,7 +1196,7 @@
         "aspect": "Aspect ratio",
         "submit": "Start generating",
         "unsupported": "{{platform}} can't publish this format",
-        "brief": "Topic “{{title}}” is confirmed for production. Platform: {{platform}}. Format: {{form}}{{aspect}}. Start generating in this format and record the finished piece in the ops ledger."
+        "brief": "Topic “{{title}}” is confirmed for production. Platform: {{platform}}. Format: {{form}}{{aspect}}. Produce it in this format, record it in the ops ledger, and schedule it. If it's time-sensitive, publish it in this session and read back to verify; if it's scheduled for later, set the time and remind me when it comes due."
       },
       "kind": {
         "image_text": "Text + images",

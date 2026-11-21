@@ -96,6 +96,14 @@ store 挡回来 —— 这是故意的，不是我不会写。
 
 **点击 ≠ 发布成功。** 见上面 `unverified` / `published` 那张表。
 
+**发布必须在有浏览器面板的会话里。** 面板属于一个正在屏幕上打开的 Chat 会话，
+`hamuna browser *` 按当前 session id 找它，找不到就报错、不回退。定时任务的 session
+认领不到面板（实测 `No browser is open for session <task-session-id>`），心跳是无人值守的、
+同样不一定有。**没面板就报「到点了，需要你在 Chat 里发」，不许说成已发。**
+
+`browser publish` 弹不弹审批，只看设置页那个平台的「允许自动发布」。**授权是人的，
+不是我的** —— 没开就在有人的时候发、让人点一下确认，这也是正常的一轮。
+
 平台规格（发布页、作品列表页、字数 / 图片上限、登录墙标记）走 `hamuna platforms <id> --json`。
 规格里缺的字段是「还没核实」，从 `creatorHomeUrl` 出发现场找，找到把实际路径记进
 `memory/topics/<平台>.md`。**不许猜 URL。**
