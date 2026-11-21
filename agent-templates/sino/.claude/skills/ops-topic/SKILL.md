@@ -37,7 +37,7 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 | 来源 | 怎么拿 | `source` |
 |---|---|---|
-| 平台公开热榜 | `hamuna browser open <热榜URL>` → `hamuna browser read`，读返回的 markdown。榜源清单、覆盖缺口、取法见 `references/hotlist-sources.md` | `hotspot` |
+| 平台公开热榜 | 交互式（有浏览器）：`hamuna browser open <热榜URL>` → `hamuna browser read`。定时任务 / 后台（无浏览器）：`curl` 打 newsnow 聚合接口。两条通道的榜源、字段、坑见 `references/hotlist-sources.md` | `hotspot` |
 | **台账里的对标账号** | `hamuna ops list benchmark --json` 拿到主页链接 → `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进别人后台** | `benchmark` |
 | **拆过的对标账号** | `hamuna ops list rule --json` 里 `source: benchmark` 的规则 —— 拆解产出的结论（爆款选题类型、封面模板、互动结构）。台账里没拆过就读主页 | `benchmark` |
 | **起号期指定的测试方向** | `hamuna ops list direction --json` 里这个平台的 `goal` / `pillars` —— 0-500 档定了一个方向要发 10 条测试时，选题就围着它转 | `manual` |
@@ -61,7 +61,9 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 **用线索时必须指名**：说清是哪个问题（几个人问、问了什么）。「最近有 3 个人问价格」比「用户关心价格」有信息量得多。
 
-**用内嵌浏览器，不用系统浏览器。** `hamuna browser open` 打开的是 App 内嵌 webview（`hamuna browser read` 能把当前页读成 markdown），页面留在 App 里用户看得见，采集过程透明。打开失败（浏览器面板不可用）就退回 web 搜索，不要反复重试。
+**采集用内嵌浏览器，不用系统浏览器。** `hamuna browser open` 打开的是 App 内嵌 webview（`hamuna browser read` 能把当前页读成 markdown），页面留在 App 里用户看得见，采集过程透明。打开失败（浏览器面板不可用）就退回 web 搜索，不要反复重试。
+
+**跑在定时任务里时没有浏览器面板。** 那里 `browser open` 会等一个永远不会有人开的面板（15 秒超时），`browser read` 直接报「No browser is open for session X」。后台场景改用 `curl` 打 newsnow 聚合接口取榜 —— 命令、必带的 `User-Agent`、可用源 id 见 `references/hotlist-sources.md` 的「无人值守时怎么取」。
 
 ## 判断值不值得做
 

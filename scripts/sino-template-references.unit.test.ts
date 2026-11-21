@@ -101,6 +101,21 @@ describe('sino 方法论文件的出处', () => {
     expect(skillMd).toMatch(/热榜.{0,12}热度值.{0,20}不是播放量/);
   });
 
+  it('无人值守取数通道写死了域名和 UA —— 别让 Agent 自己猜', () => {
+    // 实战事故（2026-11-21）：定时任务里判据文件没被打包进工作区，Agent 找不到
+    // 端点说明，自己编了一个 `newsnow.busiyi.com`（真名是 `.world`），白跑 8 分钟。
+    // 消歧只靠这一处：域名写错、UA 要求被删，都会让下一次无人值守跑空。
+    const body = readFileSync(
+      join(SKILLS_ROOT, 'ops-topic/references/hotlist-sources.md'),
+      'utf8',
+    );
+    expect(body).toContain('https://newsnow.busiyi.world/api/s?id=');
+    // 不带 UA 会 403（实测）。要求写在命令旁边，不能只在散文里提。
+    expect(body).toMatch(/User-Agent/);
+    // 少了这条，Agent 可能把热榜热度值填进 --hotness 去复盘口径里灌假数。
+    expect(body).toMatch(/不(给|返回).{0,8}热度值/);
+  });
+
   it('SKILL.md 里提到的 references 都真的存在', () => {
     // skill 正文里写着「见 references/xxx.md」，那个文件要是没了，
     // Agent 读到的是一个断掉的指针 —— 它不会报错，只会照着没有的内容往下编。

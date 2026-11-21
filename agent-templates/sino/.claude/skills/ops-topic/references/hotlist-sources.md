@@ -2,10 +2,16 @@
 
 > **方法论来源**：Easel `skills/shared/hotlist-apis.md`。
 > **改动**：
-> 1. **取数通道换了**：Easel 用 `web_fetch` 打公益 API（60s / xxapi），因为它跑在服务端、IP 被平台反爬。
->    sino 跑在用户机器的内嵌浏览器里，有真实 IP 和登录态，平台自己的热榜页能直接读。
->    **所以 60s / xxapi 的 API 清单没有搬** —— 那是绕开一个我们没有的约束，还多一个第三方依赖。
->    榜源清单本身（哪些平台值得看）搬过来了。
+> 1. **取数通道换了两轮**：
+>    - 第一轮：Easel 用 `web_fetch` 打公益 API（60s / xxapi），因为它跑在服务端、IP 被平台反爬。
+>      sino 跑在用户机器的内嵌浏览器里，有真实 IP 和登录态，平台自己的热榜页能直接读 ——
+>      所以 60s / xxapi 的 API 清单**没有搬**。榜源清单（哪些平台值得看）搬过来了。
+>    - 第二轮：热点选题搬进了定时任务（`sino-hotspot-topic`），定时任务跑在 headless sidecar 里，
+>      **没有 Chat 的浏览器面板**，`browser open/read` 整条用不了。于是在内嵌浏览器之外
+>      补了一条 newsnow 聚合接口，专供无人值守场景（见文末「无人值守时怎么取」）。
+>      它不替代交互式那套：人在电脑前选题，读平台原页仍然更准。
+>    **60s / xxapi 依然没搬** —— 那是每个平台一个 scraper，newsnow 一个接口就聚合了六个平台，
+>    多引一个聚合依赖换掉六个平台的解析维护，这个交换是划算的；当年那批单平台 scraper 不是。
 > 2. URL 换成实测过的公开热榜页（2026-11-21 逐个验过状态）。
 > 3. Easel 文档把响应字段写作 `hot`，**实测是 `hot_value`**（抖音 / 微博）、`score`（小红书）、`hot_value_desc`（知乎）。按实测的写。
 > 4. 加了一条 Easel 没有的红线：**热榜热度值 ≠ `--hotness`**。
@@ -62,3 +68,63 @@ hamuna browser read              # 当前页读成 markdown
 → 换榜源。
 
 不要用没核实过的第三方接口充数，也不要把接口挂了说成「今天没热点」。
+
+（newsnow 是**核实过**的那一个，下面单独写。除此之外不要临时找别的接口顶上来。）
+
+---
+
+## 无人值守时怎么取（定时任务 / 后台）
+
+定时任务跑在 headless sidecar 里，**没有 Chat 的浏览器窗口**：`hamuna browser open` 会去要
+一个永远不会有人开的面板（15 秒超时），`browser read` 直接报
+「No browser is open for session X」。所以后台场景**不用**上面那套 `browser open/read`。
+
+改用 newsnow 的公开聚合接口（本项目新增，不是 Easel 搬来的）：
+
+```bash
+curl -s \
+  -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' \
+  -H 'Accept: application/json' \
+  'https://newsnow.busiyi.world/api/s?id=douyin'
+```
+
+**两个头缺一不可。** 不带 `User-Agent`（或带默认的 `curl/x.y`）会被 403 —— 实测过。
+
+返回：
+
+```json
+{ "status": "cache", "id": "douyin", "updatedTime": 1795247749687,
+  "items": [ { "id": "2756443", "title": "…", "url": "https://www.douyin.com/hot/2756443" } ] }
+```
+
+| 字段 | 用法 |
+|---|---|
+| `status` | `success`（刚抓的）/ `cache`（默认 30 分钟缓存）。两种都能用 |
+| `updatedTime` | 这份数据是什么时候的（毫秒）。**拿它判新鲜度**，别拿 `Date.now()` |
+| `items[].title` / `.url` | 条目标题 + 平台原链接。`url` 是打开具体内容读播放量的入口 |
+| `items[].id` | 平台侧条目 id，不是播放量 |
+
+可用的 `id`（2026-11-21 逐个实测）：
+
+| id | 平台 | 实测 |
+|---|---|---|
+| `douyin` | 抖音 | ✅ 30 条 |
+| `weibo` | 微博 | ✅ 30 条 |
+| `zhihu` | 知乎 | ✅ 20 条 |
+| `bilibili` | B站热搜 | ✅ 30 条 |
+| `toutiao` | 今日头条 | ✅ 30 条 |
+| `baidu` | 百度热搜 | ✅ 30 条 |
+| ~~`kuaishou`~~ / ~~`xiaohongshu`~~ | 快手 / 小红书 | ❌ 该源不存在，返回 0 条 |
+
+**它不给热度值，只给标题和链接。** 这正好：`--hotness` 要的是播放量，接口里根本没有能
+填进去的数 —— 想填就得按 `items[].url` 打开那条具体内容去读播放量，读不到就不传。
+
+三条纪律：
+
+- **未知 `id` 会返回 500**（`Invalid source id`）。宁可少扫一个榜，不要猜 id。
+- **接口 403 / 500 / 空列表 → 跳过这个榜，不重试、不换榜硬凑。** 反复重试会把这个第三方
+  服务的 IP 拉黑，而且拿不到的东西重试十次也拿不到。
+- **返回空列表 ≠ 今天没热点。** 永远说「榜没取到」，不要把它说成「今天没热点」。
+
+它是第三方聚合，不是平台官方 —— 榜位顺序和平台自己的一致，但**延迟 30 分钟量级**（缓存）。
+爆发期（0-4 小时）的榜要抢，就还是得靠有浏览器的交互式选题。
