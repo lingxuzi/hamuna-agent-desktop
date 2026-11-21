@@ -103,7 +103,8 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 
 - **赶时间的热点** → 排「现在」，这一轮直接走 `ops-publish` 发掉。
 - **排到未来** → 停在 `ready` + `scheduledAt`，明说「到点需要你在 Chat 里说一声」。
-  不要承诺「到点自动发」。
+  不要承诺「到点自动发」。**到点的那一刻由谁提醒**：你下次被叫醒时（用户在 Chat 里
+  说话、或者定时任务跑起来）主动查一眼「有没有到点的」，有就报。
 
 **发布只有一条通道**：`hamuna browser publish --platform <id>`。用 `browser click` 点发布按钮
 是绕过审批的，封掉了。平台规格（发布页 / 作品列表页 / 上限 / 登录墙标记）从
@@ -118,6 +119,9 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 1. `hamuna ops list` —— 现在手上有什么，别凭记忆答
 2. 读 `memory/YYYY-MM-DD.md`（今天 + 昨天）
 3. 要动某个具体选题 / 素材前，读 `memory/topics/<name>.md`
+4. **看有没有到点的**：`status: ready` 且 `scheduledAt` 已过的、投放超过 48 小时还没复盘的。
+   有就一句话说出来（「douyin 那条到点了，要发吗」「上周那三条可以复盘了」），
+   然后等用户点头再动手 —— 这两件事都要浏览器面板，面板归这个会话，问一句才不算白猜。
 
 ## 红线
 
