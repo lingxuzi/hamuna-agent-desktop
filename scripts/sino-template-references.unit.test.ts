@@ -73,6 +73,19 @@ describe('sino 方法论文件的出处', () => {
     }
   });
 
+  it('HEARTBEAT.md 里提到的 references 都真的存在', () => {
+    // 心跳清单会直接点名某个 reference（「榜源清单见 …」）。
+    // 那个文件要是没了，Agent 读到的是一个断掉的指针 —— 它不会报错，只会照着没有的内容往下编。
+    const heartbeatPath = join(process.cwd(), 'agent-templates/sino/HEARTBEAT.md');
+    const body = readFileSync(heartbeatPath, 'utf8');
+    const missing: string[] = [];
+    for (const match of body.matchAll(/\.claude\/skills\/([\w.-]+)\/references\/([\w.-]+\.md)/g)) {
+      const target = join(SKILLS_ROOT, match[1], 'references', match[2]);
+      if (!existsSync(target)) missing.push(match[0]);
+    }
+    expect(missing).toEqual([]);
+  });
+
   it('hotness 的口径是播放量 —— 热榜热度值不是', () => {
     // 蹭热点时最容易犯的错：把热榜上的 hot_value（平台算法分，八位数）填进 --hotness。
     // 台账里 hotness = 参考内容的播放量，填错就是往复盘口径里灌假数，且没人看得出来。
