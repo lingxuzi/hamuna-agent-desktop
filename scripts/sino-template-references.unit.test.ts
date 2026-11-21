@@ -61,12 +61,31 @@ describe('sino 方法论文件的出处', () => {
     }
   });
 
-  it('新搬进来的对标拆解方法论也在这个网里', () => {
+  it('搬进来的方法论文件都在这个网里', () => {
     // 钉住具体文件：glob 写错（比如 skill 目录改名）时，上面两条会一起空跑。
     const files = referenceFiles();
-    expect(
-      files.some((file) => file.endsWith('ops-benchmark-analysis/references/viral-patterns.md')),
-    ).toBe(true);
+    for (const expected of [
+      'ops-benchmark-analysis/references/viral-patterns.md',
+      'ops-topic/references/hot-riding.md',
+      'ops-topic/references/hotlist-sources.md',
+    ]) {
+      expect(files.some((file) => file.endsWith(expected)), expected).toBe(true);
+    }
+  });
+
+  it('hotness 的口径是播放量 —— 热榜热度值不是', () => {
+    // 蹭热点时最容易犯的错：把热榜上的 hot_value（平台算法分，八位数）填进 --hotness。
+    // 台账里 hotness = 参考内容的播放量，填错就是往复盘口径里灌假数，且没人看得出来。
+    // 口径写在两处：常驻的 05-OPS.md 和用它的 ops-topic/SKILL.md，两处都要在。
+    const rules = readFileSync(join(process.cwd(), 'agent-templates/sino/.claude/rules/05-OPS.md'), 'utf8');
+    expect(rules).toContain('播放量');
+    expect(rules).toMatch(/热榜.{0,12}热度值.{0,20}不是播放量/);
+
+    const skillMd = readFileSync(
+      join(SKILLS_ROOT, 'ops-topic/SKILL.md'),
+      'utf8',
+    );
+    expect(skillMd).toMatch(/热榜.{0,12}热度值.{0,20}不是播放量/);
   });
 
   it('SKILL.md 里提到的 references 都真的存在', () => {

@@ -2,7 +2,7 @@
 name: ops-topic
 description: >-
   选题。读热点、看对标、判断值不值得做，把结果落进运营台账的 topics。
-  当用户说「今天做什么」「有什么可做的」「这个热点能不能蹭」「帮我找几个选题」，
+  当用户说「今天做什么」「有什么可做的」「这个热点能不能蹭」「蹭热点怎么做」「帮我找几个选题」，
   或者你刚做完了复盘、要按规律开下一轮时，用这个 skill。
   产出是一条或几条选题记录——不是内容，不是脚本。
 ---
@@ -37,7 +37,7 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 | 来源 | 怎么拿 | `source` |
 |---|---|---|
-| 平台公开热榜 | `hamuna browser open <热榜URL>` → `hamuna browser read`，读返回的 markdown；或 web 搜索「XX 平台 热榜 今天」 | `hotspot` |
+| 平台公开热榜 | `hamuna browser open <热榜URL>` → `hamuna browser read`，读返回的 markdown。榜源清单、覆盖缺口、取法见 `references/hotlist-sources.md` | `hotspot` |
 | **台账里的对标账号** | `hamuna ops list benchmark --json` 拿到主页链接 → `hamuna browser open <主页URL>` → `hamuna browser read`。**只读公开页，不用登录态进别人后台** | `benchmark` |
 | **拆过的对标账号** | `hamuna ops list rule --json` 里 `source: benchmark` 的规则 —— 拆解产出的结论（爆款选题类型、封面模板、互动结构）。台账里没拆过就读主页 | `benchmark` |
 | **起号期指定的测试方向** | `hamuna ops list direction --json` 里这个平台的 `goal` / `pillars` —— 0-500 档定了一个方向要发 10 条测试时，选题就围着它转 | `manual` |
@@ -69,9 +69,12 @@ hamuna ops list rule --json     # 复盘沉淀的规律，选题要顺着它们�
 
 ### 四道硬门（任一不过，直接毙，不打分）
 
-1. **和这个号的定位有关** — 读 `03-USER.md` 的赛道。不相关再好也不做。
+1. **和这个号的定位有关** — 读 `03-USER.md` 的赛道 + `hamuna ops list direction` 的定位。不相关再好也不做。
+   热点类选题的关联度分高 / 中 / 低 / 无，**低和无直接毙**（判据见 `references/hot-riding.md`）。
 2. **有差异角度** — 同样的题材已经被讲过八百遍，我要说的是哪一句不一样的话。
-3. **现在做还来得及** — 热点有半衰期，超过 72 小时的"热点"通常已经是旧闻。
+   六种切入角度（专业解读 / 经验关联 / 工具方法论 / 反向观点 / 情绪共鸣 / 延伸联想）就是「哪一句」的来源，见 `references/hot-riding.md`。
+3. **现在做还来得及** — 热点有半衰期。爆发期（0–4 小时）抢首发，高峰期（4–24 小时）做差异化，
+   衰退期（1–3 天）必须换角度（做总结 / 反思），超过 72 小时已经是旧闻，直接毙。阶段判据见 `references/hot-riding.md`。
 4. **做得出来** — 手上的素材、时间、能力够不够。够不着的选题不是选题，是愿望。
 
 ### 七维打分（过了门才打）
@@ -125,6 +128,7 @@ hamuna ops add topic \
 - `--title` 是用户能在面板上一眼认出这条选题的标题，不是内容标题的草稿
 - `--platform` 只能是 `xiaohongshu` / `douyin` / `kuaishou` / `weixin-channels` / `bilibili` / `zhihu` / `wechat-mp`
 - `--hotness` 填**参考内容的播放量**（整数）。没有可比的参考内容就**不传**——传 0 会被当成播放量为零
+- **热榜上的热度值不是播放量**，不许填进 `--hotness`（见 `references/hotlist-sources.md`）
 - `--tag` / `--ref` 可以重复传多次
 - 不加 `--status`，新建默认 `idea`
 
@@ -138,4 +142,5 @@ hamuna ops add topic \
 
 - 不要在这一步写正文、画封面。那是 `ops-produce` 的事。
 - 不要改已有选题的状态——那是用户在面板上按的检查点。
+- **不硬凑热点。** 关联度低 / 无的热点，明确说「建议不蹭」并给一个替代方向 —— 硬凑出来的选题在七维打分里会现原形（账号匹配那一维会掉到 1–3 分），只是浪费时间。
 - **不要直接编辑 `ops/state.json`。**
