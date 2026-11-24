@@ -2406,7 +2406,12 @@ fn sync_admin_agent_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<boo
 // worked" and "the click hit a dead overlay", and that ambiguity is what drove
 // the eight-reload click loop. An install that keeps the old CLI hides the
 // verdict, so the agent goes back to retrying blind.
-const CLI_VERSION: &str = "58";
+// 59: `browser <verb> --workspace <path>` exists. It is the only way a session
+// with no browser panel (cron / task / hidden Chat) can get a collector
+// created in *its own* workspace profile; an old CLI cannot pass it, so the
+// request is refused instead of quietly landing in the shared profile and
+// collecting a logged-out page.
+const CLI_VERSION: &str = "59";
 
 /// Sync the CLI script from bundled resources to ~/.hamuna/bin/.
 /// Version-gated: only runs when CLI_VERSION changes.
@@ -2690,7 +2695,13 @@ fn sync_cli_blocking<R: Runtime>(app_handle: AppHandle<R>) -> Result<bool, Strin
 // it was written and stopped being true the moment the selector path learned
 // frames — an agent reading it would have given up on `--selector` inside a
 // frame and reached for `--text` first, or worse, kept retrying selectors.
-const SYSTEM_SKILLS_VERSION: &str = "85";
+// 86: hamuna-cli — document the hidden collector. Without it an agent in a
+// scheduled session reads "the browser panel belongs to an open Chat" and
+// reports "到点了，需要你在 Chat 里发" for work it could have done itself; the
+// collector path is invisible from the outside, so the doc is the only place
+// that tells it the hidden webview exists, has only one tab, and is reclaimed
+// after ten idle minutes.
+const SYSTEM_SKILLS_VERSION: &str = "86";
 
 /// One process-wide transaction owner for the versioned system-skill
 /// snapshot. Startup automation and ConfigProvider may request convergence at

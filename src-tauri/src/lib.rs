@@ -268,6 +268,7 @@ pub fn run() {
     let cleanup_done_for_wakelock_monitor = cleanup_done.clone();
     let cleanup_done_for_agent_monitor = cleanup_done.clone();
     let cleanup_done_for_terminal_forwarder = cleanup_done.clone();
+    let cleanup_done_for_collectors = cleanup_done.clone();
 
     // Create terminal manager state
     let terminal_state = terminal::TerminalManager::new();
@@ -278,6 +279,7 @@ pub fn run() {
     let browser_state = browser::BrowserManager::new();
     let browser_state_for_exit = browser_state.clone();
     let browser_state_for_window = browser_state.clone();
+    let browser_state_for_collectors = browser_state.clone();
 
     // Create Task Center state (v0.1.69 — thought & task stores)
     let data_dir = app_dirs::hamuna_data_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
@@ -1305,6 +1307,22 @@ pub fn run() {
                 ).await;
             });
             ulog_info!("[App] Turn wake-lock monitor spawned");
+
+            // Start the collector reaper: hidden browsers created for agents
+            // (cron / task sessions, or a Chat whose window is not visible)
+            // hold a whole webview process and the workspace's data store.
+            // Nothing in the renderer owns them, so nothing would ever close
+            // them — this loop does, after ten idle minutes.
+            let app_handle_for_collectors = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                browser::monitor_collectors(
+                    app_handle_for_collectors,
+                    browser_state_for_collectors,
+                    cleanup_done_for_collectors,
+                )
+                .await;
+            });
+            ulog_info!("[App] Collector reaper spawned");
 
             // Start Agent Channel health monitor (15s initial delay)
             let app_handle_for_agent_monitor = app.handle().clone();

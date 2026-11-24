@@ -11,8 +11,12 @@ vi.mock('../utils/management-api-client', () => ({
 
 // The browser is owned by a Chat session; the handler resolves the id from the
 // session engine. Stub it so the tests do not need a Sidecar.
+const sessionContext = vi.hoisted(() => ({
+  current: { sessionId: 'sess-1', workspacePath: null as string | null },
+}));
+
 vi.mock('../session-engine/selector', () => ({
-  getSessionEngine: () => ({ getCurrentSessionContext: () => ({ sessionId: 'sess-1' }) }),
+  getSessionEngine: () => ({ getCurrentSessionContext: () => sessionContext.current }),
 }));
 
 vi.mock('../utils/embedded-browser-quota', () => ({
@@ -26,6 +30,42 @@ const {
   handleBrowserPublish,
   handleBrowserScroll,
 } = await import('./browser-api');
+
+describe('browser workspace plumbing', () => {
+  beforeEach(() => {
+    managementApi.mockReset();
+    managementApi.mockResolvedValue({ ok: true, data: { url: 'https://example.com' }, opened: false });
+    sessionContext.current = { sessionId: 'sess-1', workspacePath: '/home/me/sino' };
+  });
+
+  // Without the workspace the hidden-collector path in Rust refuses to create
+  // anything — deliberately, because the alternative is a browser in the
+  // shared profile that is logged out of every platform the user signed into.
+  // So the field has to actually make it across the Sidecar hop.
+  it('把会话工作区带进 POST body，Rust 才能用对 profile 建采集器', async () => {
+    await handleBrowserAction('navigate', { url: 'https://example.com' });
+    const [path, method, body] = managementApi.mock.calls[0];
+    expect(path).toBe('/api/browser/navigate');
+    expect(method).toBe('POST');
+    expect(body.workspace).toBe('/home/me/sino');
+  });
+
+  it('显式 --workspace 压过会话工作区', async () => {
+    await handleBrowserAction('navigate', {
+      url: 'https://example.com',
+      workspace: '/home/me/other',
+    });
+    expect(managementApi.mock.calls[0][2].workspace).toBe('/home/me/other');
+  });
+
+  // 工作区是本地路径：进 query string 就留在 Rust 的请求日志里了。
+  it('GET 路径不带 workspace', async () => {
+    await handleBrowserAction('state', {});
+    const [path, method] = managementApi.mock.calls[0];
+    expect(method).toBe('GET');
+    expect(String(path)).not.toContain('workspace');
+  });
+});
 
 describe('browser upload', () => {
   beforeEach(() => {
@@ -297,5 +337,26 @@ describe('browser publish', () => {
     // 请求本身成功（点击确实发出去了），但效果判定是「没变化」。
     expect(res.success).toBe(true);
     expect((res.data as Record<string, unknown>)?.published).toBe(false);
+  });
+
+  // 隐藏采集器上发布 = 一条没人看见的帖子。审批链之所以有意义，就是用户
+  // 能看着那个点击落地；把发布留在采集器里，等于给定时任务开了一个用户
+  // 从没授予过的发布权限。
+  it('采集器上拒绝发布，连点击都不发', async () => {
+    managementApi.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        title: '抖音创作者中心',
+        url: 'https://creator.douyin.com/creator-micro/content/upload',
+        readyState: 'complete',
+        headless: true,
+      },
+    });
+    const res = await handleBrowserPublish({ platform: 'douyin', text: '发布' });
+    expect(res.success).toBe(false);
+    expect(String(res.error)).toContain('visible browser panel');
+    // Only the state probe — the click must never happen.
+    expect(managementApi).toHaveBeenCalledTimes(1);
+    expect(managementApi.mock.calls[0][0]).toBe('/api/browser/state?session_id=sess-1');
   });
 });

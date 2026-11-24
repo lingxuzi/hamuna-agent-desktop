@@ -19,7 +19,7 @@ use crate::browser::{eval_in_webview, get_browser_manager};
 use crate::browser_agent;
 use crate::browser_throttle;
 use crate::logger::get_app_handle;
-use crate::ulog_warn;
+use crate::{ulog_info, ulog_warn};
 
 /// Bound on a single page evaluation. A page that never settles (infinite
 /// loader) must not hang the agent's turn forever.
@@ -189,6 +189,14 @@ pub struct BrowserRequest {
     /// offset is relative to wherever the page currently is.
     #[serde(default)]
     pub to: String,
+    /// Workspace whose browser profile the collector must use.
+    ///
+    /// Only read when the request has to *create* a browser (there is no panel
+    /// for this session). Without it the collector would land in the shared
+    /// profile and lose the logins the user established inside this workspace
+    /// — the one thing that makes an unattended collection possible at all.
+    #[serde(default)]
+    pub workspace: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -239,6 +247,10 @@ async fn resolve_browser(session_id: &str) -> Result<(String, String), String> {
 
     if !session_id.trim().is_empty() {
         if let Some(found) = manager.session_for_session_id(session_id).await {
+            // Every request that reaches a browser counts as a use. This is
+            // what keeps a working collector alive: the reaper only closes
+            // what nobody has asked for in the last ten minutes.
+            manager.touch_now(&found.0);
             return Ok(found);
         }
         return Err(format!(
@@ -307,14 +319,26 @@ async fn resolve_owner(session_id: &str) -> Result<String, String> {
 // ──────────────────────────────────────────────────────────
 
 /// `GET /api/browser/state` — current URL, title, and readiness.
+///
+/// Carries `headless` because the caller has to know *what kind* of browser it
+/// reached: a collector is invisible, so a verb that needs a human to see the
+/// page (publishing) must refuse instead of acting on a window nobody is
+/// looking at.
 pub async fn browser_state_handler(Query(query): Query<BrowserRequest>) -> Json<serde_json::Value> {
-    let (_tab_id, label) = match resolve_browser(&query.session_id).await {
+    let (tab_id, label) = match resolve_browser(&query.session_id).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
+    let headless = match get_browser_manager() {
+        Some(manager) => manager.is_headless(&tab_id).await,
+        None => false,
+    };
 
     match run_script(&label, &browser_agent::page_state_script()).await {
-        Ok(data) => {
+        Ok(mut data) => {
+            if let Some(object) = data.as_object_mut() {
+                object.insert("headless".into(), serde_json::Value::Bool(headless));
+            }
             Json(serde_json::to_value(BrowserResponse::ok(data, false)).unwrap_or_default())
         }
         Err(e) => Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
@@ -450,7 +474,7 @@ pub async fn browser_navigate_handler(
         };
     }
 
-    let (tab_id, label, opened) = match resolve_or_open_browser(&input.session_id).await {
+    let (tab_id, label, opened) = match resolve_or_open_browser(&input, &url).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
@@ -592,36 +616,152 @@ async fn wait_for_loaded(label: &str, before: Option<&str>, target: &str, host: 
     }
 }
 
-/// Resolve the browser session for `session_id`, opening the panel if needed.
+/// Whether the main window can host a *visible* browser panel right now.
 ///
-/// Returns `(tab_id, webview_label, opened)`. `opened` is true when the
-/// panel had to be created for this call.
-async fn resolve_or_open_browser(session_id: &str) -> Result<(String, String, bool), String> {
+/// A hidden or minimized window cannot: `add_child` would still succeed, but
+/// the user would be driving a browser that is nowhere on screen — and the
+/// renderer would have to steal focus to a window that is not even visible.
+/// Windows/Linux do not throttle a hidden WebView2/WebKitGTK child reliably
+/// either (only macOS 14+ honours `backgroundThrottling`), so an unattended
+/// navigation there can stall on lazy-loaded content.
+fn main_window_can_show_panel() -> bool {
+    let Some(app) = get_app_handle() else {
+        return false;
+    };
+    let Some(window) = app.get_window("main") else {
+        return false;
+    };
+    window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
+}
+
+/// Create a hidden collector for a session that has no browser panel.
+///
+/// Webview size is deliberately generous even though nothing renders: pages
+/// gate lazy-loading and IntersectionObserver work on viewport size, and a
+/// 1×1 viewport makes real sites serve their mobile stub or nothing at all.
+/// The webview is hidden by `apply_visibility`, not by being tiny.
+async fn create_collector(
+    input: &BrowserRequest,
+    url: &str,
+) -> Result<(String, String, bool), String> {
+    let manager =
+        get_browser_manager().ok_or_else(|| "Browser manager not initialized".to_string())?;
+    let app = get_app_handle().ok_or_else(|| "App handle not initialized".to_string())?;
+
+    let session_id = input.session_id.trim();
+    if session_id.is_empty() {
+        return Err(
+            "A browser has to be created for this session, but no session id was provided."
+                .to_string(),
+        );
+    }
+
+    // Without a workspace the collector would fall back to the shared profile
+    // and lose every login the user established inside this workspace. That
+    // is not a degradation, it is a different account — so it is refused.
+    if input.workspace.trim().is_empty() {
+        return Err(
+            "A browser has to be created for this session, but no workspace was provided — \
+             the collecting browser would lose this workspace's logins. \
+             Pass `--workspace <path>` (or run from inside the workspace)."
+                .to_string(),
+        );
+    }
+
+    ulog_info!(
+        "[browser] no panel for session {} — creating a hidden collector",
+        session_id
+    );
+    let tab_id = crate::browser::create_browser_webview(
+        &app,
+        manager,
+        crate::browser::CreateRequest {
+            owner_tab_id: &crate::browser::collector_owner_id(session_id),
+            url,
+            // Parked off-window. A hidden webview whose bounds are visible
+            // would flash for one frame on some compositors before the first
+            // `hide()` lands.
+            x: -20_000.0,
+            y: -20_000.0,
+            // A real laptop viewport, not 1×1: sites serve their desktop
+            // layout and scroll-lazy content only when the viewport is real.
+            width: 1280.0,
+            height: 900.0,
+            session_id: Some(session_id.to_string()),
+            workspace: Some(input.workspace.trim().to_string()),
+            headless: true,
+        },
+    )
+    .await?;
+
+    let label = manager
+        .session_for_session_id(session_id)
+        .await
+        .map(|(_, label)| label)
+        .ok_or_else(|| "Collector was created but cannot be resolved back".to_string())?;
+
+    Ok((tab_id, label, true))
+}
+
+/// Resolve the browser session for `session_id`, opening one if needed.
+///
+/// Returns `(tab_id, webview_label, opened)`. `opened` is true when a browser
+/// had to be created for this call.
+///
+/// Three outcomes, in order — the ladder is deliberately *observable* rather
+/// than guessed up front:
+/// 1. the session already has a browser → use it (panel or collector alike);
+/// 2. the main window is hidden / minimized → create a collector directly.
+///    Asking the renderer here would fail after a 15s timeout for a reason the
+///    user cannot act on (there is no visible window to open a panel in);
+/// 3. the renderer is asked to open a panel, and **if it does not answer** a
+///    collector is created instead. That last rung is what makes scheduled
+///    Task / Cron sessions work at all: they have a session id but no Chat
+///    tab, so nobody ever answers the event.
+///
+/// The fallback is not a band-aid: `opened` still reports honestly what
+/// happened, and every caller works the same against a hidden webview.
+async fn resolve_or_open_browser(
+    input: &BrowserRequest,
+    url: &str,
+) -> Result<(String, String, bool), String> {
     let manager =
         get_browser_manager().ok_or_else(|| "Browser manager not initialized".to_string())?;
 
-    if let Some(found) = manager.session_for_session_id(session_id).await {
-        return Ok((found.0, found.1, false));
-    }
-
-    if session_id.trim().is_empty() {
+    let session_id = input.session_id.trim();
+    if !session_id.is_empty() {
+        if let Some(found) = manager.session_for_session_id(session_id).await {
+            manager.touch_now(&found.0);
+            return Ok((found.0, found.1, false));
+        }
+    } else {
         return Err(
             "No browser is open and no session id was provided — a Chat session is required to open one."
                 .to_string(),
         );
     }
 
+    if !main_window_can_show_panel() {
+        return create_collector(input, url).await;
+    }
+
     request_browser_open(session_id)
         .await
         .map_err(|e| format!("Could not ask the app to open the browser: {e}"))?;
 
-    match manager.wait_for_session(session_id, OPEN_TIMEOUT).await {
-        Some(found) => Ok((found.0, found.1, true)),
-        None => Err(
-            "Timed out waiting for the browser panel to open. The user may need to allow it, or the Chat may not be visible."
-                .to_string(),
-        ),
+    if let Some(found) = manager.wait_for_session(session_id, OPEN_TIMEOUT).await {
+        return Ok((found.0, found.1, true));
     }
+
+    // Nobody claimed the request. That is the normal shape of a scheduled
+    // session (no Chat tab exists to answer), so the headless rung is the
+    // answer rather than an error.
+    ulog_info!(
+        "[browser] renderer did not open a panel for {} in {:?} — falling back to a hidden collector",
+        session_id,
+        OPEN_TIMEOUT
+    );
+    create_collector(input, url).await
 }
 
 /// One search engine the agent can drive.
@@ -735,7 +875,10 @@ pub async fn browser_search_handler(Json(input): Json<BrowserRequest>) -> Json<s
         );
     };
 
-    let (tab_id, label, opened) = match resolve_or_open_browser(&input.session_id).await {
+    // The engine homepage is what a collector would be created on, and it is
+    // also the very next navigation below — so pass it as the creation URL
+    // instead of creating a blank webview and immediately replacing it.
+    let (tab_id, label, opened) = match resolve_or_open_browser(&input, spec.home).await {
         Ok(found) => found,
         Err(e) => return Json(serde_json::to_value(BrowserResponse::err(e)).unwrap_or_default()),
     };
@@ -1434,11 +1577,24 @@ async fn open_in_new_tab(session_id: &str, url: &str) -> Result<String, String> 
             )
         })?;
 
+    // A collector has no tab strip and no renderer listening for the open
+    // request — waiting for one would always burn the full timeout.
+    if manager
+        .tabs_of_owner(&owner)
+        .await
+        .first()
+        .is_some_and(|(_, session)| session.is_headless())
+    {
+        return Err(
+            "The collecting browser only holds one page — navigate it instead of opening a new tab."
+                .to_string(),
+        );
+    }
+
     let before = manager.tabs_of_owner(&owner).await.len();
     if !manager.has_tab_capacity(&owner).await {
         return Err(format!(
-            "This browser already has {before} tabs (max {}) — close one before opening another.",
-            crate::browser::MAX_BROWSER_TABS
+            "This browser already has {before} tabs — close one before opening another."
         ));
     }
 

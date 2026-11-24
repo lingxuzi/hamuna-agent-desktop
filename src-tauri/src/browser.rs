@@ -283,6 +283,14 @@ pub fn parse_agent_url(url: &str) -> Result<Url, String> {
 /// "open in new tab" loop eat the machine.
 pub const MAX_BROWSER_TABS: usize = 3;
 
+/// How many webviews a hidden collector may hold.
+///
+/// One, and the reason is not resource thrift: two hidden browsers on the same
+/// workspace profile would interleave cookies and each would read whatever page
+/// the other navigated to last. A collector therefore has no tab strip — it is
+/// a single page that gets navigated, not a browser the user browses in.
+pub const HEADLESS_TAB_CAP: usize = 1;
+
 /// One embedded browser tab — a single native child Webview.
 ///
 /// A Chat tab owns up to [`MAX_BROWSER_TABS`] of these. Two ids matter and
@@ -331,6 +339,17 @@ pub struct BrowserSession {
     /// so "which webview is on screen" can never disagree with "which tab the
     /// agent is driving".
     panel_visible: bool,
+    /// Created by Rust for an agent that has no browser panel (cron / task
+    /// sessions, or a Chat whose window is hidden).
+    ///
+    /// Not a cosmetic flag — it decides three behaviours that must not be
+    /// confused with a panel tab's:
+    /// - never shown by `apply_visibility` (there is no panel to show it in);
+    /// - excluded from `MAX_BROWSER_TABS` (a collector is one per session and
+    ///   must not eat a slot the user's panel needs);
+    /// - reaped when the owning session goes away, instead of waiting for a
+    ///   `close_owner` call from a renderer panel that never existed.
+    headless: bool,
     /// Cache last-known position/size for show-after-hide restoration.
     last_x: f64,
     last_y: f64,
@@ -353,6 +372,28 @@ impl BrowserSession {
     pub fn webview_label(&self) -> &str {
         &self.webview_label
     }
+
+    /// Whether this tab is a hidden collector rather than a panel tab.
+    pub fn is_headless(&self) -> bool {
+        self.headless
+    }
+}
+
+/// How long a collector may sit unused before it is closed.
+///
+/// Ten minutes: long enough for an agent to fetch a list, think, and fetch the
+/// next page; short enough that a forgotten hidden webview (which keeps a
+/// whole WebKit/WebView2 process alive and holds the workspace's data store)
+/// does not outlive the turn that needed it.
+pub const COLLECTOR_IDLE_LIMIT_MS: u64 = 10 * 60 * 1000;
+
+/// Whether a collector last touched at `last_used` should be reaped at `now`.
+///
+/// Pure so the policy is testable without a clock. A stamp in the future
+/// (clock jumped backwards) never reaps — closing a webview mid-read is worse
+/// than holding one for another ten minutes.
+pub fn collector_is_stale(last_used_ms: u64, now_ms: u64, limit_ms: u64) -> bool {
+    now_ms.saturating_sub(last_used_ms) > limit_ms
 }
 
 pub struct BrowserManager {
@@ -364,6 +405,13 @@ pub struct BrowserManager {
     /// fire on the UI thread and cannot await the async session lock. Kept
     /// apart from the session map so a slow page cannot block the registry.
     urls: std::sync::Mutex<HashMap<String, String>>,
+    /// browser tab id → epoch millis of the last agent request against it.
+    ///
+    /// Only collectors are reaped by this, but every tab is stamped so the
+    /// question "is this tab in use" has one answer. Sync-mutex for the same
+    /// reason as `urls` — it is written from inside the async session lock,
+    /// and a second async lock taken there would be an ordering hazard.
+    last_used: std::sync::Mutex<HashMap<String, u64>>,
 }
 
 /// Global handle to the one `BrowserManager`, so the Rust Management API can
@@ -392,12 +440,126 @@ fn next_session_seq() -> u64 {
     SESSION_SEQ.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Epoch millis. Used for collector idle reaping only — nothing user-facing.
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 impl BrowserManager {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             sessions: Mutex::new(HashMap::new()),
             urls: std::sync::Mutex::new(HashMap::new()),
+            last_used: std::sync::Mutex::new(HashMap::new()),
         })
+    }
+
+    /// Mark a browser tab as used at `now_ms`.
+    pub fn touch(&self, browser_tab_id: &str, now_ms: u64) {
+        if let Ok(mut stamps) = self.last_used.lock() {
+            stamps.insert(browser_tab_id.to_string(), now_ms);
+        }
+    }
+
+    /// Whether the browser tab with this id is a hidden collector.
+    ///
+    /// `false` for an id the registry does not know — callers use this to
+    /// *refuse* an action, so an unknown tab must not read as "headless".
+    pub async fn is_headless(&self, browser_tab_id: &str) -> bool {
+        let sessions = self.sessions.lock().await;
+        sessions
+            .get(browser_tab_id)
+            .is_some_and(|session| session.headless)
+    }
+
+    /// Mark a browser tab as used right now.
+    ///
+    /// Called by every request that resolves a session onto a browser — that
+    /// is what keeps a working collector alive past the idle limit, so it must
+    /// sit on the *resolve* path rather than on any single verb.
+    pub fn touch_now(&self, browser_tab_id: &str) {
+        self.touch(browser_tab_id, now_ms());
+    }
+
+    /// Epoch millis of the last agent request against a browser tab.
+    pub fn last_used_of(&self, browser_tab_id: &str) -> Option<u64> {
+        self.last_used.lock().ok()?.get(browser_tab_id).copied()
+    }
+
+    /// Every collector that has been idle past the limit.
+    ///
+    /// Returns `(browser tab id, session id)`. Only collectors qualify: a panel
+    /// tab's lifetime is the user's business, and closing one would make the
+    /// panel disappear under their hands.
+    pub async fn stale_collectors(&self, now_ms: u64) -> Vec<(String, String)> {
+        let candidates: Vec<(String, String)> = {
+            let sessions = self.sessions.lock().await;
+            sessions
+                .iter()
+                .filter(|(_, session)| session.headless)
+                .filter_map(|(id, session)| Some((id.clone(), session.session_id.clone()?)))
+                .collect()
+        };
+        candidates
+            .into_iter()
+            .filter(|(id, _)| {
+                // No stamp means we never observed a use — the creation path
+                // always stamps, so this is a tab we cannot judge. Skip it:
+                // closing a webview mid-read is worse than holding it.
+                self.last_used_of(id)
+                    .is_some_and(|last| collector_is_stale(last, now_ms, COLLECTOR_IDLE_LIMIT_MS))
+            })
+            .collect()
+    }
+
+    /// Close one browser tab by id, promoting a sibling if it was selected.
+    ///
+    /// Shared by the `close_tab` command and the collector reaper so both
+    /// take the same path out of the registry — a webview closed one way and
+    /// left registered the other would be a phantom tab the agent keeps
+    /// addressing.
+    pub async fn close_tab(&self, app: &AppHandle, browser_tab_id: &str) -> Option<String> {
+        let (owner_tab_id, was_selected, label) = {
+            let mut sessions = self.sessions.lock().await;
+            let session = sessions.remove(browser_tab_id)?;
+            (
+                session.owner_tab_id.clone(),
+                session.selected,
+                session.webview_label.clone(),
+            )
+        };
+        if let Some(webview) = app.get_webview(&label) {
+            let _ = webview.close();
+        }
+        self.forget_url(browser_tab_id);
+        if let Ok(mut stamps) = self.last_used.lock() {
+            stamps.remove(browser_tab_id);
+        }
+
+        if was_selected {
+            // Promote the newest remaining tab of this owner.
+            let tabs = self.tabs_of_owner(&owner_tab_id).await;
+            if let Some((promote_id, promote)) = tabs.last() {
+                let mut sessions = self.sessions.lock().await;
+                for (id, session) in sessions.iter_mut() {
+                    if session.owner_tab_id == owner_tab_id {
+                        session.selected = id == promote_id;
+                    }
+                }
+                // A collector has no panel, so there is nobody to tell.
+                if !promote.headless {
+                    let _ = app.emit(
+                        &format!("browser:tab-selected:{}", owner_tab_id),
+                        promote_id.clone(),
+                    );
+                }
+            }
+        }
+        apply_visibility(app, self, &owner_tab_id).await;
+        Some(label)
     }
 
     /// Record the URL a browser tab is on (called from the navigation hooks).
@@ -518,7 +680,13 @@ impl BrowserManager {
     /// webview with its own process-level resources, so an uncapped strip
     /// would let a stray "open in new tab" loop eat the machine.
     pub async fn has_tab_capacity(&self, owner_tab_id: &str) -> bool {
-        self.tabs_of_owner(owner_tab_id).await.len() < MAX_BROWSER_TABS
+        let tabs = self.tabs_of_owner(owner_tab_id).await;
+        let cap = if tabs.first().is_some_and(|(_, session)| session.is_headless()) {
+            HEADLESS_TAB_CAP
+        } else {
+            MAX_BROWSER_TABS
+        };
+        tabs.len() < cap
     }
 
     /// Find the browser session owned by a Chat session id.
@@ -886,6 +1054,35 @@ fn on_main_thread<T: Send + 'static>(
 // IPC Commands
 // ──────────────────────────────────────────────────────────
 
+/// Everything one browser-webview creation needs.
+///
+/// Shared by the two creations paths on purpose: the renderer's visible panel
+/// tab, and the agent's hidden collector. They differ only in *who owns them*
+/// and *whether they may be on screen* — the webview itself (UA, init script,
+/// profile isolation, navigation hooks, tab cap) must never diverge, or the
+/// hidden path would be a second, subtly different browser.
+pub struct CreateRequest<'a> {
+    /// Renderer tab id for a panel tab; `agent-<sessionId>` for a collector.
+    pub owner_tab_id: &'a str,
+    pub url: &'a str,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub session_id: Option<String>,
+    pub workspace: Option<String>,
+    /// Created by Rust for an agent that has no panel. Never shown, never
+    /// counted against the renderer's tab cap.
+    pub headless: bool,
+}
+
+/// The owner id a collector uses. Distinct from any renderer tab id by
+/// construction (`agent-` prefix), so `tabs_of_owner` / `apply_visibility`
+/// can never mix a hidden collector with the user's panel tabs.
+pub fn collector_owner_id(session_id: &str) -> String {
+    format!("agent-{session_id}")
+}
+
 /// Create a child Webview for the given owner tab, positioned at (x, y) with
 /// (width, height). Returns the new **browser tab id** — the renderer keys
 /// every later call (and every native event) by it.
@@ -902,26 +1099,72 @@ pub async fn cmd_browser_create(
     session_id: Option<String>,
     workspace: Option<String>,
 ) -> Result<String, String> {
+    create_browser_webview(
+        &app,
+        state.inner(),
+        CreateRequest {
+            owner_tab_id: &tab_id,
+            url: &url,
+            x,
+            y,
+            width,
+            height,
+            session_id,
+            workspace,
+            headless: false,
+        },
+    )
+    .await
+}
+
+/// Body of `cmd_browser_create`, also callable from Rust for the headless
+/// collector path (which has no renderer round trip to go through).
+pub async fn create_browser_webview(
+    app: &AppHandle,
+    state: &Arc<BrowserManager>,
+    req: CreateRequest<'_>,
+) -> Result<String, String> {
+    let CreateRequest {
+        owner_tab_id,
+        url,
+        x,
+        y,
+        width,
+        height,
+        session_id,
+        workspace,
+        headless,
+    } = req;
+
     let _update_spawn_permit = crate::sidecar::begin_update_spawn_permit()?;
 
     // One owner holds at most MAX_BROWSER_TABS webviews. Checked before
     // anything is created so a rejected call leaves no webview behind.
+    let cap = if headless {
+        HEADLESS_TAB_CAP
+    } else {
+        MAX_BROWSER_TABS
+    };
     {
         let sessions = state.sessions.lock().await;
         let open = sessions
             .values()
-            .filter(|session| session.owner_tab_id == tab_id)
+            .filter(|session| session.owner_tab_id == owner_tab_id)
             .count();
-        if open >= MAX_BROWSER_TABS {
+        if open >= cap {
             ulog_info!(
                 "[browser] Tab limit reached for owner {} ({}/{})",
-                tab_id,
+                owner_tab_id,
                 open,
-                MAX_BROWSER_TABS
+                cap
             );
-            return Err(format!(
-                "This browser already has {MAX_BROWSER_TABS} tabs — close one before opening another."
-            ));
+            return Err(if headless {
+                "This workspace already has a collecting browser — one at a time.".to_string()
+            } else {
+                format!(
+                    "This browser already has {cap} tabs — close one before opening another."
+                )
+            });
         }
     }
 
@@ -933,8 +1176,9 @@ pub async fn cmd_browser_create(
     let label = format!("browser-{}", browser_tab_id);
 
     ulog_info!(
-        "[browser] cmd_browser_create: owner={} browser_tab={} url={} pos=({},{}) size={}x{}",
-        tab_id,
+        "[browser] create: owner={} headless={} browser_tab={} url={} pos=({},{}) size={}x{}",
+        owner_tab_id,
+        headless,
         browser_tab_id,
         url,
         x,
@@ -952,15 +1196,17 @@ pub async fn cmd_browser_create(
     // guard since they aren't `> 0.0`.
     let (width, height) = if is_degenerate_bounds(width, height) {
         ulog_info!(
-            "[browser] cmd_browser_create: clamping degenerate bounds {}x{} to 1px floor for tab {}",
-            width, height, tab_id
+            "[browser] create: clamping degenerate bounds {}x{} to 1px floor for owner {}",
+            width,
+            height,
+            owner_tab_id
         );
         (width.max(1.0), height.max(1.0))
     } else {
         (width, height)
     };
 
-    let parsed_url = parse_url_or_path(&url)?;
+    let parsed_url = parse_url_or_path(url)?;
 
     // 每个工作区一套浏览器 profile：cookie / localStorage / IndexedDB 都不跨
     // 工作区，所以「在 A 工作区登录的号」在 B 工作区根本不存在。
@@ -980,7 +1226,7 @@ pub async fn cmd_browser_create(
         ulog_info!(
             "[browser] workspace profile {} for owner {}",
             profile.key,
-            tab_id
+            owner_tab_id
         );
         #[cfg(not(target_os = "macos"))]
         profile.ensure_data_directory()?;
@@ -995,12 +1241,23 @@ pub async fn cmd_browser_create(
     let label_new_win = label.clone();
     // The navigation hooks run on the UI thread — they cannot await the async
     // session lock, so the URL goes into the manager's sync URL map.
-    let manager_nav = state.inner().clone();
-    let manager_load = state.inner().clone();
+    let manager_nav = state.clone();
+    let manager_load = state.clone();
 
     let mut builder = WebviewBuilder::new(&label, tauri::WebviewUrl::External(parsed_url.clone()))
         .user_agent(BROWSER_USER_AGENT)
         .initialization_script(BROWSER_INIT_SCRIPT)
+        // A collector is never in a visible window, so the platform default
+        // policy is exactly the wrong one: `Suspend` freezes timers and
+        // IntersectionObserver callbacks after ~5 minutes, which is when
+        // scroll-lazy lists stop appending rows and a read comes back with the
+        // first screen only. macOS 14+ honours this; Windows / Linux / older
+        // macOS ignore it, which is why callers must not *depend* on it.
+        .background_throttling(if headless {
+            tauri::utils::config::BackgroundThrottlingPolicy::Disabled
+        } else {
+            tauri::utils::config::BackgroundThrottlingPolicy::Suspend
+        })
         .on_navigation(move |nav_url| {
             let scheme = nav_url.scheme();
             // Security: block dangerous schemes; allow everything else.
@@ -1171,7 +1428,7 @@ pub async fn cmd_browser_create(
     {
         let mut sessions = state.sessions.lock().await;
         for session in sessions.values_mut() {
-            if session.owner_tab_id == tab_id {
+            if session.owner_tab_id == owner_tab_id {
                 session.selected = false;
             }
         }
@@ -1179,14 +1436,17 @@ pub async fn cmd_browser_create(
             browser_tab_id.clone(),
             BrowserSession {
                 webview_label: label.clone(),
-                owner_tab_id: tab_id.clone(),
+                owner_tab_id: owner_tab_id.to_string(),
                 session_id,
                 profile_key: profile.as_ref().map(|p| p.key.clone()),
                 created_at: seq,
                 selected: true,
-                // The renderer only creates a tab while the panel is on
-                // screen, so the owner is visible from the start.
-                panel_visible: true,
+                // A panel tab is created by the renderer only while the panel
+                // is on screen, so its owner is visible from the start. A
+                // collector has no panel at all: it is hidden for its whole
+                // life, and `apply_visibility` keeps it that way.
+                panel_visible: !headless,
+                headless,
                 last_x: x,
                 last_y: y,
                 last_width: width,
@@ -1194,21 +1454,30 @@ pub async fn cmd_browser_create(
             },
         );
     }
+    // Stamp it as used right now: the reaper must never see a collector with
+    // no stamp, because "unknown age" would have to mean either "close it now"
+    // (kills a live read) or "never close it" (leaks forever).
+    state.touch(&browser_tab_id, now_ms());
 
     // Hand the webviews over to the new frontmost tab (the previous one goes
     // off-screen).
-    apply_visibility(&app, &state, &tab_id).await;
+    apply_visibility(app, state, owner_tab_id).await;
 
-    let _ = app.emit(
-        &format!("browser:tab-selected:{}", tab_id),
-        browser_tab_id.clone(),
-    );
+    // A collector has no panel, so there is nobody to tell. Emitting the
+    // panel's selection event would make the renderer adopt a tab it can
+    // never address (the owner id is `agent-<session>`, not a renderer tab).
+    if !headless {
+        let _ = app.emit(
+            &format!("browser:tab-selected:{}", owner_tab_id),
+            browser_tab_id.clone(),
+        );
+    }
 
     ulog_info!(
         "[browser] Created webview '{}' ({}) for owner {} — session stored",
         label,
         browser_tab_id,
-        tab_id
+        owner_tab_id
     );
     Ok(browser_tab_id)
 }
@@ -1278,7 +1547,12 @@ async fn apply_visibility(app: &AppHandle, state: &BrowserManager, owner_tab_id:
         let Some(webview) = app.get_webview(&session.webview_label) else {
             continue;
         };
-        let should_show = session.panel_visible && session.selected;
+        // A collector has no panel. `panel_visible` is already false for it,
+        // but the `!headless` term makes "never on screen" a property of the
+        // tab's kind rather than of two flags happening to agree — `show`
+        // verbs exist and one future caller flipping `panel_visible` must not
+        // be able to pop a background collector into view.
+        let should_show = !session.headless && session.panel_visible && session.selected;
         if should_show {
             // SHOW restores the cached geometry — the reconciler keeps that
             // cache current even while the tab is hidden.
@@ -1888,46 +2162,11 @@ pub async fn cmd_browser_close_tab(
     state: tauri::State<'_, Arc<BrowserManager>>,
     browser_tab_id: String,
 ) -> Result<(), String> {
-    let (owner_tab_id, was_selected, label) = {
-        let mut sessions = state.sessions.lock().await;
-        let session = sessions
-            .remove(&browser_tab_id)
-            .ok_or_else(|| format!("No browser tab {}", browser_tab_id))?;
-        (
-            session.owner_tab_id.clone(),
-            session.selected,
-            session.webview_label.clone(),
-        )
-    };
-
-    if let Some(webview) = app.get_webview(&label) {
-        let _ = webview.close();
-    }
-    state.forget_url(&browser_tab_id);
-
-    if was_selected {
-        // Promote the newest remaining tab of this owner.
-        let tabs = state.tabs_of_owner(&owner_tab_id).await;
-        if let Some((promote_id, _)) = tabs.last() {
-            let mut sessions = state.sessions.lock().await;
-            for (id, session) in sessions.iter_mut() {
-                if session.owner_tab_id == owner_tab_id {
-                    session.selected = id == promote_id;
-                }
-            }
-            let _ = app.emit(
-                &format!("browser:tab-selected:{}", owner_tab_id),
-                promote_id.clone(),
-            );
-        }
-    }
-
-    apply_visibility(&app, &state, &owner_tab_id).await;
-    ulog_info!(
-        "[browser] Closed tab {} of owner {}",
-        browser_tab_id,
-        owner_tab_id
-    );
+    state
+        .close_tab(&app, &browser_tab_id)
+        .await
+        .ok_or_else(|| format!("No browser tab {}", browser_tab_id))?;
+    ulog_info!("[browser] Closed tab {}", browser_tab_id);
     Ok(())
 }
 
@@ -2051,6 +2290,46 @@ pub async fn eval_in_webview(
 // ──────────────────────────────────────────────────────────
 // Lifecycle
 // ──────────────────────────────────────────────────────────
+
+/// How often the collector reaper wakes up.
+///
+/// The idle limit is ten minutes; a one-minute tick keeps the worst-case
+/// overrun at 11 minutes while costing one `Vec` scan per minute over a map
+/// that holds a handful of entries.
+const COLLECTOR_REAP_INTERVAL_SECS: u64 = 60;
+
+/// Close collectors that nobody has used for [`COLLECTOR_IDLE_LIMIT_MS`].
+///
+/// Why this is a loop and not a per-tab timer: the webview's lifetime is
+/// driven by the agent's request cadence, which is irregular and not visible
+/// to Rust between requests. A timer per tab would have to be reset on every
+/// request; one scan over the registry asks the same question without any
+/// per-tab state to keep in sync.
+pub async fn monitor_collectors(
+    app: AppHandle,
+    state: Arc<BrowserManager>,
+    done: Arc<std::sync::atomic::AtomicBool>,
+) {
+    use std::sync::atomic::Ordering as AtomicOrdering;
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(
+            COLLECTOR_REAP_INTERVAL_SECS,
+        ))
+        .await;
+        if done.load(AtomicOrdering::Relaxed) {
+            return;
+        }
+        for (browser_tab_id, session_id) in state.stale_collectors(now_ms()).await {
+            if state.close_tab(&app, &browser_tab_id).await.is_some() {
+                ulog_info!(
+                    "[browser] reclaimed idle collector {} for session {}",
+                    browser_tab_id,
+                    session_id
+                );
+            }
+        }
+    }
+}
 
 /// Close all browser webviews (app exit cleanup).
 pub async fn close_all_browsers(state: &Arc<BrowserManager>, app: &AppHandle) {
@@ -2204,6 +2483,7 @@ async fn macos_remove_profile_store(app: &AppHandle, identifier: [u8; 16]) -> Re
 
 #[cfg(test)]
 mod tests {
+    use super::collector_is_stale;
     use super::cookie_domain_matches_host;
     use super::decode_envelope;
     use super::device_px;
@@ -2295,11 +2575,66 @@ mod tests {
             created_at,
             selected,
             panel_visible: true,
+            headless: false,
             last_x: 0.0,
             last_y: 0.0,
             last_width: 100.0,
             last_height: 100.0,
         }
+    }
+
+    /// A hidden collector: same shape as a panel tab, minus the panel.
+    fn collector_session(
+        session_id: &str,
+        created_at: u64,
+    ) -> super::BrowserSession {
+        let mut session = test_session(
+            &super::collector_owner_id(session_id),
+            session_id,
+            created_at,
+            true,
+        );
+        session.headless = true;
+        session.panel_visible = false;
+        session
+    }
+
+    /// Collectors and panel tabs must never be confused for one another.
+    ///
+    /// Both directions are load-bearing: a collector counted against the
+    /// panel's 3-tab budget would make the user's browser refuse to open a
+    /// second tab; a panel tab counted against the collector's cap of 1 would
+    /// have the reaper close the browser the user is looking at.
+    #[tokio::test]
+    async fn collectors_have_their_own_capacity_and_are_never_reaped_while_used() {
+        let manager = manager_with(vec![
+            collector_session("s1", 10),
+            test_session("chat-1", "s2", 20, true),
+        ])
+        .await;
+
+        // Collector owner: one slot, already taken.
+        let collector_owner = super::collector_owner_id("s1");
+        assert_eq!(manager.tabs_of_owner(&collector_owner).await.len(), 1);
+        assert!(!manager.has_tab_capacity(&collector_owner).await);
+
+        // A collector does not eat the panel's budget.
+        assert!(manager.has_tab_capacity("chat-1").await);
+
+        // Freshly touched: not stale even at a wildly late `now`.
+        manager.touch("bt-1", 1_000);
+        let stale = manager.stale_collectors(1_000 + super::COLLECTOR_IDLE_LIMIT_MS).await;
+        assert!(stale.is_empty(), "a used collector must survive the sweep");
+
+        // Panel tabs are never stale, however long they have been open.
+        manager.touch("bt-2", 0);
+        let stale = manager.stale_collectors(10 * super::COLLECTOR_IDLE_LIMIT_MS).await;
+        assert_eq!(stale.len(), 1);
+        assert_eq!(stale[0].0, "bt-1", "only the collector is reaped");
+
+        // A collector with no stamp at all is unjudgeable — keep it.
+        let unstamped = manager_with(vec![collector_session("s9", 10)]).await;
+        assert!(unstamped.stale_collectors(u64::MAX).await.is_empty());
     }
 
     /// A session that lives in a workspace browser profile.
@@ -2449,6 +2784,27 @@ mod tests {
         assert_eq!(device_px(101.0, 1.5), 152); // 151.5
         assert_eq!(device_px(0.0, 2.0), 0);
         assert_eq!(device_px(-50.0, 1.0), -50);
+    }
+
+    /// An idle collector gets closed; a working one does not.
+    ///
+    /// Two failure modes this pins down, both silent:
+    /// - too eager: a long agent turn (search, think, read page 2) would have
+    ///   the webview yanked mid-read, and the second read comes back on
+    ///   `about:blank` — looking like a site that returned nothing.
+    /// - too lax: an abandoned hidden webview holds a WebKit/WebView2 process
+    ///   and the workspace data store forever, in an app the user never closes.
+    ///
+    /// The boundary is `> limit`, not `>=`: a tab touched exactly `limit` ms
+    /// ago is still in its window.
+    #[test]
+    fn idle_collectors_are_reaped_but_active_ones_are_not() {
+        const LIMIT: u64 = 10 * 60 * 1000;
+        assert!(!collector_is_stale(0, LIMIT, LIMIT), "exactly at limit: keep");
+        assert!(!collector_is_stale(0, LIMIT - 1, LIMIT), "inside window: keep");
+        assert!(collector_is_stale(0, LIMIT + 1, LIMIT), "past window: reap");
+        // A stamp in the future (clock moved backwards) must never reap.
+        assert!(!collector_is_stale(LIMIT * 2, 0, LIMIT));
     }
 
     /// Regression guard for "every `hamuna browser` command fails with

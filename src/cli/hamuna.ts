@@ -4421,6 +4421,14 @@ export function buildRequestBody(
     assertStringFlag(flags.platform, 'platform');
     const sessionId = typeof flags.session === 'string' ? flags.session : undefined;
     const base: Record<string, unknown> = sessionId ? { sessionId } : {};
+    // `--workspace` names the browser profile to use **if a browser has to be
+    // created** — i.e. when this session has no panel and Rust spins up a
+    // hidden collector. Without it that path refuses to create anything
+    // rather than silently landing in the shared profile and losing this
+    // workspace's logins. It is harmless on verbs that already have a browser.
+    if (typeof flags.workspace === 'string' && flags.workspace.trim()) {
+      base.workspace = flags.workspace.trim();
+    }
     if (action === 'open' || action === 'navigate') {
       const url = (typeof flags.url === 'string' ? flags.url : rest[0] ?? '').trim();
       if (!url) {

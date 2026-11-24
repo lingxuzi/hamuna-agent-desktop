@@ -64,6 +64,16 @@ export interface BrowserActionPayload {
   delta?: number;
   /** Scroll destination for `scroll`: "top" or "bottom". */
   to?: string;
+  /**
+   * Workspace whose browser profile to use **when a browser has to be
+   * created** for this request.
+   *
+   * Only the hidden-collector path reads it. Without it that path refuses to
+   * create anything: the collector would land in the shared profile and lose
+   * the logins the user established inside this workspace, which is the one
+   * thing that makes an unattended collection worth anything.
+   */
+  workspace?: string;
 }
 
 /**
@@ -93,6 +103,24 @@ function sessionIdFor(payload: BrowserActionPayload): string {
   if (live && live.trim()) return live.trim();
 
   return (process.env.HAMUNA_SESSION_ID ?? '').trim();
+}
+
+/**
+ * The workspace whose browser profile a *newly created* browser must use.
+ *
+ * Same two-tier priority as the session id: an explicit `--workspace` wins,
+ * then the live engine context. There is deliberately no env fallback — the
+ * workspace decides which profile (i.e. which logins) the browser gets, and
+ * `HAMUNA_SESSION_ID` is preferred over its env counterpart precisely because
+ * the env snapshot can be stale. An empty answer is fine: Rust only reads it
+ * when it has to create a browser, and refuses to create one without it.
+ */
+function workspaceFor(payload: BrowserActionPayload): string {
+  const explicit = typeof payload.workspace === 'string' ? payload.workspace.trim() : '';
+  if (explicit) return explicit;
+
+  const live = getSessionEngine().getCurrentSessionContext().workspacePath;
+  return live?.trim() ?? '';
 }
 
 function mgmtError(resp: Record<string, unknown>, fallback: string): AdminResponse {
@@ -157,6 +185,9 @@ async function callBrowser(
     // Same reasoning as the credentials: a local path in the query string
     // would end up in Rust's request log.
     ['file', method === 'POST' ? payload.file : undefined],
+    // A workspace is a local path — POST only, same as `file`. Rust reads it
+    // only when it has to create a browser.
+    ['workspace', method === 'POST' ? workspaceFor(payload) || undefined : undefined],
   ];
 
   let target = path;
@@ -200,6 +231,9 @@ export async function handleBrowserState(payload: BrowserActionPayload): Promise
     title: data.title,
     url: data.url,
     readyState: data.readyState,
+    // `true` = this is a hidden collector, not a panel the user can see.
+    // Publishing checks it: the authorization chain has to be visible.
+    headless: data.headless === true,
   });
 }
 
@@ -523,9 +557,29 @@ export async function handleBrowserPublish(payload: BrowserActionPayload): Promi
   // 只带 session —— 发布目标的文字不进 query string（Rust 把请求 URL 记进日志）。
   const state = await callBrowser('/api/browser/state', 'GET', { sessionId: payload.sessionId });
   if (state.error) return state.error;
-  const currentUrl = typeof payloadOf(state.response).url === 'string'
-    ? (payloadOf(state.response).url as string)
-    : '';
+  const stateData = payloadOf(state.response);
+
+  // Publishing is never allowed from a hidden collector.
+  //
+  // This is not a UI nicety: the whole point of the gated publish path is that
+  // the user can watch the action they authorized — the click, the page it
+  // lands on, the platform's own confirmation. A collector is invisible by
+  // construction (no panel, or the app is in the background / minimized), so
+  // there is nothing to watch and nobody to notice a wrong post. Refusing here
+  // also stops a scheduled session from quietly gaining a publish capability
+  // its user never granted by opening a Chat.
+  if (stateData.headless === true) {
+    return {
+      success: false,
+      error: 'Publishing needs the visible browser panel — this session reached a hidden collector.',
+      recoveryHint: {
+        message:
+          'Open this Chat (bring the app to the front) and publish from there, or tell the user it is time to publish and wait for them. Do not retry.',
+      },
+    };
+  }
+
+  const currentUrl = typeof stateData.url === 'string' ? (stateData.url as string) : '';
   if (!isPlatformPublishHost(platform, currentUrl)) {
     return {
       success: false,
