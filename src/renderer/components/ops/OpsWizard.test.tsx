@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n';
 import type { OpsState } from '../../../shared/ops';
 import { emptyOpsState } from '../../../shared/ops';
+import { localDate } from '../../../shared/logTime';
 import OpsWizard, { type OpsWizardStep } from './OpsWizard';
 
 // 冷启动向导的回归护栏。
@@ -12,9 +13,9 @@ import OpsWizard, { type OpsWizardStep } from './OpsWizard';
 // 四条不变量：
 //  1. **登录在向导里** —— 人唯一必须亲自做的事不该藏在别处。
 //  2. **只有已登录的平台才有方向** —— 平台都没登录就谈不上「这个号说什么」。
-//  3. **物料落点是 skill 定的那个** —— `ops/inbox/<批次>/` + `brief.md`；
-//     brief.md 是 O_EXCL 写的，撞名会变成 brief_1.md，而入库的 skill 只读
-//     brief.md，所以批次目录必须唯一。
+//  3. **物料落点是 skill 定的那个** —— 平面目录 `ops/materials/`，一个文件一条
+//     记录；说明写成 `brief-<日期>.md`（O_EXCL 写的，撞名会变成 brief_1.md，
+//     而入库的 skill 按名字找，所以名字必须唯一）。
 //  4. **三步走完自动派工** —— 活不许再让人点一次「开工」；没方向就不派，
 //     因为没有方向，Agent 找的对标会跑偏。
 
@@ -122,7 +123,7 @@ describe('冷启动向导', () => {
     mocks.dialogOpen.mockReset();
     mocks.invoke.mockResolvedValue(baseState());
     mocks.copyPaths.mockResolvedValue({ copied: [], errors: [] });
-    mocks.importBase64Files.mockResolvedValue({ imported: [] });
+    mocks.importBase64Files.mockResolvedValue({ success: true, files: [] });
     mocks.checkPaths.mockResolvedValue({ results: {} });
     await i18n.changeLanguage('zh-CN');
   });
@@ -166,59 +167,81 @@ describe('冷启动向导', () => {
     });
   });
 
-  it('③ 投递把选中的文件拷进收件箱，并写下 brief.md', async () => {
+  it('③ 投递把选中的文件拷进 ops/materials，并逐文件登记', async () => {
     const user = userEvent.setup();
     mocks.dialogOpen.mockResolvedValue(['/tmp/cover.png', '/tmp/intro.txt']);
-    mocks.checkPaths.mockResolvedValue({
-      results: { 'ops/inbox/batch-1': { exists: false, type: 'file' } },
+    mocks.copyPaths.mockResolvedValue({
+      success: true,
+      copiedFiles: [
+        { sourcePath: '/tmp/cover.png', targetPath: 'ops/materials/cover.png', renamed: false },
+        { sourcePath: '/tmp/intro.txt', targetPath: 'ops/materials/intro.txt', renamed: false },
+      ],
+      errors: [],
     });
+    mocks.checkPaths.mockResolvedValue({ results: {} });
     const { container } = renderWizard('material');
 
-    const batchInput = container.querySelector('.ops-field input') as HTMLInputElement;
-    await user.clear(batchInput);
-    await user.type(batchInput, 'batch-1');
     await user.click(screen.getByRole('button', { name: '选文件' }));
     await waitFor(() => expect(screen.getByText('已选 2 个文件')).toBeInTheDocument());
 
     const briefBox = container.querySelector('.ops-field textarea') as HTMLTextAreaElement;
     await user.type(briefBox, '我们是露营装备品牌');
-    await user.click(screen.getByRole('button', { name: '投进收件箱' }));
+    await user.click(screen.getByRole('button', { name: '投进物料库' }));
 
     await waitFor(() => expect(mocks.copyPaths).toHaveBeenCalled());
     expect(mocks.copyPaths).toHaveBeenCalledWith({
       sourcePaths: ['/tmp/cover.png', '/tmp/intro.txt'],
-      targetDir: 'ops/inbox/batch-1',
+      targetDir: 'ops/materials',
     });
 
     await waitFor(() => expect(mocks.importBase64Files).toHaveBeenCalled());
     const arg = mocks.importBase64Files.mock.calls[0]?.[0];
-    expect(arg?.targetDir).toBe('ops/inbox/batch-1');
-    expect(arg?.files?.[0]?.name).toBe('brief.md');
+    expect(arg?.targetDir).toBe('ops/materials');
+    expect(arg?.files?.[0]?.name).toMatch(/^brief-\d{4}-\d{2}-\d{2}\.md$/);
     // 中文必须按 UTF-8 编：btoa 只认 Latin-1，直接 btoa(中文) 会抛。
     const bytes = Uint8Array.from(atob(arg!.files![0]!.content), (c) => c.charCodeAt(0));
     expect(new TextDecoder().decode(bytes)).toBe('我们是露营装备品牌');
+
+    // 一个文件一条记录：只落文件不建记录，Agent 查台账就查不到。
+    await waitFor(() =>
+      expect(
+        upsertCalls()
+          .map((call) => call[1]?.item)
+          .filter((item: { kind?: string }) => item?.kind === 'material'),
+      ).toEqual([
+        { kind: 'material', path: 'ops/materials/cover.png' },
+        { kind: 'material', path: 'ops/materials/intro.txt' },
+      ]),
+    );
   });
 
-  it('③ 批次目录撞了就换一个 —— brief.md 撞名会变成 brief_1.md，skill 就读不到了', async () => {
+  it('③ 说明文件撞名就换一个 —— brief.md 撞名会变成 brief_1.md，skill 就读不到了', async () => {
     const user = userEvent.setup();
     mocks.dialogOpen.mockResolvedValue(['/tmp/cover.png']);
+    mocks.copyPaths.mockResolvedValue({
+      success: true,
+      copiedFiles: [
+        { sourcePath: '/tmp/cover.png', targetPath: 'ops/materials/cover.png', renamed: false },
+      ],
+      errors: [],
+    });
+    const today = localDate();
     mocks.checkPaths.mockResolvedValue({
-      results: { 'ops/inbox/batch-1': { exists: true, type: 'dir' } },
+      results: { [`ops/materials/brief-${today}.md`]: { exists: true, type: 'file' } },
     });
     const { container } = renderWizard('material');
 
-    const batchInput = container.querySelector('.ops-field input') as HTMLInputElement;
-    await user.clear(batchInput);
-    await user.type(batchInput, 'batch-1');
     await user.click(screen.getByRole('button', { name: '选文件' }));
     await waitFor(() => expect(screen.getByText('已选 1 个文件')).toBeInTheDocument());
 
     const briefBox = container.querySelector('.ops-field textarea') as HTMLTextAreaElement;
     await user.type(briefBox, '说明');
-    await user.click(screen.getByRole('button', { name: '投进收件箱' }));
+    await user.click(screen.getByRole('button', { name: '投进物料库' }));
 
     await waitFor(() => expect(mocks.importBase64Files).toHaveBeenCalled());
-    expect(mocks.importBase64Files.mock.calls[0]?.[0]?.targetDir).toBe('ops/inbox/batch-1-2');
+    const name = mocks.importBase64Files.mock.calls[0]?.[0]?.files?.[0]?.name ?? '';
+    expect(name).not.toBe(`brief-${today}.md`);
+    expect(name).toMatch(new RegExp(`^brief-${today}-\\d+\\.md$`));
   });
 
   it('③ 走完最后一步就把活交给 Sino —— 不用人再点一次「开工」', async () => {

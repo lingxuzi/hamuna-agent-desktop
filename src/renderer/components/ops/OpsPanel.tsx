@@ -44,6 +44,7 @@ import { DirectionBriefForm } from './DirectionBriefForm';
 import { OpsAccountLogin, OpsAccounts } from './OpsAccounts';
 import { OpsBenchmarks, BenchmarkForm } from './OpsBenchmarks';
 import { OpsClues } from './OpsClues';
+import { OpsMaterials } from './OpsMaterials';
 import { OpsTerminalCode } from './OpsTerminalCode';
 import OpsWizard, { OPS_WIZARD_STEPS, type OpsWizardStep } from './OpsWizard';
 import { useOpsState } from './useOpsState';
@@ -105,10 +106,9 @@ export default function OpsPanel({
     return () => cancelAnimationFrame(raf);
   }, []);
   const [domain, setDomain] = useState<OpsDomainId>('topic');
-  // 账号与线索不是流水线域，不塞进 `OPS_DOMAIN_IDS`：那是「选题 / 素材 / 排期 /
-  // 复盘 / 方向」的流水线，这两样是这台机器在这个工作区上的另两件东西。顶栏
-  // 各一个按钮切过去，胶囊行让位给「返回」。
-  const [pane, setPane] = useState<'domains' | 'accounts' | 'clues'>('domains');
+  // 账号、线索、素材库不是流水线域，不塞进 `OPS_DOMAIN_IDS`：那是「选题 / 素材 / 排期 /
+  // 复盘 / 方向」的流水线，这几样是工作区辅助视图。顶栏按钮切过去，胶囊行让位给「返回」。
+  const [pane, setPane] = useState<'domains' | 'accounts' | 'clues' | 'materials'>('domains');
   /** 正在登录的平台。非空 = 面板让给浏览器。 */
   const [loginPlatform, setLoginPlatform] = useState<SocialPlatformId | null>(null);
   /**
@@ -391,7 +391,11 @@ export default function OpsPanel({
         ) : (
           <button type="button" className="ops-ghost" onClick={goBack}>
             <ChevronLeft size={14} aria-hidden="true" />
-            {pane === 'accounts' ? t('ops.account.back') : t('ops.clue.back')}
+            {pane === 'accounts'
+              ? t('ops.account.back')
+              : pane === 'clues'
+                ? t('ops.clue.back')
+                : t('ops.material.back')}
           </button>
         )}
         <span className="ops-sp" />
@@ -407,6 +411,9 @@ export default function OpsPanel({
               </button>
               <button type="button" className="ops-ghost" onClick={() => setPane('accounts')}>
                 {t('ops.account.open')}
+              </button>
+              <button type="button" className="ops-ghost" onClick={() => setPane('materials')}>
+                {t('ops.material.open')}
               </button>
               <button
                 type="button"
@@ -473,6 +480,12 @@ export default function OpsPanel({
               accounts={state.accounts}
               onLogin={startLogin}
             />
+          </div>
+        </div>
+      ) : pane === 'materials' ? (
+        <div className="ops-body" data-ops-pane="materials">
+          <div className="ops-main">
+            <OpsMaterials workspace={workspace} materials={state.materials} />
           </div>
         </div>
       ) : pane === 'clues' ? (

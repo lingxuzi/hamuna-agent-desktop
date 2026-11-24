@@ -1533,6 +1533,23 @@
         "archived": "已归档"
       }
     },
+    "material": {
+      "open": "物料库",
+      "back": "返回物料库",
+      "title": "物料库",
+      "hint": "工作区 ops/materials 里的原始文件；给每个文件写一句它是什么，Agent 才挑得对",
+      "loading": "正在读取物料…",
+      "upload": "上传",
+      "uploading": "上传中",
+      "refresh": "刷新",
+      "empty": "还没有物料。点「上传」把产品图、实拍、参考视频放进来。",
+      "copyFailed": "{{reason}}（共 {{count}} 个文件没传上来）",
+      "truncated": "文件较多，只显示了前 1000 项",
+      "notePh": "这是什么？例如：折叠桌正面产品图",
+      "noteLabel": "描述 {{name}}",
+      "noteAgent": "Agent 推测",
+      "noteSaved": "描述已保存"
+    },
     "code": {
       "open": "终端口令",
       "title": "终端口令",
@@ -1599,7 +1616,7 @@
       "hint": {
         "login": "登录只有你能做。逐个平台登录，登录状态只在本工作区有效。",
         "direction": "每个平台一句原话：你想让人记住这个号是做什么的。",
-        "material": "把宣传资料放进来：图片、视频、产品说明。投进来的东西会按批次收好。"
+        "material": "把宣传资料放进来：图片、视频、产品说明。它们会进 ops/materials，之后按描述挑用。"
       },
       "direction": {
         "saved": "方向已记下",
@@ -1608,19 +1625,18 @@
         "placeholder": "想让人记住我们是懂露营装备的，主要讲夜间露营"
       },
       "material": {
-        "batch": "批次名",
         "brief": "产品说明",
         "briefPlaceholder": "产品名、要观众做的动作、卖点、禁用词、平台",
         "choose": "选文件",
         "none": "还没选文件",
         "chosen": "已选 {{n}} 个文件",
-        "deliver": "投进收件箱",
-        "delivered": "物料已投进收件箱",
+        "deliver": "投进物料库",
+        "delivered": "物料已投进物料库",
         "copyFailed": "有文件没投进去：{{reason}}"
       },
       "dispatch": {
         "afterMaterial": "冷启动的三件事做完了，下面交给你。\n\n方向原话：\n{{briefs}}\n{{material}}\n按这个顺序做：\n1. 先读 `.claude/rules/03-USER.md`。里面有几项只有我知道 —— 语气、绝对不用的词、格式硬要求、一周几条、什么时候发 —— 逐条问我，我答完你按文件里 `- **…：**` 的形状写回对应行，其余内容别动。\n2. 按 ops-direction 把上面的原话拆成五字段写回台账。\n3. 按 ops-benchmark 找 2–3 个方向相近、规模更大的对标账号。\n4. 按 ops-topic 出第一轮选题。\n5. 用 ops-produce 做稿，用 ops-schedule 排期。**不要发布** —— 发布等我授权。",
-        "material": "物料已经投进 {{dir}}，请按 ops-intake 入库。"
+        "material": "物料已经投进 {{dir}}，请按 ops-intake 逐个登记并写清每个文件是什么。"
       }
     }
   }

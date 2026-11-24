@@ -1700,6 +1700,61 @@ describe('hamuna CLI operations ledger', () => {
     }
   });
 
+  it('prints the material note with who wrote it', () => {
+    // Agent 读台账挑素材时，唯一能分出「这是用户说的」还是「这是我上一轮
+    // 猜的」的就是这一行。不打印，下一轮就会把猜测当既定事实用。
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      printResult('ops', 'list', {
+        success: true,
+        data: {
+          state: {
+            materials: [
+              {
+                id: 'material-1',
+                fileName: '1.jpg',
+                path: 'ops/materials/1.jpg',
+                note: '折叠桌正面',
+                noteSource: 'user',
+              },
+              {
+                id: 'material-2',
+                fileName: '2.jpg',
+                path: 'ops/materials/2.jpg',
+                note: '大概是包装盒',
+                noteSource: 'agent',
+              },
+            ],
+          },
+        },
+      }, false, {}, ['material']);
+      const out = log.mock.calls.flat().join('\n');
+      expect(out).toContain('Materials (2)');
+      expect(out).toContain('用户写的');
+      expect(out).toContain('折叠桌正面');
+      expect(out).toContain('Agent 推测');
+      expect(out).toContain('ops/materials/2.jpg');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('add material takes --path and --note, and does not send a self-asserted noteSource', () => {
+    // noteSource 由写入门决定。载荷里出现这个键 = 调用方能冒充作者，
+    // 「Agent 猜的」和「人说的」就再也分不开了。
+    const body = buildRequestBody('ops', 'add', ['material'], {
+      path: 'ops/materials/1.jpg',
+      note: '折叠桌正面',
+      noteSource: 'user',
+    }) as { item?: Record<string, unknown> };
+    expect(body.item).toMatchObject({
+      kind: 'material',
+      path: 'ops/materials/1.jpg',
+      note: '折叠桌正面',
+    });
+    expect(body.item).not.toHaveProperty('noteSource');
+  });
+
   it('prints the ledger and the written record id', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {

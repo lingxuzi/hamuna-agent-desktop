@@ -28,8 +28,16 @@ export const OPS_STATE_VERSION = 1;
 /** 状态文件在工作区内的相对路径。 */
 export const OPS_STATE_RELATIVE_PATH = 'ops/state.json';
 
-/** 素材文件在工作区内的相对目录。 */
+/** 素材成品（封面 / 配图 / 视频 / 导出文案）在工作区内的相对目录。 */
 export const OPS_ASSETS_RELATIVE_DIR = 'ops/assets';
+
+/**
+ * 物料（人投进来的原始文件）在工作区内的相对目录。
+ *
+ * 和 `ops/assets/` 分开放的理由见 {@link OpsMaterial}：物料没有状态机，
+ * 混进 assets 会把「制作中 / 该收尾」这类指标灌水。
+ */
+export const OPS_MATERIALS_RELATIVE_DIR = 'ops/materials';
 
 /**
  * 五个域。排期不是独立实体，是素材排期字段的投影。
@@ -58,7 +66,8 @@ export type OpsItemKind =
   | 'direction'
   | 'account'
   | 'clue'
-  | 'benchmark';
+  | 'benchmark'
+  | 'material';
 
 export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'topic',
@@ -70,6 +79,7 @@ export const OPS_ITEM_KINDS: readonly OpsItemKind[] = [
   'account',
   'clue',
   'benchmark',
+  'material',
 ];
 
 /** 选题状态：想法 → 排进制作 → 已产出。 */
@@ -365,6 +375,15 @@ export interface OpsAsset {
    * 可选：旧记录里没有这个键（Rust 侧 `#[serde(default)]`）。
    */
   downgradeNote?: string | null;
+  /**
+   * 这条成品是干什么用的 / 适合什么场景。空 = 还不知道。
+   *
+   * 和物料的 `note` 回答不同问题：物料那里问「这个文件是什么」，这里问
+   * 「这条成品拿去怎么用」。字段名故意对齐，让下游只记一套。
+   */
+  note?: string;
+  /** `note` 是谁写的 —— 口径同 {@link OpsMaterial.noteSource}。 */
+  noteSource?: OpsActor | null;
   platform: SocialPlatformId;
   /** 排期时间。`null` = 未排期。 */
   scheduledAt: string | null;
@@ -696,6 +715,42 @@ export interface OpsStyle {
   updatedAt: string;
 }
 
+/**
+ * 一条**物料**：工作区 `ops/materials/` 里的一个真实原始文件。
+ *
+ * 和素材（`OpsAsset`）是两件事，判据是**有没有状态机**：
+ * 素材是内容成品，`draft → ready → published` 是一条真有意义的进度；物料是
+ * 人投进来的原料，一张产品图永远不会「ready」，也没有达成度。
+ *
+ * 混成一个集合的代价是面板指标被原料灌水：「制作中 +10」里九条是刚上传的图，
+ * 「最该收尾」指向一张没人动过的产品图，真在做的那条被淹没。
+ *
+ * 物料**没有状态**。「这个文件被哪条内容用过」是能从素材侧反推的事实
+ * （素材的 `sourceRef` / `topicId` 指向它），不是需要人维护的字段——维护它
+ * 就得在每次素材改动时同步，漏同步的那一次会让用过的物料看起来没人用。
+ */
+export interface OpsMaterial {
+  id: string;
+  /** 文件名（带扩展名）。空时由 store 从 `path` 末段推。 */
+  fileName: string;
+  /** 工作区相对路径，如 `ops/materials/1.jpg`。**天然键**。 */
+  path: string;
+  /** 这个文件是什么。空 = 还没人说过，不是「没有信息」。 */
+  note: string;
+  /**
+   * `note` 是谁写的。`null` = 描述为空，没有作者。
+   *
+   * **由写入门决定，调用方写不了**（和方向的 `lastTouchedBy` 同一机制）。
+   * 存在的理由：Agent 扫描产出的描述如果和用户手写的长得一模一样，下一轮
+   * Agent 就读不出哪些是自己猜的，然后拿它当事实用来写脚本、挑素材。
+   */
+  noteSource: OpsActor | null;
+  /** 批次说明原文（`brief.md` 之类）。存原文不摘编：摘两次会不一样。 */
+  brief: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** `ops/state.json` 的完整形态。 */
 export interface OpsState {
   version: number;
@@ -711,6 +766,8 @@ export interface OpsState {
   clues: OpsClue[];
   /** 对标账号。天然键 `(platform, profileUrl)`。 */
   benchmarks: OpsBenchmark[];
+  /** 物料：`ops/materials/` 里的原始文件。天然键 `path`。见 {@link OpsMaterial}。 */
+  materials: OpsMaterial[];
   style: OpsStyle | null;
 }
 
@@ -726,6 +783,7 @@ export function emptyOpsState(): OpsState {
     rules: [],
     clues: [],
     benchmarks: [],
+    materials: [],
     style: null,
   };
 }
@@ -748,6 +806,7 @@ export interface OpsUpsertFieldMap {
   account: Partial<OpsAccount>;
   clue: Partial<OpsClue>;
   benchmark: Partial<OpsBenchmark>;
+  material: Partial<OpsMaterial>;
 }
 
 /** 写入载荷：`kind` + 这次要动的字段。 */

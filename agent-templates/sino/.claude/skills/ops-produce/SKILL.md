@@ -12,332 +12,157 @@ description: >-
 ## 开工前先读
 
 ```bash
-hamuna ops list topic --json      # 编辑哪条，它现在什么状态
-hamuna ops list asset --json      # 手上有没有半成品，别开重
+hamuna ops list asset --json
+hamuna ops list direction --json
+hamuna ops list material --json
 ```
 
-素材有 `sourceRef` → **先读那批原件**（`<sourceRef>/brief.md`）。产品、卖点、禁用词、平台
-都写在那儿，别凭记忆编。
+还要读跟选题绑定的 topic（方向、平台、`--note` 里的判断）。先跑 `hamuna platforms <topic.platform> --json`，拿 `mediaKinds` 和 `limits`——硬上限只认这个命令；缺字段 = 还没核实，发布前现场看表单计数，不要猜。发布目标平台的创作口径读 `references/platform-profiles.md` 对应小节；它是口径，不是平台默认画幅。
 
-## 先定形态（人定的，我只读）
+**读上游台账看机会，别读存量产物抄答案。** `ops/` 里旧稿 / 旧 plan / 旧封面是原始记录，
+用来参考结构、复用判断可以，但不要把它们当模板直接填空。每条素材重新从 topic 出发。
 
-选题上有一栏 `form`：**这一条要做成什么**。它是**人在面板上点的**，也是我能不能调付费
-生成的唯一凭据 —— 我只读，不写（写会被 store 挡回来，那是对的）。
+## 物料怎么挑：按 `note`，别按文件名
 
-| `form` | 这条要做成什么 |
-|---|---|
-| `image_text` | 图文：正文 + 封面 + 配图 |
-| `text_only` | 纯文字：只有正文 |
-| `image_only` | 纯图片：只有图 |
-| `video_clip` | 视频：剪辑已有素材 + 配音 |
-| `video_aigc` | 视频：按产品 AIGC 生成画面 + 配音 |
+`ops/materials/` 是人投进来的原件（产品图、实拍、参考）。文件名不带语义，**依据是台账里
+的 `note`**——「折叠桌正面产品图」「门店实拍，门口那台机器」这类。
 
-**`form` 是空的 = 人还没定形态** → 停下来问一句，别自己挑一档。挑错就是白做一轮，
-或者白花一次钱。
-
-**画幅只认 `formAspect`**（`9:16` / `1:1` / `16:9`）。**不许从平台、账号 Profile、
-工具默认值推断** —— 猜错一次就是废掉一轮素材、废掉一笔钱。只有 `text_only` 没有画幅。
-
-`form` 决定了这一轮**能不能花钱**：选了 `video_aigc` 才可以调付费视频平台；选了
-`image_text` / `text_only` 就一分钱都不花在生成上。用户中途改主意，让他在面板上改完
-再继续，别由我改。
-
-## 读风格
-
-文案风格不是每次即兴发挥。按顺序读：
-
-1. `.claude/rules/03-USER.md` 的 `style` 与 `redlines` — 语气、绝对不用的词、格式硬要求
-2. `hamuna ops list rule --json` 里 `status: active` 的规则 — 复盘沉淀下来的、被验证过的做法
-3. `memory/topics/<系列>.md` — 这个系列之前做过什么、什么有效
-
-台账里还有一条工作区级的风格卡（`style`），它存在时优先按它走。
-
-## 做
-
-### 先出 plan
-
-动手写之前先把「这条内容长什么样」定下来，落成 `ops/assets/<assetId>.plan.json`：
-
-```json
-{
-  "hook": "开头 3 秒说清「10 秒展开」",
-  "points": ["铝合金一体成型", "10 秒展开", "收起来只有水瓶大"],
-  "coverText": "10 秒展开，收起来只有水瓶大",
-  "images": ["产品全貌", "展开过程", "和矿泉水瓶对比"]
-}
+```bash
+hamuna ops list material --json   # 每条带 path / note / noteSource
 ```
 
-视频这一档的 plan 多两栏（**镜**是这条内容的最小单位，一镜一段素材）：
+- **`noteSource: 'user'`** —— 人写的，可以当事实用：它说这张是正面图，就是正面图。
+- **`noteSource: 'agent'`** —— 我（或上一轮的我）扫出来的推测，**只能当线索**。
+  要拿它当依据前先自己看一眼文件；看不出来就问人，别按推测写脚本。
+- **`note` 为空** —— 还不知道是什么。别靠扩展名猜用途，直接问：「`2.jpg` 是干嘛的？」
+  一次问完所有没描述的，别一个文件一轮。
 
-```json
-{
-  "aspect": "9:16",
-  "shots": [
-    { "no": 1, "visual": "桌面全景，折叠桌合拢", "voice": "10 秒展开，收起来只有水瓶大", "seconds": 6 },
-    { "no": 2, "visual": "手部特写，桌腿一秒展开", "voice": "铝合金一体成型，展开只要一秒", "seconds": 5 }
-  ]
-}
-```
+挑中的物料在 plan 里写它的 `path`（`video_clip` 的 `sourceMaterials[]`、
+`image_text` 的参考图），并把路径记进素材的 `--source-ref`，下一轮才知道这条成品用了哪批原图。
 
-plan 里的 `hook` 也从 `references/hook-title-formulas.md` 挑，一次只挑一条公式，别临场发挥。
+**缺物料就停。** 要做视频但台账里没有可用实拍，报给人「缺 X」，不要拿生成画面顶替
+「真实产品实拍」——那正是用户要求「必须结合资产库里真实资产」的原因。形态是 `video_aigc`
+时可以生成画面，但产品本体仍应取自真实物料。
 
-**plan 写完就别再改。** 重试、从 `draft` 接着做、下一次心跳——都读同一个 plan，不重新规划。
-重新规划等于上一轮白做，而且第二条内容和第一条不像同一场。
+## 形态由人定，不要猜
 
-### 再并行做
+发布目标形态（`form`）是人基于 `topic.platform` 在运营面板里挑的。**它记在选题上（`topic.form` / `topic.formAspect`），不在素材上** —— 素材是从选题派生的，形态跟着选题走：
 
-正文、封面、配图三件事互不依赖，**并发做**，别一个做完再做一个。视频是**逐镜并行**：
-各镜的画面生成互不依赖，配音可以同时开始。
-
-### 每块都不能丢
-
-- 正文太长 → 砍尾，**不要删掉整块重写**。
-- 配图失败 → 重试一次；还失败就用占位图，`progress` 卡在 90。**不许因为配图没成就把正文也丢了。**
-- 封面失败 → 先拿正文首句当封面文案，占着总比空着强。
-- 某一镜的画面生成失败 → 重试一次；还失败就**这一镜用占位画面**（静态图 + 该镜的口播），
-  别把整条视频拖下来。
-
-**上限从 `hamuna platforms <id> --json` 拿**（标题几个字、正文几个字、能带几个话题、图几张）。
-规格里没写的字段才是"现场看发布页"（表单会显示「0/30」这种计数）。写稿时留余量，宁短勿长。
-
-产出的文件放工作区的 `ops/assets/`，路径写相对工作区根的形态（`ops/assets/cover.png`）。
-
-### 标题和正文怎么落笔
-
-按顺序走七步，**不许跳步** —— 钩子没定就写正文，写出来一定是平的。
-
-1. **先读约束** —— `03-USER.md` 的语气 / 禁用词 / 格式硬要求；平台上限用
-   `hamuna platforms <id> --json` 拿（`limits.maxTitleLength` / `maxBodyLength` / `maxImages`）。
-   规格以命令返回为准，不以记忆为准。
-2. **定钩子**（首行 / 首图 / 前 3 秒）—— 从 `references/hook-title-formulas.md` 挑 **一个** 公式，
-   用 `{}` 填成实际句子。**一次只用一条**：两条叠一起，读者只觉得吵。
-3. **定框架** —— 从 `references/copy-frameworks.md` 按**内容目的**挑 **一个**：
-   痛点 → PAS，围观 → AIDA，转变 → BAB，卖点 → FAB + 4U，案例 → STAR，观点互动 → SLAY。
-   **选定后只用一个，不混用。**
-4. **按形态编排** —— 见下面「按形态分」。形态是**人**在面板上定的那一栏，我不猜。
-5. **加标签** —— 层级（大 / 中 / 垂直 / 品牌）和各平台话题数见 `references/hashtag-strategy.md`。
-6. **过两道门** —— 强制，见下。
-7. **出 2–3 个变体** —— 同一钩子方向换 2-3 种写法，取最好的那个。
-   变体不是凑数：一个思路连一次机会都试不完。
-
-字数用 `hamuna platforms <id> --json` 的 `limits.maxTitleLength` / `maxBodyLength` 卡，
-留 10% 余量——平台的计数口径和我们数的不是一回事。
-
-#### 两道门：不过就不算写完
-
-| 门 | 分数线 | 五个维度 | 查哪里 |
-|---|---|---|---|
-| 去 AI 味 | ≥45/50 | 直接性 / 节奏 / 信任度 / 活人感 / 精炼度 | `references/ai-flavor-gate.md`（中文词库权威源 `references/zh-ai-markers.md`；同目录 `phrases-to-remove.md` / `structures-to-avoid.md` 是英文侧，发英文才看） |
-| 综合质量 | ≥35/50 | 清晰度 / 节奏感 / 真实感 / 价值密度 / 语气匹配 | `references/quality-gate.md` |
-
-分数是自评，但「不知道扣在哪一维」就重写，不是「大概过了」。
-
-| 综合质量维度 | 看什么 | 常见问题 |
+| `form` | 是什么 | 产物形状 |
 |---|---|---|
-| 清晰度 | 读完知不知道要说什么 | 绕三圈才到重点 |
-| 节奏感 | 段落长短、有没有一口气读完 | 每段一样长、列表全平 |
-| 真实感 | 像不像人写的 | 排比句、总结句收尾 |
-| 价值密度 | 有没有能用的信息 | 全是形容，没有一个能落地的点 |
-| 语气匹配 | 像不像这个号说的话 | 和 `03-USER.md` 的语气对不上 |
+| `image_text` | 有图有文 | 封面 + 配图 + 文案 |
+| `image_only` | 只发图 | 图片 |
+| `text_only` | 纯文字 / 文章 | 长文 |
+| `video_clip` | 手里有现成素材剪成视频 | 素材剪辑 + 配音/字幕 → 成片 |
+| `video_aigc` | 按产品 AIGC 生成画面 | 生成画面序列 + 配音 → 成片 |
 
-#### 卖点先排序，再动笔
+**门禁：**
+- `topic.form` 为空 → 这条先别做。报给人"先在面板上选形态"，停在这。
+- `form` 和平台 `mediaKinds` 对不上（比如平台只收图文，人却选了 `video_aigc`）→ 直接停，报 blocker，不要做完才发现发不出去。
+- `form` 是 `image_only / image_text / video_aigc` 且 `topic.formAspect` 为空 → 报给人"先在面板上选画幅"，停在这。
+- **`formAspect` 没有平台默认值。** 画幅是人在面板上按这条内容定的，agent 不推断、不回退。
+- 视频类形态**不在这一步定画幅** —— 画幅在选素材 / 规划阶段定，等到那一步再由人定。
 
-有产品 / 物料时，先按 **稀缺性 × 实用性 × 可感知** 三项各打 1–5 分，相乘取前 1–2 个当核心卖点，
-**只讲前 1–2 个**。全讲等于没讲。详见 `references/xiaohongshu-viral-methodology.md`。
+## 先规划，再动手
 
-小红书另有一份打法：封面文案结构、正文三段式、情绪词库、迭代原则，
-都在 `references/xiaohongshu-viral-methodology.md` 里，跟通用流程并排读，不互相覆盖。
+`form` 明确、且对应的画幅门禁已过之后，**先出 plan**，等人确认了再开始产出。
 
-#### 冲突时谁赢
+- 读 `topic.note` / `topic.angle`，在 `03-USER.md` 里确认受众和口吻（用户没写就用中性口吻，不自作主张加人设）。
+- 按 `form` 出一份 plan，写到 `ops/assets/<assetId>.plan.json`（schema 见下）。写完用系统消息或对话把 plan 摘要报给人，**等确认**。
+- 人确认后，按 plan 一步步产出。**不要在没确认的情况下直接开做。**
 
-**用户画像和红线 > 方法论。** 方法论给的是骨架和判据，`03-USER.md`、封面规则、发布三关给的是硬约束，
-冲突时以它们为准。
+> `ops/assets/<assetId>.plan.json` 在，就说明这条规划过了。**不要重新规划**，接着做就行。只有人明确说"重做规划 / 换方案"，才覆盖 plan。
 
-具体到一条：方法论里常出现「我试了下」这种第一人称。**没真做过就不许写** —— 换成事实描述
-（「实测下来…」，前提是真有数据），别编亲历。
+### Plan schema（v1）
 
-### 按形态分
+所有 plan 共用 envelope：`version: 1`、`assetId`、`topicId`、`form`、`formAspect`（图文/纯图必填，视频可空）、`confirmedAt`（人确认时写入，未确认为空）、`steps`。
 
-**图文 `image_text`** — 正文 + 封面 + 配图。
+各 `form` 的 `steps` 形状固定，内容自由发挥：
 
-- 封面 `ops/assets/<assetId>.cover.png` 是这组里最要紧的一张：**缩略图上大字要认得出**。
-  文案从 `references/hook-title-formulas.md` 挑一句，压到 12 字以内，**不要和标题一字不差**。
-- 配图 `ops/assets/<assetId>.img1.png` …：一张图讲一件事，和正文段落一一对上。五张同一个角度等于只有一张。
-- 来源优先级：`sourceRef` 里的原件 > 生成的图 > 占位图。**有真实产品图就用真的**——AI 生成的产品图会让人怀疑这不是真东西。
-- 张数按 `limits.maxImages`，别超。
+- **`image_text`**：`title`、`body`（分段）、`hashtags`、`images[]`（每张 `{role: cover|illustration, prompt, text_on_image?, composition?}`，role=cover 恰好 1 张）、`cta`
+- **`image_only`**：`images[]`（`{prompt, text_on_image?, composition?}`，≥1）、`caption?`、`hashtags?`
+- **`text_only`**：`outline[]`（章节标题 + 每节要点）、`title`、`estimatedWordCount`、`cta`
+- **`video_clip`**：`sourceMaterials[]`（现成素材路径/描述）、`editPlan`（剪辑顺序 + 每段取舍）、`script?`、`subtitles?`、`bgmMood?`、`aspectRatio`、`estimatedDurationSec`
+- **`video_aigc`**：`script`（旁白/字幕全文）、`scenes[]`（`{prompt, durationSec, transition?, narration?}`，≥1）、`bgmMood?`、`aspectRatio`（由人定）、`estimatedDurationSec`
 
-**纯文字 `text_only`** — 只有正文，没有封面也没有配图。
+`steps` 之外的字段不要加——下游渲染和检查只认这个 schema。
 
-- 读者只剩字，所以**开头两句必须自己站住**，不能靠封面兜。
-- 不要顺手配一张图再挂上去：形态是人定的。
-- 落库时 `--cover` / `--image` 都不传。
+## 做的时候按形态走
 
-**长文（知乎 / 公众号）挑一个结构再写。** 不要每篇都用「我遇到一件事」开场 ——
-故事只是八种结构里的一种，不是默认套路。
+**不管哪种形态，先读对应的 `references/`**，别凭感觉出。
 
-| 结构 | 什么题材 | 开头 |
-|---|---|---|
-| 数据砸脸 | 榜单 / 对比 / 价格 / 财报 | 直接甩一个反常数字或排名 |
-| 问题追踪 | 有争议 / 真假难辨 / 用户困惑 | 抛一个具体问题 |
-| 反常识 | 舆论一边倒但事实更复杂 | 先说一句和直觉相反的判断 |
-| 拆解地图 | 新工具 / 新方案 / 复杂概念 | 「它其实只分三层」 |
-| 实测笔记 | 工具体验 / 教程 / 踩坑 | 从一条命令、一次失败结果切入 |
-| 时间线 | 新闻 / 政策 / 事故 | 用具体时间点或事件链开场 |
-| 行动清单 | 方法论 / 入门指南 | 先给结果承诺或适用人群 |
-| 案卷复盘 | 翻车 / 被限流 / 商业事故 | 案情摘要或核心矛盾开场 |
+### `image_text` / `image_only`
 
-开头钩子按结构配一个就够：具体数字 / 一个真问题 / 两个冲突事实并排 / 当事人
-原话 / 一段命令输出 / 具体日期 / 一个具体场景。**同一批连续发的时候避开上一篇
-用过的结构**，不然读起来像同一个模板换了个词。
+1. 文案：`copy-frameworks.md` 选框架 → `copy-structure-templates.md` 搭结构 → `hook-title-formulas.md` 拟标题/钩子 → `hashtag-strategy.md` 配话题。平台口径看 `platform-profiles.md`。
+2. 配图：按 `visual-director.md` 出图。画幅**只用 `topic.formAspect`**，不要自己挑。小红书封面文字密度和缩略图可读性优先（见 `platform-profiles.md`）。
+3. 过质量闸：`ai-flavor-gate.md` + `quality-gate.md`。命中过 `phrases-to-remove.md` / `structures-to-avoid.md` / `zh-ai-markers.md` 的，改完再往下。
 
-- 每 300–400 字一个小标题，让人能跳着读。
+### `text_only`
 
-**纯图片 `image_only`** — 只有图（正文留空）。图的数量按平台上限来
-（`hamuna platforms <id> --json` 的 `limits.maxImages`），别超。
+1. 结构：`copy-structure-templates.md` 选长文骨架，`copy-frameworks.md` 定论证方式。
+2. 正文：按 outline 写，章节之间要有过渡，不要 bullet 拼盘。知乎 / 公众号口径分别看 `platform-profiles.md`。
+3. 过质量闸：同上。长文额外看事实密度和段落节奏。
 
-**视频 `video_clip`** — 已有素材剪成一条 + 配音 + 字幕：
-1. 列清 `sourceRef`（或 `ops/inbox/`）里有哪些可用素材，**没有可用画面就停下问**。
-2. 配音：`edge-tts` 的 `text_to_speech`，voice 从 `list_voices` 里挑（中文
-   `zh-CN-XiaoxiaoNeural` / `zh-CN-YunxiNeural`），产出 `ops/assets/<assetId>.voice.mp3`。
-3. 字幕：按配音稿逐句切 `ops/assets/<assetId>.srt`。
-4. 合成：ffmpeg 把画面、配音、字幕合成 `ops/assets/<assetId>.mp4`。
+### `video_clip`
 
-**视频 `video_aigc`** — 按产品 AIGC 生成画面 + 配音：
-1. 脚本 + 分镜（每镜：画面提示词 / 口播 / 时长），落进 plan 的 `shots`。
-2. **逐镜生成画面**，aspect_ratio 跟 `formAspect` 走（`9:16` / `1:1` / `16:9`）。
-3. 配音 + 字幕同上。
-4. ffmpeg 把各镜拼起来，叠配音与字幕，成 `ops/assets/<assetId>.mp4`。
+1. **画幅还没定就停**，让人选 `topic.formAspect`（这时才定）。不要猜。
+2. 先盘素材：`sourceMaterials[]` 里的东西能不能用、缺什么，报给人。
+3. 按 `editPlan` 剪，脚本 / 字幕 / BGM 按 plan 补。不要重新构思一个和 plan 无关的版本。
+4. 成片导出前过一遍 `quality-gate.md` 的视频条目（节奏、字幕可读、首帧）。
 
-### 视频的两道门
+### `video_aigc`
 
-**画幅硬门**：调付费视频生成**之前**，`formAspect` 必须有值。**没有就停下来问**，
-不许从平台 / 工具默认画幅里拿一个凑 —— 猜错一次就是白花的钱、废掉一轮素材。
+1. **画幅还没定就停**。
+2. 脚本先行：按 `references/visual-director.md` 出分镜 plan（景别、时长、画面、旁白/字幕、转场）。
+3. **预览硬门**：先拼联系表**分镜拼图**给人看，确认构图、节奏、主体一致性；人没点头不调付费生成。单镜控制在 **15 秒**内。
+4. 确认后再生成；默认出带音画成片。生成完过 QA（首帧钩子、节奏、字幕可读、AI 味硬伤）。
 
-**工具硬门**：付费视频平台（视频/图片生成那个 MCP）**必须是人已经启用过的**。
-工具不在可用列表里就是没开 —— **不许自己启用、不许自己填 key**。这时降级（见下）。
+## 产物放哪
 
-### ffmpeg
+素材落盘到 `ops/assets/<assetId>/`（相对工作区）。plan 在 `ops/assets/<assetId>.plan.json`。`hamuna ops update asset` 只改台账字段，**不负责搬文件**。
+
+## 更新台账
+
+开始做：
 
 ```bash
-command -v ffmpeg
+hamuna ops update asset <id> --progress 10
 ```
 
-没有就**自己装**，装完 `ffmpeg -version` 确认能用：
-
-| 平台 | 命令 |
-|---|---|
-| macOS | `brew install ffmpeg` |
-| Linux（Debian / Ubuntu） | `sudo apt-get install -y ffmpeg` |
-| Linux（Fedora / RHEL） | `sudo dnf install -y ffmpeg` |
-| Windows | 先 `winget search ffmpeg` 认准官方 id，再交给用户 |
-
-**要提权的命令我不自己提权。** 我的 shell 没有终端，`sudo` 拿不到密码就走不下去；
-带 `sudo` 的那条命令**原样交给用户**，等他说装好了，我再跑一次 `command -v ffmpeg` 验。
-macOS 没装 Homebrew 同理——把官方那行安装命令给用户。这一步本来就需要人，不算失败。
-
-Windows 的 winget id 我不背，现场 `winget search` 看清楚再给——写错一个 id
-就是装了个同名但不是 ffmpeg 的东西。
-
-**装不上就停下报给用户**，不要反复重试，也不要换个方案硬凑一条没声音 / 没字幕的
-片子交差。**别自己下静态二进制往 PATH 里塞**：那是绕过用户的安装决定。
-
-合成时的画幅（`formAspect` → 目标尺寸）：
-
-| 画幅 | 尺寸 | ffmpeg 滤镜 |
-|---|---|---|
-| `9:16` | 1080×1920 | `scale=1080:1920` |
-| `1:1` | 1080×1080 | `scale=1080:1080` |
-| `16:9` | 1920×1080 | `scale=1920:1080` |
-
-## 花钱与降级
-
-**只有 `form` 说了要花钱的形态才花钱。** 图像 / TTS 用的是用户已经启用的工具
-（启用了就是授权）；付费视频平台只在 `video_aigc` 下调用。
-
-付费视频平台返回**余额不足** → **降级成图文**，把正文 + 封面 + 配图真做出来，
-并在素材上记一笔降级原因：
+做到一半，随手推：
 
 ```bash
-hamuna ops update asset --id asset-1a2b3c4d \
-  --downgrade-note "视频生成返回余额不足，已降级为图文"
+hamuna ops update asset <id> --progress 60
 ```
 
-怎么认出「余额不足」：错误里的 `status_code` 是 **402**，或者文案里有「余额 / 额度 /
-insufficient / quota / 充值」这类字眼。
+`progress` 是 0–100 的整数，**只升不降**。卡住了**不要改状态**——素材状态只有
+`draft / ready / published / unverified` 四个，没有 `making` / `blocked`；`--blocked`
+这个 flag 也不存在，传了会被拒。卡点写进 `memory/YYYY-MM-DD.md` 并在汇报里说清楚，
+素材留在 `draft`，`progress` 停在那不动。
 
-**超时不是余额不足。** 超时先重试一次；还不行就停下报给用户 —— 拿超时当降级的理由，
-等于把一次故障变成一次形态变更，还不告诉用户为什么。
-
-**其它原因（工具没开、素材不够、画幅没定）不降级**：停下来问。形态是人的决定，
-不是我遇到困难就自己换一档。
-
-## 落库
-
-建一条素材，挂到选题上：
+做完：
 
 ```bash
-hamuna ops add asset \
-  --title "素材标题" \
-  --platform douyin \
-  --topic-id topic-1a2b3c4d \
-  --product "露营折叠桌" --cta "进店看新款" \
-  --body-file ops/assets/script.md \
-  --cover ops/assets/cover.png \
-  --progress 30
+hamuna ops update asset <id> --status ready --progress 100
 ```
 
-`--product` / `--cta` 是这条内容要对齐的转化目标。用户只说了产品没说动作时，按 `03-USER.md` 推一个（新号引流写「关注」、有店写「进店」）；**纯内容不带转化就留空**，不要编。
+`ready` 是「可以发了」的信号——**不是「已经发了」**。发布是另一条动作。
 
-`--body-file` 读文件内容进 `body`（正文多行、含中文标点时用这个，别塞进命令行）。图片用 `--image` 重复传，分镜用 `--shot` 传 JSON：
+## 发布前自检
 
-```bash
---shot '{"no":1,"visual":"…","voice":"…","seconds":6}'
-```
+`ready` 之前过一遍：
 
-视频产物单独一个字段，**不塞进 `--image`**（两者是不同产物，混在一列里「有几张图」
-这种计数在有视频时失去意义）：
-
-```bash
---video ops/assets/asset-1a2b3c4d.mp4
-```
-
-**边做边更新进度**，不要做完才写一次：
-
-```bash
-hamuna ops update asset --id asset-1a2b3c4d --progress 60
-hamuna ops update asset --id asset-1a2b3c4d --progress 80 --cover ops/assets/cover.png
-```
-
-`--progress` 是 0–100 的整数，反映**真实完成度**：正文写完 40，封面定了 70，分镜齐了 90，全部可投 100。不要为了显得快而虚报——用户会按这个数判断还剩多久。
-
-## 完成
-
-成品可以直接投放时：
-
-```bash
-hamuna ops update asset --id asset-1a2b3c4d --status ready --progress 100
-hamuna ops update topic --id topic-1a2b3c4d --status produced
-```
-
-`ready` 的分界是「内容本身做完了」——从这一步往后就不再动正文和素材。**不要跳 `ready` 直接 `published`／`unverified`**：那两个状态是发布那条线写的，不是制作写的。
-
-## 交接
-
-报给用户：素材 id、标题、正文路径、成品文件（封面 / 配图 / 视频）、还剩什么。
-视频那一档要把「有没有按人定的形态做出来」讲清楚——降级了就明说降级了、为什么。
-
-然后接着走 `ops-schedule` 排期 —— **不要停在 `ready` 就交差**。这一轮是从「开工」进来的，
-用户点的就是「一条做到能发」，中途停在「稿子写完了」等于把剩下两段还给用户。
-
-排期之后要不要接发布，看 `ops-schedule` 的「划清这轮到哪为止」：赶时间就在这一轮发掉，
-排到未来就明说到点要人喊一声。
+- 标题 / 正文 / 话题符合 `platform-profiles.md` 对应平台口径；硬上限已用 `hamuna platforms <id> --json` 核过。
+- 封面 / 首帧缩略图可读（小字在手机上看得清）。
+- 事实、数字、引述有来源；没有就别写死。
+- AI 味、禁用句式、结构套路过了对应闸门。
+- 画幅 / 时长 / 文件格式符合平台要求（拿不准就现场看发布页）。
 
 ## 不要做
 
-- **不碰发布**（那是 `ops-publish` 的事）、不改 `product` / `cta` 之外的发布字段
-- **不自己写 `form` / `formAspect`** —— 那是人的动作，写了会被 store 挡回来
-- **不在形态没定、画幅没定的时候调付费生成**
-- **不自己启用付费工具、不自己填 key**
-- **不重新规划已有的 plan。** `ops/assets/<assetId>.plan.json` 在，就说明这条规划过了，接着做就行。
-- **不要直接编辑 `ops/state.json`**
-- 不要在一条素材跨多个平台时复制成多条——先在一条里做完，分发时再说
+- 不要把 `ready` 当成 `published`；发布动作走 `ops-schedule` / 浏览器发布流，发完再回写 published。
+- 不要跳过 `form` / `formAspect` 门禁；也不要自己脑补默认画幅。
+- 不要在没确认 plan 的情况下开始产出成品。
+- 不要直接改 `ops/state.json`。所有字段变更走 `hamuna ops update asset`。
+- 不要为了"显得完整"虚构数据、截图、评论、播放量。
+- 不要把别人的原文大段抄进正文；参考可以，改写要彻底。

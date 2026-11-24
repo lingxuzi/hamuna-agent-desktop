@@ -18,6 +18,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { SocialPlatformId } from '../../../shared/socialPlatforms';
 import type { OpsState } from '../../../shared/ops';
+import { OPS_MATERIALS_RELATIVE_DIR } from '../../../shared/ops';
 import { localDate } from '../../../shared/logTime';
 import { useWorkspaceFileService, type WorkspaceFileService } from '@/hooks/useWorkspaceFileService';
 import { OpsAccounts } from './OpsAccounts';
@@ -32,9 +33,6 @@ export const OPS_WIZARD_STEPS = ['login', 'direction', 'material'] as const;
 export type OpsWizardStep = (typeof OPS_WIZARD_STEPS)[number];
 
 export const OPS_WIZARD_STEP_COUNT = OPS_WIZARD_STEPS.length;
-
-/** 物料落点。skill 契约：`ops/inbox/<批次名>/` + `brief.md`。 */
-const INBOX_ROOT = 'ops/inbox';
 
 export interface OpsWizardProps {
   workspace: string;
@@ -83,7 +81,6 @@ export default function OpsWizard({
   // 这样用户手改过的同一行不会被向导冲掉。
   const [dirDrafts, setDirDrafts] = useState<Record<string, string>>({});
   const [materialBrief, setMaterialBrief] = useState('');
-  const [batchName, setBatchName] = useState(() => localDate());
   const [materialFiles, setMaterialFiles] = useState<string[]>([]);
   /** 派工中。防止连点两下「完成」= 派两次工（两遍提问、两遍找对标）。 */
   const [dispatching, setDispatching] = useState(false);
@@ -123,10 +120,13 @@ export default function OpsWizard({
     [state.directions, workspace, toast, t],
   );
 
-  /* ── ③ 物料：选文件 → 投进 ops/inbox/<批次>/ ────────────── */
+  /* ── ③ 物料：选文件 → 投进 ops/materials/ 并逐文件登记 ──────────
+     文件落在**一个平面目录**里（不再按批次分文件夹）：一条记录描述一个文件，
+     合进「批次」就又回到「Agent 不知道哪张图是哪个」。说明文字单独写成一个
+     `brief-<日期>.md`，也一起登记。 */
   const [materialBusy, setMaterialBusy] = useState(false);
-  /** 已投递的批次目录。派工时告诉 Agent 物料在哪 —— 空 = 这一轮没投物料。 */
-  const [materialDir, setMaterialDir] = useState<string | null>(null);
+  /** 这一轮真的投过东西。派工时告诉 Agent 去 `ops/materials` 收物料。 */
+  const [materialDelivered, setMaterialDelivered] = useState(false);
 
   const pickMaterial = useCallback(async () => {
     try {
@@ -139,36 +139,64 @@ export default function OpsWizard({
     }
   }, [toast, t]);
 
+  /**
+   * 逐文件登记。建记录失败不回滚文件（文件已经在盘上、面板也列得出来），
+   * 但必须说出来 —— 只落文件不建记录，就是「面板看得见、Agent 查不到」。
+   */
+  const registerMaterials = useCallback(
+    async (paths: string[]): Promise<string[]> => {
+      const failures: string[] = [];
+      for (const path of paths) {
+        try {
+          await opsUpsert(workspace, { kind: 'material', path });
+        } catch (err) {
+          failures.push(`${path}: ${opsErrorMessage(err)}`);
+        }
+      }
+      return failures;
+    },
+    [workspace],
+  );
+
   const deliverMaterial = useCallback(async () => {
     setMaterialBusy(true);
     try {
-      const dir = await uniqueBatchDir(fileService, batchName);
+      const failures: string[] = [];
+      const copiedPaths: string[] = [];
       if (materialFiles.length > 0) {
         const copied = await fileService.copyPaths({
           sourcePaths: materialFiles,
-          targetDir: dir,
+          targetDir: OPS_MATERIALS_RELATIVE_DIR,
         });
         // 逐文件失败不中断整批，但**必须让用户看见**：全被拒的批次看起来
         // 跟成功一模一样。
-        if (copied.errors.length > 0) {
-          toast?.error(t('ops.wizard.material.copyFailed', { reason: copied.errors[0] }));
-        }
+        failures.push(...copied.errors);
+        copiedPaths.push(...copied.copiedFiles.map((file) => file.targetPath));
       }
       if (materialBrief.trim()) {
-        await fileService.importBase64Files({
-          files: [{ name: 'brief.md', content: toBase64(materialBrief) }],
-          targetDir: dir,
+        // 文件名带日期：`brief.md` 是 O_EXCL 写的，撞名会变成 `brief_1.md`，
+        // 而入库的 skill 只读固定名字的那份，说明就永远读不到。日期撞了再加序号。
+        const name = await uniqueBriefName(fileService);
+        const imported = await fileService.importBase64Files({
+          files: [{ name, content: toBase64(materialBrief) }],
+          targetDir: OPS_MATERIALS_RELATIVE_DIR,
         });
+        // 返回的就是工作区相对路径（`ops/materials/brief-<日期>.md`）。
+        copiedPaths.push(...imported.files);
+      }
+      failures.push(...(await registerMaterials(copiedPaths)));
+      if (failures.length > 0) {
+        toast?.error(t('ops.wizard.material.copyFailed', { reason: failures[0] }));
       }
       setMaterialFiles([]);
-      setMaterialDir(dir);
-      toast?.success(t('ops.wizard.material.delivered'));
+      setMaterialDelivered(copiedPaths.length > 0);
+      if (copiedPaths.length > 0) toast?.success(t('ops.wizard.material.delivered'));
     } catch (err) {
       toast?.error(t('ops.toast.saveFailed', { reason: opsErrorMessage(err) }));
     } finally {
       setMaterialBusy(false);
     }
-  }, [fileService, batchName, materialFiles, materialBrief, toast, t]);
+  }, [fileService, materialFiles, materialBrief, registerMaterials, toast, t]);
 
   /* ── 交接给 Agent ────────────────────────────────────
      三步走完自动派工：方向原话 + 物料 + 一份「接下来做什么」的清单。
@@ -209,10 +237,10 @@ export default function OpsWizard({
     const briefLines = briefs
       .map((row) => `${platformLabel(t, row.platform)}：${row.brief}`)
       .join('\n');
-    // 物料只在真的投过的时候才提 —— 派工里写一个空的收件箱路径，Agent 会
-    // 去找一个不存在的目录。
-    const materialLine = materialDir
-      ? `${t('ops.wizard.dispatch.material', { dir: materialDir })}\n`
+    // 物料只在真的投过的时候才提 —— 派工里写一个空的目录路径，Agent 会
+    // 去找一个不存在的地方。
+    const materialLine = materialDelivered
+      ? `${t('ops.wizard.dispatch.material', { dir: OPS_MATERIALS_RELATIVE_DIR })}\n`
       : '';
     onSendToAgent(
       t('ops.wizard.dispatch.afterMaterial', {
@@ -221,7 +249,7 @@ export default function OpsWizard({
       }),
     );
     return true;
-  }, [signedIn, directionBrief, workspace, materialDir, onSendToAgent, onStep, toast, t]);
+  }, [signedIn, directionBrief, workspace, materialDelivered, onSendToAgent, onStep, toast, t]);
 
   const goNext = useCallback(() => {
     if (index < OPS_WIZARD_STEPS.length - 1) {
@@ -280,15 +308,6 @@ export default function OpsWizard({
 
       {step === 'material' && (
         <section className="ops-card">
-          <div className="ops-field">
-            <span>{t('ops.wizard.material.batch')}</span>
-            <input
-              className="ops-input"
-              value={batchName}
-              maxLength={40}
-              onChange={(e) => setBatchName(e.target.value)}
-            />
-          </div>
           <div className="ops-field">
             <span>{t('ops.wizard.material.brief')}</span>
             <textarea
@@ -356,24 +375,18 @@ export default function OpsWizard({
 /* ── 工具 ─────────────────────────────────────────── */
 
 /**
- * 批次目录名必须唯一。
+ * `brief-<日期>.md` 的名字必须唯一。
  *
- * `brief.md` 用 O_CREAT|O_EXCL 写（`files_b64.rs`）：撞名会变成 `brief_1.md`，
- * 而入库的 skill 只读 `brief.md` —— 那份说明就永远读不到。所以在投递前给
- * 批次名加后缀，直到目录是新的。
+ * 导入文件的写入是 O_CREAT|O_EXCL（`files_b64.rs`）：撞名会变成 `brief-1.md`，
+ * 而入库的 skill 按文件名找那张说明，认不出就永远读不到。所以先探一次。
  */
-async function uniqueBatchDir(
-  fileService: WorkspaceFileService,
-  batch: string,
-): Promise<string> {
-  const base = batch.trim() || localDate();
-  for (let attempt = 1; attempt <= 20; attempt += 1) {
-    const name = attempt === 1 ? base : `${base}-${attempt}`;
-    const dir = `${INBOX_ROOT}/${name}`;
-    const { results } = await fileService.checkPaths({ paths: [dir] });
-    if (!results[dir]?.exists) return dir;
-  }
-  return `${INBOX_ROOT}/${base}-${Date.now()}`;
+async function uniqueBriefName(fileService: WorkspaceFileService): Promise<string> {
+  const base = `brief-${localDate()}`;
+  const { results } = await fileService.checkPaths({
+    paths: [`${OPS_MATERIALS_RELATIVE_DIR}/${base}.md`],
+  });
+  if (!results[`${OPS_MATERIALS_RELATIVE_DIR}/${base}.md`]?.exists) return `${base}.md`;
+  return `${base}-${Date.now()}.md`;
 }
 
 /** UTF-8 安全的 base64。`btoa` 直接吃中文会抛 —— 它只认 Latin-1。 */

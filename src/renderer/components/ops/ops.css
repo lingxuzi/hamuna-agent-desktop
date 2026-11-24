@@ -251,9 +251,10 @@
     'dist dist .'
     'notes notes notes';
 }
-/* 账号 / 线索 / 向导是单栏全宽，不参与 bento。 */
+/* 账号 / 线索 / 资产库 / 向导是单栏全宽，不参与 bento。 */
 .ops-body[data-ops-pane='accounts'],
 .ops-body[data-ops-pane='clues'],
+.ops-body[data-ops-pane='materials'],
 .ops-body[data-ops-pane='wizard'] {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1489,6 +1490,21 @@
 
 /* 终端宽度：390 下「胶囊 + 导出」两件必有一件让位。让的是导出——
    它是次要动作，且 600 这一档仍保留（那个区间不进这个断点）。 */
+/* 顶栏入口有 5 个域胶囊 + 4 个辅助视图按钮 + 终端口令 + 关闭，横向
+   约 800px。面板被侧栏挤窄时 `flex: none` + `nowrap` 会把后面几个整段
+   裁掉（`.ops` 是 overflow:hidden）—— 被裁的那几个永远点不到，比滚动更坏。
+   收进自己的横向滚动区，滚动条不显示：56px 的行高里再压一条滚动条会把
+   按钮挤变形。 */
+@container (max-width: 900px) {
+  .ops-top {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ops-top::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @container (max-width: 400px) {
   .ops-hide-narrow {
     display: none;
@@ -1983,6 +1999,98 @@
 .ops-clue-status.is-qualified {
   border-color: var(--accent-warm);
   color: var(--ink);
+}
+
+/* ── 物料库 ───────────────────────────────────────────
+   盘上原始文件的清单 + 每个文件一行描述。行结构与线索卡同一套（缩略图 +
+   文件名），子目录按 depth 缩进，不画树线 —— 路径里已有层级信息，再画线
+   只是噪音。
+
+   描述为什么在行下面而不是同一行：窄栏里横向塞不下「文件名 + 描述」两栏，
+   描述会被压成两三个字宽。折到下一行，两者都读得清。 */
+
+/* 卡头两个按钮等高（UI 红线：并排控件高度一致）。 */
+.ops-mat-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.ops-mat-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--ops-col-gap, 12px);
+  padding: 8px 0;
+}
+.ops-mat-row[data-depth='1'] {
+  padding-left: calc(var(--ops-col-thumb, 34px) + var(--ops-col-gap, 12px));
+}
+.ops-mat-row[data-depth='2'],
+.ops-mat-row[data-depth='3'] {
+  padding-left: calc((var(--ops-col-thumb, 34px) + var(--ops-col-gap, 12px)) * 2);
+}
+
+/* 缩略图格与 .ops-thumb 同尺寸：切到线索卡时左缘不跳。 */
+.ops-mat-thumb {
+  flex: none;
+  width: var(--ops-col-thumb, 34px);
+  height: 34px;
+  border-radius: var(--theme-radius-md);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--paper-inset);
+  color: var(--ink-muted);
+}
+.ops-mat-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 文件名不换行：长路径在窄栏里必须收成省略号，否则整张卡横向溢出。 */
+.ops-mat-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 描述输入框：整行宽，排在文件名下面。padding 比表单里的 .ops-input 小一号
+   ——列表里每行都有它，按表单尺寸排会把清单撑成两倍长。 */
+.ops-mat-note-input {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+/* 「Agent 推测」标记。必须和人写的描述视觉可分：把推测当事实用，脚本会
+   照着猜错的方向写。 */
+.ops-mat-tag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--theme-radius-sm);
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--paper-inset);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.ops-mat-error,
+.ops-mat-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.ops-mat-error {
+  color: var(--error);
 }
 
 /* ── 对标账号卡 ───────────────────────────────────────

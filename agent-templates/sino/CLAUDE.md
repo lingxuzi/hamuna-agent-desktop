@@ -25,8 +25,8 @@ sino/                           # 我的家
 │   └── ops-review/             # 复盘
 ├── ops/                        # 运营台账（App 的「运营」面板读的同一份）
 │   ├── state.json              # 台账本体
-│   ├── inbox/                  # 人丢进来的原始物料（入库时整批搬到 assets/imported/）
-│   └── assets/                 # 封面 / 配图 / 分镜表 / imported/（已入库的原件）
+│   ├── materials/              # 物料：人投进来的原始文件（产品图 / 实拍 / 说明）
+│   └── assets/                 # 素材成品：封面 / 配图 / 视频 / 导出文案
 └── memory/                     # 记忆
     ├── YYYY-MM-DD.md           # 日志
     └── topics/                 # 按项目沉淀
@@ -88,9 +88,12 @@ hamuna ops add clue --platform xiaohongshu --comment-id "c-abc" --content "…" 
 | 发布 | 到点在浏览器里发出去，再回读核实（`ops-publish`） | `assets.status` | `published`（有平台证据）或 `unverified`（没有） |
 | 复盘 | 录表现数据，提炼规律 | `reviews` + `rules` | 有一条可执行的结论，不写「要更用心」 |
 
-**人只投两样东西**：原始物料（丢进 `ops/inbox/<批次名>/`，里面放个 `brief.md` 写清产品、卖点、
-要观众做什么）和想宣传的产品。入库（`ops-intake`）→ 做稿（`ops-produce`）→ 排期 → 发布 → 复盘
-都是我的活。人唯一必须亲自做的是登录。
+**人只投两样东西**：原始物料（丢进 `ops/materials/`，写一句这是什么；也可以放个
+`brief-<日期>.md` 写清产品、卖点、要观众做什么）和想宣传的产品。入库（`ops-intake`）→
+做稿（`ops-produce`）→ 排期 → 发布 → 复盘都是我的活。人唯一必须亲自做的是登录。
+
+**物料不是素材。** 物料是原料（没有状态），素材是成品（有 `draft → ready → published`
+状态机）。混成一个集合，刚上传的产品图会被算成「制作中」。详见 `05-OPS.md`。
 
 **形态是人在面板上点的一档**：图文 / 纯文字 / 纯图片 / 视频（视频再分「剪辑已有素材」和
 「按产品生成」）。它同时也是**这一轮要不要花钱的开关**——所以我只读不写。形态没定就停下来

@@ -2596,6 +2596,7 @@ const OPS_KINDS = [
   'account',
   'clue',
   'benchmark',
+  'material',
 ] as const;
 
 type OpsKind = (typeof OPS_KINDS)[number];
@@ -2692,6 +2693,8 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'video', flag: 'video', type: 'text' },
     // 没按要求的形态做出来时写清原因（降级）。空 = 按要求做出来了。
     { field: 'downgradeNote', flag: 'downgradeNote', type: 'text' },
+    // 这条成品拿去怎么用。`noteSource` 不进白名单，理由同 material。
+    { field: 'note', flag: 'note', type: 'text', fileFlag: 'noteFile' },
   ],
   review: [
     { field: 'assetId', flag: 'assetId', type: 'text', required: true },
@@ -2758,6 +2761,18 @@ const OPS_FIELDS: Record<OpsKind, OpsFieldSpec[]> = {
     { field: 'evidence', flag: 'evidence', type: 'text', fileFlag: 'evidenceFile' },
     { field: 'source', flag: 'source', type: 'text' },
   ],
+  material: [
+    // 天然键：上传流程刚把文件放到哪，就只知道这个。要求它先 list 一遍
+    // 找 id 是白跑一轮。
+    { field: 'path', flag: 'path', type: 'text', required: true },
+    // `fileName` 不在白名单里 —— store 从 `path` 末段推。要求每个写者自己
+    // 算一遍，等于把「文件名怎么从路径取」复制到每个调用方。
+    { field: 'note', flag: 'note', type: 'text', fileFlag: 'noteFile' },
+    { field: 'brief', flag: 'brief', type: 'text', fileFlag: 'briefFile' },
+    // `noteSource` 同样不在白名单里：它由写入门决定（人门 = user，CLI =
+    // agent），调用方写不了。放进白名单就等于给了 Agent 一个自称「用户写的」
+    // 的入口，而这一栏存在的全部意义就是防止这件事。
+  ],
 };
 
 /** State keys of the ledger, per record kind. */
@@ -2770,6 +2785,7 @@ const OPS_SECTIONS: Array<{ key: string; kind: OpsKind; label: string }> = [
   { key: 'accounts', kind: 'account', label: 'Accounts' },
   { key: 'clues', kind: 'clue', label: 'Clues' },
   { key: 'benchmarks', kind: 'benchmark', label: 'Benchmarks' },
+  { key: 'materials', kind: 'material', label: 'Materials' },
 ];
 
 /**
@@ -3172,6 +3188,17 @@ function printOpsState(state: Record<string, unknown>, onlyKind: string): void {
         );
         console.log(`    ${String(record.profileUrl ?? '')}`);
         if (record.why) console.log(`    ${String(record.why)}`);
+      } else if (section.kind === 'material') {
+        // 物料：文件名 + 路径 + 描述的作者。
+        //
+        // **作者必须打出来。** Agent 扫描出来的描述和用户手写的在账本里是同一
+        // 个字段；这一行是 Agent 读台账时唯一能分出「这是用户说的」还是
+        // 「这是我上一轮猜的」的地方。不打印，下一次扫描就会把上轮的猜测
+        // 当成既定事实继续用。
+        const source = record.noteSource === 'user' ? '用户写的' : record.noteSource === 'agent' ? 'Agent 推测' : '无描述';
+        console.log(`  ${id}  ${String(record.fileName ?? '')}  ${source}`);
+        console.log(`    ${String(record.path ?? '')}`);
+        if (record.note) console.log(`    ${String(record.note)}`);
       } else {
         // 规则：强度之外还要看种类——「核实过的 0.5」和「推出来的 0.9」不是一回事。
         console.log(

@@ -294,6 +294,16 @@ pub struct OpsAsset {
     /// 中间那次降级不写下来就等于没发生过。
     #[serde(default)]
     pub downgrade_note: Option<String>,
+    /// 这条成品是干什么用的 / 适合什么场景。空 = 还不知道。
+    ///
+    /// 和物料的 `note` 回答的是不同问题：物料那里问「这个文件是什么」，
+    /// 这里问「这条成品拿去怎么用」。复用同一批字段名，是为了让下游不用记
+    /// 两套；语义差别写在注释里，不写进类型。
+    #[serde(default)]
+    pub note: String,
+    /// `note` 是谁写的 —— 口径同 [`OpsMaterial::note_source`]：由写入门决定。
+    #[serde(default)]
+    pub note_source: Option<OpsActor>,
     pub platform: String,
     /// 排期时间。`None` = 未排期。
     #[serde(default)]
@@ -709,6 +719,59 @@ pub struct OpsBenchmark {
     pub updated_at: String,
 }
 
+/// 一条**物料**：工作区里一个真实的原始文件（产品图、视频、竞品截图…）。
+///
+/// **和素材（`OpsAsset`）不是一回事。** 素材是「一条内容成品」——有正文、有封面、
+/// 有状态机（`draft → ready → published`），是被制作出来的东西。物料是人投进来的
+/// 原料，永远不会「ready」，也没有达成度。混进同一个集合的后果是面板指标被原料
+/// 灌水：「制作中 +10」里九条是刚上传的产品图，「最该收尾」指向一张没人动过的图。
+///
+/// 所以物料**没有状态机**。「这个文件被哪条内容用过」是从素材侧反推的事实
+/// （素材的 `sourceRef` / `topicId` 指向它），不是需要人来维护的字段——维护它
+/// 就得在每次素材改动时同步，而漏同步的那一次会让一个用过的物料看起来没人用。
+///
+/// 天然键是 `path`：同一个工作区相对路径只该有一条记录。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpsMaterial {
+    #[serde(default)]
+    pub id: String,
+    /// 文件名（带扩展名）。面板上直接显示，不截断也不改写。
+    #[serde(default)]
+    pub file_name: String,
+    /// 工作区相对路径，如 `ops/materials/1.jpg`。**天然键**，空 = 非法。
+    #[serde(default)]
+    pub path: String,
+    /// 这个文件是什么。人写的就是事实，Agent 扫描出来的只是推测。
+    ///
+    /// 空 = 还没人说过。**空不是「没有信息」，是「不知道」** —— 下游读到空
+    /// 描述时该去问 / 去看，不该自己编一个填上。
+    #[serde(default)]
+    pub note: String,
+    /// `note` 是谁写的。**由写入门决定，调用方写不了**（同 `OpsState` 里
+    /// 方向的 `lastTouchedBy`）。
+    ///
+    /// 存在的理由：心跳 / 定时任务里 Agent 扫描产出的描述，如果和用户手写的
+    /// 长得一模一样，下一轮 Agent 读到就**分不清哪些是自己猜的**，然后拿它去
+    /// 写脚本、挑素材。这和「没有回读证据就置 published」是同一类错误 ——
+    /// 让推测在事实源里伪装成事实。标出来之后，下游能区分「用户说的」和
+    /// 「Agent 看着像」。
+    ///
+    /// `note` 为空时是 `None`（没有作者，不是「Agent 写的空串」）。
+    #[serde(default)]
+    pub note_source: Option<OpsActor>,
+    /// 批次说明的原文（`brief.md` 之类）。空 = 这批没有说明。
+    ///
+    /// 存的是**原文**不摘编：入库时 Agent 摘一遍、做稿时再摘一遍，两次会不一样，
+    /// 而人写的那段话才是唯一权威描述。
+    #[serde(default)]
+    pub brief: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpsStyle {
@@ -760,6 +823,11 @@ pub struct OpsState {
     /// 对标账号。天然键 `(platform, profile_url)`。
     #[serde(default)]
     pub benchmarks: Vec<OpsBenchmark>,
+    /// 物料：工作区 `ops/materials/` 里的原始文件。天然键 `path`。
+    ///
+    /// 和 `assets` 是两件事 —— 见 [`OpsMaterial`] 的注释。
+    #[serde(default)]
+    pub materials: Vec<OpsMaterial>,
     #[serde(default)]
     pub style: Option<OpsStyle>,
 }
@@ -778,6 +846,7 @@ impl OpsState {
             rules: Vec::new(),
             clues: Vec::new(),
             benchmarks: Vec::new(),
+            materials: Vec::new(),
             style: None,
         }
     }
@@ -796,6 +865,7 @@ pub enum OpsItemKind {
     Style,
     Clue,
     Benchmark,
+    Material,
 }
 
 impl OpsItemKind {
@@ -810,6 +880,7 @@ impl OpsItemKind {
             OpsItemKind::Style => "style",
             OpsItemKind::Clue => "clue",
             OpsItemKind::Benchmark => "benchmark",
+            OpsItemKind::Material => "material",
         }
     }
 }
@@ -877,6 +948,19 @@ pub fn validate_state(state: &OpsState) -> Result<(), String> {
     check_ids("account", state.accounts.iter().map(|a| a.id.as_str()))?;
     check_ids("clue", state.clues.iter().map(|c| c.id.as_str()))?;
     check_ids("benchmark", state.benchmarks.iter().map(|b| b.id.as_str()))?;
+    check_ids("material", state.materials.iter().map(|m| m.id.as_str()))?;
+
+    // 天然键是 `path`：同一路径两条记录会让上传流程按路径查到其中一条、
+    // 覆盖另一条，而「查到哪条」决定了用户写的描述会不会被 Agent 的覆盖掉。
+    let mut seen_material_paths: HashSet<&str> = HashSet::new();
+    for material in &state.materials {
+        if material.path.trim().is_empty() {
+            return Err(format!("Material {} requires a path", material.id));
+        }
+        if !seen_material_paths.insert(material.path.as_str()) {
+            return Err(format!("Duplicate material path: {}", material.path));
+        }
+    }
 
     // 「一个平台一条账号」和方向同理：同平台出现两条账号时，界面按平台查会
     // 静默取到其中一条，而取到哪条决定了「发布发到哪个号」。
@@ -1113,12 +1197,13 @@ pub fn upsert_item_by(
         OpsItemKind::Direction => upsert_direction(state, fields, actor),
         OpsItemKind::Account => upsert_account(state, fields),
         OpsItemKind::Topic => upsert_topic(state, fields, actor),
-        OpsItemKind::Asset => upsert_asset(state, fields),
+        OpsItemKind::Asset => upsert_asset(state, fields, actor),
         OpsItemKind::Review => upsert_review(state, fields),
         OpsItemKind::Rule => upsert_rule(state, fields),
         OpsItemKind::Style => upsert_style(state, fields),
         OpsItemKind::Clue => upsert_clue(state, fields),
         OpsItemKind::Benchmark => upsert_benchmark(state, fields),
+        OpsItemKind::Material => upsert_material(state, fields, actor),
     })
 }
 
@@ -1243,18 +1328,51 @@ fn upsert_topic(
     upsert_by_id(&mut state.topics, topic, |t| t.id.as_str())
 }
 
+/// 一条 `note` 该记谁写的。
+///
+/// 物料和素材都有「谁说的」这一栏，规则完全一样，所以只有这一份：
+///
+/// - 描述空 → 没有作者（不是「Agent 写的空串」）
+/// - 描述变了 → 这次写的门说了算（人门 = `User`，CLI = `Agent`）
+/// - 描述没变 → 沿用原作者。`update` 是补丁，把整条读出来、只改别的字段再
+///   写回去是常见写法，那种写回会把用户写好的描述原样带回来；原样回填不该
+///   把用户的描述降级成 Agent 的推测。
+fn resolve_note_source(
+    note: &str,
+    previous_note: &str,
+    previous_source: Option<OpsActor>,
+    actor: OpsActor,
+) -> Option<OpsActor> {
+    if note.trim().is_empty() {
+        None
+    } else if note != previous_note {
+        Some(actor)
+    } else {
+        previous_source
+    }
+}
+
 fn upsert_asset(
     state: &mut OpsState,
     patch: serde_json::Map<String, serde_json::Value>,
+    actor: OpsActor,
 ) -> Result<String, String> {
     let id = patch_id(&patch);
     let existing = id
         .as_deref()
         .and_then(|id| state.assets.iter().find(|asset| asset.id == id));
+    let previous_note = existing.map(|old| old.note.clone()).unwrap_or_default();
+    let previous_source = existing.and_then(|old| old.note_source);
     let mut asset: OpsAsset = merge_patch(existing, &patch)?;
     if asset.id.trim().is_empty() {
         asset.id = generate_id("asset");
     }
+    asset.note_source = resolve_note_source(
+        &asset.note,
+        &previous_note,
+        previous_source,
+        actor,
+    );
     asset.created_at = resolve_created_at(
         existing.map(|old| old.created_at.as_str()),
         &asset.created_at,
@@ -1606,6 +1724,71 @@ fn upsert_benchmark(
     upsert_by_id(&mut state.benchmarks, benchmark, |b| b.id.as_str())
 }
 
+/// 写物料。除了 id，**也认 `path` 作为天然键**：上传流程只知道自己刚把文件
+/// 放到哪个路径，让它先 list 一遍找 id 是白跑一轮。
+///
+/// `noteSource` **由写入门决定**，不是字段：补丁里带了同名键会被丢弃，然后按
+/// `actor` 重写。理由和方向记录的 `lastTouchedBy` 一样 —— Agent 能自称「这是我
+/// 猜的」没问题，但它不该能自称「这是用户说的」。
+///
+/// 「值真的变了才改作者」这一条同样照搬方向的门控写法：把整条记录读出来、
+/// 只改 `brief` 再写回去，是常见写法，那种写回里会带着用户已经写好的 `note`。
+/// 原样回填不该把用户写的描述记成 Agent 的推测。
+fn upsert_material(
+    state: &mut OpsState,
+    patch: serde_json::Map<String, serde_json::Value>,
+    actor: OpsActor,
+) -> Result<String, String> {
+    let id = patch_id(&patch);
+    let path = patch
+        .get("path")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+
+    let existing = match id.as_deref() {
+        Some(id) => state.materials.iter().find(|material| material.id == id),
+        None => path
+            .as_deref()
+            .and_then(|path| state.materials.iter().find(|material| material.path == path)),
+    };
+    let previous_note = existing.map(|old| old.note.clone()).unwrap_or_default();
+    let previous_source = existing.and_then(|old| old.note_source);
+
+    let mut material: OpsMaterial = merge_patch(existing, &patch)?;
+    if material.path.trim().is_empty() {
+        return Err("material requires a path".to_string());
+    }
+    if material.file_name.trim().is_empty() {
+        // 文件名从路径末段推。调用方（上传流程）手上只有路径，要求它自己
+        // 再算一遍是把它该做的事复制到第二个地方。
+        material.file_name = material
+            .path
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or_default()
+            .to_string();
+    }
+    if material.id.trim().is_empty() {
+        material.id = generate_id("material");
+    }
+
+    material.note_source = resolve_note_source(
+        &material.note,
+        &previous_note,
+        previous_source,
+        actor,
+    );
+
+    material.created_at = resolve_created_at(
+        existing.map(|old| old.created_at.as_str()),
+        &material.created_at,
+    );
+    material.updated_at = now_iso();
+    upsert_by_id(&mut state.materials, material, |m| m.id.as_str())
+}
+
 fn upsert_style(
     state: &mut OpsState,
     patch: serde_json::Map<String, serde_json::Value>,
@@ -1643,6 +1826,7 @@ pub fn delete_item(
             OpsItemKind::Benchmark => {
                 remove_by_id(&mut state.benchmarks, id, |b| b.id.as_str())
             }
+            OpsItemKind::Material => remove_by_id(&mut state.materials, id, |m| m.id.as_str()),
             OpsItemKind::Style => {
                 let matched = state.style.as_ref().map(|s| s.id == id).unwrap_or(false);
                 if matched {
@@ -1798,6 +1982,8 @@ mod tests {
             platform_work_id: None,
             progress: 0,
             downgrade_note: None,
+            note: String::new(),
+            note_source: None,
             created_at: "2026-11-01T09:00:00".to_string(),
             updated_at: "2026-11-01T09:00:00".to_string(),
         }
@@ -3350,6 +3536,154 @@ mod tests {
             Some("2026-11-12T09:30:00.000Z"),
             "只改置信度不该动采样时刻"
         );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    fn material_patch(fields: serde_json::Value) -> OpsUpsert {
+        OpsUpsert {
+            kind: OpsItemKind::Material,
+            fields: fields.as_object().cloned().expect("object"),
+        }
+    }
+
+    /// 同一个路径重复登记只合并成一条：上传流程按文件建记录，人再点一次不
+    /// 该在台账里出现两条指向同一张图的记录。
+    #[test]
+    fn material_upsert_merges_the_same_path() {
+        let ws = make_test_workspace("ops-material-key");
+        let (state, first) = upsert_item(
+            &ws,
+            material_patch(serde_json::json!({
+                "path": "ops/materials/1.jpg",
+                "note": "折叠桌正面",
+            })),
+        )
+        .expect("first");
+        assert!(first.starts_with("material-"), "id 应当带类型前缀: {}", first);
+        assert_eq!(state.materials[0].file_name, "1.jpg", "文件名从路径末段推");
+
+        let (state, second) = upsert_item(
+            &ws,
+            material_patch(serde_json::json!({
+                "path": "ops/materials/1.jpg",
+                "note": "折叠桌正面，主图用这张",
+            })),
+        )
+        .expect("second");
+
+        assert_eq!(first, second, "同一个路径必须复用同一条物料");
+        assert_eq!(state.materials.len(), 1);
+        assert_eq!(state.materials[0].note, "折叠桌正面，主图用这张");
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn material_without_path_is_rejected() {
+        let ws = make_test_workspace("ops-material-no-path");
+        let err = upsert_item(&ws, material_patch(serde_json::json!({ "note": "随便什么" })))
+            .expect_err("must reject");
+        assert!(err.contains("path"), "错误要说清缺什么: {}", err);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 描述的作者由**写入门**决定，不由载荷自称。
+    ///
+    /// 这条不变量撑起整个分层：Agent 扫出来的描述必须留在 `agent` 档，否则
+    /// 下一轮它读不出哪些是自己猜的，会拿推测当事实写脚本。
+    #[test]
+    fn material_note_source_follows_the_write_door() {
+        let ws = make_test_workspace("ops-material-note-source");
+
+        // 人写 → user。
+        let (state, id) = upsert_item_by(
+            &ws,
+            material_patch(serde_json::json!({ "path": "ops/materials/a.jpg", "note": "产品图" })),
+            OpsActor::User,
+        )
+        .expect("user write");
+        assert_eq!(state.materials[0].note_source, Some(OpsActor::User));
+
+        // Agent 原样重传同一个描述 → 作者不变（那不算它改的）。
+        let (state, _) = upsert_item_by(
+            &ws,
+            material_patch(serde_json::json!({ "id": id, "note": "产品图" })),
+            OpsActor::Agent,
+        )
+        .expect("agent no-op");
+        assert_eq!(
+            state.materials[0].note_source,
+            Some(OpsActor::User),
+            "没改内容不该抢走作者"
+        );
+
+        // Agent 改写 → 降级成 agent。最后一次写的是它。
+        let (state, _) = upsert_item_by(
+            &ws,
+            material_patch(serde_json::json!({ "id": id, "note": "大概是产品图" })),
+            OpsActor::Agent,
+        )
+        .expect("agent rewrite");
+        assert_eq!(state.materials[0].note_source, Some(OpsActor::Agent));
+
+        // 人再改写 → 升回 user。
+        let (state, _) = upsert_item_by(
+            &ws,
+            material_patch(serde_json::json!({ "id": id, "note": "折叠桌正面产品图" })),
+            OpsActor::User,
+        )
+        .expect("user rewrite");
+        assert_eq!(state.materials[0].note_source, Some(OpsActor::User));
+
+        // 清空描述 → 没有作者。空描述是「没人说过」，不是「Agent 说过空话」。
+        let (state, _) = upsert_item_by(
+            &ws,
+            material_patch(serde_json::json!({ "id": id, "note": "" })),
+            OpsActor::Agent,
+        )
+        .expect("clear");
+        assert_eq!(state.materials[0].note_source, None);
+
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// 物料没有状态机：传状态字段不该写进去，也不该报错（老调用方还在传）。
+    #[test]
+    fn material_has_no_status() {
+        let ws = make_test_workspace("ops-material-no-status");
+        let (state, _) = upsert_item(
+            &ws,
+            material_patch(serde_json::json!({
+                "path": "ops/materials/a.jpg",
+                "status": "ready",
+            })),
+        )
+        .expect("upsert");
+        let raw = serde_json::to_value(&state.materials[0]).expect("serialize");
+        assert!(
+            raw.get("status").is_none(),
+            "物料不该有 status 字段: {}",
+            raw
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn duplicate_material_path_in_state_file_is_rejected() {
+        let ws = make_test_workspace("ops-material-dup");
+        let ops_dir = ws.join("ops");
+        fs::create_dir_all(&ops_dir).expect("mkdir");
+        let raw = serde_json::json!({
+            "version": OPS_STATE_VERSION,
+            "materials": [
+                { "id": "m1", "path": "ops/materials/a.jpg" },
+                { "id": "m2", "path": "ops/materials/a.jpg" },
+            ],
+        })
+        .to_string();
+        fs::write(ops_dir.join("state.json"), raw).expect("write");
+
+        let err = read_state(&ws).expect_err("must reject");
+        assert!(err.contains("Duplicate material"), "错误要说清是重复: {}", err);
         let _ = fs::remove_dir_all(&ws);
     }
 

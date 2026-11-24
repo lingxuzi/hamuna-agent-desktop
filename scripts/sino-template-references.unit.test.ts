@@ -10,8 +10,12 @@ import { describe, expect, it } from 'vitest';
 //
 // 这条测试盯的就是那行出处。
 //
-// 只能盯「有出处行 + 出处指向 Easel」：**「源文件还在不在」这一半在这儿断不了** ——
-// Easel 不在本仓库里，本地 CI 看不见它。源文件的存在性靠人同步时确认。
+// 只能盯「有出处行 + 出处指向一个已登记的上游」：**「源文件还在不在」这一半在这儿断不了** ——
+// Easel / Beav 都不在本仓库里，本地 CI 看不见它们。源文件的存在性靠人同步时确认。
+//
+// 上游目前有两个：Easel（运营方法论的大头）和 Beav（内容制作 / 蹭热点：封面与分镜导演、
+// 候选批产与排序）。**新增第三个上游时，要么在这里登记，要么别搬** —— 出处行写了个
+// 没人认识的名字，半年后同样不知道跟谁同步。
 
 const SKILLS_ROOT = join(process.cwd(), 'agent-templates/sino/.claude/skills');
 
@@ -53,11 +57,11 @@ describe('sino 方法论文件的出处', () => {
     expect(missing).toEqual([]);
   });
 
-  it('出处指向 Easel —— 搬的是哪本经，得写在脸上', () => {
+  it('出处指向已登记的上游（Easel / Beav）—— 搬的是哪本经，得写在脸上', () => {
     for (const file of referenceFiles()) {
       const line = provenanceLine(file);
       expect(line, file).not.toBeNull();
-      expect(line, file).toContain('Easel');
+      expect(line, file).toMatch(/Easel|Beav/);
     }
   });
 
@@ -66,8 +70,10 @@ describe('sino 方法论文件的出处', () => {
     const files = referenceFiles();
     for (const expected of [
       'ops-benchmark-analysis/references/viral-patterns.md',
-      'ops-topic/references/hot-riding.md',
-      'ops-topic/references/hotlist-sources.md',
+      'ops-signal/references/hot-riding.md',
+      'ops-signal/references/hotlist-sources.md',
+      'ops-topic/references/candidate-batch.md',
+      'ops-produce/references/visual-director.md',
     ]) {
       expect(files.some((file) => file.endsWith(expected)), expected).toBe(true);
     }
@@ -106,7 +112,7 @@ describe('sino 方法论文件的出处', () => {
     // 端点说明，自己编了一个 `newsnow.busiyi.com`（真名是 `.world`），白跑 8 分钟。
     // 消歧只靠这一处：域名写错、UA 要求被删，都会让下一次无人值守跑空。
     const body = readFileSync(
-      join(SKILLS_ROOT, 'ops-topic/references/hotlist-sources.md'),
+      join(SKILLS_ROOT, 'ops-signal/references/hotlist-sources.md'),
       'utf8',
     );
     expect(body).toContain('https://newsnow.busiyi.world/api/s?id=');
@@ -145,6 +151,42 @@ describe('sino 方法论文件的出处', () => {
     const heartbeat = readFileSync(join(root, 'HEARTBEAT.md'), 'utf8');
     expect(heartbeat).toMatch(/hamuna browser list/);
     expect(heartbeat).toMatch(/没有面板.{0,20}不发布/);
+  });
+
+  it('视觉导演守住 sino 的两条硬约束 —— 不推画幅、不锁模型', () => {
+    // 从 Beav 搬封面/分镜方法论时，最容易连它的实现假设一起搬：
+    // (1) 按平台给默认画幅（小红书 3:4 / 抖音 9:16）。sino 的画幅**只有** formAspect 一个来源，
+    //     从平台推等于猜错一次就废掉一笔钱。
+    // (2) 把视频路由写死到具体模型。sino 只允许用用户已启用的工具。
+    // 这两条被写反，产物会「看起来能跑」，但绕过了 form 授权和工具门。
+    const body = readFileSync(
+      join(SKILLS_ROOT, 'ops-produce/references/visual-director.md'),
+      'utf8',
+    );
+    expect(body).toMatch(/画幅[^\n]*只认 `formAspect`/);
+    expect(body).toMatch(/不给任何平台默认值/);
+    expect(body).toMatch(/不锁模型|只用用户已启用的工具/);
+  });
+
+  it('视频仍然有一道「先看拼图再花钱」的门', () => {
+    // Beav 的 video-director 把「出分镜拼图」放在付费生成之前。删掉这道门，
+    // 就会变成「先花一整条视频的钱，再发现构图不对」。
+    const body = readFileSync(join(SKILLS_ROOT, 'ops-produce/SKILL.md'), 'utf8');
+    expect(body).toMatch(/预览硬门/);
+    expect(body).toMatch(/分镜拼图/);
+    expect(body).toMatch(/15 秒/);
+  });
+
+  it('候选批产的排序不把榜位冒充播放量', () => {
+    // Beav 的综合分是「热度 60% + 关联度 40%」，它的热度来自有热度数值的数据源。
+    // sino 的热榜只给标题和榜位，--hotness 的口径是参考内容的播放量。
+    // 一旦有人把榜位换算成数填进 --hotness，复盘口径就被灌了假数，且看不出来。
+    const body = readFileSync(
+      join(SKILLS_ROOT, 'ops-topic/references/candidate-batch.md'),
+      'utf8',
+    );
+    expect(body).toMatch(/不许填进 `--hotness`/);
+    expect(body).toMatch(/别人作品的评论区/);
   });
 
   it('SKILL.md 里提到的 references 都真的存在', () => {

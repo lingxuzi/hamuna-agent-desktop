@@ -1533,6 +1533,23 @@
         "archived": "Archived"
       }
     },
+    "material": {
+      "open": "Materials",
+      "back": "Back to materials",
+      "title": "Materials",
+      "hint": "Raw files under ops/materials. Say what each one is, so the agent picks the right one",
+      "loading": "Reading materials…",
+      "upload": "Upload",
+      "uploading": "Uploading",
+      "refresh": "Refresh",
+      "empty": "No materials yet. Hit Upload to add product shots, footage or references.",
+      "copyFailed": "{{reason}} ({{count}} files didn't make it)",
+      "truncated": "Lots of files — showing the first 1000 only",
+      "notePh": "What is this? e.g. front shot of the folding table",
+      "noteLabel": "Describe {{name}}",
+      "noteAgent": "Agent guess",
+      "noteSaved": "Note saved"
+    },
     "code": {
       "open": "Terminal code",
       "title": "Terminal code",
@@ -1599,7 +1616,7 @@
       "hint": {
         "login": "Only you can sign in. Sign in per platform; the session stays in this workspace.",
         "direction": "One sentence per platform: what you want people to remember this account for.",
-        "material": "Drop in your promo assets: images, video, product notes. They get filed by batch."
+        "material": "Drop your material here: images, video, product notes. They go into ops/materials and get picked by their note."
       },
       "direction": {
         "saved": "Direction saved",
@@ -1608,19 +1625,18 @@
         "placeholder": "People should remember us as the people who know camping gear, mostly night camping"
       },
       "material": {
-        "batch": "Batch name",
         "brief": "Product notes",
         "briefPlaceholder": "Product name, what you want the viewer to do, selling points, banned words, platforms",
         "choose": "Choose files",
         "none": "No files chosen yet",
         "chosen": "{{n}} files chosen",
-        "deliver": "Send to inbox",
-        "delivered": "Materials sent to the inbox",
-        "copyFailed": "Some files did not make it in: {{reason}}"
+        "deliver": "Add to materials",
+        "delivered": "Materials saved",
+        "copyFailed": "Some files didn't make it: {{reason}}"
       },
       "dispatch": {
         "afterMaterial": "Cold start is done — the rest is yours.\n\nDirection notes:\n{{briefs}}\n{{material}}\nWork through this in order:\n1. Read `.claude/rules/03-USER.md` first. A few entries there are only I can know — tone, words to never use, format requirements, how many posts a week, when to post — so ask me about them one by one. Once I answer, write each answer back on the matching `- **…:**` line and leave everything else alone.\n2. Following ops-direction, split the notes above into its five fields and write them back to the ledger.\n3. Following ops-benchmark, find 2–3 accounts with a similar direction but a bigger reach.\n4. Following ops-topic, propose a first round of topics.\n5. Produce the assets with ops-produce and schedule them with ops-schedule. **Do not publish** — publishing waits for my authorization.",
-        "material": "Materials were sent to {{dir}} — file them following ops-intake."
+        "material": "Materials are in {{dir}}. Run ops-intake: register each file and say what it is."
       }
     }
   }
