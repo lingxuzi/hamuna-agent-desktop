@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "collector-board",
+  "description": "The collector board's own webview: it lists hidden collectors and asks Rust to move one into its slot. Scoped to the webview label, not the window label — a collector re-parented into this window stays `browser-*` and must not inherit these permissions.",
+  "webviews": [
+    "collector-board"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

@@ -1044,5 +1044,14 @@
     "uninstallSuccess": "Uninstalled {{appId}}",
     "uninstallConfirmTitle": "Uninstall MiniApp?",
     "uninstallConfirmMessage": "Uninstall \"{{name}}\"? Its files and saved data are deleted and cannot be recovered."
+  },
+  "collectorBoard": {
+    "title": "Collectors",
+    "collapse": "Collapse",
+    "emptyList": "No background collection running yet. One appears here when a scheduled task needs to read a ranking.",
+    "emptyStage": "Pick a session on the left to see its page",
+    "unnamed": "Untitled",
+    "loading": "Loading",
+    "pickHint": "Pick a session on the left to see its page"
   }
 }

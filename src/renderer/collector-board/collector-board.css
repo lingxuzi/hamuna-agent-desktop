@@ -1,0 +1,148 @@
+/* 采集器面板左侧列 + 顶栏。
+ * 几何值必须与 src-tauri/src/collector_board.rs 的 LIST_COLUMN_W / HEADER_H
+ * 逐像素一致：右下角那块空盒不是容器，只是给原生采集器 webview 让出的位置，
+ * 两边差一像素就是一条白缝或一次裁剪。 */
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+.cb-root {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 268px 1fr;
+  grid-template-rows: 44px 1fr;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* 顶栏横跨两列：左边是列表标题，右边是唯一的收起入口。 */
+.cb-header {
+  grid-column: 1 / 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.cb-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.cb-collapse {
+  margin-left: auto;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--theme-radius-sm);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cb-collapse:hover {
+  background: var(--hover-bg);
+  color: var(--ink);
+}
+
+.cb-collapse:focus-visible {
+  outline: 1px solid var(--focus-border);
+  outline-offset: 1px;
+}
+
+/* ── 左列 ── */
+
+.cb-list {
+  grid-column: 1;
+  grid-row: 2;
+  overflow-y: auto;
+  border-right: 1px solid var(--line-subtle);
+  padding: 6px;
+}
+
+.cb-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 56px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--theme-radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.cb-row:hover {
+  background: var(--hover-bg);
+}
+
+.cb-row:focus-visible {
+  outline: 1px solid var(--focus-border);
+  outline-offset: -1px;
+}
+
+/* 激活态 = 这个页面正在右边显示。用 accent 实底 + on-accent 文字，
+ * 不用深浅相近的两种灰——窗口失焦时用户仍需一眼看出当前是哪个。 */
+.cb-row[data-active='true'],
+.cb-row[data-active='true']:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.cb-row-name,
+.cb-row-url {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cb-row-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: inherit;
+}
+
+.cb-row-url {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.cb-row[data-active='true'] .cb-row-url {
+  color: var(--on-accent);
+  opacity: 0.78;
+}
+
+/* ── 右侧：原生 webview 覆盖区 ── */
+
+.cb-stage {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.cb-empty {
+  padding: 0 8px;
+  font-size: var(--text-xs);
+  color: var(--ink-subtle);
+  line-height: 1.6;
+}

@@ -655,9 +655,11 @@ export const PRESET_TEMPLATES: WorkspaceTemplate[] = [
       enabled: true,
       heartbeat: {
         enabled: true,
-        // 60 分钟：热点有半衰期（爆发期 0-4 小时），4 小时一轮的间隔
-        // 扫到的热点必然已经过了能抢的窗口。Mino 保持 240 —— 通用助理
-        // 没有「扫热榜」这步，醒得勤只是噪声。
+        // 60 分钟：心跳是「巡栏」，负责到点发布提醒、漏发、待复盘这类短周期
+        // 检查；扫热榜已搬到独立定时任务（热点半衰期 0-4 小时，由任务自己的
+        // cron 决定频率），所以这里不必为了抢热点再压低。抬到 240 会让「到点
+        // 了」这件事最长晚 4 小时才被看见。Mino 保持 240 —— 通用助理没有发布
+        // 窗口要盯，醒得勤只是噪声。
         intervalMinutes: 60,
         ackMaxChars: 300,
         activeHours: {

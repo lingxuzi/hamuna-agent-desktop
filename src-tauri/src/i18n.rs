@@ -153,6 +153,7 @@ pub fn t<'a>(key: &'a str, locale: SupportedLocale) -> &'a str {
         (SupportedLocale::ZhCn, "tray.open") => "打开 HamunaAgent",
         (SupportedLocale::ZhCn, "tray.settings") => "设置",
         (SupportedLocale::ZhCn, "tray.forceWakeLock") => "阻止电脑睡眠",
+        (SupportedLocale::ZhCn, "tray.collectorBoard") => "采集器",
         (SupportedLocale::ZhCn, "tray.exit") => "退出",
         (SupportedLocale::ZhCn, "notification.sessionCompleteTitle") => "HamunaAgent - 任务完成",
         (SupportedLocale::ZhCn, "notification.sessionCompleteBody") => "请您查看结果",
@@ -163,6 +164,7 @@ pub fn t<'a>(key: &'a str, locale: SupportedLocale) -> &'a str {
         (SupportedLocale::EnUs, "tray.open") => "Open HamunaAgent",
         (SupportedLocale::EnUs, "tray.settings") => "Settings",
         (SupportedLocale::EnUs, "tray.forceWakeLock") => "Prevent computer sleep",
+        (SupportedLocale::EnUs, "tray.collectorBoard") => "Collector board",
         (SupportedLocale::EnUs, "tray.exit") => "Quit",
         (SupportedLocale::EnUs, "notification.sessionCompleteTitle") => {
             "HamunaAgent - Task complete"

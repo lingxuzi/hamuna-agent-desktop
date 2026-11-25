@@ -155,6 +155,24 @@ if (tauriWindowLabel === 'fb-ball') {
       </FloatingThemeRuntime>
     </AppErrorBoundary>
   );
+} else if (tauriWindowLabel === 'collector-board') {
+  setRendererLogLabel('collector-board');
+  bootstrapFloatingWindowLogSink('collector-board');
+  // Lazy like the fb windows: the board is a thin list and must not pull in
+  // the chat tree. It does need the theme runtime (it draws real chrome) and
+  // the i18n bootstrap (its strings are user-facing).
+  const CollectorBoard = React.lazy(() => import('./collector-board/CollectorBoard'));
+  root.render(
+    <AppErrorBoundary>
+      <FloatingThemeRuntime>
+        <FloatingI18nBootstrap>
+          <React.Suspense fallback={null}>
+            <CollectorBoard />
+          </React.Suspense>
+        </FloatingI18nBootstrap>
+      </FloatingThemeRuntime>
+    </AppErrorBoundary>
+  );
 } else {
   const App = React.lazy(() => import('./App'));
   // Note: React.StrictMode removed to prevent double-rendering of SSE effects in development

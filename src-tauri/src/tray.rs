@@ -18,6 +18,7 @@ use crate::{ulog_debug, ulog_error, ulog_info, ulog_warn};
 const MENU_OPEN: &str = "open";
 const MENU_SETTINGS: &str = "settings";
 const MENU_FORCE_WAKE_LOCK: &str = "force_wake_lock";
+const MENU_COLLECTOR_BOARD: &str = "collector_board";
 const MENU_EXIT: &str = "exit";
 
 /// Tray-menu items whose check state we need to mutate at runtime
@@ -62,12 +63,21 @@ pub fn setup_tray(app: &tauri::App<Wry>) -> Result<(), Box<dyn std::error::Error
     )
     .checked(initial_force_wl)
     .build(app)?;
+    // Collector board: the only way to reach a hidden collector when no chat
+    // panel is open. It lives in the tray rather than the main window because a
+    // board with nothing in it would otherwise be permanent dead UI.
+    let collector_board_item = MenuItemBuilder::with_id(
+        MENU_COLLECTOR_BOARD,
+        crate::i18n::t("tray.collectorBoard", locale),
+    )
+    .build(app)?;
     let exit_item =
         MenuItemBuilder::with_id(MENU_EXIT, crate::i18n::t("tray.exit", locale)).build(app)?;
 
     let menu = MenuBuilder::new(app)
         .item(&open_item)
         .item(&settings_item)
+        .item(&collector_board_item)
         .separator()
         .item(&force_wake_lock_item)
         .separator()
@@ -112,6 +122,19 @@ pub fn setup_tray(app: &tauri::App<Wry>) -> Result<(), Box<dyn std::error::Error
                     // Emit event to navigate to settings
                     if let Err(e) = app.emit("tray:open-settings", ()) {
                         ulog_error!("[Tray] Failed to emit settings event: {}", e);
+                    }
+                }
+                MENU_COLLECTOR_BOARD => {
+                    ulog_info!("[Tray] Collector board menu clicked");
+                    // Runs off the menu-event thread: `toggle` may create a
+                    // window and re-parent a webview, both of which need the
+                    // main thread and must not block the event dispatch.
+                    if let Some(manager) = crate::browser::get_browser_manager() {
+                        let manager = manager.clone();
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            crate::collector_board::toggle(&app, &manager).await;
+                        });
                     }
                 }
                 MENU_FORCE_WAKE_LOCK => {

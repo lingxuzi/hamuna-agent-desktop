@@ -283,6 +283,12 @@ pub fn parse_agent_url(url: &str) -> Result<Url, String> {
 /// "open in new tab" loop eat the machine.
 pub const MAX_BROWSER_TABS: usize = 3;
 
+/// Label of the app's main window.
+///
+/// Webviews name their host window, and this string appears in more than one
+/// place that must agree (creation, `lib.rs` window build, capabilities).
+pub const MAIN_WINDOW_LABEL: &str = "main";
+
 /// How many webviews a hidden collector may hold.
 ///
 /// One, and the reason is not resource thrift: two hidden browsers on the same
@@ -335,21 +341,53 @@ pub struct BrowserSession {
     /// Whether the owner's panel is on screen.
     ///
     /// Native visibility is *derived*, never stored per tab: a tab is visible
-    /// iff `panel_visible && selected`. One rule, one place (`apply_visibility`),
-    /// so "which webview is on screen" can never disagree with "which tab the
-    /// agent is driving".
+    /// iff `selected` and its owner says "on screen" (see `apply_visibility`).
+    /// One rule, one place, so "which webview is on screen" can never disagree
+    /// with "which tab the agent is driving".
+    ///
+    /// Meaningless for a collector — it has no panel. `board_visible` carries
+    /// the same question for that kind.
     panel_visible: bool,
+    /// Whether the collector board is currently showing this tab.
+    ///
+    /// The board is the only way a hidden collector can ever be seen: the user
+    /// opens it, picks a workspace, and the webview moves into that window.
+    /// Kept separate from `panel_visible` rather than reusing it because the
+    /// two answer the same question for *different* kinds of tab — merging them
+    /// would let one flag set for the wrong reason put a collector's page on
+    /// screen in the chat panel.
+    board_visible: bool,
     /// Created by Rust for an agent that has no browser panel (cron / task
     /// sessions, or a Chat whose window is hidden).
     ///
     /// Not a cosmetic flag — it decides three behaviours that must not be
     /// confused with a panel tab's:
-    /// - never shown by `apply_visibility` (there is no panel to show it in);
+    /// - its own visibility rule in `apply_visibility` (a collector is shown
+    ///   only through the board, never through the chat panel);
     /// - excluded from `MAX_BROWSER_TABS` (a collector is one per session and
     ///   must not eat a slot the user's panel needs);
     /// - reaped when the owning session goes away, instead of waiting for a
     ///   `close_owner` call from a renderer panel that never existed.
     headless: bool,
+    /// The workspace this tab was opened for, verbatim.
+    ///
+    /// Only the board displays it (the left column's name), so it is not
+    /// derived from `profile_key`: that is a hex digest, which would force the
+    /// board to keep a reverse map that goes stale the moment a workspace is
+    /// renamed or deleted.
+    workspace: Option<String>,
+    /// Label of the native window this webview currently hangs under.
+    ///
+    /// A child webview is always owned by exactly one window, and moving it
+    /// means a native re-parent — it cannot be "positioned over" another
+    /// window. A collector is born in `main` at an off-screen offset; when the
+    /// user takes it over it moves into the floating collector window, and
+    /// when that window closes it moves back. Keeping the label on the session
+    /// means every later geometry/visibility call pushes to the window the
+    /// webview is actually in, instead of assuming `main` — the assumption
+    /// that made `apply_geometry` a no-op (or a silent mis-position) for any
+    /// webview that had been moved.
+    host_label: String,
     /// Cache last-known position/size for show-after-hide restoration.
     last_x: f64,
     last_y: f64,
@@ -376,6 +414,28 @@ impl BrowserSession {
     /// Whether this tab is a hidden collector rather than a panel tab.
     pub fn is_headless(&self) -> bool {
         self.headless
+    }
+
+    /// Whether the collector board is currently showing this tab.
+    pub fn is_board_visible(&self) -> bool {
+        self.board_visible
+    }
+
+    /// The Chat session this tab answers to, if it was bound to one.
+    pub fn session_id(&self) -> Option<&str> {
+        self.session_id.as_deref()
+    }
+
+    /// The workspace this tab was opened for, when its creator supplied one.
+    pub fn workspace(&self) -> Option<&str> {
+        self.workspace.as_deref()
+    }
+
+    /// `selected` alone does not say whether the page is on screen — a tab is
+    /// frontmost *within its owner*, and the owner may have no open surface.
+    /// The board and the panel both need this to decide what to draw.
+    pub fn is_on_screen(&self) -> bool {
+        self.selected && if self.headless { self.board_visible } else { self.panel_visible }
     }
 }
 
@@ -494,12 +554,18 @@ impl BrowserManager {
     /// Returns `(browser tab id, session id)`. Only collectors qualify: a panel
     /// tab's lifetime is the user's business, and closing one would make the
     /// panel disappear under their hands.
+    ///
+    /// A collector the user is currently watching on the board is never stale,
+    /// regardless of the agent's traffic: the idle rule exists to stop a
+    /// forgotten background webview from living forever, and "the user has it
+    /// on screen" is the exact opposite of forgotten. Their manual login would
+    /// otherwise be destroyed mid-typing by a timer they cannot see.
     pub async fn stale_collectors(&self, now_ms: u64) -> Vec<(String, String)> {
         let candidates: Vec<(String, String)> = {
             let sessions = self.sessions.lock().await;
             sessions
                 .iter()
-                .filter(|(_, session)| session.headless)
+                .filter(|(_, session)| session.headless && !session.board_visible)
                 .filter_map(|(id, session)| Some((id.clone(), session.session_id.clone()?)))
                 .collect()
         };
@@ -522,17 +588,23 @@ impl BrowserManager {
     /// left registered the other would be a phantom tab the agent keeps
     /// addressing.
     pub async fn close_tab(&self, app: &AppHandle, browser_tab_id: &str) -> Option<String> {
-        let (owner_tab_id, was_selected, label) = {
+        let (owner_tab_id, was_selected, label, was_headless) = {
             let mut sessions = self.sessions.lock().await;
             let session = sessions.remove(browser_tab_id)?;
             (
                 session.owner_tab_id.clone(),
                 session.selected,
                 session.webview_label.clone(),
+                session.headless,
             )
         };
         if let Some(webview) = app.get_webview(&label) {
             let _ = webview.close();
+        }
+        // A closed collector may be one the board is listing (or showing). Its
+        // row has to disappear even though no panel exists to notify.
+        if was_headless {
+            let _ = app.emit("collector-board:changed", ());
         }
         self.forget_url(browser_tab_id);
         if let Ok(mut stamps) = self.last_used.lock() {
@@ -642,6 +714,67 @@ impl BrowserManager {
             .values()
             .find(|session| session.session_id.as_deref() == Some(session_id))
             .map(|session| session.owner_tab_id.clone())
+    }
+
+    /// Every collector, newest first.
+    ///
+    /// The board's list order: the most recent read is the one a user is most
+    /// likely to want to look at (and the one an agent is most likely still
+    /// blocked on).
+    pub async fn all_collectors(&self) -> Vec<(String, BrowserSession)> {
+        let sessions = self.sessions.lock().await;
+        let mut tabs: Vec<(String, BrowserSession)> = sessions
+            .iter()
+            .filter(|(_, session)| session.headless)
+            .map(|(id, session)| (id.clone(), session.clone()))
+            .collect();
+        tabs.sort_by_key(|(_, session)| std::cmp::Reverse(session.created_at));
+        tabs
+    }
+
+    /// One browser tab by id, hidden collector or panel tab.
+    pub async fn collector_by_id(&self, browser_tab_id: &str) -> Option<BrowserSession> {
+        let sessions = self.sessions.lock().await;
+        sessions.get(browser_tab_id).cloned()
+    }
+
+    /// The collector currently in the board's slot, if any.
+    ///
+    /// At most one — the board has one slot, so two `board_visible` collectors
+    /// is a bug in the caller, not a state to represent.
+    pub async fn board_collector(&self) -> Option<(String, BrowserSession)> {
+        let sessions = self.sessions.lock().await;
+        sessions
+            .iter()
+            .find(|(_, session)| session.headless && session.board_visible)
+            .map(|(id, session)| (id.clone(), session.clone()))
+    }
+
+    /// Move a collector's host/visibility/geometry bookkeeping to a new home.
+    ///
+    /// Called by the board *after* the native re-parent succeeded: the registry
+    /// must describe where the webview actually is, and the only safe order is
+    /// "move the view, then record the move".
+    pub async fn mark_moved_to_board(
+        &self,
+        browser_tab_id: &str,
+        showing: bool,
+        host_label: &str,
+        geometry: Option<(f64, f64, f64, f64)>,
+    ) -> bool {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.get_mut(browser_tab_id) else {
+            return false;
+        };
+        session.board_visible = showing;
+        session.host_label = host_label.to_string();
+        if let Some((x, y, w, h)) = geometry {
+            session.last_x = x;
+            session.last_y = y;
+            session.last_width = w;
+            session.last_height = h;
+        }
+        true
     }
 
     /// Every tab of one owner, oldest first.
@@ -807,7 +940,7 @@ impl BrowserManager {
 // MAX(overlay area, natural size) so it is never clipped, and the overlay's
 // minimum size stays that of its main child.
 #[cfg(target_os = "linux")]
-mod linux_layout {
+pub(crate) mod linux_layout {
     use gtk::prelude::*;
 
     use super::device_px;
@@ -1377,7 +1510,7 @@ pub async fn create_browser_webview(
 
     // Get the Window (not WebviewWindow) to add a child webview
     let window = app
-        .get_window("main")
+        .get_window(MAIN_WINDOW_LABEL)
         .ok_or_else(|| "Main window not found".to_string())?;
 
     let position = LogicalPosition::new(x, y);
@@ -1397,7 +1530,7 @@ pub async fn create_browser_webview(
     {
         let win = window.clone();
         let main_webview = app
-            .get_webview("main")
+            .get_webview(MAIN_WINDOW_LABEL)
             .ok_or_else(|| "Main webview not found".to_string())?;
         on_main_thread(&window, move || {
             let child = win
@@ -1443,10 +1576,13 @@ pub async fn create_browser_webview(
                 selected: true,
                 // A panel tab is created by the renderer only while the panel
                 // is on screen, so its owner is visible from the start. A
-                // collector has no panel at all: it is hidden for its whole
-                // life, and `apply_visibility` keeps it that way.
+                // collector starts on neither surface: the board picks it up
+                // when the user opens that window.
                 panel_visible: !headless,
+                board_visible: false,
                 headless,
+                workspace: workspace.clone(),
+                host_label: MAIN_WINDOW_LABEL.to_string(),
                 last_x: x,
                 last_y: y,
                 last_width: width,
@@ -1484,6 +1620,11 @@ pub async fn create_browser_webview(
 
 /// Push (x, y, width, height) onto a native webview.
 ///
+/// `host_label` is the window the webview is *currently* parented to, not
+/// necessarily `main`: a webview that was re-parented into the collector
+/// window must be positioned in that window's coordinate space. See
+/// `BrowserSession::host_label`.
+///
 /// Linux has no working `set_position`/`set_size`: wry only applies them
 /// when the webview's parent is a `GtkFixed` at creation time, and Tauri
 /// builds child webviews into the window's `GtkBox`. The webview lives in
@@ -1491,6 +1632,7 @@ pub async fn create_browser_webview(
 #[cfg(target_os = "linux")]
 fn apply_geometry(
     app: &AppHandle,
+    host_label: &str,
     webview: &tauri::Webview,
     x: f64,
     y: f64,
@@ -1498,8 +1640,8 @@ fn apply_geometry(
     height: f64,
 ) -> Result<(), String> {
     let window = app
-        .get_window("main")
-        .ok_or_else(|| "Main window not found".to_string())?;
+        .get_window(host_label)
+        .ok_or_else(|| format!("Host window '{host_label}' not found"))?;
     linux_layout::move_to(&window, webview, x, y, width, height).map_err(|e| {
         ulog_warn!(
             "[browser] move_to({}, {}) {}x{} failed: {}",
@@ -1516,6 +1658,7 @@ fn apply_geometry(
 #[cfg(not(target_os = "linux"))]
 fn apply_geometry(
     _app: &AppHandle,
+    _host_label: &str,
     webview: &tauri::Webview,
     x: f64,
     y: f64,
@@ -1538,26 +1681,37 @@ fn apply_geometry(
 
 /// Enforce the native-visibility invariant for one owner.
 ///
-/// The selected tab is on screen iff the owner's panel is on screen; every
+/// The selected tab is on screen iff the surface that can show it is open:
+/// the chat panel for a panel tab, the collector board for a collector. Every
 /// other tab of that owner is hidden. One rule, applied from one place, so
 /// "what the user sees" and "what the agent drives" can never drift apart.
+///
+/// The two kinds are switched on `headless` rather than OR-ing their flags:
+/// a tab is shown by exactly one surface, and letting "either flag is true"
+/// satisfy the condition is how a collector ends up rendering inside the chat
+/// panel (its `host_label` would still point at `main`).
 async fn apply_visibility(app: &AppHandle, state: &BrowserManager, owner_tab_id: &str) {
     let tabs = state.tabs_of_owner(owner_tab_id).await;
     for (browser_tab_id, session) in tabs {
+        // A collector the board is showing belongs to the board, not to the
+        // owner's selection: the agent creating a second tab in the same
+        // session flips `selected`, and honouring that here would hide the page
+        // the user is typing a login into. Only the board moves it.
+        if session.headless && session.board_visible {
+            continue;
+        }
+        // A collector the board does not hold is off-screen — no other surface
+        // can show it, so it must stay hidden.
+        let should_show = !session.headless && session.panel_visible && session.selected;
         let Some(webview) = app.get_webview(&session.webview_label) else {
             continue;
         };
-        // A collector has no panel. `panel_visible` is already false for it,
-        // but the `!headless` term makes "never on screen" a property of the
-        // tab's kind rather than of two flags happening to agree — `show`
-        // verbs exist and one future caller flipping `panel_visible` must not
-        // be able to pop a background collector into view.
-        let should_show = !session.headless && session.panel_visible && session.selected;
         if should_show {
             // SHOW restores the cached geometry — the reconciler keeps that
             // cache current even while the tab is hidden.
             if let Err(e) = apply_geometry(
                 app,
+                &session.host_label,
                 &webview,
                 session.last_x,
                 session.last_y,
@@ -2061,9 +2215,9 @@ pub async fn cmd_browser_resize(
     // Update cached position, then release the session lock before touching
     // the native webview — the Linux path waits on a main-thread round trip
     // and must not block the other browser commands behind it.
-    let selected_label = {
+    let selected = {
         let mut sessions = state.sessions.lock().await;
-        let mut selected_label: Option<String> = None;
+        let mut selected: Option<(String, String)> = None;
         let mut found = false;
         for session in sessions.values_mut() {
             if session.owner_tab_id != tab_id {
@@ -2075,16 +2229,16 @@ pub async fn cmd_browser_resize(
             session.last_width = width;
             session.last_height = height;
             if session.selected {
-                selected_label = Some(session.webview_label.clone());
+                selected = Some((session.webview_label.clone(), session.host_label.clone()));
             }
         }
         if !found {
             return Err(format!("No browser for tab {}", tab_id));
         }
-        selected_label
+        selected
     };
 
-    let Some(webview_label) = selected_label else {
+    let Some((webview_label, host_label)) = selected else {
         return Ok(());
     };
     let webview = app
@@ -2098,7 +2252,7 @@ pub async fn cmd_browser_resize(
     // #339 post-mortem). Returning Err makes the renderer clear its synced
     // marker and retry on the next frame. Errors are exceptional (webview
     // teardown races), so the log cannot spam.
-    apply_geometry(&app, &webview, x, y, width, height)?;
+    apply_geometry(&app, &host_label, &webview, x, y, width, height)?;
     Ok(())
 }
 
@@ -2199,6 +2353,54 @@ pub async fn cmd_browser_close_owner(
         state.forget_url(&id);
     }
     ulog_info!("[browser] Closed all tabs of owner {}", tab_id);
+    Ok(())
+}
+
+// ──────────────────────────────────────────────────────────
+// Collector board commands
+// ──────────────────────────────────────────────────────────
+//
+// The board's React tree cannot touch the collectors itself: they are native
+// webviews owned by this module. These four commands are the whole surface —
+// list, show one, collapse, close.
+
+/// The collectors the board can show, newest first.
+#[tauri::command]
+pub async fn cmd_collector_board_rows(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+) -> Result<Vec<crate::collector_board::BoardRow>, String> {
+    Ok(crate::collector_board::rows(&app, state.inner()).await)
+}
+
+/// Move one collector into the board and bring the board to the front.
+#[tauri::command]
+pub async fn cmd_collector_board_show(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+    browser_tab_id: String,
+) -> Result<(), String> {
+    crate::collector_board::show(&app, state.inner(), &browser_tab_id).await
+}
+
+/// Collapse the board (page stays, window hides). Toggling from the tray uses
+/// the same entry point so "collapse" has one meaning.
+#[tauri::command]
+pub async fn cmd_collector_board_toggle(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+) -> Result<(), String> {
+    crate::collector_board::toggle(&app, state.inner()).await;
+    Ok(())
+}
+
+/// Close the board: its collector returns to hidden and starts its idle clock.
+#[tauri::command]
+pub async fn cmd_collector_board_close(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<BrowserManager>>,
+) -> Result<(), String> {
+    crate::collector_board::close(&app, state.inner()).await;
     Ok(())
 }
 
@@ -2576,6 +2778,9 @@ mod tests {
             selected,
             panel_visible: true,
             headless: false,
+            board_visible: false,
+            host_label: super::MAIN_WINDOW_LABEL.to_string(),
+            workspace: None,
             last_x: 0.0,
             last_y: 0.0,
             last_width: 100.0,

@@ -8,6 +8,7 @@ pub mod browser_agent;
 pub mod browser_api;
 pub mod browser_profile;
 pub mod browser_throttle;
+pub mod collector_board;
 pub mod cli;
 pub mod clipboard;
 mod commands;
@@ -602,6 +603,10 @@ pub fn run() {
             browser::cmd_browser_hide,
             browser::cmd_browser_close_tab,
             browser::cmd_browser_close_owner,
+            browser::cmd_collector_board_rows,
+            browser::cmd_collector_board_show,
+            browser::cmd_collector_board_toggle,
+            browser::cmd_collector_board_close,
             browser::cmd_browser_query_visible,
             browser::cmd_browser_cookie_names,
             browser::cmd_browser_clear_login_cookies,
@@ -1366,12 +1371,35 @@ pub fn run() {
             match event {
                 // Handle window close request (X button) - minimize to tray instead
                 tauri::WindowEvent::CloseRequested { api, .. } => {
+                    if window.label() == collector_board::BOARD_LABEL {
+                        // The board's X means "I'm done with this collector",
+                        // not "hide the app": its page must go back to being a
+                        // hidden collector before the window dies, or the
+                        // webview is destroyed with the window and the agent's
+                        // session loses its browser mid-read.
+                        api.prevent_close();
+                        let app = window.app_handle().clone();
+                        if let Some(manager) = browser::get_browser_manager() {
+                            let manager = manager.clone();
+                            tauri::async_runtime::spawn(async move {
+                                collector_board::close(&app, &manager).await;
+                            });
+                        }
+                        return;
+                    }
                     // Check if minimize to tray is enabled
                     // Emit event to frontend to check config and decide
                     ulog_info!("[App] Window close requested, emitting event to frontend");
                     let _ = window.emit("window:close-requested", ());
                     // Prevent default close behavior - let frontend decide
                     api.prevent_close();
+                }
+                tauri::WindowEvent::Resized(_) => {
+                    if window.label() == collector_board::BOARD_LABEL {
+                        if let Some(manager) = browser::get_browser_manager() {
+                            collector_board::on_resized(&window.app_handle().clone(), manager);
+                        }
+                    }
                 }
                 tauri::WindowEvent::Focused(focused) => {
                     let label = window.label();

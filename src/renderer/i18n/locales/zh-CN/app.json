@@ -1044,5 +1044,14 @@
     "uninstallSuccess": "已卸载 {{appId}}",
     "uninstallConfirmTitle": "卸载小程序？",
     "uninstallConfirmMessage": "确认卸载「{{name}}」吗？小程序文件和它保存的数据都会被删除，无法恢复。"
+  },
+  "collectorBoard": {
+    "title": "采集器",
+    "collapse": "收起",
+    "emptyList": "还没有后台采集任务。定时任务需要读取榜单时会自动出现在这里。",
+    "emptyStage": "选择左侧任一会话查看它的采集页面",
+    "unnamed": "未命名",
+    "loading": "尚在加载",
+    "pickHint": "选择左侧任一会话查看它的采集页面"
   }
 }
