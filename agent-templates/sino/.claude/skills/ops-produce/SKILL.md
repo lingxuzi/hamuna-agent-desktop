@@ -9,6 +9,21 @@ description: >-
 
 # ops-produce — 素材
 
+## 素材 id 从哪来
+
+**素材记录由面板「开工」建好，id 就在派工消息里。** 不要自己 `hamuna ops add asset`
+再回头找 id —— 那会留下两条挂同一选题的素材，发布时不知道该发哪条。
+
+派工消息里没带 id（用户是口头让你做的、不是从面板点的开工）才自己建：
+
+```bash
+hamuna ops add asset --title "…" --platform douyin --topic-id topic-1a2b3c4d
+# 输出的第一行就是 id：`✓ asset asset-1a2b3c4d`
+```
+
+拿到 id 之后，**所有后续动作都只认它**：文件放 `ops/assets/<assetId>/`，
+台账走 `hamuna ops update asset <assetId>`。
+
 ## 开工前先读
 
 ```bash
@@ -170,7 +185,13 @@ hamuna ops update asset <id> --progress 60
 
 ```bash
 hamuna ops update asset <id> --status ready --progress 100
+hamuna ops update topic --id <topicId> --status produced
 ```
+
+**两条都要写。** 只写素材、不写选题，选题会永远停在 `planned` —— 主控每轮
+扫台账都会把「有 `planned` 选题」判成待办，同一条选题被反复派工，第二次派工
+还会新建一条素材盖在旧的上面。`produced` 是这条选题已经出过成品的信号，
+跟素材是否发出去无关（发布是另一条动作，看素材状态）。
 
 `ready` 是「可以发了」的信号——**不是「已经发了」**。发布是另一条动作。
 
@@ -187,6 +208,7 @@ hamuna ops update asset <id> --status ready --progress 100
 ## 不要做
 
 - 不要把 `ready` 当成 `published`；发布动作走 `ops-schedule` / 浏览器发布流，发完再回写 published。
+- 不要漏写 `topic --status produced`。留在 `planned` 等于告诉主控「这条还没做」，下一轮会被重新派工。
 - 不要跳过 `form` / `formAspect` 门禁；也不要自己脑补默认画幅。
 - 不要在没确认 plan 的情况下开始产出成品。
 - 不要直接改 `ops/state.json`。所有字段变更走 `hamuna ops update asset`。

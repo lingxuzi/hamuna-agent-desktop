@@ -373,6 +373,33 @@ describe('sino 方法论文件的出处', () => {
     expect(channels).toMatch(/不能\*\*当参考图通道/);
   });
 
+  it('制作的两处收尾有人写 —— 素材 id 有出处、选题能走到 produced', () => {
+    // 这两条都是「文档在，动作没人做」的断链：
+    //
+    // (a) 素材记录。skill 里一直只写 `ops update asset <id>`，而那个 id 从来没人
+    //     产出 —— Agent 拿到派工第一步就没有落点。现在面板开工时建好并在派工
+    //     消息里带 id，skill 必须说清这一点，否则 Agent 会自己 `ops add asset`
+    //     再建一条，面板上挂两条同一选题的成品。
+    // (b) 选题状态。做完只把素材置 ready、不把选题置 produced，主控每轮扫到
+    //     `planned` 就重新派工 —— 同一条选题被反复做，钱也反复花。
+    const skill = readFileSync(join(SKILLS_ROOT, 'ops-produce/SKILL.md'), 'utf8');
+    expect(skill).toMatch(/素材记录由面板/);
+    expect(skill).toMatch(/ops add asset/);
+    expect(skill).toMatch(/--status produced/);
+    expect(skill).toMatch(/两条都要写/);
+  });
+
+  it('开工入口在 planned 上也给 —— 只能点一次就是卡死', () => {
+    // 面板的「开工」原来只在 status === 'idea' 时出现。开工写的是 planned，
+    // 于是一次没跑完的开工（Agent 崩了 / 形态选错）就再也没有入口回到那里，
+    // 那条选题永远停在 planned。这不是 UI 细节，是唯一能把 planned 推下去的按钮。
+    const cards = readFileSync(
+      join(process.cwd(), 'src/renderer/components/ops/OpsCards.tsx'),
+      'utf8',
+    );
+    expect(cards).toMatch(/row\.status === 'idea' \|\| row\.status === 'planned'/);
+  });
+
   it('SKILL.md 里提到的 references 都真的存在', () => {
     // skill 正文里写着「见 references/xxx.md」，那个文件要是没了，
     // Agent 读到的是一个断掉的指针 —— 它不会报错，只会照着没有的内容往下编。

@@ -328,13 +328,14 @@ export default function OpsPanel({
    * 台账与实际脱节比晚一步更糟。
    */
   const startTopic = useCallback(
-    (topic: OpsTopic, form: OpsContentForm, aspect: OpsAspect | null) => {
+    (topic: OpsTopic, form: OpsContentForm, aspect: OpsAspect | null, assetId: string) => {
       onSendToAgent(
         t('ops.form.start.brief', {
           title: topic.title,
           platform: t(`settings:accounts.platform.${topic.platform}`),
           form: t(`ops.form.kind.${form}`),
           aspect: aspect ? `（${aspect}）` : '',
+          assetId,
         }),
       );
       notify(t('ops.toast.topicStarted'));
@@ -664,7 +665,7 @@ function FormHost({
   state: ReturnType<typeof useOpsState>['state'];
   onClose: () => void;
   /** 「开工」台账写成功后派工。 */
-  onStartTopic: (topic: OpsTopic, form: OpsContentForm, aspect: OpsAspect | null) => void;
+  onStartTopic: (topic: OpsTopic, form: OpsContentForm, aspect: OpsAspect | null, assetId: string) => void;
   onDone: (message: string) => void;
 }) {
   switch (request.kind) {
@@ -683,8 +684,9 @@ function FormHost({
         <TopicStartForm
           workspace={workspace}
           topic={request.topic}
+          assets={state.assets}
           onClose={onClose}
-          onStart={(form, aspect) => onStartTopic(request.topic, form, aspect)}
+          onStart={(form, aspect, assetId) => onStartTopic(request.topic, form, aspect, assetId)}
         />
       );
     case 'asset:new':

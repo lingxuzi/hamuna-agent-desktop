@@ -1196,7 +1196,7 @@
         "aspect": "Aspect ratio",
         "submit": "Start generating",
         "unsupported": "{{platform}} can't publish this format",
-        "brief": "Topic “{{title}}” is confirmed for production. Platform: {{platform}}. Format: {{form}}{{aspect}}. Produce it in this format, record it in the ops ledger, and schedule it. If it's time-sensitive, publish it in this session and read back to verify; if it's scheduled for later, set the time and remind me when it comes due."
+        "brief": "Topic “{{title}}” is confirmed for production. Platform: {{platform}}. Format: {{form}}{{aspect}}. The asset record already exists with id {{assetId}} — put files under ops/assets/{{assetId}}/ and update the ledger with that id; do not create a new asset. Produce it in this format and schedule it. If it's time-sensitive, publish it in this session and read back to verify; if it's scheduled for later, set the time and remind me when it comes due. When done, set the topic to produced."
       },
       "kind": {
         "image_text": "Text + images",

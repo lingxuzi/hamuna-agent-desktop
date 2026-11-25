@@ -80,7 +80,12 @@ describe('选题开工', () => {
     const user = userEvent.setup();
     const onSendToAgent = vi.fn();
     // 抖音：视频是它独有的通道，xiaohongshu 收不了 video。
-    mocks.invoke.mockResolvedValue(stateWithIdeaTopic('douyin'));
+    const base = stateWithIdeaTopic('douyin');
+    mocks.invoke.mockImplementation((cmd: string) =>
+      cmd === 'cmd_ops_upsert'
+        ? Promise.resolve({ state: base, id: 'asset-1a2b3c4d' })
+        : Promise.resolve(base),
+    );
     renderPanel(onSendToAgent);
 
     await user.click(await screen.findByRole('button', { name: '开工' }));
@@ -89,8 +94,9 @@ describe('选题开工', () => {
     await user.click(screen.getByRole('radio', { name: '9:16' }));
     await user.click(screen.getByRole('button', { name: '开始生成' }));
 
-    await waitFor(() => expect(upsertCalls()).toHaveLength(1));
-    const [call] = upsertCalls();
+    // 两次写：选题（状态 / 形态 / 画幅）+ 素材（id 的落点）。
+    await waitFor(() => expect(upsertCalls()).toHaveLength(2));
+    const [call, assetCall] = upsertCalls();
     expect(call.workspace).toBe(WORKSPACE);
     expect(call.item.kind).toBe('topic');
     expect(call.item.id).toBe('t1');
@@ -98,11 +104,71 @@ describe('选题开工', () => {
     expect(call.item.form).toBe('video_aigc');
     expect(call.item.formAspect).toBe('9:16');
 
-    // 派工在记账之后发生，而且带上形态——Agent 才知道要做视频还是图文。
+    // 素材记录跟着建出来，挂回这条选题 —— 没有它 Agent 拿到派工也没有落点。
+    expect(assetCall.item.kind).toBe('asset');
+    expect(assetCall.item.topicId).toBe('t1');
+    expect(assetCall.item.platform).toBe('douyin');
+    expect(assetCall.item.title).toBe('出租屋灯光改造');
+
+    // 派工在记账之后发生，而且带上形态和素材 id——Agent 才知道做视频、往哪写。
     await waitFor(() => expect(onSendToAgent).toHaveBeenCalledTimes(1));
     const brief = onSendToAgent.mock.calls[0][0] as string;
     expect(brief).toContain('出租屋灯光改造');
     expect(brief).toContain('9:16');
+    expect(brief).toContain('asset-1a2b3c4d');
+    expect(brief).toContain('produced');
+  });
+
+  it('重试开工复用已有素材，不建第二条', async () => {
+    // 同一条选题开工两次（换形态 / 上一轮崩了）如果各建一条素材，面板上会挂着
+    // 两条同一选题的成品，发布时不知道发哪条，且两条各自推进度。
+    const user = userEvent.setup();
+    const onSendToAgent = vi.fn();
+    const base = stateWithIdeaTopic('douyin');
+    mocks.invoke.mockResolvedValue({
+      ...base,
+      // 上一轮已经开过工：选题停在 planned、素材已建。这正是要复用的那种现场。
+      topics: [{ ...base.topics[0], status: 'planned' as const }],
+      assets: [
+        {
+          id: 'asset-existing',
+          topicId: 't1',
+          title: base.topics[0].title,
+          platform: 'douyin' as const,
+          body: '',
+          product: '',
+          cta: '',
+          sourceRef: null,
+          cover: null,
+          images: [],
+          video: null,
+          shots: [],
+          note: '',
+          noteSource: null,
+          downgradeNote: '',
+          status: 'draft' as const,
+          progress: 0,
+          scheduledAt: null,
+          publishedAt: null,
+          platformWorkId: null,
+          createdAt: '2026-11-10T00:00:00.000Z',
+          updatedAt: '2026-11-10T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPanel(onSendToAgent);
+
+    await user.click(await screen.findByRole('button', { name: '开工' }));
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('radio', { name: /视频 · 按产品生成/ }));
+    await user.click(screen.getByRole('radio', { name: '9:16' }));
+    await user.click(screen.getByRole('button', { name: '开始生成' }));
+
+    await waitFor(() => expect(onSendToAgent).toHaveBeenCalledTimes(1));
+    // 只有选题那一次写；素材沿用旧的。
+    expect(upsertCalls()).toHaveLength(1);
+    expect(upsertCalls()[0].item.kind).toBe('topic');
+    expect(onSendToAgent.mock.calls[0][0]).toContain('asset-existing');
   });
 
   it('纯文字不问画幅', async () => {
@@ -118,7 +184,7 @@ describe('选题开工', () => {
     expect(screen.queryByRole('radio', { name: '9:16' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '开始生成' }));
-    await waitFor(() => expect(upsertCalls()).toHaveLength(1));
+    await waitFor(() => expect(upsertCalls()).toHaveLength(2));
     const [call] = upsertCalls();
     expect(call.item.form).toBe('text_only');
     expect(call.item.formAspect).toBeNull();

@@ -253,12 +253,15 @@ const FORM_NEEDS_ASPECT: readonly OpsContentForm[] = [
 export function TopicStartForm({
   workspace,
   topic,
+  assets,
   onClose,
   onStart,
 }: DialogProps & {
   topic: OpsTopic;
+  /** 已经挂在这条选题下面的素材。重试时复用它，不重复建。 */
+  assets: OpsAsset[];
   /** 台账写成功后调用：派工生成。写失败不会走到这里。 */
-  onStart: (form: OpsContentForm, aspect: OpsAspect | null) => void;
+  onStart: (form: OpsContentForm, aspect: OpsAspect | null, assetId: string) => void;
 }) {
   const { t } = useTranslation('chat');
   const spec = getSocialPlatformSpec(topic.platform);
@@ -289,7 +292,25 @@ export function TopicStartForm({
         form,
         formAspect: needsAspect ? aspect : null,
       });
-      onStart(form, needsAspect ? aspect : null);
+      // 素材记录也在这一步建立，并把 id 交给 Agent。
+      //
+      // 之前没人建它：skill 里只有 `ops update asset <id>`，而那个 id 从来
+      // 没人产出来 —— Agent 拿到派工后第一步就没有落点，只能自己去 `ops add`
+      // 再回头找 id，中途对不上就静默写歪。id 由这里产出，Agent 只管往
+      // `ops/assets/<assetId>/` 里放文件。
+      //
+      // 同一条选题重试开工（形态换了 / 上一轮崩了）复用已有素材：新建会让
+      // 面板上出现两条挂同一选题的素材，发布时不知道发哪条。
+      const existing = assets.find((asset) => asset.topicId === topic.id);
+      const { id: assetId } = existing
+        ? { id: existing.id }
+        : await opsUpsert(workspace, {
+            kind: 'asset',
+            title: topic.title,
+            platform: topic.platform,
+            topicId: topic.id,
+          });
+      onStart(form, needsAspect ? aspect : null, assetId);
       onClose();
     } catch (err) {
       setSubmit({ phase: 'error', message: opsErrorMessage(err) });

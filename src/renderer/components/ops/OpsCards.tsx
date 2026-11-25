@@ -206,9 +206,13 @@ function renderRows(
                   </span>
                 )}
                 {/* 开工入口放在标题列里，不放行尾 —— 行尾位置一动，
-                    右侧热度列就跟着每行飘。开工之后台账里已经有形态，
-                    再给一个「开工」就是让人对着同一条点两次。 */}
-                {row.status === 'idea' && handlers.onStartTopic && (
+                    右侧热度列就跟着每行飘。
+
+                    `planned` 也给这个入口：它可能是一次**没跑完**的开工（Agent
+                    崩了 / 派工消息丢了 / 形态选错了要换）。只有 `idea` 才给的话，
+                    用户点了开工就再也没有入口回到这里，那条选题就卡死在
+                    `planned` —— 面板上没有别的按钮能把它推下去。 */}
+                {(row.status === 'idea' || row.status === 'planned') && handlers.onStartTopic && (
                   <button
                     type="button"
                     className="ops-row-start"
