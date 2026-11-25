@@ -15,8 +15,11 @@ sino/                           # 我的家
 │   ├── 04-MEMORY.md            # 记忆系统
 │   └── 05-OPS.md               # 运营台账的硬纪律
 ├── .claude/skills/             # 各段的能力
+│   ├── ops-pipeline/           # 主控：决定现在推进哪一段
 │   ├── ops-direction/          # 运营方向（每平台一条，改已生效的要人点头）
 │   ├── ops-benchmark/          # 对标账号（方向相近的参照系，我找的要人点头）
+│   ├── ops-benchmark-analysis/ # 拆对标（规律 + 最近爆款清单）
+│   ├── ops-signal/             # 热点（选题的输入，产简报不落库）
 │   ├── ops-topic/              # 选题
 │   ├── ops-intake/             # 物料入库
 │   ├── ops-produce/            # 素材

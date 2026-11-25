@@ -124,7 +124,7 @@ hamuna browser read
 | 关 | 查什么 | 不过怎么办 |
 |---|---|---|
 | 一、完整性 | 该有的都有：正文、封面 / 配图（张数按 `limits.maxImages`）、话题、格式硬要求 | 补齐再发 |
-| 二、合规 | 平台规则 + 广告法 + 内容导向：极限词、虚假承诺、导流外站、未标注软广、诱导互动 | 改掉再发 |
+| 二、合规 | 规则在 `../ops-produce/references/compliance-gate.md`。文案在 plan 阶段已经过了一遍，这里补**画面本身**：首帧、封面实际渲染出来的字、字幕、素材实际用了哪一批 | 改掉再发；改不动就停 |
 | 三、原创度与版权 | 洗稿特征、引用出处、素材授权、品牌商标 | 补引用 / 换素材 / 重写 |
 
 **平台硬指标以 `hamuna platforms <id> --json` 为准**（`limits.maxTitleLength` / `maxBodyLength` /

@@ -68,10 +68,32 @@ hamuna ops list material --json   # 每条带 path / note / noteSource
 `form` 明确、且对应的画幅门禁已过之后，**先出 plan**，等人确认了再开始产出。
 
 - 读 `topic.note` / `topic.angle`，在 `03-USER.md` 里确认受众和口吻（用户没写就用中性口吻，不自作主张加人设）。
-- 按 `form` 出一份 plan，写到 `ops/assets/<assetId>.plan.json`（schema 见下）。写完用系统消息或对话把 plan 摘要报给人，**等确认**。
+- 按 `form` 出一份 plan，写到 `ops/assets/<assetId>.plan.json`（schema 见下）。
+- **plan 写完先过合规关，过了再报给人。** 见下面「合规关跑两次」——不过就自己改，
+  改到过为止再过人，别把一份会被平台拦下的脚本推给用户确认。
+- 写完用系统消息或对话把 plan 摘要报给人，**等确认**。
 - 人确认后，按 plan 一步步产出。**不要在没确认的情况下直接开做。**
 
 > `ops/assets/<assetId>.plan.json` 在，就说明这条规划过了。**不要重新规划**，接着做就行。只有人明确说"重做规划 / 换方案"，才覆盖 plan。
+
+## 合规关跑两次
+
+规则只有一份：`references/compliance-gate.md`。**跑两次**，两处都不过就不往下走。
+
+| 时机 | 查什么 |
+|---|---|
+| **plan 确认前**（文字已经写出来，还没生成 / 剪辑） | 标题、正文、旁白、字幕、画面描述、封面大字里的违规表述 |
+| **发布前**（成品在手，`ready` 之前） | 上面这些已经查过，这里补**画面本身**：首帧、封面实际渲染的字、素材实际用了哪一批 |
+
+**为什么第一次必须在花钱之前**：`video_aigc` 按分镜收钱。脚本先审、过了再生成，
+和先生成、发布前再审，差一整条视频的钱 —— 而且改脚本是改文字，改视频是重做。
+
+**不过就自己改，不要报给人然后停下。** 改完重跑整关（改 A 处常带出 B 处的新问题），
+最多 3 轮；3 轮还不过才停，报人时带上「哪条规则没过、试过哪几种改法、还剩哪一句」。
+上限和三个兜底选项（放弃 / 换形态 / 人工改写）全在 `compliance-gate.md` 里，别在这里另定一套。
+
+**画面里的字在 plan 阶段就要写出来**（封面大字、首帧标题），那时一起审。
+等生成完才发现封面写着「全网最低价」，那笔钱已经花了。
 
 ### Plan schema（v1）
 
@@ -94,7 +116,7 @@ hamuna ops list material --json   # 每条带 path / note / noteSource
 ### `image_text` / `image_only`
 
 1. 文案：`copy-frameworks.md` 选框架 → `copy-structure-templates.md` 搭结构 → `hook-title-formulas.md` 拟标题/钩子 → `hashtag-strategy.md` 配话题。平台口径看 `platform-profiles.md`。
-2. 配图：按 `visual-director.md` 出图。画幅**只用 `topic.formAspect`**，不要自己挑。小红书封面文字密度和缩略图可读性优先（见 `platform-profiles.md`）。
+2. 配图：按 `visual-director.md` 出图，按 `generation-channels.md` 挑工具（有产品图就用带参考图的编辑类工具，别纯文生图）。画幅**只用 `topic.formAspect`**，不要自己挑。小红书封面文字密度和缩略图可读性优先（见 `platform-profiles.md`）。
 3. 过质量闸：`ai-flavor-gate.md` + `quality-gate.md`。命中过 `phrases-to-remove.md` / `structures-to-avoid.md` / `zh-ai-markers.md` 的，改完再往下。
 
 ### `text_only`
@@ -115,7 +137,11 @@ hamuna ops list material --json   # 每条带 path / note / noteSource
 1. **画幅还没定就停**。
 2. 脚本先行：按 `references/visual-director.md` 出分镜 plan（景别、时长、画面、旁白/字幕、转场）。
 3. **预览硬门**：先拼联系表**分镜拼图**给人看，确认构图、节奏、主体一致性；人没点头不调付费生成。单镜控制在 **15 秒**内。
-4. 确认后再生成；默认出带音画成片。生成完过 QA（首帧钩子、节奏、字幕可读、AI 味硬伤）。
+4. **确认后按 `references/generation-channels.md` 调生成**：先看这个会话里真的有哪个出视频工具，
+   产物要吸收 `ops/materials/` 里的真实产品图（当参考图传进去，不是在 prompt 里描写）。
+   **有产品实拍就必须用实拍当参照**，不许拿生成画面顶替真实产品。默认出带音画成片。
+5. 生成完过 QA（首帧钩子、节奏、字幕可读、AI 味硬伤）。主体变形就加死锚点重跑，
+   每张重跑前问一句。工具缺 / 余额不足 → 报人，**不要自己降级形态**。
 
 ## 产物放哪
 

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // 方法论是从**别的仓库**搬进来的，出处必须留在文件里。
@@ -76,6 +76,18 @@ describe('sino 方法论文件的出处', () => {
       'ops-produce/references/visual-director.md',
     ]) {
       expect(files.some((file) => file.endsWith(expected)), expected).toBe(true);
+    }
+  });
+
+  it('热榜 / 蹭热点的判据只有一份 —— 副本会让两边悄悄分叉', () => {
+    // 这两份在 `ops-topic/references/` 下曾有内容完全相同的副本，而全模板没有一处
+    // 引用它们（SKILL.md 明确指向 `ops-signal` 那份）。副本的危险不是占空间：改一处
+    // 忘了另一处，Agent 读到哪份取决于 glob 顺序，两条互相矛盾的判据同时成立。
+    const files = referenceFiles();
+    for (const name of ['hot-riding.md', 'hotlist-sources.md']) {
+      const holders = files.filter((file) => file.endsWith(`/${name}`));
+      expect(holders, name).toHaveLength(1);
+      expect(holders[0], name).toContain('ops-signal');
     }
   });
 
@@ -189,9 +201,184 @@ describe('sino 方法论文件的出处', () => {
     expect(body).toMatch(/别人作品的评论区/);
   });
 
+  it('不存在的东西不许被写成「有」—— 定时任务与 CLI flag 两处', () => {
+    // 两类幻觉，形状相同：文档对着一个**不存在的东西**说话，Agent 照着做就是空转。
+    //
+    // (1) `sino-hotspot-topic` 定时任务：曾有文档写「热点选题搬进了这个定时任务」，
+    //     而全仓库零命中。`ops-topic` 于是「等一个永远不会来的简报」。
+    // (2) `--competitor`：CLI 的 OPS_FIELDS.topic 里没有这个 flag，写了会被静默丢弃
+    //     （不报错、不落库），对标信息在选题这一步丢掉。
+    const root = join(process.cwd(), 'agent-templates/sino');
+    const offenders: string[] = [];
+    for (const skill of readdirSync(SKILLS_ROOT, { withFileTypes: true })) {
+      if (!skill.isDirectory()) continue;
+      const targets = [join(SKILLS_ROOT, skill.name, 'SKILL.md')];
+      const refsDir = join(SKILLS_ROOT, skill.name, 'references');
+      try {
+        for (const entry of readdirSync(refsDir)) {
+          if (entry.endsWith('.md')) targets.push(join(refsDir, entry));
+        }
+      } catch { /* 没有 references 目录 */ }
+      for (const target of targets) {
+        let body: string;
+        try {
+          body = readFileSync(target, 'utf8');
+        } catch {
+          continue;
+        }
+        if (/sino-hotspot-topic/.test(body)) offenders.push(`${target}: sino-hotspot-topic`);
+        // 只在**可复制的命令块**里查 `--competitor`：散文里写「没有这个 flag，
+        // 写了会被丢弃」是正确写法，把那种警告也判违规只会逼人删掉警告。
+        for (const block of body.matchAll(/```(?:bash|sh)?\n([\s\S]*?)```/g)) {
+          if (/--competitor\b/.test(block[1])) offenders.push(`${target}: --competitor`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+    // 反向断言：模板里真有一个 cron 配置的话，这条测试会看不见 —— `PRESET_TEMPLATES`
+    // 目前只带 heartbeat，没有任务定义。等哪天加了，这里要一起改。
+    expect(readFileSync(join(process.cwd(), 'src/shared/config-types.ts'), 'utf8'))
+      .not.toMatch(/sino-hotspot-topic/);
+    void root;
+  });
+
+  it('选题的三个新硬约束真的落在 SKILL.md 上，且和 CLI 一致', () => {
+    // 三处都是「别的文档指过来，但这里没有」的断指针，修法是让断言钉在落点上：
+    const topic = readFileSync(join(SKILLS_ROOT, 'ops-topic/SKILL.md'), 'utf8');
+
+    // (a) 一次最多 3 条候选 —— candidate-batch.md 和 hotlist-sources.md 都写着
+    //     「硬约束在 SKILL.md」，这里必须真有。
+    expect(topic).toMatch(/一次最多 3 条/);
+    // (b) 自我批判：三条候选不是全推给用户。
+    expect(topic).toMatch(/自我批判/);
+    expect(topic).toMatch(/默认只推 1 条/);
+    // (c) --angle 必须落库：ops-signal 算出了角度，ops-topic 不落就等于丢了。
+    expect(topic).toMatch(/--angle/);
+
+    // (d) --source 的取值必须就是 Rust 枚举那四个，多写一个就是被 store 拒。
+    const rust = readFileSync(join(process.cwd(), 'src-tauri/src/ops_store.rs'), 'utf8');
+    const enumBody = rust.match(/pub enum OpsTopicSource \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(enumBody).not.toBe('');
+    const rustSources = [...enumBody.matchAll(/^\s{4}([A-Z]\w*),/gm)]
+      .map((m) => m[1].toLowerCase())
+      .sort();
+    expect(rustSources).toEqual(['benchmark', 'hotspot', 'manual', 'reflection']);
+    // SKILL.md 那句 `--source` 说明里，四个值都得在。
+    const sourceLine = topic.split('\n').find((line) => line.includes('`--source`')) ?? '';
+    for (const source of rustSources) expect(sourceLine, source).toContain(source);
+    // 曾经写错的三个值不许回来。
+    for (const ghost of ['system', 'clue', 'evolution']) {
+      expect(sourceLine, ghost).not.toMatch(new RegExp(`\`${ghost}\``));
+    }
+  });
+
+  it('72 小时不挂在硬门上 —— 它是分类规则，不是第二个可行性门', () => {
+    // 历史事故：hot-riding.md 写「生命周期接到四道硬门第 3 条（超过 72 小时）」，
+    // 而第 3 条实际是「可行性」。照做会拿「素材够不够」去卡「热点新不新」。
+    // 现在它是分类规则：超过 72 小时改判常青题（--source manual），不毙掉。
+    const body = readFileSync(join(SKILLS_ROOT, 'ops-signal/references/hot-riding.md'), 'utf8');
+    expect(body).toMatch(/72 小时不是硬门/);
+    expect(body).toMatch(/--source/);
+    // 阶段边界只写一次：SKILL.md 不许再写 1–3 天那套旧口径。
+    const signal = readFileSync(join(SKILLS_ROOT, 'ops-signal/SKILL.md'), 'utf8');
+    expect(signal).not.toMatch(/衰退期（1–3 天）/);
+    expect(signal).toMatch(/衰退期（24–72 小时）/);
+  });
+
+  it('简报不落盘 —— 存下来的榜会被当成今天的榜', () => {
+    // 曾经的写法是「等定时任务产出的简报」，任务不存在；改成落盘又会留下另一坑：
+    // 三天前的简报看起来和今天的榜一模一样，拿它选题产出的是一条过期选题。
+    const signal = readFileSync(join(SKILLS_ROOT, 'ops-signal/SKILL.md'), 'utf8');
+    expect(signal).toMatch(/简报不落盘/);
+    const topic = readFileSync(join(SKILLS_ROOT, 'ops-topic/SKILL.md'), 'utf8');
+    expect(topic).toMatch(/没有定时任务替你扫/);
+    expect(topic).not.toMatch(/等定时任务产出/);
+  });
+
+  it('CLAUDE.md 的 skills 树和磁盘上的目录一一对应', () => {
+    // 目录树是 Agent 的「这里有什么」清单。少列一个 skill，等于那一段的能力在
+    // 主 prompt 里不存在 —— 想改对标的 Agent 不会去翻 ops-benchmark-analysis。
+    // 多列一个，则是点向一个不存在的目录。
+    const body = readFileSync(join(process.cwd(), 'agent-templates/sino/CLAUDE.md'), 'utf8');
+    const tree = body.slice(body.indexOf('.claude/skills/'));
+    // 树里最后一项用 `└──`，其余用 `├──` —— 只匹配前者会漏掉最后一个 skill。
+    const listed = new Set(
+      [...tree.matchAll(/^│\s+[├└]── (ops-[\w-]+)\//gm)].map((m) => m[1]),
+    );
+    const onDisk = new Set(
+      readdirSync(SKILLS_ROOT, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name),
+    );
+    expect([...listed].sort()).toEqual([...onDisk].sort());
+  });
+
+  it('合规规则只有一份 —— 两份会分叉成「制作时放行、发布时拦下」', () => {
+    // 原来合规规则只在 `ops-publish/references/publish-gates.md` §二。位置的问题不是
+    // 重复，是**顺序**：脚本在 `ops-produce` 写成，一路跑到发布前才审 —— 违规脚本已经
+    // 花完整条视频的钱。抽出来之后 `publish-gates` 只能指向它，不许自己再写一套。
+    const gatePath = join(SKILLS_ROOT, 'ops-produce/references/compliance-gate.md');
+    expect(existsSync(gatePath)).toBe(true);
+    const gate = readFileSync(gatePath, 'utf8');
+    // 具体规则得真在这份里（判定词是规则的证据，删掉就只剩一个标题）。
+    expect(gate).toMatch(/绝对化用语/);
+    expect(gate).toMatch(/导流外站/);
+    expect(gate).toMatch(/诱导互动/);
+
+    const publishGates = readFileSync(
+      join(SKILLS_ROOT, 'ops-publish/references/publish-gates.md'),
+      'utf8',
+    );
+    expect(publishGates).toContain('compliance-gate.md');
+    // 副本的判据：这条规则如果两份都有，改一份另一份就静默过期。
+    expect(publishGates).not.toMatch(/导流外站/);
+    expect(publishGates).not.toMatch(/诱导互动/);
+  });
+
+  it('合规关跑在花钱之前，且自改循环有上限', () => {
+    // 没有上限的自改会烧 token，而且越改越像在规避审查 —— 比原样违规更糟。
+    // 没有「在 plan 阶段就跑」则等于这条关白抽。
+    const skill = readFileSync(join(SKILLS_ROOT, 'ops-produce/SKILL.md'), 'utf8');
+    expect(skill).toMatch(/合规关跑两次/);
+    expect(skill).toMatch(/plan 确认前/);
+    expect(skill).toMatch(/最多 3 轮/);
+
+    const gate = readFileSync(
+      join(SKILLS_ROOT, 'ops-produce/references/compliance-gate.md'),
+      'utf8',
+    );
+    // 到上限后的三个兜底选项，缺一个 Agent 就会自己发明第四个（通常是"降级发布"）。
+    for (const escape of ['放弃这条选题', '换形态做', '人工改写后重跑']) {
+      expect(gate, escape).toContain(escape);
+    }
+    // 「删掉不过的项假装通过」是最隐蔽的失败形状，必须明文禁掉。
+    expect(gate).toMatch(/不许把不过的项删掉/);
+  });
+
+  it('视频生成的工具链路写清了，且不锁模型名', () => {
+    // 原来的第 4 步只写「确认后再生成」，没说拿什么生成、真实物料怎么进去 ——
+    // 与本轮目标（必须结合资产库真实资产）断在这里。
+    const skill = readFileSync(join(SKILLS_ROOT, 'ops-produce/SKILL.md'), 'utf8');
+    expect(skill).toMatch(/generation-channels\.md/);
+
+    const channels = readFileSync(
+      join(SKILLS_ROOT, 'ops-produce/references/generation-channels.md'),
+      'utf8',
+    );
+    // 参考图必须真的传进去，不能只在 prompt 里描写 —— 这是"结合真实资产"的落点。
+    expect(channels).toMatch(/参考图必须真的传进去/);
+    // 不许自己降级形态：用户以为拿到视频、实际拿到图文，比直接失败更坏。
+    expect(channels).toMatch(/降级只能由人决定/);
+    // gemini-image 的 edit_image 收不了本地参考图，写错了会让 Agent 拿它做产品图。
+    expect(channels).toMatch(/不能\*\*当参考图通道/);
+  });
+
   it('SKILL.md 里提到的 references 都真的存在', () => {
     // skill 正文里写着「见 references/xxx.md」，那个文件要是没了，
     // Agent 读到的是一个断掉的指针 —— 它不会报错，只会照着没有的内容往下编。
+    //
+    // 路径按**相对这个文件的真实位置**解析，不假定同 skill：合规关抽出去之后，
+    // `ops-publish` 的 SKILL.md 会用 `../ops-produce/references/…` 指别人的文件。
     const missing: string[] = [];
     for (const skill of readdirSync(SKILLS_ROOT, { withFileTypes: true })) {
       if (!skill.isDirectory()) continue;
@@ -202,9 +389,9 @@ describe('sino 方法论文件的出处', () => {
       } catch {
         continue; // 这个 skill 没有 SKILL.md
       }
-      for (const match of body.matchAll(/references\/[\w.-]+\.md/g)) {
-        const target = join(SKILLS_ROOT, skill.name, match[0]);
-        if (!existsSync(target)) missing.push(`${skill.name}/${match[0]}`);
+      for (const match of body.matchAll(/(?:\.\.?\/)*(?:[\w-]+\/)?references\/[\w.-]+\.md/g)) {
+        const target = resolve(dirname(skillMd), match[0]);
+        if (!existsSync(target)) missing.push(`${skill.name}: ${match[0]}`);
       }
     }
     expect(missing).toEqual([]);
